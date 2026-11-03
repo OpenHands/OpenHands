@@ -1199,4 +1199,131 @@ describe("BackendSelector", () => {
       });
     });
   });
+
+  describe("single visible organization handling", () => {
+    it("hides the backend selector trigger in the expanded sidebar when a cloud backend has exactly one visible org", async () => {
+      const backend = {
+        ...SEED_CLOUD_PRODUCTION,
+        id: "cloud",
+        authMode: "cookie" as const,
+      };
+      setRegisteredBackends([backend]);
+      setActiveSelection({ backendId: backend.id, orgId: "org-personal" });
+      vi.mocked(getCloudOrganizations).mockResolvedValue({
+        items: [{ id: "org-personal", name: "Personal" }],
+        currentOrgId: "org-personal",
+      });
+
+      renderWithProviders(<BackendSelector />, true);
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("backend-selector-settings-link"),
+        ).toBeInTheDocument();
+      });
+
+      expect(screen.queryByTestId("backend-selector")).not.toBeInTheDocument();
+
+      const settingsLink = screen.getByTestId("backend-selector-settings-link");
+      expect(settingsLink).toHaveAttribute(
+        "href",
+        "https://app.all-hands.dev/settings?org=org-personal",
+      );
+    });
+
+    it("renders the selector again when two or more visible organizations exist", async () => {
+      const backend = {
+        ...SEED_CLOUD_PRODUCTION,
+        id: "cloud",
+        authMode: "cookie" as const,
+      };
+      setRegisteredBackends([backend]);
+      setActiveSelection({ backendId: backend.id, orgId: "org-personal" });
+      vi.mocked(getCloudOrganizations).mockResolvedValue({
+        items: [
+          { id: "org-personal", name: "Personal" },
+          { id: "org-acme", name: "Acme Inc" },
+        ],
+        currentOrgId: "org-personal",
+      });
+
+      renderWithProviders(<BackendSelector />, true);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("backend-selector")).toBeInTheDocument();
+      });
+    });
+
+    it("renders the selector when a second backend is registered alongside a single-org cloud backend", async () => {
+      renderWithProviders(
+        <TestSeed
+          onMount={(ctx) => {
+            ctx.addBackend({
+              ...SEED_CLOUD_PRODUCTION,
+              authMode: "cookie",
+            });
+            ctx.addBackend(SEED_LOCAL_1);
+          }}
+        >
+          <BackendSelector />
+        </TestSeed>,
+        true,
+      );
+
+      vi.mocked(getCloudOrganizations).mockResolvedValue({
+        items: [{ id: "org-personal", name: "Personal" }],
+        currentOrgId: "org-personal",
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("backend-selector")).toBeInTheDocument();
+      });
+    });
+
+    it("does not hide the selector while org data is loading or when query fails", async () => {
+      const backend = {
+        ...SEED_CLOUD_PRODUCTION,
+        id: "cloud",
+        authMode: "cookie" as const,
+      };
+      setRegisteredBackends([backend]);
+      setActiveSelection({ backendId: backend.id, orgId: null });
+      vi.mocked(getCloudOrganizations).mockRejectedValue(
+        new Error("Network Error"),
+      );
+
+      renderWithProviders(<BackendSelector />);
+
+      // Even on failure, selector matches today's no-org-known rendering and is not hidden
+      await waitFor(() => {
+        expect(screen.getByTestId("backend-selector")).toBeInTheDocument();
+      });
+    });
+
+    it("keeps the dropdown menu and footer actions reachable when hideTrigger is true even with one visible org", async () => {
+      const backend = {
+        ...SEED_CLOUD_PRODUCTION,
+        id: "cloud",
+        authMode: "api-key" as const,
+      };
+      setRegisteredBackends([backend]);
+      setActiveSelection({ backendId: backend.id, orgId: "org-personal" });
+      vi.mocked(getCloudOrganizations).mockResolvedValue({
+        items: [{ id: "org-personal", name: "Personal" }],
+        currentOrgId: "org-personal",
+      });
+
+      renderWithProviders(
+        <BackendSelector hideTrigger defaultOpen openUpward />,
+        true,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("listbox")).toBeInTheDocument();
+        expect(
+          screen.getByTestId("manage-backends-menu-item"),
+        ).toBeInTheDocument();
+      });
+    });
+  });
 });
