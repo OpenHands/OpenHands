@@ -1,5 +1,6 @@
 import { PluginsClient } from "@openhands/typescript-client/clients";
 import { getActiveBackend } from "./backend-registry/active-store";
+import type { Backend } from "./backend-registry/types";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import type { PluginBundledSkill } from "./plugins-service";
 
@@ -56,9 +57,11 @@ function isCloudBackend(): boolean {
   return getActiveBackend().backend.kind === "cloud";
 }
 
-function getManagementClient(): PluginsManagementClient {
+function getManagementClient(backend?: Backend): PluginsManagementClient {
   return new PluginsClient(
-    getAgentServerClientOptions(),
+    getAgentServerClientOptions(
+      backend ? { host: backend.host, apiKey: backend.apiKey } : undefined,
+    ),
   ) as unknown as PluginsManagementClient;
 }
 
@@ -74,13 +77,16 @@ function getManagementClient(): PluginsManagementClient {
  * actions throw (the UI also disables them on cloud).
  */
 class PluginsManagementService {
-  static async listInstalledPlugins(): Promise<InstalledPluginInfo[]> {
-    if (isCloudBackend()) {
+  static async listInstalledPlugins(
+    backend: Backend = getActiveBackend().backend,
+  ): Promise<InstalledPluginInfo[]> {
+    if (backend.kind === "cloud") {
       return [];
     }
 
     try {
-      const response = await getManagementClient().listInstalledPlugins();
+      const response =
+        await getManagementClient(backend).listInstalledPlugins();
       return response.plugins ?? [];
     } catch {
       // Agent-server may predate the plugins router or be unreachable; surface
