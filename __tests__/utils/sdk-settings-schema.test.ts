@@ -1071,6 +1071,20 @@ describe("sdk settings schema helpers", () => {
       expect(coerceFieldValue(cpusField, "0.5")).toBe(0.5);
     });
 
+    it("rejects a negative condenser max size", () => {
+      const field = getMockField({
+        key: "condenser.condenser_max_size",
+        label: "Max Number of Events",
+        value_type: "integer",
+      });
+
+      expect(() => coerceFieldValue(field, "-5")).toThrow(
+        "Max Number of Events must be at least 0",
+      );
+      expect(coerceFieldValue(field, "0")).toBe(0);
+      expect(coerceFieldValue(field, "")).toBeNull();
+    });
+
     it("coerces JSON arrays and reports invalid array input", () => {
       const field = getMockField({
         label: "Tags",
