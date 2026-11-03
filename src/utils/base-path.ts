@@ -63,8 +63,30 @@ function resolveOrigin(origin?: string): string {
  */
 function stripBasePath(origin: string): string {
   const basePath = getAgentCanvasBasePath();
-  if (!basePath || !origin.endsWith(basePath)) return origin;
-  return origin.slice(0, -basePath.length);
+  if (!basePath || !origin) return origin;
+
+  // Match the base path only against the URL path. A string suffix also
+  // matches a host whose name is the mount segment: `https://canvas` ends
+  // with `/canvas` because of the scheme slash, so the host is sliced off
+  // and the mount path is concatenated back into the hostname.
+  let pathname: string;
+  let urlOrigin: string;
+  try {
+    const url = new URL(origin);
+    pathname = url.pathname.replace(/\/+$/, "") || "/";
+    urlOrigin = url.origin;
+  } catch {
+    return origin;
+  }
+
+  const matchesPath =
+    pathname === basePath ||
+    (pathname.endsWith(basePath) &&
+      pathname.charAt(pathname.length - basePath.length - 1) === "/");
+  if (!matchesPath) return origin;
+
+  const stripped = pathname.slice(0, -basePath.length).replace(/\/+$/, "");
+  return `${urlOrigin}${stripped}`;
 }
 
 /**
