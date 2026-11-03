@@ -152,6 +152,11 @@ export type Settings = {
   user_consents_to_analytics: boolean | null;
   search_api_key?: string;
   is_new_user?: boolean;
+  /**
+   * Frontend-only, never sent to a backend: `true` when the backend could not
+   * be read and every value is a display default rather than a stored setting.
+   */
+  is_fallback?: boolean;
   mcp_config?: MCPConfig;
   /** Deny-list over user- and project-authored skills. */
   disabled_skills?: string[];
