@@ -7,6 +7,7 @@ import {
 } from "#/components/features/onboarding/steps/setup-llm-step";
 import { I18nKey } from "#/i18n/declaration";
 import type { SdkSectionSaveControl } from "#/components/features/settings/sdk-settings/sdk-section-page";
+import { I18nKey } from "#/i18n/declaration";
 import type { SettingsFormValues } from "#/utils/sdk-settings-schema";
 import { renderWithProviders } from "../../../test-utils";
 
