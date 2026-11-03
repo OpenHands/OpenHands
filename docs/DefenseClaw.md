@@ -53,7 +53,7 @@ flowchart TD
 
 ## Installation
 
-### 1. Install and initialise DefenseClaw
+### 1. Install and initialize DefenseClaw
 
 ```bash
 # Install from the release script
