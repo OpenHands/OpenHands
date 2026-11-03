@@ -341,6 +341,15 @@ export function ChatInterface({
   const session = sessions.at(-1);
   const isSessionStarting =
     session?.phase === "pending" || session?.phase === "connecting";
+  // A session group exists only in the tab that started or resumed the
+  // conversation. Until its socket is open and history has loaded, the chat
+  // cannot know whether saved events are on their way, so the empty state
+  // waits; once it is known to be empty, the suggestions show as in any tab.
+  const sessionHistoryKnown =
+    sessions.length === 0 ||
+    (!isSessionStarting &&
+      conversationWebSocket?.connectionState === "OPEN" &&
+      !conversationWebSocket.isLoadingHistory);
   const hasSendingMessages = pendingMessages.some(
     (message) =>
       message.status === "sending" &&
@@ -667,7 +676,7 @@ export function ChatInterface({
     <WorkspaceFilesForChatProvider>
       <ScrollProvider value={scrollProviderValue}>
         <div className={CHAT_BODY_CLASS_NAME} data-testid="chat-interface">
-          {sessions.length === 0 &&
+          {sessionHistoryKnown &&
             !hasSubstantiveAgentActions &&
             !hasPendingUserMessages &&
             !userEventsExist &&
@@ -677,7 +686,7 @@ export function ChatInterface({
             totalEvents === 0 &&
             !isArchivedConversation &&
             // With no usable LLM the suggestions can't be acted on (the input is
-            // disabled). They're also a `pointer-events-auto` overlay that would
+            // disabled). Their chips would also
             // sit over the LlmNotConfiguredBanner below and swallow clicks on its
             // setup button — so hide them and let the banner be the lone CTA.
             !llmBlocked &&
