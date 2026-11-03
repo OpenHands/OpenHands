@@ -26,11 +26,10 @@ import { BackLink } from "#/components/features/automations/detail/back-link";
 import { DetailHeader } from "#/components/features/automations/detail/detail-header";
 import { AutomationTagsEditor } from "#/components/features/automations/detail/automation-tags-editor";
 import { DisabledReasonBanner } from "#/components/features/automations/detail/disabled-reason-banner";
-import { PromptSection } from "#/components/features/automations/detail/prompt-section";
-import { ScriptSection } from "#/components/features/automations/detail/script-section";
-import { ConfigurationSection } from "#/components/features/automations/detail/configuration-section";
-import { PluginsSection } from "#/components/features/automations/detail/plugins-section";
-import { ActivitySection } from "#/components/features/automations/detail/activity-section";
+import { TriggerSection } from "#/components/features/automations/detail/trigger-section";
+import { ActionSection } from "#/components/features/automations/detail/action-section";
+import { SettingsSection } from "#/components/features/automations/detail/settings-section";
+import { SectionConnector } from "#/components/features/automations/detail/section-connector";
 import { ActivityLogSection } from "#/components/features/automations/detail/activity-log-section";
 import { DetailSkeleton } from "#/components/features/automations/detail/detail-skeleton";
 import { NotFoundState } from "#/components/features/automations/detail/not-found-state";
@@ -241,6 +240,7 @@ export default function AutomationDetail() {
   // Non-creators may turn an automation off but not back on. Draft test
   // artifacts are finalized through the draft setup flow, not this toggle.
   const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
+  const canEditTags = isOwner && !isDraft;
 
   return (
     <div className="min-h-full">
@@ -260,26 +260,24 @@ export default function AutomationDetail() {
             isRunningNow={dispatchMutation.isPending}
             canManage={canManage}
             canToggle={canToggle}
-          />
-          {/* The service lets only the creator change tags. */}
-          <AutomationTagsEditor
-            automation={automation}
-            canEdit={isOwner && !isDraft}
-          />
+          >
+            {/* The service lets only the creator change tags. */}
+            {canEditTags || automation.tags?.length ? (
+              <AutomationTagsEditor
+                automation={automation}
+                canEdit={canEditTags}
+              />
+            ) : null}
+          </DetailHeader>
           <DisabledReasonBanner automation={automation} />
-          {automation.prompt ? (
-            <PromptSection prompt={automation.prompt} />
-          ) : (
-            <ScriptSection automation={automation} />
-          )}
-          <ConfigurationSection automation={automation} runsAs={runsAs} />
-          {automation.plugins && automation.plugins.length > 0 && (
-            <PluginsSection plugins={automation.plugins} />
-          )}
-          <ActivitySection
-            createdAt={automation.created_at}
-            lastRunAt={automation.last_triggered_at}
-          />
+          {/* Same order as the setup form: what starts it, what it does,
+              how it runs, then what it has done. */}
+          <div className="flex flex-col">
+            <TriggerSection automation={automation} />
+            <SectionConnector />
+            <ActionSection automation={automation} />
+          </div>
+          <SettingsSection automation={automation} runsAs={runsAs} />
           <ActivityLogSection
             automation={automation}
             highlightedRunId={highlightedRunId}

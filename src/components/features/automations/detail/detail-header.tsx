@@ -13,7 +13,7 @@ import { ActiveStatusBadge } from "./active-status-badge";
 interface DetailHeaderProps {
   automation: Automation;
   onToggle: () => void;
-  /** When provided (and the user can manage), the kebab menu shows an Edit entry. */
+  /** When provided (and the user can manage), the header shows an Edit button. */
   onEdit?: () => void;
   onDelete: () => void;
   onExport: () => void;
@@ -28,7 +28,12 @@ interface DetailHeaderProps {
    * non-creators may only turn automations off.
    */
   canToggle?: boolean;
+  /** Rendered under the name, e.g. the tags editor. */
+  children?: React.ReactNode;
 }
+
+const headerButtonClassName =
+  "inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-content transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-60";
 
 export function DetailHeader({
   automation,
@@ -41,6 +46,7 @@ export function DetailHeader({
   isRunningNow = false,
   canManage = true,
   canToggle = canManage,
+  children,
 }: DetailHeaderProps) {
   const { t } = useTranslation("openhands");
 
@@ -57,15 +63,6 @@ export function DetailHeader({
       onClick: onDownloadTarball,
     },
     // Write items — only when the user may mutate this automation.
-    ...(canManage && onEdit
-      ? [
-          {
-            label: t(I18nKey.AUTOMATIONS$EDIT),
-            icon: <EditIcon className="size-4" />,
-            onClick: onEdit,
-          },
-        ]
-      : []),
     ...(canToggle
       ? [
           {
@@ -91,17 +88,20 @@ export function DetailHeader({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <h1 className="min-w-0 break-words text-xl font-medium text-content">
-            {automation.name}
-          </h1>
-          <ActiveStatusBadge automation={automation} />
+        <div className="flex min-w-0 flex-col gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <h1 className="min-w-0 break-words text-xl font-medium text-content">
+              {automation.name}
+            </h1>
+            <ActiveStatusBadge automation={automation} />
+          </div>
+          {children}
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {canManage && onRunNow && (
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-content transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-60"
+              className={headerButtonClassName}
               disabled={isRunningNow || !automation.enabled}
               onClick={onRunNow}
             >
@@ -109,6 +109,17 @@ export function DetailHeader({
               {isRunningNow
                 ? t(I18nKey.AUTOMATIONS$STARTING)
                 : t(I18nKey.AUTOMATIONS$RUN_NOW)}
+            </button>
+          )}
+          {canManage && onEdit && (
+            <button
+              type="button"
+              data-testid="automation-detail-edit"
+              className={headerButtonClassName}
+              onClick={onEdit}
+            >
+              <EditIcon className="size-3.5 shrink-0" aria-hidden />
+              {t(I18nKey.AUTOMATIONS$EDIT)}
             </button>
           )}
           {canToggle && (

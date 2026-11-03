@@ -757,8 +757,9 @@ code .token {
   scrollbar-gutter: stable;
 }
 
+/* Matches the detail page's max-w-4xl, so view and edit share one column. */
 @utility automation-setup-content {
-  max-width: 800px;
+  max-width: 56rem;
 }
 
 @utility automation-setup-card {

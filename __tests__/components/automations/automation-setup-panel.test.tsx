@@ -2933,7 +2933,7 @@ describe("AutomationSetupPanel", () => {
     expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByTestId("automation-setup-close"));
-    expect(mockNavigate).toHaveBeenCalledWith("/automations");
+    expect(mockNavigate).toHaveBeenCalledWith("/automations/auto-1");
   });
 
   describe("existing automation request failures", () => {

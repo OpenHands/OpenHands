@@ -31,8 +31,18 @@ vi.mock("#/contexts/active-backend-context", () => ({
   }),
 }));
 
-vi.mock("#/hooks/query/use-automation-detail", () => ({
+vi.mock("#/hooks/query/use-automation-detail", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/hooks/query/use-automation-detail")
+  >()),
   useAutomationRuns: vi.fn(),
+}));
+
+// The run stats read the same sample through the service.
+vi.mock("#/api/automation-service/automation-service.api", () => ({
+  default: {
+    getAutomationRuns: vi.fn().mockResolvedValue({ runs: [], total: 0 }),
+  },
 }));
 
 import { useAutomationRuns } from "#/hooks/query/use-automation-detail";
@@ -184,5 +194,74 @@ describe("ActivityLogSection ?run= highlight", () => {
       .mock.calls.map(([options]) => options.limit ?? 0);
     expect(Math.max(...requestedLimits)).toBe(100);
     expect(window.HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
+describe("ActivityLogSection run grouping", () => {
+  function successfulRuns(count: number): AutomationRun[] {
+    return Array.from({ length: count }, (_, index) => ({
+      ...run,
+      id: `s${index + 1}`,
+      conversation_id: `c${index + 1}`,
+      started_at: `2026-01-01T09:0${index}:00Z`,
+    }));
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  it("folds a stretch of successful runs under its first and opens it on click", async () => {
+    // Arrange
+    vi.mocked(useAutomationRuns).mockReturnValue({
+      data: { runs: successfulRuns(5), total: 5 },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAutomationRuns>);
+    const user = userEvent.setup();
+    renderSection();
+    expect(screen.getAllByTestId("automation-run-day")).toHaveLength(1);
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+
+    // Act
+    await user.click(screen.getByTestId("automation-run-fold"));
+
+    // Assert
+    expect(screen.getAllByRole("link")).toHaveLength(5);
+    expect(screen.queryByTestId("automation-run-fold")).not.toBeInTheDocument();
+  });
+
+  it("keeps a deep-linked run visible inside a stretch it would fold", () => {
+    vi.mocked(useAutomationRuns).mockReturnValue({
+      data: { runs: successfulRuns(5), total: 5 },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAutomationRuns>);
+
+    renderSection("s4");
+
+    expect(
+      screen.getByTestId("automation-run-highlight-s4"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("automation-run-fold")).not.toBeInTheDocument();
+  });
+
+  it("explains once that script runs have no conversation", () => {
+    vi.mocked(useAutomationRuns).mockReturnValue({
+      data: { runs: successfulRuns(2), total: 2 },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAutomationRuns>);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={client}>
+        <ActivityLogSection automation={{ ...automation, prompt: null }} />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getAllByTestId("automation-script-runs-note")).toHaveLength(
+      1,
+    );
   });
 });

@@ -109,16 +109,20 @@ export default function AutomationSetupNew() {
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-canvas-base">
       <header
         data-testid="automation-setup-topbar"
-        className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-canvas-base px-3"
+        className="flex h-14 min-h-14 shrink-0 items-center border-b border-border bg-canvas-base px-5"
       >
-        <h2 className="min-w-0 truncate text-sm font-medium text-content">
-          {title}
-        </h2>
-        <div
-          ref={setToolbarElement}
-          data-testid="automation-setup-toolbar"
-          className="flex min-w-0 shrink-0 items-center gap-1.5"
-        />
+        {/* Same column as the form and the detail page, so the name and
+            actions sit where they do when viewing the automation. */}
+        <div className="automation-setup-content mx-auto flex w-full min-w-0 items-center justify-between gap-2">
+          <h2 className="min-w-0 truncate text-lg font-medium text-content">
+            {title}
+          </h2>
+          <div
+            ref={setToolbarElement}
+            data-testid="automation-setup-toolbar"
+            className="flex min-w-0 shrink-0 items-center gap-1.5"
+          />
+        </div>
       </header>
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         {draft ? (
