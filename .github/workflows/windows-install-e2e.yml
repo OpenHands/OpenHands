@@ -91,6 +91,17 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 
+      # #16551: on Windows the SDK launches system Chrome before Playwright's
+      # Chromium, and the reporter's system Chrome never answered CDP. The
+      # runner's Chrome works, so block remote debugging in it by policy (as
+      # managed machines can). The browser test then fails until the SDK
+      # prefers Playwright's Chromium (OpenHands/software-agent-sdk#4502).
+      - name: Make system Chrome refuse remote debugging (#16551)
+        run: |
+          $key = "HKLM:\SOFTWARE\Policies\Google\Chrome"
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name RemoteDebuggingAllowed -PropertyType DWord -Value 0 -Force | Out-Null
+
       # One step on purpose: the Windows runner kills processes a step started
       # when that step ends, so agent-canvas must live in the step that tests it.
       - name: Start agent-canvas like a user and run the specs
