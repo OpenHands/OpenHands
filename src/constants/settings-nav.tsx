@@ -1,4 +1,10 @@
-import { AppWindow, Brain, Route as RouteIcon, Shield } from "lucide-react";
+import {
+  AppWindow,
+  Brain,
+  Container,
+  Route as RouteIcon,
+  Shield,
+} from "lucide-react";
 import KeyIcon from "#/icons/key.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
@@ -44,10 +50,8 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
   {
     // The agent's ``agent_context`` section, whatever the schema exposes in it
     // — today only persistent memory (``agent_context.load_memory``). Not
-    // ``disabledByAcp``: the stored flag rides the shared agent_settings
-    // record into ACP conversations too — inline launches spread it into
-    // ``agent_context``, and profile launches (the normal ACP path) have the
-    // agent-server stamp it onto the profile-resolved agent.
+    // ``disabledByAcp``: the agent-server stamps the stored flag onto every
+    // profile-resolved agent, ACP included.
     icon: <Brain className="size-4" strokeWidth={2} aria-hidden />,
     to: "/settings/agent-context",
     text: "SETTINGS$NAV_AGENT_CONTEXT",
@@ -58,6 +62,12 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/verification",
     text: "SETTINGS$NAV_VERIFICATION",
     subtitle: "SETTINGS$PAGE_VERIFICATION_SUBLINE",
+  },
+  {
+    icon: <Container className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/runtime",
+    text: "SETTINGS$NAV_RUNTIME",
+    subtitle: "SETTINGS$PAGE_RUNTIME_SUBLINE",
   },
   {
     icon: <AppWindow className="size-4" strokeWidth={2} aria-hidden />,

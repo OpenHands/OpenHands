@@ -10,6 +10,7 @@ import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import { useSaveMetaProfile } from "#/hooks/mutation/use-save-meta-profile";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateMetaProfile } from "#/hooks/mutation/use-activate-meta-profile";
+import { agentProfileSupportsRouter } from "#/api/agent-profiles-service/profile-field-support";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { SettingsSwitch } from "#/components/features/settings/settings-switch";
@@ -83,7 +84,9 @@ export function MetaLlmSettingsView() {
   >([]);
 
   const metaProfiles = data?.meta_profiles ?? [];
-  const active = data?.active_meta_profile ?? null;
+  // Locally each agent profile picks its router, so none is active here.
+  const routerPerProfile = agentProfileSupportsRouter();
+  const active = routerPerProfile ? null : (data?.active_meta_profile ?? null);
   const availableProfiles = (llmProfilesData?.profiles ?? []).map(
     (p) => p.name,
   );
@@ -203,7 +206,8 @@ export function MetaLlmSettingsView() {
     config: MetaProfile,
     providerConnectionId: string | null,
   ) => {
-    const shouldActivateAfterCreate = view === "create" && active === null;
+    const shouldActivateAfterCreate =
+      view === "create" && active === null && !routerPerProfile;
     // Creating the first router (0 → 1) is the moment "Run on first message"
     // becomes useful, so flip it on by default — but only if the user hasn't
     // already enabled it. Subsequent router creations leave the preference
@@ -272,18 +276,18 @@ export function MetaLlmSettingsView() {
   // meta-profiles response can prove a router is active. Instead the launch
   // paths gate on the active meta-profile at the single suffix-emission
   // point (``buildRouterAtStartSystemSuffix``), so a stale ``true`` with no
-  // router can never emit the ``route_task_to_model`` instruction.
-  const canRunRouterAtStart = active !== null;
+  // router can never emit the ``route_task_to_model`` instruction. Locally
+  // that gate is the launched profile's router, so any router enables it.
+  const canRunRouterAtStart = routerPerProfile
+    ? metaProfiles.length > 0
+    : active !== null;
   const handleToggleRunAtConversationStart = (value: boolean) => {
     saveSettings({ run_router_at_conversation_start: value });
   };
 
   if (isUnsupportedBackend) {
     return (
-      <p
-        data-testid="meta-profile-unsupported"
-        className="text-sm text-[var(--oh-muted)]"
-      >
+      <p data-testid="meta-profile-unsupported" className="text-sm text-muted">
         {t(I18nKey.SETTINGS$META_PROFILE_UNSUPPORTED)}
       </p>
     );
@@ -317,7 +321,7 @@ export function MetaLlmSettingsView() {
         {availableProfiles.length === 0 ? (
           <p
             data-testid="meta-profile-no-llm-profiles"
-            className="text-sm text-[var(--oh-muted)]"
+            className="text-sm text-muted"
           >
             {t(I18nKey.SETTINGS$META_PROFILE_NO_LLM_PROFILES)}
           </p>
@@ -347,14 +351,13 @@ export function MetaLlmSettingsView() {
         ) : null}
 
         {error ? (
-          <p className="text-sm text-red-400">{t(I18nKey.ERROR$GENERIC)}</p>
+          <p className="text-sm text-feedback-error">
+            {t(I18nKey.ERROR$GENERIC)}
+          </p>
         ) : null}
 
         {!isLoading && !error && metaProfiles.length === 0 ? (
-          <p
-            data-testid="meta-profile-empty"
-            className="text-sm text-[var(--oh-muted)]"
-          >
+          <p data-testid="meta-profile-empty" className="text-sm text-muted">
             {t(I18nKey.SETTINGS$META_PROFILE_NO_PROFILES)}
           </p>
         ) : null}
@@ -366,7 +369,7 @@ export function MetaLlmSettingsView() {
                 key={info.name}
                 info={info}
                 isActive={info.name === active}
-                onActivate={handleActivate}
+                onActivate={routerPerProfile ? undefined : handleActivate}
                 onEdit={handleEdit}
                 onDelete={setNameToDelete}
                 isActivating={activateMetaProfile.isPending}
@@ -390,7 +393,11 @@ export function MetaLlmSettingsView() {
             {t(I18nKey.SETTINGS$META_PROFILE_RUN_AT_CONVERSATION_START)}
           </SettingsSwitch>
           <p className="text-xs leading-4 text-tertiary-light">
-            {t(I18nKey.SETTINGS$META_PROFILE_RUN_AT_CONVERSATION_START_HELP)}
+            {t(
+              routerPerProfile
+                ? I18nKey.SETTINGS$META_PROFILE_RUN_AT_CONVERSATION_START_HELP_PROFILE
+                : I18nKey.SETTINGS$META_PROFILE_RUN_AT_CONVERSATION_START_HELP,
+            )}
           </p>
         </div>
       </div>

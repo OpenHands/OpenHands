@@ -1,4 +1,5 @@
 import { useLocation } from "react-router";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { SEEDED_DEFAULT_BACKEND_ID } from "#/api/backend-registry/default-backend";
 import { useSettings } from "#/hooks/query/use-settings";
@@ -32,6 +33,10 @@ function hasUsableLlm(settings: Settings | undefined): boolean {
  * skipped — except the launcher-seeded default-local one, which may hold an
  * LLM from an earlier user, leaving `openhands-onboarded` its first-run signal.
  *
+ * A canvas locked to a Cloud host (SaaS / self-hosted OHE) never opens it: the
+ * main app owns setup there, including the LLM and agent pages this flow
+ * mirrors (OHE-3457), so the modal would only compete with it (OHE-3670).
+ *
  * With `?previewOnboardingStep=<0-3>` the modal opens on that slide for
  * design review without persisting completion (works on any route when
  * mounted from the root layout).
@@ -51,6 +56,7 @@ export function OnboardingHost() {
 
   if (!isPreview) {
     if (isCompleted) return null;
+    if (getLockedCloudHost() !== null) return null;
     if (trustsBackendLlm && settings.isLoading) return null;
     if (trustsBackendLlm && hasUsableLlm(settings.data)) {
       return null;

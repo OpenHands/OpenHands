@@ -12,6 +12,7 @@ const packageJson = JSON.parse(
   module: string;
   types: string;
   exports: Record<string, unknown>;
+  sideEffects?: unknown;
   scripts: Record<string, string>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
@@ -57,7 +58,11 @@ describe("package library metadata", () => {
         import: "./dist/i18n/index.js",
         require: "./dist/i18n/index.cjs",
       },
+      "./styles.css": "./dist/styles.css",
     });
+    // A `sideEffects` list would let bundlers drop `import ".../styles.css"`
+    // unless it names the stylesheet.
+    expect(packageJson.sideEffects).toBeUndefined();
   });
 
   // Git dependencies break `npm install -g` because npm clones the repo and

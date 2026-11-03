@@ -1,3 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { parse } from "postcss";
 import type { ReactNode, SVGProps } from "react";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -264,13 +268,29 @@ describe("ChangeAgentButton mode selection", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("sizes the mode label at the intended 11px", () => {
+  it("sizes the mode label at 11px and inherits its mode color", async () => {
     renderButton();
-
     const label = screen.getByText("COMMON$CODE");
-    expect(label).toHaveClass("text-[11px]");
-    expect(label).toHaveClass("text-inherit");
-    expect(label).not.toHaveClass("text-2.75");
+    const classes = [...label.classList];
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency() {} },
+    );
+    const selectors = new Set(
+      classes.map((name) => `.${name.replace(/([^\w-])/g, "\\$1")}`),
+    );
+    const fontSizes: string[] = [];
+    const colors: string[] = [];
+    parse(compiler.build(classes)).walkRules((rule) => {
+      if (!rule.selectors.some((selector) => selectors.has(selector))) return;
+      rule.walkDecls((declaration) => {
+        if (declaration.prop === "font-size") fontSizes.push(declaration.value);
+        if (declaration.prop === "color") colors.push(declaration.value);
+      });
+    });
+
+    expect(fontSizes).toEqual(["11px"]);
+    expect(colors).toEqual(["inherit"]);
   });
 
   it("selects plan and code modes from the menu", async () => {

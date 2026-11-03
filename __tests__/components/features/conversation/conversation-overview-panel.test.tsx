@@ -118,7 +118,6 @@ vi.mock(
       ...actual,
       useConversationOverviewDrawerOptional: () => ({
         section: null,
-        openAdd: false,
         openSection,
         closeDrawer,
       }),
@@ -149,7 +148,7 @@ describe("ConversationOverviewPanel", () => {
     localStorage.clear();
   });
 
-  it("renders workspace and git changes without MCP, secrets, skills, or automations", () => {
+  it("renders workspace and git changes but no Issues row", () => {
     renderPanel();
 
     expect(screen.getByTestId("conversation-overview-panel")).toBeInTheDocument();
@@ -158,18 +157,6 @@ describe("ConversationOverviewPanel", () => {
       screen.queryByTestId("conversation-overview-git-title"),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("conversation-overview-diffs")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("conversation-overview-mcp"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("conversation-overview-automations"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("conversation-overview-skills"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("conversation-overview-secrets"),
-    ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("conversation-overview-issues"),
     ).not.toBeInTheDocument();

@@ -15,7 +15,10 @@ import type { ActionEvent, MessageEvent } from "#/types/agent-server/core";
 import { SecurityRisk } from "#/types/agent-server/core";
 import type { FinishAction } from "#/types/agent-server/core/base/action";
 import type { CriticResult } from "#/types/agent-server/core/base/critic";
-import { seedLocalStorage, routeSessionApiKey } from "../utils/mock-llm-helpers";
+import {
+  seedLocalStorage,
+  routeSessionApiKey,
+} from "../utils/mock-llm-helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -389,24 +392,99 @@ test.describe("UI regressions", () => {
       )
       .not.toBe("rgba(0, 0, 0, 0)");
 
-    const insideBackground = await shell.evaluate(
-      (el) => getComputedStyle(el).backgroundColor,
-    );
-
-    const outsideStyles = await page.evaluate(() => {
+    const probeStyles = await shell.evaluate((el) => {
+      const shellBackground = getComputedStyle(el).backgroundColor;
       const probe = document.createElement("div");
-      probe.className = "bg-base text-content-2";
-      probe.textContent = "host";
+      probe.className = "bg-canvas-base";
+      // Keep the token available outside the shell: an undefined variable
+      // would make even a leaked utility transparent and hide a scoping bug.
+      probe.style.setProperty("--oh-color-base", shellBackground);
+      el.appendChild(probe);
+      const insideBackground = getComputedStyle(probe).backgroundColor;
       document.documentElement.appendChild(probe);
-      const styles = getComputedStyle(probe);
+      const outsideBackground = getComputedStyle(probe).backgroundColor;
+      probe.remove();
       return {
-        backgroundColor: styles.backgroundColor,
-        color: styles.color,
+        shellBackground,
+        insideBackground,
+        outsideBackground,
       };
     });
 
-    expect(insideBackground).not.toBe("rgba(0, 0, 0, 0)");
-    expect(outsideStyles.backgroundColor).not.toBe(insideBackground);
+    // First prove the utility exists, then prove it cannot style the host.
+    expect(probeStyles.insideBackground).toBe(probeStyles.shellBackground);
+    expect(probeStyles.outsideBackground).toBe("rgba(0, 0, 0, 0)");
+  });
+
+  // @spec BM-004 — Backend feedback consumes the embedding host's theme roles
+  test("backend connection feedback follows host color overrides", async ({
+    page,
+  }) => {
+    await routeSessionApiKey(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const shell = page.locator("[data-agent-server-ui]").first();
+    await expect(shell).toBeVisible();
+    await shell.evaluate((el) => {
+      const scope = el as HTMLElement;
+      scope.style.setProperty("--oh-feedback-error", "#8b1029");
+      scope.style.setProperty("--oh-feedback-success", "#17642f");
+    });
+
+    await page.getByTestId("backend-selector").click();
+    await page.getByTestId("manage-backends-menu-item").click();
+    await expect(page.getByTestId("manage-backends-status-Local")).toHaveCSS(
+      "color",
+      "rgb(23, 100, 47)",
+    );
+    await page.getByTestId("manage-backends-done").click();
+
+    await page.getByTestId("backend-selector").click();
+    await page.getByTestId("add-backend-menu-item").click();
+    await page.getByTestId("add-backend-option-agent-server").click();
+    await page.getByTestId("add-backend-name").fill("Unavailable server");
+    await page.getByTestId("add-backend-host").fill("http://127.0.0.1:9");
+    await page.getByTestId("add-backend-submit").click();
+    await expect(page.getByTestId("add-backend-error")).toHaveCSS(
+      "color",
+      "rgb(139, 16, 41)",
+    );
+  });
+
+  // @spec TN-001 — Toasts follow the embedding host's contrast ink
+  test("error and success toasts follow the host contrast color", async ({
+    page,
+  }) => {
+    await routeSessionApiKey(page);
+    // A host stylesheet override that survives full-page navigation.
+    await page.addInitScript(() => {
+      document.addEventListener("DOMContentLoaded", () => {
+        const style = document.createElement("style");
+        style.textContent =
+          "[data-agent-server-ui] { --oh-contrast: #8b1029 !important; }";
+        document.head.append(style);
+      });
+    });
+
+    await page.goto("/conversations/0123456789abcdef0123456789abcdef", {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page.getByRole("status").filter({ hasText: "does not exist" }),
+    ).toHaveCSS("color", "rgb(139, 16, 41)");
+
+    await page.goto("/settings/app", { waitUntil: "domcontentloaded" });
+    const soundSwitch = page.getByText("Sound Notifications", { exact: true });
+    const saveButton = page.getByRole("button", { name: "Save Changes" });
+    await soundSwitch.click();
+    await saveButton.click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Settings saved" }),
+    ).toHaveCSS("color", "rgb(139, 16, 41)");
+
+    // Restore the original setting for later serial scenarios.
+    await soundSwitch.click();
+    await saveButton.click();
+    await expect(saveButton).toBeDisabled();
   });
 
   // ── critic result rendering ──────────────────────────────────────
@@ -505,6 +583,185 @@ test.describe("UI regressions", () => {
       page.getByText("Pagination message 50", { exact: true }),
     ).toBeAttached({ timeout: 15_000 });
     await expect(page.getByTestId("loading-older-events")).toHaveCount(0);
+  });
+
+  // ── Drag-selection stays inside the message feed ─────────────────
+
+  /**
+   * Drags from a message in the feed past the top/bottom edge. Without the
+   * clamp the selection escapes to the pane header (up) or the composer
+   * (down); with it the focus stays inside the feed.
+   */
+  async function dragSelectionPastEdge(page: Page, direction: "up" | "down") {
+    const scroller = await waitForScrollableConversation(page);
+    // Park mid-feed, then let any auto-scroll settle before measuring so the
+    // pointer coordinates still point at a message when the drag starts.
+    await scroller.evaluate((el) => {
+      const feed = el;
+      feed.scrollTop = Math.round((feed.scrollHeight - feed.clientHeight) / 2);
+    });
+    await page.waitForTimeout(300);
+
+    const start = await pickVisibleMessage(
+      page,
+      direction === "down" ? "first" : "last",
+    );
+    // Stay inside the viewport but outside the feed so the selection tries to
+    // escape into the pane header (up) or the composer (down).
+    const targetY = direction === "down" ? page.viewportSize()!.height - 1 : 1;
+
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x, targetY, { steps: 30 });
+    // Wait for the auto-scroll to run and the clamp to engage rather than a
+    // fixed delay, so the assertion does not race the feed's scroll.
+    await expect
+      .poll(
+        () =>
+          scroller.evaluate((el) =>
+            el.contains(window.getSelection()?.focusNode ?? null),
+          ),
+        { timeout: 5_000 },
+      )
+      .toBe(true);
+
+    const result = await scroller.evaluate((el) => {
+      const feed = el;
+      const selection = window.getSelection();
+      return {
+        focusInFeed: feed.contains(selection?.focusNode ?? null),
+        text: selection?.toString() ?? "",
+      };
+    });
+
+    await page.mouse.up();
+    return result;
+  }
+
+  /** A point inside the first or last fully visible message text node, with the
+   *  message number that text belongs to. */
+  async function pickVisibleMessage(page: Page, position: "first" | "last") {
+    const scroller = await waitForScrollableConversation(page);
+    return scroller.evaluate((el, pos) => {
+      const feed = el;
+      const bounds = feed.getBoundingClientRect();
+      const walker = document.createTreeWalker(feed, NodeFilter.SHOW_TEXT);
+      const candidates: { x: number; y: number; number: number }[] = [];
+      let node: Node | null;
+      while ((node = walker.nextNode())) {
+        const match = node.textContent?.match(/Pagination message (\d+)/);
+        if (!match) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const rect = range.getBoundingClientRect();
+        if (rect.top > bounds.top + 30 && rect.bottom < bounds.bottom - 30) {
+          candidates.push({
+            x: Math.round(rect.left + 8),
+            y: Math.round(rect.top + rect.height / 2),
+            number: Number(match[1]),
+          });
+        }
+      }
+      const point = pos === "first" ? candidates[0] : candidates.at(-1);
+      if (!point) throw new Error(`no draggable message found (${pos})`);
+      return point;
+    }, position);
+  }
+
+  for (const direction of ["up", "down"] as const) {
+    test(`keeps drag-selection in the feed when dragging ${direction} past the edge`, async ({
+      page,
+    }) => {
+      test.setTimeout(60_000);
+      await routeSessionApiKey(page);
+      await routePaginationConversation(page);
+
+      await page.goto(`/conversations/${PAGINATION_CONVERSATION_ID}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(
+        page.getByText("Pagination message 100", { exact: true }),
+      ).toBeVisible({ timeout: 15_000 });
+
+      const selection = await dragSelectionPastEdge(page, direction);
+
+      expect(selection.focusInFeed).toBe(true);
+      expect(selection.text.length).toBeGreaterThan(0);
+      expect(selection.text).not.toContain("Disconnected");
+    });
+  }
+
+  /**
+   * Drags from a message, past the top edge, and back into the feed without
+   * releasing. With the clamp rebuilding the range via `collapse()` +
+   * `extend()`, the browser anchor survives, so the selection resumes from the
+   * original message instead of restarting at the first feed child.
+   */
+  test("keeps the original anchor when an upward drag reenters the feed", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    await routeSessionApiKey(page);
+    await routePaginationConversation(page);
+    await page.goto(`/conversations/${PAGINATION_CONVERSATION_ID}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page.getByText("Pagination message 100", { exact: true }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const scroller = await waitForScrollableConversation(page);
+    await scroller.evaluate((el) => {
+      const feed = el;
+      feed.scrollTop = Math.round((feed.scrollHeight - feed.clientHeight) / 2);
+    });
+    await page.waitForTimeout(300);
+
+    const start = await pickVisibleMessage(page, "last");
+
+    // Start on the bottom-most visible message, escape past the top edge, then
+    // come back down into the feed without releasing the button.
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x, 1, { steps: 20 });
+    await page.waitForTimeout(400);
+
+    const reenter = await pickVisibleMessage(page, "last");
+    await page.mouse.move(reenter.x, reenter.y, { steps: 20 });
+    await page.waitForTimeout(400);
+
+    const selection = await scroller.evaluate((el) => {
+      const s = window.getSelection();
+      const text = s?.toString() ?? "";
+      const numbers = [...text.matchAll(/Pagination message (\d+)/g)].map((m) =>
+        Number(m[1]),
+      );
+      // The message the browser anchor sits in. `anchorNode` is a text node, so
+      // resolve the enclosing message element and read its number.
+      const anchorText = s?.anchorNode?.textContent ?? "";
+      const anchorNumber = Number(
+        anchorText.match(/Pagination message (\d+)/)?.[1],
+      );
+      return {
+        anchorInFeed: el.contains(s?.anchorNode ?? null),
+        anchorIsFeedElement: s?.anchorNode === el,
+        anchorNumber: Number.isNaN(anchorNumber) ? null : anchorNumber,
+        focusInFeed: el.contains(s?.focusNode ?? null),
+        minNumber: numbers.length ? Math.min(...numbers) : null,
+      };
+    });
+    await page.mouse.up();
+
+    expect(selection.anchorInFeed).toBe(true);
+    // A regression that resets the anchor to the feed element must fail.
+    expect(selection.anchorIsFeedElement).toBe(false);
+    expect(selection.focusInFeed).toBe(true);
+    // The browser anchor must still be the message the drag started on. With the
+    // anchor reset to the feed element this is null; with it reset to the feed
+    // start the anchor message would be 1.
+    expect(selection.anchorNumber).toBe(start.number);
+    // Re-entering near the bottom must not restart the range at message 1.
+    expect(selection.minNumber).toBeGreaterThan(1);
   });
 
   // ── #1076: workspace selection persistence ───────────────────────
@@ -643,5 +900,126 @@ test.describe("UI regressions", () => {
     const dropdown = page.getByTestId("workspace-dropdown");
     await expect(dropdown).toBeEnabled({ timeout: 15_000 });
     await expect(dropdown).toHaveValue("");
+  });
+
+  // @spec FF-001 — Validation feedback follows the embedding host's error role
+  test("profile validation feedback follows the host error role", async ({
+    page,
+  }) => {
+    await routeSessionApiKey(page);
+    // Isolate the missing-model state from profiles saved by earlier scenarios.
+    // Mock the underlying read contract, while the real editor and built CSS run.
+    await page.route("**/api/profiles", async (route, request) => {
+      if (request.method() !== "GET") return route.fallback();
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ profiles: [], active_profile: null }),
+      });
+    });
+    await page.goto("/settings/agents", { waitUntil: "domcontentloaded" });
+    await page.getByTestId("add-agent-profile").click();
+    await expect(page.getByTestId("agent-profile-no-llm")).toBeVisible();
+    await page.getByTestId("agent-profile-no-llm").evaluate((el) => {
+      const scope = el.closest("[data-agent-server-ui]");
+      if (!scope) throw new Error("Agent Server UI theme scope not found");
+      (scope as HTMLElement).style.setProperty(
+        "--oh-feedback-error",
+        "#8b1029",
+      );
+    });
+    await expect(page.getByTestId("agent-profile-no-llm")).toHaveCSS(
+      "color",
+      "rgb(139, 16, 41)",
+    );
+  });
+
+  // @spec WN-001 — Home warning icon follows the embedding host warning role
+  test("home warning icon follows the host warning color", async ({ page }) => {
+    await routeSessionApiKey(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByTestId("home-llm-not-configured-banner"),
+    ).toBeVisible();
+    const icon = page
+      .getByTestId("home-llm-not-configured-banner")
+      .locator("svg")
+      .first();
+    await icon.evaluate((element) => {
+      const scope = element.closest("[data-agent-server-ui]");
+      if (!scope) throw new Error("Agent Server UI theme scope not found");
+      (scope as HTMLElement).style.setProperty(
+        "--oh-feedback-warning",
+        "#8b1029",
+      );
+    });
+    await expect(icon).toHaveCSS("color", "rgb(139, 16, 41)");
+  });
+
+  // @spec WN-001 — Canvas Apps trust notice follows the host warning role
+  test("Apps trust notice follows the host warning color", async ({ page }) => {
+    await routeSessionApiKey(page);
+    await page.goto("/apps", { waitUntil: "domcontentloaded" });
+    const notice = page.getByText("This app runs trusted JavaScript", {
+      exact: false,
+    });
+    await expect(notice).toBeVisible();
+    await notice.evaluate((element) => {
+      const scope = element.closest("[data-agent-server-ui]");
+      if (!scope) throw new Error("Agent Server UI theme scope not found");
+      (scope as HTMLElement).style.setProperty(
+        "--oh-feedback-warning",
+        "#8b1029",
+      );
+    });
+    await expect(notice).toHaveCSS("color", "rgb(139, 16, 41)");
+  });
+
+  // @spec HL-001 — Home mode labels follow the embedding host's contrast ink
+  test("home mode toggle labels follow the host contrast color", async ({
+    page,
+  }) => {
+    await routeSessionApiKey(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const toggle = page.getByTestId("home-launcher-mode-toggle");
+    const selected = toggle.getByRole("radio", { checked: true });
+    const unselected = toggle.getByRole("radio", { checked: false });
+    await expect(selected).toBeVisible();
+    await toggle.evaluate((element) => {
+      const scope = element.closest("[data-agent-server-ui]");
+      if (!scope) throw new Error("Agent Server UI theme scope not found");
+      (scope as HTMLElement).style.setProperty("--oh-contrast", "#8b1029");
+    });
+
+    await expect(selected).toHaveCSS("color", "rgb(139, 16, 41)");
+    await unselected.hover();
+    await expect(unselected).toHaveCSS("color", "rgb(139, 16, 41)");
+  });
+
+  test("backend keyboard focus follows the host focus role", async ({
+    page,
+  }) => {
+    await routeSessionApiKey(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const shell = page.locator("[data-agent-server-ui]").first();
+    await expect(shell).toBeVisible();
+    await shell.evaluate((el) => {
+      (el as HTMLElement).style.setProperty("--oh-focus", "#7314b9");
+    });
+    await page.getByTestId("backend-selector").click();
+    await page.getByTestId("add-backend-menu-item").click();
+    await page.getByTestId("add-backend-option-agent-server").click();
+
+    for (const id of [
+      "add-backend-option-agent-server",
+      "add-backend-local-guidance-toggle",
+    ]) {
+      const control = page.getByTestId(id);
+      await control.focus();
+      await page.keyboard.press("Space");
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Shift+Tab");
+      await expect(control).toBeFocused();
+      await expect(control).toHaveCSS("outline-color", "rgb(115, 20, 185)");
+    }
   });
 });

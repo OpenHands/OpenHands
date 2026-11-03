@@ -43,6 +43,9 @@ vi.mock(
     ChatInputProfileMenuContent: () => (
       <div data-testid="agent-profile-menu-stub" />
     ),
+    ChatInputAgentProfilePicker: () => (
+      <div data-testid="agent-profile-pill-stub" />
+    ),
   }),
 );
 
@@ -339,6 +342,31 @@ describe("ChatInputActions — Switch agent profile gate (OSS-5735)", () => {
     ).toBeInTheDocument();
   });
 
+  it("names the agent profile on the home page", async () => {
+    renderWithProviders(<ChatInputActions disabled={false} />, {
+      navigation: { conversationId: null },
+    });
+
+    expect(
+      await screen.findByTestId("agent-profile-pill-stub"),
+    ).toBeInTheDocument();
+  });
+
+  it("still mounts the agent profile pill when no profile is active", async () => {
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [{ id: "p1", name: "default", agent_kind: "openhands" }],
+      active_agent_profile_id: null,
+    });
+
+    renderWithProviders(<ChatInputActions disabled={false} />, {
+      navigation: { conversationId: null },
+    });
+
+    expect(
+      await screen.findByTestId("agent-profile-pill-stub"),
+    ).toBeInTheDocument();
+  });
+
   it("offers Switch agent profile in a blank (unstarted) conversation", async () => {
     useActiveConversationMock.mockReturnValue({
       data: { conversation_id: "conv-blank", llm_model: null },
@@ -371,6 +399,9 @@ describe("ChatInputActions — Switch agent profile gate (OSS-5735)", () => {
     expect(await screen.findByTestId("tools-context-menu")).toBeInTheDocument();
     expect(
       screen.queryByTestId("switch-agent-profile-button"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-profile-pill-stub"),
     ).not.toBeInTheDocument();
   });
 
@@ -504,6 +535,25 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
     expect(
       screen.queryByTestId("chat-input-overflow-menu"),
     ).not.toBeInTheDocument();
+  });
+
+  it("closes on Escape and returns focus to the trigger", () => {
+    renderWithProviders(<ChatInputActions disabled={false} />);
+
+    clickTrigger();
+    fireEvent.click(screen.getByTestId("overflow-model-button"));
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(getTrigger()).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByTestId("chat-input-overflow-menu"),
+    ).not.toBeInTheDocument();
+    expect(getTrigger()).toHaveFocus();
+
+    clickTrigger();
+    expect(
+      screen.getByTestId("overflow-model-submenu").parentElement,
+    ).not.toHaveClass("visible");
   });
 
   it("opens the Model submenu with the profile list", () => {

@@ -13,12 +13,12 @@ import {
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   useAutomations,
+  useAutomationDrafts,
   useCancelAutomationRun,
   useDispatchAutomation,
   useDeleteAutomation,
   useImportAutomation,
   useToggleAutomation,
-  useUpdateAutomation,
 } from "#/hooks/query/use-automations";
 import {
   useAutomationDetail,
@@ -46,8 +46,10 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     cancelAutomationRun: vi.fn(),
     createAutomation: vi.fn(),
     deleteAutomation: vi.fn(),
-    updateAutomation: vi.fn(),
     toggleAutomation: vi.fn(),
+    listServerDrafts: vi.fn(),
+    getCapabilities: vi.fn(),
+    supportsAutomationDrafts: vi.fn(),
   },
 }));
 
@@ -124,6 +126,25 @@ beforeEach(() => {
   vi.mocked(AutomationService.getAutomations).mockReset();
   vi.mocked(AutomationService.getAutomation).mockReset();
   vi.mocked(AutomationService.getAutomationRuns).mockReset();
+  vi.mocked(AutomationService.listServerDrafts).mockReset();
+  vi.mocked(AutomationService.listServerDrafts).mockResolvedValue({
+    drafts: [],
+    total: 0,
+  });
+  vi.mocked(AutomationService.getCapabilities).mockReset();
+  vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+    ready: true,
+    features: ["automationDrafts"],
+    triggerKinds: ["cron", "event"],
+    eventSources: [],
+    eventTypes: [],
+    triggers: {},
+  });
+  vi.mocked(AutomationService.supportsAutomationDrafts).mockReset();
+  vi.mocked(AutomationService.supportsAutomationDrafts).mockImplementation(
+    (capabilities) =>
+      Boolean(capabilities?.features?.includes("automationDrafts")),
+  );
   vi.mocked(AutomationService.dispatchAutomation).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockResolvedValue(
     automationRun,
@@ -133,10 +154,8 @@ beforeEach(() => {
     automationRun,
   );
   vi.mocked(AutomationService.deleteAutomation).mockReset();
-  vi.mocked(AutomationService.updateAutomation).mockReset();
   vi.mocked(AutomationService.toggleAutomation).mockReset();
   vi.mocked(AutomationService.deleteAutomation).mockResolvedValue(undefined);
-  vi.mocked(AutomationService.updateAutomation).mockResolvedValue(automation);
   vi.mocked(AutomationService.toggleAutomation).mockResolvedValue(automation);
 
   vi.mocked(AutomationService.getAutomations).mockResolvedValue(listResponse);
@@ -151,6 +170,69 @@ afterEach(() => {
   __resetActiveStoreForTests();
 });
 
+describe("useAutomationDrafts — draft endpoint unavailability", () => {
+  it("does not call the drafts endpoint when capabilities do not advertise drafts", async () => {
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      features: [],
+      triggerKinds: ["cron", "event"],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+    });
+
+    const { result } = renderHook(() => useAutomationDrafts(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ drafts: [], total: 0 });
+    expect(AutomationService.listServerDrafts).not.toHaveBeenCalled();
+  });
+  it("returns an empty draft list when the drafts fetch rejects with an axios-style error", async () => {
+    const error = Object.assign(new Error("Not Found"), {
+      response: { status: 404 },
+    });
+    vi.mocked(AutomationService.listServerDrafts).mockRejectedValue(error);
+
+    const { result } = renderHook(() => useAutomationDrafts(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ drafts: [], total: 0 });
+  });
+
+  it("returns an empty draft list when the drafts fetch rejects with an SDK HttpError", async () => {
+    // Cloud requests go through callCloudProxy, whose TypeScript client throws
+    // an HttpError with `status` set directly on the error (not under `response`).
+    const error = Object.assign(new Error("Not Found"), {
+      name: "HttpError",
+      status: 405,
+    });
+    vi.mocked(AutomationService.listServerDrafts).mockRejectedValue(error);
+
+    const { result } = renderHook(() => useAutomationDrafts(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ drafts: [], total: 0 });
+  });
+
+  it("re-throws errors that are not draft-endpoint 404/405 responses", async () => {
+    vi.mocked(AutomationService.listServerDrafts).mockRejectedValue(
+      new Error("boom"),
+    );
+
+    const { result } = renderHook(() => useAutomationDrafts(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toBeInstanceOf(Error);
+  });
+});
 describe("automation hooks — backend switch", () => {
   it("useAutomations refetches when the active backend changes", async () => {
     // Arrange — mount under the local backend; capture the initial fetch.
@@ -395,26 +477,6 @@ describe("automation mutation hooks — analytics tracking", () => {
     });
   });
 
-  it("captures automation_edited after a successful update", async () => {
-    const { result } = renderHook(() => useUpdateAutomation(), {
-      wrapper: makeWrapper(),
-    });
-
-    await act(async () => {
-      await result.current.mutateAsync({
-        id: "auto-1",
-        body: { name: "Renamed" },
-      });
-    });
-
-    await waitFor(() => {
-      expect(captureMock).toHaveBeenCalledWith(
-        "automation_edited",
-        expect.objectContaining({ backend_kind: "local" }),
-      );
-    });
-  });
-
   it("captures automation_disable_button when an automation is disabled", async () => {
     const { result } = renderHook(() => useToggleAutomation(), {
       wrapper: makeWrapper(),
@@ -485,7 +547,6 @@ describe("automation mutation hooks — error toasts", () => {
       .mockImplementation(() => "toast-id");
     vi.mocked(AutomationService.dispatchAutomation).mockRejectedValue(notFound);
     vi.mocked(AutomationService.createAutomation).mockRejectedValue(notFound);
-    vi.mocked(AutomationService.updateAutomation).mockRejectedValue(notFound);
     vi.mocked(AutomationService.cancelAutomationRun).mockRejectedValue(
       notFound,
     );
@@ -523,20 +584,6 @@ describe("automation mutation hooks — error toasts", () => {
               trigger: automation.trigger,
               enabled: false,
             },
-            { onError: toastApiMessage },
-          ),
-        );
-      },
-    },
-    {
-      action: "Edit save",
-      run: () => {
-        const { result } = renderHook(() => useUpdateAutomation(), {
-          wrapper: makeAppClientWrapper(),
-        });
-        act(() =>
-          result.current.mutate(
-            { id: "auto-1", body: { name: "Renamed" } },
             { onError: toastApiMessage },
           ),
         );

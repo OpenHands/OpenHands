@@ -384,13 +384,13 @@ export function AddModelsModal({
     >
       <div data-testid="add-models-modal" className="flex flex-col gap-3">
         <label
-          className="flex flex-col gap-2 text-sm text-white"
+          className="flex flex-col gap-2 text-sm text-contrast"
           data-testid="add-models-provider-field"
         >
           {t(I18nKey.SETTINGS$ADD_MODELS_PROVIDER_LABEL)}
           <select
             data-testid="add-models-provider"
-            className="rounded-md border border-[var(--oh-border)] bg-[var(--oh-background)] px-3 py-2 text-sm text-white"
+            className="rounded-md border border-border bg-[var(--oh-background)] px-3 py-2 text-sm text-contrast"
             value={selectedProvider ?? ""}
             onChange={(e) => handleProviderChange(e.target.value)}
             disabled={submitting}
@@ -412,13 +412,13 @@ export function AddModelsModal({
             lone "No connection" option. */}
         {matchingConnections.length > 0 && (
           <label
-            className="flex flex-col gap-2 text-sm text-white"
+            className="flex flex-col gap-2 text-sm text-contrast"
             data-testid="add-models-connection-field"
           >
             {t(I18nKey.SETTINGS$ADD_MODELS_CONNECTION_LABEL)}
             <select
               data-testid="add-models-connection"
-              className="rounded-md border border-[var(--oh-border)] bg-[var(--oh-background)] px-3 py-2 text-sm text-white"
+              className="rounded-md border border-border bg-[var(--oh-background)] px-3 py-2 text-sm text-contrast"
               value={selectedConnectionId ?? KEYLESS_CONNECTION_VALUE}
               onChange={(e) => setSelectedConnectionId(e.target.value || null)}
               disabled={submitting}
@@ -436,7 +436,7 @@ export function AddModelsModal({
         )}
 
         {selectedProvider && connectionId && (
-          <span className="min-w-0 max-w-full truncate text-xs text-[var(--oh-muted)]">
+          <span className="min-w-0 max-w-full truncate text-xs text-muted">
             {t(I18nKey.SETTINGS$ADD_MODELS_CONNECTION_BOUND, {
               provider: selectedProvider,
             })}
@@ -445,7 +445,7 @@ export function AddModelsModal({
         {selectedProvider && !connectionId && (
           <span
             data-testid="add-models-keyless-note"
-            className="min-w-0 max-w-full truncate text-xs text-[var(--oh-muted)]"
+            className="min-w-0 max-w-full truncate text-xs text-muted"
           >
             {t(I18nKey.SETTINGS$ADD_MODELS_KEYLESS_NOTE)}
           </span>
@@ -458,17 +458,14 @@ export function AddModelsModal({
         )}
 
         {showEmpty && (
-          <p
-            data-testid="add-models-empty"
-            className="text-sm text-[var(--oh-muted)]"
-          >
+          <p data-testid="add-models-empty" className="text-sm text-muted">
             {t(emptyMessage)}
           </p>
         )}
 
         {visibleRows.length > 0 && (
           <>
-            <label className="flex items-center gap-2 text-sm text-white">
+            <label className="flex items-center gap-2 text-sm text-contrast">
               <input
                 data-testid="add-models-select-all"
                 type="checkbox"
@@ -501,19 +498,19 @@ export function AddModelsModal({
                       disabled={disabled}
                     />
                     <span
-                      className="min-w-0 flex-1 truncate text-sm text-white"
+                      className="min-w-0 flex-1 truncate text-sm text-contrast"
                       title={row.model}
                     >
                       {shortName}
                     </span>
                     {row.status === "saving" && <LoadingSpinner size="small" />}
                     {row.status === "saved" && (
-                      <span className="text-xs text-green-400">
+                      <span className="text-xs text-feedback-success">
                         {t(I18nKey.SETTINGS$MODEL_ROW_SAVED)}
                       </span>
                     )}
                     {row.status === "failed" && (
-                      <span className="text-xs text-red-400">
+                      <span className="text-xs text-feedback-error">
                         {t(I18nKey.SETTINGS$MODEL_ROW_FAILED)}
                       </span>
                     )}

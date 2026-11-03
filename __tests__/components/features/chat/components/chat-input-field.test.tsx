@@ -45,6 +45,17 @@ describe("ChatInputField auto-focus", () => {
 
     expect(screen.getByTestId("chat-input")).not.toBe(document.activeElement);
   });
+
+  it("uses the provided placeholder when one is passed", () => {
+    renderWithProviders(
+      <Harness disabled={false} placeholder="Custom placeholder" />,
+    );
+
+    expect(screen.getByTestId("chat-input")).toHaveAttribute(
+      "data-placeholder",
+      "Custom placeholder",
+    );
+  });
 });
 
 function describeEngineeringTask() {

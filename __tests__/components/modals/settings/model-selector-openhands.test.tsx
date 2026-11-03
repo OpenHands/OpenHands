@@ -131,4 +131,57 @@ describe("ModelSelector — OpenHands provider display", () => {
       "Free",
     );
   });
+
+  it("lists each section's providers by their shown name, OpenHands first", async () => {
+    // Arrange: neither the backend order nor the provider ids follow the
+    // names the picker shows (e.g. "bedrock" is shown as "AWS Bedrock").
+    server.use(
+      http.get("*/api/llm/providers", () =>
+        HttpResponse.json({ providers: ["mistral", "azure", "bedrock"] }),
+      ),
+      http.get("*/api/llm/models/verified", () =>
+        HttpResponse.json({
+          models: { openai: [], openhands: [], deepseek: [], anthropic: [] },
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithQuery(<ModelSelector />);
+
+    // Act
+    await user.click(screen.getByLabelText("LLM$PROVIDER"));
+
+    // Assert
+    await waitFor(() => {
+      expect(
+        screen.getAllByRole("option").map((option) => option.textContent),
+      ).toEqual([
+        "OpenHands",
+        "Anthropic",
+        "deepseek",
+        "OpenAI",
+        "AWS Bedrock",
+        "Azure",
+        "Mistral AI",
+      ]);
+    });
+  });
+
+  it("filters providers by what the user types over the selected one", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderWithQuery(<ModelSelector currentModel="openai/gpt-4o" />);
+    const providerInput = screen.getByLabelText("LLM$PROVIDER");
+    await waitFor(() => expect(providerInput).toHaveValue("OpenAI"));
+
+    // Act
+    await user.click(providerInput);
+    await user.keyboard("anth");
+
+    // Assert
+    expect(providerInput).toHaveValue("anth");
+    expect(
+      screen.getAllByRole("option").map((option) => option.textContent),
+    ).toEqual(["Anthropic"]);
+  });
 });

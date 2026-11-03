@@ -18,6 +18,11 @@ export interface CustomChatInputProps {
   showButton?: boolean;
   /** Overrides the input's default placeholder text. */
   placeholder?: string;
+  /**
+   * Whether this composer saves and restores a draft. Defaults to true; turn
+   * it off for composers that must not share the Home draft.
+   */
+  persistDraft?: boolean;
   onSubmit: (message: string) => void;
   onFocus?: () => void;
   onBlur?: () => void;
@@ -35,6 +40,7 @@ export function CustomChatInput({
   hasStartedConversation,
   showButton = true,
   placeholder,
+  persistDraft = true,
   onSubmit,
   onFocus,
   onBlur,
@@ -81,13 +87,8 @@ export function CustomChatInput({
   }, [submittedMessage, disabled, setSubmittedMessage]);
 
   // Custom hooks
-  const {
-    chatInputRef,
-    messageToSend,
-    checkIsContentEmpty,
-    clearEmptyContentHandler,
-    saveDraft,
-  } = useChatInputLogic();
+  const { chatInputRef, messageToSend, checkIsContentEmpty, saveDraft } =
+    useChatInputLogic({ persistDraft });
 
   const syncCanSubmit = React.useCallback(() => {
     const text = chatInputRef.current?.innerText ?? "";
@@ -107,11 +108,7 @@ export function CustomChatInput({
   } = useFileHandling(onFilesPaste);
 
   const {
-    gripRef,
-    isGripVisible,
-    isGripDragging,
     canResize,
-    handleTopEdgeClick,
     smartResize,
     handleGripMouseDown,
     handleGripTouchStart,
@@ -140,7 +137,6 @@ export function CustomChatInput({
       smartResize,
       increaseHeightForEmptyContent,
       checkIsContentEmpty,
-      clearEmptyContentHandler,
       onFocus,
       onBlur,
     );
@@ -177,11 +173,7 @@ export function CustomChatInput({
       {/* Container with grip */}
       <div className="relative w-full">
         <ChatInputGrip
-          gripRef={gripRef}
-          isGripVisible={isGripVisible}
-          isGripDragging={isGripDragging}
           canResize={canResize}
-          handleTopEdgeClick={handleTopEdgeClick}
           handleGripMouseDown={handleGripMouseDown}
           handleGripTouchStart={handleGripTouchStart}
         />
@@ -194,9 +186,9 @@ export function CustomChatInput({
           hasStartedConversation={hasStartedConversation}
           isNewConversationPending={isNewConversationPending}
           showButton={showButton}
-          placeholder={placeholder}
           buttonClassName={buttonClassName}
           chatInputRef={chatInputRef}
+          placeholder={placeholder}
           handleFileIconClick={handleFileIconClick}
           handleSubmit={handleSubmitAndSync}
           onDragOver={handleDragOver}

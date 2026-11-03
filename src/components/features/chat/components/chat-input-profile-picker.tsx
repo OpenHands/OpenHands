@@ -1,5 +1,11 @@
+import React from "react";
 import { useTranslation } from "react-i18next";
 import { useChatInputProfileState } from "#/hooks/use-chat-input-profile-state";
+import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import RobotIcon from "#/icons/u-robot.svg?react";
+import { ContextMenu } from "#/ui/context-menu";
+import { ComboboxCaretInline } from "#/ui/combobox-caret";
+import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
 import SettingsGearIcon from "#/icons/settings-gear.svg?react";
 import CheckIcon from "#/icons/checkmark.svg?react";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -22,8 +28,8 @@ interface ChatInputProfileMenuContentProps {
  * profile" submenu, offered only while starting a new conversation (OSS-5735 —
  * the profile is locked once a conversation starts). Selecting a profile
  * activates it (home) or recreates the blank conversation with it (see
- * `useChatInputProfileState`). The chat-input pill itself is always an LLM
- * selector; the former `ChatInputProfilePicker` pill is gone.
+ * `useChatInputProfileState`). Also the menu of the
+ * {@link ChatInputAgentProfilePicker} pill.
  */
 export function ChatInputProfileMenuContent({
   onClose,
@@ -55,7 +61,7 @@ export function ChatInputProfileMenuContent({
           {/* role="presentation" keeps this a valid <li> child of the
               ContextMenu <ul> without exposing the label as a menu item. */}
           <li role="presentation" className="px-2 pt-1 pb-0.5">
-            <Typography.Text className="text-[11px] font-medium text-text-dim uppercase tracking-wide leading-4">
+            <Typography.Text className="menu-caption-text font-medium text-text-dim uppercase tracking-wide leading-4">
               {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
             </Typography.Text>
           </li>
@@ -100,7 +106,7 @@ export function ChatInputProfileMenuContent({
           })}
           {isInConversation && (
             <li role="presentation" className="px-2 pt-0.5 pb-1">
-              <Typography.Text className="text-[11px] text-text-dim leading-4">
+              <Typography.Text className="menu-caption-text text-text-dim leading-4">
                 {t(I18nKey.CHAT$START_NEW_WITH_PROFILE_HINT)}
               </Typography.Text>
             </li>
@@ -131,5 +137,62 @@ export function ChatInputProfileMenuContent({
         </li>
       )}
     </>
+  );
+}
+
+/** Names the agent profile a new conversation will run, and switches it. */
+export function ChatInputAgentProfilePicker() {
+  const { t } = useTranslation("openhands");
+  const { profiles, currentProfileName, isLoading, isSwitching } =
+    useChatInputProfileState();
+  const [isOpen, setIsOpen] = React.useState(false);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const popoverRef = useClickOutsideElement<HTMLUListElement>(
+    () => setIsOpen(false),
+    triggerRef,
+  );
+
+  // No profiles yet: stay out of the way, like the LLM picker. With profiles
+  // but nothing selected, the pill still renders so the user can pick one.
+  if (isLoading || profiles.length === 0) return null;
+
+  const label = currentProfileName ?? t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER);
+
+  return (
+    <div className="relative min-w-0">
+      <button
+        ref={triggerRef}
+        type="button"
+        className={cn(chatInputPillButtonClassName, "max-w-40")}
+        title={t(I18nKey.CHAT$SWITCH_AGENT_PROFILE)}
+        aria-label={`${t(I18nKey.CHAT$SWITCH_AGENT_PROFILE)}: ${label}`}
+        data-testid="chat-input-agent-profile"
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        disabled={isSwitching}
+        aria-busy={isSwitching}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setIsOpen((open) => !open);
+        }}
+      >
+        <RobotIcon width={14} height={14} className="shrink-0" aria-hidden />
+        <span className="truncate">{label}</span>
+        <ComboboxCaretInline isOpen={isOpen} />
+      </button>
+      {isOpen && (
+        <ContextMenu
+          ref={popoverRef}
+          testId="chat-input-agent-profile-popover"
+          position="top"
+          alignment="left"
+          spacing="none"
+          className="z-60 mb-2 min-w-50 max-w-80 profile-menu-height overflow-y-auto"
+        >
+          <ChatInputProfileMenuContent onClose={() => setIsOpen(false)} />
+        </ContextMenu>
+      )}
+    </div>
   );
 }

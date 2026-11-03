@@ -14,6 +14,7 @@ import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-
 import { SidebarMobileMenuBar } from "#/components/features/sidebar/sidebar-mobile-menu-bar";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useEnsureActiveProfile } from "#/hooks/use-ensure-active-profile";
+import { useMigrateDefaultAgentProfile } from "#/hooks/use-migrate-default-agent-profile";
 import { useMigrateEnabledSkills } from "#/hooks/use-migrate-enabled-skills";
 import { useSyncTelemetryConsent } from "#/hooks/use-sync-telemetry-consent";
 import { useSyncAutomationTelemetryConsent } from "#/hooks/use-sync-automation-telemetry-consent";
@@ -27,6 +28,9 @@ import { ReactRouterNavigationProvider } from "./react-router-navigation-provide
 import { OnboardingHost } from "#/components/features/onboarding";
 import { isOnboardingPreviewActive } from "#/components/features/onboarding/onboarding-preview";
 import { CanvasExtensionsRuntimeProvider } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
+import { isMacDesktopShell } from "#/utils/desktop-shell";
+import { useDesktopFullScreen } from "#/hooks/use-desktop-full-screen";
+import { cn } from "#/utils/utils";
 
 const EnvironmentSwitchOverlay = React.lazy(
   () => import("#/components/features/backends/environment-switch-overlay"),
@@ -41,6 +45,41 @@ const CommandMenu = React.lazy(() =>
     default: m.CommandMenu,
   })),
 );
+const SuperAdminSetupGuide = React.lazy(
+  () => import("#/components/features/setup-guide/super-admin-setup-guide"),
+);
+
+/**
+ * The macOS desktop app hides its title bar ("hiddenInset"), leaving the
+ * traffic lights over the shell. Screens reserve a 28px band for them (pt-7)
+ * and make it the window's drag handle; the padding keeps it free of controls.
+ */
+function useShowTitleBarBand(): boolean {
+  const isFullScreen = useDesktopFullScreen();
+  // Fullscreen hides the traffic lights, so the band has nothing to clear.
+  return isMacDesktopShell() && !isFullScreen;
+}
+
+function TitleBarDragRegion() {
+  if (!useShowTitleBarBand()) return null;
+  return (
+    <div
+      data-testid="titlebar-drag-region"
+      aria-hidden="true"
+      className="app-region-drag fixed inset-x-0 top-0 z-50 h-7"
+    />
+  );
+}
+
+function ErrorShell({ children }: { children: React.ReactNode }) {
+  const showTitleBarBand = useShowTitleBarBand();
+  return (
+    <div className={cn(showTitleBarBand && "pt-7")}>
+      <TitleBarDragRegion />
+      {children}
+    </div>
+  );
+}
 
 export function ErrorBoundary() {
   const error = useRouteError();
@@ -48,7 +87,7 @@ export function ErrorBoundary() {
 
   if (isRouteErrorResponse(error)) {
     return (
-      <div>
+      <ErrorShell>
         <h1>{error.status}</h1>
         <p>{error.statusText}</p>
         <pre>
@@ -56,22 +95,22 @@ export function ErrorBoundary() {
             ? JSON.stringify(error.data)
             : error.data}
         </pre>
-      </div>
+      </ErrorShell>
     );
   }
   if (error instanceof Error) {
     return (
-      <div>
+      <ErrorShell>
         <h1>{t(I18nKey.ERROR$GENERIC)}</h1>
         <pre>{error.message}</pre>
-      </div>
+      </ErrorShell>
     );
   }
 
   return (
-    <div>
+    <ErrorShell>
       <h1>{t(I18nKey.ERROR$UNKNOWN)}</h1>
-    </div>
+    </ErrorShell>
   );
 }
 
@@ -83,11 +122,16 @@ export default function MainApp() {
   );
 }
 
+function DocumentTitle() {
+  const appTitle = useAppTitle();
+  return <title>{appTitle}</title>;
+}
+
 function MainAppContent() {
   const location = useLocation();
-  const appTitle = useAppTitle();
   const { data: settings } = useSettings();
   const config = useConfig();
+  const showTitleBarBand = useShowTitleBarBand();
 
   useSyncAutomationTelemetryConsent();
 
@@ -97,6 +141,8 @@ function MainAppContent() {
   useEnsureActiveProfile();
   // One-shot move from the catalog deny-list to an explicit allow-list.
   useMigrateEnabledSkills();
+  // One-shot move of global agent behavior into the `default` profile.
+  useMigrateDefaultAgentProfile();
 
   React.useEffect(() => {
     if (settings?.language) {
@@ -107,7 +153,8 @@ function MainAppContent() {
 
   if (config.isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-base">
+      <div className="min-h-screen flex items-center justify-center bg-canvas-base">
+        <TitleBarDragRegion />
         <LoadingSpinner size="large" />
       </div>
     );
@@ -126,9 +173,13 @@ function MainAppContent() {
         <SidebarMobileNavProvider>
           <div
             data-testid="root-layout"
-            className="h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden p-0"
+            className={cn(
+              "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-canvas-base overflow-hidden p-0",
+              showTitleBarBand && "pt-7",
+            )}
           >
-            <title>{appTitle}</title>
+            <DocumentTitle />
+            <TitleBarDragRegion />
             <Sidebar />
 
             <div className="flex min-h-0 flex-col w-full min-w-0 h-full gap-3">
@@ -158,6 +209,9 @@ function MainAppContent() {
           <React.Suspense fallback={null}>
             <EnvironmentSwitchOverlay />
             <CommandMenu />
+          </React.Suspense>
+          <React.Suspense fallback={null}>
+            <SuperAdminSetupGuide />
           </React.Suspense>
           {showOnboardingPreview ? <OnboardingHost /> : null}
         </SidebarMobileNavProvider>

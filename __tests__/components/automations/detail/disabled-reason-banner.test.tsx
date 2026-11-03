@@ -30,8 +30,24 @@ describe("DisabledReasonBanner", () => {
 
   it("renders nothing for an inactive automation with no recorded reason", () => {
     const { container } = render(
-      <DisabledReasonBanner automation={{ ...baseAutomation, disabled_reason: null }} />,
+      <DisabledReasonBanner
+        automation={{ ...baseAutomation, disabled_reason: null }}
+      />,
     );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("renders nothing for draft automations even if they carry a disable reason", () => {
+    const { container } = render(
+      <DisabledReasonBanner
+        automation={{
+          ...baseAutomation,
+          state: "DRAFT",
+          disabled_reason: "Automation moved to draft by user",
+        }}
+      />,
+    );
+
     expect(container.firstChild).toBeNull();
   });
 
@@ -43,17 +59,24 @@ describe("DisabledReasonBanner", () => {
         automation={{
           ...baseAutomation,
           disabled_reason: reason,
-          disabled_detail: { reason: "consecutive_permanent_failures", source: "consecutive_permanent_failures" },
+          disabled_detail: {
+            reason: "consecutive_permanent_failures",
+            source: "consecutive_permanent_failures",
+          },
           disabled_at: "2026-09-14T10:00:00Z",
         }}
       />,
     );
 
-    expect(screen.getByTestId("automation-disabled-reason-banner")).toBeInTheDocument();
-    expect(screen.getByTestId("automation-disabled-reason-text")).toHaveTextContent(
-      reason,
-    );
-    expect(screen.getByTestId("automation-disabled-reason-timestamp")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-disabled-reason-banner"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-disabled-reason-text"),
+    ).toHaveTextContent(reason);
+    expect(
+      screen.getByTestId("automation-disabled-reason-timestamp"),
+    ).toBeInTheDocument();
   });
 
   it("hides the timestamp when disabled_at is missing or invalid", () => {
@@ -62,13 +85,18 @@ describe("DisabledReasonBanner", () => {
         automation={{
           ...baseAutomation,
           disabled_reason: "Paused automatically: the last 5 runs all failed.",
-          disabled_detail: { reason: "consecutive_failures", source: "consecutive_failures" },
+          disabled_detail: {
+            reason: "consecutive_failures",
+            source: "consecutive_failures",
+          },
           disabled_at: null,
         }}
       />,
     );
 
-    expect(screen.queryByTestId("automation-disabled-reason-timestamp")).toBeNull();
+    expect(
+      screen.queryByTestId("automation-disabled-reason-timestamp"),
+    ).toBeNull();
   });
 
   it("hides the timestamp for an epoch/zero disabled_at", () => {
@@ -77,13 +105,18 @@ describe("DisabledReasonBanner", () => {
         automation={{
           ...baseAutomation,
           disabled_reason: "Paused automatically: the last 5 runs all failed.",
-          disabled_detail: { reason: "consecutive_failures", source: "consecutive_failures" },
+          disabled_detail: {
+            reason: "consecutive_failures",
+            source: "consecutive_failures",
+          },
           disabled_at: "1970-01-01T00:00:00Z",
         }}
       />,
     );
 
-    expect(screen.queryByTestId("automation-disabled-reason-timestamp")).toBeNull();
+    expect(
+      screen.queryByTestId("automation-disabled-reason-timestamp"),
+    ).toBeNull();
   });
 
   it("substitutes the manual-disable label", () => {
@@ -98,9 +131,11 @@ describe("DisabledReasonBanner", () => {
       />,
     );
 
-    expect(screen.getByTestId("automation-disabled-reason-text")).toHaveTextContent(
-      I18nKey.AUTOMATIONS$DETAIL$DISABLED_MANUAL,
-    );
-    expect(screen.queryByTestId("automation-disabled-reason-timestamp")).toBeNull();
+    expect(
+      screen.getByTestId("automation-disabled-reason-text"),
+    ).toHaveTextContent(I18nKey.AUTOMATIONS$DETAIL$DISABLED_MANUAL);
+    expect(
+      screen.queryByTestId("automation-disabled-reason-timestamp"),
+    ).toBeNull();
   });
 });

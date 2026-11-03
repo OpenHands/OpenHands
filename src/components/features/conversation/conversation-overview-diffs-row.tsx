@@ -6,10 +6,6 @@ import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useConversationOverviewGitDiffStats } from "#/hooks/use-conversation-overview-git-diff-stats";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { I18nKey } from "#/i18n/declaration";
-import {
-  OH_STATUS_ERROR_COLOR,
-  OH_STATUS_SUCCESS_COLOR,
-} from "#/constants/status-colors";
 import { cn } from "#/utils/utils";
 import { Provider } from "#/types/settings";
 import { useConversationOverviewDrawerOptional } from "./conversation-overview-drawer-context";
@@ -107,7 +103,7 @@ export function ConversationOverviewDiffsRow() {
             >
               <span
                 data-testid="conversation-overview-diffs-additions"
-                style={{ color: OH_STATUS_SUCCESS_COLOR }}
+                className="text-status-success"
               >
                 {t(I18nKey.CONVERSATION$OVERVIEW_DIFF_ADDITIONS, {
                   count: additions.toLocaleString(),
@@ -115,7 +111,7 @@ export function ConversationOverviewDiffsRow() {
               </span>
               <span
                 data-testid="conversation-overview-diffs-deletions"
-                style={{ color: OH_STATUS_ERROR_COLOR }}
+                className="text-status-error"
               >
                 {t(I18nKey.CONVERSATION$OVERVIEW_DIFF_DELETIONS, {
                   count: deletions.toLocaleString(),

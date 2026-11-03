@@ -106,33 +106,36 @@ describe("settings route", () => {
     expect(result).toBeNull();
   });
 
-  it("renders the current OSS section title", () => {
-    const RouterStub = createRoutesStub([
-      {
-        path: "/settings",
-        Component: SettingsScreen,
-        children: [
-          {
-            path: "/settings/app",
-            Component: () => <div data-testid="app-settings-screen" />,
-          },
-        ],
-      },
-    ]);
+  it.each(["/settings/app", "/settings/app/"])(
+    "renders the current OSS section title on %s",
+    (path) => {
+      const RouterStub = createRoutesStub([
+        {
+          path: "/settings",
+          Component: SettingsScreen,
+          children: [
+            {
+              path: "/settings/app",
+              Component: () => <div data-testid="app-settings-screen" />,
+            },
+          ],
+        },
+      ]);
 
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <ActiveBackendProvider>
-          <RouterStub initialEntries={["/settings/app"]} />
-        </ActiveBackendProvider>
-      </QueryClientProvider>,
-    );
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <ActiveBackendProvider>
+            <RouterStub initialEntries={[path]} />
+          </ActiveBackendProvider>
+        </QueryClientProvider>,
+      );
 
-    expect(
-      screen.getAllByText("SETTINGS$NAV_APPLICATION").length,
-    ).toBeGreaterThan(0);
-    expect(screen.getByTestId("app-settings-screen")).toBeInTheDocument();
-  });
+      expect(
+        screen.getByRole("heading", { name: "SETTINGS$NAV_APPLICATION" }),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("app-settings-screen")).toBeInTheDocument();
+    },
+  );
 
   it("exposes a single main landmark that holds the settings page", () => {
     // Arrange

@@ -43,6 +43,24 @@ export function useCanvasExtensionsRuntime(): CanvasExtensionsRuntimeValue {
   return React.useContext(CanvasExtensionsRuntimeContext);
 }
 
+export function selectCanvasExtensionPage(
+  pages: RegisteredCanvasExtensionPage[],
+  extensionName: string,
+  routePath: string,
+): RegisteredCanvasExtensionPage | undefined {
+  return pages
+    .filter((candidate) => candidate.extension.name === extensionName)
+    .sort(
+      (left, right) =>
+        right.contribution.path.length - left.contribution.path.length,
+    )
+    .find(
+      (candidate) =>
+        routePath === candidate.contribution.path ||
+        routePath.startsWith(`${candidate.contribution.path}/`),
+    );
+}
+
 function isValidSegment(value: string): boolean {
   return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 }

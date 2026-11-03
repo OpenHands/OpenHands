@@ -20,7 +20,6 @@ import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 import { validateInterfaceManifest } from "./interface-validation";
 import { AUTOMATION_INTERFACE_CANDIDATE } from "./manifest-sources";
 import type {
-  AutomationAttributeName,
   InterfaceDashboardFilter,
   InterfaceDashboardSort,
   InterfaceEndpointName,
@@ -175,39 +174,6 @@ export function getInterfaceCopy(): InterfaceCopy {
     listSubtitle: manifest.pages.list.subtitle,
     detailBackLabel: manifest.pages.detail.backLabel,
     editTitle: manifest.pages.edit.title,
-  };
-}
-
-export interface AttributeSpec {
-  present: boolean;
-  label: string;
-  /** Null when the manifest states no help text for the attribute. */
-  help: string | null;
-  required: boolean;
-  min: number | null;
-  max: number | null;
-}
-
-/** An attribute the manifest does not declare is not offered at all. */
-const ABSENT_ATTRIBUTE: AttributeSpec = {
-  present: false,
-  label: "",
-  help: null,
-  required: false,
-  min: null,
-  max: null,
-};
-
-export function getAttributeSpec(name: AutomationAttributeName): AttributeSpec {
-  const attribute = requireInterface().attributes[name];
-  if (!attribute) return ABSENT_ATTRIBUTE;
-  return {
-    present: true,
-    label: attribute.label,
-    help: attribute.help ?? null,
-    required: attribute.required,
-    min: attribute.constraints?.min ?? null,
-    max: attribute.constraints?.max ?? null,
   };
 }
 

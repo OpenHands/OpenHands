@@ -7,10 +7,14 @@ import { SkillInfo } from "#/types/settings";
  *   views pass the conversation's own workspace so the catalog matches the
  *   skills loaded into that conversation; the global Skills page omits it.
  */
-export const useSkills = (projectDir?: string) =>
+export const useSkills = (
+  projectDir?: string,
+  options: { enabled?: boolean } = {},
+) =>
   useQuery<SkillInfo[]>({
     queryKey: ["skills", projectDir ?? null],
     queryFn: () => SkillsService.getSkills(projectDir),
+    enabled: options.enabled ?? true,
     staleTime: 1000 * 60 * 10, // 10 minutes – skill list rarely changes
     refetchOnWindowFocus: false,
   });
