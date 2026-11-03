@@ -22,6 +22,10 @@ value's owner before moving it to classes or CSS variables.
 public `style` / `styleOverrides` API forwards caller-owned styles, so the
 implementation must accept an opaque object. Other lint policies keep their scope.
 
+## Arbitrary-value rollout
+
+`shadcn/no-arbitrary-values` warns globally while migration proceeds. Four audited owners reject arbitrary values at error severity: `command-menu.tsx`, `backend-version.tsx`, `settings-nav-header.tsx`, and `backend-synced-settings-badge.tsx`. Unadopted routes, UI primitives, and geometry owners continue to receive warnings. Theme tokens and recipes pass cleanly; slash opacity modifiers remain accepted.
+
 ## Skill Loading
 
 Public skills are loaded from the `@openhands/extensions` npm package at build time through `SKILLS_CATALOG` from `@openhands/extensions/skills`. `SkillsService` maps catalog entries to `SkillInfo` and merges them with user and project skills fetched from the Agent Server using `load_public: false`.
