@@ -3,6 +3,10 @@ name: Mock-LLM E2E Tests
 on:
   push:
     branches: [main]
+  # The release-please PR, on every update: only it changes this file.
+  pull_request:
+    paths:
+      - .release-please-manifest.json
   workflow_dispatch:
 
 concurrency:
