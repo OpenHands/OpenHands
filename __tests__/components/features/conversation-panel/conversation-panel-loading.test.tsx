@@ -31,6 +31,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import { SEEDED_DEFAULT_BACKEND_ID } from "#/api/backend-registry/default-backend";
+import { CONVERSATION_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 const mockStopConversationMutate = vi.fn();
 vi.mock("#/hooks/mutation/use-unified-stop-conversation", () => ({
@@ -132,14 +133,12 @@ describe("ConversationPanel list loading", () => {
     expect(screen.queryByText("Conversation 12345")).not.toBeInTheDocument();
     act(() =>
       client.setQueryData(
-        [
-          "user",
-          "conversations",
-          "paginated",
+        CONVERSATION_QUERY_KEYS.paginated(
           20,
           cloudBackend.id,
           "org-startup",
-        ],
+          0,
+        ),
         { pages: [{ items: [], next_page_id: null }], pageParams: [undefined] },
       ),
     );

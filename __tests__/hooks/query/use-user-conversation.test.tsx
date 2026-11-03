@@ -150,6 +150,25 @@ describe("useUserConversation — backend switch", () => {
     ).toHaveBeenCalledTimes(1);
   });
 
+  it("does not load the conversation id after the active connection changes", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    const { result } = renderHook(
+      () => useUserConversation(CLOUD_CONVERSATION_ID),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    setRegisteredBackends([
+      localBackend,
+      { ...cloudBackend, apiKey: "new-key", connectionRevision: 1 },
+    ]);
+
+    await waitFor(() => expect(result.current.data).toBeUndefined());
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).toHaveBeenCalledTimes(1);
+  });
+
   it("still loads the conversation when only the org changes on the same backend", async () => {
     // Arrange — opened under a cloud backend scoped to one org.
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
@@ -204,6 +223,26 @@ describe("useUserConversation — backend switch", () => {
 });
 
 describe("selected conversation prefetch", () => {
+  it("does not prefetch through an edited connection with a stale callback", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    const { result } = renderHook(() => usePrefetchUserConversation(), {
+      wrapper: makeWrapper(),
+    });
+    const prefetchBeforeEdit = result.current;
+
+    setRegisteredBackends([
+      localBackend,
+      { ...cloudBackend, apiKey: "new-key", connectionRevision: 1 },
+    ]);
+    await act(async () => {
+      await prefetchBeforeEdit(CLOUD_CONVERSATION_ID);
+    });
+
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).not.toHaveBeenCalled();
+  });
+
   it("shares the request started before navigation with the conversation page", async () => {
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
     let resolve!: (value: (AppConversation | null)[]) => void;

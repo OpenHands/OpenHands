@@ -177,6 +177,7 @@ describe("ConversationPanel conversation actions", () => {
           DEFAULT_CONVERSATION_PAGE_SIZE,
           cloudBackend.id,
           "org-2",
+          0,
         ),
         {
           pages: [

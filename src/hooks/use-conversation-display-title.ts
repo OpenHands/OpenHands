@@ -55,6 +55,7 @@ export function useConversationDisplayTitleState() {
       DEFAULT_CONVERSATION_PAGE_SIZE,
       backend.id,
       orgId,
+      backend.connectionRevision ?? 0,
     ),
   );
   const listedById = useMemo(
@@ -67,7 +68,12 @@ export function useConversationDisplayTitleState() {
     [list?.data],
   );
   const detail = useCachedQuery<AppConversation | null>(
-    CONVERSATION_QUERY_KEYS.detail(conversationId ?? null, backend.id, orgId),
+    CONVERSATION_QUERY_KEYS.detail(
+      conversationId ?? null,
+      backend.id,
+      orgId,
+      backend.connectionRevision ?? 0,
+    ),
   );
   const taskId = conversationId?.startsWith("task-")
     ? conversationId.slice(5)
@@ -135,7 +141,12 @@ export function useConversationDisplayTitleState() {
         launch?.conversationId ?? activeTask?.app_conversation_id ?? id;
       const listed = realId ? listedById.get(realId) : undefined;
       const cachedDetail = queryClient.getQueryState<AppConversation | null>(
-        CONVERSATION_QUERY_KEYS.detail(realId, backend.id, orgId),
+        CONVERSATION_QUERY_KEYS.detail(
+          realId,
+          backend.id,
+          orgId,
+          backend.connectionRevision ?? 0,
+        ),
       );
       const active = cachedDetail?.data;
       const candidates = [
@@ -197,6 +208,7 @@ export function useConversationDisplayTitleState() {
       launches,
       backend.id,
       backend.kind,
+      backend.connectionRevision,
       orgId,
       taskId,
       task?.data,

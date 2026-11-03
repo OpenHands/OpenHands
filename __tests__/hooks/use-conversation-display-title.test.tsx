@@ -22,8 +22,8 @@ let launchId: string;
 let routeId: string;
 const prompt = "Explain the startup flow";
 const id = "12345-real";
-const listKey = CONVERSATION_QUERY_KEYS.paginated(20, "cloud", "org-1");
-const detailKey = CONVERSATION_QUERY_KEYS.detail(id, "cloud", "org-1");
+const listKey = CONVERSATION_QUERY_KEYS.paginated(20, "cloud", "org-1", 0);
+const detailKey = CONVERSATION_QUERY_KEYS.detail(id, "cloud", "org-1", 0);
 const metadata = (title: string, updated_at = "2026-11-01T10:00:00Z") => ({
   id,
   title,

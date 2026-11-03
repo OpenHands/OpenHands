@@ -48,6 +48,7 @@ import { makeDefaultLocalBackend } from "#/api/backend-registry/default-backend"
 import { NO_BACKEND } from "#/api/backend-registry/active-store";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { I18nKey } from "#/i18n/declaration";
+import { CONVERSATION_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 const mockSend = vi.fn();
 vi.mock("#/hooks/use-send-message", () => ({
@@ -818,13 +819,12 @@ describe("ChatInterface - Pending message queue", () => {
 
   it("shows resume progress in place of the connection warning only while a send waits", async () => {
     const conversationId = "test-conversation-id";
-    const queryKey = [
-      "user",
-      "conversation",
+    const queryKey = CONVERSATION_QUERY_KEYS.detail(
       conversationId,
       (makeDefaultLocalBackend() ?? NO_BACKEND).id,
       null,
-    ];
+      0,
+    );
     queryClient.setQueryData(queryKey, {
       id: conversationId,
       sandbox_status: "PAUSED",

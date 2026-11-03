@@ -22,9 +22,15 @@ export const useUpdateConversation = () => {
     DEFAULT_CONVERSATION_PAGE_SIZE,
     backend.id,
     orgId,
+    backend.connectionRevision ?? 0,
   );
   const detailKey = (id: string) =>
-    CONVERSATION_QUERY_KEYS.detail(id, backend.id, orgId);
+    CONVERSATION_QUERY_KEYS.detail(
+      id,
+      backend.id,
+      orgId,
+      backend.connectionRevision ?? 0,
+    );
 
   return useMutation({
     mutationFn: (variables: { conversationId: string; newTitle: string }) => {

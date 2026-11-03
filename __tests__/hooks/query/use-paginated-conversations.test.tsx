@@ -36,11 +36,14 @@ function createWrapper(currentPath: string) {
     isNavigating: false,
     navigate: () => {},
   };
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>
-      <NavigationProvider value={navigation}>{children}</NavigationProvider>
-    </QueryClientProvider>
-  );
+  function Wrapper({ children }: { children: React.ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <NavigationProvider value={navigation}>{children}</NavigationProvider>
+      </QueryClientProvider>
+    );
+  }
+  return Wrapper;
 }
 
 /** Flush timers and the promise work they unblock inside act. */
@@ -119,5 +122,37 @@ describe("usePaginatedConversations — interval polling", () => {
     expect(
       AgentServerConversationService.searchConversations,
     ).not.toHaveBeenCalled();
+  });
+
+  it("fetches a fresh list after the active connection changes", async () => {
+    useActiveBackendMock.mockReturnValue({
+      backend: {
+        id: "test-backend",
+        kind: "local",
+        connectionRevision: 0,
+      },
+      orgId: null,
+    });
+    const { rerender } = renderHook(() => usePaginatedConversations(), {
+      wrapper: createWrapper("/"),
+    });
+    await flushAsync();
+    await flushAsync();
+
+    useActiveBackendMock.mockReturnValue({
+      backend: {
+        id: "test-backend",
+        kind: "local",
+        connectionRevision: 1,
+      },
+      orgId: null,
+    });
+    rerender();
+    await flushAsync();
+    await flushAsync();
+
+    expect(
+      AgentServerConversationService.searchConversations,
+    ).toHaveBeenCalledTimes(2);
   });
 });

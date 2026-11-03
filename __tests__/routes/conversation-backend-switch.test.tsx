@@ -28,6 +28,12 @@ import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-
 import { useConversationStore } from "#/stores/conversation-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { useEventStore } from "#/stores/use-event-store";
+import { CONVERSATION_QUERY_KEYS } from "#/hooks/query/query-keys";
+
+const { webSocketProviderUnmountMock } = vi.hoisted(() => ({
+  webSocketProviderUnmountMock: vi.fn(),
+}));
 
 // Mock the underlying service the conversation queries depend on.
 vi.mock(
@@ -57,9 +63,14 @@ vi.mock("#/wrapper/event-handler", () => ({
   ),
 }));
 vi.mock("#/contexts/websocket-provider-wrapper", () => ({
-  WebSocketProviderWrapper: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
+  WebSocketProviderWrapper: function MockWebSocketProviderWrapper({
+    children,
+  }: {
+    children: React.ReactNode;
+  }) {
+    React.useEffect(() => () => webSocketProviderUnmountMock(), []);
+    return <>{children}</>;
+  },
 }));
 vi.mock("#/hooks/query/use-task-polling", () => ({
   useTaskPollingController: () => ({
@@ -236,6 +247,8 @@ beforeEach(() => {
     AgentServerConversationService.batchGetAppConversations,
   ).mockResolvedValue([makeConversation(CLOUD_CONVERSATION_ID)]);
   setRegisteredBackends([localBackend, cloudBackend]);
+  useEventStore.getState().clearEvents();
+  webSocketProviderUnmountMock.mockReset();
 });
 
 afterEach(() => {
@@ -243,6 +256,7 @@ afterEach(() => {
   __clearCloudAutoResumeSuppressionsForTests();
   window.localStorage.clear();
   __resetActiveStoreForTests();
+  useEventStore.getState().clearEvents();
 });
 
 describe("conversation route — backend switch", () => {
@@ -295,6 +309,29 @@ describe("conversation route — backend switch", () => {
 
     // Assert
     expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
+  });
+
+  it("leaves the conversation and clears events when its connection changes", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    renderConversationRoute(CLOUD_CONVERSATION_ID);
+    expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
+    webSocketProviderUnmountMock.mockClear();
+    useEventStore.setState({ loadedConversationId: CLOUD_CONVERSATION_ID });
+    expect(useEventStore.getState().loadedConversationId).toBe(
+      CLOUD_CONVERSATION_ID,
+    );
+
+    setRegisteredBackends([
+      localBackend,
+      { ...cloudBackend, apiKey: "new-key", connectionRevision: 1 },
+    ]);
+
+    expect(await screen.findByTestId("conversations-home")).toBeInTheDocument();
+    expect(webSocketProviderUnmountMock).toHaveBeenCalledTimes(1);
+    expect(useEventStore.getState().loadedConversationId).toBeNull();
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -388,13 +425,14 @@ describe("conversation route — cloud sandbox resume", () => {
     await screen.findByTestId("conversation-main");
     await waitFor(() =>
       expect(
-        queryClient.getQueryData<AppConversation>([
-          "user",
-          "conversation",
-          CLOUD_CONVERSATION_ID,
-          cloudBackend.id,
-          "org-a",
-        ])?.sandbox_status,
+        queryClient.getQueryData<AppConversation>(
+          CONVERSATION_QUERY_KEYS.detail(
+            CLOUD_CONVERSATION_ID,
+            cloudBackend.id,
+            "org-a",
+            0,
+          ),
+        )?.sandbox_status,
       ).toBe("PAUSED"),
     );
     vi.mocked(resumeCloudSandbox).mockRejectedValueOnce(

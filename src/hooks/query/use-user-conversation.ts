@@ -26,7 +26,7 @@ type RefetchInterval = (
     AppConversation | null,
     AxiosError<unknown, any>,
     AppConversation | null,
-    (string | null)[]
+    ReturnType<typeof CONVERSATION_QUERY_KEYS.detail>
   >,
 ) => number;
 
@@ -39,15 +39,20 @@ function userConversationQueryOptions(
       cid,
       active.backend.id,
       active.orgId,
+      active.backend.connectionRevision ?? 0,
     ),
     queryFn: async ({
       client,
       queryKey,
-    }: QueryFunctionContext<(string | null)[]>) => {
+    }: QueryFunctionContext<
+      ReturnType<typeof CONVERSATION_QUERY_KEYS.detail>
+    >) => {
       const current = getActiveBackend();
       if (
         current.backend.id !== active.backend.id ||
-        current.orgId !== active.orgId
+        current.orgId !== active.orgId ||
+        (current.backend.connectionRevision ?? 0) !==
+          (active.backend.connectionRevision ?? 0)
       ) {
         void client.cancelQueries({ queryKey, exact: true });
         throw new CancelledError({ revert: true });
@@ -81,6 +86,8 @@ export const usePrefetchUserConversation = () => {
         !active.orgId ||
         current.backend.id !== active.backend.id ||
         current.orgId !== active.orgId ||
+        (current.backend.connectionRevision ?? 0) !==
+          (active.backend.connectionRevision ?? 0) ||
         !cid ||
         cid.startsWith("task-") ||
         cid.startsWith(CONVERSATION_LAUNCH_PREFIX)
@@ -100,6 +107,7 @@ export const useUserConversation = (
   refetchInterval?: RefetchInterval,
 ) => {
   const active = useActiveBackend();
+  const connectionRevision = active.backend.connectionRevision ?? 0;
   const isPendingId =
     cid?.startsWith("task-") || cid?.startsWith(CONVERSATION_LAUNCH_PREFIX);
 
@@ -109,20 +117,29 @@ export const useUserConversation = (
   // backend; fetching it makes that backend parse a response for an id it
   // doesn't own and surfaces a confusing "agent server returned data this UI
   // does not understand" toast. Pin the cid to its origin backend and disable
-  // the query until the route navigates to a valid id. Compare backend id
-  // ONLY — org changes within the same backend (e.g. the cloud
-  // personal-workspace self-heal in BackendSelector) keep the same
-  // agent-server schema and must still refetch.
-  const origin = useRef({ cid, backendId: active.backend.id });
+  // the query until the route navigates to a valid id. A backend ID or
+  // connection revision change makes a new origin. An org change on the same
+  // connection can still refetch the conversation.
+  const origin = useRef({
+    cid,
+    backendId: active.backend.id,
+    connectionRevision,
+  });
   if (origin.current.cid !== cid) {
-    origin.current = { cid, backendId: active.backend.id };
+    origin.current = {
+      cid,
+      backendId: active.backend.id,
+      connectionRevision,
+    };
   }
-  const backendChanged = origin.current.backendId !== active.backend.id;
+  const backendChanged =
+    origin.current.backendId !== active.backend.id ||
+    origin.current.connectionRevision !== connectionRevision;
   const hasConversationScope =
     active.backend.kind !== "cloud" || !!active.orgId;
 
   return useQuery({
-    // Include the active backend identity so each (backend, org) pair
+    // Include the active backend identity so each connection and org pair
     // maintains its own per-conversation cache entry. Without this, a
     // local→cloud→local switch can leave a `null` cached value (from a
     // refetch that ran while the cloud backend was active) under the
