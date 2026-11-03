@@ -36,15 +36,13 @@ interface MCPServerFormProps {
   onCancel: () => void;
   onDelete?: () => void;
   isActionDisabled?: boolean;
-  onTest?: (server: MCPServerConfig) => void;
+  /** The submit action tests the connection before saving. */
   isTestPending?: boolean;
   testMessage?: TestMessage | null;
-  /**
-   * Hide the Test button while the form describes a stdio server. Cloud
-   * backends can only probe remote servers; the type is live form state in
-   * add mode, so the form owns this decision.
-   */
-  isStdioTestUnavailable?: boolean;
+  /** Offered after a failed test: save the tested config without a passing test. */
+  onSaveAnyway?: () => void;
+  /** Called whenever the user edits a field. */
+  onEdit?: () => void;
 }
 
 export function MCPServerForm({
@@ -55,10 +53,10 @@ export function MCPServerForm({
   onCancel,
   onDelete,
   isActionDisabled = false,
-  onTest,
   isTestPending = false,
   testMessage = null,
-  isStdioTestUnavailable = false,
+  onSaveAnyway,
+  onEdit,
 }: MCPServerFormProps) {
   const { t } = useTranslation("openhands");
   const [serverType, setServerType] = React.useState<MCPServerType>(
@@ -82,7 +80,6 @@ export function MCPServerForm({
         : "auto",
     );
   const [error, setError] = React.useState<string | null>(null);
-  const formRef = React.useRef<HTMLFormElement>(null);
 
   const serverTypeOptions = [
     { key: "sse", label: t(I18nKey.SETTINGS$MCP_SERVER_TYPE_SSE) },
@@ -441,26 +438,14 @@ export function MCPServerForm({
     onSubmit(buildConfig(formData));
   };
 
-  const handleTestClick = () => {
-    if (!onTest || !formRef.current) return;
-    setError(null);
-    const formData = new FormData(formRef.current);
-    const validationError = validateForm(formData);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-    onTest(buildConfig(formData));
-  };
-
   const formTestId =
     mode === "add" ? "add-mcp-server-form" : "edit-mcp-server-form";
 
   return (
     <form
-      ref={formRef}
       data-testid={formTestId}
       onSubmit={handleSubmit}
+      onChange={onEdit}
       className="flex flex-col items-start gap-6"
       noValidate
     >
@@ -471,7 +456,10 @@ export function MCPServerForm({
           label={t(I18nKey.SETTINGS$MCP_SERVER_TYPE)}
           items={serverTypeOptions}
           selectedKey={serverType}
-          onSelectionChange={(key) => setServerType(key as MCPServerType)}
+          onSelectionChange={(key) => {
+            setServerType(key as MCPServerType);
+            onEdit?.();
+          }}
           onInputChange={() => {}} // Prevent input changes
           isClearable={false}
           allowsCustomValue={false}
@@ -516,7 +504,10 @@ export function MCPServerForm({
             label={t(I18nKey.SETTINGS$MCP_AUTHENTICATION)}
             items={authModeOptions}
             selectedKey={authMode}
-            onSelectionChange={(key) => setAuthMode(key as RemoteAuthMode)}
+            onSelectionChange={(key) => {
+              setAuthMode(key as RemoteAuthMode);
+              onEdit?.();
+            }}
             onInputChange={() => {}}
             isClearable={false}
             allowsCustomValue={false}
@@ -562,9 +553,10 @@ export function MCPServerForm({
                 label={t(I18nKey.SETTINGS$MCP_OAUTH_CLIENT_AUTH)}
                 items={oauthClientAuthMethodOptions}
                 selectedKey={oauthClientAuthMethod}
-                onSelectionChange={(key) =>
-                  setOAuthClientAuthMethod(key as OAuthClientAuthMethodOption)
-                }
+                onSelectionChange={(key) => {
+                  setOAuthClientAuthMethod(key as OAuthClientAuthMethodOption);
+                  onEdit?.();
+                }}
                 onInputChange={() => {}}
                 isClearable={false}
                 allowsCustomValue={false}
@@ -748,17 +740,15 @@ export function MCPServerForm({
           >
             {t(I18nKey.BUTTON$CANCEL)}
           </BrandButton>
-          {onTest && !(isStdioTestUnavailable && serverType === "stdio") && (
+          {onSaveAnyway && (
             <BrandButton
-              testId="mcp-test-connection"
+              testId="mcp-save-anyway"
               type="button"
               variant="secondary"
-              onClick={handleTestClick}
+              onClick={onSaveAnyway}
               isDisabled={isActionDisabled || isTestPending}
             >
-              {isTestPending
-                ? t(I18nKey.MCP$VERIFYING)
-                : t(I18nKey.MCP$TEST_BUTTON)}
+              {t(I18nKey.MCP$SAVE_ANYWAY)}
             </BrandButton>
           )}
           <BrandButton
@@ -767,8 +757,13 @@ export function MCPServerForm({
             variant="primary"
             isDisabled={isActionDisabled || isTestPending}
           >
-            {mode === "add" && t(I18nKey.SETTINGS$MCP_ADD_SERVER)}
-            {mode === "edit" && t(I18nKey.SETTINGS$MCP_SAVE_SERVER)}
+            {isTestPending && t(I18nKey.MCP$VERIFYING)}
+            {!isTestPending &&
+              mode === "add" &&
+              t(I18nKey.SETTINGS$MCP_ADD_SERVER)}
+            {!isTestPending &&
+              mode === "edit" &&
+              t(I18nKey.SETTINGS$MCP_SAVE_SERVER)}
           </BrandButton>
         </div>
       </div>

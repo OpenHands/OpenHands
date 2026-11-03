@@ -303,8 +303,9 @@ test.describe("MCP GitHub server install flow", () => {
       const before = mcpTestBodies.length;
       await page.locator('[data-server-id="github"]').press("Enter");
       await expect(page.getByTestId("mcp-custom-editor")).toBeVisible();
-      await page.getByTestId("mcp-test-connection").click();
-      await expect(page.getByTestId("mcp-test-message")).toBeVisible();
+      // Saving tests the stored credential first, then closes the editor.
+      await page.getByTestId("submit-button").click();
+      await expect(page.getByTestId("mcp-custom-editor")).not.toBeVisible();
       expect(mcpTestBodies).toHaveLength(before + 1);
       const request = mcpTestBodies.at(-1) as {
         name?: string;
@@ -321,8 +322,6 @@ test.describe("MCP GitHub server install flow", () => {
       expect(request.server?.auth?.value).toBeTruthy();
       expect(request.server?.auth?.value).not.toBe("**********");
       expect(request.server?.auth?.value).not.toBe(FAKE_PAT);
-      await page.getByTestId("mcp-custom-editor-close").click();
-      await expect(page.getByTestId("mcp-custom-editor")).not.toBeVisible();
     };
 
     await page.getByTestId("mcp-add-custom-server").click();
