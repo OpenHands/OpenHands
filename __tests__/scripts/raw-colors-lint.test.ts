@@ -26,7 +26,11 @@ export function Probe() {
 `;
 
 describe("Canvas raw color rollout", () => {
-  it("warns on palette classes reached through an adopted dynamic map", async () => {
+  it.each([
+    "src/components/features/backends/backend-status-dot.tsx",
+    "src/components/features/markdown/blockquote.tsx",
+    "src/components/features/mcp-page/mcp-server-health.tsx",
+  ])("rejects raw palette recipes in migrated owner %s", async (filePath) => {
     const [result] = await eslint.lintText(
       `
 const toneClasses = {
@@ -37,7 +41,7 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
   return <div className={toneClasses[tone]} />;
 }
 `,
-      { filePath: "src/components/features/markdown/blockquote.tsx" },
+      { filePath },
     );
 
     expect(
@@ -46,7 +50,7 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
       ),
     ).toEqual([
       expect.objectContaining({
-        severity: 1,
+        severity: 2,
         messageId: expect.stringMatching(/^paletteClass/),
       }),
     ]);
@@ -80,7 +84,12 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
     ).toEqual([]);
   });
 
-  it.each(["src/routes/color-probe.tsx", "src/ui/color-probe.tsx"])(
+  it.each([
+    "src/routes/color-probe.tsx",
+    "src/ui/color-probe.tsx",
+    "src/components/features/conversation-panel/start-task-card/start-task-status-badge.tsx",
+    "src/components/features/conversation-panel/start-task-card/start-task-status-indicator.tsx",
+  ])(
     "warns on raw colors and unknown tokens while accepting verified tokens in %s",
     async (filePath) => {
       const [result] = await eslint.lintText(probe, { filePath });

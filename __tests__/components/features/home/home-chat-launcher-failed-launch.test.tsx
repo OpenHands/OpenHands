@@ -22,12 +22,18 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+const mockNavigate = vi.hoisted(() => vi.fn());
+const backendState = vi.hoisted(() => ({
+  kind: "local" as "local" | "cloud",
+  orgId: null as string | null,
+}));
+
 vi.mock("#/context/navigation-context", () => ({
   useNavigation: () => ({
     currentPath: "/",
     conversationId: null,
     isNavigating: false,
-    navigate: vi.fn(),
+    navigate: mockNavigate,
   }),
 }));
 
@@ -38,9 +44,9 @@ vi.mock("#/contexts/active-backend-context", () => ({
       name: "Local",
       host: "http://localhost",
       apiKey: "test",
-      kind: "local" as const,
+      kind: backendState.kind,
     },
-    orgId: null,
+    orgId: backendState.orgId,
   }),
 }));
 
@@ -119,6 +125,9 @@ async function submitPrompt() {
 
 describe("HomeChatLauncher failed launch", () => {
   beforeEach(() => {
+    backendState.kind = "local";
+    backendState.orgId = null;
+    mockNavigate.mockClear();
     Object.defineProperty(HTMLElement.prototype, "innerText", {
       configurable: true,
       get() {
@@ -176,7 +185,7 @@ describe("HomeChatLauncher failed launch", () => {
     vi.restoreAllMocks();
   });
 
-  it("shows one error toast, dismisses the loading toast and keeps the prompt when the agent server is unreachable", async () => {
+  it("shows one error toast, no loading toast and keeps the prompt when the agent server is unreachable", async () => {
     // Arrange — every launch-path request fails the same way.
     vi.spyOn(AgentProfilesService, "getProfile").mockRejectedValue(
       unreachable(),
@@ -190,10 +199,52 @@ describe("HomeChatLauncher failed launch", () => {
     // Act
     const input = await submitPrompt();
 
-    // Assert — the loading toast shows, then gives way to a single error.
-    // Error toasts outlive the loading toast's exit, so every one that was
-    // raised is still on screen when the loading toast is gone.
-    await screen.findByText("HOME$CREATING_CONVERSATION");
+    // Assert — a fast failure goes straight to a single error; the loading
+    // toast never appears, even after its delay has passed.
+    await waitFor(() =>
+      expect(screen.getAllByText(UNREACHABLE_MESSAGE)).toHaveLength(1),
+    );
+    await new Promise((resolve) => {
+      setTimeout(resolve, 800);
+    });
+    expect(
+      screen.queryByText("HOME$CREATING_CONVERSATION"),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText(UNREACHABLE_MESSAGE)).toHaveLength(1);
+    expect(input).toHaveTextContent(PROMPT);
+  });
+
+  it("shows the loading toast only once a launch is slow, then replaces it with the error", async () => {
+    // Arrange — the create stays in flight until the test fails it.
+    vi.spyOn(AgentProfilesService, "getProfile").mockResolvedValue({
+      profile: { name: "default" },
+    } as never);
+    let failCreate: (error: Error) => void = () => {};
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          failCreate = reject;
+        }),
+    );
+    renderLauncher();
+
+    // Act
+    const input = await submitPrompt();
+
+    // Assert — nothing right away, the loading toast once the request lags,
+    // then a single error in its place.
+    expect(
+      screen.queryByText("HOME$CREATING_CONVERSATION"),
+    ).not.toBeInTheDocument();
+    await screen.findByText(
+      "HOME$CREATING_CONVERSATION",
+      {},
+      { timeout: 2000 },
+    );
+    failCreate(unreachable());
     await waitFor(
       () =>
         expect(
@@ -203,6 +254,51 @@ describe("HomeChatLauncher failed launch", () => {
     );
     expect(screen.getAllByText(UNREACHABLE_MESSAGE)).toHaveLength(1);
     expect(input).toHaveTextContent(PROMPT);
+  });
+
+  it("keeps a slow launch's loading toast up briefly after navigating instead of flashing it", async () => {
+    // Arrange — the create stays in flight until the test resolves it.
+    vi.spyOn(AgentProfilesService, "getProfile").mockResolvedValue({
+      profile: { name: "default" },
+    } as never);
+    let finishCreate: (value: unknown) => void = () => {};
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishCreate = resolve;
+        }) as never,
+    );
+    // A dismissed toast stays in the DOM while it animates out, so watch the
+    // dismissal itself.
+    const dismissSpy = vi.spyOn(toast, "dismiss");
+    renderLauncher();
+
+    // Act — the create finishes right after the toast appears.
+    await submitPrompt();
+    await screen.findByText(
+      "HOME$CREATING_CONVERSATION",
+      {},
+      { timeout: 2000 },
+    );
+    finishCreate({
+      id: "conv-slow",
+      status: "READY",
+      app_conversation_id: "conv-slow",
+      request: { initial_message: PROMPT, plugins: null },
+    });
+
+    // Assert — navigation is not held back, but the toast stays readable
+    // for a moment before it goes.
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-slow"),
+    );
+    expect(dismissSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(dismissSpy).toHaveBeenCalledTimes(1), {
+      timeout: 2000,
+    });
   });
 
   it("names the missing MCP server in one readable toast and keeps the prompt when the launch is refused", async () => {
@@ -240,5 +336,89 @@ describe("HomeChatLauncher failed launch", () => {
     );
     expect(screen.queryByText(/dangling_mcp_server_refs/)).toBeNull();
     expect(input).toHaveTextContent(PROMPT);
+  });
+  it("shows a cloud prompt immediately and keeps a failed start inline until edited", async () => {
+    backendState.kind = "cloud";
+    let failCreate: (error: Error) => void = () => {};
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          failCreate = reject;
+        }),
+    );
+    const loadingToast = vi.spyOn(toast, "loading");
+    renderLauncher();
+    const input = await submitPrompt();
+    expect(screen.getByTestId("startup-user-message")).toHaveTextContent(
+      PROMPT,
+    );
+    expect(
+      screen.getByTestId("conversation-startup-progress"),
+    ).toHaveTextContent("HOME$CREATING_CONVERSATION");
+    await waitFor(() =>
+      expect(
+        AgentServerConversationService.createConversation,
+      ).toHaveBeenCalledOnce(),
+    );
+    failCreate(unreachable());
+    await screen.findByRole("alert");
+    expect(screen.getAllByText(UNREACHABLE_MESSAGE)).toHaveLength(1);
+    expect(loadingToast).not.toHaveBeenCalled();
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/conversations\/launch-/),
+    );
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "BUTTON$EDIT" }));
+    await waitFor(() => expect(input).toHaveTextContent(PROMPT));
+    expect(
+      screen.queryByTestId("startup-user-message"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not redirect a late cloud launch after switching organizations", async () => {
+    backendState.kind = "cloud";
+    let finishCreate: (value: unknown) => void = () => {};
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishCreate = resolve;
+        }) as never,
+    );
+    const view = renderLauncher();
+    await submitPrompt();
+    await waitFor(() =>
+      expect(
+        AgentServerConversationService.createConversation,
+      ).toHaveBeenCalledOnce(),
+    );
+    backendState.orgId = "other-org";
+    view.rerender(
+      <QueryClientProvider client={createAgentServerQueryClient()}>
+        <HomeChatLauncher />
+        <Toaster />
+      </QueryClientProvider>,
+    );
+    finishCreate({
+      id: "task-late",
+      status: "WORKING",
+      app_conversation_id: null,
+      request: {},
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/conversations\/launch-/),
+    );
+    expect(
+      screen.queryByTestId("startup-user-message"),
+    ).not.toBeInTheDocument();
   });
 });

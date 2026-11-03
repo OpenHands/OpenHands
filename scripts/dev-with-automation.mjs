@@ -80,6 +80,7 @@ import {
   buildRuntimeServicesInfo,
   buildUvxPythonArgs,
   formatMissingUvxGuidance,
+  resolveFrontendPort,
   validateFrontendDependencies,
   validateLocalAgentServerPath,
 } from "./dev-safe.mjs";
@@ -203,6 +204,7 @@ function parseArgs() {
     frontendOnly: false,
     backendOnly: false,
     host: null,
+    allowLanSessionKey: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -242,6 +244,9 @@ function parseArgs() {
       case "--backend-only":
         config.backendOnly = true;
         break;
+      case "--allow-lan-session-key":
+        config.allowLanSessionKey = true;
+        break;
       case "-H":
       case "--host":
         config.host = args[++i];
@@ -279,6 +284,7 @@ OPTIONS:
   --dynamic                   Force Vite dev server when a wrapper defaults static
   --frontend-only             Start only the frontend behind ingress
   --backend-only              Start only agent-server + automation behind ingress
+  --allow-lan-session-key      Inject the session key on a non-loopback bind (opt-in)
   -v, --verbose               Set backend log level to DEBUG (default: WARNING)
   -h, --help                  Show this help
 
@@ -475,16 +481,14 @@ async function buildConfig(args, env = process.env) {
     parseInt(env.OH_CANVAS_SAFE_AUTOMATION_PORT, 10) || DEFAULT_AUTOMATION_PORT;
   const preferredVitePort = parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
 
-  // Fail fast if any preferred port for a service in this mode is already in use.
+  // Fail fast if any preferred port for a service in this mode is already in
+  // use, so a second agent-canvas instance is detected (#16904).
   const requiredPorts = [{ name: "ingress", port: preferredIngressPort }];
   if (launchAgentServer) {
     requiredPorts.push({ name: "agent-server", port: preferredBackendPort });
   }
   if (launchAutomation) {
     requiredPorts.push({ name: "automation", port: preferredAutomationPort });
-  }
-  if (launchFrontend) {
-    requiredPorts.push({ name: "frontend", port: preferredVitePort });
   }
 
   logStep("ports", "Checking ports...");
@@ -530,12 +534,32 @@ async function buildConfig(args, env = process.env) {
         ? "0.0.0.0"
         : undefined),
   });
-  if (!isLoopbackBind(bindHost) && !isPublic) {
+  if (!isLoopbackBind(bindHost) && !isPublic && !args.allowLanSessionKey) {
     logService(
       "auth",
       `Bind host ${bindHost} is not loopback — session key will not be injected into HTML`,
       c.yellow,
     );
+  }
+
+  // The frontend is internal (browsers reach it through the ingress), so a
+  // taken preferred port falls back to a free one instead of failing (#17546).
+  let vitePort = preferredVitePort;
+  if (launchFrontend) {
+    vitePort = await resolveFrontendPort(preferredVitePort, {
+      bindHost,
+      reservedPorts: [
+        ...requiredPorts.map(({ port }) => port),
+        ...(launchAgentServer ? [vscodePort] : []),
+      ],
+    });
+    if (vitePort !== preferredVitePort) {
+      logService(
+        "ports",
+        `Frontend port ${preferredVitePort} is taken — using ${vitePort}`,
+        c.yellow,
+      );
+    }
   }
 
   return {
@@ -545,7 +569,7 @@ async function buildConfig(args, env = process.env) {
     // Service ports (internal)
     agentServerPort: preferredBackendPort,
     autoBackendPort: preferredAutomationPort,
-    vitePort: preferredVitePort,
+    vitePort,
     vscodePort,
     // Prefix the editor is served under on the ingress origin. Carried on the
     // config so the route table and the agent-server env are built from one
@@ -574,6 +598,7 @@ async function buildConfig(args, env = process.env) {
 
     // Public mode — the session key should NOT be baked into the frontend
     isPublic,
+    allowLanSessionKey: Boolean(args.allowLanSessionKey),
 
     frontendOnly,
     backendOnly,
@@ -1208,6 +1233,19 @@ export function buildAutomationLogArgs(config, env = process.env) {
   ];
 }
 
+/**
+ * Browser origins the automation backend accepts: the ingress, and the
+ * frontend's own port so it can still be browsed directly.
+ *
+ * @param {{ingressPort: number, vitePort: number}} config
+ * @returns {string}
+ */
+export function buildAutomationCorsOrigins(config) {
+  return [config.ingressPort, config.vitePort]
+    .flatMap((port) => [`http://localhost:${port}`, `http://127.0.0.1:${port}`])
+    .join(",");
+}
+
 function startAutomationBackend(config) {
   logService(
     "automation",
@@ -1297,7 +1335,7 @@ function startAutomationBackend(config) {
         // CORS: allow localhost origins for dev, unless explicitly overridden.
         AUTOMATION_CORS_ORIGINS:
           process.env.AUTOMATION_CORS_ORIGINS ||
-          `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:3001,http://127.0.0.1:3001`,
+          buildAutomationCorsOrigins(config),
         FILE_STORE: "local",
         LOCAL_STORAGE_PATH: join(config.stateDir, "storage"),
         OPENHANDS_SUPPRESS_BANNER: "1",
@@ -1504,6 +1542,7 @@ function buildViteFrontendEnv(config) {
   // and shows the API-key entry screen.
   const policy = applySessionKeyPolicy({
     host: config.bindHost,
+    allowLanSessionKey: config.allowLanSessionKey,
     sessionApiKey:
       config.launchAgentServer && !config.isPublic
         ? config.sessionApiKey
@@ -1982,6 +2021,7 @@ function startStaticFrontend(config, staticDir) {
   const staticServerScript = join(projectRoot, "scripts", "static-server.mjs");
   const keyPolicy = applySessionKeyPolicy({
     host: config.bindHost,
+    allowLanSessionKey: config.allowLanSessionKey,
     sessionApiKey:
       config.launchAgentServer && !config.isPublic ? config.sessionApiKey : null,
     authRequired: Boolean(config.launchAgentServer && config.isPublic),
@@ -1999,6 +2039,10 @@ function startStaticFrontend(config, staticDir) {
       ...bindHostArgs(config.bindHost),
       ...(process.env.VITE_BASE_PATH
         ? ["--base-path", process.env.VITE_BASE_PATH]
+        : []),
+      // Explicit LAN opt-in: let static-server keep the key on a non-loopback bind.
+      ...(keyPolicy.sessionApiKey && config.allowLanSessionKey
+        ? ["--allow-lan-session-key"]
         : []),
       // Off-loopback binds and public mode show the API key entry screen.
       ...(keyPolicy.authRequired ? ["--auth-required"] : []),
@@ -2076,7 +2120,7 @@ const isMainModule =
 if (isMainModule) {
   main().catch((err) => {
     logError(`Fatal error: ${err.message}`);
-    if (err.stack) {
+    if (err.stack && err.code !== "EADDRINUSE") {
       console.error(c.dim + err.stack + c.reset);
       fileLog("error", err.stack);
     }

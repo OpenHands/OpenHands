@@ -9,7 +9,7 @@ import type { Automation } from "#/types/automation";
 import { cn } from "#/utils/utils";
 import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
 import { getMarketplaceEntryById } from "#/utils/mcp-marketplace-utils";
-import { parseGitRemoteUrl } from "#/utils/parse-git-remote-url";
+import { automationRepositoryLabel } from "#/utils/automation-repo-sources";
 import {
   formatTriggerSourceLabel,
   getTriggerEventLabel,
@@ -25,12 +25,13 @@ export function buildAutomationMetadataPills(
 
   // The service returns repositories, lifted from preset metadata; only an
   // imported file shape carries the single `repository`.
-  const repositoryUrls = automation.repositories?.map(({ url }) => url) ?? [];
-  if (repositoryUrls.length === 0 && automation.repository) {
-    repositoryUrls.push(automation.repository);
+  const repositories = [...(automation.repositories ?? [])];
+  if (repositories.length === 0 && automation.repository) {
+    repositories.push({ url: automation.repository });
   }
-  repositoryUrls.forEach((url, index) => {
-    const name = parseGitRemoteUrl(url)?.repository ?? url;
+  repositories.forEach((repository, index) => {
+    const { url } = repository;
+    const name = automationRepositoryLabel(repository);
     pills.push({
       id: index === 0 ? "repository" : `repository-${index}`,
       node: (

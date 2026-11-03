@@ -112,13 +112,14 @@ function createPreviewProps(
     workspaceModes: ["local_repo", "new_worktree"],
     backendKind: "local",
     onRepoClick: vi.fn(),
+    onClear: vi.fn(),
     onWorkspaceModeChange: vi.fn(),
     ...overrides,
   };
 }
 
 describe("home git selection preview", () => {
-  it("shows a complete selection and forwards both controls", async () => {
+  it("shows a complete selection and forwards its controls", async () => {
     const user = userEvent.setup();
     const props = createPreviewProps({
       workspace: createWorkspace({ path: "/workspace/review-target///" }),
@@ -152,9 +153,13 @@ describe("home git selection preview", () => {
 
     await user.click(screen.getByTestId("repo-preview"));
     await user.click(screen.getByTestId("workspace-mode-preview"));
+    await user.click(
+      screen.getByRole("button", { name: "COMMON$CLEAR_SELECTION" }),
+    );
 
     expect(props.onRepoClick).toHaveBeenCalledOnce();
     expect(props.onWorkspaceModeChange).toHaveBeenCalledWith("new_worktree");
+    expect(props.onClear).toHaveBeenCalledOnce();
   });
 
   it("keeps only the repository control when there is no selection", () => {

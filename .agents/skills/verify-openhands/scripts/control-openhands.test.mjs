@@ -2939,6 +2939,29 @@ test("network plugin projection bounds complete UTF-8 JSON and omits non-JSON or
   );
 });
 
+test("network body projection keeps the start request's runtime choice past the display cap", () => {
+  const request = JSON.stringify({
+    agent_launch_additions: { system_message_suffix_append: "x".repeat(4000) },
+    llm: { api_key: "never-project-me" },
+    worktree: true,
+    worktree_options: { base: "current_head", branch_prefix: "qa/" },
+    conversation_runtime: "local",
+    container: { memory: "2g", cpus: 1 },
+  });
+  assert.deepEqual(redactBodyFields(request), {
+    bodyFields: {
+      conversation_runtime: "local",
+      worktree: true,
+      worktree_options: { base: "current_head", branch_prefix: "qa/" },
+      container: { memory: "2g", cpus: 1 },
+    },
+  });
+  assert.doesNotMatch(
+    JSON.stringify(redactBodyFields(request)),
+    /never-project-me|system_message/,
+  );
+});
+
 test("browser media validates motion before dispatch and preserves playback observation", async () => {
   const runDir = mkdtempSync(join(tmpdir(), "cov-media-motion-"));
   mkdirSync(join(runDir, "private"));

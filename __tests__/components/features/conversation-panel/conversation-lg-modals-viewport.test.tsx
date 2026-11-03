@@ -1,3 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { parse } from "postcss";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -7,10 +11,7 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import { HooksModal } from "#/components/features/conversation-panel/hooks-modal";
 import { SkillsModal } from "#/components/features/conversation-panel/skills-modal";
 import { SystemMessageModal } from "#/components/features/conversation-panel/system-message-modal";
-import {
-  MODAL_MAX_WIDTH_VIEWPORT,
-  MODAL_WIDTH_CLASS,
-} from "#/components/shared/modals/modal-body";
+import { MODAL_WIDTH_CLASS } from "#/components/shared/modals/modal-body";
 import { adaptSystemMessage } from "#/utils/system-message-adapter";
 import { EventState } from "#/stores/use-event-store";
 
@@ -82,7 +83,6 @@ describe("conversation lg dialogs viewport fit", () => {
   it("keeps the shared lg token at 640px so a 720px viewport still uses the desktop width", () => {
     // w-160 is 40rem/640px; 90vw at 720px is 648px, so min(640px, 90vw) remains 640px.
     expect(MODAL_WIDTH_CLASS.lg).toBe("w-160");
-    expect(MODAL_MAX_WIDTH_VIEWPORT).toBe("max-w-[90vw]");
   });
 
   it.each(DIALOGS)(
@@ -92,10 +92,28 @@ describe("conversation lg dialogs viewport fit", () => {
 
       const body = await screen.findByTestId(testId);
       expect(body).toHaveClass(MODAL_WIDTH_CLASS.lg);
-      expect(body).toHaveClass(MODAL_MAX_WIDTH_VIEWPORT);
 
       const scrollRegion = body.querySelector(".overflow-auto");
-      expect(scrollRegion).toHaveClass("h-[60vh]");
+      if (!scrollRegion) throw new Error("Expected the dialog scroll region");
+      const compiler = await compile(
+        await readFile(resolve("src/tailwind.css"), "utf8"),
+        { base: resolve("src"), onDependency: () => {} },
+      );
+      const css = parse(
+        compiler.build([...body.classList, ...scrollRegion.classList]),
+      );
+      for (const [element, property, expected] of [
+        [body, "max-width", "90vw"],
+        [scrollRegion, "height", "60vh"],
+      ] as const) {
+        const values: string[] = [];
+        css.walkDecls(property, (declaration) => {
+          const rule = declaration.parent;
+          if (rule?.type === "rule" && element.matches(rule.selector))
+            values.push(declaration.value);
+        });
+        expect(values).toContain(expected);
+      }
     },
   );
 

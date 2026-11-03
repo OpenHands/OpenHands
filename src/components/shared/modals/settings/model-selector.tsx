@@ -28,7 +28,7 @@ const compareProviderLabels = (a: LLMProvider, b: LLMProvider) =>
   });
 
 const freeModelBadgeClassName =
-  "shrink-0 rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] leading-none text-warning";
+  "shrink-0 rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-3xs leading-none text-warning";
 
 interface ModelSelectorProps {
   isDisabled?: boolean;

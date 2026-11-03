@@ -4,6 +4,7 @@ import {
   type ChatInputModelState,
 } from "#/hooks/use-chat-input-model-state";
 import { useSwitchAcpModel } from "#/hooks/mutation/use-switch-acp-model";
+import { useModelStore } from "#/stores/model-store";
 import { ComboboxCaretInline } from "#/ui/combobox-caret";
 import SettingsGearIcon from "#/icons/settings-gear.svg?react";
 import CheckIcon from "#/icons/checkmark.svg?react";
@@ -58,6 +59,13 @@ export function ChatInputModelMenuContent({
 
   const handleSelectAcpModel = (modelId: string | null) => {
     if (modelId !== model.selectedModelId) {
+      // A home-page ACP model pick (no conversation) is an explicit model
+      // choice made before the first message: mark it so the next home launch
+      // suppresses "Run on first message" routing for that one conversation.
+      // `useCreateConversation` reads-and-clears it.
+      if (!model.switchConversationId) {
+        useModelStore.getState().setHomeManualModelPick(true);
+      }
       switchAcpModel.mutate({
         conversationId: model.switchConversationId,
         model: modelId,
@@ -74,7 +82,7 @@ export function ChatInputModelMenuContent({
               ContextMenu <ul> without exposing the section label as a
               selectable menu item (the label text is still announced). */}
           <li role="presentation" className="px-2 pt-1 pb-0.5">
-            <Typography.Text className="text-[11px] font-medium text-text-dim uppercase tracking-wide leading-4">
+            <Typography.Text className="text-2xs font-medium text-text-dim uppercase tracking-wide leading-4">
               {t(I18nKey.MODEL$AVAILABLE_MODELS)}
             </Typography.Text>
           </li>

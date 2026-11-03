@@ -263,6 +263,45 @@ describe("buildStartConversationRequest", () => {
 
     expect(payload.agent_launch_additions).toBeUndefined();
   });
+
+  it("sends the enabled catalog skills to an ACP agent, which has no profile skill selection", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...makeSettings({ agent_kind: "acp" }),
+        enabled_skills: ["openhands-automation", "github"],
+        disabled_skills: ["github"],
+      },
+      agentProfileId: "profile-acp",
+      agentProfileKind: "acp",
+    });
+
+    expect(
+      payload.agent_launch_additions?.skills?.map((skill) => skill.name),
+    ).toEqual(["openhands-automation"]);
+  });
+
+  it("sends no skills to an ACP agent when none are enabled", () => {
+    const payload = buildStartConversationRequest({
+      settings: { ...makeSettings({ agent_kind: "acp" }), enabled_skills: [] },
+      agentProfileId: "profile-acp",
+      agentProfileKind: "acp",
+    });
+
+    expect(payload.agent_launch_additions).toBeUndefined();
+  });
+
+  it("does not send the enabled catalog to an OpenHands profile, which selects its own", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...makeSettings({ agent_kind: "openhands" }),
+        enabled_skills: ["openhands-automation"],
+      },
+      agentProfileId: "profile-xyz",
+      agentProfileKind: "openhands",
+    });
+
+    expect(payload.agent_launch_additions).toBeUndefined();
+  });
 });
 
 describe("buildStartConversationRequest — execution runtime", () => {

@@ -247,6 +247,11 @@ export interface DeploymentCapabilities {
   features: string[];
   /** Providers whose repositories a run clones with the user's token; older services omit it. */
   repoProviders?: string[];
+  /**
+   * Event type patterns per event source that has a catalog; a source missing
+   * here accepts any key. Older services omit it and list GitHub's in `eventTypes`.
+   */
+  eventTypesBySource?: Record<string, string[]>;
 }
 
 /** A single problem with a draft, addressed to the field that caused it. */

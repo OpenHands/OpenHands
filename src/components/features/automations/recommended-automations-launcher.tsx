@@ -30,8 +30,8 @@ import {
 } from "#/manifests/automation-interface";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import {
+  getAutomationAvailability,
   getAutomationLaunchPrompt,
-  getHiddenAutomationIds,
   getRequiredIntegrationIds,
 } from "#/utils/automation-catalog";
 import { isResponderAutomation } from "#/utils/responder-deployment";
@@ -47,6 +47,7 @@ import {
 import { RecommendedAutomationsRail } from "./recommended-automations-rail";
 import { RecommendedAutomationsSection } from "./recommended-automations-section";
 import { ResponderDeploymentModal } from "./responder-deployment-modal";
+import { UnlikelyIntegrationNoticeModal } from "./unlikely-integration-notice-modal";
 import type { TemplateFilters } from "./template-filter-chips";
 
 interface RecommendedAutomationsLauncherProps {
@@ -142,13 +143,25 @@ export function RecommendedAutomationsLauncher({
     useAutomations({ enabled: isRail && automationHealth?.status === "ok" });
   const {
     getNativeIntegration,
+    builtInIntegrations,
     isJiraEnabled,
     isLinearEnabled,
     isSlackEnabled,
     deploymentMode,
     isLoading: isNativeIntegrationsLoading,
   } = useNativeGitIntegrations();
-  const hiddenAutomationIds = getHiddenAutomationIds(deploymentMode);
+  const {
+    hidden: hiddenAutomationIds,
+    unlikely: unlikelyAutomations,
+    suggested: suggestedAutomations,
+  } = useMemo(
+    () => getAutomationAvailability({ deploymentMode, builtInIntegrations }),
+    [deploymentMode, builtInIntegrations],
+  );
+  const [unlikelyNotice, setUnlikelyNotice] = useState<{
+    automation: RecommendedAutomation;
+    missing: readonly string[];
+  } | null>(null);
   const { isSlackConnected, isJiraConnected } =
     useBuiltInIntegrationConnections({
       slackEnabled: isSlackEnabled,
@@ -284,11 +297,30 @@ export function RecommendedAutomationsLauncher({
       isCreatingConversation ||
       installQueue.length > 0 ||
       deploymentChoiceAutomation !== null ||
-      builtInChoice !== null
+      builtInChoice !== null ||
+      unlikelyNotice !== null
     ) {
       return;
     }
 
+    // The instance does not appear to have an integration this template
+    // needs. Say so once, and let the user continue: the report is a hint.
+    const missing = unlikelyAutomations.get(automation.id);
+    if (missing) {
+      setUnlikelyNotice({ automation, missing });
+      return;
+    }
+
+    selectAutomation(automation);
+  };
+
+  const handleUnlikelyNoticeContinue = () => {
+    const automation = unlikelyNotice?.automation;
+    setUnlikelyNotice(null);
+    if (automation) selectAutomation(automation);
+  };
+
+  const selectAutomation = (automation: RecommendedAutomation) => {
     // GitHub/Slack responders poll continuously; let the user choose where the
     // responder runs before committing to the local setup flow. On a cloud
     // backend the responder already runs in the cloud, so there is no choice.
@@ -412,6 +444,8 @@ export function RecommendedAutomationsLauncher({
           className={className}
           installedAutomations={automationsData?.automations ?? []}
           hiddenAutomationIds={hiddenAutomationIds}
+          unlikelyAutomations={unlikelyAutomations}
+          suggestedAutomations={suggestedAutomations}
           onSelect={handleSelectAutomation}
           dismissible={dismissible}
           onDismiss={onDismiss}
@@ -421,6 +455,8 @@ export function RecommendedAutomationsLauncher({
           backendKind={activeBackend.backend.kind}
           installedServers={installedMcpConfig}
           hiddenAutomationIds={hiddenAutomationIds}
+          unlikelyAutomations={unlikelyAutomations}
+          suggestedAutomations={suggestedAutomations}
           getNativeIntegration={getNativeIntegration}
           query={query}
           onClearQuery={onClearQuery}
@@ -439,6 +475,15 @@ export function RecommendedAutomationsLauncher({
           onClose={cancelInstallFlow}
           onSuccess={handleInstallSuccess}
           mcpOnly
+        />
+      )}
+
+      {unlikelyNotice && (
+        <UnlikelyIntegrationNoticeModal
+          automationName={unlikelyNotice.automation.name}
+          missing={unlikelyNotice.missing}
+          onContinue={handleUnlikelyNoticeContinue}
+          onCancel={() => setUnlikelyNotice(null)}
         />
       )}
 

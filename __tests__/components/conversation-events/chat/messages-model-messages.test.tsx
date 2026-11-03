@@ -83,3 +83,47 @@ describe("Messages model entries", () => {
     );
   });
 });
+
+it("preserves the open startup group through reasoning, tools and completion", async () => {
+  const { getActiveBackend } =
+    await import("#/api/backend-registry/active-store");
+  const { sessionActivityKey, useSessionActivityStore } =
+    await import("#/stores/session-activity-store");
+  const { fireEvent } = await import("@testing-library/react");
+  const { backend, orgId } = getActiveBackend();
+  const key = sessionActivityKey(backend.id, orgId, CONVERSATION_ID);
+  const store = useSessionActivityStore.getState();
+  store.begin(key, "initialize");
+  store.observe(key, "READY");
+  const first = {
+    ...makeStreamingDelta(""),
+    reasoning_content: "Check the implementation",
+  };
+  const { rerender } = renderWithProviders(
+    <Messages messages={[first]} allEvents={[first]} />,
+  );
+  const header = screen.getByTestId("event-group-toggle");
+  fireEvent.click(header);
+  expect(header).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getByTestId("session-activity-details")).toBeVisible();
+  const command = makeBashAction("command");
+  rerender(
+    <Messages messages={[first, command]} allEvents={[first, command]} />,
+  );
+  expect(screen.getByTestId("event-group-toggle")).toBe(header);
+  expect(header).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getAllByTestId("collapsible-thinking")).toHaveLength(1);
+  expect(screen.queryByTestId("live-thinking")).not.toBeInTheDocument();
+  const reply = { ...makeStreamingDelta("Here is the answer"), id: "answer" };
+  rerender(
+    <Messages
+      messages={[first, command, reply]}
+      allEvents={[first, command, reply]}
+    />,
+  );
+  expect(screen.getByTestId("event-group-toggle")).toBe(header);
+  expect(screen.getByTestId("agent-message")).toHaveTextContent(
+    "Here is the answer",
+  );
+  useSessionActivityStore.setState({ entries: {} });
+});
