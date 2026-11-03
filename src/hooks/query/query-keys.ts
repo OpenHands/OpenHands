@@ -152,6 +152,18 @@ export const CONVERSATION_QUERY_KEYS = {
     ["user", "conversations", "paginated", limit, backendId, orgId] as const,
   startTask: (id: string | null) => ["start-task", id] as const,
   subConversations: ["v1", "sub-conversations"] as const,
+  /** Full persisted event history used to attribute token usage per call. */
+  tokenUsageEvents: (
+    conversationId: string | null | undefined,
+    conversationUrl: string | null | undefined,
+    sessionApiKey: string | null | undefined,
+  ) =>
+    [
+      "conversation-token-usage-events",
+      conversationId,
+      conversationUrl,
+      sessionApiKey,
+    ] as const,
 } as const;
 
 export const LOCAL_PLANNER_MUTATION_KEYS = {
