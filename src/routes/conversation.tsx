@@ -8,7 +8,6 @@ import { useTranslation } from "react-i18next";
 
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useConversationPanelRoute } from "#/hooks/use-conversation-panel-route";
-import { useCommandStore } from "#/stores/command-store";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useAgentStore } from "#/stores/agent-store";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
@@ -81,7 +80,6 @@ function AppContent() {
   const { data: conversation, isFetched, isSuccess } = useActiveConversation();
   const { data: isAuthed } = useIsAuthed();
   const { resetConversationState } = useConversationStore();
-  const clearTerminal = useCommandStore((state) => state.clearTerminal);
   const resetConversationRuntimeState = useConversationStateStore(
     (state) => state.reset,
   );
@@ -112,14 +110,12 @@ function AppContent() {
   React.useEffect(() => {
     if (resetForConversation.current === conversationId) return;
     resetForConversation.current = conversationId;
-    clearTerminal();
     resetConversationState();
     resetConversationRuntimeState();
     setCurrentAgentState(AgentState.LOADING);
     removeErrorMessage();
   }, [
     conversationId,
-    clearTerminal,
     resetConversationState,
     resetConversationRuntimeState,
     setCurrentAgentState,
@@ -167,8 +163,17 @@ function AppContent() {
       showErrorToast: true,
     });
 
+  // The miss is reported once per conversation id. The effect below also
+  // depends on `navigate` and `t`, whose identities can change after the
+  // toast and before the redirect lands (a lazy chunk or translation bundle
+  // finishing), and each re-run would otherwise toast the same miss again.
+  const reportedMissRef = React.useRef<string | null>(null);
+
   React.useEffect(() => {
-    if (!ownerLookupMissed) return;
+    if (!ownerLookupMissed) {
+      reportedMissRef.current = null;
+      return;
+    }
     if (shouldProbeShared) {
       if (!isSharedProbeSuccessful) return;
       if (sharedConversation) {
@@ -176,6 +181,8 @@ function AppContent() {
         return;
       }
     }
+    if (reportedMissRef.current === conversationId) return;
+    reportedMissRef.current = conversationId ?? null;
     // Clear the per-backend "last selected" slot so the next switch
     // to this backend doesn't try to revisit a stale id.
     clearLastConversationId(active.backend.id, active.orgId);

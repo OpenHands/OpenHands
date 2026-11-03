@@ -1,6 +1,7 @@
 import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
+  isACPToolCallEvent,
   isHookExecutionEvent,
   isObservationEvent,
   isUserRejectObservation,
@@ -92,4 +93,23 @@ export const getEventGroupSummaryParts = (
     key: STEP_KIND_KEYS[kind],
     count,
   }));
+};
+
+export const getSingleToolEvent = (events: OpenHandsEvent[]) => {
+  const steps = events.filter(
+    (event) =>
+      !(
+        (isActionEvent(event) && event.action.kind === "ThinkAction") ||
+        (isObservationEvent(event) &&
+          event.observation.kind === "ThinkObservation")
+      ),
+  );
+  if (steps.length !== 1) return undefined;
+  const event = steps[0];
+  return isActionEvent(event) ||
+    isObservationEvent(event) ||
+    isUserRejectObservation(event) ||
+    isACPToolCallEvent(event)
+    ? event
+    : undefined;
 };

@@ -574,9 +574,16 @@ export function ChatInterface({
   });
   React.useEffect(() => {
     const target = scrollRef.current;
-    if (!target) return;
+    if (!target || allConversationEvents.length === 0) return;
+    // Initial scrolling is scheduled for the next frame, so scrollTop may still be zero.
+    if (target.scrollHeight > target.clientHeight + SCROLL_TOP_THRESHOLD_PX)
+      return;
     maybeLoadOlderRef.current(target);
-  }, [renderableEvents.length, hasMoreOlderEvents]);
+  }, [
+    allConversationEvents.length,
+    renderableEvents.length,
+    hasMoreOlderEvents,
+  ]);
 
   // Create a ScrollProvider with the scroll hook values
   const scrollProviderValue = {

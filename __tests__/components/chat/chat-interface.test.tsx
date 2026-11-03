@@ -1,3 +1,4 @@
+import { useLayoutEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 import {
   fireEvent,
@@ -513,6 +514,73 @@ describe("ChatInterface - Scroll-up loads older events", () => {
     // prevTop + (newHeight - prevHeight) = 50 + (6000 - 5000) = 1050.
     expect(setScrollTop).not.toHaveBeenCalledWith(1050);
   });
+
+  it.each(["cached", "hydrated"])(
+    "does not fetch older history before the initial bottom scroll (%s)",
+    async (mode) => {
+      setupPaginationTest();
+      const initialEvents = useEventStore.getState().events;
+      if (mode === "hydrated") {
+        useEventStore
+          .getState()
+          .clearEventsForConversation("test-conversation-id");
+      }
+      function HydratedChat() {
+        useLayoutEffect(() => {
+          if (mode === "hydrated")
+            useEventStore.getState().addEvents(initialEvents);
+        }, []);
+        return <ChatInterface />;
+      }
+      const actual = await vi.importActual<
+        typeof import("#/hooks/use-load-older-events")
+      >("#/hooks/use-load-older-events");
+      vi.mocked(useLoadOlderEvents).mockImplementation(
+        actual.useLoadOlderEvents,
+      );
+      const { CONVERSATION_QUERY_KEYS } =
+        await import("#/hooks/query/query-keys");
+      const backend = makeDefaultLocalBackend() ?? NO_BACKEND;
+      queryClient.setQueryData(
+        CONVERSATION_QUERY_KEYS.detail(
+          "test-conversation-id",
+          backend.id,
+          null,
+        ),
+        { conversation_id: "test-conversation-id", conversation_url: null },
+      );
+      const { default: events } =
+        await import("#/api/event-service/event-service.api");
+      const search = vi
+        .spyOn(events, "searchEvents")
+        .mockImplementation((_id, _url, _key, options) =>
+          options?.timestampLt
+            ? Promise.resolve({ items: [], next_page_id: null })
+            : new Promise(() => {}),
+        );
+      vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(
+        function (this: HTMLElement) {
+          return this.querySelector('[data-testid="user-message"]')
+            ? 5000
+            : 500;
+        },
+      );
+      vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(
+        800,
+      );
+      vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
+
+      renderWithQueryClient(<HydratedChat />, queryClient);
+      const olderCalls = () =>
+        search.mock.calls.filter((call) => call[3]?.timestampLt);
+      expect(olderCalls()).toHaveLength(0);
+
+      fireEvent.wheel(screen.getByTestId("chat-scroll-container"), {
+        deltaY: -100,
+      });
+      await waitFor(() => expect(olderCalls()).toHaveLength(1));
+    },
+  );
 
   it("auto-loads older events when the chat content does not overflow the viewport", async () => {
     // No overflow ⇒ no scrollbar ⇒ user can't trigger loadOlder by
