@@ -122,4 +122,55 @@ describe("Messages stable EventMessage props", () => {
     expect(latestPropsFor("plan-1").showPlanPreview).toBe(false);
     expect(latestPropsFor("plan-2").showPlanPreview).toBe(true);
   });
+
+  it.each([1, 16])(
+    "keeps action lookup work linear on append across %i retained tool groups",
+    (groupCount) => {
+      // Count work rather than wall time: every full-history search has to read
+      // these ids, so rescanning the history for each observation/group cannot
+      // hide behind a fast CI machine or a collapsed group.
+      let actionIdReads = 0;
+      const messages: OpenHandsEvent[] = [];
+      const allEvents: OpenHandsEvent[] = [];
+      const actionCount = 128;
+      for (let index = 0; index < actionCount; index += 1) {
+        if (index % (actionCount / groupCount) === 0) {
+          const user = createUserMessageEvent(`user-${index}`);
+          messages.push(user);
+          allEvents.push(user);
+        }
+        const id = `action-${index}`;
+        const action = createOtherActionEvent(id);
+        action.thought = [];
+        action.reasoning_content = `Reasoning for tool ${index}`;
+        Object.defineProperty(action, "id", {
+          get: () => {
+            actionIdReads += 1;
+            return id;
+          },
+          enumerable: true,
+        });
+        const observation = makeBashObservation(`observation-${index}`, id);
+        messages.push(observation);
+        allEvents.push(action, observation);
+      }
+      const { rerender } = renderWithProviders(
+        <Messages messages={messages} allEvents={allEvents} />,
+      );
+      actionIdReads = 0;
+
+      const appended = createUserMessageEvent("new-turn");
+      rerender(
+        <Messages
+          messages={[...messages, appended]}
+          allEvents={[...allEvents, appended]}
+        />,
+      );
+
+      expect(screen.getAllByTestId("event-group-toggle")).toHaveLength(
+        groupCount,
+      );
+      expect(actionIdReads).toBeLessThan(actionCount * 10);
+    },
+  );
 });

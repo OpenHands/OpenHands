@@ -6,6 +6,15 @@ import {
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 
+/** Index the retained history once for grouping, summaries, and event cards. */
+export const buildActionById = (events: OpenHandsEvent[]) => {
+  const actions = new Map<string, ActionEvent>();
+  for (const event of events) {
+    if (isActionEvent(event)) actions.set(event.id, event);
+  }
+  return actions;
+};
+
 /**
  * Returns the displayable thought text of an `ActionEvent`, or an empty
  * string if the event has no usable thought content.
@@ -97,6 +106,7 @@ export const splitInlineThink = (
 export const getThoughtSourceAction = (
   event: OpenHandsEvent,
   allEvents: OpenHandsEvent[],
+  actionById?: ReadonlyMap<string, ActionEvent>,
 ): ActionEvent | null => {
   if (isActionEvent(event)) {
     if (event.action.kind === "ThinkAction") return null;
@@ -104,9 +114,11 @@ export const getThoughtSourceAction = (
   }
 
   if (isObservationEvent(event) || isUserRejectObservation(event)) {
-    const action = allEvents.find(
-      (e): e is ActionEvent => isActionEvent(e) && e.id === event.action_id,
-    );
+    const action = actionById
+      ? actionById.get(event.action_id ?? "")
+      : allEvents.find(
+          (e): e is ActionEvent => isActionEvent(e) && e.id === event.action_id,
+        );
     if (!action) return null;
     if (action.action.kind === "ThinkAction") return null;
     return hasNonEmptyThought(action) ? action : null;

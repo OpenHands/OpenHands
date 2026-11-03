@@ -10,7 +10,7 @@ import { getObservationResult } from "../event-content-helpers/get-observation-r
 import { formatEventTimestamp } from "#/utils/format-event-timestamp";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
-import { OpenHandsEvent } from "#/types/agent-server/core";
+import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
   isACPToolCallEvent,
@@ -27,6 +27,7 @@ import { DisclosureCaret } from "#/components/shared/disclosure-caret";
 import { getEventContent } from "../event-content-helpers/get-event-content";
 import { IsInEventGroupContext } from "../../../features/chat/is-in-event-group-context";
 import { PathInteractiveContext } from "../../../features/chat/path-component";
+import { buildActionById } from "../event-thought-helpers";
 
 interface EventGroupProps {
   /** The events represented by this group. Used to compute the summary. */
@@ -39,6 +40,8 @@ interface EventGroupProps {
    * when omitted.
    */
   allEvents?: OpenHandsEvent[];
+  /** Reuse the message list's history index across every visible group. */
+  actionById?: ReadonlyMap<string, ActionEvent>;
   /**
    * `true` while this group is the last item of the chat and the agent is
    * running. The header then shows live status instead of the summary.
@@ -72,6 +75,7 @@ export function EventGroup({
   session,
   hasReasoning = false,
   allEvents,
+  actionById,
   isLive = false,
   open,
   onOpenChange,
@@ -84,13 +88,21 @@ export function EventGroup({
     onOpenChange ? onOpenChange(!expanded) : setLocalExpanded(!expanded);
   const contentId = React.useId();
   const buttonId = `${contentId}-toggle`;
+  const lookupSource = allEvents ?? events;
+  const resolvedActions = React.useMemo(
+    () => actionById ?? buildActionById(lookupSource),
+    [actionById, lookupSource],
+  );
 
   if (events.length === 0 && !session && !hasReasoning) {
     return null;
   }
 
-  const lookupSource = allEvents ?? events;
-  let summary: React.ReactNode = getEventGroupSummaryParts(events, lookupSource)
+  let summary: React.ReactNode = getEventGroupSummaryParts(
+    events,
+    lookupSource,
+    resolvedActions,
+  )
     .map(({ key, count }, index) => {
       const context = [
         count === 1 ? "single" : "",
@@ -112,17 +124,10 @@ export function EventGroup({
       isObservationEvent(singleTool) || isUserRejectObservation(singleTool)
         ? singleTool.action_id
         : undefined;
-    const action = lookupSource.find(
-      (event) => isActionEvent(event) && event.id === actionId,
-    );
+    const action = actionId ? resolvedActions.get(actionId) : undefined;
     summary = (
       <PathInteractiveContext.Provider value={false}>
-        {
-          getEventContent(
-            singleTool,
-            action && isActionEvent(action) ? action : undefined,
-          ).title
-        }
+        {getEventContent(singleTool, action).title}
       </PathInteractiveContext.Provider>
     );
   }
