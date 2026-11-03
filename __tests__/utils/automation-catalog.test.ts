@@ -329,23 +329,46 @@ describe("getAutomationAvailability", () => {
     expect(unlikely.has("news-digest")).toBe(false);
   });
 
-  it("offers a Data Center template on an Enterprise instance missing part of it, ranked last", () => {
-    // Arrange
+  it("ranks a Data Center template last only when the instance uses the other kind", () => {
+    // Arrange — Bitbucket Data Center with Jira Cloud rather than Jira Data Center.
+    const instance = {
+      deploymentMode: "self_hosted",
+      builtInIntegrations: new Set(["bitbucket_data_center", "jira"]),
+    };
+
+    // Act
+    const { hidden, unlikely, suggested } = getAutomationAvailability(
+      instance,
+      catalog,
+    );
+
+    // Assert
+    expect(hidden.has("jira-dc-to-bitbucket-dc")).toBe(false);
+    expect(unlikely.get("jira-dc-to-bitbucket-dc")).toEqual(["jira_dc"]);
+    expect(suggested.get("bitbucket-dc-reviewer")).toEqual([
+      "bitbucket_data_center",
+    ]);
+  });
+
+  it("suggests a Data Center template on an instance reporting part of it, without evidence against the rest", () => {
+    // Arrange — Bitbucket Data Center, no Jira of either kind reported.
     const instance = {
       deploymentMode: "self_hosted",
       builtInIntegrations: new Set(["bitbucket_data_center"]),
     };
 
     // Act
-    const { hidden, unlikely } = getAutomationAvailability(instance, catalog);
+    const { unlikely, suggested } = getAutomationAvailability(
+      instance,
+      catalog,
+    );
 
     // Assert
-    expect(hidden.has("jira-dc-to-bitbucket-dc")).toBe(false);
-    expect(unlikely.get("jira-dc-to-bitbucket-dc")).toEqual(["jira_dc"]);
-    expect(unlikely.has("bitbucket-dc-reviewer")).toBe(false);
+    expect(unlikely.has("jira-dc-to-bitbucket-dc")).toBe(false);
+    expect(suggested.has("jira-dc-to-bitbucket-dc")).toBe(true);
   });
 
-  it("leaves OpenHands Cloud's catalog alone apart from hiding Data Center templates", () => {
+  it("leaves OpenHands Cloud's catalog alone, Data Center templates included", () => {
     // Arrange
     const instance = {
       deploymentMode: "cloud",
@@ -356,14 +379,11 @@ describe("getAutomationAvailability", () => {
     const { hidden, unlikely } = getAutomationAvailability(instance, catalog);
 
     // Assert
-    expect([...hidden]).toEqual([
-      "bitbucket-dc-reviewer",
-      "jira-dc-to-bitbucket-dc",
-    ]);
+    expect(hidden.size).toBe(0);
     expect(unlikely.size).toBe(0);
   });
 
-  it("hides only Data Center templates while the instance's integrations are unknown", () => {
+  it("hides nothing while the instance's integrations are unknown", () => {
     // Arrange — a local backend, or a cloud instance whose config is loading.
     const instance = { deploymentMode: null, builtInIntegrations: null };
 
@@ -371,10 +391,7 @@ describe("getAutomationAvailability", () => {
     const { hidden, unlikely } = getAutomationAvailability(instance, catalog);
 
     // Assert
-    expect([...hidden]).toEqual([
-      "bitbucket-dc-reviewer",
-      "jira-dc-to-bitbucket-dc",
-    ]);
+    expect(hidden.size).toBe(0);
     expect(unlikely.size).toBe(0);
   });
 
@@ -394,9 +411,7 @@ describe("getAutomationAvailability", () => {
     // Assert
     expect(unlikely.has("github-reviewer")).toBe(false);
     expect(unlikely.has("jira-to-github")).toBe(false);
-    expect(unlikely.get("bitbucket-dc-reviewer")).toEqual([
-      "bitbucket_data_center",
-    ]);
+    expect(unlikely.size).toBe(0);
     expect(suggested.size).toBe(0);
   });
 

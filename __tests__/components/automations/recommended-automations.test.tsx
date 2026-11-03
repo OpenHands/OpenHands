@@ -1454,7 +1454,7 @@ describe("recommended automations", () => {
     );
   });
 
-  it("does not offer Data Center templates on OpenHands Cloud", async () => {
+  it("offers Data Center templates on OpenHands Cloud too", async () => {
     await withBuiltInRequirement(["bitbucket_data_center"], async () => {
       // Arrange
       await activateCloudBackend({
@@ -1473,8 +1473,8 @@ describe("recommended automations", () => {
         ),
       ).toBeInTheDocument();
       expect(
-        screen.queryByTestId("recommended-automation-card-news-digest"),
-      ).not.toBeInTheDocument();
+        screen.getByTestId("recommended-automation-card-news-digest"),
+      ).toBeInTheDocument();
     });
   });
 

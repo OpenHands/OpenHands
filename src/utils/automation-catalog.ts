@@ -145,6 +145,9 @@ const BUILT_IN_GIT_PROVIDER_IDS: ReadonlySet<string> = new Set([
   "azure_devops",
 ]);
 
+/** The built-in Jira integrations: Jira Cloud and Jira Data Center. */
+const JIRA_BUILT_IN_IDS: ReadonlySet<string> = new Set(["jira", "jira_dc"]);
+
 /** The most templates the Suggested group shows. */
 export const SUGGESTED_TEMPLATE_LIMIT = 8;
 
@@ -243,8 +246,18 @@ function getMissingIntegrations(
   builtIns: ReadonlySet<string>,
   connected: ReadonlySet<string>,
 ): string[] {
+  const reportsGitProvider = [...builtIns].some((id) =>
+    BUILT_IN_GIT_PROVIDER_IDS.has(id),
+  );
+  const reportsJira = builtIns.has("jira") || builtIns.has("jira_dc");
+  // A built-in integration the template declares counts as missing only when
+  // the instance reports another of its kind (a different git provider, or
+  // the other Jira); otherwise there is no evidence either way.
   const missing = getRequiredBuiltInIntegrations(automation).filter(
-    (id) => !builtIns.has(id),
+    (id) =>
+      !builtIns.has(id) &&
+      ((BUILT_IN_GIT_PROVIDER_IDS.has(id) && reportsGitProvider) ||
+        (JIRA_BUILT_IN_IDS.has(id) && reportsJira)),
   );
   // An integration the template can start without never counts against it.
   const required = getRequiredIntegrationIds(automation);
@@ -252,9 +265,6 @@ function getMissingIntegrations(
     (id) =>
       !connected.has(id) &&
       (required.includes(id) || !getIntegrationIds(automation).includes(id)),
-  );
-  const reportsGitProvider = [...builtIns].some((id) =>
-    BUILT_IN_GIT_PROVIDER_IDS.has(id),
   );
   for (const id of ids) {
     if (
@@ -295,9 +305,8 @@ export interface AutomationAvailability {
  * Which catalog entries to hide, suggest and rank last on the active backend.
  *
  * A self-hosted (Enterprise) instance hides the entries it does not offer at
- * all. An entry that needs built-in integrations is hidden everywhere but an
- * Enterprise instance whose integrations are known, since no other backend has
- * them. On every backend, an entry using an MCP server or git provider the
+ * all; every other entry, Data Center ones included, is offered everywhere.
+ * On every backend, an entry using an MCP server or git provider the
  * user has connected is suggested. Once an Enterprise instance's integrations
  * are known, an entry using one of them is suggested too, and one the instance
  * clearly uses something else for is ranked last rather than hidden.
@@ -320,10 +329,6 @@ export function getAutomationAvailability(
   const connected = connectedIntegrations ?? new Set<string>();
   for (const automation of catalog) {
     if (hidden.has(automation.id)) continue;
-    if (!knownSelfHosted && getRequiredBuiltInIntegrations(automation).length) {
-      hidden.add(automation.id);
-      continue;
-    }
     const missing = knownSelfHosted
       ? getMissingIntegrations(automation, knownSelfHosted, connected)
       : [];
