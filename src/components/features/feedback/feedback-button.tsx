@@ -49,7 +49,7 @@ export function FeedbackButton() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted hover:bg-surface-raised hover:text-contrast"
+        className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-muted hover:bg-surface-raised hover:text-contrast"
       >
         <MessageSquare aria-hidden size={16} />
         {t(I18nKey.FEEDBACK$TITLE)}
