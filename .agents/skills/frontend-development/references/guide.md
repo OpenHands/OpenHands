@@ -1,3 +1,13 @@
+## Arbitrary-value guard adoption
+
+`shadcn/no-arbitrary-values` warns globally. Four migrated owners reject new
+arbitrary classes: command-menu, backend-version, settings-nav-header and
+backend-synced-settings-badge. Their exact paths are in `eslint.config.js`,
+with executable probes in `__tests__/scripts/arbitrary-values-lint.test.ts`.
+Other components, routes and primitive implementations retain warnings during
+migration. Keep legitimate measured/portal geometry with its owner; do not
+expand this file list or add exemptions without auditing the remaining values.
+
 ## Raw-color class-map scanning
 
 `shadcn/no-raw-colors` warns globally. Three migrated owners reject new raw colors:
