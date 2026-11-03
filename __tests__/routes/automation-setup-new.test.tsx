@@ -96,9 +96,11 @@ describe("AutomationSetupNew", () => {
     await waitFor(() =>
       expect(AutomationService.getAutomation).toHaveBeenCalledWith("auto-1"),
     );
-    const draft = JSON.parse(
-      screen.getByTestId("setup-panel-draft").textContent ?? "{}",
-    );
+    // The mock is called before its promise resolves, so wait for the panel
+    // (rendered only once the draft has loaded) rather than reading the DOM
+    // synchronously while the component may still be loading.
+    const panel = await screen.findByTestId("setup-panel-draft");
+    const draft = JSON.parse(panel.textContent ?? "{}");
     expect(draft.editingAutomationId).toBe("auto-1");
     expect(draft.form.name).toBe("Daily digest");
   });
@@ -111,9 +113,8 @@ describe("AutomationSetupNew", () => {
     await waitFor(() =>
       expect(AutomationService.getServerDraft).toHaveBeenCalledWith("draft-1"),
     );
-    const draft = JSON.parse(
-      screen.getByTestId("setup-panel-draft").textContent ?? "{}",
-    );
+    const panel = await screen.findByTestId("setup-panel-draft");
+    const draft = JSON.parse(panel.textContent ?? "{}");
     expect(draft.serverDraftId).toBe("draft-1");
     expect(draft.form.repository).toBe("acme/one, acme/two");
     expect(draft.form.eventKey).toBe("issues,push");
