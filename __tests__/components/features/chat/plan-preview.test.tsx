@@ -377,8 +377,7 @@ describe("PlanPreview", () => {
     await user.click(viewButton);
 
     // Assert: selectTab was called with 'planner' and the drawer opened.
-    // Opening the drawer also mirrors `rightPanelShown` into the
-    // conversation's localStorage blob, alongside the selected tab.
+    // Opening the drawer persists the selected tab; visibility is session-only.
     expect(useConversationStore.getState().selectedTab).toBe("planner");
     expect(useConversationStore.getState().hasRightPanelToggled).toBe(true);
 
@@ -386,7 +385,7 @@ describe("PlanPreview", () => {
       localStorage.getItem(`conversation-state-${conversationId}`)!,
     );
     expect(storedState.selectedTab).toBe("planner");
-    expect(storedState.rightPanelShown).toBe(true);
+    expect("rightPanelShown" in storedState).toBe(false);
   });
 
   it("should call selectTab with 'planner' when Read more button is clicked", async () => {
@@ -408,8 +407,7 @@ describe("PlanPreview", () => {
     await user.click(readMoreButton);
 
     // Assert: selectTab was called with 'planner' and the drawer opened.
-    // Opening the drawer also mirrors `rightPanelShown` into the
-    // conversation's localStorage blob, alongside the selected tab.
+    // Opening the drawer persists the selected tab; visibility is session-only.
     expect(useConversationStore.getState().selectedTab).toBe("planner");
     expect(useConversationStore.getState().hasRightPanelToggled).toBe(true);
 
@@ -417,6 +415,6 @@ describe("PlanPreview", () => {
       localStorage.getItem(`conversation-state-${conversationId}`)!,
     );
     expect(storedState.selectedTab).toBe("planner");
-    expect(storedState.rightPanelShown).toBe(true);
+    expect("rightPanelShown" in storedState).toBe(false);
   });
 });

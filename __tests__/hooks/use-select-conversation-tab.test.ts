@@ -46,7 +46,7 @@ describe("useSelectConversationTab", () => {
         localStorage.getItem(`conversation-state-${TEST_CONVERSATION_ID}`)!,
       );
       expect(storedState.selectedTab).toBe("files");
-      expect(storedState.rightPanelShown).toBe(true);
+      expect("rightPanelShown" in storedState).toBe(false);
     });
 
     it("should close panel when clicking the same active tab", () => {
@@ -64,14 +64,14 @@ describe("useSelectConversationTab", () => {
         result.current.selectTab("files");
       });
 
-      // Assert: Panel should be closed and persisted.
+      // Assert: Panel should be closed; visibility is session-only.
       expect(useConversationStore.getState().hasRightPanelToggled).toBe(false);
       expect(useConversationStore.getState().isRightPanelShown).toBe(false);
 
-      const storedState = JSON.parse(
-        localStorage.getItem(`conversation-state-${TEST_CONVERSATION_ID}`)!,
+      const rawStoredState = localStorage.getItem(
+        `conversation-state-${TEST_CONVERSATION_ID}`,
       );
-      expect(storedState.rightPanelShown).toBe(false);
+      expect(rawStoredState ?? "").not.toContain("rightPanelShown");
     });
 
     it("should switch to different tab when panel is already open", () => {

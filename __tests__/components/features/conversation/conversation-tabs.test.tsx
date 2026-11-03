@@ -206,7 +206,7 @@ describe("ConversationTabs localStorage behavior", () => {
       const parsed = JSON.parse(storedState!);
       expect(parsed).toHaveProperty("selectedTab");
       expect(parsed).toHaveProperty("unpinnedTabs");
-      expect(parsed.rightPanelShown).toBe(true);
+      expect("rightPanelShown" in parsed).toBe(false);
     });
   });
 
@@ -238,7 +238,7 @@ describe("ConversationTabs localStorage behavior", () => {
         localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
       );
       expect(storedState.selectedTab).toBe("terminal");
-      expect(storedState.rightPanelShown).toBe(true);
+      expect("rightPanelShown" in storedState).toBe(false);
     });
 
     it("should close panel when clicking the same active tab", async () => {
@@ -270,7 +270,8 @@ describe("ConversationTabs localStorage behavior", () => {
       const storedState = JSON.parse(
         localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
       );
-      expect(storedState.rightPanelShown).toBe(false);
+      // Legacy seed stays untouched; visibility is session-only.
+      expect(storedState.rightPanelShown).toBe(true);
     });
 
     it("should switch to different tab when clicking another tab while panel is open", async () => {
