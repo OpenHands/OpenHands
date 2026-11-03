@@ -5,7 +5,6 @@ export type ChatAttachmentUploadOptions = {
 };
 import { isFileImage } from "#/utils/is-file-image";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
-import { validateFiles } from "#/utils/file-validation";
 import { processFiles, processImages } from "#/utils/file-processing";
 import { useConversationStore } from "#/stores/conversation-store";
 
@@ -14,8 +13,6 @@ import { useConversationStore } from "#/stores/conversation-store";
  */
 export function useChatAttachmentUpload() {
   const {
-    images,
-    files,
     addImages,
     addFiles,
     addFileLoading,
@@ -27,13 +24,6 @@ export function useChatAttachmentUpload() {
 
   const handleUpload = useCallback(
     async (selectedFiles: File[], _options?: ChatAttachmentUploadOptions) => {
-      const validation = validateFiles(selectedFiles, [...images, ...files]);
-
-      if (!validation.isValid) {
-        displayErrorToast(`Error: ${validation.errorMessage}`);
-        return;
-      }
-
       const validFiles = selectedFiles.filter((f) => !isFileImage(f));
       const validImages = selectedFiles.filter((f) => isFileImage(f));
 
@@ -86,8 +76,6 @@ export function useChatAttachmentUpload() {
       }
     },
     [
-      images,
-      files,
       addImages,
       addFiles,
       addFileLoading,
