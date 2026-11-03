@@ -31,6 +31,7 @@ import { CanvasExtensionsRuntimeProvider } from "#/components/features/canvas-ex
 import { isMacDesktopShell } from "#/utils/desktop-shell";
 import { useDesktopFullScreen } from "#/hooks/use-desktop-full-screen";
 import { cn } from "#/utils/utils";
+import { isEmbeddedView } from "#/utils/embedded-view";
 
 const EnvironmentSwitchOverlay = React.lazy(
   () => import("#/components/features/backends/environment-switch-overlay"),
@@ -166,6 +167,25 @@ function MainAppContent() {
     location.pathname,
   );
   const showOnboardingPreview = isOnboardingPreviewActive(location.search);
+
+  if (isEmbeddedView(location.search)) {
+    return (
+      <ReactRouterNavigationProvider>
+        <CanvasExtensionsRuntimeProvider>
+          <SidebarMobileNavProvider>
+            <div
+              data-testid="root-layout"
+              data-embedded="true"
+              className="h-screen overflow-auto bg-canvas-base custom-scrollbar"
+            >
+              <DocumentTitle />
+              <Outlet />
+            </div>
+          </SidebarMobileNavProvider>
+        </CanvasExtensionsRuntimeProvider>
+      </ReactRouterNavigationProvider>
+    );
+  }
 
   return (
     <ReactRouterNavigationProvider>

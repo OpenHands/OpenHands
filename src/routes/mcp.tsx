@@ -4,6 +4,7 @@ import {
   ExtensionsNavigation,
   ExtensionsCompactNavigation,
 } from "#/components/features/skills/extensions-navigation";
+import { useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -24,6 +25,7 @@ import {
 } from "@openhands/extensions/integrations";
 import { MCPServerConfig } from "#/types/mcp-server";
 import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
+import { isEmbeddedView } from "#/utils/embedded-view";
 import {
   InstalledServersSection,
   McpToolbar,
@@ -41,6 +43,8 @@ import {
 
 export default function MCPPage() {
   const { t } = useTranslation("openhands");
+  // Hosted inside another surface: that surface provides the navigation.
+  const embedded = isEmbeddedView(useLocation().search);
   const { data: settings, isLoading } = useSettings();
   const { mutate: updateMcpServer } = useUpdateMcpServer();
 
@@ -100,7 +104,7 @@ export default function MCPPage() {
         data-testid="mcp-page"
         className="flex h-full gap-4 lg:gap-10 lg:pl-10"
       >
-        <ExtensionsNavigation />
+        {!embedded && <ExtensionsNavigation />}
         <div className="flex h-full flex-1 items-center justify-center px-4 lg:px-0">
           <div className="h-8 w-8 rounded-full border-2 border-transparent border-t-contrast animate-spin" />
         </div>
@@ -113,10 +117,10 @@ export default function MCPPage() {
       data-testid="mcp-page"
       className="flex h-full gap-4 lg:gap-10 lg:pl-10"
     >
-      <ExtensionsNavigation />
+      {!embedded && <ExtensionsNavigation />}
       <main className={settingsLikeMainScrollClassName}>
         <div className="mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6">
-          <ExtensionsCompactNavigation />
+          {!embedded && <ExtensionsCompactNavigation />}
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0 flex-1 basis-64 space-y-1">
