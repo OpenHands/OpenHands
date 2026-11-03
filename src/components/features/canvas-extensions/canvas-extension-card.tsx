@@ -1,3 +1,9 @@
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import type { Backend } from "#/api/backend-registry/types";
+import { useEffect, useRef, useState } from "react";
+import CanvasExtensionsService, {
+  type CanvasAppBackendStatus,
+} from "#/api/canvas-extensions-service";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ToggleSwitch } from "#/ui/toggle-switch";
@@ -25,6 +31,7 @@ export function CanvasExtensionCard({
   onUninstall,
 }: CanvasExtensionCardProps) {
   const { t } = useTranslation("openhands");
+  const { backend } = useActiveBackend();
   const pages = extension.manifest?.contributes?.pages ?? [];
   const displayName = extension.manifest?.display_name || extension.name;
 
@@ -117,6 +124,14 @@ export function CanvasExtensionCard({
         </section>
       ) : null}
 
+      {extension.manifest?.backend && (
+        <CanvasBackendControls
+          key={`${backend.id}:${backend.connectionRevision}:${extension.name}:${extension.version}`}
+          extension={extension}
+          backend={backend}
+        />
+      )}
+
       <footer className="flex justify-end gap-2 border-t border-border pt-3">
         <BrandButton
           type="button"
@@ -138,5 +153,112 @@ export function CanvasExtensionCard({
         </BrandButton>
       </footer>
     </article>
+  );
+}
+
+function CanvasBackendControls({
+  extension,
+  backend,
+}: {
+  extension: InstalledCanvasExtensionInfo;
+  backend: Backend;
+}) {
+  const { t } = useTranslation("openhands");
+  const [status, setStatus] = useState<CanvasAppBackendStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const mounted = useRef(false);
+  const generation = useRef(0);
+  const acting = useRef(false);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    let active = true;
+    mounted.current = true;
+    const refresh = () => {
+      if (acting.current) return;
+      const requestGeneration = ++generation.current;
+      return CanvasExtensionsService.backendStatus(extension.name, backend)
+        .then((value) => {
+          if (active && requestGeneration === generation.current)
+            setStatus(value);
+        })
+        .catch(() => {
+          if (active && requestGeneration === generation.current)
+            setStatus(null);
+        });
+    };
+    void refresh();
+    const timer = setInterval(refresh, 3000);
+    return () => {
+      active = false;
+      mounted.current = false;
+      clearInterval(timer);
+    };
+  }, [extension.name, extension.version, extension.enabled, backend]);
+  const refs = extension.manifest?.backend?.secret_refs ?? [];
+  const approved =
+    status?.secret_grant_revision === status?.revision && !!status?.revision;
+  const revokeSecrets = async () => {
+    if (!status?.revision) return;
+    acting.current = true;
+    generation.current += 1;
+    const requestGeneration = generation.current;
+    setBusy(true);
+    setError(false);
+    try {
+      const result = await CanvasExtensionsService.revokeBackendSecrets(
+        extension.name,
+        backend,
+      );
+      if (mounted.current && requestGeneration === generation.current) {
+        setStatus(result);
+        window.dispatchEvent(new Event("canvas-app-revoked"));
+      }
+    } catch {
+      if (mounted.current && requestGeneration === generation.current)
+        setError(true);
+    } finally {
+      acting.current = false;
+      if (mounted.current && requestGeneration === generation.current)
+        setBusy(false);
+    }
+  };
+  return (
+    <section className="flex flex-col gap-3 border-t border-border pt-3">
+      {refs.length > 0 && (
+        <>
+          <p>
+            {t(I18nKey.SETTINGS$APPS_BACKEND_SECRETS, {
+              names: refs.join(", "),
+            })}
+          </p>
+          <p className="text-xs text-tertiary-light">
+            {t(I18nKey.SETTINGS$APPS_BACKEND_WARNING)}
+          </p>
+        </>
+      )}
+      {!status ? (
+        <p role="status">{t(I18nKey.SETTINGS$APPS_BACKEND_UNSUPPORTED)}</p>
+      ) : (
+        <>
+          <p role="status">
+            {t(I18nKey.SETTINGS$APPS_BACKEND_STATE, { state: status.state })}
+          </p>
+          {approved && <p>{t(I18nKey.SETTINGS$APPS_BACKEND_APPROVED)}</p>}
+          <div className="flex flex-wrap gap-2">
+            {refs.length > 0 && approved && (
+              <BrandButton
+                type="button"
+                variant="secondary"
+                isDisabled={busy}
+                onClick={revokeSecrets}
+              >
+                {t(I18nKey.SETTINGS$APPS_BACKEND_REVOKE)}
+              </BrandButton>
+            )}
+          </div>
+        </>
+      )}
+      {error && <p role="alert">{t(I18nKey.SETTINGS$APPS_BACKEND_ERROR)}</p>}
+    </section>
   );
 }

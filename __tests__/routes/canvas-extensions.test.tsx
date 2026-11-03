@@ -1,9 +1,12 @@
+import i18next from "i18next";
+import translations from "#/i18n/translation.json";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import CanvasExtensionsScreen from "#/routes/canvas-extensions";
 import CanvasExtensionsService from "#/api/canvas-extensions-service";
+import { SecretsService } from "#/api/secrets-service";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import {
   __resetActiveStoreForTests,
@@ -14,6 +17,11 @@ import type { Backend } from "#/api/backend-registry/types";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import type { InstalledCanvasExtensionInfo } from "#/types/canvas-extension";
+
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
+  useTranslation: () => ({ t: i18next.getFixedT("en", "app-secret-test") }),
+}));
 
 vi.mock("#/context/navigation-context", () => ({
   useNavigation: () => ({
@@ -83,7 +91,17 @@ async function startPendingUpdate(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("CanvasExtensionsScreen", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18next.init({
+      lng: "en",
+      resources: {
+        en: {
+          "app-secret-test": Object.fromEntries(
+            Object.entries(translations).map(([key, value]) => [key, value.en]),
+          ),
+        },
+      },
+    });
     vi.restoreAllMocks();
     __resetActiveStoreForTests();
     setRegisteredBackends([localBackend]);
@@ -91,6 +109,42 @@ describe("CanvasExtensionsScreen", () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       MOCK_DEFAULT_USER_SETTINGS,
     );
+  });
+
+  it("links missing managed-App secrets to the mounted Canvas settings", async () => {
+    const user = userEvent.setup();
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
+    vi.spyOn(CanvasExtensionsService, "backendStatus").mockResolvedValue({
+      name: "demo-page",
+      state: "stopped",
+      revision: "revision",
+    });
+    vi.spyOn(CanvasExtensionsService, "listInstalled").mockResolvedValue([
+      buildExtension({
+        enabled: false,
+        manifest: {
+          schema_version: 1,
+          name: "demo-page",
+          display_name: "Demo page",
+          version: "0.1.0",
+          entrypoint: "dist/extension.js",
+          backend: { secret_refs: ["MISSING_KEY"] },
+        },
+      }),
+    ]);
+    try {
+      renderAppsScreen();
+      await user.click(await screen.findByRole("switch"));
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Required server secrets: MISSING_KEY");
+      expect(alert.textContent).not.toContain("{{names}}");
+      expect(
+        screen.getByRole("link", { name: "Secrets settings" }),
+      ).toHaveAttribute("href", "/canvas/settings/secrets");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   // Issue #17956: the switch was only styled inert while busy, so the
@@ -118,7 +172,12 @@ describe("CanvasExtensionsScreen", () => {
     appSwitch.focus();
     await user.keyboard(" ");
     await waitFor(() =>
-      expect(setEnabledSpy).toHaveBeenCalledWith("demo-page", false),
+      expect(setEnabledSpy).toHaveBeenCalledWith(
+        "demo-page",
+        false,
+        undefined,
+        localBackend,
+      ),
     );
   });
 
