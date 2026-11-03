@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; padding: 24px; background: #0d1117; color: #e6edf3; font: 14px/1.5 ui-monospace, Menlo, monospace; width: 1100px; }
+  .row { display: flex; gap: 24px; }
+  .col { flex: 1; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+  h2 { margin: 0 0 12px; font: 600 15px system-ui, sans-serif; }
+  .bad { color: #ff7b72; } .good { color: #7ee787; } .dim { color: #8b949e; }
+  pre { margin: 0; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<p class="dim">agent-canvas --port 18450, then kill -9 the ingress process listening on 18450 (scripts in .pr/oss-15065/ingress_repro.sh)</p>
+<div class="row">
+  <div class="col">
+    <h2 class="bad">Before (main)</h2>
+<pre>before kill: 200
+killing ingress pid 67691
+right after kill: 000
+5 s after kill: <span class="bad">000</span>
+launcher still running: yes
+<span class="dim">--- launcher log (ingress lines) ---</span>
+20:40:59 [ingress] Starting on port 18450...</pre>
+  </div>
+  <div class="col">
+    <h2 class="good">After (this PR)</h2>
+<pre>before kill: 200
+killing ingress pid 67516
+right after kill: 000
+5 s after kill: <span class="good">200</span>
+launcher still running: yes
+<span class="dim">--- launcher log (ingress lines) ---</span>
+20:40:32 [ingress] Starting on port 18450...
+<span class="good">20:40:33 [ingress] Restarting (1/3)...</span>
+20:40:34 [ingress] Starting on port 18450...</pre>
+  </div>
+</div>
+</body>
+</html>
