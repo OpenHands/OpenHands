@@ -1,0 +1,34 @@
+# F26.cli-port-in-use fallback, run 1 (stand-in 'other app' on 127.0.0.1:3001; agent-canvas --port 18940, backend 18941, automation 18942)
+
+Agent Canvas (Static)
+
+[1/2] Checking prerequisites...
+✓ uvx found
+[ports] Checking ports...
+11:16:47 [ports] Frontend port 3001 is taken — using 36597
+[2/2] Starting services...
+11:16:47 [agent-server] Starting on port 18941...
+11:17:50 [ingress] ║  Ingress Proxy                                                ║
+11:17:50 [ingress] ║  Listening on: http://localhost:18940/                          ║
+11:17:50 [ingress] ║  Routes:                                                      ║
+11:17:50 [ingress] ║      /api/automation → http://127.0.0.1:18942                 ║
+11:17:50 [ingress] ║      /openapi.json → http://127.0.0.1:18941                   ║
+11:17:50 [ingress] ║      /server_info → http://127.0.0.1:18941                    ║
+11:17:50 [ingress] ║      /sockets → http://127.0.0.1:18941                        ║
+11:17:50 [ingress] ║      /health → http://127.0.0.1:18941                         ║
+11:17:50 [ingress] ║      /vscode → http://127.0.0.1:19941                         ║
+11:17:50 [ingress] ║      /ready → http://127.0.0.1:18941                          ║
+11:17:50 [ingress] ║      /alive → http://127.0.0.1:18941                          ║
+11:17:50 [ingress] ║      /redoc → http://127.0.0.1:18941                          ║
+11:17:50 [ingress] ║      /docs → http://127.0.0.1:18941                           ║
+11:17:50 [ingress] ║      /api → http://127.0.0.1:18941                            ║
+11:17:50 [ingress] ║      * (default) → http://localhost:36597                     ║
+11:17:50 [ingress] ║                                                               ║
+AUTOMATION_CORS_ORIGINS (automation process env, run 1): http://localhost:18940,http://127.0.0.1:18940,http://localhost:36597,http://127.0.0.1:36597
+
+# run 2 (same setup, fresh launcher)
+[ports] Checking ports...
+11:19:04 [ports] Frontend port 3001 is taken — using 34009
+11:19:15 [ingress] ║      * (default) → http://localhost:34009                     ║
+/server_info runtime_services.services.frontend.url_from_agent: http://localhost:34009
+GET http://127.0.0.1:18940/ -> <title>OpenHands ; GET http://127.0.0.1:3001/ -> other app
