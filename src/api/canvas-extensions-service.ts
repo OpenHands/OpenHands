@@ -220,7 +220,12 @@ function normalizeInstallRequest(
   };
 }
 
-export type CanvasAppBackendStatus = AgentServerCanvasBackendStatusResponse;
+export type CanvasAppBackendStatus = AgentServerCanvasBackendStatusResponse & {
+  // Secret-grant fields returned by agent-servers that support
+  // canvas_app_backend_secret_grants_v1; absent in the pinned client types.
+  secret_refs?: string[];
+  secret_grant_revision?: string | null;
+};
 
 class CanvasExtensionsService {
   static async backendStatus(
@@ -239,8 +244,12 @@ class CanvasExtensionsService {
     name: string,
     backend: Backend,
   ): Promise<CanvasAppBackendStatus> {
+    // DELETE via the generic client until the pinned canvas-extensions
+    // client exposes revokeBackendSecrets.
     return mapUnsupported(() =>
-      getClientForBackend(backend).canvasExtensions.revokeBackendSecrets(name),
+      getClientForBackend(backend).delete<CanvasAppBackendStatus>(
+        `${installedExtensionPath(name)}/backend/secret-grant`,
+      ),
     );
   }
 
@@ -281,8 +290,13 @@ class CanvasExtensionsService {
         throw new Error("Upgrade Agent Server to enable managed Apps safely.");
       }
     }
+    // PATCH via the generic client until the pinned canvas-extensions
+    // client exposes setEnabled with secret-grant consent.
     return mapUnsupported(() =>
-      client.canvasExtensions.setEnabled(name, enabled, consent),
+      client.patch<{ name: string; enabled: boolean }>(
+        installedExtensionPath(name),
+        { enabled, ...consent },
+      ),
     );
   }
 
