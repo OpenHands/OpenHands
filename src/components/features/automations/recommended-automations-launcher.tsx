@@ -150,14 +150,6 @@ export function RecommendedAutomationsLauncher({
     deploymentMode,
     isLoading: isNativeIntegrationsLoading,
   } = useNativeGitIntegrations();
-  const {
-    hidden: hiddenAutomationIds,
-    unlikely: unlikelyAutomations,
-    suggested: suggestedAutomations,
-  } = useMemo(
-    () => getAutomationAvailability({ deploymentMode, builtInIntegrations }),
-    [deploymentMode, builtInIntegrations],
-  );
   const [unlikelyNotice, setUnlikelyNotice] = useState<{
     automation: RecommendedAutomation;
     missing: readonly string[];
@@ -175,6 +167,34 @@ export function RecommendedAutomationsLauncher({
           parseMcpConfig(settings?.agent_settings?.mcp_config),
       ).filter((server) => server.enabled !== false),
     [settings?.agent_settings?.mcp_config, settings?.mcp_config],
+  );
+
+  // Integrations the user has set up themselves move the templates that use
+  // them into Suggested.
+  const connectedIntegrations = useMemo(
+    () =>
+      new Set(
+        MCP_MARKETPLACE.filter(
+          (entry) =>
+            findInstalledEntryMatch(entry, installedMcpConfig) ||
+            getNativeIntegration(entry.id)?.isConnected === true,
+        ).map((entry) => entry.id),
+      ),
+    [getNativeIntegration, installedMcpConfig],
+  );
+
+  const {
+    hidden: hiddenAutomationIds,
+    unlikely: unlikelyAutomations,
+    suggested: suggestedAutomations,
+  } = useMemo(
+    () =>
+      getAutomationAvailability({
+        deploymentMode,
+        builtInIntegrations,
+        connectedIntegrations,
+      }),
+    [deploymentMode, builtInIntegrations, connectedIntegrations],
   );
 
   const launchAutomation = useCallback(

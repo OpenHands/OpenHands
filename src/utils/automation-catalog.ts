@@ -138,6 +138,16 @@ const GIT_PROVIDER_INTEGRATION_IDS: ReadonlySet<string> = new Set([
   "bitbucket",
 ]);
 
+/** Every git provider an instance can report as built in. */
+const BUILT_IN_GIT_PROVIDER_IDS: ReadonlySet<string> = new Set([
+  ...GIT_PROVIDER_INTEGRATION_IDS,
+  "bitbucket_data_center",
+  "azure_devops",
+]);
+
+/** The most templates the Suggested group shows. */
+export const SUGGESTED_TEMPLATE_LIMIT = 8;
+
 /**
  * Integration ids that reach only Jira Cloud, never Jira Data Center. The
  * `atlassian` MCP server is absent: it also serves Jira Data Center.
@@ -179,6 +189,11 @@ export interface InstanceIntegrations {
    * while unknown (local backends, loading, an unreadable config).
    */
   builtInIntegrations: ReadonlySet<string> | null | undefined;
+  /**
+   * Catalog integration ids the user has set up themselves: installed MCP
+   * servers and connected git providers. Known on every backend.
+   */
+  connectedIntegrations?: ReadonlySet<string> | null;
 }
 
 /**
@@ -215,14 +230,18 @@ function getUsedBuiltInIntegrations(
 }
 
 /**
- * The built-in integrations an OpenHands Enterprise instance does not report
- * enabling but the template seems to need: a git provider the instance does
- * not configure, or Jira Cloud on an instance that uses Jira Data Center
- * instead (reported as `jira`). Empty when the instance looks ready for it.
+ * The built-in integrations an OpenHands Enterprise instance clearly uses
+ * something else for: a git provider it does not configure while it does
+ * configure another, or Jira Cloud on an instance that uses Jira Data Center
+ * instead (reported as `jira`). An instance that reports no git provider gives
+ * no such evidence, so its templates keep their default place. An integration
+ * the user has connected themselves never counts as missing. Empty when the
+ * instance looks ready for the template.
  */
 function getMissingIntegrations(
   automation: RecommendedAutomation,
   builtIns: ReadonlySet<string>,
+  connected: ReadonlySet<string>,
 ): string[] {
   const missing = getRequiredBuiltInIntegrations(automation).filter(
     (id) => !builtIns.has(id),
@@ -231,10 +250,18 @@ function getMissingIntegrations(
   const required = getRequiredIntegrationIds(automation);
   const ids = getTemplateIntegrationIds(automation).filter(
     (id) =>
-      required.includes(id) || !getIntegrationIds(automation).includes(id),
+      !connected.has(id) &&
+      (required.includes(id) || !getIntegrationIds(automation).includes(id)),
+  );
+  const reportsGitProvider = [...builtIns].some((id) =>
+    BUILT_IN_GIT_PROVIDER_IDS.has(id),
   );
   for (const id of ids) {
-    if (GIT_PROVIDER_INTEGRATION_IDS.has(id) && !builtIns.has(id)) {
+    if (
+      reportsGitProvider &&
+      GIT_PROVIDER_INTEGRATION_IDS.has(id) &&
+      !builtIns.has(id)
+    ) {
       missing.push(id);
     }
   }
@@ -257,24 +284,30 @@ export interface AutomationAvailability {
    */
   unlikely: ReadonlyMap<string, readonly string[]>;
   /**
-   * Entries an Enterprise instance looks ready for that use one of its
-   * built-in integrations, with the ones each uses, by provider name.
+   * Entries that use something already set up — one of an Enterprise
+   * instance's built-in integrations, or an MCP server or git provider the
+   * user has connected — with the ids each uses.
    */
   suggested: ReadonlyMap<string, readonly string[]>;
 }
 
 /**
- * Which catalog entries to hide and which to rank last on the active backend.
+ * Which catalog entries to hide, suggest and rank last on the active backend.
  *
  * A self-hosted (Enterprise) instance hides the entries it does not offer at
  * all. An entry that needs built-in integrations is hidden everywhere but an
  * Enterprise instance whose integrations are known, since no other backend has
- * them. Once an Enterprise instance's integrations are known, an entry that
- * seems to need one it does not report is ranked last rather than hidden, and
- * one that uses an integration it does report is suggested.
+ * them. On every backend, an entry using an MCP server or git provider the
+ * user has connected is suggested. Once an Enterprise instance's integrations
+ * are known, an entry using one of them is suggested too, and one the instance
+ * clearly uses something else for is ranked last rather than hidden.
  */
 export function getAutomationAvailability(
-  { deploymentMode, builtInIntegrations }: InstanceIntegrations,
+  {
+    deploymentMode,
+    builtInIntegrations,
+    connectedIntegrations,
+  }: InstanceIntegrations,
   catalog: readonly RecommendedAutomation[] = AUTOMATION_CATALOG,
 ): AutomationAvailability {
   const isSelfHosted = deploymentMode === "self_hosted";
@@ -284,23 +317,31 @@ export function getAutomationAvailability(
   );
   const unlikely = new Map<string, readonly string[]>();
   const suggested = new Map<string, readonly string[]>();
+  const connected = connectedIntegrations ?? new Set<string>();
   for (const automation of catalog) {
     if (hidden.has(automation.id)) continue;
-    if (!knownSelfHosted) {
-      if (getRequiredBuiltInIntegrations(automation).length > 0) {
-        hidden.add(automation.id);
-      }
+    if (!knownSelfHosted && getRequiredBuiltInIntegrations(automation).length) {
+      hidden.add(automation.id);
       continue;
     }
-    const missing = getMissingIntegrations(automation, knownSelfHosted);
+    const missing = knownSelfHosted
+      ? getMissingIntegrations(automation, knownSelfHosted, connected)
+      : [];
     if (missing.length > 0) {
       unlikely.set(automation.id, missing);
       continue;
     }
-    const used = getUsedBuiltInIntegrations(automation).filter((id) =>
-      knownSelfHosted.has(id),
-    );
-    if (used.length > 0) suggested.set(automation.id, used);
+    const used = [
+      ...(knownSelfHosted
+        ? getUsedBuiltInIntegrations(automation).filter((id) =>
+            knownSelfHosted.has(id),
+          )
+        : []),
+      ...getTemplateIntegrationIds(automation).filter((id) =>
+        connected.has(id),
+      ),
+    ];
+    if (used.length > 0) suggested.set(automation.id, [...new Set(used)]);
   }
   return { hidden, unlikely, suggested };
 }
@@ -328,10 +369,10 @@ export interface SuggestedTemplates<T> {
 
 /**
  * Splits entries into the suggested ones and the rest. Suggested are the ones
- * using an integration the instance reports, then the featured ones the
- * instance looks ready for; with nothing reported, that is just the featured
- * ones. The rest keep their order, with those the instance does not appear to
- * support last.
+ * using something already set up, then the featured ones the instance looks
+ * ready for, up to `SUGGESTED_TEMPLATE_LIMIT`; with nothing set up, that is
+ * just the featured ones. The rest keep their order, with those the instance
+ * does not appear to support last.
  */
 export function splitBySuggestion<T extends { id: string }>(
   automations: readonly T[],
@@ -348,9 +389,11 @@ export function splitBySuggestion<T extends { id: string }>(
       !unlikely?.has(automation.id) &&
       isFeatured(automation),
   );
-  const chosen = new Set([...matched, ...featured]);
+  const chosen = new Set(
+    [...matched, ...featured].slice(0, SUGGESTED_TEMPLATE_LIMIT),
+  );
   return {
-    suggested: [...matched, ...featured],
+    suggested: [...chosen],
     more: rankByAvailability(
       automations.filter((automation) => !chosen.has(automation)),
       unlikely,
