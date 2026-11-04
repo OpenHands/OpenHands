@@ -1533,9 +1533,17 @@ describe("AutomationSetupPanel", () => {
     ).toHaveAttribute("aria-checked", "true");
     expect(screen.getByTestId("automation-setup-time")).toHaveValue("10:30");
     expect(screen.getByTestId("automation-setup-timezone")).toHaveValue("UTC");
+    // The note sits once in each filled section's title; the fields the
+    // agent filled carry only the mark.
     expect(
-      screen.getAllByText("AUTOMATION_SETUP$FILLED_BY_OPENHANDS").length,
-    ).toBeGreaterThan(0);
+      screen.getByTestId("automation-setup-trigger-group-agent-filled"),
+    ).toHaveTextContent("AUTOMATION_SETUP$FILLED_BY_OPENHANDS");
+    expect(
+      screen.getByTestId("automation-setup-settings-group-agent-filled"),
+    ).toBeInTheDocument();
+    expect(
+      within(nameInput.closest("label")!).getByText("✦"),
+    ).toBeInTheDocument();
   });
 
   it("shows a weekday dropdown for a weekly schedule", async () => {

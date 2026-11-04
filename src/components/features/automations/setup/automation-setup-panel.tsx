@@ -726,6 +726,42 @@ function frequencyLabelKey(frequency: Frequency): I18nKey {
   }
 }
 
+/** Marks a field the agent filled in. */
+const AGENT_FILLED_MARK = "✦";
+
+// The form fields each setup section holds, for its "Filled by" note.
+const TRIGGER_SECTION_FIELDS: readonly AutomationSetupField[] = [
+  "triggerKind",
+  "frequency",
+  "time",
+  "scheduleDateTime",
+  "timezone",
+  "weekday",
+  "customSchedule",
+  "eventSource",
+  "eventKey",
+  "eventFilter",
+];
+const ACTION_SECTION_FIELDS: readonly AutomationSetupField[] = [
+  "kind",
+  "prompt",
+  "repository",
+  "pluginSource",
+  "pluginRef",
+  "pluginList",
+  "customCode",
+  "entrypoint",
+  "setupScriptPath",
+  "setupScript",
+  "model",
+  "agentProfileId",
+];
+const SETTINGS_SECTION_FIELDS: readonly AutomationSetupField[] = [
+  "name",
+  "showTimeout",
+  "timeoutSeconds",
+];
+
 export function AutomationSetupPanel({
   draft,
   conversationId,
@@ -1310,10 +1346,19 @@ export function AutomationSetupPanel({
     );
   };
 
+  // A field the agent filled carries only the mark; its section's title says
+  // what the mark means, so labels keep their size as the agent fills them.
   const agentUpdatedSuffix = (field: AutomationSetupField) =>
-    fieldMetadata[field]?.updatedBy === "agent"
-      ? t(I18nKey.AUTOMATION_SETUP$FILLED_BY_OPENHANDS)
-      : undefined;
+    fieldMetadata[field]?.updatedBy === "agent" ? AGENT_FILLED_MARK : undefined;
+  const agentFilledSectionMeta = (
+    fields: readonly AutomationSetupField[],
+    testId: string,
+  ) =>
+    fields.some((field) => fieldMetadata[field]?.updatedBy === "agent") ? (
+      <span data-testid={testId}>
+        {t(I18nKey.AUTOMATION_SETUP$FILLED_BY_OPENHANDS)}
+      </span>
+    ) : undefined;
 
   const updateCustomWebhook = <FieldName extends keyof CustomWebhookFormState>(
     field: FieldName,
@@ -2134,6 +2179,10 @@ export function AutomationSetupPanel({
               <div className="flex flex-col">
                 <SectionCard
                   testId="automation-setup-trigger-group"
+                  meta={agentFilledSectionMeta(
+                    TRIGGER_SECTION_FIELDS,
+                    "automation-setup-trigger-group-agent-filled",
+                  )}
                   icon={
                     triggerKind === "event" ? (
                       <Zap className="size-4" aria-hidden />
@@ -2275,6 +2324,10 @@ export function AutomationSetupPanel({
                 <SectionConnector />
                 <SectionCard
                   testId="automation-setup-action-group"
+                  meta={agentFilledSectionMeta(
+                    ACTION_SECTION_FIELDS,
+                    "automation-setup-action-group-agent-filled",
+                  )}
                   icon={<TerminalIcon className="size-4" />}
                   title={t(I18nKey.AUTOMATIONS$SECTION$ACTION)}
                 >
@@ -2576,6 +2629,10 @@ export function AutomationSetupPanel({
 
               <SectionCard
                 testId="automation-setup-settings-group"
+                meta={agentFilledSectionMeta(
+                  SETTINGS_SECTION_FIELDS,
+                  "automation-setup-settings-group-agent-filled",
+                )}
                 icon={<CogIcon className="size-4" />}
                 title={t(I18nKey.AUTOMATIONS$SECTION$SETTINGS)}
               >
