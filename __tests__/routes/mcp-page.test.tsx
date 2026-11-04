@@ -6,13 +6,21 @@ import {
   fireEvent,
   waitFor,
 } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { http, HttpResponse } from "msw";
 import MCPPage from "#/routes/mcp";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import McpService from "#/api/mcp-service/mcp-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
+import { server } from "#/mocks/node";
 import { Settings } from "#/types/settings";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import type { Backend } from "#/api/backend-registry/types";
 
 function buildSettings(overrides: Partial<Settings> = {}): Settings {
   return {
@@ -412,5 +420,79 @@ describe("MCPPage", () => {
     await waitFor(() => {
       expect(screen.getByTestId("mcp-custom-editor")).toBeInTheDocument();
     });
+  });
+});
+
+describe("MCPPage on an OpenHands Enterprise instance", () => {
+  const enterpriseBackend: Backend = {
+    id: "ohe-1",
+    name: "OpenHands Enterprise",
+    host: "https://ohe.example.com",
+    apiKey: "token",
+    kind: "cloud",
+  };
+
+  function arrangeInstance(featureFlags: Record<string, unknown>) {
+    setRegisteredBackends([enterpriseBackend]);
+    setActiveSelection({ backendId: enterpriseBackend.id, orgId: "org-1" });
+    server.use(
+      http.get("*/api/v1/web-client/config", () =>
+        HttpResponse.json({
+          providers_configured: [],
+          feature_flags: featureFlags,
+        }),
+      ),
+    );
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+  });
+
+  it("sends members to the instance's MCP settings when organization MCP servers are on", async () => {
+    arrangeInstance({
+      deployment_mode: "self_hosted",
+      enable_org_mcp_servers: true,
+    });
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+
+    renderPage();
+    fireEvent.click(await screen.findByTestId("mcp-open-settings"));
+
+    expect(
+      screen.queryByTestId("mcp-add-custom-server"),
+    ).not.toBeInTheDocument();
+    expect(open).toHaveBeenCalledWith(
+      "https://ohe.example.com/settings/mcp?org=org-1",
+      "_blank",
+      "noopener,noreferrer",
+    );
+  });
+
+  it.each([
+    ["without organization MCP servers", { deployment_mode: "self_hosted" }],
+    [
+      "on OpenHands Cloud",
+      { deployment_mode: "cloud", enable_org_mcp_servers: true },
+    ],
+  ])("keeps the MCP page %s", async (_case, featureFlags) => {
+    arrangeInstance(featureFlags);
+
+    renderPage();
+
+    expect(
+      await screen.findByTestId("mcp-add-custom-server"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("mcp-managed-in-settings"),
+    ).not.toBeInTheDocument();
   });
 });

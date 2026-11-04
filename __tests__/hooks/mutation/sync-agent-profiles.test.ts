@@ -15,6 +15,7 @@ import {
   mcpServerRenamed,
   routerDetached,
   withSkillSelection,
+  updateAgentProfile,
   updateDefaultAgentProfile,
   updateEveryAgentProfile,
 } from "#/hooks/mutation/sync-agent-profiles";
@@ -219,6 +220,23 @@ describe("profile writes", () => {
 
     expect(AgentProfilesService.saveProfile).not.toHaveBeenCalled();
     expect(displayErrorToast).not.toHaveBeenCalled();
+  });
+
+  it("saves one profile's change on Cloud, without the local migration", async () => {
+    useBackend("cloud");
+    storeProfiles(openHands("reviewer"));
+
+    await updateAgentProfile(
+      queryClient,
+      "reviewer",
+      llmProfileMirrored("fast"),
+    );
+
+    expect(settleRunningDefaultAgentProfileMigration).not.toHaveBeenCalled();
+    expect(AgentProfilesService.saveProfile).toHaveBeenCalledWith(
+      "reviewer",
+      expect.objectContaining({ llm_profile_ref: "fast" }),
+    );
   });
 
   it("runs writes one at a time, so the second reads the first's save", async () => {

@@ -31,6 +31,7 @@ import { useSkills } from "#/hooks/query/use-skills";
 import { useSkillEnablement } from "#/hooks/use-skill-enablement";
 import { I18nKey } from "#/i18n/declaration";
 import type { SkillInfo } from "#/types/settings";
+import { getSkillKey } from "#/utils/skill-key";
 import {
   extensionModuleCardGridClassName,
   extensionModuleCardGridContainerClassName,
@@ -261,7 +262,7 @@ function SkillsSettingsScreen() {
                       <div className={extensionModuleCardGridClassName}>
                         {visibleSkills.map((skill) => (
                           <SkillCard
-                            key={skill.name}
+                            key={getSkillKey(skill)}
                             skill={skill}
                             enabled={isEnabled(skill)}
                             onOpen={() => setSelectedSkill(skill)}

@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as activeStore from "#/api/backend-registry/active-store";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sendMessageWithAttachments } from "#/utils/send-message-with-attachments";
 
 const mocks = vi.hoisted(() => ({
@@ -60,6 +61,7 @@ function options() {
 }
 
 describe("sendMessageWithAttachments", () => {
+  afterEach(() => vi.restoreAllMocks());
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.partition.mockReturnValue({
@@ -71,10 +73,7 @@ describe("sendMessageWithAttachments", () => {
     mocks.resolveRuntime.mockResolvedValue({ kind: "remote" });
     mocks.upload.mockResolvedValue({
       skipped_files: [{ reason: "large.png was skipped" }],
-      uploaded_files: [
-        "/workspace/notes.txt",
-        "/workspace/large.png",
-      ],
+      uploaded_files: ["/workspace/notes.txt", "/workspace/large.png"],
     });
     mocks.sendMessage.mockResolvedValue(undefined);
   });
@@ -121,6 +120,29 @@ describe("sendMessageWithAttachments", () => {
       fileUrls: ["/workspace/notes.txt", "/workspace/large.png"],
     });
     expect(Number.isNaN(Date.parse(result.timestamp))).toBe(false);
+  });
+
+  it("preserves a startup request instead of sending it with missing attachments", async () => {
+    await expect(
+      sendMessageWithAttachments({ ...options(), requireAllAttachments: true }),
+    ).rejects.toThrow("large.png was skipped");
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+    expect(mocks.toast).not.toHaveBeenCalled();
+  });
+
+  it("does not send the prompt after changing organization during upload", async () => {
+    const original = activeStore.getActiveBackend();
+    const active = vi
+      .spyOn(activeStore, "getActiveBackend")
+      .mockReturnValue(original);
+    mocks.upload.mockImplementationOnce(async () => {
+      active.mockReturnValue({ ...original, orgId: "other" });
+      return { skipped_files: [], uploaded_files: ["notes.txt"] };
+    });
+    await expect(sendMessageWithAttachments(options())).rejects.toThrow(
+      "CONVERSATION$START_ENVIRONMENT_CHANGED",
+    );
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
   });
 
   it("sends plain text without calling the upload or image converters", async () => {

@@ -322,7 +322,13 @@ export function isSettingsFieldVisible(
   field: SettingsFieldSchema,
   values: SettingsFormValues,
 ): boolean {
-  return field.depends_on.every((dependency) => values[dependency] === true);
+  // "field" needs that switch on; "field=value" needs that choice selected.
+  return field.depends_on.every((dependency) => {
+    const [key, expected] = dependency.split("=", 2);
+    return expected === undefined
+      ? values[key] === true
+      : values[key] === expected;
+  });
 }
 
 function parseBooleanFieldValue(rawValue: string | boolean): boolean | null {

@@ -47,7 +47,7 @@ candidate. Sources, roughly in order of yield:
 6. **Backends and modes**: local vs Cloud backend, public vs local auth, ACP
    agents, partial stacks (`agent-canvas --help`), Electron, Docker, and the
    embeddable library (`src/index.ts` / `build:lib`).
-7. **Docs, specs and tests**: `README.md`, `docs/*.md`, `specs/*.md` describe
+7. **Docs and tests**: `README.md`, `docs/*.md` describe
    intended behavior. The Playwright suites under `tests/e2e/` (mock-LLM, live,
    bind-policy, live-acp) assert behaviors a user sees too: read them for
    selectors and for behaviors the map lacks, then map those behaviors as
@@ -182,6 +182,13 @@ will run them that way:
   option click otherwise goes unnoticed until a later step.
 - Assert deterministic text (what the UI sent, a file the agent wrote, a tool
   observation), not the model's wording.
+- A claim about how many ("the only toast", "once", "exactly one", "no
+  duplicate", "a single request") names a command that counts, and the
+  number it must give: the entries of `browser toasts --history` (cleared
+  before the action) with that text, `browser count`, a `browser network`
+  `total`. Checking that one other text is absent proves only that it is
+  absent: write it as its own check, never as the proof of "only". A
+  duplicate of the expected item passes a presence or absence check.
 - Secret and credential checks assert the tool's output, not the model's
   reply: models refuse to echo secrets. Compare inside the command
   (`test "$QA_SECRET" = expected && echo match`) and read the observation

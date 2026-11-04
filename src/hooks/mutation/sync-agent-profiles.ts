@@ -71,7 +71,7 @@ interface WriteOptions {
   throwOnError?: boolean;
 }
 
-/** Run profile writes one at a time on a local backend, so each reads the previous one's result. */
+/** Run profile writes one at a time, so each reads the previous one's result. */
 function enqueue(
   queryClient: QueryClient,
   write: () => Promise<boolean>,
@@ -79,11 +79,13 @@ function enqueue(
 ): Promise<void> {
   const run = queue.then(async () => {
     const { backend } = getActiveBackend();
-    if (backend.kind !== "local" || isNoBackend(backend)) return;
-    await settleRunningDefaultAgentProfileMigration(
-      queryClient,
-      backend.id,
-    ).catch(() => undefined);
+    if (isNoBackend(backend)) return;
+    if (backend.kind === "local") {
+      await settleRunningDefaultAgentProfileMigration(
+        queryClient,
+        backend.id,
+      ).catch(() => undefined);
+    }
     if (await write()) {
       await queryClient.invalidateQueries({
         queryKey: AGENT_PROFILES_QUERY_KEYS.all,
@@ -100,7 +102,11 @@ function enqueue(
   });
 }
 
-/** Change one local profile. */
+const onLocalBackend =
+  (write: () => Promise<boolean>) => async (): Promise<boolean> =>
+    getActiveBackend().backend.kind === "local" && write();
+
+/** Change one profile. */
 export function updateAgentProfile(
   queryClient: QueryClient,
   name: string,
@@ -122,12 +128,13 @@ export function updateDefaultAgentProfile(
 ): Promise<void> {
   return enqueue(
     queryClient,
-    async () =>
+    onLocalBackend(async () =>
       saveChange(
         WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
         await readProfile(WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME),
         change,
       ),
+    ),
     options,
   );
 }
@@ -140,7 +147,7 @@ export function updateEveryAgentProfile(
 ): Promise<void> {
   return enqueue(
     queryClient,
-    async () => {
+    onLocalBackend(async () => {
       const { profiles } = await AgentProfilesService.listProfiles();
       const saved = await Promise.all(
         profiles.map(async ({ name }) =>
@@ -148,7 +155,7 @@ export function updateEveryAgentProfile(
         ),
       );
       return saved.some(Boolean);
-    },
+    }),
     options,
   );
 }

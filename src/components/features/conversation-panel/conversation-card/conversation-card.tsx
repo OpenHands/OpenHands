@@ -36,6 +36,12 @@ interface ConversationCardProps {
    */
   onUnarchive?: () => void;
   onStop?: () => void;
+  /**
+   * Starts a new conversation in this conversation's sandbox. The panel
+   * passes it only for Cloud rows whose sandbox can still be used, so the
+   * menu item disappears on Local backends and on missing/errored sandboxes.
+   */
+  onNewConversationInSandbox?: () => void;
   onChangeTitle?: (title: string) => void;
   /**
    * Opens the tag editor for this conversation. Local agent-server backends
@@ -45,10 +51,13 @@ interface ConversationCardProps {
   onEditTags?: () => void;
   showOptions?: boolean;
   title: string;
+  titlePending?: boolean;
   selectedRepository: RepositorySelection | null;
   lastUpdatedAt: string;
+  timestampLabel?: string;
   createdAt?: string;
   executionStatus?: ExecutionStatus | null;
+  isStarting?: boolean;
   sandboxStatus?: SandboxStatus | null;
   conversationId?: string;
   contextMenuOpen?: boolean;
@@ -83,15 +92,19 @@ export function ConversationCard({
   onArchive,
   onUnarchive,
   onStop,
+  onNewConversationInSandbox,
   onChangeTitle,
   onEditTags,
   showOptions,
   title,
+  titlePending,
   selectedRepository,
   lastUpdatedAt,
+  timestampLabel,
   createdAt,
   conversationId,
   executionStatus,
+  isStarting,
   sandboxStatus,
   contextMenuOpen = false,
   onContextMenuToggle,
@@ -159,6 +172,15 @@ export function ConversationCard({
     onContextMenuToggle?.(false);
   };
 
+  const handleNewConversationInSandbox = (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onNewConversationInSandbox?.();
+    onContextMenuToggle?.(false);
+  };
+
   const handleEdit = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -187,7 +209,7 @@ export function ConversationCard({
         if (data.vscode_url) {
           const transformedUrl = transformVSCodeUrl(data.vscode_url);
           if (transformedUrl) {
-            window.open(transformedUrl, "_blank");
+            window.open(transformedUrl, "_blank", "noopener,noreferrer");
           }
         }
         // VS Code URL not available
@@ -272,7 +294,7 @@ export function ConversationCard({
       data-active={isActive ? "true" : "false"}
       onClick={onClick}
       className={cn(
-        "group relative h-auto w-full cursor-pointer rounded-md py-1 pl-2 pr-1 transition-colors",
+        "group relative h-auto w-full cursor-pointer rounded-md py-1 pl-2 pr-1 transition-colors max-md:flex max-md:min-h-12 max-md:flex-col max-md:justify-center",
         !contextMenuOpen && "hover:bg-surface",
         (isActive || contextMenuOpen) && "bg-surface",
       )}
@@ -281,9 +303,11 @@ export function ConversationCard({
         <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
           <ConversationCardHeader
             title={title}
+            titlePending={titlePending}
             titleMode={titleMode}
             onTitleSave={onTitleSave}
             executionStatus={executionStatus}
+            isStarting={isStarting}
             sandboxStatus={sandboxStatus}
             isArchived={effectiveArchived}
           />
@@ -314,7 +338,9 @@ export function ConversationCard({
                 hasHoverActions && hoverRevealYieldClassName(contextMenuOpen),
               )}
             >
-              <time>{formatTimeDelta(lastUpdatedAt ?? createdAt)}</time>
+              <time>
+                {timestampLabel ?? formatTimeDelta(lastUpdatedAt ?? createdAt)}
+              </time>
             </p>
           )}
 
@@ -341,6 +367,10 @@ export function ConversationCard({
                       onArchive={onArchive && handleArchive}
                       onUnarchive={onUnarchive && handleUnarchive}
                       onStop={onStop && handleStop}
+                      onNewConversationInSandbox={
+                        onNewConversationInSandbox &&
+                        handleNewConversationInSandbox
+                      }
                       onEdit={onChangeTitle && handleEdit}
                       onEditTags={onEditTags && handleEditTags}
                       onDownloadViaVSCode={handleDownloadViaVSCode}
@@ -357,7 +387,10 @@ export function ConversationCard({
                       hoverRevealPinnedTimestampClassName(contextMenuOpen),
                     )}
                   >
-                    <time>{formatTimeDelta(lastUpdatedAt ?? createdAt)}</time>
+                    <time>
+                      {timestampLabel ??
+                        formatTimeDelta(lastUpdatedAt ?? createdAt)}
+                    </time>
                   </p>
                 </div>
               ) : null}
@@ -369,6 +402,9 @@ export function ConversationCard({
                   onArchive={onArchive && handleArchive}
                   onUnarchive={onUnarchive && handleUnarchive}
                   onStop={onStop && handleStop}
+                  onNewConversationInSandbox={
+                    onNewConversationInSandbox && handleNewConversationInSandbox
+                  }
                   onEdit={onChangeTitle && handleEdit}
                   onEditTags={onEditTags && handleEditTags}
                   onDownloadViaVSCode={handleDownloadViaVSCode}

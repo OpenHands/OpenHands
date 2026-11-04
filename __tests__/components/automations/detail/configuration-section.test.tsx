@@ -69,6 +69,14 @@ describe("ConfigurationSection", () => {
         { url: "https://github.com/qa-example/qa-repo", ref: "main" },
         { url: "git@gitlab.com:qa-example/docs.git", ref: "v2" },
         { url: "qa-example/tools" },
+        {
+          url: "https://bitbucket.example.com/scm/DEM/demo-app.git",
+          provider: "bitbucket_data_center",
+        },
+        {
+          url: "https://example.com/bitbucket/scm/~ALICE/notes.git",
+          provider: "bitbucket_data_center",
+        },
       ],
     };
 
@@ -82,6 +90,8 @@ describe("ConfigurationSection", () => {
       "qa-example/qa-repomain",
       "qa-example/docsv2",
       "qa-example/tools",
+      "DEM/demo-app",
+      "~ALICE/notes",
     ]);
   });
 

@@ -150,6 +150,7 @@ COPY scripts/mars-web-bridge.mjs /opt/agent-canvas/mars-web-bridge.mjs
 COPY scripts/mars-tunnel-bridge.mjs /opt/agent-canvas/mars-tunnel-bridge.mjs
 COPY scripts/mars-api.mjs /opt/agent-canvas/mars-api.mjs
 COPY scripts/mars-credentials.mjs /opt/agent-canvas/mars-credentials.mjs
+COPY scripts/mars-secret-store.mjs /opt/agent-canvas/mars-secret-store.mjs
 COPY scripts/mars-oauth.mjs /opt/agent-canvas/mars-oauth.mjs
 COPY scripts/mars-session.mjs /opt/agent-canvas/mars-session.mjs
 COPY scripts/tunnel-client.mjs /opt/agent-canvas/tunnel-client.mjs

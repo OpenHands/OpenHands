@@ -122,9 +122,13 @@ export default function MainApp() {
   );
 }
 
+function DocumentTitle() {
+  const appTitle = useAppTitle();
+  return <title>{appTitle}</title>;
+}
+
 function MainAppContent() {
   const location = useLocation();
-  const appTitle = useAppTitle();
   const { data: settings } = useSettings();
   const config = useConfig();
   const showTitleBarBand = useShowTitleBarBand();
@@ -174,7 +178,7 @@ function MainAppContent() {
               showTitleBarBand && "pt-7",
             )}
           >
-            <title>{appTitle}</title>
+            <DocumentTitle />
             <TitleBarDragRegion />
             <Sidebar />
 

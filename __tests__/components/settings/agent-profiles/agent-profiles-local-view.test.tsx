@@ -144,6 +144,14 @@ vi.mock("#/hooks/use-migrate-default-agent-profile", () => ({
   ensureDefaultAgentProfileMigrated: vi.fn(),
 }));
 
+const backendKind = vi.hoisted(() => ({ current: "local" }));
+vi.mock("#/contexts/active-backend-context", () => ({
+  useActiveBackend: () => ({
+    backend: { id: "b1", kind: backendKind.current },
+    orgId: null,
+  }),
+}));
+
 function renderView() {
   return render(<AgentProfilesLocalView />, {
     wrapper: ({ children }) => (
@@ -183,6 +191,7 @@ describe("AgentProfilesLocalView save mapping", () => {
     settingsData = {};
     editTarget = "my-agent";
     profileSupportsSkillsMock.mockReturnValue(true);
+    backendKind.current = "local";
   });
 
   it("opens a new profile on the settings lists when there is no OpenHands default", async () => {
@@ -715,6 +724,24 @@ describe("AgentProfilesLocalView save mapping", () => {
       expect(applyToGlobalMock).not.toHaveBeenCalled();
       expect(saveMutate.mock.calls[0][0].profile).toMatchObject({
         secret_refs: ["GITHUB_TOKEN"],
+      });
+    });
+
+    it("edits a cloud profile named default like any other profile", async () => {
+      backendKind.current = "cloud";
+      renderView();
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("edit-agent-profile"));
+      const form = await screen.findByTestId("mock-agent-settings");
+
+      expect(form).toHaveAttribute("data-default-profile", "false");
+      expect(screen.getByTestId("agent-profile-name-input")).toBeEnabled();
+      await user.click(screen.getByTestId("save-agent-profile-btn"));
+      await waitFor(() => expect(saveMutate).toHaveBeenCalledTimes(1));
+      expect(applyToGlobalMock).not.toHaveBeenCalled();
+      expect(saveMutate.mock.calls[0][0].profile).toMatchObject({
+        llm_profile_ref: "stale",
+        mcp_server_refs: ["slack"],
       });
     });
 

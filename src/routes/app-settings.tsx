@@ -240,7 +240,8 @@ function AppSettingsForm() {
             {t(I18nKey.SETTINGS$SOUND_NOTIFICATIONS)}
           </SettingsSwitch>
 
-          <GettingStartedChecklistSwitch />
+          {/* Locked-to-Cloud never shows the checklist (OHE-3683). */}
+          {getLockedCloudHost() === null && <GettingStartedChecklistSwitch />}
           <RecommendedAutomationsSwitch />
 
           <div className="border-t border-border pt-6 mt-2">
