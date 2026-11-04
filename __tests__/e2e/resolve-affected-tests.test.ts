@@ -80,12 +80,15 @@ describe("mock-LLM E2E affected test resolver", () => {
     expect(resolveAffectedTests([file])).toEqual(["__ALL__"]);
   });
 
-  it("runs browser mock E2E after main updates or manual dispatch", () => {
+  it("runs browser mock E2E after main updates, on the release PR, or manual dispatch", () => {
     const workflow = readFileSync(workflowPath, "utf-8");
 
     expect(workflow).toContain("push:\n    branches: [main]");
     expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).not.toContain("pull_request:");
+    // Only the release-please PR changes this file, so ordinary PRs skip it.
+    expect(workflow).toContain(
+      "pull_request:\n    paths:\n      - .release-please-manifest.json\n  workflow_dispatch:",
+    );
     expect(workflow).not.toContain("detect-pr-changes:");
     expect(workflow).toContain("npm run test:e2e:mock-llm &");
   });

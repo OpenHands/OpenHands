@@ -370,6 +370,8 @@ export interface InterfaceRoutes {
   detail: string;
   /** The templates sub-page. Static: there is no parameter to substitute. */
   templates?: string;
+  /** The event sources sub-page. */
+  events?: string;
 }
 
 /**
@@ -396,6 +398,7 @@ export interface InterfaceEndpoints {
   uploads?: string;
   /** The org's tags with counts. Optional: added after the block shipped. */
   tags?: string;
+  webhooks?: string;
 }
 
 export type InterfaceEndpointName = keyof InterfaceEndpoints;
@@ -422,7 +425,7 @@ export interface InterfaceImportExport {
  * leaves the sub-pages unrendered.
  */
 
-export const INTERFACE_SUB_PAGE_IDS = ["list", "templates"] as const;
+export const INTERFACE_SUB_PAGE_IDS = ["list", "events", "templates"] as const;
 
 export type InterfaceSubPageId = (typeof INTERFACE_SUB_PAGE_IDS)[number];
 
@@ -611,6 +614,7 @@ export interface InterfaceManifest {
     detail: { backLabel: string };
     edit: { title: string };
     templates?: InterfaceTemplatesPage;
+    events?: { title: string; description: string };
   };
   docsUrl: string;
   /**

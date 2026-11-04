@@ -21,8 +21,11 @@
 
 import { test, expect } from "@playwright/test";
 import {
+  BASH_COMMAND,
   BASH_TOKEN,
   REPLY_TOKEN,
+  registerTrajectory,
+  activateTrajectory,
   waitForAgentMessageContaining,
   MOCK_LLM_AGENT_URL,
   BACKEND_URL,
@@ -157,23 +160,19 @@ test.describe("mock-LLM agent-server conversation", () => {
     await dismissAnalyticsModal(page);
     await waitForTestId(page, "add-llm-profile");
 
-    // Find the profile row containing our profile name
-    const profileRows = page.getByTestId("profile-row");
-    const rowCount = await profileRows.count();
-    let targetRow: ReturnType<typeof profileRows.nth> | null = null;
-
-    for (let i = 0; i < rowCount; i++) {
-      const row = profileRows.nth(i);
-      const text = await row.textContent();
-      if (text?.includes(PROFILE_NAME)) {
-        targetRow = row;
-        break;
-      }
-    }
-    expect(targetRow, `Could not find profile row for "${PROFILE_NAME}"`).not.toBeNull();
+    // Find the profile row containing our profile name. `add-llm-profile` is
+    // in the header and renders before the profile list has loaded, so wait
+    // for the row itself rather than counting rows right away.
+    const targetRow = page
+      .getByTestId("profile-row")
+      .filter({ hasText: PROFILE_NAME });
+    await expect(
+      targetRow,
+      `Could not find profile row for "${PROFILE_NAME}"`,
+    ).toBeVisible({ timeout: 15_000 });
 
     // Open the actions menu for this profile
-    await targetRow!.getByTestId("profile-menu-trigger").click();
+    await targetRow.getByTestId("profile-menu-trigger").click();
     await waitForTestId(page, "profile-actions-menu");
 
     // Click "Set as active" — with client-side reconciliation
@@ -198,29 +197,27 @@ test.describe("mock-LLM agent-server conversation", () => {
       .poll(
         async () => {
           await page.goto("/settings/llm", { waitUntil: "domcontentloaded" });
-          await waitForTestId(page, "add-llm-profile");
-          const rows = page.getByTestId("profile-row");
-          const count = await rows.count();
-          for (let i = 0; i < count; i++) {
-            const row = rows.nth(i);
-            const text = await row.textContent();
-            if (text?.includes(PROFILE_NAME)) {
-              if (
-                (await row.getByTestId("profile-active-badge").count()) > 0
-              ) {
-                return true;
-              }
-              // Badge absent — re-attempt activation before the next poll.
-              await row.getByTestId("profile-menu-trigger").click();
-              await waitForTestId(page, "profile-actions-menu");
-              const retrySetActive = page.getByTestId("profile-set-active");
-              if (await retrySetActive.isEnabled()) {
-                await retrySetActive.click();
-              } else {
-                await page.keyboard.press("Escape");
-              }
-              return false;
-            }
+          // Wait for the row: the header (add-llm-profile) renders before the
+          // profile list loads, and counting rows then finds none.
+          const row = page
+            .getByTestId("profile-row")
+            .filter({ hasText: PROFILE_NAME });
+          try {
+            await row.waitFor({ state: "visible", timeout: 10_000 });
+          } catch {
+            return false;
+          }
+          if ((await row.getByTestId("profile-active-badge").count()) > 0) {
+            return true;
+          }
+          // Badge absent — re-attempt activation before the next poll.
+          await row.getByTestId("profile-menu-trigger").click();
+          await waitForTestId(page, "profile-actions-menu");
+          const retrySetActive = page.getByTestId("profile-set-active");
+          if (await retrySetActive.isEnabled()) {
+            await retrySetActive.click();
+          } else {
+            await page.keyboard.press("Escape");
           }
           return false;
         },
@@ -269,10 +266,22 @@ test.describe("mock-LLM agent-server conversation", () => {
     page,
     request,
   }) => {
-    // Reset the mock LLM to its default trajectory. Other test suites
-    // (e.g. automation tests) may have activated a different trajectory
-    // that wasn't fully consumed due to earlier failures.
+    // Reset the mock LLM. Other test suites (e.g. automation tests) may
+    // have activated a different trajectory that wasn't fully consumed due
+    // to earlier failures.
     await resetMockLLM(request);
+
+    // Turn 0 is padding for the agent-server's internal LLM call (title
+    // generation) before the agent's first step; without it that call takes
+    // the terminal turn and the agent never runs a command. Same pattern as
+    // mock-llm-model-switch.spec.ts. BASH_COMMAND uses `echo`, which works in
+    // both bash and the agent-server's PowerShell terminal on Windows.
+    await registerTrajectory(request, "conversation", [
+      { text: "" },
+      { tool_call: { name: "terminal", arguments: { command: BASH_COMMAND } } },
+      { text: REPLY_TOKEN },
+    ]);
+    await activateTrajectory(request, "conversation");
 
     // Steps 1+2 already configured and verified the profile via the UI
     // (including the "Active" badge check). No API pre-check needed.
@@ -338,9 +347,9 @@ test.describe("mock-LLM agent-server conversation", () => {
       ).toBe(true);
     });
 
-    // ── Verify: bash tool was executed (via bash events API) ──
+    // ── Verify: the agent's terminal call ran (via conversation events API) ──
 
-    await test.step("verify bash tool execution via bash events API", async () => {
+    await test.step("verify terminal tool execution via conversation events API", async () => {
       await waitForSuccessfulBashObservation(request, conversationId);
     });
 

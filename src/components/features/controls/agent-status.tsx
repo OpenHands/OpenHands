@@ -33,6 +33,8 @@ export interface AgentStatusProps {
   handleResumeAgent: () => void;
   disabled?: boolean;
   isPausing?: boolean;
+  /** Keep only the status control; the label stays for screen readers. */
+  compact?: boolean;
 }
 
 export function AgentStatus({
@@ -41,6 +43,7 @@ export function AgentStatus({
   handleResumeAgent,
   disabled = false,
   isPausing = false,
+  compact = false,
 }: AgentStatusProps) {
   const { t } = useTranslation("openhands");
   const progressInChat = useChatProgress();
@@ -111,7 +114,8 @@ export function AgentStatus({
       curAgentState === AgentState.PAUSED);
   const isInteractive =
     !isLoading && (shouldShownAgentStop || shouldShownAgentResume);
-  const compactStatus = progressInChat && (isLoading || shouldShownAgentStop);
+  const compactStatus =
+    compact || (progressInChat && (isLoading || shouldShownAgentStop));
   const isDoneStatus =
     statusCode === I18nKey.CHAT_INTERFACE$AGENT_FINISHED_MESSAGE;
   const isReadyStatus = statusCode === I18nKey.AGENT_STATUS$WAITING_FOR_TASK;
