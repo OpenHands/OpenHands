@@ -38,6 +38,11 @@
     "tools": "openhands-tools",
     "workspace": "openhands-workspace"
   },
+  "upload": {
+    "_comment": "Maximum chat-attachment size in MB, enforced by the frontend before upload. Files ride HTTP (no server-side cap), but images marked 'embed' are base64-embedded into chat events, which travel as WebSocket frames capped at 4MB (sdk session_protocol.MAX_FRAME_BYTES) — so keep embed images at or below ~2.5MB (3MB base64 is ~4.1MB). Overridable per deployment by the AGENT_CANVAS_MAX_FILE_MB / AGENT_CANVAS_MAX_TOTAL_MB environment variables, injected into the served frontend by the docker entrypoint and the npm launchers.",
+    "maxFileMb": 3,
+    "maxTotalMb": 3
+  },
   "mars": {
     "_comment": "DigitalOcean Managed Agents: the Electron desktop app and the web build (its server hosts the experimental bridge only with MARS_WEB=1). apiBaseUrl is the harness API both use. oauthClientId (desktop only; the web build offers personal access tokens only) is the public client ID of the DigitalOcean OAuth app registered with redirect URI http://127.0.0.1:53682/callback; implicit grant needs no secret. Leave empty to offer personal access tokens only. Overridden at runtime by DO_OAUTH_CLIENT_ID / MARS_API_BASE_URL. Read by scripts/mars-tunnel-bridge.mjs.",
     "apiBaseUrl": "https://api.digitalocean.com",
