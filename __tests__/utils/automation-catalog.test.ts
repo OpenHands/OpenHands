@@ -6,6 +6,7 @@ import {
   getAutomationIcon,
   getAutomationLaunchPrompt,
   getAutomationAvailability,
+  getTemplateLogoIds,
   rankByAvailability,
   resolveAutomationImpactStatement,
 } from "#/utils/automation-catalog";
@@ -29,7 +30,11 @@ vi.mock("@openhands/extensions/automations", async (importOriginal) => {
     },
     {
       id: "impact-unknown-basis",
-      impact: { basis: "run-counter", one: "1 widget", other: "{{count}} widgets" },
+      impact: {
+        basis: "run-counter",
+        one: "1 widget",
+        other: "{{count}} widgets",
+      },
     },
     {
       id: "impact-markup",
@@ -41,7 +46,11 @@ vi.mock("@openhands/extensions/automations", async (importOriginal) => {
     },
     {
       id: "impact-no-count",
-      impact: { basis: "completed-runs", one: "one check", other: "many checks" },
+      impact: {
+        basis: "completed-runs",
+        one: "one check",
+        other: "many checks",
+      },
     },
     {
       id: "impact-foreign-placeholder",
@@ -130,6 +139,34 @@ describe("getAutomationIcon", () => {
         icon: "not-a-real-slug",
       } as unknown as Parameters<typeof getAutomationIcon>[0]),
     ).toBeNull();
+  });
+});
+
+describe("getTemplateLogoIds", () => {
+  it("names the repository provider of a template that declares no integration", () => {
+    expect(getTemplateLogoIds(automationById("github-pr-reviewer"))).toEqual([
+      "github",
+    ]);
+  });
+
+  it("lists a provider once when it is both declared and picked", () => {
+    expect(getTemplateLogoIds(automationById("github-repo-monitor"))).toEqual([
+      "github",
+    ]);
+  });
+
+  it("stands a built-in Data Center integration in with its product's logo", () => {
+    // Arrange — no integration and no picker, like the Data Center templates.
+    const entry = {
+      ...automationById("news-digest"),
+      requires: {
+        integrations: {},
+        builtInIntegrations: ["jira_dc", "bitbucket_data_center"],
+      },
+    } as unknown as RecommendedAutomation;
+
+    // Act / Assert
+    expect(getTemplateLogoIds(entry)).toEqual(["jira", "bitbucket"]);
   });
 });
 
