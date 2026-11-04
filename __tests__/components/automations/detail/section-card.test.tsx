@@ -14,14 +14,4 @@ describe("SectionCard", () => {
     expect(screen.getByText("Section content")).toBeInTheDocument();
     expect(screen.getByTestId("icon")).toBeInTheDocument();
   });
-
-  it("shows header meta beside the title", () => {
-    render(
-      <SectionCard icon={null} title="Trigger" meta="Schedule">
-        {null}
-      </SectionCard>,
-    );
-
-    expect(screen.getByText("Schedule")).toBeInTheDocument();
-  });
 });

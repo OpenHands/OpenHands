@@ -3885,7 +3885,14 @@ function Field({
           )}
         >
           <span>{label}</span>
-          {suffix && <span className="font-normal text-muted">{suffix}</span>}
+          {suffix && (
+            <span
+              data-testid="automation-setup-field-suffix"
+              className="font-normal text-muted"
+            >
+              {suffix}
+            </span>
+          )}
         </span>
       ) : null}
       <div className="min-w-0 flex-1">{children}</div>

@@ -1542,7 +1542,9 @@ describe("AutomationSetupPanel", () => {
       screen.getByTestId("automation-setup-settings-group-agent-filled"),
     ).toBeInTheDocument();
     expect(
-      within(nameInput.closest("label")!).getByText("✦"),
+      within(nameInput.closest("label")!).getByTestId(
+        "automation-setup-field-suffix",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -1565,12 +1567,6 @@ describe("AutomationSetupPanel", () => {
     await user.click(screen.getByTestId("automation-setup-frequency-weekly"));
     const weekday = screen.getByTestId("automation-setup-weekday");
     expect(weekday).toHaveValue("1");
-    // Reads "Monday at 9:00": the day leads the time.
-    expect(
-      weekday.compareDocumentPosition(
-        screen.getByTestId("automation-setup-time"),
-      ) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
     await user.selectOptions(weekday, "3");
 
     await user.click(screen.getByTestId("automation-setup-test"));

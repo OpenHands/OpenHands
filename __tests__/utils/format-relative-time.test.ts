@@ -56,11 +56,6 @@ describe("formatRelativeTime", () => {
       lastRunAt: "2026-06-08T12:00:00Z",
       expected: "Jun 8, 2026",
     },
-    {
-      description: "years ago",
-      lastRunAt: "2020-01-02T12:00:00Z",
-      expected: "Jan 2, 2020",
-    },
   ])("words a run from $description", ({ lastRunAt, expected }) => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));

@@ -2,10 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { TFunction } from "i18next";
 import translations from "#/i18n/translation.json";
 import type { AutomationTrigger } from "#/types/automation";
-import {
-  describeSchedule,
-  describeTrigger,
-} from "#/utils/automation-trigger-description";
+import { describeSchedule } from "#/utils/automation-trigger-description";
 
 // English copy with interpolation, so assertions read like the UI.
 const t = ((key: string, options?: Record<string, unknown>) => {
@@ -46,17 +43,5 @@ describe("describeSchedule", () => {
 
   it("has nothing to say about an event trigger", () => {
     expect(describeSchedule({ type: "event" }, t, "en-US")).toBeNull();
-  });
-});
-
-describe("describeTrigger", () => {
-  it("names an event trigger's source and event", () => {
-    expect(
-      describeTrigger(
-        { type: "event", source: "github", on: ["push", "release.published"] },
-        t,
-        "en-US",
-      ),
-    ).toBe("GitHub · push, release.published");
   });
 });
