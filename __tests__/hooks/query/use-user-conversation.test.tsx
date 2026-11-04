@@ -1,3 +1,8 @@
+import EventService from "#/api/event-service/event-service.api";
+import {
+  useConversationHistory,
+  usePersistedConversationHistory,
+} from "#/hooks/query/use-conversation-history";
 import { useConversationDisplayTitle } from "#/hooks/use-conversation-display-title";
 import { NavigationProvider } from "#/context/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -28,6 +33,10 @@ vi.mock(
     default: { batchGetAppConversations: vi.fn() },
   }),
 );
+
+vi.mock("#/api/event-service/event-service.api", () => ({
+  default: { searchEvents: vi.fn(), getEventCount: vi.fn() },
+}));
 
 const localBackend: Backend = {
   id: "local-1",
@@ -95,6 +104,10 @@ function makeWrapper(conversationId?: string) {
 }
 
 beforeEach(() => {
+  vi.mocked(EventService.getEventCount).mockReset().mockResolvedValue(120);
+  vi.mocked(EventService.searchEvents)
+    .mockReset()
+    .mockResolvedValue({ items: [], next_page_id: null });
   window.localStorage.clear();
   __resetActiveStoreForTests();
   vi.mocked(
@@ -204,6 +217,195 @@ describe("useUserConversation — backend switch", () => {
 });
 
 describe("selected conversation prefetch", () => {
+  it("prepares ordered replay alongside display history and shares it with the page", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    let finishCount!: (count: number) => void;
+    vi.mocked(EventService.getEventCount).mockReturnValue(
+      new Promise((resolve) => {
+        finishCount = resolve;
+      }),
+    );
+    const wrapper = makeWrapper();
+    const { result: prefetch } = renderHook(
+      () => usePrefetchUserConversation(),
+      { wrapper },
+    );
+    let pending!: Promise<void>;
+    act(() => {
+      pending = prefetch.current(CLOUD_CONVERSATION_ID);
+    });
+    await waitFor(() =>
+      expect(EventService.getEventCount).toHaveBeenCalledOnce(),
+    );
+    await waitFor(() =>
+      expect(EventService.searchEvents).toHaveBeenCalledOnce(),
+    );
+    expect(EventService.searchEvents).toHaveBeenCalledWith(
+      CLOUD_CONVERSATION_ID,
+      null,
+      null,
+      expect.anything(),
+    );
+
+    const page = renderHook(
+      () => ({
+        display: usePersistedConversationHistory(CLOUD_CONVERSATION_ID),
+        replay: useConversationHistory(CLOUD_CONVERSATION_ID),
+      }),
+      { wrapper },
+    );
+    await waitFor(() =>
+      expect(page.result.current.display.isSuccess).toBe(true),
+    );
+    expect(page.result.current.replay.isPending).toBe(true);
+    await act(async () => {
+      finishCount(120);
+      await pending;
+    });
+    await waitFor(() =>
+      expect(page.result.current.replay.data?.afterSeq).toBe(69),
+    );
+    expect(EventService.getEventCount).toHaveBeenCalledOnce();
+    expect(EventService.searchEvents).toHaveBeenCalledTimes(2);
+
+    page.unmount();
+    const revisit = renderHook(
+      () => useConversationHistory(CLOUD_CONVERSATION_ID),
+      { wrapper },
+    );
+    await waitFor(() => expect(revisit.result.current.isSuccess).toBe(true));
+    expect(EventService.getEventCount).toHaveBeenCalledOnce();
+    await act(async () => {
+      await prefetch.current(CLOUD_CONVERSATION_ID);
+    });
+    expect(EventService.getEventCount).toHaveBeenCalledTimes(2);
+    expect(EventService.searchEvents).toHaveBeenCalledTimes(4);
+  });
+
+  it("does not issue a replay history request into a newly selected organization", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    let finishCount!: (count: number) => void;
+    vi.mocked(EventService.getEventCount).mockReturnValue(
+      new Promise((resolve) => {
+        finishCount = resolve;
+      }),
+    );
+    const { result } = renderHook(() => usePrefetchUserConversation(), {
+      wrapper: makeWrapper(),
+    });
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current(CLOUD_CONVERSATION_ID);
+    });
+    await waitFor(() =>
+      expect(EventService.getEventCount).toHaveBeenCalledOnce(),
+    );
+    await waitFor(() =>
+      expect(EventService.searchEvents).toHaveBeenCalledOnce(),
+    );
+    act(() =>
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-b" }),
+    );
+    await act(async () => {
+      finishCount(120);
+      await pending;
+    });
+    expect(EventService.searchEvents).toHaveBeenCalledOnce();
+  });
+
+  it("does not preload history if the org changes while metadata is loading", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    let resolve!: (value: (AppConversation | null)[]) => void;
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    const { result } = renderHook(() => usePrefetchUserConversation(), {
+      wrapper: makeWrapper(),
+    });
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current(CLOUD_CONVERSATION_ID);
+    });
+    act(() =>
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-b" }),
+    );
+    await act(async () => {
+      resolve([makeConversation(CLOUD_CONVERSATION_ID)]);
+      await pending;
+    });
+    expect(EventService.searchEvents).not.toHaveBeenCalled();
+  });
+
+  it("lets the page recover when the early history request fails", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    let displayAttempts = 0;
+    vi.mocked(EventService.searchEvents).mockImplementation(
+      async (_id, url) => {
+        if (url === null && ++displayAttempts <= 2)
+          throw new Error("Unavailable");
+        return { items: [], next_page_id: null };
+      },
+    );
+    const wrapper = makeWrapper();
+    const { result: prefetch } = renderHook(
+      () => usePrefetchUserConversation(),
+      { wrapper },
+    );
+    await act(async () => {
+      await prefetch.current(CLOUD_CONVERSATION_ID);
+    });
+    const { result } = renderHook(
+      () => usePersistedConversationHistory(CLOUD_CONVERSATION_ID),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(displayAttempts).toBe(3);
+  });
+
+  it.each(["PAUSED", "ERROR"] as const)(
+    "skips runtime prefetch for a %s sandbox",
+    async (sandbox_status) => {
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+      vi.mocked(
+        AgentServerConversationService.batchGetAppConversations,
+      ).mockResolvedValue([
+        { ...makeConversation(CLOUD_CONVERSATION_ID), sandbox_status },
+      ]);
+      const { result } = renderHook(() => usePrefetchUserConversation(), {
+        wrapper: makeWrapper(),
+      });
+      await act(async () => {
+        await result.current(CLOUD_CONVERSATION_ID);
+      });
+      expect(EventService.getEventCount).not.toHaveBeenCalled();
+      expect(EventService.searchEvents).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("refreshes the ordered tail on a later return without a sidebar preload", async () => {
+    vi.useFakeTimers();
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    const wrapper = makeWrapper();
+    const { result: prefetch } = renderHook(
+      () => usePrefetchUserConversation(),
+      { wrapper },
+    );
+    await act(async () => {
+      await prefetch.current(CLOUD_CONVERSATION_ID);
+    });
+    expect(EventService.getEventCount).toHaveBeenCalledOnce();
+    await act(async () => vi.advanceTimersByTimeAsync(1100));
+    renderHook(() => useConversationHistory(CLOUD_CONVERSATION_ID), {
+      wrapper,
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(10));
+    expect(EventService.getEventCount).toHaveBeenCalledTimes(2);
+  });
+
   it("shares the request started before navigation with the conversation page", async () => {
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
     let resolve!: (value: (AppConversation | null)[]) => void;

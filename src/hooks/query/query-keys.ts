@@ -116,6 +116,11 @@ export const SETUP_QUERY_KEYS = {
   capabilities: () => ["setup-capabilities"] as const,
 } as const;
 
+export const AUTOMATION_WEBHOOK_QUERY_KEYS = {
+  forScope: (backendId: string, orgId: string | null, revision: number) =>
+    ["automation-webhooks", backendId, orgId, revision] as const,
+} as const;
+
 export const MARS_QUERY_KEYS = {
   all: ["mars"] as const,
   authState: ["mars", "auth-state"] as const,

@@ -211,10 +211,7 @@ export function LocalNewConversationMenu({
           style={fixedStyle}
         >
           {workspacesUnsupportedMessage && (
-            <p
-              role="status"
-              className="px-3 py-2 text-xs text-[var(--oh-text-secondary)]"
-            >
+            <p role="status" className="px-3 py-2 text-xs text-text-secondary">
               {workspacesUnsupportedMessage}
             </p>
           )}
@@ -232,7 +229,7 @@ export function LocalNewConversationMenu({
                 onClick={() => launch()}
                 className={itemClass}
               >
-                <span className="text-[var(--oh-muted)]">
+                <span className="text-muted">
                   {t(
                     isolated
                       ? I18nKey.HOME$ISOLATED_WORKSPACE_NEW

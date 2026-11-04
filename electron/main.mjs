@@ -691,9 +691,10 @@ async function startStack() {
     skipNpmCheck: true,
     agentServerReadyTimeoutMs: 10 * 60_000,
     onServiceLog: handleServiceLog,
-    // main() announces the stack without waiting for the automation backend;
-    // if it then exits during startup, the services are already stopped.
-    onAutomationStartupFailure: failStartup,
+    // main() announces the stack without waiting for the automation backend.
+    // If that backend exits during startup, or the ingress/static server
+    // keeps exiting, the services are already stopped when this runs.
+    onStackFailure: failStartup,
   });
 
   // main() returns { config, agentServerReady } — treat a timeout as a fatal
