@@ -180,7 +180,7 @@
   },
   "packageManager": "npm@11.12.1",
   "volta": {
-    "node": "24.21.0",
+    "node": "24.22.1",
     "npm": "11.12.1"
   },
   "msw": {
