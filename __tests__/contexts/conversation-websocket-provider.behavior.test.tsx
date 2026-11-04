@@ -448,13 +448,15 @@ describe("Conversation websocket behavior", () => {
       expect(useEventStore.getState().eventIds.has("old-running")).toBe(true);
       expect(useEventStore.getState().eventIds.has("old-snapshot")).toBe(true);
 
+      // The connect snapshot arrives after the replay but was taken before
+      // `through_seq`, so the replay's final status stands.
       dispatch({
         type: "transient",
         event: makeStateEvent("current-snapshot", "full_state", {
           execution_status: "running",
         }),
       });
-      expect(status()).toBe("running");
+      expect(status()).toBe("finished");
       dispatch({
         type: "durable",
         seq: 101,
@@ -482,6 +484,50 @@ describe("Conversation websocket behavior", () => {
         event: makeStateEvent("new-running", "execution_status", "running"),
       });
       expect(status()).toBe("running");
+    },
+  );
+
+  it.each(["main", "planning"] as const)(
+    "applies the %s replay's final status over the older connect snapshot",
+    (target) => {
+      renderProvider({
+        subConversations: [makeSubConversation()],
+        subConversationIds: ["conv-planning"],
+      });
+      const dispatch =
+        target === "main" ? dispatchMainFrame : dispatchPlanningFrame;
+      const id = target === "main" ? "conv-main" : "conv-planning";
+      const status = () =>
+        useConversationStateStore.getState().executionStatusByConversation[id];
+      // A run starts (an ACP agent launching its subprocess) after the
+      // server took its connect snapshot but before it took `through_seq`.
+      dispatch({ type: "sync", from_seq: 1, through_seq: 5 });
+      dispatch({
+        type: "durable",
+        seq: 4,
+        event: makeStateEvent("acp-running", "execution_status", "running"),
+      });
+      expect(status()).toBeUndefined();
+      dispatch({
+        type: "durable",
+        seq: 5,
+        event: makeStateEvent("acp-stats", "stats", {}),
+      });
+      expect(status()).toBe("running");
+      // The server sends the snapshot after the replay, although it is older.
+      dispatch({
+        type: "transient",
+        event: makeStateEvent("connect-snapshot", "full_state", {
+          execution_status: "idle",
+        }),
+      });
+      expect(status()).toBe("running");
+      dispatch({
+        type: "durable",
+        seq: 6,
+        event: makeStateEvent("acp-finished", "execution_status", "finished"),
+      });
+      expect(status()).toBe("finished");
     },
   );
 
