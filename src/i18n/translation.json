@@ -374,7 +374,8 @@
     "es": "Actividad",
     "ca": "Activitat",
     "tr": "Etkinlik",
-    "uk": "Активність"
+    "uk": "Активність",
+    "id": "Aktivitas"
   },
   "ACTIVITY$SUBTITLE": {
     "en": "Every running agent and subagent at a glance",
@@ -391,7 +392,8 @@
     "es": "Todos los agentes y subagentes en ejecución de un vistazo",
     "ca": "Tots els agents i subagents en execució d'un cop d'ull",
     "tr": "Çalışan tüm aracılar ve alt aracılar tek bakışta",
-    "uk": "Усі запущені агенти та субагенти з першого погляду"
+    "uk": "Усі запущені агенти та субагенти з першого погляду",
+    "id": "Semua agen dan subagen yang berjalan sekilas pandang"
   },
   "ACTIVITY$EMPTY_TITLE": {
     "en": "No agents are running",
@@ -408,7 +410,8 @@
     "es": "No hay agentes en ejecución",
     "ca": "No hi ha cap agent en execució",
     "tr": "Çalışan aracı yok",
-    "uk": "Жоден агент не запущено"
+    "uk": "Жоден агент не запущено",
+    "id": "Tidak ada agen yang berjalan"
   },
   "ACTIVITY$EMPTY_BODY": {
     "en": "Start a conversation and it will appear here while it works.",
@@ -425,7 +428,8 @@
     "es": "Inicia una conversación y aparecerá aquí mientras trabaja.",
     "ca": "Inicia una conversa i apareixerà aquí mentre treballa.",
     "tr": "Bir sohbet başlatın; çalışırken burada görünecek.",
-    "uk": "Почніть розмову — вона з'явиться тут, поки працює."
+    "uk": "Почніть розмову — вона з'явиться тут, поки працює.",
+    "id": "Mulai percakapan dan percakapan itu akan muncul di sini saat bekerja."
   },
   "ACTIVITY$EMPTY_PAGE_TITLE": {
     "en": "No running agents on this page",
@@ -442,7 +446,8 @@
     "es": "No hay agentes en ejecución en esta página",
     "ca": "No hi ha cap agent en execució en aquesta pàgina",
     "tr": "Bu sayfada çalışan aracı yok",
-    "uk": "На цій сторінці немає запущених агентів"
+    "uk": "На цій сторінці немає запущених агентів",
+    "id": "Tidak ada agen yang berjalan di halaman ini"
   },
   "ACTIVITY$EMPTY_PAGE_BODY": {
     "en": "Load more to check the older conversations.",
@@ -459,7 +464,8 @@
     "es": "Carga más para ver las conversaciones más antiguas.",
     "ca": "Carrega'n més per veure les converses més antigues.",
     "tr": "Daha fazla yükleyerek daha eski sohbetleri kontrol edin.",
-    "uk": "Завантажте більше, щоб переглянути старіші розмови."
+    "uk": "Завантажте більше, щоб переглянути старіші розмови.",
+    "id": "Muat lebih banyak untuk memeriksa percakapan yang lebih lama."
   },
   "ACTIVITY$ERROR_TITLE": {
     "en": "Couldn't load running agents",
@@ -476,7 +482,8 @@
     "es": "No se pudieron cargar los agentes en ejecución",
     "ca": "No s'han pogut carregar els agents en execució",
     "tr": "Çalışan aracılar yüklenemedi",
-    "uk": "Не вдалося завантажити запущених агентів"
+    "uk": "Не вдалося завантажити запущених агентів",
+    "id": "Tidak dapat memuat agen yang berjalan"
   },
   "ACTIVITY$UNAVAILABLE_TITLE": {
     "en": "Activity is unavailable",
@@ -493,7 +500,8 @@
     "es": "La actividad no está disponible",
     "ca": "L'activitat no està disponible",
     "tr": "Etkinlik kullanılamıyor",
-    "uk": "Активність недоступна"
+    "uk": "Активність недоступна",
+    "id": "Aktivitas tidak tersedia"
   },
   "ACTIVITY$UNAVAILABLE_BODY": {
     "en": "Connect to an agent server to see your running agents.",
@@ -510,7 +518,8 @@
     "es": "Conéctate a un servidor de agentes para ver tus agentes en ejecución.",
     "ca": "Connecta't a un servidor d'agents per veure els agents en execució.",
     "tr": "Çalışan aracıları görmek için bir aracı sunucusuna bağlanın.",
-    "uk": "Підключіться до сервера агентів, щоб побачити запущених агентів."
+    "uk": "Підключіться до сервера агентів, щоб побачити запущених агентів.",
+    "id": "Hubungkan ke server agen untuk melihat agen yang berjalan."
   },
   "ACTIVITY$RETRY": {
     "en": "Retry",
@@ -527,7 +536,8 @@
     "es": "Reintentar",
     "ca": "Torna a provar",
     "tr": "Yeniden dene",
-    "uk": "Повторити"
+    "uk": "Повторити",
+    "id": "Coba lagi"
   },
   "ACTIVITY$LOAD_MORE": {
     "en": "Load more",
@@ -544,7 +554,8 @@
     "es": "Cargar más",
     "ca": "Carrega'n més",
     "tr": "Daha fazla yükle",
-    "uk": "Завантажити ще"
+    "uk": "Завантажити ще",
+    "id": "Muat lebih banyak"
   },
   "ACTIVITY$NO_ACTIVITY": {
     "en": "Waiting for the next step…",
@@ -561,7 +572,8 @@
     "es": "Esperando el siguiente paso…",
     "ca": "S'espera el següent pas…",
     "tr": "Sonraki adım bekleniyor…",
-    "uk": "Очікування наступного кроку…"
+    "uk": "Очікування наступного кроку…",
+    "id": "Menunggu langkah berikutnya…"
   },
   "ACTIVITY$NEEDS_ATTENTION": {
     "en": "Needs attention",
@@ -578,7 +590,8 @@
     "es": "Requiere atención",
     "ca": "Requereix atenció",
     "tr": "İlgi gerekiyor",
-    "uk": "Потребує уваги"
+    "uk": "Потребує уваги",
+    "id": "Perlu perhatian"
   },
   "ACTIVITY$STATUS_RUNNING": {
     "en": "Running",
@@ -595,7 +608,8 @@
     "es": "En ejecución",
     "ca": "En execució",
     "tr": "Çalışıyor",
-    "uk": "Виконується"
+    "uk": "Виконується",
+    "id": "Berjalan"
   },
   "ACTIVITY$STATUS_WAITING": {
     "en": "Waiting",
@@ -612,7 +626,8 @@
     "es": "En espera",
     "ca": "En espera",
     "tr": "Bekliyor",
-    "uk": "Очікує"
+    "uk": "Очікує",
+    "id": "Menunggu"
   },
   "ACTIVITY$STATUS_PAUSED": {
     "en": "Paused",
@@ -629,7 +644,8 @@
     "es": "En pausa",
     "ca": "En pausa",
     "tr": "Duraklatıldı",
-    "uk": "Призупинено"
+    "uk": "Призупинено",
+    "id": "Dijeda"
   },
   "ACTIVITY$STATUS_ERROR": {
     "en": "Error",
@@ -646,7 +662,8 @@
     "es": "Error",
     "ca": "Error",
     "tr": "Hata",
-    "uk": "Помилка"
+    "uk": "Помилка",
+    "id": "Kesalahan"
   },
   "ACTIVITY$STATUS_FINISHED": {
     "en": "Finished",
@@ -663,7 +680,8 @@
     "es": "Finalizado",
     "ca": "Finalitzat",
     "tr": "Tamamlandı",
-    "uk": "Завершено"
+    "uk": "Завершено",
+    "id": "Selesai"
   },
   "ACTIVITY$STATUS_IDLE": {
     "en": "Idle",
@@ -680,7 +698,8 @@
     "es": "Inactivo",
     "ca": "Inactiu",
     "tr": "Boşta",
-    "uk": "Очікування"
+    "uk": "Очікування",
+    "id": "Menganggur"
   },
   "ACTIVITY$STATUS_UNKNOWN": {
     "en": "Unknown",
@@ -697,7 +716,8 @@
     "es": "Desconocido",
     "ca": "Desconegut",
     "tr": "Bilinmiyor",
-    "uk": "Невідомо"
+    "uk": "Невідомо",
+    "id": "Tidak diketahui"
   },
   "ACTIVITY$SUBAGENT_COUNT_one": {
     "en": "{{count}} subagent",
@@ -714,7 +734,8 @@
     "es": "{{count}} subagente",
     "ca": "{{count}} subagent",
     "tr": "{{count}} alt aracı",
-    "uk": "{{count}} субагент"
+    "uk": "{{count}} субагент",
+    "id": "{{count}} subagen"
   },
   "ACTIVITY$SUBAGENT_COUNT_other": {
     "en": "{{count}} subagents",
@@ -731,7 +752,8 @@
     "es": "{{count}} subagentes",
     "ca": "{{count}} subagents",
     "tr": "{{count}} alt aracı",
-    "uk": "{{count}} субагентів"
+    "uk": "{{count}} субагентів",
+    "id": "{{count}} subagen"
   },
   "ACTIVITY$TOKENS_one": {
     "en": "{{count}} token",
@@ -748,7 +770,8 @@
     "es": "{{count}} token",
     "ca": "{{count}} testimoni",
     "tr": "{{count}} belirteç",
-    "uk": "{{count}} токен"
+    "uk": "{{count}} токен",
+    "id": "{{count}} token"
   },
   "ACTIVITY$TOKENS_other": {
     "en": "{{count}} tokens",
@@ -765,7 +788,8 @@
     "es": "{{count}} tokens",
     "ca": "{{count}} testimonis",
     "tr": "{{count}} belirteç",
-    "uk": "{{count}} токенів"
+    "uk": "{{count}} токенів",
+    "id": "{{count}} token"
   },
   "ACTIVITY$METRICS_UNKNOWN": {
     "en": "Usage unavailable",
@@ -782,7 +806,8 @@
     "es": "Uso no disponible",
     "ca": "Ús no disponible",
     "tr": "Kullanım mevcut değil",
-    "uk": "Використання недоступне"
+    "uk": "Використання недоступне",
+    "id": "Penggunaan tidak tersedia"
   },
   "OBSERVATION_MESSAGE$TASK": {
     "en": "Ran subagent <cmd>{{name}}</cmd>",

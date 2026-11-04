@@ -258,8 +258,9 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F26 | [Launcher modes, Docker, desktop and library](F26-runtime-variants.md) | launcher flags, partial stacks, LAN bind, Docker, Electron, embeddable library | a terminal | Docker/Electron where available | 35 |
 | F27 | [Workspace tools](F27-workspace-tools.md) | terminal, browser, planner, task list, usage, `canvas_ui_control` | drawer tabs | LLM | 31 |
 | F28 | [Automation setup page](F28-automation-setup-page.md) | blank form, kind toggle, schedule presets, event fields, timeout, draft save and validation, draft Test, Create | **Add Automation → Create Automation**, `/automations/setup`, draft Resume, kebab Edit | automation service; no LLM | 16 |
+| F29 | [Live activity view](F29-live-activity-view.md) | running/waiting agents list, status chips, latest action, subagent fan-out, cost and tokens, empty/error/unavailable states, home pin | sidebar **Activity** link, `/activity` | LLM; a running conversation | 10 |
 
-28 families, 815 sub-features. `control-openhands map ids` lists every ID with its file.
+29 families, 825 sub-features. `control-openhands map ids` lists every ID with its file.
 
 ### Neighbouring families
 
@@ -270,6 +271,7 @@ Several pages are shared. Each behavior has one owner; the others reference its 
 - LLM settings: profiles are F10, provider connections F11 (same page), routers F12, agent profiles F13.
 - Automations: dashboard F21, creation F22, detail and runs F23, Git Sync F24; the setup page's form, drafts and Test are F28 (F22 keeps the agent-assisted recipes, F23 owns edit mode).
 - Customize: MCP F17, skills F18, plugins F19, apps F20; the hub and its navigation are in F17.
+- Activity: the cross-conversation live overview is F29; what happens inside one conversation's stream (live chip, stop/resume, confirmation) is F06.
 - Backends: adding and switching backends is F25; launcher flags that create them are F26.
 
 ## Not mapped
