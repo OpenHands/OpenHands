@@ -87,6 +87,29 @@ export function getTemplateIntegrationIds(
   return ids;
 }
 
+/** The integration whose logo stands for a built-in provider of another name. */
+const BUILT_IN_LOGO_IDS: Readonly<Record<string, string>> = {
+  bitbucket_data_center: "bitbucket",
+  jira_dc: "jira",
+};
+
+/**
+ * The integrations whose logos stand for a template on its card: the ones it
+ * is about, then the built-in integrations it requires. Templates that use
+ * the connected git account declare no integration and are recognised by
+ * their repository picker; the Data Center templates only by their built-ins.
+ */
+export function getTemplateLogoIds(
+  automation: RecommendedAutomation,
+): string[] {
+  const ids = getTemplateIntegrationIds(automation);
+  for (const name of getRequiredBuiltInIntegrations(automation)) {
+    const id = BUILT_IN_LOGO_IDS[name] ?? name;
+    if (!ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
 export type TemplateTriggerKind = AutomationTriggerKind;
 
 const TEMPLATE_TRIGGER_KINDS: readonly TemplateTriggerKind[] = [

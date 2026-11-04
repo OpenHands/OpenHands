@@ -431,6 +431,23 @@ describe("recommended automations", () => {
     ).toHaveAttribute("data-layout", "quadrants");
   });
 
+  it("shows the repository provider's logo for a template that declares no integration", () => {
+    render(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    // The GitHub workers use the connected account's token, so they declare
+    // no integration; their repository picker is what makes them GitHub's.
+    const badge = screen.getByTestId(
+      "recommended-automation-icon-github-pr-reviewer",
+    );
+    expect(badge.querySelector('img[alt="GitHub logo"]')).toBeInTheDocument();
+  });
+
   it("shows the declared glyph instead of a logo stack when an entry names one", () => {
     render(
       <RecommendedAutomationsSection
