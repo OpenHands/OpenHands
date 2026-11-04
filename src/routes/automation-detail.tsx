@@ -23,7 +23,6 @@ import {
   automationListPath,
   hasAutomationInterface,
 } from "#/manifests/automation-interface";
-import { BackLink } from "#/components/features/automations/detail/back-link";
 import { DetailHeader } from "#/components/features/automations/detail/detail-header";
 import { AutomationTagsEditor } from "#/components/features/automations/detail/automation-tags-editor";
 import { DisabledReasonBanner } from "#/components/features/automations/detail/disabled-reason-banner";
@@ -271,36 +270,34 @@ export default function AutomationDetail() {
     !isKeepAliveForced(automation);
 
   return (
-    <div className="min-h-full">
-      <div className="p-6 max-w-4xl mx-auto">
-        <div className="flex flex-col gap-4">
-          <BackLink />
-          <DetailHeader
-            automation={automation}
-            onToggle={handleToggle}
-            onToggleKeepAlive={
-              canToggleKeepAlive ? handleToggleKeepAlive : undefined
-            }
-            isKeepAlivePending={keepAliveMutation.isPending}
-            onEdit={() => openEditor(automation)}
-            onDelete={() => setShowDeleteModal(true)}
-            onExport={handleExport}
-            onDownloadTarball={() =>
-              AutomationService.downloadTarball(automation.id, automation.name)
-            }
-            onRunNow={handleRunNow}
-            isRunningNow={dispatchMutation.isPending}
-            canManage={canManage}
-            canToggle={canToggle}
-          >
-            {/* The service lets only the creator change tags. */}
-            {canEditTags || automation.tags?.length ? (
-              <AutomationTagsEditor
-                automation={automation}
-                canEdit={canEditTags}
-              />
-            ) : null}
-          </DetailHeader>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-canvas-base">
+      <DetailHeader
+        automation={automation}
+        onToggle={handleToggle}
+        onToggleKeepAlive={
+          canToggleKeepAlive ? handleToggleKeepAlive : undefined
+        }
+        isKeepAlivePending={keepAliveMutation.isPending}
+        onEdit={() => openEditor(automation)}
+        onDelete={() => setShowDeleteModal(true)}
+        onExport={handleExport}
+        onDownloadTarball={() =>
+          AutomationService.downloadTarball(automation.id, automation.name)
+        }
+        onRunNow={handleRunNow}
+        isRunningNow={dispatchMutation.isPending}
+        canManage={canManage}
+        canToggle={canToggle}
+      />
+      <div className="automation-setup-scroll-gutter custom-scrollbar-always min-h-0 flex-1 overflow-y-auto px-5 py-5">
+        <div className="automation-setup-content mx-auto flex flex-col gap-4">
+          {/* The service lets only the creator change tags. */}
+          {canEditTags || automation.tags?.length ? (
+            <AutomationTagsEditor
+              automation={automation}
+              canEdit={canEditTags}
+            />
+          ) : null}
           <DisabledReasonBanner automation={automation} />
           {/* Same order as the setup form: what starts it, what it does,
               how it runs, then what it has done. */}

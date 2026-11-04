@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { DetailHeader } from "#/components/features/automations/detail/detail-header";
 import { I18nKey } from "#/i18n/declaration";
+import { automationListPath } from "#/manifests/automation-interface";
 import type { Automation } from "#/types/automation";
 
 const disabledAutomation: Automation = {
@@ -46,6 +47,19 @@ describe("DetailHeader — status badge", () => {
     expect(
       screen.queryByTestId("active-status-badge-inactive"),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("DetailHeader — back arrow", () => {
+  it("returns to the automations list", () => {
+    renderHeader();
+
+    expect(
+      screen.getByRole("link", { name: I18nKey.COMMON$BACK }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringMatching(new RegExp(`${automationListPath()}$`)),
+    );
   });
 });
 

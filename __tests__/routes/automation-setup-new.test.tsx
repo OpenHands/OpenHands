@@ -15,6 +15,10 @@ import {
 } from "#/api/automation-form-session";
 import type { Automation } from "#/types/automation";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
+import {
+  automationDetailPath,
+  automationListPath,
+} from "#/manifests/automation-interface";
 
 const { mockStartConversationFromPrompt } = vi.hoisted(() => ({
   mockStartConversationFromPrompt: vi.fn(),
@@ -174,4 +178,33 @@ describe("AutomationSetupNew", () => {
       "ASK_AGENT_PROMPT",
     );
   });
+
+  it.each([
+    [
+      "an automation being edited",
+      "?automationId=auto-1",
+      automationDetailPath("auto-1"),
+    ],
+    ["a saved draft", "?draftId=draft-1", automationListPath()],
+    ["a new automation", "", automationListPath()],
+  ])(
+    "points the header's back arrow for %s at where it came from",
+    async (_case, query, expectedPath) => {
+      // Arrange
+      vi.mocked(AutomationService.getAutomation).mockResolvedValue(automation);
+      vi.mocked(AutomationService.getServerDraft).mockResolvedValue(
+        serverDraft,
+      );
+
+      // Act
+      renderRoute(`/automations/setup${query}`);
+      await screen.findByTestId("setup-panel-draft");
+
+      // Assert
+      expect(screen.getByTestId("automation-page-back")).toHaveAttribute(
+        "href",
+        expect.stringMatching(new RegExp(`${expectedPath}$`)),
+      );
+    },
+  );
 });

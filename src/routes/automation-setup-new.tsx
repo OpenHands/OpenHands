@@ -16,6 +16,11 @@ import { InteractiveChatBox } from "#/components/features/chat/interactive-chat-
 import { ComposerDockedProvider } from "#/context/composer-docked-context";
 import { useStartAutomationSetup } from "#/hooks/use-start-automation-setup";
 import { I18nKey } from "#/i18n/declaration";
+import {
+  automationDetailPath,
+  automationListPath,
+} from "#/manifests/automation-interface";
+import { AutomationPageHeader } from "#/components/features/automations/automation-page-header";
 import { buildAutomationDraftTags } from "#/utils/automation-draft-tags";
 import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
@@ -107,23 +112,16 @@ export default function AutomationSetupNew() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-canvas-base">
-      <header
-        data-testid="automation-setup-topbar"
-        className="flex h-14 min-h-14 shrink-0 items-center border-b border-border bg-canvas-base px-5"
-      >
-        {/* Same column as the form and the detail page, so the name and
-            actions sit where they do when viewing the automation. */}
-        <div className="automation-setup-content mx-auto flex w-full min-w-0 items-center justify-between gap-2">
-          <h2 className="min-w-0 truncate text-lg font-medium text-content">
-            {title}
-          </h2>
-          <div
-            ref={setToolbarElement}
-            data-testid="automation-setup-toolbar"
-            className="flex min-w-0 shrink-0 items-center gap-1.5"
-          />
-        </div>
-      </header>
+      <AutomationPageHeader
+        testId="automation-setup-topbar"
+        title={title}
+        backTo={
+          automationId
+            ? automationDetailPath(automationId)
+            : automationListPath()
+        }
+        actionsRef={setToolbarElement}
+      />
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         {draft ? (
           <AutomationSetupPanel
