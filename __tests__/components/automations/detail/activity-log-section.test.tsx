@@ -212,35 +212,73 @@ describe("ActivityLogSection run grouping", () => {
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
-  it("folds a stretch of successful runs under its first and opens it on click", async () => {
+  it("shows the newest runs of a successful stretch and folds the rest until opened", async () => {
     // Arrange
     vi.mocked(useAutomationRuns).mockReturnValue({
-      data: { runs: successfulRuns(5), total: 5 },
+      data: { runs: successfulRuns(8), total: 8 },
       isLoading: false,
     } as unknown as ReturnType<typeof useAutomationRuns>);
     const user = userEvent.setup();
     renderSection();
     expect(screen.getAllByTestId("automation-run-day")).toHaveLength(1);
-    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(screen.getAllByRole("link")).toHaveLength(5);
 
     // Act
     await user.click(screen.getByTestId("automation-run-fold"));
 
     // Assert
-    expect(screen.getAllByRole("link")).toHaveLength(5);
+    expect(screen.getAllByRole("link")).toHaveLength(8);
     expect(screen.queryByTestId("automation-run-fold")).not.toBeInTheDocument();
+  });
+
+  it("shows every loaded run under its day once more are loaded", async () => {
+    // Arrange: a run every 30 minutes, newest first, so the second page
+    // reaches into the previous day.
+    const runsEvery30Minutes = (count: number): AutomationRun[] =>
+      Array.from({ length: count }, (_, index) => ({
+        ...run,
+        id: `m${index + 1}`,
+        conversation_id: `c${index + 1}`,
+        started_at: new Date(
+          Date.UTC(2026, 0, 2, 12) - index * 30 * 60_000,
+        ).toISOString(),
+      }));
+    vi.mocked(useAutomationRuns).mockImplementation(
+      (options) =>
+        ({
+          data: { runs: runsEvery30Minutes(options.limit ?? 20), total: 60 },
+          isLoading: false,
+        }) as unknown as ReturnType<typeof useAutomationRuns>,
+    );
+    const user = userEvent.setup();
+    renderSection();
+    expect(screen.getAllByTestId("automation-run-fold")).toHaveLength(1);
+
+    // Act
+    await user.click(screen.getByTestId("automation-runs-load-more"));
+
+    // Assert
+    expect(screen.getAllByRole("link")).toHaveLength(40);
+    expect(screen.queryByTestId("automation-run-fold")).not.toBeInTheDocument();
+    expect(
+      new Set(
+        screen
+          .getAllByTestId("automation-run-day")
+          .map((day) => day.querySelector("h4")?.textContent),
+      ).size,
+    ).toBe(screen.getAllByTestId("automation-run-day").length);
   });
 
   it("keeps a deep-linked run visible inside a stretch it would fold", () => {
     vi.mocked(useAutomationRuns).mockReturnValue({
-      data: { runs: successfulRuns(5), total: 5 },
+      data: { runs: successfulRuns(8), total: 8 },
       isLoading: false,
     } as unknown as ReturnType<typeof useAutomationRuns>);
 
-    renderSection("s4");
+    renderSection("s7");
 
     expect(
-      screen.getByTestId("automation-run-highlight-s4"),
+      screen.getByTestId("automation-run-highlight-s7"),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("automation-run-fold")).not.toBeInTheDocument();
   });

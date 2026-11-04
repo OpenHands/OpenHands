@@ -45,8 +45,11 @@ const PAGE_SIZE = 20;
  */
 const HIGHLIGHT_AUTO_LOAD_MAX_RUNS = 100;
 
-/** Consecutive successful runs at or above this length fold into one row. */
-const COLLAPSE_MIN_RUNS = 3;
+/** The newest runs of a successful stretch that stay visible above its fold. */
+const STRETCH_VISIBLE_RUNS = 5;
+
+/** A fold hides at least this many runs; fewer are simply shown. */
+const COLLAPSE_MIN_RUNS = 2;
 
 type RunRow =
   | { kind: "run"; run: AutomationRun }
@@ -73,9 +76,10 @@ function runDate(run: AutomationRun): Date {
 }
 
 /**
- * Folds every stretch of successful runs after its first into one row, so a
- * script that succeeds every minute reads as one line, not sixty. A stretch
- * holding the deep-linked run, or one the user opened, stays expanded.
+ * Folds every stretch of successful runs after its newest few into one row,
+ * so a script that succeeds every minute reads as a handful of lines, not
+ * sixty. A stretch holding the deep-linked run, or one the user opened, stays
+ * expanded.
  */
 function foldSuccessfulRuns(
   runs: AutomationRun[],
@@ -88,12 +92,13 @@ function foldSuccessfulRuns(
     let end = index;
     while (end < runs.length && isSuccessfulRun(runs[end])) end += 1;
     const stretch = runs.slice(index, end);
-    const folded = stretch.slice(1);
+    const shown = stretch.slice(0, STRETCH_VISIBLE_RUNS);
+    const folded = stretch.slice(STRETCH_VISIBLE_RUNS);
     const foldId = folded[0] ? `fold-${folded[0].id}` : "";
     const keepOpen =
       expanded.has(foldId) || folded.some((run) => run.id === highlightedRunId);
-    if (stretch.length >= COLLAPSE_MIN_RUNS && !keepOpen) {
-      rows.push({ kind: "run", run: stretch[0] });
+    if (folded.length >= COLLAPSE_MIN_RUNS && !keepOpen) {
+      shown.forEach((run) => rows.push({ kind: "run", run }));
       rows.push({ kind: "collapsed", id: foldId, runs: folded });
     } else {
       stretch.forEach((run) => rows.push({ kind: "run", run }));
@@ -112,6 +117,7 @@ function groupRunsByDay(
   locale: string,
   expanded: ReadonlySet<string>,
   highlightedRunId: string | null,
+  showAll: boolean,
 ): DayGroup[] {
   const currentYear = new Date().getFullYear();
   const days: { key: string; label: string; runs: AutomationRun[] }[] = [];
@@ -137,7 +143,9 @@ function groupRunsByDay(
   return days.map((day) => ({
     key: day.key,
     label: day.label,
-    rows: foldSuccessfulRuns(day.runs, expanded, highlightedRunId),
+    rows: showAll
+      ? day.runs.map((run) => ({ kind: "run" as const, run }))
+      : foldSuccessfulRuns(day.runs, expanded, highlightedRunId),
   }));
 }
 
@@ -178,6 +186,10 @@ export function ActivityLogSection({
   const [expandedFolds, setExpandedFolds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  // Loading more asks to see older runs. Folding them would hide them inside
+  // the stretch they extend, so once the user pages, every run shows under
+  // its day.
+  const [showAllRuns, setShowAllRuns] = useState(false);
   const dayGroups = useMemo(
     () =>
       groupRunsByDay(
@@ -185,8 +197,9 @@ export function ActivityLogSection({
         i18n.language,
         expandedFolds,
         highlightedRunId,
+        showAllRuns,
       ),
-    [data?.runs, i18n.language, expandedFolds, highlightedRunId],
+    [data?.runs, i18n.language, expandedFolds, highlightedRunId, showAllRuns],
   );
   const isScript = !automation.prompt;
 
@@ -389,7 +402,11 @@ export function ActivityLogSection({
             <div className="border-t border-border px-5 py-3">
               <button
                 type="button"
-                onClick={() => setLimit((prev) => prev + PAGE_SIZE)}
+                data-testid="automation-runs-load-more"
+                onClick={() => {
+                  setShowAllRuns(true);
+                  setLimit((prev) => prev + PAGE_SIZE);
+                }}
                 className="text-sm text-muted hover:text-foreground"
               >
                 {t(I18nKey.AUTOMATIONS$DETAIL$LOAD_MORE_RUNS)}
