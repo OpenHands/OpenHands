@@ -60,18 +60,17 @@ describe("SkillCardPillRow", () => {
     });
   }
 
+  const eventTriggerText = "pull_request_review_comment.created (github)";
+  const modelText = "review-fast";
+
   const pills = [
     {
       id: "event-trigger",
-      node: (
-        <span className={SKILL_CARD_PILL_CLASS}>
-          pull_request_review_comment.created (github)
-        </span>
-      ),
+      node: <span className={SKILL_CARD_PILL_CLASS}>{eventTriggerText}</span>,
     },
     {
       id: "model",
-      node: <span className={SKILL_CARD_PILL_CLASS}>review-fast</span>,
+      node: <span className={SKILL_CARD_PILL_CLASS}>{modelText}</span>,
     },
   ];
 
@@ -102,10 +101,10 @@ describe("SkillCardPillRow", () => {
     });
 
     expect(screen.getByTestId("skill-triggers-test")).toHaveTextContent(
-      "pull_request_review_comment.created (github)",
+      eventTriggerText,
     );
     expect(screen.getByTestId("skill-triggers-test")).not.toHaveTextContent(
-      "review-fast",
+      modelText,
     );
 
     const overflow = screen.getByTestId("skill-triggers-test-overflow");
@@ -150,6 +149,53 @@ describe("SkillCardPillRow", () => {
 
     await user.click(screen.getByTestId("skill-triggers-test-overflow"));
 
+    expect(
+      screen.getByTestId("skill-triggers-test-overflow-popover"),
+    ).toBeInTheDocument();
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it("uses Escape for the overflow popover and keeps card activation scoped", async () => {
+    const user = userEvent.setup();
+    const onActivate = vi.fn();
+
+    renderWithProviders(
+      <div
+        role="link"
+        tabIndex={0}
+        onClick={onActivate}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") onActivate();
+        }}
+      >
+        <SkillCardPillRow testId="skill-triggers-test" pills={pills} />
+      </div>,
+    );
+
+    stubWidths(130, 80);
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("skill-triggers-test-overflow"),
+      ).toBeInTheDocument();
+    });
+
+    const trigger = screen.getByTestId("skill-triggers-test-overflow");
+    await user.click(trigger);
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByTestId("skill-triggers-test-overflow-popover"),
+    ).not.toBeInTheDocument();
+    expect(onActivate).not.toHaveBeenCalled();
+
+    await user.keyboard("{Enter}");
+    expect(
+      screen.getByTestId("skill-triggers-test-overflow-popover"),
+    ).toBeInTheDocument();
+    expect(onActivate).not.toHaveBeenCalled();
+
+    await user.keyboard("{Escape}");
+    await user.keyboard(" ");
     expect(
       screen.getByTestId("skill-triggers-test-overflow-popover"),
     ).toBeInTheDocument();

@@ -8,7 +8,7 @@ import {
   LAUNCH_CHILD_CONVERSATION_ACTION_KIND,
   LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
 } from "#/constants/child-conversation";
-import { getEventContent } from "#/components/conversation-events/chat";
+import { getEventContent } from "#/components/conversation-events/chat/event-content-helpers/get-event-content";
 import {
   ActionEvent,
   ObservationEvent,

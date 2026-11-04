@@ -18,12 +18,10 @@ import {
   clearCachedAgentServerInfo,
   getCachedAgentServerInfo,
   getCachedAgentServerVersion,
-  getCachedAgentServerSdkVersion,
   validateLocalBackend,
   INVALID_BACKEND_API_KEY_ERROR,
   isAgentServerAuthError,
   isAgentServerUnavailableError,
-  isAgentServerUnknownVersionError,
   isAgentServerUnsupportedVersionError,
   loadAgentServerInfo,
   MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
@@ -110,11 +108,9 @@ describe("loadAgentServerInfo", () => {
         new AgentServerUnsupportedVersionError("1.27.0"),
       ),
     ).toBe(true);
-    expect(
-      isAgentServerUnknownVersionError(
-        new AgentServerUnknownVersionError("dev-build"),
-      ),
-    ).toBe(true);
+    expect(new AgentServerUnknownVersionError("dev-build").code).toBe(
+      AGENT_SERVER_UNKNOWN_VERSION_ERROR_CODE,
+    );
 
     (
       window as unknown as Record<string, unknown>
@@ -365,7 +361,6 @@ describe("local backend validation", () => {
 describe("cached display versions", () => {
   it("returns no versions without a cache and limits populated values to the active host", async () => {
     expect(getCachedAgentServerVersion()).toBeNull();
-    expect(getCachedAgentServerSdkVersion()).toBeNull();
     setRegisteredBackends([localBackend]);
     setActiveSelection({ backendId: localBackend.id });
     getServerInfoMock.mockResolvedValue({
@@ -376,16 +371,12 @@ describe("cached display versions", () => {
     expect(getCachedAgentServerVersion()).toBe(
       MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
     );
-    expect(getCachedAgentServerSdkVersion()).toBe("9.8.7");
     expect(getCachedAgentServerVersion(localBackend.host)).toBe(
       MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
     );
-    expect(getCachedAgentServerSdkVersion(localBackend.host)).toBe("9.8.7");
     expect(getCachedAgentServerVersion("http://elsewhere.test")).toBeNull();
-    expect(getCachedAgentServerSdkVersion("http://elsewhere.test")).toBeNull();
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
     expect(getCachedAgentServerVersion(localBackend.host)).toBeNull();
-    expect(getCachedAgentServerSdkVersion(localBackend.host)).toBeNull();
   });
 });

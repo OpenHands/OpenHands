@@ -2,7 +2,6 @@ import { Tooltip } from "@heroui/react";
 import { Plus, Zap } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
 import { RunStatusBadge } from "#/components/features/automations/detail/run-status-badge";
 import { TurnOffConfirmationModal } from "#/components/features/automations/turn-off-confirmation-modal";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
@@ -184,14 +183,6 @@ function RunningAutomationRow({
           items={menuItems}
         />
       </div>
-
-      {actions.editOpen ? (
-        <EditAutomationModal
-          automation={automation}
-          isOpen={actions.editOpen}
-          onClose={() => actions.setEditOpen(false)}
-        />
-      ) : null}
 
       <TurnOffConfirmationModal
         automationName={automation.name}

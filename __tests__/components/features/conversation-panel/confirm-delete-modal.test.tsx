@@ -37,9 +37,7 @@ describe("ConfirmDeleteModal", () => {
       />,
     );
 
-    expect(
-      screen.getByText("CONVERSATION$DELETE_WARNING"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("CONVERSATION$DELETE_WARNING")).toBeInTheDocument();
   });
 
   it("places Cancel before Confirm in the footer so the dominant action is the last focusable button", () => {
@@ -58,5 +56,16 @@ describe("ConfirmDeleteModal", () => {
       cancel.compareDocumentPosition(confirm) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("renders buttons with cancel-button and confirm-button test ids", () => {
+    // Arrange: render the modal.
+    renderWithProviders(
+      <ConfirmDeleteModal onConfirm={vi.fn()} onCancel={vi.fn()} />,
+    );
+
+    // Assert: buttons expose the expected data-testid attributes.
+    expect(screen.getByTestId("cancel-button")).toBeInTheDocument();
+    expect(screen.getByTestId("confirm-button")).toBeInTheDocument();
   });
 });

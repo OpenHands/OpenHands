@@ -1,7 +1,6 @@
 import { useRef, useCallback, useEffect } from "react";
 import {
   isContentEmpty,
-  clearEmptyContent,
   getTextContent,
 } from "#/components/features/chat/utils/chat-input.utils";
 import {
@@ -12,9 +11,14 @@ import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useDraftPersistence } from "./use-draft-persistence";
 
 /**
- * Hook for managing chat input content logic
+ * Hook for managing chat input content logic.
+ *
+ * `persistDraft: false` turns off draft persistence for a composer that does
+ * not own a draft (see `useDraftPersistence`).
  */
-export const useChatInputLogic = () => {
+export const useChatInputLogic = ({
+  persistDraft = true,
+}: { persistDraft?: boolean } = {}) => {
   const chatInputRef = useRef<HTMLDivElement | null>(null);
   // Optional because the chat input also renders on the home page, where no
   // conversation route is mounted yet. Draft persistence is conversation-
@@ -34,6 +38,7 @@ export const useChatInputLogic = () => {
   const { saveDraft, clearDraft } = useDraftPersistence(
     conversationId,
     chatInputRef,
+    { persist: persistDraft },
   );
 
   // Apply only messages queued for this composer. On the home page (no
@@ -48,15 +53,25 @@ export const useChatInputLogic = () => {
       ? rawMessageToSend
       : null;
 
-  // Restore a cancelled pending send back into the input only when empty.
+  // Restore a cancelled pending send (or, on the home page, a prompt whose
+  // launch failed) back into the input only when empty.
   useEffect(() => {
-    if (!conversationId || !messageRestoreIfEmpty) {
+    if (!messageRestoreIfEmpty) {
       return;
     }
 
-    const currentText = getTextContent(chatInputRef.current).trim();
+    const element = chatInputRef.current;
+    const currentText = getTextContent(element).trim();
     if (currentText.length === 0) {
-      setMessageToSend(messageRestoreIfEmpty.text);
+      if (conversationId) {
+        setMessageToSend(messageRestoreIfEmpty.text);
+      } else if (element) {
+        // Write the text directly rather than queueing it as messageToSend:
+        // the input event runs the same path as typing (resize, draft save
+        // and submit-button state).
+        element.textContent = messageRestoreIfEmpty.text;
+        element.dispatchEvent(new InputEvent("input", { bubbles: true }));
+      }
     }
     clearMessageRestoreIfEmpty();
   }, [
@@ -87,11 +102,6 @@ export const useChatInputLogic = () => {
     [],
   );
 
-  // Helper function to properly clear contentEditable for placeholder display
-  const clearEmptyContentHandler = useCallback((): void => {
-    clearEmptyContent(chatInputRef.current);
-  }, []);
-
   // Get current message text
   const getCurrentMessage = useCallback(
     (): string => getTextContent(chatInputRef.current),
@@ -102,7 +112,6 @@ export const useChatInputLogic = () => {
     chatInputRef,
     messageToSend,
     checkIsContentEmpty,
-    clearEmptyContentHandler,
     getCurrentMessage,
     saveDraft,
     clearDraft,

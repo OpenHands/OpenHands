@@ -9,6 +9,7 @@ interface MenuItemProps {
   onKeyDown: (e: React.KeyboardEvent, index: number) => void;
   menuItemsRef: React.MutableRefObject<(HTMLButtonElement | null)[]>;
   disabled?: boolean;
+  title?: string;
   testId: string;
 }
 
@@ -20,6 +21,7 @@ export function MenuItem({
   onKeyDown,
   menuItemsRef,
   disabled,
+  title,
   testId,
 }: MenuItemProps) {
   return (
@@ -32,6 +34,7 @@ export function MenuItem({
       onClick={onClick}
       onKeyDown={(e) => onKeyDown(e, index)}
       disabled={disabled}
+      title={title}
       className={cn(
         "group w-full cursor-pointer rounded px-2 py-2 text-start text-nowrap text-sm font-normal",
         "text-foreground hover:bg-interactive-hover",

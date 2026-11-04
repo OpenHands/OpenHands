@@ -1,10 +1,16 @@
-import { getAcpProvider as getClientAcpProvider } from "@openhands/typescript-client";
+import {
+  getAcpProvider as getClientAcpProvider,
+  type ACPModelInfo,
+} from "@openhands/typescript-client";
+import type { BackendKind } from "#/api/backend-registry/types";
 import { I18nKey } from "#/i18n/declaration";
 
 export type ACPProviderIcon =
   | "claude-code"
   | "codex"
   | "gemini"
+  | "pi"
+  | "opencode"
   | "cli-generic";
 
 export const ACP_PROVIDER_FALLBACK_ICON: ACPProviderIcon = "cli-generic";
@@ -66,8 +72,8 @@ export function resolveEffectiveAcpModel(inputs: {
 
 /**
  * Shape of a built-in ACP (Agent Client Protocol) provider as Canvas consumes
- * it. The data fields (display name, launch command, model picker + default)
- * are sourced at module load from ``@openhands/typescript-client``'s ACP
+ * it. The data fields (display name, launch command) are sourced at module
+ * load from ``@openhands/typescript-client``'s ACP
  * registry — the generated mirror of the Python source of truth
  * ``openhands.sdk.settings.acp_providers``. This config only adds the
  * Canvas-specific UI fields ({@link ACPProviderConfig.icon} +
@@ -91,14 +97,6 @@ export interface ACPProviderConfig {
    */
   default_command: string[];
   /**
-   * Suggested ACP model IDs for the provider's picker, sourced from the
-   * typescript-client registry. Not authoritative access checks; users can
-   * still enter a custom override in Settings -> Agent.
-   */
-  available_models?: ACPModelOption[];
-  /** Model ID preselected for built-in providers so Canvas never saves blank. */
-  default_model?: string;
-  /**
    * i18n key for the one-line provider description rendered under the
    * onboarding tile. Stored on the registry so adding a new ACP
    * provider only requires editing this file (not the onboarding tile
@@ -111,6 +109,8 @@ export interface ACPProviderConfig {
    * parse this registry without importing React components.
    */
   icon?: ACPProviderIcon;
+  /** Offered only on local backends; Cloud runs a fixed set of providers. */
+  local_only?: boolean;
 }
 
 export interface ACPModelOption {
@@ -121,14 +121,14 @@ export interface ACPModelOption {
 }
 
 // Canvas-only UI metadata per built-in provider, keyed by the ACP registry
-// key. Everything else — display name, launch command, model picker list and
-// default — comes from the typescript-client registry below. Adding a model
-// or a provider happens upstream in the SDK; Canvas only owns the brand icon
-// and the onboarding-tile description here. Its keys are the harnesses Canvas
+// key. The display name and launch command come from the typescript-client
+// registry below; models come from the agent itself. Adding a provider
+// happens upstream in the SDK; Canvas only owns the brand icon and the
+// onboarding-tile description here. Its keys are the harnesses Canvas
 // offers — see {@link SURFACED_ACP_PROVIDERS}.
 const ACP_PROVIDER_UI: Record<
   string,
-  { icon: ACPProviderIcon; description_key: I18nKey }
+  { icon: ACPProviderIcon; description_key: I18nKey; local_only?: boolean }
 > = {
   "claude-code": {
     icon: "claude-code",
@@ -142,14 +142,17 @@ const ACP_PROVIDER_UI: Record<
     icon: "gemini",
     description_key: I18nKey.ONBOARDING$AGENT_GEMINI_CLI_DESCRIPTION,
   },
+  pi: {
+    icon: "pi",
+    description_key: I18nKey.ONBOARDING$AGENT_PI_DESCRIPTION,
+    local_only: true,
+  },
+  opencode: {
+    icon: "opencode",
+    description_key: I18nKey.ONBOARDING$AGENT_OPENCODE_DESCRIPTION,
+    local_only: true,
+  },
 };
-
-function getAvailableModels(key: string): ACPModelOption[] | undefined {
-  return getClientAcpProvider(key)?.available_models?.map((model) => ({
-    id: model.id,
-    label: model.label,
-  }));
-}
 
 /**
  * The ACP harnesses Canvas surfaces — its own declaration of what it offers,
@@ -171,12 +174,20 @@ export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
     key,
     display_name: info?.display_name ?? key,
     default_command: info ? [...info.default_command] : [],
-    available_models: getAvailableModels(key),
-    default_model: info?.default_model ?? undefined,
     description_key: ui.description_key,
     icon: ui.icon,
+    local_only: ui.local_only,
   };
 });
+
+/** The built-in ACP providers a backend of ``kind`` can launch. */
+export function getAcpProvidersForBackend(
+  kind: BackendKind,
+): ACPProviderConfig[] {
+  return kind === "cloud"
+    ? ACP_PROVIDERS.filter((provider) => !provider.local_only)
+    : ACP_PROVIDERS;
+}
 
 export const ACP_CUSTOM_PRESET_KEY = "custom";
 
@@ -267,6 +278,24 @@ const ACP_RESERVED_CREDENTIALS: Record<string, ACPProviderSecretField[]> = {
       hint_key: I18nKey.ONBOARDING$ACP_SECRET_VERTEXAI_FLAG_HINT,
     },
   ],
+  pi: [
+    {
+      name: "PI_AUTH_JSON",
+      secret: true,
+      multiline: true,
+      hint_key: I18nKey.ONBOARDING$ACP_SECRET_FILE_BLOB_HINT,
+      hint_values: { file: "~/.pi/agent/auth.json" },
+    },
+  ],
+  opencode: [
+    {
+      name: "OPENCODE_AUTH_CONTENT",
+      secret: true,
+      multiline: true,
+      hint_key: I18nKey.ONBOARDING$ACP_SECRET_AUTH_CONTENT_HINT,
+      hint_values: { file: "~/.local/share/opencode/auth.json" },
+    },
+  ],
 };
 
 /**
@@ -318,26 +347,16 @@ export function getAcpCredentialConflicts(
 export const ACP_VERTEX_SAFE_MODEL = "gemini-2.5-pro";
 
 /**
- * The default ``acp_model`` canvas substitutes for ``providerKey`` wherever no
- * concrete model is configured — settings seeding (onboarding, Settings →
- * Agent), the {@link buildAcpAgentSettingsDiff} fallback, and the start-request
- * fallback for a saved ``null``. Overrides only Gemini (→
- * {@link ACP_VERTEX_SAFE_MODEL}, see why above); every other provider keeps its
- * registry {@link ACPProviderConfig.default_model}. Returns ``null`` when
- * there's no override and no registry default, letting the ACP server pick its
- * own.
- *
- * Distinct from {@link ACPProviderConfig.default_model} (which mirrors the SDK
- * registry verbatim, closing agent-canvas#740): this is the *preferred* default,
- * deliberately diverging for Gemini where the registry value isn't safe on
- * every backend — so every default-model surface must route through this, not
- * read ``default_model`` directly.
+ * The ``acp_model`` canvas substitutes for ``providerKey`` wherever no concrete
+ * model is configured — settings seeding (onboarding, Settings → Agent), the
+ * {@link buildAcpAgentSettingsDiff} fallback, and the start-request fallback
+ * for a saved ``null``. ``null`` lets the agent use its own default; only
+ * Gemini's own default is unsafe (see {@link ACP_VERTEX_SAFE_MODEL}).
  */
 export function getAcpPreferredDefaultModel(
   key: string | null | undefined,
 ): string | null {
-  if (key === "gemini-cli") return ACP_VERTEX_SAFE_MODEL;
-  return getAcpProvider(key)?.default_model ?? null;
+  return key === "gemini-cli" ? ACP_VERTEX_SAFE_MODEL : null;
 }
 
 /**
@@ -455,23 +474,28 @@ export function resolveAcpProviderIcon(
 }
 
 /**
- * Resolve a raw ``acp_model`` ID to the human-readable label the provider's
- * picker shows for it (e.g. ``"claude-opus-4-7"`` → ``"Claude Opus 4.7"``).
- *
- * Falls back to the raw ID when the provider is unknown or the ID isn't one
- * of its registered {@link ACPModelOption}s — so a user's custom override
- * still renders something meaningful rather than nothing. Returns ``null``
- * only when there is no model to show, letting the conversation chip decide
- * to display the provider name instead.
+ * The label the agent gave ``modelId`` in ``models``, else the raw ID. Returns
+ * ``null`` only when there is no model to show, letting the conversation chip
+ * display the provider name instead.
  */
 export function labelForAcpModel(
-  serverKey: string | null | undefined,
   modelId: string | null | undefined,
+  models: readonly ACPModelOption[] = [],
 ): string | null {
   if (!modelId) return null;
-  const provider = getAcpProvider(serverKey);
-  const match = provider?.available_models?.find((m) => m.id === modelId);
-  return match?.label ?? modelId;
+  return models.find(({ id }) => id === modelId)?.label ?? modelId;
+}
+
+/** Picker options for the models an ACP server reported. */
+export function toAcpModelOptions(
+  models: readonly ACPModelInfo[] | null | undefined,
+): ACPModelOption[] {
+  return (models ?? [])
+    .filter(({ model_id }) => model_id)
+    .map(({ model_id, name }) => ({
+      id: model_id,
+      label: name?.trim() || model_id,
+    }));
 }
 
 /**
@@ -506,8 +530,6 @@ export function buildAcpAgentSettingsDiff(
     acp_server: providerKey,
     acp_command: [],
     acp_args: [],
-    // The *preferred* default (Vertex-safe for Gemini), not the raw registry
-    // default — see getAcpPreferredDefaultModel.
     acp_model: getAcpPreferredDefaultModel(providerKey) ?? null,
   };
 }

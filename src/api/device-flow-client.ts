@@ -34,5 +34,4 @@ export function pollForToken(
 export type {
   DeviceAuthorizationResponse,
   DeviceTokenResponse,
-  PollDeviceTokenOptions as PollOptions,
 } from "@openhands/typescript-client/client/device-flow-client";

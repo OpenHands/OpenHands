@@ -50,13 +50,3 @@ export function getMobileTopBarState(pathname: string): MobileTopBarState {
 
   return { mode: "menu" };
 }
-
-export function isExtensionsSectionPath(pathname: string): boolean {
-  return (
-    pathname === CUSTOMIZE_HUB ||
-    pathname === APPS_MANAGEMENT_PATH ||
-    EXTENSIONS_DETAIL_PATHS.some(
-      (path) => pathname === path || pathname.startsWith(`${path}/`),
-    )
-  );
-}

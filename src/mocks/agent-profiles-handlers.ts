@@ -56,7 +56,6 @@ function makeOpenHandsProfile(
     agent_kind: "openhands",
     llm_profile_ref: "default",
     agent: "CodeActAgent",
-    skills: [],
     system_message_suffix: null,
     condenser: null,
     verification: DEFAULT_VERIFICATION,

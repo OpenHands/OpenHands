@@ -95,11 +95,10 @@ ENV VITE_POSTHOG_API_KEY=${VITE_POSTHOG_API_KEY}
 
 USER root
 
-# Install system deps required by automation's transitive dependencies
-# (asyncpg needs libpq, which the agent-server base image may not include).
-# Refresh inherited packages after adding dependencies so the final image
-# includes available security fixes.
-ARG DEBIAN_SNAPSHOT=20260913T000000Z
+# Refresh inherited packages so the final image includes available security
+# fixes. asyncpg publishes wheels for the supported Python and architectures
+# and implements the PostgreSQL protocol directly, so no libpq package is needed.
+ARG DEBIAN_SNAPSHOT=20260930T000000Z
 RUN if command -v apt-get >/dev/null 2>&1; then \
       printf '%s\n' \
         'Types: deb' \
@@ -117,16 +116,17 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
         'Check-Valid-Until: no' \
         > /etc/apt/sources.list.d/debian.sources && \
       apt-get update && \
-      apt-get install -y --no-install-recommends libpq-dev && \
       apt-get upgrade -y --no-install-recommends && \
       rm -rf /var/lib/apt/lists/*; \
     fi
 
 # Install automation server and the tool models its SDK clients deserialize.
 # Match openhands-tools to the SDK already provided by the agent-server image,
-# just as the local Canvas launcher does.
-RUN uv pip install --system "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" 2>/dev/null \
-    || pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}"
+# just as the local Canvas launcher does. Pin openhands-agent-server too: it
+# arrives via openhands-workspace, and left unpinned the resolver downgraded it
+# to dodge an openai conflict (#17531).
+RUN uv pip install --system "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}" 2>/dev/null \
+    || pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}"
 
 RUN if [ -n "${AGENT_SERVER_SDK_GIT_REF}" ]; then \
       BASE_GIT_URL="git+https://github.com/OpenHands/software-agent-sdk@${AGENT_SERVER_SDK_GIT_REF}" && \
@@ -144,11 +144,26 @@ COPY --from=frontend-build /build/build /opt/agent-canvas/frontend
 COPY scripts/static-server.mjs /opt/agent-canvas/static-server.mjs
 COPY scripts/bind-host.mjs /opt/agent-canvas/bind-host.mjs
 COPY scripts/proxy-utils.mjs /opt/agent-canvas/proxy-utils.mjs
+# static-server.mjs mounts the MARS web bridge, which pulls in these modules.
+COPY scripts/http-body.mjs /opt/agent-canvas/http-body.mjs
+COPY scripts/mars-web-bridge.mjs /opt/agent-canvas/mars-web-bridge.mjs
+COPY scripts/mars-tunnel-bridge.mjs /opt/agent-canvas/mars-tunnel-bridge.mjs
+COPY scripts/mars-api.mjs /opt/agent-canvas/mars-api.mjs
+COPY scripts/mars-credentials.mjs /opt/agent-canvas/mars-credentials.mjs
+COPY scripts/mars-secret-store.mjs /opt/agent-canvas/mars-secret-store.mjs
+COPY scripts/mars-oauth.mjs /opt/agent-canvas/mars-oauth.mjs
+COPY scripts/mars-session.mjs /opt/agent-canvas/mars-session.mjs
+COPY scripts/tunnel-client.mjs /opt/agent-canvas/tunnel-client.mjs
+COPY scripts/tunnel-registry.mjs /opt/agent-canvas/tunnel-registry.mjs
+COPY --from=frontend-build /build/node_modules/ws /opt/agent-canvas/node_modules/ws
 COPY --from=frontend-build /build/node_modules/httpxy /opt/agent-canvas/node_modules/httpxy
 COPY --from=frontend-build /build/node_modules/sirv /opt/agent-canvas/node_modules/sirv
 COPY --from=frontend-build /build/node_modules/@polka /opt/agent-canvas/node_modules/@polka
 COPY --from=frontend-build /build/node_modules/mrmime /opt/agent-canvas/node_modules/mrmime
 COPY --from=frontend-build /build/node_modules/totalist /opt/agent-canvas/node_modules/totalist
+# The agent-server reads public skills from the package the frontend bundles
+# (EXTENSIONS_PATH in entrypoint.sh) instead of cloning the extensions repo.
+COPY --from=frontend-build /build/node_modules/@openhands/extensions /opt/agent-canvas/node_modules/@openhands/extensions
 
 # Copy the runtime-services-info builder (entrypoint.sh runs it as a CLI to
 # emit the agent's <RUNTIME_SERVICES> block; same builder the dev stack uses).

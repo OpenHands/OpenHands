@@ -88,7 +88,7 @@ const NON_USER_FACING = [
   /^src\/dev\//,
   // Build and i18n tooling under scripts/; the launchers there are F26's.
   /^scripts\/[^/]+\.cjs$/,
-  /^scripts\/(stryker-diff|generate-icons|brand-dev-electron)\.mjs$/,
+  /^scripts\/(stryker-diff|generate-icons|brand-dev-electron|check-sdk-version-sync)\.mjs$/,
   /\.test\.[cm]?[jt]sx?$/,
   /^(README|CHANGELOG|AGENTS|MAINTAINERS)[^/]*\.md$/,
   /^\.[^/]+$/,

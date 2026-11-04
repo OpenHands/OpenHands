@@ -32,13 +32,6 @@ export function normalizePastedFile(file: File): File {
   });
 }
 
-/** Matches names assigned by {@link normalizePastedFile} for clipboard screenshots. */
-export const PASTED_CLIPBOARD_IMAGE_NAME = /^pasted-image-\d+\.[a-z0-9]+$/i;
-
-export function isPastedClipboardImage(file: File): boolean {
-  return PASTED_CLIPBOARD_IMAGE_NAME.test(file.name);
-}
-
 export function partitionImagesForUpload(
   images: File[],
   markedUploadAsFileNames: readonly string[],

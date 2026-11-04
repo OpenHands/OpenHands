@@ -21,6 +21,7 @@ interface SkillCardProps {
   enabled: boolean;
   onOpen: () => void;
   onToggle: (enabled: boolean) => void;
+  isToggleDisabled?: boolean;
 }
 
 export function SkillCard({
@@ -28,6 +29,7 @@ export function SkillCard({
   enabled,
   onOpen,
   onToggle,
+  isToggleDisabled = false,
 }: SkillCardProps) {
   const { t } = useTranslation("openhands");
   const [sourceCopied, setSourceCopied] = React.useState(false);
@@ -122,6 +124,7 @@ export function SkillCard({
               testId={`skill-toggle-${skill.name}`}
               isSelected={enabled}
               onToggle={onToggle}
+              isDisabled={isToggleDisabled}
               disableTooltipKey={I18nKey.COMMON$DISABLE}
             />
           </header>
