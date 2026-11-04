@@ -76,7 +76,7 @@ jobs:
       - name: Set up Node.js with npm cache
         uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: "24.22.1"
           cache: npm
 
       - name: Install dependencies
@@ -158,7 +158,7 @@ jobs:
       - name: Set up Node.js with npm cache
         uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: "24.22.1"
           cache: npm
 
       - name: Install dependencies
