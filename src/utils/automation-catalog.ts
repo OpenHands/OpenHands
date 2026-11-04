@@ -467,12 +467,16 @@ export function getAutomationTemplateOverview(
 ): { description: string; diagram: string | null } | null {
   const entry = getAutomationTemplateEntry(automation);
   if (!entry) return null;
-  // `diagram` is newer than some catalog releases, so it is read guarded.
+  return { description: entry.description, diagram: getEntryDiagram(entry) };
+}
+
+/**
+ * A catalog entry's Mermaid diagram, or null. The field is newer than some
+ * catalog releases and is published data, so it is read guarded.
+ */
+export function getEntryDiagram(entry: object): string | null {
   const { diagram } = entry as { diagram?: unknown };
-  return {
-    description: entry.description,
-    diagram: typeof diagram === "string" && diagram.length > 0 ? diagram : null,
-  };
+  return typeof diagram === "string" && diagram.length > 0 ? diagram : null;
 }
 
 /**

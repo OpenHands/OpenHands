@@ -21,6 +21,10 @@ import { useSetupPreflight } from "#/hooks/use-manifest-preflight";
 import { useSetupAction } from "#/manifests/manifest-actions";
 import { MermaidDiagram } from "#/components/features/markdown/mermaid-diagram";
 import {
+  getEntryDiagram,
+  findAutomationCommand,
+} from "#/utils/automation-catalog";
+import {
   supportedActionKinds,
   supportedTriggerKinds,
 } from "#/manifests/manifest-capabilities";
@@ -49,7 +53,6 @@ import {
   type MappedManifestErrors,
 } from "#/manifests/manifest-error-map";
 import { automationDetailPath } from "#/manifests/automation-interface";
-import { findAutomationCommand } from "#/utils/automation-catalog";
 import type { GitRepository } from "#/types/git";
 import type { Provider } from "#/types/settings";
 import type {
@@ -115,6 +118,7 @@ export interface SetupDialogProps {
  */
 export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const { t } = useTranslation("openhands");
+  const diagram = getEntryDiagram(entry);
   const navigate = useNavigate();
 
   const capabilities = useSetupCapabilities(entry);
@@ -508,11 +512,11 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
           {!isLoading && !isUnsupported && currentStep === "form" && (
             <div className="flex flex-col gap-5">
               <p className="text-sm text-muted">{entry.description}</p>
-              {typeof entry.diagram === "string" && entry.diagram && (
+              {diagram && (
                 // The dialog scrolls, so the diagram keeps its full height
                 // instead of shrinking its labels to fit the default cap.
                 <MermaidDiagram
-                  source={entry.diagram}
+                  source={diagram}
                   fallback={null}
                   className="[&_svg]:max-h-none"
                 />
