@@ -78,6 +78,7 @@ interface AgentStatusScenario {
   taskStatus?: AppConversationStartTaskStatus;
   webSocketStatus?: WebSocketConnectionState;
   hasConnectedOnce?: boolean;
+  compact?: boolean;
 }
 
 function renderAgentStatus({
@@ -94,6 +95,7 @@ function renderAgentStatus({
   taskStatus,
   webSocketStatus = "OPEN",
   hasConnectedOnce = false,
+  compact,
 }: AgentStatusScenario = {}) {
   const handleResumeAgent = vi.fn();
   const handleStop = vi.fn();
@@ -135,6 +137,7 @@ function renderAgentStatus({
           handleResumeAgent={handleResumeAgent}
           handleStop={handleStop}
           isPausing={isPausing}
+          compact={compact}
         />
       </ChatProgressContext.Provider>
     </NavigationProvider>,
@@ -169,6 +172,20 @@ describe("AgentStatus", () => {
       expect(screen.queryByTestId("play-button")).not.toBeInTheDocument();
     },
   );
+
+  it("keeps Stop usable and the label for screen readers when compact", () => {
+    const { container, handleStop } = renderAgentStatus({
+      compact: true,
+      agentState: AgentState.RUNNING,
+      executionStatus: ExecutionStatus.RUNNING,
+    });
+
+    const stop = screen.getByRole("button", { name: I18nKey.BUTTON$STOP });
+    expect(container.querySelector("span[title]")).toHaveClass("sr-only");
+    fireEvent.click(stop);
+
+    expect(handleStop).toHaveBeenCalledOnce();
+  });
 
   it("keeps Stop accessible when the conversation owns progress text", () => {
     const { handleStop } = renderAgentStatus({

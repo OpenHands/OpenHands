@@ -87,6 +87,37 @@ export function getTemplateIntegrationIds(
   return ids;
 }
 
+/** The integration whose logo stands for a built-in provider of another name. */
+const BUILT_IN_LOGO_IDS: Readonly<Record<string, string>> = {
+  bitbucket_data_center: "bitbucket",
+  jira_dc: "jira",
+};
+
+/**
+ * The integration catalog id whose logo stands for a provider name, such as
+ * a built-in integration or an automation's event source.
+ */
+export function getIntegrationLogoId(name: string): string {
+  return BUILT_IN_LOGO_IDS[name] ?? name;
+}
+
+/**
+ * The integrations whose logos stand for a template on its card: the ones it
+ * is about, then the built-in integrations it requires. Templates that use
+ * the connected git account declare no integration and are recognised by
+ * their repository picker; the Data Center templates only by their built-ins.
+ */
+export function getTemplateLogoIds(
+  automation: RecommendedAutomation,
+): string[] {
+  const ids = getTemplateIntegrationIds(automation);
+  for (const name of getRequiredBuiltInIntegrations(automation)) {
+    const id = getIntegrationLogoId(name);
+    if (!ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
 export type TemplateTriggerKind = AutomationTriggerKind;
 
 const TEMPLATE_TRIGGER_KINDS: readonly TemplateTriggerKind[] = [
@@ -159,16 +190,6 @@ export const BUILT_IN_INTEGRATION_NAMES: Readonly<Record<string, string>> = {
   linear: "Linear",
   slack: "Slack",
 };
-
-/** Built-in integrations, by provider name, as one localized phrase. */
-export function formatBuiltInIntegrations(
-  ids: readonly string[],
-  language: string,
-): string {
-  return new Intl.ListFormat(language, { type: "conjunction" }).format(
-    ids.map((id) => BUILT_IN_INTEGRATION_NAMES[id] ?? id),
-  );
-}
 
 /** What the active backend says about the integrations built into it. */
 export interface InstanceIntegrations {

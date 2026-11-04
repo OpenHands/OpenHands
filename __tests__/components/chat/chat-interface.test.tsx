@@ -1755,6 +1755,60 @@ describe("ChatInterface - session connection handoff", () => {
     expect(screen.getByTestId("event-group-toggle")).toBeVisible();
   });
 
+  it("shows empty-chat suggestions once a started session is connected with no history", () => {
+    const { backend, orgId } = getActiveBackend();
+    const key = sessionActivityKey(backend.id, orgId, "test-conversation-id");
+    const activity = useSessionActivityStore.getState();
+    activity.begin(key, "initialize");
+    activity.observe(key, "READY");
+    activity.complete(
+      key,
+      useSessionActivityStore.getState().entries[key][0].id,
+    );
+    vi.spyOn(conversationWebSocket, "useConversationWebSocket").mockReturnValue(
+      {
+        connectionState: "OPEN",
+        mainConnectionState: "OPEN",
+        recoveryState: "idle",
+        isLoadingHistory: false,
+        hasConnectedOnce: true,
+        sendMessage: vi.fn(),
+        reconnect: vi.fn(),
+      },
+    );
+    renderWithProviders(
+      <MemoryRouter>
+        <ChatInterface />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("chat-suggestions")).toBeInTheDocument();
+    expect(screen.getByTestId("event-group-toggle")).toBeVisible();
+  });
+
+  it("keeps empty-chat suggestions hidden while a started session is still pending", () => {
+    const { backend, orgId } = getActiveBackend();
+    const key = sessionActivityKey(backend.id, orgId, "test-conversation-id");
+    const activity = useSessionActivityStore.getState();
+    activity.begin(key, "initialize");
+    vi.spyOn(conversationWebSocket, "useConversationWebSocket").mockReturnValue(
+      {
+        connectionState: "OPEN",
+        mainConnectionState: "OPEN",
+        recoveryState: "idle",
+        isLoadingHistory: false,
+        hasConnectedOnce: true,
+        sendMessage: vi.fn(),
+        reconnect: vi.fn(),
+      },
+    );
+    renderWithProviders(
+      <MemoryRouter>
+        <ChatInterface />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
+  });
+
   it.each(["initialize", "resume"] as const)(
     "keeps %s, connecting and message delivery in one group",
     (kind) => {

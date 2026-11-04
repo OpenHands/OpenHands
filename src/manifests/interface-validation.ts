@@ -75,6 +75,7 @@ const OPTIONAL_PLAIN_ENDPOINT_NAMES = [
   "createBundle",
   "uploads",
   "tags",
+  "webhooks",
 ] as const;
 const ID_ENDPOINT_NAMES = ["detail", "dispatch", "runs", "tarball"] as const;
 
@@ -144,7 +145,11 @@ function checkRoutes(
   mounted: InterfaceRoutes,
 ): void {
   if (!check.record(routes, "routes")) return;
-  check.closed(routes, ["list", "setup", "detail", "templates"], "routes");
+  check.closed(
+    routes,
+    ["list", "setup", "detail", "templates", "events"],
+    "routes",
+  );
 
   // The host serves what it has registrations for, so a declared route must be
   // exactly the mounted shape — the manifest owns link construction, not the
@@ -154,17 +159,16 @@ function checkRoutes(
       check.fail(`routes.${name}`, `must be "${mounted[name]}"`);
     }
   });
-  if (
-    routes.templates !== undefined &&
-    routes.templates !== mounted.templates
-  ) {
-    check.fail(
-      "routes.templates",
-      mounted.templates === undefined
-        ? "is not a route this host mounts"
-        : `must be "${mounted.templates}"`,
-    );
-  }
+  (["templates", "events"] as const).forEach((name) => {
+    if (routes[name] !== undefined && routes[name] !== mounted[name]) {
+      check.fail(
+        `routes.${name}`,
+        mounted[name] === undefined
+          ? "is not a route this host mounts"
+          : `must be "${mounted[name]}"`,
+      );
+    }
+  });
 }
 
 function checkSubPages(check: InterfaceChecker, subPages: unknown): void {
@@ -231,7 +235,11 @@ function checkNavigation(check: InterfaceChecker, navigation: unknown): void {
 
 function checkPages(check: InterfaceChecker, pages: unknown): void {
   if (!check.record(pages, "pages")) return;
-  check.closed(pages, ["list", "detail", "edit", "templates"], "pages");
+  check.closed(
+    pages,
+    ["list", "detail", "edit", "templates", "events"],
+    "pages",
+  );
 
   if (check.record(pages.list, "pages.list")) {
     check.closed(
@@ -263,7 +271,10 @@ function checkPages(check: InterfaceChecker, pages: unknown): void {
     check.copy(pages.edit.title, "pages.edit.title");
   }
   if (pages.templates !== undefined) {
-    checkTemplatesPage(check, pages.templates);
+    checkPageIdentity(check, pages.templates, "pages.templates");
+  }
+  if (pages.events !== undefined) {
+    checkPageIdentity(check, pages.events, "pages.events");
   }
 }
 
@@ -480,12 +491,15 @@ function checkInsights(check: InterfaceChecker, insights: unknown): void {
   );
 }
 
-function checkTemplatesPage(check: InterfaceChecker, templates: unknown): void {
-  const path = "pages.templates";
-  if (!check.record(templates, path)) return;
-  check.closed(templates, ["title", "description"], path);
-  check.copy(templates.title, `${path}.title`);
-  check.copy(templates.description, `${path}.description`);
+function checkPageIdentity(
+  check: InterfaceChecker,
+  value: unknown,
+  path: string,
+): void {
+  if (!check.record(value, path)) return;
+  check.closed(value, ["title", "description"], path);
+  check.copy(value.title, `${path}.title`);
+  check.copy(value.description, `${path}.description`);
 }
 
 /**
@@ -773,6 +787,29 @@ export function validateInterfaceManifest(
   );
 
   checkSubPageGroup(check, candidate);
+  const routes = isRecord(candidate.routes) ? candidate.routes : {};
+  const pages = isRecord(candidate.pages) ? candidate.pages : {};
+  const navigation = isRecord(candidate.navigation) ? candidate.navigation : {};
+  const endpoints = isRecord(candidate.endpoints) ? candidate.endpoints : {};
+  const hasEventsNav =
+    Array.isArray(navigation.subPages) &&
+    navigation.subPages.some(
+      (item: unknown) => isRecord(item) && item.page === "events",
+    );
+  if (
+    [
+      routes.events !== undefined,
+      pages.events !== undefined,
+      endpoints.webhooks !== undefined,
+      hasEventsNav,
+    ].some(Boolean) &&
+    !(routes.events && pages.events && endpoints.webhooks && hasEventsNav)
+  ) {
+    check.fail(
+      "pages.events",
+      "events route, page, endpoint and navigation must be declared together",
+    );
+  }
 
   return { valid: check.errors.length === 0, errors: check.errors };
 }
