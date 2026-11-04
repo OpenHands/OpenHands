@@ -94,6 +94,14 @@ const BUILT_IN_LOGO_IDS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * The integration catalog id whose logo stands for a provider name, such as
+ * a built-in integration or an automation's event source.
+ */
+export function getIntegrationLogoId(name: string): string {
+  return BUILT_IN_LOGO_IDS[name] ?? name;
+}
+
+/**
  * The integrations whose logos stand for a template on its card: the ones it
  * is about, then the built-in integrations it requires. Templates that use
  * the connected git account declare no integration and are recognised by
@@ -104,7 +112,7 @@ export function getTemplateLogoIds(
 ): string[] {
   const ids = getTemplateIntegrationIds(automation);
   for (const name of getRequiredBuiltInIntegrations(automation)) {
-    const id = BUILT_IN_LOGO_IDS[name] ?? name;
+    const id = getIntegrationLogoId(name);
     if (!ids.includes(id)) ids.push(id);
   }
   return ids;
