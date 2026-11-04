@@ -23,18 +23,15 @@ function makeField(
 describe("coerceFieldValue", () => {
   describe("llm.base_url validation (#15778)", () => {
     it("accepts a valid https URL", () => {
-      expect(
-        coerceFieldValue(
-          makeField(),
-          "https://api.openai.com/v1",
-        ),
-      ).toBe("https://api.openai.com/v1");
+      expect(coerceFieldValue(makeField(), "https://api.openai.com/v1")).toBe(
+        "https://api.openai.com/v1",
+      );
     });
 
     it("accepts a valid http URL", () => {
-      expect(
-        coerceFieldValue(makeField(), "http://localhost:11434"),
-      ).toBe("http://localhost:11434");
+      expect(coerceFieldValue(makeField(), "http://localhost:11434")).toBe(
+        "http://localhost:11434",
+      );
     });
 
     it("treats an empty value as unset", () => {
@@ -42,15 +39,15 @@ describe("coerceFieldValue", () => {
     });
 
     it("rejects a non-URL string", () => {
-      expect(() =>
-        coerceFieldValue(makeField(), "not-a-url"),
-      ).toThrow(/valid http\(s\) URL/);
+      expect(() => coerceFieldValue(makeField(), "not-a-url")).toThrow(
+        /valid http\(s\) URL/,
+      );
     });
 
     it("rejects a URL with an unsupported protocol", () => {
-      expect(() =>
-        coerceFieldValue(makeField(), "ftp://example.com"),
-      ).toThrow(/valid http\(s\) URL/);
+      expect(() => coerceFieldValue(makeField(), "ftp://example.com")).toThrow(
+        /valid http\(s\) URL/,
+      );
     });
   });
 });
