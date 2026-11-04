@@ -49,6 +49,7 @@ import AutomationService from "#/api/automation-service/automation-service.api";
 import type { Automation } from "#/types/automation";
 import { isDraftAutomation, isKeepAliveForced } from "#/utils/automation-state";
 import { getAutomationTemplateOverview } from "#/utils/automation-catalog";
+import { buildAutomationFlowDiagram } from "#/utils/automation-flow-diagram";
 import {
   getAutomationExportFilename,
   serializeAutomation,
@@ -306,15 +307,23 @@ export default function AutomationDetail() {
             canEdit={isOwner && !isDraft}
           />
           <DisabledReasonBanner automation={automation} />
+          {/* Own description, else the template's, else a diagram built
+              from the automation's settings, so every automation has one. */}
           {automation.description ? (
             <DescriptionSection description={automation.description} />
+          ) : templateOverview ? (
+            <DescriptionSection
+              description={templateOverview.description}
+              diagram={
+                templateOverview.diagram ??
+                buildAutomationFlowDiagram(automation, t)
+              }
+            />
           ) : (
-            templateOverview && (
-              <DescriptionSection
-                description={templateOverview.description}
-                diagram={templateOverview.diagram}
-              />
-            )
+            <DescriptionSection
+              title={t(I18nKey.AUTOMATIONS$DETAIL$HOW_IT_RUNS)}
+              diagram={buildAutomationFlowDiagram(automation, t)}
+            />
           )}
           {automation.prompt ? (
             <PromptSection prompt={automation.prompt} />

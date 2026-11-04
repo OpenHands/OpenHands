@@ -75,6 +75,15 @@ const detailMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 
+const mermaidMock = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  parse: vi.fn().mockResolvedValue({ diagramType: "flowchart" }),
+  render: vi
+    .fn()
+    .mockResolvedValue({ svg: '<svg data-testid="flow-diagram-svg"></svg>' }),
+}));
+vi.mock("mermaid", () => ({ default: mermaidMock }));
+
 vi.mock("#/hooks/mutation/use-create-conversation", () => ({
   useCreateConversation: () => ({
     mutate: detailMocks.createConversationMutate,
@@ -386,17 +395,19 @@ describe("AutomationDetail — description", () => {
     expect(content).not.toHaveTextContent(templateEntry.description);
   });
 
-  it("shows no description without one or a template", async () => {
+  it("draws how it runs when there is no description or template", async () => {
     // Act
     renderDetail();
 
     // Assert
     expect(
-      await screen.findByText("Test Automation", {}, LOAD),
+      await screen.findByText(I18nKey.AUTOMATIONS$DETAIL$HOW_IT_RUNS, {}, LOAD),
     ).toBeInTheDocument();
+    // Earlier tests may have drawn this automation already; rendered SVGs
+    // are cached, so assert what is shown rather than the Mermaid call.
     expect(
-      screen.queryByTestId("automation-description-content"),
-    ).not.toBeInTheDocument();
+      await screen.findByTestId("mermaid-diagram", {}, LOAD),
+    ).toContainElement(screen.getByTestId("flow-diagram-svg"));
   });
 });
 
