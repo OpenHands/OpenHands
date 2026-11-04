@@ -619,6 +619,7 @@ describe("LaunchRoute", () => {
     const PREFLIGHT_RESPONSE = {
       resolved_ref: "abc123",
       manifest: {
+        name: "News Digest",
         description: "A test automation.",
         config_schema: {
           properties: {
@@ -695,6 +696,7 @@ describe("LaunchRoute", () => {
       });
 
       const call = mockCreate.mock.calls[0][0];
+      expect(call.name).toBe("News Digest");
       expect(call.plugin.source).toBe("github:owner/news-digest");
       expect(call.config).toEqual({ feeds: "https://example.com/rss" });
       expect(call.trigger).toEqual({
@@ -702,6 +704,41 @@ describe("LaunchRoute", () => {
         schedule: "0 9 * * *",
         timezone: "UTC",
       });
+    });
+
+    it("falls back to a repo-derived name when the manifest has no name", async () => {
+      const user = userEvent.setup();
+      mockPreflight.mockResolvedValue({
+        ...PREFLIGHT_RESPONSE,
+        manifest: { ...PREFLIGHT_RESPONSE.manifest, name: undefined },
+      });
+      const plugins = [
+        {
+          source: "github:owner/news-digest",
+          ref: "main",
+          parameters: { feeds: "https://example.com/rss" },
+        },
+      ];
+
+      renderLaunchRoute(
+        `?mode=automation&plugins=${btoa(JSON.stringify(plugins))}`,
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("plugin-trigger-section"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("trust-checkbox"));
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      await waitFor(() => {
+        expect(mockCreate).toHaveBeenCalledTimes(1);
+      });
+
+      const call = mockCreate.mock.calls[0][0];
+      expect(call.name).toBe("news-digest (owner)");
     });
 
     it("navigates to the automation detail page on success", async () => {

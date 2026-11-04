@@ -192,6 +192,7 @@ export default function LaunchRoute() {
   // request still works (the service applies manifest defaults itself).
   const [preflight, setPreflight] = React.useState<
     | {
+        name?: string | null;
         description?: string | null;
         resolvedRef?: string | null;
         fields: ReturnType<typeof configSchemaToFormFields>;
@@ -217,6 +218,7 @@ export default function LaunchRoute() {
       .then((response) => {
         if (cancelled) return;
         setPreflight({
+          name: response.manifest.name ?? null,
           description: response.manifest.description ?? null,
           resolvedRef: response.resolved_ref ?? null,
           fields: configSchemaToFormFields(response),
@@ -251,10 +253,13 @@ export default function LaunchRoute() {
   };
 
   /**
-   * Automation name derived from the plugin source, e.g.
-   * `github:org/recipe` -> `recipe (org)`.
+   * Automation name: prefer the manifest's `name` (e.g. "Daily dad jokes")
+   * from the preflight response. Fall back to a repo-derived string
+   * (`github:org/recipe` -> `recipe (org)`) when preflight is unavailable
+   * (backend predates the endpoint) or the manifest carries no name.
    */
   const automationNameForPlugin = (plugin: PluginSpec): string => {
+    if (preflight?.name) return preflight.name;
     const source = plugin.source
       .replace(/^github:/, "")
       .replace(/^https?:\/\/github\.com\//, "")
