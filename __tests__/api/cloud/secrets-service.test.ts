@@ -41,8 +41,32 @@ afterEach(() => {
 });
 
 describe("SecretsService against cloud backend", () => {
-  it("paginates getSecrets directly and returns the merged list", async () => {
+  it("loads getSecrets from the combined agent profile options endpoint", async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockJsonResponse({
+        secrets: [
+          { name: "ALPHA", description: "first", scope: "personal" },
+          { name: "BETA", description: "second", scope: "organization" },
+        ],
+      }),
+    );
+
+    const secrets = await SecretsService.getSecrets();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const [url, init] = getFetchCall(fetchMock, 0);
+    expect(init).toMatchObject({
+      method: "GET",
+      headers: { Authorization: "Bearer bearer-token" },
+    });
+    expect(url).toBe("https://app.all-hands.dev/api/v1/agent-profile/options");
+    expect(secrets.map((s) => s.name)).toEqual(["ALPHA", "BETA"]);
+  });
+
+  it("falls back to paginated getSecrets when options are unavailable", async () => {
     fetchMock
+      .mockRejectedValueOnce(new Error("not found"))
       .mockResolvedValueOnce(
         mockJsonResponse({
           items: [
@@ -61,9 +85,9 @@ describe("SecretsService against cloud backend", () => {
 
     const secrets = await SecretsService.getSecrets();
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
 
-    const [firstUrl, firstInit] = getFetchCall(fetchMock, 0);
+    const [firstUrl, firstInit] = getFetchCall(fetchMock, 1);
     expect(firstInit).toMatchObject({
       method: "GET",
       headers: { Authorization: "Bearer bearer-token" },
@@ -73,7 +97,7 @@ describe("SecretsService against cloud backend", () => {
     );
     expect(firstUrl).not.toContain("page_id=");
 
-    const [secondUrl] = getFetchCall(fetchMock, 1);
+    const [secondUrl] = getFetchCall(fetchMock, 2);
     expect(secondUrl).toContain("page_id=BETA");
 
     expect(secrets.map((s) => s.name)).toEqual(["ALPHA", "BETA", "GAMMA"]);
