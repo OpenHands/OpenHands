@@ -46,7 +46,8 @@ describe("useSelectConversationTab", () => {
         localStorage.getItem(`conversation-state-${TEST_CONVERSATION_ID}`)!,
       );
       expect(storedState.selectedTab).toBe("files");
-      expect(storedState.rightPanelShown).toBe(true);
+      // #19280: the drawer open/closed state no longer mirrors into the blob.
+      expect("rightPanelShown" in storedState).toBe(false);
     });
 
     it("should close panel when clicking the same active tab", () => {
@@ -68,10 +69,10 @@ describe("useSelectConversationTab", () => {
       expect(useConversationStore.getState().hasRightPanelToggled).toBe(false);
       expect(useConversationStore.getState().isRightPanelShown).toBe(false);
 
-      const storedState = JSON.parse(
-        localStorage.getItem(`conversation-state-${TEST_CONVERSATION_ID}`)!,
-      );
-      expect(storedState.rightPanelShown).toBe(false);
+      // #19280: closing the panel is session-only — no blob is written.
+      expect(
+        localStorage.getItem(`conversation-state-${TEST_CONVERSATION_ID}`),
+      ).toBeNull();
     });
 
     it("should switch to different tab when panel is already open", () => {
