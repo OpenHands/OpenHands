@@ -322,7 +322,7 @@ describe("vite library build", () => {
       "--automation-setup-cron-width": "14rem",
       "--automation-setup-datetime-width": "15rem",
       "--automation-setup-time-width": "9.5rem",
-      "--automation-setup-timezone-width": "16rem",
+      "--automation-setup-timezone-width": "12.5rem",
     };
     expect(declarations(scheduleRow)).toMatchObject(scheduleWidths);
     for (const property of Object.keys(scheduleWidths)) {

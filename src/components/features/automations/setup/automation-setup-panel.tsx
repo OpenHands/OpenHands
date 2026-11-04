@@ -2009,7 +2009,7 @@ export function AutomationSetupPanel({
     !draftsSupported || (serverDraft !== null && !isDraftDirty);
 
   const renderToolbarActions = () => (
-    <div className="flex shrink-0 items-center gap-1.5">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       {saveStateText ? (
         <span
           data-testid="automation-setup-save-state"
@@ -3027,7 +3027,7 @@ function CustomDetailsReveal({
 
 function frequencyTabClassName(selected: boolean) {
   return cn(
-    "inline-flex h-full shrink-0 items-center rounded-md px-1.5 text-sm",
+    "inline-flex h-8 shrink-0 items-center rounded-md px-1.5 text-sm",
     formControlTransitionClassName,
     selected
       ? cn(
@@ -3114,7 +3114,9 @@ function ScheduleFields({
 
   return (
     <section className="flex flex-col gap-2.5">
-      <div className="flex min-w-0 items-center gap-2">
+      {/* Both rows wrap rather than scroll: the tabs drop under the label,
+          and the time, day and timezone controls drop onto their own lines. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <span className="flex shrink-0 items-center gap-2 text-sm">
           <span>{t(I18nKey.AUTOMATION_SETUP$FREQUENCY)}</span>
           {updatedSuffixes.frequency && (
@@ -3127,9 +3129,8 @@ function ScheduleFields({
           role="radiogroup"
           aria-label={t(I18nKey.AUTOMATION_SETUP$FREQUENCY)}
           className={cn(
-            formControlHeightClassName,
             formControlRadiusClassName,
-            "inline-flex max-w-full min-w-0 items-center gap-0.5 overflow-x-auto bg-surface-raised p-0.5",
+            "inline-flex min-h-9 max-w-full min-w-0 flex-wrap items-center gap-0.5 bg-surface-raised p-0.5",
             streamingHighlightClassName(streamingField === "frequency"),
           )}
         >
@@ -3150,10 +3151,10 @@ function ScheduleFields({
       </div>
       <div
         data-testid="automation-setup-at-row"
-        className="automation-setup-schedule-row flex w-full min-w-0 items-center gap-4 overflow-x-auto"
+        className="automation-setup-schedule-row flex w-full min-w-0 flex-wrap items-center gap-x-4 gap-y-2.5"
       >
         {frequency === "custom" ? (
-          <label className="flex shrink-0 items-center gap-2.5">
+          <label className="flex min-w-0 max-w-full items-center gap-2.5">
             <span className="shrink-0 text-sm text-content">
               {t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
             </span>
@@ -3163,13 +3164,13 @@ function ScheduleFields({
               onChange={(event) => setCustomSchedule(event.target.value)}
               className={cn(
                 formControlFieldClassName,
-                "w-(--automation-setup-cron-width)",
+                "w-(--automation-setup-cron-width) min-w-0 max-w-full",
               )}
             />
           </label>
         ) : null}
         {frequency === "once" ? (
-          <div className="flex shrink-0 items-center gap-2.5">
+          <div className="flex min-w-0 max-w-full items-center gap-2.5">
             <span className="shrink-0 text-sm text-content">
               {t(I18nKey.AUTOMATION_SETUP$AT)}
             </span>
@@ -3181,14 +3182,49 @@ function ScheduleFields({
               onChange={(event) => setScheduleDateTime(event.target.value)}
               className={cn(
                 formControlFieldClassName,
-                "w-(--automation-setup-datetime-width)",
+                "w-(--automation-setup-datetime-width) min-w-0 max-w-full",
               )}
             />
           </div>
         ) : null}
+        {/* Weekly reads "Friday at 5:00 PM", so the day comes first. */}
+        {frequency === "weekly" ? (
+          <div
+            className={cn(
+              "relative w-fit shrink-0",
+              streamingHighlightClassName(streamingField === "weekday"),
+            )}
+          >
+            <select
+              aria-label={t(I18nKey.AUTOMATIONS$WEEKDAY)}
+              data-testid="automation-setup-weekday"
+              value={weekday}
+              onChange={(event) => setWeekday(event.target.value)}
+              className={cn(
+                formControlFieldClassName,
+                "w-auto appearance-none pr-8",
+              )}
+            >
+              {WEEKDAY_KEYS.map((key, index) => (
+                <option key={key} value={String(index)}>
+                  {t(key)}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+              aria-hidden
+            />
+          </div>
+        ) : null}
         {showTime ? (
-          <div className="flex shrink-0 items-center gap-2.5">
-            <span className="shrink-0 text-sm text-content">
+          <div className="flex min-w-0 max-w-full items-center gap-2.5">
+            <span
+              className={cn(
+                "shrink-0 text-sm text-content",
+                frequency === "weekly" && "lowercase",
+              )}
+            >
               {t(I18nKey.AUTOMATION_SETUP$AT)}
             </span>
             <input
@@ -3199,43 +3235,9 @@ function ScheduleFields({
               onChange={(event) => setTime(event.target.value)}
               className={cn(
                 formControlFieldClassName,
-                "w-(--automation-setup-time-width)",
+                "w-(--automation-setup-time-width) min-w-0 max-w-full",
               )}
             />
-          </div>
-        ) : null}
-        {frequency === "weekly" ? (
-          <div className="flex shrink-0 items-center gap-2.5">
-            <span className="shrink-0 text-sm text-content">
-              {t(I18nKey.AUTOMATION_SETUP$ON)}
-            </span>
-            <div
-              className={cn(
-                "relative w-fit shrink-0",
-                streamingHighlightClassName(streamingField === "weekday"),
-              )}
-            >
-              <select
-                aria-label={t(I18nKey.AUTOMATIONS$WEEKDAY)}
-                data-testid="automation-setup-weekday"
-                value={weekday}
-                onChange={(event) => setWeekday(event.target.value)}
-                className={cn(
-                  formControlFieldClassName,
-                  "w-auto appearance-none pr-8",
-                )}
-              >
-                {WEEKDAY_KEYS.map((key, index) => (
-                  <option key={key} value={String(index)}>
-                    {t(key)}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted"
-                aria-hidden
-              />
-            </div>
           </div>
         ) : null}
         <div
@@ -3243,7 +3245,7 @@ function ScheduleFields({
             streamingField === "timezone" ? "true" : undefined
           }
           className={cn(
-            "relative w-(--automation-setup-timezone-width) shrink-0",
+            "relative w-(--automation-setup-timezone-width) min-w-0 max-w-full",
             streamingHighlightClassName(streamingField === "timezone"),
           )}
         >

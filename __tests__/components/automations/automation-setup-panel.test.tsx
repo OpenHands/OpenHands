@@ -440,7 +440,7 @@ describe("AutomationSetupPanel", () => {
         scheduleWidth(
           screen.getByTestId("automation-setup-timezone").parentElement!,
         ),
-      ).toBe("16rem");
+      ).toBe("12.5rem");
       expect(
         getComputedStyle(screen.getByTestId("automation-setup-prompt-drawer"))
           .paddingTop,
@@ -1565,9 +1565,12 @@ describe("AutomationSetupPanel", () => {
     await user.click(screen.getByTestId("automation-setup-frequency-weekly"));
     const weekday = screen.getByTestId("automation-setup-weekday");
     expect(weekday).toHaveValue("1");
-    expect(weekday.parentElement?.parentElement).toHaveTextContent(
-      "AUTOMATION_SETUP$ON",
-    );
+    // Reads "Monday at 9:00": the day leads the time.
+    expect(
+      weekday.compareDocumentPosition(
+        screen.getByTestId("automation-setup-time"),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     await user.selectOptions(weekday, "3");
 
     await user.click(screen.getByTestId("automation-setup-test"));

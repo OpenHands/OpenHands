@@ -38699,24 +38699,6 @@
     "zh-TW": "At",
     "id": "Pada"
   },
-  "AUTOMATION_SETUP$ON": {
-    "ar": "في",
-    "ca": "El",
-    "de": "Am",
-    "en": "On",
-    "es": "El",
-    "fr": "Le",
-    "it": "Il",
-    "ja": "毎週",
-    "ko-KR": "매주",
-    "no": "På",
-    "pt": "Em",
-    "tr": "Her",
-    "uk": "У",
-    "zh-CN": "每",
-    "zh-TW": "每",
-    "id": "Pada"
-  },
   "AUTOMATION_SETUP$EVENT_SOURCE": {
     "ar": "Event source",
     "ca": "Event source",

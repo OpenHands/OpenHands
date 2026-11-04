@@ -59,7 +59,7 @@ export function AutomationPageHeader({
         <div
           ref={actionsRef}
           data-testid={testId ? `${testId}-actions` : undefined}
-          className="flex min-w-0 shrink-0 flex-wrap items-center gap-1.5"
+          className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5"
         >
           {children}
         </div>
