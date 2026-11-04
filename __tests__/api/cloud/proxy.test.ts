@@ -5,6 +5,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import { callCloudProxy } from "#/api/cloud/proxy";
+import { getOrganizationSuspension } from "#/api/cloud/organization-suspension-store";
 import type { Backend } from "#/api/backend-registry/types";
 
 const cloudPersonal: Backend = {
@@ -268,5 +269,58 @@ describe("callCloudProxy hostOverride routing", () => {
       Authorization: `Bearer ${cloudPersonal.apiKey}`,
       "X-Org-Id": "org-personal-uuid",
     });
+  });
+});
+
+describe("callCloudProxy organization suspension", () => {
+  it("does not flag the organization for a 403 that is not a suspension", async () => {
+    // Arrange
+    setRegisteredBackends([cookieCloud]);
+    setActiveSelection({ backendId: cookieCloud.id, orgId: "org-forbidden" });
+    fetchMock.mockResolvedValue(
+      mockJsonResponse({ detail: "Missing required permission: x" }, 403),
+    );
+
+    // Act
+    await expect(
+      callCloudProxy({
+        backend: cookieCloud,
+        method: "GET",
+        path: "/api/v1/settings",
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+
+    // Assert
+    expect(getOrganizationSuspension(cookieCloud.id, "org-forbidden")).toBe(
+      null,
+    );
+  });
+
+  it("flags the organization the request was sent for when the selection changes before it fails", async () => {
+    // Arrange
+    setRegisteredBackends([cookieCloud]);
+    setActiveSelection({ backendId: cookieCloud.id, orgId: "org-suspended" });
+    let respond: (response: Response) => void = () => {};
+    fetchMock.mockReturnValue(
+      new Promise<Response>((resolve) => {
+        respond = resolve;
+      }),
+    );
+    const request = callCloudProxy({
+      backend: cookieCloud,
+      method: "GET",
+      path: "/api/v1/settings",
+    });
+    setActiveSelection({ backendId: cookieCloud.id, orgId: "org-next" });
+
+    // Act
+    respond(mockJsonResponse({ detail: "Organization is suspended" }, 403));
+    await expect(request).rejects.toMatchObject({ status: 403 });
+
+    // Assert
+    expect(getOrganizationSuspension(cookieCloud.id, "org-suspended")).toBe(
+      "organization",
+    );
+    expect(getOrganizationSuspension(cookieCloud.id, "org-next")).toBe(null);
   });
 });

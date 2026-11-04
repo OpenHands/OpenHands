@@ -3,7 +3,7 @@ import { ExternalLink, Puzzle } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { isNoBackend } from "#/api/backend-registry/active-store";
-import { getLockedCloudHost } from "#/api/agent-server-config";
+import { cloudIntegrationsUrl } from "#/utils/cloud-integrations-url";
 import { cn } from "#/utils/utils";
 import {
   SIDEBAR_ICON_SLOT_CLASS,
@@ -13,10 +13,9 @@ import {
 } from "#/components/features/sidebar/sidebar-layout";
 
 /**
- * Renders only for cloud backends — local backends have no equivalent
- * hosted integrations settings page. Also hidden when the canvas is locked to
- * a Cloud host (SaaS / self-hosted OHE): the OHE settings shell behind
- * "All Cloud Settings" already exposes Integrations (OHE-3168).
+ * Renders only for cloud backends — local backends have no equivalent hosted
+ * integrations settings page. In locked-to-Cloud deployments this sits beside
+ * "All Cloud Settings" as a direct shortcut to the Cloud integrations page.
  */
 export function IntegrationsSettingsLink() {
   const { t } = useTranslation("openhands");
@@ -24,12 +23,8 @@ export function IntegrationsSettingsLink() {
   const { backend, orgId } = active;
 
   if (isNoBackend(backend) || backend.kind !== "cloud") return null;
-  if (getLockedCloudHost() !== null) return null;
 
-  // `org` is consumed by the cloud settings loader so the page opens on the
-  // org that is active here instead of the cloud's last-used org.
-  const orgQuery = orgId ? `?org=${encodeURIComponent(orgId)}` : "";
-  const integrationsUrl = `${backend.host.replace(/\/+$/, "")}/settings/integrations${orgQuery}`;
+  const integrationsUrl = cloudIntegrationsUrl(backend, orgId);
 
   return (
     <a

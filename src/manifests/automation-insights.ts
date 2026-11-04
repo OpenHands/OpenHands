@@ -22,10 +22,10 @@ import {
 } from "#/types/automation";
 import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import type {
+  DashboardCreatedByValue,
   DashboardSortValue,
   DashboardStatusValue,
   DashboardTriggerValue,
-  InterfaceListInsights,
   OverviewMetric,
 } from "./types";
 
@@ -36,19 +36,6 @@ export type AutomationHealth =
   | "disabled"
   | "never-run"
   | "unknown";
-
-/** Which caption of the manifest's `insights.health` block names each state. */
-export const HEALTH_LABEL_KEYS: Record<
-  AutomationHealth,
-  keyof InterfaceListInsights["health"]
-> = {
-  healthy: "healthy",
-  failing: "failing",
-  running: "running",
-  disabled: "disabled",
-  "never-run": "neverRun",
-  unknown: "checking",
-};
 
 export interface AutomationRunSummary {
   /** Lifetime run count, from the response — not the sample's length. */
@@ -179,6 +166,9 @@ export function matchesAutomationSearch(
   return (
     automation.name.toLowerCase().includes(q) ||
     (automation.prompt ?? "").toLowerCase().includes(q) ||
+    (automation.repositories ?? []).some(({ url }) =>
+      url.toLowerCase().includes(q),
+    ) ||
     automation.repository?.toLowerCase().includes(q) === true ||
     automation.model?.toLowerCase().includes(q) === true
   );
@@ -201,6 +191,17 @@ const TRIGGER_PREDICATES: Record<
   // one exact kind and everything else is a schedule.
   event: (automation) => automation.trigger.type === "event",
   schedule: (automation) => automation.trigger.type !== "event",
+};
+
+// The caller's id is non-null whenever these run; applyDashboardView skips the
+// creator check until identity resolves, so "me" is an exact match and
+// "others" is everything else, including creator-less automations.
+const CREATED_BY_PREDICATES: Record<
+  Exclude<DashboardCreatedByValue, "all">,
+  (automation: Automation, currentUserId: string) => boolean
+> = {
+  me: (automation, currentUserId) => automation.user_id === currentUserId,
+  others: (automation, currentUserId) => automation.user_id !== currentUserId,
 };
 
 function runCount(automation: Automation, byId: Summaries): number {
@@ -229,6 +230,10 @@ export interface DashboardViewState {
   search: string;
   status: DashboardStatusValue;
   trigger: DashboardTriggerValue;
+  createdBy: DashboardCreatedByValue;
+  currentUserId: string | null;
+  /** The selected tag, or null for automations with any tags or none. */
+  tag: string | null;
   sort: DashboardSortValue;
 }
 
@@ -254,6 +259,18 @@ export function applyDashboardView(
         view.trigger !== "all" &&
         !TRIGGER_PREDICATES[view.trigger](automation)
       ) {
+        return false;
+      }
+      // With no caller id (local backend, personal workspace, or /me
+      // loading), the creator filter is inert.
+      if (
+        view.currentUserId !== null &&
+        view.createdBy !== "all" &&
+        !CREATED_BY_PREDICATES[view.createdBy](automation, view.currentUserId)
+      ) {
+        return false;
+      }
+      if (view.tag !== null && !automation.tags?.includes(view.tag)) {
         return false;
       }
       return true;

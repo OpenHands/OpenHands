@@ -89,7 +89,6 @@ describe("custom-toast-handlers", () => {
             borderRadius: "var(--oh-radius)",
             maxWidth: "400px",
             wordBreak: "break-word",
-            color: "var(--oh-muted)",
           }),
         }),
       );
@@ -110,7 +109,6 @@ describe("custom-toast-handlers", () => {
             borderRadius: "var(--oh-radius)",
             maxWidth: "400px",
             wordBreak: "break-word",
-            color: "var(--oh-muted)",
           }),
         }),
       );

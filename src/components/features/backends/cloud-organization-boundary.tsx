@@ -2,6 +2,11 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { useAllCloudOrganizations } from "#/hooks/query/use-cloud-organizations";
+import {
+  getOrganizationSuspension,
+  subscribeOrganizationSuspension,
+  type OrganizationSuspension,
+} from "#/api/cloud/organization-suspension-store";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
@@ -17,6 +22,10 @@ export function CloudOrganizationBoundary({
   const isCloud = active.backend.kind === "cloud";
   const hasValidSelection =
     entry?.hasData && entry.orgs.some((org) => org.id === active.orgId);
+  const suspension = React.useSyncExternalStore(
+    subscribeOrganizationSuspension,
+    () => getOrganizationSuspension(active.backend.id, active.orgId),
+  );
 
   // Resolve membership before mounting consumers that send org-scoped requests.
   React.useEffect(() => {
@@ -29,6 +38,14 @@ export function CloudOrganizationBoundary({
       setActive(active.backend.id, target?.id ?? null);
     }
   }, [active, entry, hasValidSelection, isCloud, setActive]);
+
+  // The cloud refused the selected org; replace the app until the user
+  // switches, so org-scoped calls stop failing behind it.
+  if (isCloud && suspension) {
+    return (
+      <SuspendedOrganizationScreen entry={entry} suspension={suspension} />
+    );
+  }
 
   const canUseSavedSelection = active.orgId && entry?.isError && !entry.hasData;
   if (
@@ -46,7 +63,7 @@ export function CloudOrganizationBoundary({
     return <CloudOrganizationRecovery entry={entry} />;
   }
   return (
-    <div className="min-h-full flex items-center justify-center bg-base">
+    <div className="min-h-full flex items-center justify-center bg-canvas-base">
       <LoadingSpinner size="large" />
     </div>
   );
@@ -60,7 +77,7 @@ function CloudOrganizationRecovery({
   const { t } = useTranslation("openhands");
   const { active, backends, setActive } = useActiveBackendContext();
   return (
-    <div className="min-h-full flex flex-col items-center justify-center gap-4 bg-base px-6 text-contrast">
+    <div className="min-h-full flex flex-col items-center justify-center gap-4 bg-canvas-base px-6 text-contrast">
       <p role="alert">
         {t(
           entry.isError
@@ -80,7 +97,7 @@ function CloudOrganizationRecovery({
           aria-label={t(I18nKey.BACKEND$CHOOSER_TITLE)}
           value={active.backend.id}
           onChange={(event) => setActive(event.target.value, null)}
-          className="rounded border border-border bg-base px-3 py-2"
+          className="rounded border border-border bg-canvas-base px-3 py-2"
         >
           {backends.map((backend) => (
             <option key={backend.id} value={backend.id}>
@@ -88,6 +105,49 @@ function CloudOrganizationRecovery({
             </option>
           ))}
         </select>
+      )}
+    </div>
+  );
+}
+
+function SuspendedOrganizationScreen({
+  entry,
+  suspension,
+}: {
+  entry: ReturnType<typeof useAllCloudOrganizations>[string] | undefined;
+  suspension: OrganizationSuspension;
+}) {
+  const { t } = useTranslation("openhands");
+  const { active, setActive } = useActiveBackendContext();
+  const orgs = entry?.orgs ?? [];
+  const orgLabel = (org: (typeof orgs)[number]) =>
+    org.is_personal === true ? t(I18nKey.BACKEND$PERSONAL_WORKSPACE) : org.name;
+  const suspendedOrg = orgs.find((org) => org.id === active.orgId);
+  const otherOrgs = orgs.filter((org) => org.id !== active.orgId);
+  return (
+    <div className="min-h-full flex flex-col items-center justify-center gap-4 bg-canvas-base px-6 text-contrast">
+      <p role="alert" className="max-w-md text-center">
+        {t(
+          suspension === "organization"
+            ? I18nKey.BACKEND$ORGANIZATION_SUSPENDED
+            : I18nKey.BACKEND$MEMBERSHIP_SUSPENDED,
+          { name: suspendedOrg ? orgLabel(suspendedOrg) : "" },
+        )}
+      </p>
+      {otherOrgs.length > 0 && (
+        <>
+          <p>{t(I18nKey.BACKEND$SWITCH_WORKSPACE)}</p>
+          {otherOrgs.map((org) => (
+            <BrandButton
+              key={org.id}
+              type="button"
+              variant="secondary"
+              onClick={() => setActive(active.backend.id, org.id)}
+            >
+              {orgLabel(org)}
+            </BrandButton>
+          ))}
+        </>
       )}
     </div>
   );

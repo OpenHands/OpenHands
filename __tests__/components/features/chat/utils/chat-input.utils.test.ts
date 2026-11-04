@@ -7,8 +7,8 @@ import {
   focusContentEditableAtEnd,
   getClipboardFiles,
   getTextContent,
+  insertTextAtCaret,
   isContentEmpty,
-  isPastedClipboardImage,
   normalizePastedFile,
   partitionImagesForUpload,
 } from "#/components/features/chat/utils/chat-input.utils";
@@ -78,28 +78,6 @@ describe("normalizePastedFile", () => {
 
     expect(normalized.name).toBe(`pasted-image-1234.${extension}`);
     expect(normalized.lastModified).toBe(99);
-  });
-});
-
-describe("isPastedClipboardImage", () => {
-  it("returns true for normalized clipboard screenshot names", () => {
-    const file = new File(["x"], "pasted-image-1710000000000.png", {
-      type: "image/png",
-    });
-    expect(isPastedClipboardImage(file)).toBe(true);
-  });
-
-  it("returns false for images picked from the file dialog", () => {
-    const file = new File(["x"], "photo.png", { type: "image/png" });
-    expect(isPastedClipboardImage(file)).toBe(false);
-  });
-
-  it("matches normalized names case-insensitively", () => {
-    expect(
-      isPastedClipboardImage(
-        new File(["x"], "PASTED-IMAGE-1710000000000.WEBP"),
-      ),
-    ).toBe(true);
   });
 });
 
@@ -200,12 +178,6 @@ describe("module-initialized clipboard contracts", () => {
         fresh.normalizePastedFile(new File(["x"], "", { type })).name,
       ).toBe(`pasted-image-1234.${extension}`);
     }
-
-    const named = (name: string) =>
-      fresh.isPastedClipboardImage(new File(["x"], name));
-    expect(named("pasted-image-1710000000000.png")).toBe(true);
-    expect(named("prefix-pasted-image-1710000000000.png")).toBe(false);
-    expect(named("pasted-image-1710000000000.png.extra")).toBe(false);
 
     const editable = document.createElement("div");
     editable.innerText = "message";
@@ -343,5 +315,46 @@ describe("content-editable helpers", () => {
     vi.spyOn(window, "getSelection").mockReturnValue(null);
     focusContentEditableAtEnd(element);
     expect(focus).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("insertTextAtCaret", () => {
+  function setup(text: string, caretOffset?: number) {
+    const element = document.createElement("div");
+    element.textContent = text;
+    document.body.appendChild(element);
+    window.getSelection()!.removeAllRanges();
+    if (caretOffset !== undefined) {
+      const range = document.createRange();
+      range.setStart(element.firstChild!, caretOffset);
+      window.getSelection()!.addRange(range);
+    }
+    const execCommand = vi.fn();
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommand,
+    });
+    return { element, execCommand };
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(document, "execCommand");
+    document.body.replaceChildren();
+  });
+
+  it("inserts through the paste path, padding against adjacent words", () => {
+    const { element, execCommand } = setup("fix the bug", "fix the ".length);
+
+    insertTextAtCaret(element, "login");
+
+    expect(execCommand).toHaveBeenCalledWith("insertText", false, "login ");
+  });
+
+  it("adds a leading space after a word and appends when the caret is outside", () => {
+    const { element, execCommand } = setup("hello");
+
+    insertTextAtCaret(element, "world");
+
+    expect(execCommand).toHaveBeenCalledWith("insertText", false, " world");
   });
 });

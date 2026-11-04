@@ -30,10 +30,13 @@ export function PluginsToolbar({
   const { t } = useTranslation("openhands");
 
   return (
-    <div data-testid="plugins-toolbar" className="flex items-stretch gap-2">
+    <div
+      data-testid="plugins-toolbar"
+      className="flex flex-col items-stretch gap-2 md:flex-row"
+    >
       <div
         className={cn(
-          "relative flex flex-1 min-w-0 items-center",
+          "relative flex w-full min-w-0 flex-1 items-center",
           "rounded-lg border border-border bg-base-secondary",
           "focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
           "transition-colors",
@@ -70,7 +73,7 @@ export function PluginsToolbar({
 
       <div
         data-testid="plugins-status-filter"
-        className="flex shrink-0 items-center gap-1 rounded-lg border border-border bg-base-secondary p-1"
+        className="flex w-full flex-wrap items-center gap-1 rounded-lg border border-border bg-base-secondary p-1 md:w-auto md:shrink-0 md:flex-nowrap"
       >
         {STATUS_FILTERS.map((filter) => (
           <button

@@ -21,6 +21,7 @@ import AutomationDetail from "#/routes/automation-detail";
 import type { Backend } from "#/api/backend-registry/types";
 import { AutomationRunStatus } from "#/types/automation";
 import type { Automation, AutomationRunsResponse } from "#/types/automation";
+import { withPresetSources } from "#/utils/automation-preset-sources";
 import { packTarGzip } from "#/utils/tar-gzip";
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
@@ -30,6 +31,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     toggleAutomation: vi.fn(),
     deleteAutomation: vi.fn(),
     dispatchAutomation: vi.fn(),
+    updateAutomation: vi.fn(),
     fetchTarballBytes: vi.fn(),
     checkHealth: vi.fn(),
   },
@@ -39,6 +41,13 @@ vi.mock("#/api/profiles-service/profiles-service.api", () => ({
   default: {
     listProfiles: vi.fn(),
   },
+}));
+
+// Spy on the success toast; the test tree does not render a toaster.
+const displaySuccessToast = vi.hoisted(() => vi.fn());
+vi.mock("#/utils/custom-toast-handlers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/custom-toast-handlers")>()),
+  displaySuccessToast,
 }));
 
 // Mock permission hooks so cloud-backend tests don't need a real /me endpoint.
@@ -58,6 +67,26 @@ vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
     typeof import("#/api/cloud/organization-service.api")
   >()),
   getCloudOrganizationMember: vi.fn(),
+}));
+
+const detailMocks = vi.hoisted(() => ({
+  createConversationMutate: vi.fn(),
+  navigate: vi.fn(),
+}));
+
+vi.mock("#/hooks/mutation/use-create-conversation", () => ({
+  useCreateConversation: () => ({
+    mutate: detailMocks.createConversationMutate,
+  }),
+}));
+
+vi.mock("#/context/navigation-context", () => ({
+  useNavigation: () => ({
+    currentPath: "/automations/auto-1",
+    conversationId: null,
+    isNavigating: false,
+    navigate: detailMocks.navigate,
+  }),
 }));
 
 const localBackend: Backend = {
@@ -126,6 +155,7 @@ beforeEach(() => {
     completed_at: null,
   });
 
+  vi.mocked(AutomationService.deleteAutomation).mockReset();
   vi.mocked(AutomationService.getAutomation).mockReset();
   vi.mocked(AutomationService.getAutomation).mockResolvedValue(automation);
   vi.mocked(AutomationService.getAutomationRuns).mockReset();
@@ -135,6 +165,8 @@ beforeEach(() => {
     profiles: [],
     active_profile: null,
   });
+  detailMocks.createConversationMutate.mockReset();
+  detailMocks.navigate.mockReset();
   setRegisteredBackends([localBackend, cloudBackend]);
   setActiveSelection({ backendId: localBackend.id });
 });
@@ -163,7 +195,7 @@ describe("AutomationDetail — Edit in the kebab menu", () => {
     ).toBeInTheDocument();
   });
 
-  it("opens the Edit modal pre-filled from the kebab menu when the active backend is cloud", async () => {
+  it("opens the setup page from the kebab menu when the active backend is cloud", async () => {
     // Arrange — switch to the cloud backend BEFORE rendering so the
     // detail page mounts under cloud (the backend-change guard would
     // otherwise stop the fetch).
@@ -180,13 +212,42 @@ describe("AutomationDetail — Edit in the kebab menu", () => {
       screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
     );
 
-    // Assert — the Edit modal mounts on cloud, pre-filled for this
-    // automation; the permission model (mocked to canManage above) decides,
-    // not the backend kind.
-    const nameInput = (await screen.findByTestId(
-      "edit-automation-name",
-    )) as HTMLInputElement;
-    expect(nameInput.value).toBe(automation.name);
+    // Assert — Edit opens the setup form without starting or seeding an agent
+    // conversation. The permission model (mocked to canManage above) decides
+    // whether the action exists, not the backend kind.
+    expect(detailMocks.createConversationMutate).not.toHaveBeenCalled();
+    expect(detailMocks.navigate).toHaveBeenCalledWith(
+      "/automations/setup?automationId=auto-1",
+    );
+    expect(
+      screen.queryByTestId("edit-automation-name"),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("AutomationDetail — delete confirmation", () => {
+  it("opens as a named modal dialog with focus inside, and Escape cancels without deleting", async () => {
+    // Arrange — open the confirmation from the header kebab.
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: I18nKey.AUTOMATIONS$DELETE_CONFIRM_TITLE,
+    });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+
+    // Act
+    await user.keyboard("{Escape}");
+
+    // Assert — same behavior as on the dashboard: closed, nothing deleted.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(AutomationService.deleteAutomation).not.toHaveBeenCalled();
   });
 });
 
@@ -273,6 +334,37 @@ describe("AutomationDetail — backend-change guard", () => {
     // Assert — the off-state gate prevents the dispatch API from firing.
     expect(runNow).toBeDisabled();
     expect(AutomationService.dispatchAutomation).not.toHaveBeenCalled();
+  });
+});
+
+describe("AutomationDetail — repositories and plugins", () => {
+  it("shows the repositories and plugins a preset response stores in preset_metadata", async () => {
+    // Arrange — the automation service returns repos and plugins only inside
+    // preset_metadata; the service layer maps them onto the automation.
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(
+      withPresetSources({
+        ...automation,
+        repository: undefined,
+        preset_metadata: {
+          preset_type: "plugin",
+          repos: [
+            { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+          ],
+          plugins: [{ source: "github:qa-example/qa-plugin" }],
+        },
+      }),
+    );
+
+    // Act
+    renderDetail();
+
+    // Assert
+    const [repository] = await screen.findAllByTestId("automation-repository");
+    expect(repository).toHaveTextContent("qa-example/qa-repomain");
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$PLUGINS),
+    ).toBeInTheDocument();
+    expect(screen.getByText("github:qa-example/qa-plugin")).toBeInTheDocument();
   });
 });
 
@@ -421,4 +513,110 @@ describe("AutomationDetail — script automations", () => {
       screen.queryByTestId("automation-prompt-content"),
     ).not.toBeInTheDocument();
   });
+});
+
+describe("AutomationDetail — keep sandbox alive", () => {
+  beforeEach(() => {
+    setActiveSelection({ backendId: cloudBackend.id });
+  });
+
+  it.each([
+    {
+      saved: false,
+      label: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+      next: true,
+      toast: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE_ON_SUCCESS,
+    },
+    {
+      saved: true,
+      label: I18nKey.AUTOMATIONS$STOP_KEEPING_SANDBOX_ALIVE,
+      next: false,
+      toast: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE_OFF_SUCCESS,
+    },
+  ])(
+    "saves keep_alive $next from the actions menu and confirms with a toast",
+    async ({ saved, label, next, toast }) => {
+      // Arrange
+      vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+        ...automation,
+        keep_alive: saved,
+      });
+      vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+        ...automation,
+        keep_alive: next,
+      });
+      displaySuccessToast.mockClear();
+      const user = userEvent.setup();
+      renderDetail();
+      await user.click(
+        await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+      );
+
+      // Act
+      await user.click(screen.getByRole("button", { name: label }));
+
+      // Assert
+      expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+        automation.id,
+        { keep_alive: next },
+      );
+      await waitFor(() =>
+        expect(displaySuccessToast).toHaveBeenCalledWith(toast),
+      );
+    },
+  );
+
+  it.each([
+    {
+      reason: "a local backend",
+      backendId: localBackend.id,
+      overrides: { keep_alive: false },
+    },
+    { reason: "a draft", overrides: { state: "DRAFT", keep_alive: false } },
+    {
+      reason: "a continue_conversation trigger",
+      overrides: {
+        keep_alive: true,
+        trigger: {
+          type: "event" as const,
+          source: "github",
+          on: "issue_comment.created",
+          destination: "continue_conversation" as const,
+        },
+      },
+    },
+    { reason: "a service without the field", overrides: {} },
+  ])(
+    "leaves the item out of the menu for $reason",
+    async ({ backendId, overrides }) => {
+      // Arrange
+      if (backendId) setActiveSelection({ backendId });
+      vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+        ...automation,
+        ...overrides,
+      });
+      const user = userEvent.setup();
+      renderDetail();
+
+      // Act
+      await user.click(
+        await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+      );
+
+      // Assert
+      expect(
+        screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+        }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$STOP_KEEPING_SANDBOX_ALIVE,
+        }),
+      ).not.toBeInTheDocument();
+    },
+  );
 });

@@ -25,7 +25,7 @@ jobs:
       IMAGE: openhands/agent-canvas:snapshot-update
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC }}
       - name: Select newest snapshot older than seven days
@@ -33,9 +33,11 @@ jobs:
       - name: Read image build defaults
         id: defaults
         run: |
-          echo "agent_server_image=$(node -p \"require('./config/defaults.json').images.agentServer + ':' + require('./config/defaults.json').versions.agentServer + '-python'\")" >> "$GITHUB_OUTPUT"
-          echo "agent_server_version=$(node -p \"require('./config/defaults.json').versions.agentServer\")" >> "$GITHUB_OUTPUT"
-          echo "automation_version=$(node -p \"require('./config/defaults.json').versions.automation\")" >> "$GITHUB_OUTPUT"
+          image=$(jq -r '.images.agentServer' config/defaults.json)
+          version=$(jq -r '.versions.agentServer' config/defaults.json)
+          echo "agent_server_image=${image}:${version}-python" >> "$GITHUB_OUTPUT"
+          echo "agent_server_version=${version}" >> "$GITHUB_OUTPUT"
+          echo "automation_version=$(jq -r '.versions.automation' config/defaults.json)" >> "$GITHUB_OUTPUT"
       - name: Build image
         run: |
           docker build --tag "$IMAGE" --file "$DOCKERFILE" \

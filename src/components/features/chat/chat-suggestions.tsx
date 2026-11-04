@@ -22,22 +22,26 @@ export function ChatSuggestions({ onSuggestionsClick }: ChatSuggestionsProps) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3, ease: "easeInOut" }}
-          className="pointer-events-auto absolute inset-x-4 bottom-37.75 top-0 flex flex-col items-center justify-center md:inset-x-8"
+          className="pointer-events-none absolute inset-x-4 bottom-37.75 top-0 flex flex-col items-center justify-center md:inset-x-8"
         >
+          {/* The overlay spans the chat body; only its content takes clicks, so
+            a session group above it stays usable. */}
           <div className="flex flex-col items-center p-4 rounded-xl w-full">
             <span className="pb-6 text-[32px] font-medium leading-5 text-contrast">
               {t(I18nKey.LANDING$TITLE)}
             </span>
           </div>
-          <Suggestions
-            suggestions={Object.entries(SUGGESTIONS.repo)
-              .slice(0, 4)
-              .map(([label, value]) => ({
-                label,
-                value,
-              }))}
-            onSuggestionClick={onSuggestionsClick}
-          />
+          <div className="pointer-events-auto">
+            <Suggestions
+              suggestions={Object.entries(SUGGESTIONS.repo)
+                .slice(0, 4)
+                .map(([label, value]) => ({
+                  label,
+                  value,
+                }))}
+              onSuggestionClick={onSuggestionsClick}
+            />
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

@@ -5,6 +5,7 @@ import { PluginLaunchModal } from "#/components/features/launch/plugin-launch-mo
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { I18nKey } from "#/i18n/declaration";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 
 type ErrorType = "no_plugins" | "invalid_format" | "creation_failed";
 
@@ -105,7 +106,7 @@ function ErrorDisplay({
       data-testid="launch-error"
     >
       <div className="max-w-md rounded-lg bg-surface p-6 text-center">
-        <h2 className="mb-4 text-xl font-medium text-red-400">
+        <h2 className="mb-4 text-xl font-medium text-feedback-error">
           {t(I18nKey.LAUNCH$ERROR_TITLE)}
         </h2>
         <p className="mb-6 text-text-tertiary">{errorMessages[errorType]}</p>
@@ -122,7 +123,7 @@ function ErrorDisplay({
             <button
               type="button"
               onClick={onTryAgain}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+              className="rounded-md bg-contrast px-4 py-2 text-sm text-contrast-foreground hover:bg-contrast/90"
               data-testid="try-again-button"
             >
               {t(I18nKey.LAUNCH$TRY_AGAIN)}
@@ -135,6 +136,7 @@ function ErrorDisplay({
 }
 
 export default function LaunchRoute() {
+  const { backend } = useActiveBackend();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { t } = useTranslation("openhands");
@@ -195,6 +197,7 @@ export default function LaunchRoute() {
     <div className="h-full" data-testid="launch-route">
       <PluginLaunchModal
         plugins={parseResult.plugins}
+        parametersSupported={backend.kind !== "local"}
         message={parseResult.message}
         isLoading={createConversation.isPending}
         onStartConversation={handleStartConversation}

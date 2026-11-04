@@ -10,6 +10,15 @@ export interface Backend {
   authMode?: BackendAuthMode;
   /** Changes whenever connection credentials change, invalidating keyed data. */
   connectionRevision?: number;
+  /**
+   * Set when `host` reaches a DigitalOcean MARS session — the loopback end
+   * of a port-forward tunnel (or the web server's proxy for it). The far end is an
+   * ordinary agent-server, so the backend stays `kind: "local"`; this only
+   * lets the Managed Agents screen and connection lifecycle recognise it.
+   */
+  marsSessionId?: string;
+  /** The MARS agent config the session was launched from, when known. */
+  marsConfigId?: string;
 }
 
 export interface BackendSelection {

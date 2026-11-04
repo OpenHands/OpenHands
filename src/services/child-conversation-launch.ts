@@ -16,6 +16,12 @@ import {
 } from "#/api/conversation-metadata-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { buildRouterAtStartSystemSuffix } from "#/api/agent-server-adapter";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
+import { launchConversation } from "#/hooks/mutation/resolve-conversation-launch";
+import { getQueryClient } from "#/query-client-config";
+import SettingsService from "#/api/settings-service/settings-service.api";
+import MetaProfilesService from "#/api/meta-profiles-service/meta-profiles-service.api";
 import {
   CHILD_CONVERSATION_ISOLATIONS,
   CHILD_CONVERSATION_RESULT_PREFIX,
@@ -25,9 +31,10 @@ import {
   type ChildConversationIsolation,
   type ChildConversationTarget,
 } from "#/constants/child-conversation";
-import { useGoalStore } from "#/stores/goal-store";
 import type { LaunchChildConversationAction } from "#/types/agent-server/core";
 import { buildAgentCanvasUrl } from "#/utils/base-path";
+import { claimClientToolCall } from "#/utils/claim-client-tool-call";
+import { postClientToolResult } from "./client-tool-result";
 import {
   displayErrorToast,
   displaySuccessToastWithLink,
@@ -36,6 +43,9 @@ import {
 /** Cadence and ceiling for waiting on a Cloud sandbox to expose its id. */
 const CLOUD_START_POLL_INTERVAL_MS = 3_000;
 const CLOUD_START_POLL_TIMEOUT_MS = 180_000;
+
+/** Cloud and self-hosted Enterprise serve Agent Canvas here; the host root is the legacy UI. */
+const CLOUD_AGENT_CANVAS_BASE_PATH = "/canvas";
 
 const LEDGER_STORAGE_KEY_PREFIX = "openhands-child-conversation-launches:";
 
@@ -193,39 +203,6 @@ function validateLaunchParams(
   };
 }
 
-/**
- * Remember which tool calls have already been acted on.
- *
- * Unlike the Canvas UI tool, a launch is not idempotent: replaying its
- * ActionEvent (a socket reconnect that falls back to `resend_mode: "all"`, or a
- * REST/WebSocket race after a reload) would start a second — on Cloud, billable
- * — conversation. Claim the tool call before any network work so a replay that
- * arrives mid-flight is dropped too.
- */
-function claimToolCall(parentConversationId: string, toolCallId: string) {
-  const key = `${LEDGER_STORAGE_KEY_PREFIX}${parentConversationId}`;
-  let handled: string[] = [];
-  try {
-    const raw = window.localStorage.getItem(key);
-    const parsed: unknown = raw ? JSON.parse(raw) : null;
-    if (Array.isArray(parsed)) {
-      handled = parsed.filter((id): id is string => typeof id === "string");
-    }
-  } catch {
-    // A corrupt ledger must not block the launch; start a fresh one.
-  }
-
-  if (handled.includes(toolCallId)) return false;
-
-  try {
-    window.localStorage.setItem(key, JSON.stringify([...handled, toolCallId]));
-  } catch {
-    // Storage full or unavailable — proceed, accepting replay risk over never
-    // launching at all.
-  }
-  return true;
-}
-
 function absoluteCanvasUrl(path: string) {
   return buildAgentCanvasUrl(path);
 }
@@ -267,6 +244,24 @@ const parentSupportsWorktree = (
 const SHARED_FALLBACK_CONSEQUENCE =
   "The child was launched in this conversation's directory instead, so it can see work in progress here and the two agents may conflict over the same files.";
 
+/** The parent's Agent Profile and current LLM, so the child stays in its scope. */
+async function parentProfileLaunch(parentConversationId: string) {
+  const [parent] =
+    await AgentServerConversationService.batchGetAppConversations([
+      parentConversationId,
+    ]);
+  const { backend, orgId } = getActiveBackend();
+  return {
+    queryClient: getQueryClient(),
+    backendId: backend.id,
+    orgId,
+    isCloud: false,
+    agentProfileId: parent?.launched_agent_profile?.agent_profile_id,
+    llmProfile:
+      parent?.agent_kind === "openhands" ? parent.active_profile : null,
+  };
+}
+
 async function launchLocalChild(
   params: ValidatedParams,
   parentConversationId: string,
@@ -279,9 +274,10 @@ async function launchLocalChild(
       parentConversationId,
     );
   const parentMetadata = getStoredConversationMetadata(parentConversationId);
+  const profileLaunch = await parentProfileLaunch(parentConversationId);
 
   const createChild = (isolation: ChildConversationIsolation) =>
-    AgentServerConversationService.createConversation({
+    launchConversation(profileLaunch, {
       initialUserMsg: params.task,
       metadata: parentMetadata
         ? {
@@ -394,6 +390,21 @@ async function launchCloudChild(
   }
 
   const parentMetadata = getStoredConversationMetadata(parentConversationId);
+  // The cloud child path bypasses `createConversation`, so read the
+  // "Run on first message" toggle here to stamp the router instruction
+  // onto the launch additions (the local child path reads it inside its own
+  // settings fetch via the encrypted-settings builder). The meta-profiles
+  // fetch is gated on the toggle so the default-off path issues no extra
+  // request; when on, the suffix is only emitted if a router is actually
+  // attached — failing closed if the endpoint is unreachable.
+  const cloudSettings = await SettingsService.getSettings();
+  const cloudMetaProfiles = cloudSettings.run_router_at_conversation_start
+    ? await MetaProfilesService.listMetaProfiles().catch(() => null)
+    : null;
+  const routerAtStartSuffix = buildRouterAtStartSystemSuffix(
+    cloudSettings.run_router_at_conversation_start,
+    !!cloudMetaProfiles?.active_meta_profile,
+  );
   const startTask = await createCloudAppConversation(
     {
       initial_message: {
@@ -415,6 +426,13 @@ async function launchCloudChild(
       // Cloud. Sending it would only hide the child from the Cloud
       // conversation list, which filters out anything with a parent.
       parent_conversation_id: null,
+      ...(routerAtStartSuffix
+        ? {
+            agent_launch_additions: {
+              system_message_suffix_append: routerAtStartSuffix,
+            },
+          }
+        : {}),
     },
     backend,
   );
@@ -433,7 +451,7 @@ async function launchCloudChild(
     target: "cloud",
     conversation_id: conversationId,
     url: conversationId
-      ? `${backend.host.replace(/\/$/, "")}/conversations/${conversationId}`
+      ? `${backend.host.replace(/\/$/, "")}${CLOUD_AGENT_CANVAS_BASE_PATH}/conversations/${conversationId}`
       : null,
     initial_status: settled.status,
     title: params.title,
@@ -476,22 +494,12 @@ async function reportLaunchResult(
     );
   }
 
-  // The agent-server cancels an active `/goal` loop on any inbound message, so
-  // a launch must not silently end one. The toast above still tells the user
-  // what happened.
-  const goalStatus =
-    useGoalStore.getState().statusByConversation[parentConversationId];
-  if (goalStatus?.active) return;
-
-  await AgentServerConversationService.sendMessage(parentConversationId, {
-    role: "user",
-    content: [
-      {
-        type: "text",
-        text: `${CHILD_CONVERSATION_RESULT_PREFIX}${JSON.stringify(result)}`,
-      },
-    ],
-  });
+  // Skipped during a `/goal` loop; the toast above still tells the user.
+  await postClientToolResult(
+    parentConversationId,
+    CHILD_CONVERSATION_RESULT_PREFIX,
+    result,
+  );
 }
 
 /**
@@ -505,7 +513,16 @@ export async function handleLaunchChildConversationAction(
   parentConversationId: string,
   toolCallId: string,
 ): Promise<void> {
-  if (!claimToolCall(parentConversationId, toolCallId)) return;
+  // A launch is not idempotent — on Cloud, a replay would start a second,
+  // billable conversation.
+  if (
+    !claimClientToolCall(
+      `${LEDGER_STORAGE_KEY_PREFIX}${parentConversationId}`,
+      toolCallId,
+    )
+  ) {
+    return;
+  }
 
   const validation = validateLaunchParams(action);
   let result: LaunchChildConversationResult;

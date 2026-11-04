@@ -22,6 +22,28 @@ describe("ToggleSwitch", () => {
     expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true");
   });
 
+  it("ignores pointer and keyboard activation when disabled", async () => {
+    const onToggle = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ToggleSwitch
+        enabled={false}
+        label="Toggle test"
+        onToggle={onToggle}
+        disabled
+      />,
+    );
+
+    const toggle = screen.getByRole("switch");
+    await user.click(toggle);
+    toggle.focus();
+    await user.keyboard(" ");
+
+    expect(toggle).toBeDisabled();
+    expect(toggle).not.toHaveFocus();
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
   it("stops event propagation on click", async () => {
     const parentClick = vi.fn();
     const user = userEvent.setup();

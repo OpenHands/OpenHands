@@ -7,6 +7,7 @@ import { I18nKey } from "#/i18n/declaration";
  * ``getAcpCredentialConflicts``). Rendered identically by the onboarding
  * credentials step and the Settings → Agent credentials section.
  */
+// @spec WN-001 — Credential conflict warnings use theme-aware warning feedback
 export function AcpConflictWarnings({
   conflicts,
 }: {
@@ -20,7 +21,7 @@ export function AcpConflictWarnings({
         <p
           key={`${credential}:${conflicting}`}
           data-testid="acp-credential-conflict-warning"
-          className="text-sm text-amber-300"
+          className="text-sm text-feedback-warning"
         >
           {t(I18nKey.SETTINGS$ACP_CREDENTIAL_CONFLICT_WARNING, {
             credential,

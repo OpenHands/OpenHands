@@ -272,9 +272,10 @@ describe("useUnifiedVSCodeUrl", () => {
     expect(result.current.data?.error).toBe(
       i18n.t(I18nKey.VSCODE$URL_NOT_AVAILABLE),
     );
+    expect(result.current.isUnavailable).toBe(false);
   });
 
-  it("ignores unrelated cloud exposed URLs", async () => {
+  it("hides the control when a running cloud sandbox exposes no VSCode service", async () => {
     vi.mocked(useActiveBackend).mockReturnValue(cloudBackend);
     vi.mocked(batchGetCloudSandboxes).mockResolvedValue([
       makeSandbox({
@@ -291,6 +292,7 @@ describe("useUnifiedVSCodeUrl", () => {
       url: null,
       error: i18n.t(I18nKey.VSCODE$URL_NOT_AVAILABLE),
     });
+    expect(result.current.isUnavailable).toBe(true);
   });
 
   it("falls through to AgentServerConversationService.getVSCodeUrl in local mode", async () => {

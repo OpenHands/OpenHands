@@ -11,7 +11,7 @@ import { expect, type APIRequestContext, type Page } from "@playwright/test";
 // Tokens that the mock LLM server uses — must match mock-llm-server.py.
 export const BASH_TOKEN = "MOCK_LLM_E2E_BASH_OK";
 export const REPLY_TOKEN = "MOCK_LLM_E2E_REPLY_OK";
-export const BASH_COMMAND = `printf '${BASH_TOKEN}\\n'`;
+export const BASH_COMMAND = `echo ${BASH_TOKEN}`;
 
 /** Reply token used by the image-upload test trajectory. */
 export const IMAGE_REPLY_TOKEN = "MOCK_LLM_IMAGE_OK";
@@ -229,15 +229,17 @@ export async function waitForNonUserMessageText(
 }
 
 /**
- * Poll the bash events API for a BashOutput containing BASH_TOKEN.
+ * Poll the conversation events API for the agent's terminal observation
+ * containing BASH_TOKEN.
  *
- * The agent-server keeps tool executions in a separate bash event stream
- * (`/api/bash/bash_events/search`), not the conversation events API.
- * Conversation events only contain high-level MessageEvents.
+ * The agent's terminal tool reports its result as an ObservationEvent in the
+ * conversation's own event stream. The agent-server's `/api/bash` event
+ * stream only records commands sent to that endpoint directly (such as the
+ * git commands Canvas runs), so it cannot show that the agent's call ran.
  */
 export async function waitForSuccessfulBashObservation(
   request: APIRequestContext,
-  _conversationId: string,
+  conversationId: string,
   timeout = 30_000,
 ) {
   let lastDiag = "no polls yet";
@@ -245,34 +247,39 @@ export async function waitForSuccessfulBashObservation(
     .poll(
       async () => {
         const resp = await request.get(
-          `${BACKEND_URL}/api/bash/bash_events/search`,
+          `${BACKEND_URL}/api/conversations/${encodeURIComponent(conversationId)}/events/search`,
           {
             headers: { "X-Session-API-Key": SESSION_API_KEY },
-            params: { limit: "50", kind__eq: "BashOutput" },
+            params: { limit: "100", sort_order: "TIMESTAMP_DESC" },
           },
         );
         if (!resp.ok()) {
-          lastDiag = `bash events API returned ${resp.status()}`;
+          lastDiag = `events API returned ${resp.status()}`;
           return false;
         }
         const body = (await resp.json()) as { items?: unknown[] };
-        const items = body.items ?? [];
-        lastDiag = `${items.length} BashOutput events`;
-        // Success: any BashOutput with exit_code 0 proves our command ran.
-        // The agent-server may return stdout as null for the completion
-        // event, so we accept null stdout when exit_code is 0.
-        return items.some((e: any) => {
-          if (e.kind !== "BashOutput" || e.exit_code !== 0) return false;
-          const stdout = typeof e.stdout === "string" ? e.stdout : "";
-          return stdout.includes(BASH_TOKEN) || e.stdout === null;
-        });
+        const kinds = (body.items ?? []).map(
+          (e: any) => `${e.kind}${e.tool_name ? `:${e.tool_name}` : ""}`,
+        );
+        const terminal = (body.items ?? []).filter(
+          (e: any) => e.kind === "ObservationEvent" && e.tool_name === "terminal",
+        );
+        const texts = terminal.map((e: any) =>
+          (e.observation?.content ?? [])
+            .map((c: any) => (typeof c.text === "string" ? c.text : ""))
+            .join(""),
+        );
+        lastDiag = `${terminal.length} terminal observations: ${JSON.stringify(texts).slice(0, 500)}; events: ${kinds.join(", ")}`;
+        return terminal.some(
+          (e: any, i) => !e.observation?.is_error && texts[i].includes(BASH_TOKEN),
+        );
       },
       { timeout },
     )
     .toBe(true)
     .catch((err) => {
       throw new Error(
-        `No successful bash execution after ${timeout}ms. ${lastDiag}`,
+        `No successful terminal observation containing ${BASH_TOKEN} after ${timeout}ms. ${lastDiag}`,
         { cause: err },
       );
     });

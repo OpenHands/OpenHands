@@ -12,12 +12,15 @@ import { ConversationClient } from "@openhands/typescript-client/clients";
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useWebSocket, WebSocketHookOptions } from "#/hooks/use-websocket";
-import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
+import { usePageVisibilityReconnect } from "#/hooks/use-page-visibility-reconnect";
+import {
+  useConnectionErrorGracePeriod,
+  type ConnectionRecoveryState,
+} from "#/hooks/use-connection-error-grace-period";
 import { useEventStore } from "#/stores/use-event-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
-import { useCommandStore } from "#/stores/command-store";
 import { useBrowserStore } from "#/stores/browser-store";
 import { useGoalStore } from "#/stores/goal-store";
 import {
@@ -30,23 +33,29 @@ import {
   isAgentStatusConversationStateUpdateEvent,
   isStatsConversationStateUpdateEvent,
   isGoalConversationStateUpdateEvent,
-  isExecuteBashActionEvent,
-  isExecuteBashObservationEvent,
   isDisplayableErrorEvent,
   isPlanningFileEditorObservationEvent,
   isBrowserObservationEvent,
   isBrowserNavigateActionEvent,
   isSwitchLLMObservationEvent,
+  isClassifyAndSwitchLLMObservationEvent,
   isCanvasUIActionEvent,
-  isStreamingDeltaEvent,
+  isAutomationFormUpdateActionEvent,
   isLaunchChildConversationActionEvent,
+  isRequestSecretActionEvent,
 } from "#/types/agent-server/type-guards";
+import {
+  asSessionFrame,
+  type SessionFrame,
+} from "#/types/agent-server/session-frames";
 import {
   createStreamingDeltaBatcher,
   StreamingDeltaBatcher,
 } from "#/utils/streaming-delta-batcher";
 import { handleCanvasUIAction } from "#/services/canvas-ui";
+import { handleAutomationFormUpdateAction } from "#/services/automation-form";
 import { handleLaunchChildConversationAction } from "#/services/child-conversation-launch";
+import { handleRequestSecretAction } from "#/services/secret-request";
 import { ConversationStateUpdateEventStats } from "#/types/agent-server/core/events/conversation-state-event";
 import type {
   ConversationErrorEvent,
@@ -54,17 +63,24 @@ import type {
 } from "#/types/agent-server/core/events/conversation-state-event";
 import { handleActionEventCacheInvalidation } from "#/utils/cache-utils";
 import { buildWebSocketUrl } from "#/utils/websocket-url";
+import { createSeqCursor, type SeqCursor } from "#/utils/session-seq-cursor";
 import type {
   AppConversation,
   SendMessageRequest,
 } from "#/api/conversation-service/agent-server-conversation-service.types";
 import EventService from "#/api/event-service/event-service.api";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { useConversationStore } from "#/stores/conversation-store";
 import { trackError } from "#/utils/error-handler";
+import { matchesPendingConversationId } from "#/utils/pending-task-message-link";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore, { type MetricsState } from "#/stores/metrics-store";
-import { useConversationHistory } from "#/hooks/query/use-conversation-history";
+import {
+  useConversationHistory,
+  usePersistedConversationHistory,
+  getConversationHistoryScope,
+} from "#/hooks/query/use-conversation-history";
 import { setConversationState } from "#/utils/conversation-local-storage";
 import {
   recordModelSwitchMessage,
@@ -83,12 +99,29 @@ export type WebSocketConnectionState =
   | "CLOSED"
   | "CLOSING";
 
+/**
+ * A message submitted while its cloud conversation had no runtime URL yet
+ * (sandbox PAUSED/STARTING). Held until that conversation's socket opens.
+ */
+interface HeldMessage {
+  message: SendMessageRequest;
+  /** Whether an optimistic "sending" bubble existed when the message was held. */
+  hadBubble: boolean;
+}
+
+const heldMessageText = (message: SendMessageRequest): string =>
+  message.content
+    .map((item) => (item.type === "text" ? item.text : ""))
+    .join("");
+
 interface SendMessageResult {
   queued: boolean; // true if message was queued for later delivery, false if sent immediately
 }
 
 interface ConversationWebSocketContextType {
   connectionState: WebSocketConnectionState;
+  recoveryState: ConnectionRecoveryState;
+  recoveryConversationId?: string;
   /**
    * The main connection's own state, unmerged with the planning connection —
    * see `useMainWebSocketStatus`.
@@ -97,6 +130,12 @@ interface ConversationWebSocketContextType {
   sendMessage: (message: SendMessageRequest) => Promise<SendMessageResult>;
   isLoadingHistory: boolean;
   reconnect: () => void;
+  /**
+   * True once the main or planning socket has opened at least once for the
+   * current conversation. Lets the UI say "Reconnecting" instead of the
+   * first-connect "Connecting" — see `getStatusCode`.
+   */
+  hasConnectedOnce: boolean;
 }
 
 const ConversationWebSocketContext = createContext<
@@ -121,6 +160,69 @@ function extractMessageEventText(
     .join("");
 }
 
+/**
+ * Route one frame of `/sockets/session/{id}`.
+ *
+ * Progress frames (`item_started` / `delta` / `item_aborted`) are applied to
+ * the streaming slot here and produce no event. Durable and transient frames
+ * are unwrapped and returned for the caller's normal event handling; a durable
+ * frame also advances the resume cursor and stamps its `seq` on the event, so
+ * the UI can place a slot relative to it.
+ */
+const routeSessionFrame = (
+  raw: unknown,
+  batcher: StreamingDeltaBatcher | null,
+  /** Report a durable frame's `seq` to this socket's resume cursor. */
+  advanceCursor: (seq: number) => void,
+  replayThroughSeq: number | null,
+  onSync: (throughSeq: number | null) => void,
+  slotMeta: { isFromPlanningAgent?: boolean } = {},
+): { event: unknown; isReplay: boolean } | null => {
+  const frame: SessionFrame | null = asSessionFrame(raw);
+  if (!frame) {
+    return null;
+  }
+
+  if (frame.type === "delta") {
+    batcher?.enqueue(frame);
+    return null;
+  }
+
+  // Nothing else may overtake text that was streamed ahead of it.
+  batcher?.flush();
+
+  switch (frame.type) {
+    case "sync":
+      onSync(frame.from_seq == null ? null : (frame.through_seq ?? null));
+      return null;
+    case "item_started":
+      useEventStore.getState().openStreamingSlot(frame, slotMeta);
+      return null;
+    case "item_aborted":
+      // Nothing durable is coming to supersede the provisional text.
+      useEventStore.getState().abortStreamingSlot(frame.item_id, frame.attempt);
+      return null;
+    case "durable":
+      advanceCursor(frame.seq);
+      return {
+        event: { ...frame.event, seq: frame.seq },
+        isReplay: replayThroughSeq !== null && frame.seq <= replayThroughSeq,
+      };
+    case "transient":
+      return { event: frame.event, isReplay: false };
+    case "error":
+      // The server answers a rejected inbound message with an ErrorFrame and
+      // keeps the socket open ("not worth dropping over"), so there is no
+      // reconnect and nothing else will ever surface this to the user.
+      useErrorMessageStore
+        .getState()
+        .setErrorMessage(frame.detail, "conversation", frame.code);
+      return null;
+    default:
+      return null;
+  }
+};
+
 export function ConversationWebSocketProvider({
   children,
   conversationId,
@@ -143,7 +245,6 @@ export function ConversationWebSocketProvider({
     useState<WebSocketConnectionState>("CONNECTING");
 
   // Track if we've ever successfully connected for each connection
-  // Don't show errors until after first successful connection
   const hasConnectedRefMain = React.useRef(false);
   const hasConnectedRefPlanning = React.useRef(false);
 
@@ -159,28 +260,34 @@ export function ConversationWebSocketProvider({
     (state) => state.consumeMatchingPendingMessage,
   );
   const { setExecutionStatus } = useConversationStateStore();
-  const { appendInput, appendOutput } = useCommandStore();
   const resetBrowserStore = useBrowserStore((state) => state.reset);
 
   // Coalesce streaming deltas to ≤1 store commit/render per frame.
   // Separate batchers keep the main and planning streams from ever merging.
   const mainDeltaBatcherRef = useRef<StreamingDeltaBatcher | null>(null);
   if (mainDeltaBatcherRef.current === null) {
-    mainDeltaBatcherRef.current = createStreamingDeltaBatcher((delta) => {
-      useEventStore.getState().addEvent(delta);
+    mainDeltaBatcherRef.current = createStreamingDeltaBatcher((frames) => {
+      useEventStore.getState().appendStreamingDeltas(frames);
       // A delta means connectivity recovered — mirror handleNonErrorEvent.
       useErrorMessageStore.getState().clearConnectionError();
     });
   }
   const planningDeltaBatcherRef = useRef<StreamingDeltaBatcher | null>(null);
   if (planningDeltaBatcherRef.current === null) {
-    planningDeltaBatcherRef.current = createStreamingDeltaBatcher((delta) => {
+    planningDeltaBatcherRef.current = createStreamingDeltaBatcher((frames) => {
       useEventStore
         .getState()
-        .addEvent({ ...delta, isFromPlanningAgent: true });
+        .appendStreamingDeltas(frames, { isFromPlanningAgent: true });
       useErrorMessageStore.getState().clearConnectionError();
     });
   }
+
+  // Resume cursors, one per socket. Started at connect time (see the lazy
+  // `queryParams` below) and advanced per durable frame without re-rendering.
+  const mainCursorRef = useRef<SeqCursor>(createSeqCursor());
+  const planningCursorRef = useRef<SeqCursor>(createSeqCursor());
+  const mainReplayThroughSeqRef = useRef<number | null>(null);
+  const planningReplayThroughSeqRef = useRef<number | null>(null);
 
   // History loading state.
   // - Main conversation history is now loaded via REST (`useConversationHistory`),
@@ -286,12 +393,39 @@ export function ConversationWebSocketProvider({
   const { data: preloadedHistory, isPending: isPreloadingHistory } =
     useConversationHistory(conversationId);
 
+  const historyScope = getConversationHistoryScope();
+  const { data: persistedHistory } =
+    usePersistedConversationHistory(conversationId);
+  const visibleHistory = useMemo(() => {
+    if (!persistedHistory) return preloadedHistory;
+    if (!preloadedHistory) return persistedHistory;
+    return {
+      ...preloadedHistory,
+      events: [...persistedHistory.events, ...preloadedHistory.events],
+    };
+  }, [persistedHistory, preloadedHistory]);
+
   // Skeleton only on the genuine first load (no cached data yet). On return the
   // cached page is present, so `isPending` is false and we render the
   // last-known discussion immediately while the tail refetch runs in the
   // background — the socket gate below also keys on `isPending`, so that
   // refetch never drops a live socket.
-  const isLoadingHistoryMain = !!conversationId && isPreloadingHistory;
+  const isLoadingHistoryMain =
+    !!conversationId && isPreloadingHistory && !persistedHistory;
+
+  // First-connect cursor from the REST page (see `afterSeq`). Read lazily by
+  // the socket's `queryParams`; after the first connect the socket's own
+  // cursor takes over.
+  const historyAfterSeqRef = useRef<number | null>(null);
+  useEffect(() => {
+    historyAfterSeqRef.current = preloadedHistory?.afterSeq ?? null;
+  }, [preloadedHistory]);
+
+  // The planner has its own log: reset its cursor when it is a different one.
+  const planningSocketConversationId = subConversations?.[0]?.id ?? null;
+  useEffect(() => {
+    planningCursorRef.current.clear();
+  }, [planningSocketConversationId]);
 
   // Clear the (global, not conversation-scoped) event store when the active
   // conversation changes, BEFORE the preloaded-history effect below re-seeds
@@ -305,26 +439,34 @@ export function ConversationWebSocketProvider({
   // a no-op, so the store survives navigating away to Settings and back.
   useLayoutEffect(() => {
     const nextId = conversationId ?? null;
-    if (useEventStore.getState().loadedConversationId === nextId) {
+    if (
+      useEventStore.getState().loadedConversationId === nextId &&
+      useEventStore.getState().loadedConversationScope === historyScope
+    ) {
       return;
     }
     // Single atomic action: clears the previous conversation's events and
     // records the new loaded id in one `set`, so no subscriber can observe a
     // half-applied state (events gone but the old id still reported).
-    clearEventsForConversation(nextId);
+    clearEventsForConversation(nextId, historyScope);
     resetBrowserStore();
     // The metrics store is conversation-scoped state too: without a reset the
     // previous conversation's usage/cost keeps rendering in the new
     // conversation's meter until fresh WS stats arrive — and a brand-new
     // conversation sends none, so the stale figure stuck indefinitely.
     useMetricsStore.getState().resetMetrics();
-  }, [conversationId, clearEventsForConversation, resetBrowserStore]);
+  }, [
+    conversationId,
+    historyScope,
+    clearEventsForConversation,
+    resetBrowserStore,
+  ]);
 
   useLayoutEffect(() => {
-    if (!preloadedHistory || preloadedHistory.events.length === 0) {
+    if (!visibleHistory || visibleHistory.events.length === 0) {
       return;
     }
-    addEvents(preloadedHistory.events);
+    addEvents(visibleHistory.events);
 
     // The first user message of a cloud start-task conversation is persisted
     // server-side and reaches us via this REST preload, not over the WebSocket
@@ -343,7 +485,7 @@ export function ConversationWebSocketProvider({
         useEventStore.getState().uiEvents,
       );
 
-      for (const event of preloadedHistory.events) {
+      for (const event of visibleHistory.events) {
         if (isUserMessageEvent(event)) {
           consumeMatchingPendingMessage(
             conversationId,
@@ -354,27 +496,11 @@ export function ConversationWebSocketProvider({
       }
     }
   }, [
-    preloadedHistory,
+    visibleHistory,
     addEvents,
     conversationId,
     consumeMatchingPendingMessage,
   ]);
-
-  /**
-   * Timestamp of the latest event we already have from REST. Used as
-   * `after_timestamp` when opening the WebSocket so the server only resends
-   * events strictly after this point. `null` until the first REST page lands
-   * (the WS connection is gated on that — see `wsUrl` below). During
-   * background refetches `preloadedHistory` keeps the last-known page, so the
-   * anchor holds steady instead of flipping to null; reconnects read the
-   * freshest value from the options ref at connect time.
-   */
-  const initialAfterTimestamp = useMemo<string | null>(() => {
-    const events = preloadedHistory?.events ?? [];
-    const latest = events[events.length - 1];
-    if (!latest || !("timestamp" in latest) || !latest.timestamp) return null;
-    return latest.timestamp;
-  }, [preloadedHistory]);
 
   // Build WebSocket URL from props.
   //
@@ -414,7 +540,7 @@ export function ConversationWebSocketProvider({
   );
 
   const planningAgentWsUrl = useMemo(() => {
-    if (!subConversations?.length) {
+    if (!conversationUrl || !subConversations?.length) {
       return null;
     }
 
@@ -432,7 +558,7 @@ export function ConversationWebSocketProvider({
       planningAgentConversation.id,
       planningAgentConversation.conversation_url,
     );
-  }, [subConversations]);
+  }, [conversationUrl, subConversations]);
 
   // Merged connection state - reflects combined status of both connections
   const connectionState = useMemo<WebSocketConnectionState>(() => {
@@ -527,9 +653,12 @@ export function ConversationWebSocketProvider({
   useEffect(() => {
     hasConnectedRefMain.current = false;
     hasConnectedRefPlanning.current = false;
+    // A cursor is a position in one conversation's log; carrying it into the
+    // next would skip that conversation's events below it.
+    mainCursorRef.current.clear();
     // Reset the tracked event ref when conversation changes
     latestPlanningFileEventRef.current = null;
-  }, [conversationId]);
+  }, [conversationId, historyScope]);
 
   // Drop buffered deltas on conversation switch/unmount: the store is cleared on
   // switch, so flushing them would leak into the next conversation.
@@ -552,21 +681,23 @@ export function ConversationWebSocketProvider({
   const handleMainMessage = useCallback(
     (messageEvent: MessageEvent) => {
       try {
-        const event = JSON.parse(messageEvent.data);
+        const routed = routeSessionFrame(
+          JSON.parse(messageEvent.data),
+          mainDeltaBatcherRef.current,
+          mainCursorRef.current.observe,
+          mainReplayThroughSeqRef.current,
+          (throughSeq) => {
+            mainReplayThroughSeqRef.current = throughSeq;
+          },
+        );
+        if (!routed) return;
+        const { event, isReplay } = routed;
 
         // History loading for the main conversation is REST-driven now;
-        // every WS message is a new event we add to the store.
+        // every durable frame is a new event we add to the store.
 
         // Use type guard to validate v1 event structure
         if (isAgentServerEvent(event)) {
-          // Buffer deltas; nothing else in this handler applies to them.
-          if (isStreamingDeltaEvent(event)) {
-            mainDeltaBatcherRef.current?.enqueue(event);
-            return;
-          }
-          // Flush buffered deltas before this event so it can't overtake them.
-          mainDeltaBatcherRef.current?.flush();
-
           // A reconnect replays the backlog from a stale anchor. The store
           // dedups by id, but the side-effects below aren't idempotent, so skip
           // them for replayed events (#1656).
@@ -576,6 +707,8 @@ export function ConversationWebSocketProvider({
           const switchLLMObservation = isSwitchLLMObservationEvent(event)
             ? event
             : null;
+          const classifyAndSwitchLLMObservation =
+            isClassifyAndSwitchLLMObservationEvent(event) ? event : null;
           addEvent(event);
           if (isDuplicateEvent) {
             return;
@@ -646,15 +779,17 @@ export function ConversationWebSocketProvider({
             );
           }
 
-          // Handle conversation state updates
+          // Replayed status describes past work, not the current execution.
           if (isConversationStateUpdateEvent(event)) {
             if (
+              !isReplay &&
               isFullStateConversationStateUpdateEvent(event) &&
               conversationId
             ) {
               setExecutionStatus(conversationId, event.value.execution_status);
             }
             if (
+              !isReplay &&
               isAgentStatusConversationStateUpdateEvent(event) &&
               conversationId
             ) {
@@ -669,21 +804,6 @@ export function ConversationWebSocketProvider({
             if (isGoalConversationStateUpdateEvent(event) && conversationId) {
               useGoalStore.getState().setStatus(conversationId, event.value);
             }
-          }
-
-          // Handle ExecuteBashAction events - add command as input to terminal
-          if (isExecuteBashActionEvent(event)) {
-            appendInput(event.action.command);
-          }
-
-          // Handle ExecuteBashObservation events - add output to terminal
-          if (isExecuteBashObservationEvent(event)) {
-            // Extract text content from the observation content array
-            const textContent = event.observation.content
-              .filter((c) => c.type === "text")
-              .map((c) => c.text)
-              .join("\n");
-            appendOutput(textContent);
           }
 
           // Handle BrowserObservation events - update browser store with screenshot
@@ -710,6 +830,12 @@ export function ConversationWebSocketProvider({
             recordModelSwitchMessage(
               conversationId,
               switchLLMObservation.observation.profile_name,
+              undefined,
+              {
+                id: `history-switch:${switchLLMObservation.id}`,
+                initiator: "agent",
+                reason: switchLLMObservation.observation.reason,
+              },
             );
 
             // Mirror the user-driven `/model` path: persist the profile so the
@@ -734,6 +860,46 @@ export function ConversationWebSocketProvider({
             invalidateConversationQueries(queryClient, conversationId);
           }
 
+          // Router-driven model switch (Router/meta-profile classifier).
+          // Same UI semantics as SwitchLLMObservation: update the combobox,
+          // stamp the active profile, record the inline "Switched to"
+          // message. Per the SDK wire contract, `model` is the saved LLM
+          // profile name that was activated and `active_model` is the
+          // underlying model string — so the profile stamp and inline
+          // message use `model` (mirroring SwitchLLMObservation.profile_name),
+          // while the combobox cache update uses `active_model`.
+          if (
+            conversationId &&
+            classifyAndSwitchLLMObservation &&
+            !classifyAndSwitchLLMObservation.observation.is_error &&
+            classifyAndSwitchLLMObservation.observation.model
+          ) {
+            const profileName =
+              classifyAndSwitchLLMObservation.observation.model;
+
+            recordModelSwitchMessage(conversationId, profileName, undefined, {
+              id: `history-classify-switch:${classifyAndSwitchLLMObservation.id}`,
+              initiator: "router",
+              reason: classifyAndSwitchLLMObservation.observation.chosen_class,
+            });
+
+            stampActiveLlmProfile(
+              conversationId,
+              profileName,
+              classifyAndSwitchLLMObservation.timestamp,
+            );
+
+            if (classifyAndSwitchLLMObservation.observation.active_model) {
+              updateConversationLlmModelInCache(
+                queryClient,
+                conversationId,
+                classifyAndSwitchLLMObservation.observation.active_model,
+              );
+            }
+
+            invalidateConversationQueries(queryClient, conversationId);
+          }
+
           // Handle canvas_ui ActionEvents from both the legacy Python tool and
           // the client-defined JSON tool. The server acknowledges immediately;
           // the actual UI change happens here on the client.
@@ -741,11 +907,30 @@ export function ConversationWebSocketProvider({
             handleCanvasUIAction(event.action, conversationId ?? null);
           }
 
+          if (isAutomationFormUpdateActionEvent(event)) {
+            handleAutomationFormUpdateAction(
+              event.action,
+              conversationId ?? null,
+              event.id,
+              event.timestamp,
+            );
+          }
+
           // Same client-tool pattern, but the work is a network call: launch
           // the requested child conversation and post the outcome back so the
           // agent learns the id the server-side acknowledgement can't carry.
           if (conversationId && isLaunchChildConversationActionEvent(event)) {
             void handleLaunchChildConversationAction(
+              event.action,
+              conversationId,
+              event.tool_call_id,
+            );
+          }
+
+          // Same pattern again: the user answers in a chat card, and the
+          // outcome is posted back once they save or cancel it.
+          if (conversationId && isRequestSecretActionEvent(event)) {
+            void handleRequestSecretAction(
               event.action,
               conversationId,
               event.tool_call_id,
@@ -763,8 +948,6 @@ export function ConversationWebSocketProvider({
       queryClient,
       conversationId,
       setExecutionStatus,
-      appendInput,
-      appendOutput,
       updateMetricsFromStats,
       handleNonErrorEvent,
     ],
@@ -773,10 +956,21 @@ export function ConversationWebSocketProvider({
   const handlePlanningMessage = useCallback(
     (messageEvent: MessageEvent) => {
       try {
-        const event = JSON.parse(messageEvent.data);
+        const routed = routeSessionFrame(
+          JSON.parse(messageEvent.data),
+          planningDeltaBatcherRef.current,
+          planningCursorRef.current.observe,
+          planningReplayThroughSeqRef.current,
+          (throughSeq) => {
+            planningReplayThroughSeqRef.current = throughSeq;
+          },
+          { isFromPlanningAgent: true },
+        );
+        if (!routed) return;
+        const { event, isReplay } = routed;
 
-        // Track received events for history loading (count ALL events from WebSocket)
-        // Always count when loading, even if we don't have the expected count yet
+        // Track received events for history loading. Only events count:
+        // progress frames are not part of the replayed log.
         if (isLoadingHistoryPlanning) {
           receivedEventCountRefPlanning.current += 1;
 
@@ -790,14 +984,6 @@ export function ConversationWebSocketProvider({
 
         // Use type guard to validate v1 event structure
         if (isAgentServerEvent(event)) {
-          // Buffer deltas (the commit re-applies the planning flag).
-          if (isStreamingDeltaEvent(event)) {
-            planningDeltaBatcherRef.current?.enqueue(event);
-            return;
-          }
-          // Flush buffered deltas before this event so it can't overtake them.
-          planningDeltaBatcherRef.current?.flush();
-
           // Skip non-idempotent side-effects for replayed events, as in the
           // main handler (#1656).
           const isDuplicateEvent = useEventStore
@@ -882,13 +1068,14 @@ export function ConversationWebSocketProvider({
             }
           }
 
-          // Handle conversation state updates
+          // Replayed status describes past work, not the current execution.
           if (isConversationStateUpdateEvent(event)) {
             // Scope to the planning agent's own conversation id, not the main
             // `conversationId` — this socket reports the planning helper
             // conversation's run/idle transitions, which must never overwrite
             // the main conversation's status in the shared store.
             if (
+              !isReplay &&
               isFullStateConversationStateUpdateEvent(event) &&
               planningConversationId
             ) {
@@ -898,6 +1085,7 @@ export function ConversationWebSocketProvider({
               );
             }
             if (
+              !isReplay &&
               isAgentStatusConversationStateUpdateEvent(event) &&
               planningConversationId
             ) {
@@ -912,21 +1100,6 @@ export function ConversationWebSocketProvider({
             if (isGoalConversationStateUpdateEvent(event) && conversationId) {
               useGoalStore.getState().setStatus(conversationId, event.value);
             }
-          }
-
-          // Handle ExecuteBashAction events - add command as input to terminal
-          if (isExecuteBashActionEvent(event)) {
-            appendInput(event.action.command);
-          }
-
-          // Handle ExecuteBashObservation events - add output to terminal
-          if (isExecuteBashObservationEvent(event)) {
-            // Extract text content from the observation content array
-            const textContent = event.observation.content
-              .filter((c) => c.type === "text")
-              .map((c) => c.text)
-              .join("\n");
-            appendOutput(textContent);
           }
 
           // Handle PlanningFileEditorObservation - only update plan for Plan.md
@@ -980,8 +1153,6 @@ export function ConversationWebSocketProvider({
       planningConversationId,
       conversationId,
       setExecutionStatus,
-      appendInput,
-      appendOutput,
       readConversationFile,
       setPlanContent,
       updateMetricsFromStats,
@@ -989,51 +1160,66 @@ export function ConversationWebSocketProvider({
     ],
   );
 
+  const mainConnectionError = useConnectionErrorGracePeriod(wsUrl);
+  const planningConnectionError =
+    useConnectionErrorGracePeriod(planningAgentWsUrl);
+
   // Separate WebSocket options for main connection
   const mainWebsocketOptions: WebSocketHookOptions = useMemo(() => {
-    // History was already loaded over REST (`useConversationHistory`).
-    // Subscribe with `resend_mode='since'` so the server only resends events
-    // strictly after the latest one we already have. If REST returned no
-    // events at all (brand-new conversation), fall back to `'all'` so any
-    // events that may have been written between the REST call and the WS
-    // handshake still show up. Dedup in the event store handles overlap.
-    const queryParams: Record<string, string | boolean> = initialAfterTimestamp
-      ? { resend_mode: "since", after_timestamp: initialAfterTimestamp }
-      : { resend_mode: "all" };
+    // `after_seq` replaces the legacy resend_mode/after_timestamp pair, which
+    // compared naive local timestamps. Resolved lazily so a reconnect resumes
+    // from the newest `seq` this socket actually saw rather than from a value
+    // captured at render. The first connect has no cursor and asks for the
+    // whole log (`-1`); the REST preload (`useConversationHistory`) still
+    // renders instantly and the event store dedupes the overlap by id.
+    const queryParams = () => {
+      const cursor = mainCursorRef.current;
+      cursor.start(cursor.value ?? historyAfterSeqRef.current ?? -1);
+      return { after_seq: String(cursor.value) };
+    };
 
     return {
       queryParams,
       sessionApiKey,
       reconnect: { enabled: true },
       onOpen: () => {
+        mainReplayThroughSeqRef.current = null;
+        mainConnectionError.cancel();
         setMainConnectionState("OPEN");
         hasConnectedRefMain.current = true; // Mark that we've successfully connected
         clearConnectionError(); // Clear a previous connection error; keep sticky conversation errors
+        // Progress frames are never replayed, so any slot left open across the
+        // gap can never be retired. Discard and wait: the durable message is
+        // coming on the cursor regardless.
+        mainDeltaBatcherRef.current?.reset();
+        useEventStore.getState().clearStreamingSlots();
       },
       onClose: () => {
         setMainConnectionState("CLOSED");
+        mainDeltaBatcherRef.current?.reset();
+        useEventStore.getState().clearStreamingSlots();
       },
       onError: () => {
         setMainConnectionState("CLOSED");
-        // Only show error message if we've previously connected successfully
-        if (hasConnectedRefMain.current) {
-          setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, "connection");
-        }
+        mainConnectionError.report();
       },
       onMessage: handleMainMessage,
     };
   }, [
     handleMainMessage,
-    setErrorMessage,
+    mainConnectionError,
     clearConnectionError,
     sessionApiKey,
-    initialAfterTimestamp,
   ]);
 
   // Separate WebSocket options for planning agent connection
   const planningWebsocketOptions: WebSocketHookOptions = useMemo(() => {
-    const queryParams: Record<string, string | boolean> = {
-      resend_all: true,
+    // The planner's history is not preloaded over REST, so it always replays
+    // from the start on a first connect and from its cursor after that.
+    const queryParams = () => {
+      const cursor = planningCursorRef.current;
+      cursor.start(cursor.value ?? -1);
+      return { after_seq: String(cursor.value) };
     };
 
     const planningAgentConversation = subConversations?.[0];
@@ -1045,9 +1231,14 @@ export function ConversationWebSocketProvider({
       sessionApiKey: planningApiKey,
       reconnect: { enabled: true },
       onOpen: async () => {
+        planningReplayThroughSeqRef.current = null;
+        planningConnectionError.cancel();
         setPlanningConnectionState("OPEN");
         hasConnectedRefPlanning.current = true; // Mark that we've successfully connected
         clearConnectionError(); // Clear a previous connection error; keep sticky conversation errors
+        // See the main socket: an open slot cannot survive the gap.
+        planningDeltaBatcherRef.current?.reset();
+        useEventStore.getState().clearStreamingSlots(true);
 
         // Fetch expected event count for history loading detection
         if (
@@ -1074,19 +1265,18 @@ export function ConversationWebSocketProvider({
       },
       onClose: () => {
         setPlanningConnectionState("CLOSED");
+        planningDeltaBatcherRef.current?.reset();
+        useEventStore.getState().clearStreamingSlots(true);
       },
       onError: () => {
         setPlanningConnectionState("CLOSED");
-        // Only show error message if we've previously connected successfully
-        if (hasConnectedRefPlanning.current) {
-          setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, "connection");
-        }
+        planningConnectionError.report();
       },
       onMessage: handlePlanningMessage,
     };
   }, [
     handlePlanningMessage,
-    setErrorMessage,
+    planningConnectionError,
     clearConnectionError,
     sessionApiKey,
     subConversations,
@@ -1095,16 +1285,88 @@ export function ConversationWebSocketProvider({
   // Only attempt WebSocket connection when we have a valid URL
   // This prevents connection attempts during task polling phase
   const websocketUrl = wsUrl;
-  const { socket: mainSocket, reconnect: reconnectMain } = useWebSocket(
-    websocketUrl || "",
-    mainWebsocketOptions,
+  const {
+    socket: mainSocket,
+    reconnect: reconnectMain,
+    disconnect: disconnectMain,
+  } = useWebSocket(websocketUrl || "", mainWebsocketOptions);
+
+  const {
+    socket: planningAgentSocket,
+    reconnect: reconnectPlanning,
+    disconnect: disconnectPlanning,
+  } = useWebSocket(planningAgentWsUrl || "", planningWebsocketOptions);
+
+  // Messages submitted on a cloud backend while the target conversation has
+  // no runtime URL (sandbox PAUSED/STARTING) have nowhere to go: the V1 agent
+  // server only exists once the sandbox is RUNNING. Hold them per target
+  // conversation and send them when that conversation's socket opens. The
+  // caller's optimistic bubble stays in "sending" until the echo lands.
+  const heldMessagesRef = useRef(new Map<string, HeldMessage[]>());
+
+  const hasSendingBubble = useCallback(
+    (targetConversationId: string, message: SendMessageRequest) => {
+      const text = heldMessageText(message).trim();
+      return useOptimisticUserMessageStore
+        .getState()
+        .pendingMessages.some(
+          (pending) =>
+            pending.status === "sending" &&
+            matchesPendingConversationId(
+              targetConversationId,
+              pending.conversationId,
+            ) &&
+            pending.content.trim() === text,
+        );
+    },
+    [],
   );
 
-  const { socket: planningAgentSocket, reconnect: reconnectPlanning } =
-    useWebSocket(planningAgentWsUrl || "", planningWebsocketOptions);
+  const flushHeldMessages = useCallback(
+    (targetConversationId: string, socket: WebSocket) => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+      const held = heldMessagesRef.current.get(targetConversationId);
+      if (!held?.length) return;
+      heldMessagesRef.current.delete(targetConversationId);
+      held.forEach(({ message, hadBubble }) => {
+        // A bubble the user stopped (or that timed out into Retry) withdraws
+        // its message; everything else goes out exactly as a live send would.
+        if (hadBubble && !hasSendingBubble(targetConversationId, message)) {
+          return;
+        }
+        socket.send(JSON.stringify({ ...message, run: true }));
+      });
+    },
+    [hasSendingBubble],
+  );
+
+  useEffect(() => {
+    if (mainConnectionState !== "OPEN" || !mainSocket || !conversationId) {
+      return;
+    }
+    flushHeldMessages(conversationId, mainSocket);
+  }, [mainConnectionState, mainSocket, conversationId, flushHeldMessages]);
+
+  useEffect(() => {
+    if (
+      planningConnectionState !== "OPEN" ||
+      !planningAgentSocket ||
+      !planningConversationId
+    ) {
+      return;
+    }
+    flushHeldMessages(planningConversationId, planningAgentSocket);
+  }, [
+    planningConnectionState,
+    planningAgentSocket,
+    planningConversationId,
+    flushHeldMessages,
+  ]);
 
   const reconnect = useCallback(() => {
     removeErrorMessage();
+    mainConnectionError.cancel();
+    planningConnectionError.cancel();
     const currentMode = useConversationStore.getState().conversationMode;
     if (currentMode === "plan" && planningAgentWsUrl) {
       reconnectPlanning();
@@ -1116,10 +1378,55 @@ export function ConversationWebSocketProvider({
     reconnectMain,
     reconnectPlanning,
     removeErrorMessage,
+    mainConnectionError,
+    planningConnectionError,
   ]);
 
-  // V1 send message function via WebSocket
-  // Falls back to REST API queue when WebSocket is not connected
+  // Mobile browsers freeze and discard backgrounded tabs, silently killing
+  // the socket; this pre-empts that with a clean close on the way out and an
+  // immediate, explicit reconnect on the way back — see
+  // `usePageVisibilityReconnect` for the full rationale. Both sockets are
+  // covered regardless of `conversationMode`: a mode switch while
+  // backgrounded must not leave the *other* one stale.
+  const disconnectForBackground = useCallback(() => {
+    disconnectMain();
+    disconnectPlanning();
+  }, [disconnectMain, disconnectPlanning]);
+
+  const reconnectStaleOnForeground = useCallback(() => {
+    // Drop any "Unable to connect" banner left over from a background-caused
+    // close the instant the tab is foregrounded, so the UI reads
+    // "Reconnecting" (via `hasConnectedOnce`) rather than a stale error while
+    // the reconnect below is in flight. `clearConnectionError` only clears
+    // the connection-classified message, leaving any unrelated sticky error
+    // (e.g. a misconfigured API key) untouched.
+    clearConnectionError();
+    if (websocketUrl && mainConnectionState !== "OPEN") {
+      reconnectMain();
+    }
+    if (planningAgentWsUrl && planningConnectionState !== "OPEN") {
+      reconnectPlanning();
+    }
+  }, [
+    websocketUrl,
+    mainConnectionState,
+    planningAgentWsUrl,
+    planningConnectionState,
+    reconnectMain,
+    reconnectPlanning,
+    clearConnectionError,
+  ]);
+
+  usePageVisibilityReconnect({
+    enabled: !!(websocketUrl || planningAgentWsUrl),
+    disconnect: disconnectForBackground,
+    reconnectIfStale: reconnectStaleOnForeground,
+  });
+
+  // V1 send message function via WebSocket.
+  // When the socket is not connected: on a cloud backend whose runtime has
+  // no URL yet, hold the message until the socket opens; otherwise post it
+  // straight to the runtime.
   const sendMessage = useCallback(
     async (message: SendMessageRequest): Promise<SendMessageResult> => {
       const currentMode = useConversationStore.getState().conversationMode;
@@ -1129,8 +1436,7 @@ export function ConversationWebSocketProvider({
         currentMode === "plan" ? planningConversationId : conversationId;
 
       if (currentSocket?.readyState !== WebSocket.OPEN) {
-        // WebSocket not connected - queue message via REST API
-        // Message will be delivered automatically when conversation becomes ready
+        // WebSocket not connected.
         if (!targetConversationId) {
           // Never fall back to the parent in plan mode: without a planner
           // target the message would run in the code agent, which is exactly
@@ -1144,8 +1450,45 @@ export function ConversationWebSocketProvider({
           throw error;
         }
 
+        // Runtime coordinates for the target. A cloud runtime only has a URL
+        // (and session key) while its sandbox is RUNNING.
+        const planningAgentConversation = subConversations?.[0];
+        const runtimeUrl =
+          currentMode === "plan"
+            ? planningAgentConversation?.conversation_url
+            : conversationUrl;
+        const runtimeApiKey =
+          currentMode === "plan"
+            ? planningAgentConversation?.session_api_key
+            : sessionApiKey;
+
+        if (getActiveBackend().backend.kind === "cloud" && !runtimeUrl) {
+          // Nothing to deliver to yet (sandbox PAUSED/STARTING). Hold the
+          // message for `flushHeldMessages`; the caller's bubble stays in
+          // "sending". Not an error, so no banner.
+          const held = heldMessagesRef.current.get(targetConversationId) ?? [];
+          const serialized = JSON.stringify(message);
+          if (
+            !held.some((entry) => JSON.stringify(entry.message) === serialized)
+          ) {
+            held.push({
+              message,
+              hadBubble: hasSendingBubble(targetConversationId, message),
+            });
+            heldMessagesRef.current.set(targetConversationId, held);
+          }
+          return { queued: true };
+        }
+
+        // The runtime is reachable: post the message to it directly. It is
+        // delivered immediately and shows up in the socket's history replay.
         try {
-          await new ConversationClient(getAgentServerClientOptions()).sendEvent(
+          await new ConversationClient(
+            getAgentServerClientOptions({
+              conversationUrl: runtimeUrl,
+              sessionApiKey: runtimeApiKey,
+            }),
+          ).sendEvent(
             targetConversationId,
             {
               role: "user",
@@ -1153,8 +1496,7 @@ export function ConversationWebSocketProvider({
             },
             { run: true },
           );
-          // Message queued successfully - it will be delivered when ready
-          // Return queued: true so caller knows not to show optimistic UI
+          // Return queued: true so the caller knows the socket did not carry it
           return { queued: true };
         } catch (error) {
           const errorMessage =
@@ -1184,6 +1526,10 @@ export function ConversationWebSocketProvider({
       setErrorMessage,
       conversationId,
       planningConversationId,
+      conversationUrl,
+      sessionApiKey,
+      subConversations,
+      hasSendingBubble,
     ],
   );
 
@@ -1245,17 +1591,34 @@ export function ConversationWebSocketProvider({
     }
   }, [planningAgentSocket, planningAgentWsUrl]);
 
+  const activeMode = useConversationStore((state) => state.conversationMode);
+  const recoveryConversationId =
+    activeMode === "plan" && planningAgentWsUrl
+      ? subConversations?.[0]?.id
+      : conversationId;
+  const recoveryState =
+    activeMode === "plan" && planningAgentWsUrl
+      ? planningConnectionError.state
+      : mainConnectionError.state;
+
   const contextValue = useMemo(
     () => ({
       connectionState,
+      recoveryState,
+      recoveryConversationId,
       mainConnectionState,
       sendMessage,
       isLoadingHistory,
       reconnect,
+      hasConnectedOnce:
+        hasConnectedRefMain.current || hasConnectedRefPlanning.current,
     }),
     [
       connectionState,
+      recoveryState,
+      recoveryConversationId,
       mainConnectionState,
+      planningConnectionState,
       sendMessage,
       isLoadingHistory,
       reconnect,

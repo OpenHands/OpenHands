@@ -17,7 +17,10 @@ export function BtwMessages({ conversationId }: BtwMessagesProps) {
   if (!conversationId || entries.length === 0) return null;
 
   return (
-    <div data-testid="btw-messages" className="flex flex-col w-full">
+    <div
+      data-testid="btw-messages"
+      className="custom-scrollbar-always flex max-h-[40vh] w-full flex-col overflow-y-auto overscroll-contain"
+    >
       {entries.map((entry) => {
         const isPending = entry.status === "pending";
         return (

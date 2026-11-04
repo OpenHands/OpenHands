@@ -21,7 +21,7 @@ export function DragOver() {
             className="absolute top-[-16px] left-[-20px]"
           />
         </div>
-        <div className="drag-over-content">
+        <div>
           <p>{t(I18nKey.COMMON$DROP_YOUR_FILES_HERE)}</p>
         </div>
       </div>

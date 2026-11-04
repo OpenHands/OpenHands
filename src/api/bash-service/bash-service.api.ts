@@ -26,9 +26,11 @@ function isBashOutput(event: BashEvent): event is BashOutput {
  *
  * Bash events live on the agent-server runtime that owns the
  * conversation. In **local** mode we talk to the active backend's
- * agent-server directly with the SDK's `BashClient` (a per-conversation
- * URL is honoured when known, otherwise we fall back to the backend
- * host — a single local agent-server hosts all conversations). In
+ * agent-server directly with the SDK's `BashClient` at server level and
+ * ignore any per-conversation URL: a single local agent-server hosts all
+ * conversations, and the automation's command runs on it outside any
+ * conversation, so a conversation-scoped search
+ * (`/api/conversations/<id>/bash/...`) never finds its output. In
  * **cloud** mode we call that same per-conversation runtime host
  * directly from the browser: the runtime's CORS allowlist
  * (`OH_ALLOW_CORS_ORIGINS`, set to the Canvas origin in saas-deploy)
@@ -78,7 +80,8 @@ class BashService {
     sessionApiKey: string | null | undefined,
     options: SearchOptions,
   ): Promise<BashEventPage> {
-    if (getActiveBackend().backend.kind === "cloud") {
+    const isCloud = getActiveBackend().backend.kind === "cloud";
+    if (isCloud) {
       // Cloud requires the per-conversation runtime URL — there is no
       // shared cloud host that owns bash events. Callers must wait for
       // the conversation to be hydrated before invoking this method on
@@ -90,9 +93,10 @@ class BashService {
       }
     }
 
+    // Local searches stay at server level (see the class comment).
     return new BashClient(
       getAgentServerClientOptions({
-        ...(conversationUrl ? { conversationUrl } : {}),
+        ...(isCloud && conversationUrl ? { conversationUrl } : {}),
         sessionApiKey,
       }),
     ).searchEvents(options);

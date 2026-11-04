@@ -36,7 +36,7 @@ export const formControlHeroUiWrapperTransitionClassName = cn(
 
 /** Transform-only transitions (e.g. combobox carets). */
 export const formControlTransformTransitionClassName = cn(
-  "transition-[transform] ease",
+  "transition-[transform]",
   formControlTransitionDurationClassName,
   formControlMotionReduceClassName,
 );
@@ -129,17 +129,12 @@ export const formControlButtonClassName = cn(
 /** Helper text under a left-aligned {@link SettingsSwitch} (40px track + gap-2). */
 export const formControlSwitchDescriptionClassName = "pl-12";
 
-/** Filter / enum dropdown triggers beside search toolbars. */
-export const formControlFilterTriggerClassName = cn(
-  formControlButtonClassName,
-  formControlBorderClassName,
-  formControlSurfaceClassName,
-  "shrink-0 text-contrast",
-);
-
-/** Muted back navigation control with tertiary hover fill (settings sub-pages, detail views). */
+/** Outlined back navigation control with tertiary hover fill (settings sub-pages, detail views). */
 export const formControlBackNavButtonClassName = cn(
-  "inline-flex items-center gap-2 self-start rounded-lg p-2",
+  formControlHeightClassName,
+  "inline-flex items-center gap-2 self-start px-2",
+  formControlRadiusClassName,
+  formControlBorderClassName,
   "text-sm font-normal leading-5 text-muted cursor-pointer",
   formControlTransitionClassName,
   "hover:bg-tertiary hover:text-contrast",

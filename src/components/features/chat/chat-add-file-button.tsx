@@ -6,6 +6,7 @@ import { cn } from "#/utils/utils";
 import { chatInputIconButtonClassName } from "#/utils/form-control-classes";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useConversationNameContextMenu } from "#/hooks/use-conversation-name-context-menu";
 import { ToolsContextMenu } from "#/components/features/controls/tools-context-menu";
 import { SystemMessageModal } from "#/components/features/conversation-panel/system-message-modal";
@@ -34,6 +35,8 @@ export function ChatAddFileButton({
   const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  useCloseOnEscape(menuOpen, () => setMenuOpen(false), triggerRef);
 
   const {
     handleShowAgentTools,
@@ -69,6 +72,7 @@ export function ChatAddFileButton({
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         className={cn(
           chatInputIconButtonClassName,

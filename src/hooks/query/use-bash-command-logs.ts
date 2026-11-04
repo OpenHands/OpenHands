@@ -124,9 +124,10 @@ function classifyFetchError(error: unknown): SandboxIssue | null {
  * - **Local backend**: the query fires as soon as the modal opens and
  *   we have a `bash_command_id`. The conversation lookup runs in
  *   parallel; if it resolves with `session_api_key`/`conversation_url`
- *   those are passed through, but a missing/stale conversation does not
- *   block the bash query (the local agent-server hosts events under a
- *   single root).
+ *   those are passed through (`BashService` still searches at server
+ *   level, where the automation's command runs), but a missing/stale
+ *   conversation does not block the bash query (the local agent-server
+ *   hosts events under a single root).
  * - **Cloud backend**: the run's agent-server is found through its
  *   conversation when it has one, and through its sandbox otherwise
  *   (script automations never create a conversation). Either lookup

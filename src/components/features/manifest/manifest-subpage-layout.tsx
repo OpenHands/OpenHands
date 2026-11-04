@@ -60,10 +60,10 @@ export function ManifestSubpageLayout({
   children,
 }: ManifestSubpageLayoutProps) {
   return (
-    <div className="flex h-full gap-4 md:gap-6 md:pl-8 lg:gap-10 lg:pl-10">
+    <div className="flex h-full gap-4 lg:gap-10 lg:pl-10">
       <aside
         data-testid={`${navTestIdBase}-desktop`}
-        className="hidden md:flex md:w-65 md:shrink-0 md:flex-col md:gap-2 md:sticky md:top-8 md:self-start"
+        className="hidden lg:flex lg:w-65 lg:shrink-0 lg:flex-col lg:gap-2 lg:sticky lg:top-8 lg:self-start"
       >
         <span className="px-2 text-sm font-normal text-contrast">
           {heading}
@@ -78,7 +78,7 @@ export function ManifestSubpageLayout({
         <div className="mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6">
           <nav
             data-testid={`${navTestIdBase}-mobile`}
-            className="md:hidden flex gap-1 overflow-x-auto border-b border-border pb-2"
+            className="lg:hidden flex gap-1 overflow-x-auto border-b border-border pb-2"
           >
             {items.map((item) => (
               <SubPageNavLink key={item.to} item={item} />

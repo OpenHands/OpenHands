@@ -7,8 +7,16 @@ const mockAskAgent = vi.hoisted(() =>
   vi.fn<(id: string, q: string) => Promise<{ response: string }>>(),
 );
 
+const mockDisplayErrorToast = vi.hoisted(() => vi.fn());
+
 vi.mock("#/hooks/mutation/conversation-mutation-utils", () => ({
   askAgent: (id: string, q: string) => mockAskAgent(id, q),
+}));
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displayErrorToast: (message: string) => mockDisplayErrorToast(message),
+}));
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
 }));
 
 const CONV = "conv-1";
@@ -18,6 +26,7 @@ describe("useBtwInterceptor", () => {
   beforeEach(() => {
     useBtwStore.setState({ entriesByConversation: {} });
     mockAskAgent.mockReset();
+    mockDisplayErrorToast.mockReset();
   });
 
   it("falls through to onSubmit for non-/btw messages", () => {
@@ -46,6 +55,23 @@ describe("useBtwInterceptor", () => {
       status: "done",
     });
   });
+
+  it.each(["/btw", "/btw ", "  /btw   "])(
+    "toasts and asks nothing for a bare %j (no question)",
+    (message) => {
+      const onSubmit = vi.fn();
+      const { result } = renderHook(() => useBtwInterceptor(CONV, onSubmit));
+
+      act(() => result.current(message));
+
+      expect(mockDisplayErrorToast).toHaveBeenCalledWith(
+        "CHAT_INTERFACE$BTW_QUESTION_REQUIRED",
+      );
+      expect(mockAskAgent).not.toHaveBeenCalled();
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(entries()).toEqual([]);
+    },
+  );
 
   it("marks the entry as error when askAgent rejects", async () => {
     mockAskAgent.mockRejectedValueOnce(new Error("boom"));

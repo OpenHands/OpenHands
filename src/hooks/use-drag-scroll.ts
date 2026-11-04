@@ -61,8 +61,10 @@ export function useDragScroll(scrollRef: RefObject<HTMLElement | null>) {
       }
 
       // The mouseup can be missed when released outside the window; end the
-      // drag once the primary button is no longer held.
+      // drag once the primary button is no longer held. That release sent no
+      // click to the page, so there is nothing left to suppress.
       if ((event.buttons & 1) === 0) {
+        dragCommittedRef.current = false;
         setIsDragging(false);
         return;
       }
@@ -79,7 +81,18 @@ export function useDragScroll(scrollRef: RefObject<HTMLElement | null>) {
         startScrollLeftRef.current - (event.clientX - startXRef.current);
     };
 
-    const handleMouseUp = () => setIsDragging(false);
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      // A release outside the scroller sends its click elsewhere, so the
+      // capture handler never clears the flag and would swallow the next
+      // keyboard or touch click. This release's own click is dispatched
+      // before the timeout runs, so it is still suppressed.
+      if (dragCommittedRef.current) {
+        window.setTimeout(() => {
+          dragCommittedRef.current = false;
+        }, 0);
+      }
+    };
 
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);

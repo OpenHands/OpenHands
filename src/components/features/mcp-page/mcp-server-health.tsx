@@ -25,7 +25,7 @@ const DOT_CLASS_BY_STATUS: Record<McpServerHealth["status"], string> = {
   unchecked: "bg-text-tertiary",
   checking: "bg-interactive-selected animate-pulse",
   healthy: "bg-status-success",
-  failed: "bg-red-500",
+  failed: "bg-status-error",
 };
 
 const actionClassName =
@@ -43,6 +43,7 @@ function getDotStatus(health: McpServerHealth): string {
 function getStatusLabel(
   t: TFunction<"openhands">,
   health: McpServerHealth,
+  serverType: MCPServerConfig["type"],
 ): string {
   switch (health.status) {
     case "checking":
@@ -52,7 +53,7 @@ function getStatusLabel(
         ? t(I18nKey.MCP$HEALTH_STATUS_VERIFIED, { count: health.toolCount })
         : t(I18nKey.MCP$HEALTH_STATUS_CONNECTIVITY_ONLY);
     case "failed":
-      return makeMcpTestErrorMessage(t, health.kind, health.error);
+      return makeMcpTestErrorMessage(t, health.kind, health.error, serverType);
     default:
       return t(I18nKey.MCP$HEALTH_STATUS_UNCHECKED);
   }
@@ -82,7 +83,7 @@ export function McpServerHealthSection({
 
   const isChecking = health.status === "checking";
   const isFailed = health.status === "failed";
-  const label = getStatusLabel(t, health);
+  const label = getStatusLabel(t, health, server.type);
 
   const handleReauthorize = async () => {
     const result = await reauthorize();
@@ -138,7 +139,7 @@ export function McpServerHealthSection({
           data-testid={`mcp-health-label-${server.id}`}
           className={cn(
             "line-clamp-2 break-words text-xs",
-            isFailed ? "text-red-500" : "text-tertiary-alt",
+            isFailed ? "text-feedback-error" : "text-tertiary-alt",
           )}
           title={label}
         >

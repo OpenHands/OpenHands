@@ -8,6 +8,7 @@ import {
 import { I18nKey } from "#/i18n/declaration";
 import { getAgentServerWorkingDir } from "#/api/agent-server-config";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useSkillEnabledFilter } from "#/hooks/use-skill-enablement";
 import {
   groupSkillsByScope,
@@ -46,7 +47,10 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
     refetch,
     isRefetching,
   } = useConversationSkills();
-  const isSkillEnabled = useSkillEnabledFilter();
+  const { data: conversation } = useActiveConversation();
+  const isSkillEnabled = useSkillEnabledFilter(
+    conversation?.launched_agent_profile?.agent_profile_id,
+  );
 
   // The modal reports what the conversation actually has, so it lists the
   // enabled set rather than the whole catalog.
@@ -72,7 +76,7 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
       <ModalBody
         width="lg"
         className={cn(
-          "relative max-h-[80vh] flex flex-col items-start border border-border",
+          "relative dialog-content-height flex flex-col items-start border border-border",
           MODAL_MAX_WIDTH_VIEWPORT,
         )}
         testID="skills-modal"
@@ -84,7 +88,7 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
           onClose={onClose}
         />
 
-        <div className="w-full h-[60vh] overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always">
+        <div className="w-full conversation-dialog-reading-height overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always">
           {isLoading ? (
             <SkillsLoadingState />
           ) : isError || !skills || visibleSkills.length === 0 ? (

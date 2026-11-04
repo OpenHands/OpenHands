@@ -1,0 +1,55 @@
+{
+  "attribution": "I am an AI agent helping Engel Nyst (@enyst) with project work.",
+  "target": "61a3bd93e642a0ff4def73b29496a73245628209",
+  "workspace_capacity_bytes": 33770192896,
+  "initial_free_bytes": 16454135808,
+  "frontend_stage": {
+    "exitCode": 0,
+    "elapsedSeconds": 120.79,
+    "cancelReason": null
+  },
+  "full_final_stage": {
+    "exitCode": 130,
+    "elapsedSeconds": 69.16,
+    "cancelReason": "free disk reached5GiB reserve"
+  },
+  "minimum_sampled_free_bytes": 5219561472,
+  "peak_sampled_anon_plus_kernel_bytes": 4191911936,
+  "oom_before": 0,
+  "oom_after": 0,
+  "oom_kill_before": 0,
+  "oom_kill_after": 0,
+  "full_base_digest": "sha256:da0d9f39d16717637f6779e590e304b6b248038011648e75ca65fea36ae2e660",
+  "phase_at_cancel": "Required full Agent Server base unpack; final29steps and Canvas image/container runtime did not complete.",
+  "result": "blocked_capacity_not_product_failure",
+  "capacity_needed": "More than the observed11.23GB incremental build consumption plus5GiB reserve; exact completed peak is unmeasured. Larger Docker storage budget or a supported storage path avoiding current copy amplification is needed.",
+  "bootstrap_errors": [
+    {
+      "result": "preflight_error_no_build",
+      "detail": "Uppercase temporary tag corrected to lowercase; not a frontend product failure."
+    },
+    {
+      "result": "registry_transport_setup_error",
+      "detail": "Client allowlist initially omitted existing noncredential proxy; validated proxy transport restored without daemon restart/reconfiguration."
+    }
+  ],
+  "scope": "Neutral public-CA build secrets, frozen product source/pins, credential-free proxy transport. Provider/GitHub/session credentials excluded. No productfix, daemon restart or global prune.",
+  "owned_frontend_image_removed": true,
+  "final_image_produced": false,
+  "container_started_from_full_image": false,
+  "full_image_browser_auth_persistence_checks": "blocked; not executed",
+  "separate_minimal_docker_conversation": "passed; see docker-runtime-proof.json",
+  "historical_original_cancel": "Separate earlier attempt at about3.9GBfree. Its cancellation is not attributed as the cause of the subsequent shared execution outage.",
+  "publication_status": "Reviewed final artifact published on the existing fork audit branch.",
+  "owned_cleanup_final": {
+    "all_three_task_images_removed": true,
+    "remaining_images": [
+      "postgres:15",
+      "testcontainers/ryuk:0.8.1"
+    ],
+    "exact_new_cache_ids_removed": 3,
+    "protected_preexisting_cache_ids_preserved": 34,
+    "no_global_prune": true,
+    "evidence_visibility": "Detailed owned image/cache receipts retained privately; this public artifact contains reviewed counts only."
+  }
+}

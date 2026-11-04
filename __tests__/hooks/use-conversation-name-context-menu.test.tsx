@@ -393,6 +393,25 @@ describe("useConversationNameContextMenu", () => {
     expect(harness.navigate).toHaveBeenCalledWith("/conversations");
   });
 
+  it("closes the menu without rethrowing when the download fails", async () => {
+    harness.downloadConversation.mockRejectedValue(
+      new Error("HTTP request failed (502 Bad Gateway)"),
+    );
+    const onContextMenuToggle = vi.fn();
+    const { result } = renderHook(() =>
+      useConversationNameContextMenu({
+        conversationId: "conv-active",
+        onContextMenuToggle,
+      }),
+    );
+
+    await act(async () =>
+      result.current.handleDownloadConversation(clickEvent().event),
+    );
+
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+  });
+
   it("does not navigate after deleting a conversation that is not currently open", () => {
     harness.currentConversationId = "conv-current";
     const { result } = renderHook(() =>
