@@ -113,6 +113,14 @@ class SkillsService {
    * when a conversation opens its workspace, so they are not listed.
    */
   static async getSkillCatalog(): Promise<SkillInfo[]> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      const skills = await fetchCloudSkills();
+      return skills.map((skill) => ({
+        ...skill,
+        origin: skill.origin ?? (skill.source === "user" ? "user" : "public"),
+      }));
+    }
+
     const { host, apiKey } = getAgentServerClientOptions();
     try {
       const data = await new AgentServerClient({ host, apiKey }).get<unknown>(

@@ -1,26 +1,26 @@
-import { getActiveBackend } from "#/api/backend-registry/active-store";
-
-/** Local only: cloud launches do not enforce a profile's secret scope yet. */
+/**
+ * Agent Canvas stores these fields directly on agent profiles in both local and
+ * Enterprise cloud backends. Cloud launches now resolve profile-scoped secrets,
+ * instructions, tools, skills, and routers from the profile snapshot, while the
+ * options endpoint supplies the inherited organization values that the editor
+ * can reference.
+ */
 export function agentProfileSupportsSecretRefs(): boolean {
-  return getActiveBackend().backend.kind !== "cloud";
+  return true;
 }
 
-/** Only offer profile instructions where launches apply them. */
 export function agentProfileSupportsInstructions(): boolean {
-  return getActiveBackend().backend.kind !== "cloud";
+  return true;
 }
 
-/** Local only: cloud launches ignore a profile's tools for now. */
 export function agentProfileSupportsTools(): boolean {
-  return getActiveBackend().backend.kind !== "cloud";
+  return true;
 }
 
-/** Local only: cloud loads skills from its own catalog. */
 export function agentProfileSupportsSkills(): boolean {
-  return getActiveBackend().backend.kind !== "cloud";
+  return true;
 }
 
-/** Local only: cloud backends keep routers in the organization's store. */
 export function agentProfileSupportsRouter(): boolean {
-  return getActiveBackend().backend.kind !== "cloud";
+  return true;
 }

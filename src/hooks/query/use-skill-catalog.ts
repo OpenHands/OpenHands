@@ -19,7 +19,7 @@ export function useSkillCatalog(options: UseSkillCatalogOptions = {}) {
   return useQuery({
     queryKey: [...SKILL_CATALOG_QUERY_KEYS.all, backend.id, backend.host],
     queryFn: SkillsService.getSkillCatalog,
-    enabled: (options.enabled ?? true) && backend.kind !== "cloud",
+    enabled: options.enabled ?? true,
     ...CONFIG_CACHE_OPTIONS,
     ...AGENT_PROFILES_RETRY_OPTIONS,
     meta: { disableToast: true },
