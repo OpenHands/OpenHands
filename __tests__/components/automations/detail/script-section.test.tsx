@@ -99,19 +99,32 @@ describe("ScriptBody", () => {
     // Arrange
     vi.spyOn(AutomationService, "fetchTarballBytes").mockResolvedValue(
       new Uint8Array(
-        await packTarGzip([{ name: "main.py", content: "print('hi')\n" }]),
+        await packTarGzip([
+          { name: "main.py", content: "print('hi')\n" },
+          { name: "config.json", content: "{}\n" },
+        ]),
       ),
     );
     const user = userEvent.setup();
     renderSection();
-    const [file] = await screen.findAllByTestId("automation-script-file");
-    expect(file).not.toHaveTextContent("print('hi')");
+    const [mainFile, configFile] = await screen.findAllByTestId(
+      "automation-script-file",
+    );
+    const mainToggle = screen.getByRole("button", { name: /main\.py/ });
+    const configToggle = screen.getByRole("button", { name: /config\.json/ });
+    expect(mainFile).not.toHaveTextContent("print('hi')");
+    expect(configFile).not.toHaveTextContent("{}");
+    expect(mainToggle).toHaveAttribute("aria-expanded", "false");
+    expect(configToggle).toHaveAttribute("aria-expanded", "false");
 
     // Act
-    await user.click(screen.getByRole("button", { name: /main\.py/ }));
+    await user.click(mainToggle);
 
     // Assert
-    expect(file).toHaveTextContent("print('hi')");
+    expect(mainFile).toHaveTextContent("print('hi')");
+    expect(mainToggle).toHaveAttribute("aria-expanded", "true");
+    expect(configFile).not.toHaveTextContent("{}");
+    expect(configToggle).toHaveAttribute("aria-expanded", "false");
   });
 
   it("shows a loading message until the bundle arrives", () => {
