@@ -14,8 +14,12 @@ import {
 import { I18nKey } from "#/i18n/declaration";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { isNoBackend } from "#/api/backend-registry/active-store";
+import { useCloudMcpSettingsUrl } from "#/hooks/use-cloud-mcp-settings-url";
 
-/** Only the Skills item points to a cloud-hosted page today. */
+/**
+ * The Skills item points to a cloud-hosted page; so does the MCP Servers item
+ * on an OpenHands Enterprise instance with organization MCP servers on.
+ */
 const CLOUD_LINKED_EXTENSION_PATH = "/skills";
 /** Backend-installed artifacts are not available on Cloud backends yet. */
 const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/apps"]);
@@ -96,6 +100,7 @@ function ExtensionsNavigationLinks() {
   const { active } = useActiveBackendContext();
   const { backend } = active;
   const isCloudBackend = !isNoBackend(backend) && backend.kind === "cloud";
+  const { url: cloudMcpSettingsUrl } = useCloudMcpSettingsUrl();
   return (
     <div className="flex flex-col gap-0.5 pt-0.5">
       {EXTENSIONS_NAV_ITEMS.filter(
@@ -104,6 +109,12 @@ function ExtensionsNavigationLinks() {
       ).map((item) => {
         const isCloudSkillsLink =
           item.to === CLOUD_LINKED_EXTENSION_PATH && isCloudBackend;
+        let externalUrl: string | null = null;
+        if (isCloudSkillsLink) {
+          externalUrl = `${backend.host.replace(/\/+$/, "")}/settings/skills`;
+        } else if (item.to === "/mcp") {
+          externalUrl = cloudMcpSettingsUrl;
+        }
         const baseRow = (
           <span className="shrink-0 flex items-center justify-center">
             {item.icon}
@@ -122,13 +133,12 @@ function ExtensionsNavigationLinks() {
           </span>
         );
 
-        if (isCloudSkillsLink) {
-          const cloudSkillsUrl = `${backend.host.replace(/\/+$/, "")}/settings/skills`;
+        if (externalUrl) {
           return (
             <a
               key={item.to}
               data-testid={`sidebar-extensions-${item.to}`}
-              href={cloudSkillsUrl}
+              href={externalUrl}
               target="_blank"
               rel="noopener noreferrer"
               className={cn(

@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
+import { server } from "#/mocks/node";
 import { NavigationProvider } from "#/context/navigation-context";
 import { MemoryRouter } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -189,6 +191,37 @@ describe("ExtensionsNavigation", () => {
       const mcpItem = within(nav).getByTestId("sidebar-extensions-/mcp");
       expect(mcpItem).not.toHaveAttribute("target");
       expect(mcpItem).toHaveAttribute("href", "/mcp");
+    });
+
+    it("links the MCP Servers item to {cloudHost}/settings/mcp on an Enterprise instance with organization MCP servers", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+      server.use(
+        http.get("*/api/v1/web-client/config", () =>
+          HttpResponse.json({
+            providers_configured: [],
+            feature_flags: {
+              deployment_mode: "self_hosted",
+              enable_org_mcp_servers: true,
+            },
+          }),
+        ),
+      );
+
+      renderExtensionsNavigation(<ExtensionsNavigation />);
+
+      const nav = screen.getByTestId("extensions-navbar-desktop");
+      await waitFor(() =>
+        expect(
+          within(nav).getByTestId("sidebar-extensions-/mcp"),
+        ).toHaveAttribute(
+          "href",
+          "https://app.all-hands.dev/settings/mcp?org=org-1",
+        ),
+      );
+      expect(
+        within(nav).getByTestId("sidebar-extensions-/mcp"),
+      ).toHaveAttribute("target", "_blank");
     });
   });
 

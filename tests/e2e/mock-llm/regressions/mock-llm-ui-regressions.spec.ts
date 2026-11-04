@@ -936,6 +936,31 @@ test.describe("UI regressions", () => {
   // @spec WN-001 — Home warning icon follows the embedding host warning role
   test("home warning icon follows the host warning color", async ({ page }) => {
     await routeSessionApiKey(page);
+    // Earlier scenarios persist usable LLM and ACP profiles on the shared server.
+    await page.route("**/api/profiles", async (route, request) => {
+      if (request.method() !== "GET") return route.fallback();
+      return route.fulfill({
+        json: { profiles: [], active_profile: null },
+      });
+    });
+    await page.route("**/api/agent-profiles", async (route, request) => {
+      if (request.method() !== "GET") return route.fallback();
+      return route.fulfill({
+        json: {
+          active_agent_profile_id: "warning-test-agent",
+          profiles: [
+            {
+              id: "warning-test-agent",
+              name: "default",
+              agent_kind: "openhands",
+              revision: 1,
+              llm_profile_ref: null,
+              mcp_server_refs: [],
+            },
+          ],
+        },
+      });
+    });
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(
       page.getByTestId("home-llm-not-configured-banner"),

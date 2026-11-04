@@ -279,6 +279,7 @@ describe("recommended automations", () => {
       "upstream-fork-sync",
       "incident-retrospective-drafter",
       "github-stale-ci-pr-closer",
+      "github-comment-cleanup",
     ]);
   });
 
@@ -305,7 +306,7 @@ describe("recommended automations", () => {
     expect(moreHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$MORE_TITLE,
     );
-    expect(within(moreHeading).getByText("17")).toBeInTheDocument();
+    expect(within(moreHeading).getByText("18")).toBeInTheDocument();
 
     const moreSection = screen.getByTestId(
       "recommended-automations-beta-section",
@@ -1346,7 +1347,7 @@ describe("recommended automations", () => {
     });
   });
 
-  it("explains what the instance does not report before setting such a template up, and lets the user continue", async () => {
+  it("sets up a template the instance does not look ready for without a notice", async () => {
     // Arrange
     await activateCloudBackend({
       deploymentMode: "self_hosted",
@@ -1354,28 +1355,16 @@ describe("recommended automations", () => {
       jiraDcEnabled: true,
     });
     renderLauncher({ withBackendProvider: true });
-    const card = await screen.findByTestId(
-      "recommended-automation-card-github-pr-reviewer",
+
+    // Act
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-github-pr-reviewer",
+      ),
     );
 
-    // Act — open it and cancel.
-    fireEvent.click(card);
-
     // Assert
-    expect(screen.getByTestId("unlikely-integration-notice")).toHaveTextContent(
-      "GitHub",
-    );
-    fireEvent.click(screen.getByTestId("unlikely-integration-notice-cancel"));
-    expect(
-      screen.queryByTestId("unlikely-integration-notice"),
-    ).not.toBeInTheDocument();
-    expect(mockNavigate).not.toHaveBeenCalled();
-
-    // Act — open it again and continue.
-    fireEvent.click(card);
-    fireEvent.click(screen.getByTestId("unlikely-integration-notice-continue"));
-
-    // Assert
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith(
         "/automations/new/github-pr-reviewer",
@@ -1383,7 +1372,7 @@ describe("recommended automations", () => {
     );
   });
 
-  it("sets up a template the instance looks ready for without the notice", async () => {
+  it("sets up a template the instance looks ready for", async () => {
     // Arrange
     await activateCloudBackend({
       deploymentMode: "self_hosted",
@@ -1399,9 +1388,6 @@ describe("recommended automations", () => {
     );
 
     // Assert
-    expect(
-      screen.queryByTestId("unlikely-integration-notice"),
-    ).not.toBeInTheDocument();
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith(
         "/automations/new/github-pr-reviewer",
