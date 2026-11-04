@@ -161,6 +161,96 @@ describe("LaunchRoute", () => {
     });
   });
 
+  describe("Message-Only Launch (no plugins)", () => {
+    it("should show the message confirmation modal instead of the no-plugins error", () => {
+      renderLaunchRoute("?message=hey%20whats%20up");
+
+      expect(screen.getByTestId("message-launch-modal")).toBeInTheDocument();
+      expect(screen.getByText("hey whats up")).toBeInTheDocument();
+      expect(screen.queryByTestId("launch-error")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("plugin-launch-modal"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should not show a trust checkbox for message-only launches", () => {
+      renderLaunchRoute("?message=hey");
+
+      expect(screen.queryByTestId("trust-checkbox")).not.toBeInTheDocument();
+    });
+
+    it("should enable the start button without checking any checkbox", () => {
+      renderLaunchRoute("?message=hey");
+
+      expect(
+        screen.getByTestId("start-conversation-button"),
+      ).not.toBeDisabled();
+    });
+
+    it("should create a conversation with the message and no plugins", async () => {
+      const user = userEvent.setup();
+      renderLaunchRoute("?message=hey%20whats%20up");
+
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledWith({
+          plugins: [],
+          query: "hey whats up",
+          entryPoint: "launch_deeplink",
+        });
+      });
+    });
+
+    it("should navigate to conversation after successful creation", async () => {
+      const user = userEvent.setup();
+      mockMutateAsync.mockResolvedValue({ conversation_id: "msg-conv-789" });
+
+      renderLaunchRoute("?message=hey");
+
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith(
+          "/conversations/msg-conv-789",
+        );
+      });
+    });
+
+    it("should navigate home when close button clicked", async () => {
+      const user = userEvent.setup();
+
+      renderLaunchRoute("?message=hey");
+
+      await user.click(screen.getByTestId("close-button"));
+
+      expect(mockNavigate).toHaveBeenCalledWith("/conversations");
+    });
+
+    it("should strip HTML from message-only links", () => {
+      const maliciousMessage = "<script>alert(1)</script>Safe text";
+
+      renderLaunchRoute(`?message=${encodeURIComponent(maliciousMessage)}`);
+
+      expect(screen.queryByText(/<script>/)).not.toBeInTheDocument();
+      expect(screen.getByText("alert(1)Safe text")).toBeInTheDocument();
+    });
+
+    it("should show error when message is empty", () => {
+      renderLaunchRoute("?message=");
+
+      expect(screen.getByTestId("launch-error")).toBeInTheDocument();
+      expect(screen.getByText("LAUNCH$ERROR_NO_PLUGINS")).toBeInTheDocument();
+    });
+
+    it("should show error when message strips to empty", () => {
+      renderLaunchRoute(`?message=${encodeURIComponent("<div></div>")}`);
+
+      expect(screen.getByTestId("launch-error")).toBeInTheDocument();
+      expect(screen.getByText("LAUNCH$ERROR_NO_PLUGINS")).toBeInTheDocument();
+    });
+  });
+
   describe("Message Sanitization", () => {
     it("should display sanitized message", () => {
       const plugins = [{ source: "github:owner/repo" }];
