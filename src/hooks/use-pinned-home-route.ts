@@ -5,6 +5,7 @@ import {
   isNoBackend,
 } from "#/api/backend-registry/active-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { ACTIVITY_PATH } from "#/constants/activity";
 import {
   automationListPath,
   hasAutomationInterface,
@@ -38,6 +39,7 @@ export function getPinnedHomeRouteKey(
  */
 export function isPinnableRoute(path: string): boolean {
   if (path === CUSTOMIZE_PATH) return true;
+  if (path === ACTIVITY_PATH) return true;
   if (path === automationListPath()) return hasAutomationInterface();
   return false;
 }

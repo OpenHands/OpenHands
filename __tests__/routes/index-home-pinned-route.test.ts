@@ -57,6 +57,18 @@ describe("the index route with a pinned home page", () => {
     expect((result as Response).headers.get("Location")).toBe("/customize");
   });
 
+  it("redirects / to the Activity view when it is pinned as home", () => {
+    // Arrange
+    window.localStorage.setItem(PIN_KEY, JSON.stringify("/activity"));
+
+    // Act
+    const result = clientLoader();
+
+    // Assert
+    expect(result).toBeInstanceOf(Response);
+    expect((result as Response).headers.get("Location")).toBe("/activity");
+  });
+
   it("renders the default home when no pin is set", () => {
     expect(clientLoader()).toBeNull();
   });

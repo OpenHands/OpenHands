@@ -152,6 +152,8 @@ export const CONVERSATION_QUERY_KEYS = {
     ["user", "conversations", "paginated", limit, backendId, orgId] as const,
   startTask: (id: string | null) => ["start-task", id] as const,
   subConversations: ["v1", "sub-conversations"] as const,
+  activityTail: ["v1", "conversation-activity-tail"] as const,
+  activityRuntime: ["v1", "conversation-activity-runtime"] as const,
 } as const;
 
 export const LOCAL_PLANNER_MUTATION_KEYS = {
