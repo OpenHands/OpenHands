@@ -19,6 +19,39 @@ import { AutomationRunStatus } from "#/types/automation";
 import { MOCK_AUTOMATIONS_RESPONSE } from "./automations.mock";
 import { MOCK_AUTOMATION_RUNS } from "./automation-runs.mock";
 
+// The built-in Data Center sources (OpenHands/automation 1.27.0) are newer
+// than the fixture too; these are the event keys the service's catalog lists
+// for them, so the mock deployment looks like an Enterprise instance with
+// Jira and Bitbucket Data Center.
+const DATA_CENTER_EVENT_TYPES: Record<string, string[]> = {
+  bitbucket_data_center: [
+    "pr:comment:added",
+    "pr:comment:deleted",
+    "pr:comment:edited",
+    "pr:declined",
+    "pr:deleted",
+    "pr:from_ref_updated",
+    "pr:merged",
+    "pr:modified",
+    "pr:opened",
+    "pr:reviewer:approved",
+    "pr:reviewer:needs_work",
+    "pr:reviewer:unapproved",
+    "repo:comment:added",
+    "repo:comment:deleted",
+    "repo:comment:edited",
+    "repo:refs_changed",
+  ],
+  jira_dc: [
+    "comment_created",
+    "comment_deleted",
+    "comment_updated",
+    "jira:issue_created",
+    "jira:issue_deleted",
+    "jira:issue_updated",
+  ],
+};
+
 // The "supported" deployment from the published contract fixtures. Discovery
 // and preflight answer with it, so the setup flow runs against the same
 // reference data the extensions contract is verified against.
@@ -34,6 +67,14 @@ const CAPABILITIES: DeploymentCapabilities = {
     "repoUpdate",
   ],
   repoProviders: ["bitbucket", "github", "gitlab"],
+  eventSources: [
+    ...capabilitiesFixture.responses.supported.body.eventSources,
+    ...Object.keys(DATA_CENTER_EVENT_TYPES),
+  ].sort(),
+  eventTypesBySource: {
+    github: capabilitiesFixture.responses.supported.body.eventTypes,
+    ...DATA_CENTER_EVENT_TYPES,
+  },
 };
 
 interface DraftTrigger {
@@ -54,14 +95,24 @@ function cronIntervalSeconds(schedule: string): number | null {
   return (match[1] ? Number(match[1]) : 1) * 60;
 }
 
-// Event deliveries registered for the mock organization. Distinct from
-// CAPABILITIES.eventTypes on purpose: a deployment can support an event type
-// that no webhook is registered to deliver, and preflight is what catches
+// Event deliveries registered for the mock organization, per source. Distinct
+// from CAPABILITIES.eventTypes on purpose: a deployment can support an event
+// type that no webhook is registered to deliver, and preflight is what catches
 // that gap — the fixtures' event-type-not-delivered scenario depends on one
-// supported type staying unregistered here.
-const REGISTERED_EVENT_TYPES = CAPABILITIES.eventTypes.filter(
-  (type) => type !== "pull_request_review_comment.created",
-);
+// supported GitHub type staying unregistered here.
+const REGISTERED_EVENT_TYPES_BY_SOURCE: Record<string, string[]> = {
+  github: CAPABILITIES.eventTypes.filter(
+    (type) => type !== "pull_request_review_comment.created",
+  ),
+  ...DATA_CENTER_EVENT_TYPES,
+};
+
+// A trailing `*` subscribes to a family of event keys, as in `pr:*`.
+function eventPatternMatches(pattern: string, eventType: string): boolean {
+  return pattern.endsWith("*")
+    ? eventType.startsWith(pattern.slice(0, -1))
+    : pattern === eventType;
+}
 
 // The deployment checks the contract fixtures record: a cron schedule below
 // triggers.cron.minIntervalSeconds, and an event type no webhook delivers.
@@ -86,12 +137,15 @@ function validateDraftTrigger(
   }
 
   // "*" subscribes to every event the source delivers, so it never names an
-  // unregistered type.
+  // unregistered type. A source without a catalog accepts any key.
+  const registered =
+    REGISTERED_EVENT_TYPES_BY_SOURCE[trigger.source ?? "github"];
   if (
     trigger.type === "event" &&
     trigger.on &&
     trigger.on !== "*" &&
-    !REGISTERED_EVENT_TYPES.includes(trigger.on)
+    registered &&
+    !registered.some((type) => eventPatternMatches(trigger.on ?? "", type))
   ) {
     const source = trigger.source === "github" ? "GitHub" : trigger.source;
     return [
