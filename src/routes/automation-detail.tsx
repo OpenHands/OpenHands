@@ -27,6 +27,7 @@ import { BackLink } from "#/components/features/automations/detail/back-link";
 import { DetailHeader } from "#/components/features/automations/detail/detail-header";
 import { AutomationTagsEditor } from "#/components/features/automations/detail/automation-tags-editor";
 import { DisabledReasonBanner } from "#/components/features/automations/detail/disabled-reason-banner";
+import { DescriptionSection } from "#/components/features/automations/detail/description-section";
 import { PromptSection } from "#/components/features/automations/detail/prompt-section";
 import { ScriptSection } from "#/components/features/automations/detail/script-section";
 import { ConfigurationSection } from "#/components/features/automations/detail/configuration-section";
@@ -47,6 +48,8 @@ import {
 import AutomationService from "#/api/automation-service/automation-service.api";
 import type { Automation } from "#/types/automation";
 import { isDraftAutomation, isKeepAliveForced } from "#/utils/automation-state";
+import { getAutomationTemplateOverview } from "#/utils/automation-catalog";
+import { buildAutomationFlowDiagram } from "#/utils/automation-flow-diagram";
 import {
   getAutomationExportFilename,
   serializeAutomation,
@@ -258,6 +261,11 @@ export default function AutomationDetail() {
       (creatorQuery.isError ? automation.user_id : null);
   }
   const isDraft = isDraftAutomation(automation);
+  // Without its own description, an automation shows what the template it
+  // was created from says about it.
+  const templateOverview = automation.description
+    ? null
+    : getAutomationTemplateOverview(automation);
   // Non-creators may turn an automation off but not back on. Draft test
   // artifacts are finalized through the draft setup flow, not this toggle.
   const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
@@ -299,6 +307,24 @@ export default function AutomationDetail() {
             canEdit={isOwner && !isDraft}
           />
           <DisabledReasonBanner automation={automation} />
+          {/* Own description, else the template's, else a diagram built
+              from the automation's settings, so every automation has one. */}
+          {automation.description ? (
+            <DescriptionSection description={automation.description} />
+          ) : templateOverview ? (
+            <DescriptionSection
+              description={templateOverview.description}
+              diagram={
+                templateOverview.diagram ??
+                buildAutomationFlowDiagram(automation, t)
+              }
+            />
+          ) : (
+            <DescriptionSection
+              title={t(I18nKey.AUTOMATIONS$DETAIL$HOW_IT_RUNS)}
+              diagram={buildAutomationFlowDiagram(automation, t)}
+            />
+          )}
           {automation.prompt ? (
             <PromptSection prompt={automation.prompt} />
           ) : (
