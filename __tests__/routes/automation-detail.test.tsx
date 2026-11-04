@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { HttpError } from "@openhands/typescript-client";
+import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 
 import { I18nKey } from "#/i18n/declaration";
 
@@ -334,6 +335,68 @@ describe("AutomationDetail — backend-change guard", () => {
     // Assert — the off-state gate prevents the dispatch API from firing.
     expect(runNow).toBeDisabled();
     expect(AutomationService.dispatchAutomation).not.toHaveBeenCalled();
+  });
+});
+
+describe("AutomationDetail — description", () => {
+  const templateEntry = AUTOMATION_CATALOG.find(
+    (entry) => entry.id === "github-pr-reviewer",
+  )!;
+  // The whole route renders before the section does, which can exceed the
+  // default 1 s wait when the suite runs alongside others.
+  const LOAD = { timeout: 5000 };
+  const fromTemplate: Automation = {
+    ...automation,
+    description: null,
+    preset_metadata: {
+      template: { id: templateEntry.id, version: "1.0.0", config: {} },
+    },
+  };
+
+  it("shows the template's description when the automation has none", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(fromTemplate);
+
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(
+      await screen.findByTestId("automation-description-content", {}, LOAD),
+    ).toHaveTextContent(templateEntry.description);
+  });
+
+  it("prefers the automation's own description over its template's", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...fromTemplate,
+      description: "Written for this automation.",
+    });
+
+    // Act
+    renderDetail();
+
+    // Assert
+    const content = await screen.findByTestId(
+      "automation-description-content",
+      {},
+      LOAD,
+    );
+    expect(content).toHaveTextContent("Written for this automation.");
+    expect(content).not.toHaveTextContent(templateEntry.description);
+  });
+
+  it("shows no description without one or a template", async () => {
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(
+      await screen.findByText("Test Automation", {}, LOAD),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-description-content"),
+    ).not.toBeInTheDocument();
   });
 });
 

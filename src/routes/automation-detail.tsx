@@ -48,6 +48,7 @@ import {
 import AutomationService from "#/api/automation-service/automation-service.api";
 import type { Automation } from "#/types/automation";
 import { isDraftAutomation, isKeepAliveForced } from "#/utils/automation-state";
+import { getAutomationTemplateOverview } from "#/utils/automation-catalog";
 import {
   getAutomationExportFilename,
   serializeAutomation,
@@ -259,6 +260,11 @@ export default function AutomationDetail() {
       (creatorQuery.isError ? automation.user_id : null);
   }
   const isDraft = isDraftAutomation(automation);
+  // Without its own description, an automation shows what the template it
+  // was created from says about it.
+  const templateOverview = automation.description
+    ? null
+    : getAutomationTemplateOverview(automation);
   // Non-creators may turn an automation off but not back on. Draft test
   // artifacts are finalized through the draft setup flow, not this toggle.
   const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
@@ -302,7 +308,14 @@ export default function AutomationDetail() {
           <DisabledReasonBanner automation={automation} />
           {automation.description ? (
             <DescriptionSection description={automation.description} />
-          ) : null}
+          ) : (
+            templateOverview && (
+              <DescriptionSection
+                description={templateOverview.description}
+                diagram={templateOverview.diagram}
+              />
+            )
+          )}
           {automation.prompt ? (
             <PromptSection prompt={automation.prompt} />
           ) : (
