@@ -6,6 +6,7 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import type { GitSyncStatus } from "#/types/git-sync";
+import { bytesToBase64 } from "#/utils/base64";
 import AutomationService from "./automation-service.api";
 
 const {
@@ -365,6 +366,56 @@ describe("AutomationService.createAutomation", () => {
       expect.objectContaining({ timeout: 1200 }),
       expect.any(Object),
     );
+  });
+
+  it("uploads the bundle and creates a script automation disabled in one request", async () => {
+    const bundle = new Uint8Array([0x1f, 0x8b, 8, 0, 1, 2, 3]);
+    const scriptSpec: AutomationSpec = {
+      name: "Socials monitor",
+      prompt: null,
+      trigger: { type: "cron", schedule: "0,30 9-17 * * 1-5", timezone: "UTC" },
+      enabled: false,
+      model: "fast",
+      timeout: 900,
+      script: {
+        entrypoint: "python3 main.py",
+        setup_script_path: "setup.sh",
+        tarball_base64: bytesToBase64(bundle),
+      },
+    };
+    localAxios.post.mockResolvedValueOnce({
+      data: { tarball_path: "oh-internal://uploads/socials-monitor" },
+    });
+
+    const created = await AutomationService.createAutomation(scriptSpec);
+
+    expect(localAxios.post).toHaveBeenNthCalledWith(
+      1,
+      "/api/automation/v1/uploads?name=Socials%20monitor",
+      bundle,
+      { headers: { "Content-Type": "application/gzip" } },
+    );
+    expect(localAxios.post).toHaveBeenNthCalledWith(
+      2,
+      "/api/automation/v1",
+      {
+        name: "Socials monitor",
+        trigger: {
+          type: "cron",
+          schedule: "0,30 9-17 * * 1-5",
+          timezone: "UTC",
+        },
+        enabled: false,
+        tarball_path: "oh-internal://uploads/socials-monitor",
+        entrypoint: "python3 main.py",
+        setup_script_path: "setup.sh",
+        model: "fast",
+        timeout: 900,
+      },
+      expect.objectContaining({ baseURL: localBackend.host }),
+    );
+    expect(localAxios.patch).not.toHaveBeenCalled();
+    expect(created).toEqual(createdAutomation);
   });
 });
 

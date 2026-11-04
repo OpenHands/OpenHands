@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "kind": "automation",
+  "spec": {
+    "name": "Socials Monitor - LinkedIn & X new post alerts",
+    "trigger": {
+      "type": "schedule",
+      "schedule": "0,30 9-17 * * 1-5",
+      "schedule_human": "Every 30 minutes, weekdays 9-17",
+      "timezone": "UTC"
+    },
+    "enabled": true,
+    "prompt": null,
+    "model": "openhands_deepseek_v4_flash",
+    "timezone": "UTC",
+    "script": {
+      "entrypoint": "python3 main.py",
+      "setup_script_path": "setup.sh",
+      "tarball_base64": "H4sIAH9S62oC/+3UsWoDMQzGcc95CpcOaZfcOT3Hz3MpDmfw2a7lK/TtazoGOiaU5v9bBNIgEHxa55AO5Uvd0tidpumndtd1HPvM2KM7nqwxzvW+ezNW6VHdwSZtrn2lekylhtRe9ouPMetLzauW/B7mKHrNKbRc9687hX9LfNvKQZZb599Z+3v+rbnOvzUT+b+H56dhkzqcQxp8+tTnWZZdCUWH1O8So67+Y/PShCcAAAAAAAAAAAAAAADwN30DG8KPRgAoAAA="
+    }
+  }
+}

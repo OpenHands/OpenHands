@@ -197,10 +197,17 @@ export function ImportAutomationModal({
                 label={t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
                 value={trigger}
               />
-              <PreviewField
-                label={t(I18nKey.AUTOMATIONS$PROMPT)}
-                value={spec.prompt ?? ""}
-              />
+              {spec.script ? (
+                <PreviewField
+                  label={t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT)}
+                  value={spec.script.entrypoint}
+                />
+              ) : (
+                <PreviewField
+                  label={t(I18nKey.AUTOMATIONS$PROMPT)}
+                  value={spec.prompt ?? ""}
+                />
+              )}
               {spec.plugins && spec.plugins.length > 0 ? (
                 <PreviewField
                   label={t(I18nKey.AUTOMATIONS$DETAIL$PLUGINS)}

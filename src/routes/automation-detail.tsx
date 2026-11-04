@@ -45,11 +45,12 @@ import {
   useIsAutomationOwner,
 } from "#/hooks/use-automation-permissions";
 import AutomationService from "#/api/automation-service/automation-service.api";
-import type { Automation } from "#/types/automation";
+import type { Automation, AutomationExportFile } from "#/types/automation";
 import { isDraftAutomation, isKeepAliveForced } from "#/utils/automation-state";
 import {
   getAutomationExportFilename,
   serializeAutomation,
+  serializeScriptAutomation,
 } from "#/utils/automation-export";
 import { downloadBlob } from "#/utils/utils";
 
@@ -236,8 +237,21 @@ export default function AutomationDetail() {
     );
   };
 
-  const handleExport = () => {
-    const contents = `${JSON.stringify(serializeAutomation(automation), null, 2)}\n`;
+  const handleExport = async () => {
+    let file: AutomationExportFile;
+    try {
+      // A script automation's file has to carry its bundle.
+      file = automation.prompt
+        ? serializeAutomation(automation)
+        : serializeScriptAutomation(
+            automation,
+            await AutomationService.fetchTarballBytes(automation.id),
+          );
+    } catch (error) {
+      displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
+      return;
+    }
+    const contents = `${JSON.stringify(file, null, 2)}\n`;
     downloadBlob(
       new Blob([contents], { type: "application/json" }),
       getAutomationExportFilename(automation),

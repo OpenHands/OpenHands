@@ -2,9 +2,11 @@ import { getImportExportSpec } from "#/manifests/automation-interface";
 import type {
   Automation,
   AutomationExportFile,
+  AutomationScriptBundle,
   AutomationSpec,
   AutomationTrigger,
 } from "#/types/automation";
+import { base64ToBytes, bytesToBase64 } from "#/utils/base64";
 
 const SUPPORTED_TRIGGER_TYPES = new Set(["cron", "schedule", "event"]);
 
@@ -151,6 +153,58 @@ function validateTrigger(
   };
 }
 
+function decodesAsBase64(value: string): boolean {
+  try {
+    base64ToBytes(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function validateScript(
+  value: unknown,
+  issues: string[],
+): AutomationScriptBundle | undefined {
+  if (!isRecord(value)) {
+    issues.push("spec.script: expected an object");
+    return undefined;
+  }
+
+  const entrypoint = validateRequiredString(
+    value,
+    "entrypoint",
+    "spec.script.entrypoint",
+    issues,
+  );
+  const setupScriptPath = validateOptionalString(
+    value,
+    "setup_script_path",
+    "spec.script.setup_script_path",
+    issues,
+  );
+  const tarballBase64 = validateRequiredString(
+    value,
+    "tarball_base64",
+    "spec.script.tarball_base64",
+    issues,
+  );
+  if (tarballBase64 !== undefined && !decodesAsBase64(tarballBase64)) {
+    issues.push("spec.script.tarball_base64: expected base64");
+    return undefined;
+  }
+
+  if (!entrypoint || !tarballBase64) return undefined;
+
+  return {
+    entrypoint,
+    ...(setupScriptPath !== undefined && {
+      setup_script_path: setupScriptPath,
+    }),
+    tarball_base64: tarballBase64,
+  };
+}
+
 export function serializeAutomation(a: Automation): AutomationExportFile {
   const timezone = a.timezone ?? a.trigger.timezone;
   // The file carries a single repository: the first one the automation clones.
@@ -173,6 +227,35 @@ export function serializeAutomation(a: Automation): AutomationExportFile {
 
   const envelope = getImportExportSpec();
   return { version: envelope.fileVersion, kind: envelope.fileKind, spec };
+}
+
+/**
+ * The file of an automation that runs a script bundle instead of a prompt:
+ * the same spec plus the bundle itself, so an import can upload it again.
+ * `tarball` is what the service's tarball endpoint returned.
+ */
+export function serializeScriptAutomation(
+  a: Automation,
+  tarball: Uint8Array,
+): AutomationExportFile {
+  if (!a.entrypoint) {
+    throw new Error("This automation has no entrypoint to export.");
+  }
+
+  const file = serializeAutomation(a);
+  return {
+    ...file,
+    spec: {
+      ...file.spec,
+      script: {
+        entrypoint: a.entrypoint,
+        ...(a.setup_script_path
+          ? { setup_script_path: a.setup_script_path }
+          : {}),
+        tarball_base64: bytesToBase64(tarball),
+      },
+    },
+  };
 }
 
 export function getAutomationExportFilename(
@@ -205,12 +288,17 @@ export function parseAutomationFile(json: unknown): AutomationSpec {
   }
 
   const name = validateRequiredString(json.spec, "name", "spec.name", issues);
-  const prompt = validateRequiredString(
-    json.spec,
-    "prompt",
-    "spec.prompt",
-    issues,
-  );
+  let prompt: string | undefined;
+  let script: AutomationScriptBundle | undefined;
+  if (json.spec.script == null) {
+    prompt = validateRequiredString(json.spec, "prompt", "spec.prompt", issues);
+  } else {
+    // A script automation carries its bundle in place of a prompt.
+    script = validateScript(json.spec.script, issues);
+    if (json.spec.prompt != null) {
+      issues.push("spec.prompt: must be omitted for a script automation");
+    }
+  }
   const trigger = validateTrigger(json.spec.trigger, issues);
 
   const enabled = json.spec.enabled;
@@ -282,15 +370,16 @@ export function parseAutomationFile(json: unknown): AutomationSpec {
     }
   }
 
-  if (issues.length > 0 || !name || !prompt || !trigger) {
+  if (issues.length > 0 || !name || !trigger || (!prompt && !script)) {
     throw new AutomationFileValidationError(issues);
   }
 
   return {
     name,
-    prompt,
+    prompt: prompt ?? null,
     trigger,
     enabled: enabled as boolean,
+    ...(script !== undefined && { script }),
     ...(repository !== undefined && { repository }),
     ...(model !== undefined && { model }),
     ...(timeout !== undefined && { timeout }),
