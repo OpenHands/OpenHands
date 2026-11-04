@@ -12,4 +12,11 @@ export type CustomSecret = {
  * Custom secret metadata without the secret value.
  * Used for listing secrets via GET /api/settings/secrets.
  */
-export type CustomSecretWithoutValue = Omit<CustomSecret, "value">;
+export type CustomSecretScope = "personal" | "organization";
+
+export type CustomSecretWithoutValue = Omit<CustomSecret, "value"> & {
+  scope?: CustomSecretScope;
+  source_name?: string | null;
+  writable?: boolean;
+  deletable?: boolean;
+};

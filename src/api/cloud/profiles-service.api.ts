@@ -26,36 +26,62 @@ import { callCloudProxy } from "./proxy";
 
 const SETTINGS_PROFILES_PATH = "/api/v1/settings/profiles";
 
-/**
- * Resolve the backend + base path for the active cloud backend's profiles:
- * the org-gated route when an org is bound, else the per-user settings route.
- */
-function cloudProfilesTarget(): { backend: Backend; base: string } {
-  const { backend, orgId } = getActiveBackend();
+function activeCloudBackend(): Backend {
+  const { backend } = getActiveBackend();
   if (backend.kind !== "cloud") {
     throw new Error("Cloud profiles call requires a cloud backend.");
   }
-  return {
-    backend,
-    base: orgId
-      ? `/api/organizations/${encodeURIComponent(orgId)}/profiles`
-      : SETTINGS_PROFILES_PATH,
-  };
+  return backend;
+}
+
+function personalProfilesTarget(): { backend: Backend; base: string } {
+  return { backend: activeCloudBackend(), base: SETTINGS_PROFILES_PATH };
+}
+
+interface CloudAgentProfileOptions {
+  llm_profiles?: Array<{
+    name: string;
+    model?: string | null;
+    base_url?: string | null;
+    api_key_set?: boolean;
+    provider_connection_id?: string | null;
+  }>;
 }
 
 export async function fetchCloudProfiles(): Promise<ProfileListResponse> {
-  const { backend, base } = cloudProfilesTarget();
+  const backend = activeCloudBackend();
+  try {
+    const options = await callCloudProxy<CloudAgentProfileOptions>({
+      backend,
+      method: "GET",
+      path: "/api/v1/agent-profile/options",
+    });
+    if (Array.isArray(options.llm_profiles)) {
+      return {
+        profiles: options.llm_profiles.map((profile) => ({
+          name: profile.name,
+          model: profile.model ?? null,
+          base_url: profile.base_url ?? null,
+          api_key_set: profile.api_key_set ?? false,
+          provider_connection_id: profile.provider_connection_id ?? null,
+        })),
+        active_profile: null,
+      };
+    }
+  } catch {
+    // Older cloud backends do not expose the combined options endpoint yet.
+  }
   return callCloudProxy<ProfileListResponse>({
     backend,
     method: "GET",
-    path: base,
+    path: SETTINGS_PROFILES_PATH,
   });
 }
 
 export async function fetchCloudProfile(
   name: string,
 ): Promise<ProfileDetailResponse> {
-  const { backend, base } = cloudProfilesTarget();
+  const { backend, base } = personalProfilesTarget();
   // Org returns `{ name, llm }`; settings returns `{ name, config, api_key_set }`.
   // Normalize to the SDK detail shape. Neither route exposes the key, and the
   // GUI never reads the detail's `api_key_set` (only list-item `api_key_set`).
@@ -80,7 +106,7 @@ export async function saveCloudProfile(
   name: string,
   request: SaveProfileRequest,
 ): Promise<ProfileMutationResponse> {
-  const { backend, base } = cloudProfilesTarget();
+  const { backend, base } = personalProfilesTarget();
   return callCloudProxy<ProfileMutationResponse>({
     backend,
     method: "POST",
@@ -92,7 +118,7 @@ export async function saveCloudProfile(
 export async function deleteCloudProfile(
   name: string,
 ): Promise<ProfileMutationResponse> {
-  const { backend, base } = cloudProfilesTarget();
+  const { backend, base } = personalProfilesTarget();
   return callCloudProxy<ProfileMutationResponse>({
     backend,
     method: "DELETE",
@@ -104,7 +130,7 @@ export async function renameCloudProfile(
   name: string,
   newName: string,
 ): Promise<ProfileMutationResponse> {
-  const { backend, base } = cloudProfilesTarget();
+  const { backend, base } = personalProfilesTarget();
   return callCloudProxy<ProfileMutationResponse>({
     backend,
     method: "POST",
@@ -116,7 +142,7 @@ export async function renameCloudProfile(
 export async function activateCloudProfile(
   name: string,
 ): Promise<ActivateProfileResponse> {
-  const { backend, base } = cloudProfilesTarget();
+  const { backend, base } = personalProfilesTarget();
   // Org returns `{ name, message, llm }`; settings returns `{ name, message,
   // model }`. The SDK type carries `llm_applied`; derive it from whichever the
   // route provided (consumers only read name/message — the hook just
