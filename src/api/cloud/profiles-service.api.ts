@@ -57,7 +57,16 @@ export async function fetchCloudProfiles(): Promise<ProfileListResponse> {
       path: "/api/v1/agent-profile/options",
     });
     if (Array.isArray(options.llm_profiles)) {
-      return { profiles: options.llm_profiles, active_profile: null };
+      return {
+        profiles: options.llm_profiles.map((profile) => ({
+          name: profile.name,
+          model: profile.model ?? null,
+          base_url: profile.base_url ?? null,
+          api_key_set: profile.api_key_set ?? false,
+          provider_connection_id: profile.provider_connection_id ?? null,
+        })),
+        active_profile: null,
+      };
     }
   } catch {
     // Older cloud backends do not expose the combined options endpoint yet.
