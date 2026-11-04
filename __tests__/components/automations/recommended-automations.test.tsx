@@ -1341,6 +1341,50 @@ describe("recommended automations", () => {
     );
   });
 
+  it("suggests the proven templates on an Enterprise instance with nothing set up", async () => {
+    // Arrange — sign-up by password, no git provider or integration.
+    await activateCloudBackend({ deploymentMode: "self_hosted" });
+
+    // Act
+    renderLauncher({ withBackendProvider: true });
+
+    // Assert
+    await screen.findByTestId("recommended-automation-card-github-pr-reviewer");
+    const more = screen.getByTestId("recommended-automations-beta-section");
+    for (const id of [
+      "github-pr-reviewer",
+      "github-issue-to-pr",
+      "news-digest",
+    ]) {
+      expect(
+        within(more).queryByTestId(`recommended-automation-card-${id}`),
+      ).not.toBeInTheDocument();
+    }
+  });
+
+  it("suggests a template using an MCP server the user installed", async () => {
+    // Arrange
+    await activateCloudBackend({
+      settings: settingsWithMcpConfig({
+        linear: { url: "https://mcp.linear.app/mcp" },
+      }),
+    });
+
+    // Act
+    renderLauncher({ withBackendProvider: true });
+
+    // Assert
+    await screen.findByTestId(
+      "recommended-automation-card-linear-triage-assistant",
+    );
+    expect(cardOrder()[0]).toBe("linear-triage-assistant");
+    expect(
+      within(
+        screen.getByTestId("recommended-automations-beta-section"),
+      ).queryByTestId("recommended-automation-card-linear-triage-assistant"),
+    ).not.toBeInTheDocument();
+  });
+
   it("suggests first the templates using an integration an Enterprise instance reports", async () => {
     await withBuiltInRequirement(["bitbucket_data_center"], async () => {
       // Arrange
@@ -1412,7 +1456,7 @@ describe("recommended automations", () => {
     );
   });
 
-  it("does not offer Data Center templates on OpenHands Cloud", async () => {
+  it("offers Data Center templates on OpenHands Cloud too", async () => {
     await withBuiltInRequirement(["bitbucket_data_center"], async () => {
       // Arrange
       await activateCloudBackend({
@@ -1431,8 +1475,8 @@ describe("recommended automations", () => {
         ),
       ).toBeInTheDocument();
       expect(
-        screen.queryByTestId("recommended-automation-card-news-digest"),
-      ).not.toBeInTheDocument();
+        screen.getByTestId("recommended-automation-card-news-digest"),
+      ).toBeInTheDocument();
     });
   });
 
