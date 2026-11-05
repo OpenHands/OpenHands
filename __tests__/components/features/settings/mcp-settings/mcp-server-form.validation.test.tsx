@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { MCPServerForm } from "#/components/features/settings/mcp-settings/mcp-server-form";
 
@@ -451,8 +452,7 @@ describe("MCPServerForm validation", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("labels SSE option as deprecated in add mode and displays deprecation notice when SSE is active", () => {
-    // In edit mode with an existing SSE server, it should render deprecation notice and keep sse type
+  it("shows the deprecation notice and keeps the type when editing an SSE server", () => {
     const onSubmit = vi.fn();
     render(
       <MCPServerForm
@@ -479,5 +479,24 @@ describe("MCPServerForm validation", () => {
     fireEvent.click(screen.getByTestId("submit-button"));
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit.mock.calls[0][0].type).toBe("sse");
+  });
+
+  it("offers the SSE type as deprecated when adding a server", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MCPServerForm
+        mode="add"
+        existingServers={[]}
+        onSubmit={noop}
+        onCancel={noop}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("SETTINGS$MCP_SERVER_TYPE"));
+
+    expect(
+      await screen.findByText("SETTINGS$MCP_SERVER_TYPE_SSE_DEPRECATED"),
+    ).toBeInTheDocument();
   });
 });
