@@ -18,6 +18,27 @@ type TourStopSpec = Omit<GuidedTourStop, "title" | "body"> & {
 const SETUP_GUIDE_TOUR_STOPS: Partial<
   Record<SuperAdminSetupStepId, TourStopSpec[]>
 > = {
+  "connect-git": [
+    {
+      id: "pick-git-provider",
+      anchor: '[data-testid="mcp-marketplace-card-github"]',
+      // The card and its add button both open GitHub's install dialog.
+      advanceOnClick: '[data-testid="mcp-marketplace-card-github"]',
+      hideFooter: true,
+      title: I18nKey.ONBOARDING$SETUP_GUIDE_TOUR_GIT_PICK_TITLE,
+      body: I18nKey.ONBOARDING$SETUP_GUIDE_TOUR_GIT_PICK_BODY,
+      side: "top",
+    },
+    {
+      id: "add-git-token",
+      anchor: '[data-testid="mcp-install-modal"]',
+      waitForComplete: "connect-git",
+      interactive: true,
+      title: I18nKey.ONBOARDING$SETUP_GUIDE_TOUR_GIT_TOKEN_TITLE,
+      body: I18nKey.ONBOARDING$SETUP_GUIDE_TOUR_GIT_TOKEN_BODY,
+      side: "left",
+    },
+  ],
   "first-automation": [
     {
       id: "choose-template",
