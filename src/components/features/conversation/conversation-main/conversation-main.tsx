@@ -380,10 +380,15 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
             />
           )}
 
-        {showMobileAutomationForm && automationSetupDraft ? (
+        {/* Mobile setup form - stays mounted while Conversation is shown, like
+            the chat panel above, so unsaved form edits survive the toggle. */}
+        {isMobile && automationSetupDraft ? (
           <div
             data-testid="automation-setup-mobile-form"
-            className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
+            className={cn(
+              "relative flex min-h-0 flex-1 flex-col overflow-hidden",
+              !showMobileAutomationForm && "hidden",
+            )}
           >
             <Suspense fallback={<LoadingSpinner size="small" />}>
               <AutomationSetupPanel
@@ -395,7 +400,9 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
                 reserveComposerSpace
               />
             </Suspense>
-            <AutomationSetupDockedComposer onTarget={setComposerDockTarget} />
+            {showMobileAutomationForm ? (
+              <AutomationSetupDockedComposer onTarget={setComposerDockTarget} />
+            ) : null}
           </div>
         ) : null}
 

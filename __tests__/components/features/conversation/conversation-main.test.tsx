@@ -166,7 +166,10 @@ vi.mock(
             <div
               data-testid="automation-setup-panel"
               data-conversation-id={conversationId ?? ""}
-            />
+            >
+              {/* Stands in for the panel's own unsaved form state. */}
+              <input data-testid="automation-setup-panel-field" />
+            </div>
           </>
         );
       },
@@ -377,9 +380,9 @@ describe("ConversationMain - Layout Transition Stability", () => {
       screen.getByTestId("automation-setup-mobile-view-conversation"),
     );
 
-    expect(
-      screen.queryByTestId("automation-setup-mobile-form"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-mobile-form")).toHaveClass(
+      "hidden",
+    );
     expect(
       screen.queryByTestId("automation-setup-docked-composer"),
     ).not.toBeInTheDocument();
@@ -405,18 +408,18 @@ describe("ConversationMain - Layout Transition Stability", () => {
 
     await user.click(screen.getByTestId("automation-setup-mobile-view-form"));
 
-    expect(
-      screen.getByTestId("automation-setup-mobile-form"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-mobile-form")).not.toHaveClass(
+      "hidden",
+    );
     expect(
       screen.getByTestId("automation-setup-docked-composer"),
     ).toBeInTheDocument();
 
     await user.click(screen.getByTestId("docked-composer-submit"));
 
-    expect(
-      screen.queryByTestId("automation-setup-mobile-form"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-mobile-form")).toHaveClass(
+      "hidden",
+    );
 
     await user.click(screen.getByTestId("automation-setup-mobile-view-form"));
 
@@ -424,11 +427,34 @@ describe("ConversationMain - Layout Transition Stability", () => {
       requestAutomationSetupAgent();
     });
 
-    expect(
-      screen.queryByTestId("automation-setup-mobile-form"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-mobile-form")).toHaveClass(
+      "hidden",
+    );
     expect(screen.getByTestId("conversation-chat-panel")).not.toHaveClass(
       "hidden",
+    );
+  });
+
+  it("keeps unsaved form edits when a narrow window toggles to the conversation and back", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    mockIsMobile = true;
+    markAutomationSetupHandoff("conv-1");
+    renderConversationMain();
+    await user.type(
+      screen.getByTestId("automation-setup-panel-field"),
+      "QA phone keep",
+    );
+
+    // Act
+    await user.click(
+      screen.getByTestId("automation-setup-mobile-view-conversation"),
+    );
+    await user.click(screen.getByTestId("automation-setup-mobile-view-form"));
+
+    // Assert
+    expect(screen.getByTestId("automation-setup-panel-field")).toHaveValue(
+      "QA phone keep",
     );
   });
 
