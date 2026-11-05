@@ -131,7 +131,10 @@ function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
   const absolutePath = gitPath.startsWith("/") ? gitPath : `/${gitPath}`;
 
   const query = useQuery<string[]>({
-    queryKey: ["workspace-files-cloud", conversationId, absolutePath],
+    // Shares the `workspace-files` prefix with the local listing so the Files
+    // tab Refresh and the file-edit auto-refresh (which invalidate
+    // `["workspace-files"]`) refetch this query too.
+    queryKey: ["workspace-files", "cloud", conversationId, absolutePath],
     queryFn: async () => {
       const files = await listCloudConversationFiles(
         conversationId!,

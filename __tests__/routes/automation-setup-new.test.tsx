@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AutomationSetupNew from "#/routes/automation-setup-new";
@@ -9,6 +9,10 @@ import {
 } from "#/api/automation-form-session";
 import type { Automation } from "#/types/automation";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
+
+const { mockStartConversationFromPrompt } = vi.hoisted(() => ({
+  mockStartConversationFromPrompt: vi.fn(),
+}));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -23,7 +27,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
 
 vi.mock("#/hooks/use-start-automation-setup", () => ({
   useStartAutomationSetup: () => ({
-    startConversationFromPrompt: vi.fn(),
+    startConversationFromPrompt: mockStartConversationFromPrompt,
     isPending: false,
   }),
 }));
@@ -35,9 +39,27 @@ vi.mock("#/components/features/chat/interactive-chat-box", () => ({
 vi.mock(
   "#/components/features/automations/setup/automation-setup-panel",
   () => ({
-    AutomationSetupPanel: ({ draft }: { draft: unknown }) => (
-      <pre data-testid="setup-panel-draft">{JSON.stringify(draft)}</pre>
-    ),
+    AutomationSetupPanel: ({
+      draft,
+      onAskAgent,
+    }: {
+      draft: unknown;
+      onAskAgent?: (prompt: string) => void;
+    }) => {
+      const askAgentLabel = "ask agent";
+      return (
+        <>
+          <pre data-testid="setup-panel-draft">{JSON.stringify(draft)}</pre>
+          <button
+            type="button"
+            data-testid="mock-ask-agent"
+            onClick={() => onAskAgent?.("ASK_AGENT_PROMPT")}
+          >
+            {askAgentLabel}
+          </button>
+        </>
+      );
+    },
   }),
 );
 
@@ -96,9 +118,11 @@ describe("AutomationSetupNew", () => {
     await waitFor(() =>
       expect(AutomationService.getAutomation).toHaveBeenCalledWith("auto-1"),
     );
-    const draft = JSON.parse(
-      screen.getByTestId("setup-panel-draft").textContent ?? "{}",
-    );
+    // The mock is called before its promise resolves, so wait for the panel
+    // (rendered only once the draft has loaded) rather than reading the DOM
+    // synchronously while the component may still be loading.
+    const panel = await screen.findByTestId("setup-panel-draft");
+    const draft = JSON.parse(panel.textContent ?? "{}");
     expect(draft.editingAutomationId).toBe("auto-1");
     expect(draft.form.name).toBe("Daily digest");
   });
@@ -111,11 +135,20 @@ describe("AutomationSetupNew", () => {
     await waitFor(() =>
       expect(AutomationService.getServerDraft).toHaveBeenCalledWith("draft-1"),
     );
-    const draft = JSON.parse(
-      screen.getByTestId("setup-panel-draft").textContent ?? "{}",
-    );
+    const panel = await screen.findByTestId("setup-panel-draft");
+    const draft = JSON.parse(panel.textContent ?? "{}");
     expect(draft.serverDraftId).toBe("draft-1");
     expect(draft.form.repository).toBe("acme/one, acme/two");
     expect(draft.form.eventKey).toBe("issues,push");
+  });
+
+  it("hands the Ask Agent prompt to the setup conversation starter", async () => {
+    renderRoute("/automations/setup");
+
+    fireEvent.click(await screen.findByTestId("mock-ask-agent"));
+
+    expect(mockStartConversationFromPrompt).toHaveBeenCalledWith(
+      "ASK_AGENT_PROMPT",
+    );
   });
 });

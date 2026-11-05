@@ -227,6 +227,8 @@ export interface DashboardViewState {
   trigger: DashboardTriggerValue;
   createdBy: DashboardCreatedByValue;
   currentUserId: string | null;
+  /** The selected tag, or null for automations with any tags or none. */
+  tag: string | null;
   sort: DashboardSortValue;
 }
 
@@ -261,6 +263,9 @@ export function applyDashboardView(
         view.createdBy !== "all" &&
         !CREATED_BY_PREDICATES[view.createdBy](automation, view.currentUserId)
       ) {
+        return false;
+      }
+      if (view.tag !== null && !automation.tags?.includes(view.tag)) {
         return false;
       }
       return true;

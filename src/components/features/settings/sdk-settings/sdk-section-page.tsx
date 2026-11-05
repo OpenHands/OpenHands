@@ -128,6 +128,8 @@ export interface SettingsSourceConfig {
   sectionKeys: string[];
   /** Field keys to skip (rendered elsewhere by the caller). */
   excludeKeys?: Set<string>;
+  /** Choice values to hide, by field key. */
+  excludeChoices?: Record<string, string[]>;
 }
 
 export interface SdkSectionHeaderProps {
@@ -272,6 +274,7 @@ export function SdkSectionPage({
           source: s.settingsSource,
           sectionKeys: s.sectionKeys,
           excludeKeys: s.excludeKeys ? Array.from(s.excludeKeys).sort() : null,
+          excludeChoices: s.excludeChoices ?? null,
         })),
       ),
     [settingsSources],
@@ -282,11 +285,13 @@ export function SdkSectionPage({
       source: SettingsValueSource;
       sectionKeys: string[];
       excludeKeys: string[] | null;
+      excludeChoices: Record<string, string[]> | null;
     }>;
     return parsed.map((p) => ({
       settingsSource: p.source,
       sectionKeys: p.sectionKeys,
       excludeKeys: p.excludeKeys ? new Set(p.excludeKeys) : undefined,
+      excludeChoices: p.excludeChoices ?? undefined,
     }));
   }, [sourcesSignature]);
 
@@ -318,13 +323,29 @@ export function SdkSectionPage({
         // so keep the first section per key; otherwise every field renders
         // twice and React sees duplicate section keys.
         const seenKeys = new Set<string>();
+        const excludeChoices = src.excludeChoices ?? {};
         const filteredSchema: SettingsSchema = {
           ...schema,
-          sections: schema.sections.filter((s) => {
-            if (!sectionSet.has(s.key) || seenKeys.has(s.key)) return false;
-            seenKeys.add(s.key);
-            return true;
-          }),
+          sections: schema.sections
+            .filter((s) => {
+              if (!sectionSet.has(s.key) || seenKeys.has(s.key)) return false;
+              seenKeys.add(s.key);
+              return true;
+            })
+            .map((s) => ({
+              ...s,
+              fields: s.fields.map((field) =>
+                excludeChoices[field.key]
+                  ? {
+                      ...field,
+                      choices: field.choices.filter(
+                        (c) =>
+                          !excludeChoices[field.key].includes(String(c.value)),
+                      ),
+                    }
+                  : field,
+              ),
+            })),
         };
         return { ...src, filteredSchema };
       }),

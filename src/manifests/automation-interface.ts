@@ -39,6 +39,7 @@ const MOUNTED_ROUTES = {
   setup: "/automations/new/:automationId",
   detail: "/automations/:automationId",
   templates: "/automations/templates",
+  events: "/automations/events",
 } satisfies InterfaceRoutes;
 
 /**
@@ -122,6 +123,10 @@ export function automationDetailPath(id: string): string {
 
 export function automationTemplatesPath(): string {
   return MOUNTED_ROUTES.templates;
+}
+
+export function automationEventsPath(): string {
+  return MOUNTED_ROUTES.events;
 }
 
 /**
@@ -213,7 +218,9 @@ export function getSubPagesSpec(): SubPageNavSpec[] | null {
     to:
       item.page === "templates"
         ? automationTemplatesPath()
-        : automationListPath(),
+        : item.page === "events"
+          ? automationEventsPath()
+          : automationListPath(),
     label: item.label,
     icon: item.icon,
   }));
@@ -247,4 +254,10 @@ export function getDashboardSpec(): DashboardSpec | null {
 /** The templates page identity, or null when the manifest does not declare it. */
 export function getTemplatesPageSpec(): InterfaceTemplatesPage | null {
   return ADMITTED?.pages.templates ?? null;
+}
+
+export function getEventsPageSpec(): NonNullable<
+  InterfaceManifest["pages"]["events"]
+> | null {
+  return ADMITTED?.pages.events ?? null;
 }

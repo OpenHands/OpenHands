@@ -28,7 +28,17 @@ export type SetupFieldType =
   | "plugin-sources"
   | "tarball-upload";
 
-export type SetupGitProvider = "github" | "gitlab" | "bitbucket";
+/**
+ * The provider whose repositories a `repo-picker` lists. The hosted services
+ * and the two integrations an OpenHands Enterprise instance connects to a
+ * self-managed Bitbucket Data Center or to Azure DevOps.
+ */
+export type SetupGitProvider =
+  | "github"
+  | "gitlab"
+  | "bitbucket"
+  | "bitbucket_data_center"
+  | "azure_devops";
 
 export type SetupTriggerKind = "cron" | "event";
 
@@ -247,6 +257,11 @@ export interface DeploymentCapabilities {
   features: string[];
   /** Providers whose repositories a run clones with the user's token; older services omit it. */
   repoProviders?: string[];
+  /**
+   * Event type patterns per event source that has a catalog; a source missing
+   * here accepts any key. Older services omit it and list GitHub's in `eventTypes`.
+   */
+  eventTypesBySource?: Record<string, string[]>;
 }
 
 /** A single problem with a draft, addressed to the field that caused it. */
@@ -270,7 +285,9 @@ export interface ValidateDraftResponse {
  * path an entry shipping its own tarball uses; the other two are presets.
  */
 export type AutomationDraftEndpoint =
-  "/v1" | "/v1/preset/prompt" | "/v1/preset/plugin";
+  | "/v1"
+  | "/v1/preset/prompt"
+  | "/v1/preset/plugin";
 
 /** `POST /v1/drafts` — create a server-backed automation setup draft. */
 export interface CreateAutomationDraftApiRequest {
@@ -332,10 +349,18 @@ export const INTERFACE_VERSION = "1.0";
 
 /** The closed set of runtime-model properties a client may offer for setting. */
 export type AutomationAttributeName =
-  "name" | "prompt" | "model" | "timeout" | "schedule";
+  | "name"
+  | "prompt"
+  | "model"
+  | "timeout"
+  | "schedule";
 
 export type InterfaceAttributeType =
-  "text" | "textarea" | "number" | "llm-profile" | "schedule";
+  | "text"
+  | "textarea"
+  | "number"
+  | "llm-profile"
+  | "schedule";
 
 /** How one settable attribute of an existing Automation is offered. */
 export interface InterfaceAttribute {
@@ -355,6 +380,8 @@ export interface InterfaceRoutes {
   detail: string;
   /** The templates sub-page. Static: there is no parameter to substitute. */
   templates?: string;
+  /** The event sources sub-page. */
+  events?: string;
 }
 
 /**
@@ -379,6 +406,9 @@ export interface InterfaceEndpoints {
    */
   createBundle?: string;
   uploads?: string;
+  /** The org's tags with counts. Optional: added after the block shipped. */
+  tags?: string;
+  webhooks?: string;
 }
 
 export type InterfaceEndpointName = keyof InterfaceEndpoints;
@@ -405,7 +435,7 @@ export interface InterfaceImportExport {
  * leaves the sub-pages unrendered.
  */
 
-export const INTERFACE_SUB_PAGE_IDS = ["list", "templates"] as const;
+export const INTERFACE_SUB_PAGE_IDS = ["list", "events", "templates"] as const;
 
 export type InterfaceSubPageId = (typeof INTERFACE_SUB_PAGE_IDS)[number];
 
@@ -512,8 +542,25 @@ export interface InterfaceCreatedByFilter {
   options: { value: DashboardCreatedByValue; label: string }[];
 }
 
+/**
+ * The tag filter's values are the org's tags, read from the service, so the
+ * manifest captions the control and its neutral option but declares no values.
+ */
+export const DASHBOARD_TAG_FILTER_ID = "tag";
+
+export interface InterfaceTagFilter {
+  id: typeof DASHBOARD_TAG_FILTER_ID;
+  /** The control's accessible name. */
+  label: string;
+  /** The neutral option, which shows automations with any tags or none. */
+  allLabel: string;
+}
+
 export type InterfaceDashboardFilter =
-  InterfaceStatusFilter | InterfaceTriggerFilter | InterfaceCreatedByFilter;
+  | InterfaceStatusFilter
+  | InterfaceTriggerFilter
+  | InterfaceCreatedByFilter
+  | InterfaceTagFilter;
 
 /** Sort values name comparators this host implements. */
 export const DASHBOARD_SORT_VALUES = ["last-run", "runs", "name"] as const;
@@ -577,6 +624,7 @@ export interface InterfaceManifest {
     detail: { backLabel: string };
     edit: { title: string };
     templates?: InterfaceTemplatesPage;
+    events?: { title: string; description: string };
   };
   docsUrl: string;
   /**

@@ -50,7 +50,7 @@ export function StyledTooltip({
       disableAnimation={disableAnimation}
       classNames={{
         content: cn(
-          "z-[9999] rounded-md px-2 py-1 text-xs font-medium shadow-md",
+          "z-9999 rounded-md px-2 py-1 text-xs font-medium shadow-md",
           "!bg-contrast !text-contrast-foreground",
           tooltipClassName,
         ),

@@ -63,6 +63,7 @@ import {
 import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
+  buildAutomationCorsOrigins,
   buildAutomationTelemetryEnv,
   buildAutomationRuntimeServicesInfo,
   buildConfig,
@@ -122,6 +123,7 @@ export function parseArgs(argv = process.argv.slice(2)) {
     skipBuild: false,
     verbose: false,
     host: null,
+    allowLanSessionKey: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -133,6 +135,9 @@ export function parseArgs(argv = process.argv.slice(2)) {
       case "-H":
       case "--host":
         config.host = argv[++i];
+        break;
+      case "--allow-lan-session-key":
+        config.allowLanSessionKey = true;
         break;
       case "--automation-ref":
         config.automationGitRef = argv[++i];
@@ -171,6 +176,7 @@ USAGE:
 OPTIONS:
   -p, --port <port>           Ingress port (default: 8000)
   -H, --host <host>           Bind address for ingress/static (default: 127.0.0.1)
+  --allow-lan-session-key      Inject the session key on a non-loopback bind (opt-in)
   --automation-ref <ref>      Git ref for automation backend (default: main)
   --automation-repo <url>     Git repo URL for automation
   --skip-build                Reuse existing build/ directory (faster restart)
@@ -384,7 +390,7 @@ function buildAutomationBackendEnv(config, env = process.env) {
     ...buildAutomationTelemetryEnv(env),
     // Quiet the automation service by default; see buildBackendLogEnv.
     ...buildBackendLogEnv({ verbose: config.verbose, automation: true, env }),
-    AUTOMATION_CORS_ORIGINS: `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:3001,http://127.0.0.1:3001`,
+    AUTOMATION_CORS_ORIGINS: buildAutomationCorsOrigins(config),
     FILE_STORE: "local",
     LOCAL_STORAGE_PATH: join(config.stateDir, "storage"),
     OPENHANDS_SUPPRESS_BANNER: "1",
@@ -461,6 +467,7 @@ function startStaticServer(config) {
   );
   const keyPolicy = applySessionKeyPolicy({
     host: config.bindHost,
+    allowLanSessionKey: config.allowLanSessionKey,
     sessionApiKey: config.sessionApiKey,
     warn: (msg) => logService("static", msg, c.yellow),
   });
@@ -476,6 +483,9 @@ function startStaticServer(config) {
       ...bindHostArgs(config.bindHost),
       ...(process.env.VITE_BASE_PATH
         ? ["--base-path", process.env.VITE_BASE_PATH]
+        : []),
+      ...(keyPolicy.sessionApiKey && config.allowLanSessionKey
+        ? ["--allow-lan-session-key"]
         : []),
       ...(keyPolicy.authRequired ? ["--auth-required"] : []),
       "--runtime-services-info",
@@ -709,7 +719,7 @@ const isMainModule =
 if (isMainModule) {
   main().catch((err) => {
     logError(`Fatal error: ${err.message}`);
-    if (err.stack) {
+    if (err.stack && err.code !== "EADDRINUSE") {
       console.error(c.dim + err.stack + c.reset);
     }
     process.exit(1);

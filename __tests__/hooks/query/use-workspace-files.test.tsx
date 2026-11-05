@@ -1,5 +1,5 @@
 import React from "react";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -262,5 +262,35 @@ describe("useWorkspaceFiles — cloud backend", () => {
       "conv-1",
       "/workspace/project",
     );
+  });
+
+  it("refetches the listing when the Files tab Refresh invalidates it", async () => {
+    // Arrange: the first listing happens before the agent writes a file.
+    listCloudFilesMock.mockResolvedValueOnce(["hello.txt"]);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    function RefreshTestWrapper({ children }: { children: React.ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: RefreshTestWrapper,
+    });
+    await waitFor(() => expect(result.current.data).toEqual(["hello.txt"]));
+    listCloudFilesMock.mockResolvedValueOnce(["hello.txt", "report.md"]);
+
+    // Act: the Refresh button and the file-edit auto-refresh both
+    // invalidate the shared `workspace-files` key.
+    await act(() =>
+      client.invalidateQueries({ queryKey: ["workspace-files"] }),
+    );
+
+    // Assert: the new file shows up without waiting for the stale time.
+    await waitFor(() =>
+      expect(result.current.data).toEqual(["hello.txt", "report.md"]),
+    );
+    expect(listCloudFilesMock).toHaveBeenCalledTimes(2);
   });
 });
