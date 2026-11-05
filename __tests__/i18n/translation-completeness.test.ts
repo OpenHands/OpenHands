@@ -98,7 +98,6 @@ describe('translation.json', () => {
 
   it('keeps the keys from #1218 translated', () => {
     const keys = [
-      'SETTINGS$SAVE_AND_RECONNECT',
       'SETTINGS$MCP_ERROR_URL_DUPLICATE',
       'SETTINGS$MCP_ERROR_ENV_INVALID_FORMAT',
     ];

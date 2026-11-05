@@ -3,7 +3,7 @@ import {
   useConversationHistory,
   usePersistedConversationHistory,
 } from "#/hooks/query/use-conversation-history";
-import { useConversationDisplayTitle } from "#/hooks/use-conversation-display-title";
+import { useConversationDisplayTitleState } from "#/hooks/use-conversation-display-title";
 import { NavigationProvider } from "#/context/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
@@ -569,7 +569,7 @@ describe("active conversation title freshness", () => {
       const { result } = renderHook(
         () => ({
           conversation: useActiveConversation(),
-          getTitle: useConversationDisplayTitle(),
+          getTitle: useConversationDisplayTitleState(),
         }),
         { wrapper },
       );
@@ -580,7 +580,7 @@ describe("active conversation title freshness", () => {
       expect(fetchConversation).toHaveBeenCalledTimes(1);
       await act(async () => vi.advanceTimersByTimeAsync(3100));
       expect(result.current.conversation.data?.title).toBe("Startup explained");
-      expect(result.current.getTitle(CLOUD_CONVERSATION_ID)).toBe(
+      expect(result.current.getTitle(CLOUD_CONVERSATION_ID).title).toBe(
         "Startup explained",
       );
       expect(fetchConversation).toHaveBeenCalledTimes(2);

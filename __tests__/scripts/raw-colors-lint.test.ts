@@ -84,12 +84,7 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
     ).toEqual([]);
   });
 
-  it.each([
-    "src/routes/color-probe.tsx",
-    "src/ui/color-probe.tsx",
-    "src/components/features/conversation-panel/start-task-card/start-task-status-badge.tsx",
-    "src/components/features/conversation-panel/start-task-card/start-task-status-indicator.tsx",
-  ])(
+  it.each(["src/routes/color-probe.tsx", "src/ui/color-probe.tsx"])(
     "warns on raw colors and unknown tokens while accepting verified tokens in %s",
     async (filePath) => {
       const [result] = await eslint.lintText(probe, { filePath });

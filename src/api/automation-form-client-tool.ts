@@ -116,7 +116,3 @@ export function buildAutomationFormUpdateClientTool(
     },
   };
 }
-
-/** The tool as sent when the deployment's capabilities are not known. */
-export const AUTOMATION_FORM_UPDATE_CLIENT_TOOL: ClientToolSpec =
-  buildAutomationFormUpdateClientTool();
