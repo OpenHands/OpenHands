@@ -696,6 +696,8 @@ function ensureDirectories(config) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const processes = new Map();
+// Processes stopServices has signalled; their exits are not crashes to restart.
+const stoppingProcesses = new WeakSet();
 const shutdownHooks = createShutdownHookRegistry((err) => {
   logService("cleanup", `Cleanup hook failed: ${err.message}`, c.yellow);
 });
@@ -778,12 +780,15 @@ function spawnService(name, command, args, options = {}) {
   });
 
   proc.on("exit", (code, signal) => {
-    if (code !== 0 && code !== null && !shuttingDown) {
+    // An exit the launcher asked for (stopServices) is never unexpected, even
+    // when the stack stops without the launcher itself shutting down.
+    const expected = shuttingDown || stoppingProcesses.has(proc);
+    if (code !== 0 && code !== null && !expected) {
       logService(name, `Exited with code ${code}`, c.red);
       emitServiceLog(name, `exited with code ${code}`, "error");
     }
     processes.delete(name);
-    if (code !== 0 && !shuttingDown) {
+    if (code !== 0 && !expected) {
       options.onUnexpectedExit?.(code ?? `signal ${signal}`);
     }
   });
@@ -1359,6 +1364,7 @@ let shuttingDown = false;
 async function stopServices() {
   for (const [name, proc] of processes) {
     logService(name, "Stopping...", c.dim);
+    stoppingProcesses.add(proc);
     signalProcessTree(proc, "SIGTERM");
   }
 
@@ -2072,7 +2078,9 @@ function startStaticFrontend(config, staticDir, { onUnexpectedExit } = {}) {
     host: config.bindHost,
     allowLanSessionKey: config.allowLanSessionKey,
     sessionApiKey:
-      config.launchAgentServer && !config.isPublic ? config.sessionApiKey : null,
+      config.launchAgentServer && !config.isPublic
+        ? config.sessionApiKey
+        : null,
     authRequired: Boolean(config.launchAgentServer && config.isPublic),
     warn: (msg) => logService("static", msg, c.yellow),
   });

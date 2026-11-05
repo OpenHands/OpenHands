@@ -1299,6 +1299,51 @@ describe("superviseService", () => {
       "The supervise-give-up-test exited 3 times (last: 3)",
     );
   }, 15_000);
+
+  it("does not restart other supervised services while giving up", async () => {
+    // Arrange: a healthy supervised service runs beside one that keeps exiting.
+    let healthyStarts = 0;
+    const healthy: ReturnType<typeof spawnService>[] = [];
+    const healthyFailure = vi.fn();
+    superviseService(
+      "supervise-bystander-test",
+      (hooks: object) => {
+        healthyStarts += 1;
+        const proc = spawnService(
+          "supervise-bystander-test",
+          process.execPath,
+          stayUp,
+          hooks,
+        );
+        healthy.push(proc);
+        return proc;
+      },
+      { onFailure: healthyFailure, restartDelayMs: 0 },
+    );
+
+    // Act: the failing service gives up and stops the stack.
+    await new Promise<Error>((resolve) => {
+      superviseService(
+        "supervise-crasher-test",
+        (hooks: object) =>
+          spawnService(
+            "supervise-crasher-test",
+            process.execPath,
+            exitWith(3),
+            hooks,
+          ),
+        { onFailure: resolve, maxRestarts: 1, restartDelayMs: 0 },
+      );
+    });
+
+    // Assert: the bystander's SIGTERM exit is not treated as a crash.
+    await vi.waitFor(() =>
+      expect(healthy[0].exitCode ?? healthy[0].signalCode).not.toBeNull(),
+    );
+    await delay(300);
+    expect(healthyStarts).toBe(1);
+    expect(healthyFailure).not.toHaveBeenCalled();
+  }, 15_000);
 });
 
 describe("dev-with-automation CLI", () => {
