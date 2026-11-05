@@ -30,8 +30,8 @@ import {
 } from "#/manifests/automation-interface";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import {
+  getAutomationAvailability,
   getAutomationLaunchPrompt,
-  getHiddenAutomationIds,
   getRequiredIntegrationIds,
 } from "#/utils/automation-catalog";
 import { isResponderAutomation } from "#/utils/responder-deployment";
@@ -142,13 +142,13 @@ export function RecommendedAutomationsLauncher({
     useAutomations({ enabled: isRail && automationHealth?.status === "ok" });
   const {
     getNativeIntegration,
+    builtInIntegrations,
     isJiraEnabled,
     isLinearEnabled,
     isSlackEnabled,
     deploymentMode,
     isLoading: isNativeIntegrationsLoading,
   } = useNativeGitIntegrations();
-  const hiddenAutomationIds = getHiddenAutomationIds(deploymentMode);
   const { isSlackConnected, isJiraConnected } =
     useBuiltInIntegrationConnections({
       slackEnabled: isSlackEnabled,
@@ -162,6 +162,34 @@ export function RecommendedAutomationsLauncher({
           parseMcpConfig(settings?.agent_settings?.mcp_config),
       ).filter((server) => server.enabled !== false),
     [settings?.agent_settings?.mcp_config, settings?.mcp_config],
+  );
+
+  // Integrations the user has set up themselves move the templates that use
+  // them into Suggested.
+  const connectedIntegrations = useMemo(
+    () =>
+      new Set(
+        MCP_MARKETPLACE.filter(
+          (entry) =>
+            findInstalledEntryMatch(entry, installedMcpConfig) ||
+            getNativeIntegration(entry.id)?.isConnected === true,
+        ).map((entry) => entry.id),
+      ),
+    [getNativeIntegration, installedMcpConfig],
+  );
+
+  const {
+    hidden: hiddenAutomationIds,
+    unlikely: unlikelyAutomations,
+    suggested: suggestedAutomations,
+  } = useMemo(
+    () =>
+      getAutomationAvailability({
+        deploymentMode,
+        builtInIntegrations,
+        connectedIntegrations,
+      }),
+    [deploymentMode, builtInIntegrations, connectedIntegrations],
   );
 
   const launchAutomation = useCallback(
@@ -412,6 +440,8 @@ export function RecommendedAutomationsLauncher({
           className={className}
           installedAutomations={automationsData?.automations ?? []}
           hiddenAutomationIds={hiddenAutomationIds}
+          unlikelyAutomations={unlikelyAutomations}
+          suggestedAutomations={suggestedAutomations}
           onSelect={handleSelectAutomation}
           dismissible={dismissible}
           onDismiss={onDismiss}
@@ -421,6 +451,8 @@ export function RecommendedAutomationsLauncher({
           backendKind={activeBackend.backend.kind}
           installedServers={installedMcpConfig}
           hiddenAutomationIds={hiddenAutomationIds}
+          unlikelyAutomations={unlikelyAutomations}
+          suggestedAutomations={suggestedAutomations}
           getNativeIntegration={getNativeIntegration}
           query={query}
           onClearQuery={onClearQuery}

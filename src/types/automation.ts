@@ -19,6 +19,12 @@ export interface AutomationTrigger {
   on?: string | string[];
   /** JMESPath filter expression evaluated against the raw webhook payload. */
   filter?: string;
+  /**
+   * Where a matching event goes (event triggers only): `"dispatch_run"`
+   * (default) starts a new run, `"continue_conversation"` resumes the
+   * conversation an earlier event started.
+   */
+  destination?: string;
 }
 
 /**
@@ -87,6 +93,13 @@ export interface Automation {
    * (600s, 10 min); the deployment reports the maximum it accepts.
    */
   timeout?: number | null;
+  /**
+   * Leave the run's sandbox for runtime TTL cleanup instead of deleting it
+   * when the run finishes. The service forces it on for
+   * `continue_conversation` triggers. Absent from an automation service that
+   * does not expose it.
+   */
+  keep_alive?: boolean | null;
 
   created_at: string;
   updated_at: string;
@@ -125,6 +138,17 @@ export interface Automation {
    * `#/utils/automation-preset-sources`.
    */
   preset_metadata?: Record<string, unknown> | null;
+  /**
+   * Labels the creator groups automations by, normalized by the automation
+   * service. Absent from an automation service older than tag support.
+   */
+  tags?: string[];
+}
+
+/** One of the org's tags and how many live automations carry it. */
+export interface AutomationTagCount {
+  tag: string;
+  count: number;
 }
 
 export type AutomationSpec = Omit<

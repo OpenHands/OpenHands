@@ -2,6 +2,7 @@ import React from "react";
 import {
   Bot,
   Brain,
+  Container,
   Home,
   Keyboard,
   KeyRound,
@@ -40,6 +41,7 @@ export const COMMAND_MENU_ROUTE = {
   condenserSettings: "/settings/condenser",
   agentContextSettings: "/settings/agent-context",
   verificationSettings: "/settings/verification",
+  runtimeSettings: "/settings/runtime",
   appSettings: "/settings/app",
   secretsSettings: "/settings/secrets",
 } as const;
@@ -57,6 +59,7 @@ export type CommandMenuItemId =
   | "condenser-settings"
   | "agent-context-settings"
   | "verification-settings"
+  | "runtime-settings"
   | "app-settings"
   | "secrets-settings"
   | "toggle-sidebar";
@@ -222,6 +225,15 @@ export const createCommandMenuItems = ({
       keywordsKey: I18nKey.COMMAND_MENU$VERIFICATION_SETTINGS_KEYWORDS,
       icon: <ShieldCheck size={ICON_SIZE} />,
       to: COMMAND_MENU_ROUTE.verificationSettings,
+    },
+    {
+      id: "runtime-settings",
+      group: "settings",
+      titleKey: I18nKey.SETTINGS$NAV_RUNTIME,
+      descriptionKey: I18nKey.SETTINGS$PAGE_RUNTIME_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$RUNTIME_SETTINGS_KEYWORDS,
+      icon: <Container size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.runtimeSettings,
     },
     {
       id: "app-settings",

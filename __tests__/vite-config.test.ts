@@ -189,8 +189,8 @@ describe("vite library build", () => {
       });
       return values;
     };
-    const recipe = (name: string) => {
-      const classSelector = `.${name.replace(/([^\w-])/g, "\\$1")}`;
+    const recipes = (name: string, pseudo = "") => {
+      const classSelector = `.${name.replace(/([^\w-])/g, "\\$1")}${pseudo}`;
       const matches: Rule[] = [];
       stylesheet.walkRules((rule) => {
         if (
@@ -203,30 +203,38 @@ describe("vite library build", () => {
           matches.push(rule);
         }
       });
-      expect(matches, `Shipped scoped recipe: ${name}`).toHaveLength(1);
-      const rule = matches[0];
-      expect(rule.selectors).toContain(
-        `[data-agent-server-ui] ${classSelector}`,
+      expect(matches.length, `Shipped scoped recipe: ${name}`).toBeGreaterThan(
+        0,
       );
-      for (const selector of rule.selectors) {
-        expect(selector).toMatch(/^\[data-agent-server-ui\]\s/);
-      }
-      let inUtilitiesLayer = false;
-      for (
-        let parent: AnyNode | undefined = rule.parent;
-        parent;
-        parent = parent.parent
-      ) {
-        if (
-          parent.type === "atrule" &&
-          (parent as AtRule).name === "layer" &&
-          (parent as AtRule).params === "utilities"
-        ) {
-          inUtilitiesLayer = true;
+      for (const rule of matches) {
+        expect(rule.selectors).toContain(
+          `[data-agent-server-ui] ${classSelector}`,
+        );
+        for (const selector of rule.selectors) {
+          expect(selector).toMatch(/^\[data-agent-server-ui\]\s/);
         }
+        let inUtilitiesLayer = false;
+        for (
+          let parent: AnyNode | undefined = rule.parent;
+          parent;
+          parent = parent.parent
+        ) {
+          if (
+            parent.type === "atrule" &&
+            (parent as AtRule).name === "layer" &&
+            (parent as AtRule).params === "utilities"
+          ) {
+            inUtilitiesLayer = true;
+          }
+        }
+        expect(inUtilitiesLayer, `Utilities-layer recipe: ${name}`).toBe(true);
       }
-      expect(inUtilitiesLayer, `Utilities-layer recipe: ${name}`).toBe(true);
-      return rule;
+      return matches;
+    };
+    const recipe = (name: string, pseudo = "") => {
+      const matches = recipes(name, pseudo);
+      expect(matches, `Single scoped recipe: ${name}`).toHaveLength(1);
+      return matches[0];
     };
     // Scoped to the Canvas root so it never restyles the host page.
     expect(css).toContain("[data-agent-server-ui] .flex{display:flex}");
@@ -337,6 +345,260 @@ describe("vite library build", () => {
       name: "media",
       params: expect.stringMatching(/^\(width\s*>=\s*48rem\)$/),
     });
+
+    // The sidebar shortcut ships to hosts; palette recipes also stay scoped
+    // for the standalone body portal without changing its mount boundary.
+    expect(declarations(recipe("z-70"))["z-index"]).toBe("70");
+    expect(declarations(recipe("command-menu-overlay"))["padding-top"]).toBe(
+      "10vh",
+    );
+    const commandPanel = declarations(recipe("command-menu-panel"));
+    expect(commandPanel["max-height"].replace(/\s/g, "")).toBe(
+      "min(720px,78vh)",
+    );
+    expect(commandPanel["--tw-shadow"]).toContain("0 24px 90px");
+    expect(commandPanel["--tw-shadow"]).toContain("inset");
+    // Vite may split color fallbacks into @supports rules. Check each
+    // emitted selector's scope and collect all supported declarations.
+    const commandSelection = Object.assign(
+      {},
+      ...recipes("command-menu-active-option").map(declarations),
+    );
+    expect(commandSelection["--tw-shadow"]).toContain("var(--oh-contrast)");
+    expect(commandSelection["--tw-shadow"]).toContain("8%");
+    for (const shadow of [commandPanel, commandSelection]) {
+      for (const variable of [
+        "--tw-inset-shadow",
+        "--tw-inset-ring-shadow",
+        "--tw-ring-offset-shadow",
+        "--tw-ring-shadow",
+        "--tw-shadow",
+      ]) {
+        expect(shadow["box-shadow"]).toContain(`var(${variable})`);
+      }
+    }
+    const commandBackdrop = declarations(recipe("command-menu-backdrop"));
+    expect(commandBackdrop["--tw-backdrop-blur"]).toBe("blur(2px)");
+    expect(commandBackdrop["backdrop-filter"]).toContain(
+      "var(--tw-backdrop-blur,)",
+    );
+    expect(commandBackdrop["backdrop-filter"]).toContain(
+      "var(--tw-backdrop-brightness,)",
+    );
+    expect(commandBackdrop["-webkit-backdrop-filter"]).toBe(
+      commandBackdrop["backdrop-filter"],
+    );
+    for (const [name, fontSize, tracking] of [
+      ["command-menu-label", "11px", 0.18],
+      ["command-menu-result-hint", "10px", 0.14],
+      ["command-menu-trigger-hint", "10px", 0.12],
+      ["command-menu-footer", "11px", undefined],
+    ] as const) {
+      const typography = declarations(recipe(name));
+      expect(typography["font-size"]).toBe(fontSize);
+      expect(typography["line-height"]).toBeUndefined();
+      if (tracking === undefined) {
+        expect(typography["letter-spacing"]).toBeUndefined();
+      } else {
+        expect(typography["letter-spacing"]).toMatch(/em$/);
+        expect(Number.parseFloat(typography["letter-spacing"])).toBe(tracking);
+        expect(typography["--tw-tracking"]).toBe(typography["letter-spacing"]);
+      }
+    }
+
+    // Connection chooser disclosures retain exact fractional tracks and their
+    // motion override after extraction and library selector scoping.
+    const disclosure = recipe("backend-chooser-disclosure");
+    expect(declarations(disclosure)).toMatchObject({
+      "transition-property": "grid-template-rows",
+      "transition-timing-function":
+        "var(--tw-ease,var(--default-transition-timing-function))",
+      "transition-duration":
+        "var(--tw-duration,var(--default-transition-duration))",
+    });
+    expect(
+      declarations(recipe("backend-chooser-disclosure-open")),
+    ).toMatchObject({ "grid-template-rows": "1fr" });
+    expect(
+      declarations(recipe("backend-chooser-disclosure-closed")),
+    ).toMatchObject({ "grid-template-rows": "0fr" });
+    expect(declarations(recipe("duration-200"))).toMatchObject({
+      "transition-duration": ".2s",
+    });
+    const easeOut = declarations(recipe("ease-out"));
+    expect(easeOut["transition-timing-function"]).toBe("var(--ease-out)");
+    const easingValues: string[] = [];
+    stylesheet.walkDecls("--ease-out", ({ value }) => {
+      easingValues.push(value.replace(/\s/g, ""));
+    });
+    expect(easingValues).toContain("cubic-bezier(0,0,.2,1)");
+    const reducedMotion = recipe("motion-reduce:transition-none");
+    expect(declarations(reducedMotion)["transition-property"]).toBe("none");
+    expect(reducedMotion.parent).toMatchObject({
+      type: "atrule",
+      name: "media",
+      params: "(prefers-reduced-motion:reduce)",
+    });
+    expect(reducedMotion.source?.start?.offset).toBeGreaterThan(
+      disclosure.source?.start?.offset ?? Infinity,
+    );
+
+    // Preserve relative typography/geometry and distinct Add/Edit viewport
+    // semantics, including the Cloud panel's grayscale pseudo-element halo.
+    expect(declarations(recipe("backend-chooser-cloud-panel"))).toMatchObject({
+      "min-height": "13.5rem",
+    });
+    const halo = declarations(
+      recipe("before:backend-chooser-cloud-halo", ":before"),
+    );
+    expect(halo["background-image"]).toBe(
+      "radial-gradient(75% 75%,#ffffff1a 0%,#fff0 70%)",
+    );
+    expect(halo.content).toBe("var(--tw-content)");
+    expect(
+      declarations(recipe("backend-chooser-learn-more-icon")),
+    ).toMatchObject({ "vertical-align": "-.125em" });
+    expect(declarations(recipe("backend-chooser-add-dialog"))).toMatchObject({
+      "max-height": "92vh",
+    });
+    expect(declarations(recipe("backend-chooser-edit-dialog"))).toMatchObject({
+      "max-height": "92dvh",
+    });
+
+    // Workspace selection keeps its mixed rem/px columns and viewport bounds.
+    const folderColumns = recipe("workspace-folder-columns");
+    expect(declarations(folderColumns)["grid-template-columns"]).toBe(
+      "minmax(0,1fr) 4rem",
+    );
+    const desktopColumns = recipe("md:workspace-folder-columns-desktop");
+    expect(declarations(desktopColumns)["grid-template-columns"]).toBe(
+      "1fr 120px",
+    );
+    expect(desktopColumns.parent).toMatchObject({
+      type: "atrule",
+      name: "media",
+      params: "(width>=48rem)",
+    });
+    expect(declarations(recipe("workspace-section-label"))).toMatchObject({
+      "font-size": "11px",
+    });
+    expect(declarations(recipe("workspace-manager-dialog"))).toMatchObject({
+      "max-height": "70vh",
+    });
+    expect(declarations(recipe("z-9999"))).toMatchObject({
+      "z-index": "9999",
+    });
+    expect(declarations(recipe("home-dropdown-sticky-list"))).toMatchObject({
+      "max-height": "12rem",
+    });
+
+    // Floating surfaces retain their stacking and compiled SVG stroke width.
+    expect(declarations(recipe("z-200"))).toMatchObject({ "z-index": "200" });
+    expect(declarations(recipe("context-menu-icon-stroke"))).toMatchObject({
+      "stroke-width": "1.75px",
+    });
+
+    // Preserve exact menu units and text metrics in the shipped scoped CSS.
+    const menuGeometryContracts = {
+      "tools-menu-offset": {
+        left: "-16px",
+      },
+      "tools-submenu-offset": {
+        top: "-4px",
+      },
+      "tools-git-submenu-offset": {
+        top: "-6px",
+      },
+      "profile-menu-height": {
+        "max-height": "60vh",
+      },
+      "menu-caption-text": {
+        "font-size": "11px",
+      },
+      "z-60": {
+        "z-index": "60",
+      },
+      "new-conversation-menu-height": {
+        "max-height": "40vh",
+      },
+      "menu-detail-text": {
+        "font-size": "10px",
+      },
+      "conversation-card-menu-width": {
+        "max-width": "min(280px,100vw - 16px)",
+      },
+      "-z-1": {
+        "z-index": "calc(1 * -1)",
+      },
+      "conversation-tag-popover-width": {
+        "min-width": "10rem",
+        "max-width": "16rem",
+      },
+      "conversation-tag-popover-columns": {
+        "grid-template-columns": "minmax(0,auto) minmax(0,1fr)",
+      },
+      "conversation-meta-text": {
+        "font-size": "10px",
+      },
+      "skill-pill-popover-width": {
+        "max-width": "20rem",
+      },
+      "conversation-git-actions-width": {
+        "min-width": "8rem",
+      },
+      "automation-actions-menu-width": {
+        "min-width": "10rem",
+      },
+      "dropdown-menu-width": {
+        "max-width": "min(26rem,100vw - 2rem)",
+      },
+      "dropdown-menu-viewport-height": {
+        "max-height": "min(60vh,100dvh - 5rem)",
+      },
+    };
+    for (const [name, expected] of Object.entries(menuGeometryContracts)) {
+      expect(declarations(recipe(name))).toMatchObject(expected);
+    }
+
+    const dialogContracts = {
+      "dialog-viewport-width": {
+        "max-width": "90vw",
+      },
+      "onboarding-viewport-height": {
+        "max-height": "90vh",
+      },
+      "dialog-content-height": {
+        "max-height": "80vh",
+      },
+      "setup-dialog-height": {
+        "max-height": "85vh",
+      },
+      "setup-dialog-width": {
+        width: "92vw",
+      },
+      "automation-import-width": {
+        width: "min(36rem,100vw - 2rem)",
+      },
+      "dialog-scroll-height": {
+        "max-height": "60vh",
+      },
+      "automation-log-min-height": {
+        "min-height": "12rem",
+      },
+      "conversation-dialog-reading-height": {
+        height: "60vh",
+      },
+      "conversation-options-bleed-width": {
+        width: "calc(100% + 3rem)",
+      },
+    };
+    for (const [name, expected] of Object.entries(dialogContracts)) {
+      expect(declarations(recipe(name))).toMatchObject(expected);
+    }
+
+    // Compact type tokens must not introduce a line-height default.
+    expect(declarations(recipe("text-2xs"))).toEqual({ "font-size": "11px" });
+    expect(declarations(recipe("text-3xs"))).toEqual({ "font-size": "10px" });
 
     // `package.json` routes `require` here; stripped CSS imports must not
     // leave it unparseable.

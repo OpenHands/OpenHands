@@ -1,7 +1,9 @@
 ## Raw-color class-map scanning
 
-`shadcn/no-raw-colors` stays at warning severity. The audited component paths in
-`eslint.config.js` also enable `scanAllStrings` so literal class recipes remain
+`shadcn/no-raw-colors` warns globally. Three migrated owners reject new raw colors:
+backend-status-dot, Markdown blockquote and mcp-server-health. Start-task badge
+and indicator remain warning-only pending their separate migration. Their exact paths in `eslint.config.js` also
+enable `scanAllStrings` so literal class recipes remain
 visible when dynamic map or helper lookups hide them from class-site analysis.
 Keep this adoption scoped: scanning every string can mistake program tags for
 color utilities. Review newly included findings before extending the file list;
@@ -145,13 +147,16 @@ When adding code that needs a new string, decide up front which rule it falls un
 
   - `useLoadOlderEvents` intentionally distinguishes between "no anchor yet" (empty store before the initial REST seed, so `loadOlder()` should no-op) and "malformed oldest event" (store has an oldest event with no timestamp, so the hook throws, flips `hasMore` false, and `ChatInterface` surfaces the failure via the shared error banner instead of failing silently).
 
-- Action grouping in the chat stream:
-  - `src/components/conversation-events/chat/group-events.ts` folds runs of consecutive groupable events (regular `ActionEvent`/`ObservationEvent` cards, but not `FinishAction`, `ThinkAction`, `PlanningFileEditorObservation`, `TaskTrackerObservation`, hooks, errors, or message events) into single `RenderedItem` groups. The threshold lives in `EVENT_GROUP_MIN_SIZE` (currently 2, so even pairs of back-to-back actions get folded).
-  - `EventGroup` (`src/components/conversation-events/chat/event-message-components/event-group.tsx`) is the collapsible header that wraps each run. Default state is collapsed; the header shows `EVENT_GROUP$ACTIONS_COMPLETED` (with a success check) when the group is done, or `EVENT_GROUP$ACTIONS_PROGRESS` plus the currently-running action's title (from `getEventContent`) while a member `ActionEvent` has not yet been replaced by its observation in the UI events array. Expanding renders the original `EventMessage`s verbatim so each card still expands the way it did before.
-  - Agent thoughts attached to an `ActionEvent` (`event.thought`) are hoisted out of groups: `groupEvents` emits a third `RenderedItem` kind `"thought"` whenever a groupable event carries (or, for an observation, originates from) a non-empty thought, flushing the current run and starting a new one. `messages.tsx` renders that item via `ThoughtEventMessage` and passes `suppressThought` to `EventMessage` so the inline thought isn't duplicated inside the group's expanded content. `ThinkAction` is excluded from this hoisting because the thought IS its action body and is rendered through its own codepath.
-  - `groupEvents` now de-duplicates hoisted thoughts by action ID so mixed UI arrays that temporarily contain both an action and its replacement observation do not emit the same thought twice; `minSize` is treated as a validated internal invariant (`>= 1`).
-  - `EventGroup` should return `null` for an empty `events` array and wire the toggle button to the expanded body with `aria-controls` / `role="region"` / `aria-labelledby`.
-  - `src/components/conversation-events/chat/messages.tsx` is the only consumer; the grouping is transparent to upstream code. Coverage lives in `__tests__/components/conversation-events/chat/group-events.test.ts` (pure logic, including thought hoisting) and `__tests__/components/conversation-events/chat/event-message-components/event-group.test.tsx` (rendering/interaction).
+- Activity grouping in the chat stream:
+  - `groupEvents` combines consecutive tools, successful/blocked hooks and reasoning; visible agent messages/thoughts, errors, approvals and artifact previews remain boundaries. `Messages` uses a one-step minimum so a completed group never unfolds just because the agent stopped. A lone blocked hook opens directly to its details; in mixed groups its blocked badge stays on the hook row, not the summary. Failed hooks remain standalone.
+  - `useSessionActivityStore` owns observed initialization/resume steps and disclosure state, scoped by backend, organization and conversation. Launch/task aliases transfer the same entry to the real conversation. This is tab-local presentation history in sessionStorage, not an SDK event or cross-device transcript; old conversations do not gain invented initialization rows.
+  - A READY sandbox leaves its session in `connecting` until the conversation socket is open and pending sends have settled. `ChatInterface` completes that handoff; startup/resume owns the progress row throughout. Pending user bubbles render before the active session group, keep failure/retry/stop controls, and omit their separate sending status only during that handoff. Later ordinary sends and connection recovery retain their own feedback.
+  - Session entries and streamed/finalized message reasoning join the first following activity run. Session setup is excluded from tool counts. The live header shows activity; completion keeps the same group and summarizes actual tools, or the completed session when no tools ran.
+  - Count summaries use natural English singulars and comma-separated sentence fragments. Later fragments use the i18n `continuation` context; casing is translated, never applied to tool names or paths. The separator is localized.
+  - A one-tool group uses the existing descriptive tool title. It reveals the body directly only when there is no session entry, reasoning or other activity alongside it; mixed groups retain collapsed tool rows until the user opens them. Its shared step disclosure records revealed output so adding another tool or moving a failed ACP call outside the group preserves that output. Reasoning, session history, rejection/timeout indicators and actionable boundaries remain accessible.
+  - Startup headers show the latest reported phase, independently of deduplicated history. Setup-only groups expose observed phase details directly; groups with tools retain a nested session entry. Phase labels describe observed activity, not inferred success or skipped steps. Other sandbox/composer status consumers keep their own labels.
+  - Active startup/resume groups stay visible while the initial history page is unknown. Paginated history hides completed initialization until the beginning is loaded; resume entries use an observed event anchor when available and timestamp ordering otherwise. Errors and pending secret/confirmation forms stay outside collapsed details.
+  - Coverage lives in `group-events.test.ts`, `event-group.test.tsx`, `messages-model-messages.test.tsx`, and `session-activity-store.test.ts` under `__tests__`.
 
 - Home page workspace UX (local backend):
   - `FolderBrowserModal`'s "Use this folder" button adds **only the currently navigated directory** as a single workspace (named by its basename). It no longer iterates `subdirs` and adds each child as a separate workspace.

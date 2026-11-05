@@ -4,6 +4,8 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalBody } from "#/components/shared/modals/modal-body";
 import { useDeviceFlow, type DeviceFlowStatus } from "#/hooks/use-device-flow";
+import { getLockedCloudHost } from "#/api/agent-server-config";
+import { isOpenHandsCloudHost } from "#/api/device-flow-client";
 import type { CloudConnectionSource } from "#/services/cloud-funnel-analytics";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
@@ -68,6 +70,18 @@ function isValidVerificationUrl(url: string): boolean {
   }
 }
 
+function withLocalSignupSource(
+  url: string | null,
+  host: string,
+): string | null {
+  if (!url || !isValidVerificationUrl(url)) return url;
+  if (getLockedCloudHost() || !isOpenHandsCloudHost(host)) return url;
+  const verificationUrl = new URL(url);
+  if (!isOpenHandsCloudHost(verificationUrl.origin)) return url;
+  verificationUrl.searchParams.set("signup_entry_source", "local_canvas");
+  return verificationUrl.toString();
+}
+
 export function DeviceFlowAuth({
   host,
   onSuccess,
@@ -86,6 +100,10 @@ export function DeviceFlowAuth({
   const { t } = useTranslation("openhands");
   const deviceFlow = useDeviceFlow();
   const popupRef = React.useRef<Window | null>(null);
+  const verificationUrl = withLocalSignupSource(
+    deviceFlow.verificationUrl,
+    host,
+  );
 
   // Close popup on unmount or when auth completes/errors
   React.useEffect(() => {
@@ -98,28 +116,28 @@ export function DeviceFlowAuth({
   React.useEffect(() => {
     if (
       deviceFlow.status === "awaiting_authorization" &&
-      deviceFlow.verificationUrl &&
+      verificationUrl &&
       popupRef.current &&
       !popupRef.current.closed
     ) {
       // Validate URL before assigning to prevent XSS
-      if (!isValidVerificationUrl(deviceFlow.verificationUrl)) {
+      if (!isValidVerificationUrl(verificationUrl)) {
         console.error("Invalid verification URL protocol");
         return;
       }
       try {
-        popupRef.current.location.href = deviceFlow.verificationUrl;
+        popupRef.current.location.href = verificationUrl;
       } catch {
         // Cross-origin error - popup was navigated away
         // Open a new one as fallback
         popupRef.current = window.open(
-          deviceFlow.verificationUrl,
+          verificationUrl,
           "_blank",
           "noopener,noreferrer",
         );
       }
     }
-  }, [deviceFlow.status, deviceFlow.verificationUrl]);
+  }, [deviceFlow.status, verificationUrl]);
 
   // A failed flow has nothing left to show in its popup; Try again opens a
   // fresh one.
@@ -184,7 +202,7 @@ export function DeviceFlowAuth({
     <DeviceFlowStatusContent
       status={deviceFlow.status}
       error={deviceFlow.error}
-      verificationUrl={deviceFlow.verificationUrl}
+      verificationUrl={verificationUrl}
       testIdRoot={testIdRoot}
       onCancel={handleCancel}
       onRetry={handleStartAuth}

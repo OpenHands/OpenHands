@@ -108,6 +108,7 @@ type NativeGitIntegrations = ReturnType<typeof useNativeGitIntegrations>;
 /** A backend with no native git integration to use: local, or cloud with none. */
 const NO_NATIVE_INTEGRATIONS: NativeGitIntegrations = {
   getNativeIntegration: () => null,
+  builtInIntegrations: null,
   isJiraEnabled: false,
   isLinearEnabled: false,
   isSlackEnabled: false,
@@ -527,6 +528,38 @@ describe("SetupDialog", () => {
       name: "Widget monitor - OpenHands/agent-server-gui",
       prompt: "Report on Widgets in OpenHands/agent-server-gui.",
       repos: [{ url: "OpenHands/agent-server-gui", provider: "github" }],
+      trigger: { type: "cron", schedule: "*/15 * * * *" },
+    });
+  });
+
+  it("leaves a repository the deployment's runs cannot clone out of repos", async () => {
+    // Arrange — the entry picks a GitHub repository and this service's runs
+    // clone GitLab ones only, so the repository reaches the prompt alone.
+    mocks.capabilities.mockReturnValue({
+      capabilities: { ...CRON_ONLY_CAPABILITIES, repoProviders: ["gitlab"] },
+      supported: true,
+      unmet: [],
+      isLoading: false,
+    });
+    mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert — neither preflight nor creation is sent the repository.
+    await waitFor(() => expect(mocks.runAction).toHaveBeenCalled());
+    expect(
+      vi.mocked(AutomationService.validateDraft).mock.calls[0][0].draft,
+    ).not.toHaveProperty("repos");
+    expect(mocks.runAction.mock.calls[0][2]).toEqual({
+      name: "Widget monitor - OpenHands/agent-server-gui",
+      prompt: "Report on Widgets in OpenHands/agent-server-gui.",
       trigger: { type: "cron", schedule: "*/15 * * * *" },
     });
   });
