@@ -432,4 +432,52 @@ describe("MCPServerForm validation", () => {
 
     r2.unmount();
   });
+
+  it("defaults new server to SHTTP in add mode and exposes timeout input", () => {
+    render(
+      <MCPServerForm
+        mode="add"
+        existingServers={[]}
+        onSubmit={noop}
+        onCancel={noop}
+      />,
+    );
+
+    // Should default to shttp, so timeout input should be rendered
+    expect(screen.getByTestId("timeout-input")).toBeInTheDocument();
+    // Deprecation notice should not be displayed when defaulting to shttp
+    expect(
+      screen.queryByTestId("mcp-sse-deprecation-notice"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("labels SSE option as deprecated in add mode and displays deprecation notice when SSE is active", () => {
+    // In edit mode with an existing SSE server, it should render deprecation notice and keep sse type
+    const onSubmit = vi.fn();
+    render(
+      <MCPServerForm
+        mode="edit"
+        server={{
+          id: "sse-1",
+          type: "sse",
+          name: "legacy_server",
+          url: "https://legacy.example.com/sse",
+        }}
+        existingServers={[]}
+        onSubmit={onSubmit}
+        onCancel={noop}
+      />,
+    );
+
+    const notice = screen.getByTestId("mcp-sse-deprecation-notice");
+    expect(notice).toBeInTheDocument();
+    expect(notice).toHaveTextContent(
+      "SETTINGS$MCP_SERVER_TYPE_SSE_DEPRECATION_NOTICE",
+    );
+    expect(notice).toHaveClass("text-feedback-warning");
+
+    fireEvent.click(screen.getByTestId("submit-button"));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0][0].type).toBe("sse");
+  });
 });
