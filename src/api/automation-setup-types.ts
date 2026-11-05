@@ -9,6 +9,8 @@ export type AutomationSetupFieldUpdateSource = "agent" | "user";
 export interface AutomationSetupFormValues {
   kind: AutomationSetupKind;
   name: string;
+  /** Service account id selected for a new automation; empty means the caller. */
+  runAsUserId: string;
   prompt: string;
   repository: string;
   pluginSource: string;
