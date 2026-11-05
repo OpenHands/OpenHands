@@ -8,7 +8,7 @@ export {
   AUTOMATION_FORM_UPDATE_TOOL_NAME,
 } from "#/constants/automation-form";
 
-const AUTOMATION_FORM_UPDATE_DESCRIPTION = `Update the automation setup form that is open beside this conversation. Use this only when the user asks you to help fill, revise, or complete automation configuration fields in the UI.
+const AUTOMATION_FORM_UPDATE_DESCRIPTION = `Update the automation setup form that is open beside this conversation. Use this to propose the automation the user asks for and to fill, revise, or complete its configuration fields; the user reviews the form and saves or creates the automation from it.
 
 The user can keep editing the form while you converse. By default, your updates fill empty fields or fields the user has not manually edited. If the user already edited a field, do not overwrite it unless they explicitly asked you to replace their value; set overwrite_user_edits=true only in that case.
 
@@ -117,6 +117,12 @@ export function buildAutomationFormUpdateClientTool(
   };
 }
 
-/** The tool as sent when the deployment's capabilities are not known. */
-export const AUTOMATION_FORM_UPDATE_CLIENT_TOOL: ClientToolSpec =
-  buildAutomationFormUpdateClientTool();
+/**
+ * System-message suffix for a setup conversation, sent with the form tool.
+ * The sandbox can also reach the automation API, and keyword-triggered skills
+ * describe creating automations there, which would skip the user's review of
+ * the form.
+ */
+export const AUTOMATION_SETUP_SYSTEM_SUFFIX = `This conversation is an automation setup session. The automation setup form is open beside the chat, and the user saves, tests, or creates the automation from that form after reviewing it.
+* When the user asks for an automation, or for a change to one, propose it by filling the form with the ${AUTOMATION_FORM_UPDATE_TOOL_NAME} tool. Use only the event sources that tool's description lists.
+* Do not create, update, enable, run, or delete automations, drafts, or custom webhooks through the automation API in this conversation, with curl, a script, or any other tool, even when a skill describes how or the user asks you to deploy. Point the user to the form's Save draft, Test, and Create Automation buttons instead.`;

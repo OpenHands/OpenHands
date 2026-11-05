@@ -79,7 +79,10 @@ import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
 import { toAcpModelOptions } from "#/constants/acp-providers";
 import { isPlannerConversationOf } from "#/utils/plan-file";
 import { buildAutomationSetupModeTags } from "#/utils/automation-draft-tags";
-import { buildAutomationFormUpdateClientTool } from "../automation-form-client-tool";
+import {
+  AUTOMATION_SETUP_SYSTEM_SUFFIX,
+  buildAutomationFormUpdateClientTool,
+} from "../automation-form-client-tool";
 import type { DeploymentCapabilities } from "#/manifests/types";
 import { CANVAS_UI_CLIENT_TOOL } from "../canvas-ui-client-tool";
 import { LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL } from "../launch-child-conversation-client-tool";
@@ -296,10 +299,23 @@ function normalizeLaunchedAgentProfile(
 }
 
 function normalizeAbsolutePath(path: string): string | null {
-  if (!path.startsWith("/")) return null;
+  const normalizedPath = path.replace(/\\/g, "/");
+
+  let root: string;
+  let remainder: string;
+
+  if (/^[A-Za-z]:\//.test(normalizedPath)) {
+    root = normalizedPath.slice(0, 3);
+    remainder = normalizedPath.slice(3);
+  } else if (normalizedPath.startsWith("/")) {
+    root = "/";
+    remainder = normalizedPath.slice(1);
+  } else {
+    return null;
+  }
 
   const segments: string[] = [];
-  for (const segment of path.split("/")) {
+  for (const segment of remainder.split("/")) {
     if (segment && segment !== ".") {
       if (segment === "..") {
         if (!segments.length) return null;
@@ -310,7 +326,7 @@ function normalizeAbsolutePath(path: string): string | null {
     }
   }
 
-  return `/${segments.join("/")}`;
+  return `${root}${segments.join("/")}`;
 }
 
 function requirePathInsideDirectory(path: string, directory: string): string {
@@ -613,6 +629,7 @@ class AgentServerConversationService {
                   automationSetupCapabilities,
                 ),
               ],
+              system_message_suffix: AUTOMATION_SETUP_SYSTEM_SUFFIX,
             }
           : {}),
       };
@@ -745,8 +762,7 @@ class AgentServerConversationService {
       agent_server_url: localBackend.host,
       request: {
         initial_message: payload.initial_message as
-          | AppConversationStartRequest["initial_message"]
-          | undefined,
+          AppConversationStartRequest["initial_message"] | undefined,
         plugins: plugins ?? null,
       },
       created_at: data.created_at,
@@ -1187,8 +1203,9 @@ class AgentServerConversationService {
    * agent-server PATCH is replace-all, so callers must merge user edits with
    * any reserved/internal keys before calling). Mirrors
    * `updateConversationTitle`; local agent-server conversations only — Cloud
-   * callers go through {@link updateConversationTagFlags}, which uses the
-   * app-server's merge patch instead.
+   * callers go through {@link updateConversationTagFlags} or
+   * {@link replaceConversationTags}, which use the app-server's merge patch
+   * instead.
    */
   static async updateConversationTags(
     conversationId: string,
@@ -1203,6 +1220,31 @@ class AgentServerConversationService {
       conversationId,
     ]);
     return requireAppConversation(conversation, conversationId);
+  }
+
+  /**
+   * Replaces the tag map `currentTags` with `nextTags` on either backend. The
+   * local agent-server receives `nextTags` (its PATCH is replace-all). The
+   * Cloud app-server's PATCH is a merge patch that rejects server-managed keys
+   * even when unchanged, so it receives only the keys that differ: their new
+   * value, or `null` for a key `nextTags` drops.
+   */
+  static async replaceConversationTags(
+    conversationId: string,
+    currentTags: Record<string, string> | null | undefined,
+    nextTags: Record<string, string>,
+  ): Promise<AppConversation> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      const patch: Record<string, string | null> = {};
+      for (const [key, value] of Object.entries(nextTags)) {
+        if (currentTags?.[key] !== value) patch[key] = value;
+      }
+      for (const key of Object.keys(currentTags ?? {})) {
+        if (!(key in nextTags)) patch[key] = null;
+      }
+      return updateCloudConversationTags(conversationId, patch);
+    }
+    return this.updateConversationTags(conversationId, nextTags);
   }
 
   /**

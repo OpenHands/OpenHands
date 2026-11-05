@@ -43,9 +43,8 @@ export function useStartAutomationSetup() {
       };
       const editingAutomationId = draft.editingAutomationId?.trim() || null;
       let entryPoint:
-        | "automations_add"
-        | "automation_edit"
-        | "automation_draft_resume" = "automations_add";
+        "automations_add" | "automation_edit" | "automation_draft_resume" =
+        "automations_add";
       let automationSetupTags: Record<string, string> | undefined;
       if (editingAutomationId) {
         entryPoint = "automation_edit";

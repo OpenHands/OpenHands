@@ -75,7 +75,10 @@ import {
   LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
   LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
 } from "./launch-child-conversation-client-tool";
-import { buildAutomationFormUpdateClientTool } from "./automation-form-client-tool";
+import {
+  AUTOMATION_SETUP_SYSTEM_SUFFIX,
+  buildAutomationFormUpdateClientTool,
+} from "./automation-form-client-tool";
 import type { DeploymentCapabilities } from "#/manifests/types";
 import { REQUEST_SECRET_CLIENT_TOOL } from "./request-secret-client-tool";
 import {
@@ -1152,6 +1155,10 @@ export function buildStartConversationRequest(
         !options.suppressRouterAtStart,
       options.profileHasRouter ?? false,
     ),
+    // Sent with the form tool below, which only OpenHands profiles get.
+    options.automationSetup && options.agentProfileKind === "openhands"
+      ? AUTOMATION_SETUP_SYSTEM_SUFFIX
+      : null,
   ]
     .filter((suffix): suffix is string => Boolean(suffix))
     .join("\n\n");
@@ -1270,8 +1277,7 @@ export function buildStartConversationRequest(
 
   const toolModuleQualnames = {
     ...((conversationSettings.tool_module_qualnames as
-      | Record<string, string>
-      | undefined) ?? {}),
+      Record<string, string> | undefined) ?? {}),
   };
   delete toolModuleQualnames[LEGACY_CANVAS_UI_TOOL_NAME];
   delete toolModuleQualnames[CANVAS_UI_CLIENT_TOOL_NAME];

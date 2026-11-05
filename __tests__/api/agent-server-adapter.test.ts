@@ -5,6 +5,7 @@ import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import { REQUEST_SECRET_TOOL_NAME } from "#/constants/secret-request";
 import { AUTOMATION_FORM_UPDATE_TOOL_NAME } from "#/constants/automation-form";
+import { AUTOMATION_SETUP_SYSTEM_SUFFIX } from "#/api/automation-form-client-tool";
 
 import {
   ACP_SERVER_TAG_KEY,
@@ -1334,6 +1335,25 @@ describe("profile launch additions", () => {
       } else {
         expect(appended ?? "").not.toContain("ROUTE_AT_CONVERSATION_START");
       }
+    },
+  );
+
+  it.each([
+    ["an OpenHands setup conversation", "openhands", true, true],
+    ["an ordinary conversation", "openhands", false, false],
+    ["an ACP setup conversation, which gets no form tool", "acp", true, false],
+  ] as const)(
+    "tells the agent to stay on the setup form only in %s",
+    (_case, agentProfileKind, automationSetup, expected) => {
+      const payload = buildStartConversationRequest({
+        settings: DEFAULT_SETTINGS,
+        agentProfileId: "profile-1",
+        agentProfileKind,
+        automationSetup,
+      });
+
+      const appended = additionsOf(payload)?.system_message_suffix_append ?? "";
+      expect(appended.includes(AUTOMATION_SETUP_SYSTEM_SUFFIX)).toBe(expected);
     },
   );
 

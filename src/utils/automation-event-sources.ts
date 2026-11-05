@@ -13,7 +13,10 @@ export interface EventSourceGuide {
   eventKeyField: string;
   /** A payload shaped like the source's webhook for `eventKey`. */
   samplePayload: (eventKey: string) => Record<string, unknown>;
-  /** A trigger the source's automation template ships, so it has been run. */
+  /**
+   * A trigger that an automation template for the source ships or has
+   * shipped, so it has been run.
+   */
   reference?: {
     purpose: string;
     eventKey: string;
@@ -25,7 +28,10 @@ export interface EventSourceGuide {
 
 // The references are the Data Center templates' triggers
 // (OpenHands/extensions `automations/catalog/*-data-center-*`), with their
-// form values replaced by the examples the templates' forms show.
+// form values replaced by the examples the templates' forms show. Bitbucket
+// Data Center's is the code review template's trigger from extensions 0.39.0:
+// it names the repository by project key and slug, which a chat request can
+// supply, where the template now matches the clone URL its picker stores.
 export const EVENT_SOURCE_GUIDES: Readonly<Record<string, EventSourceGuide>> = {
   jira_dc: {
     label: "Jira Data Center",
