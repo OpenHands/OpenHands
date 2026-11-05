@@ -40,6 +40,29 @@ export interface ChatInputLlmProfileState {
 }
 
 /**
+ * Whether the browser-local `active_profile` stamp may still label the chat
+ * input. The stamp is trusted only while the profile still exists *and* its
+ * model still matches the backend's authoritative `llm_model`; a renamed or
+ * deleted profile (or any backend/localStorage divergence) falls through to
+ * model-based resolution instead (OSS-8611 root cause B).
+ *
+ * When the backend model is unknown (no conversation yet), the stamp keeps its
+ * previous trust level so home-page behavior is unchanged.
+ */
+export function stampedProfileMatches(
+  stampedProfile: string | null | undefined,
+  profiles: ProfileInfo[],
+  conversationModel: string | null | undefined,
+): boolean {
+  if (!stampedProfile) return false;
+  return profiles.some(
+    (p) =>
+      p.name === stampedProfile &&
+      (conversationModel == null || p.model === conversationModel),
+  );
+}
+
+/**
  * Backs the OpenHands LLM-profile switcher pill, both on the home page (where
  * it shows and sets the LLM the active agent profile launches with) and
  * inside a conversation (live swap). The ACP analog is
@@ -94,10 +117,13 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
   //      active agent profile's own LLM, which the launch runs, else the
   //      user-level active_profile.
   const stampedProfile = conversation?.active_profile ?? null;
-  const conversationProfile =
-    stampedProfile && profiles.some((p) => p.name === stampedProfile)
-      ? stampedProfile
-      : null;
+  const conversationProfile = stampedProfileMatches(
+    stampedProfile,
+    profiles,
+    conversationModel,
+  )
+    ? stampedProfile
+    : null;
   const activeAgentProfile = agentProfiles?.profiles?.find(
     (profile) =>
       profile.id != null &&
