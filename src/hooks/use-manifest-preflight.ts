@@ -58,6 +58,7 @@ export function useSetupPreflight(entry: SetupEntry) {
       formValues: SetupFormValues,
       selectedTrigger?: string | null,
       selectedAction?: string | null,
+      cloneProviders?: readonly string[],
     ): Promise<MappedManifestErrors | null> => {
       try {
         // Deriving the body is inside the guard too: a bundle entry resolves
@@ -71,6 +72,7 @@ export function useSetupPreflight(entry: SetupEntry) {
           formValues,
           selectedTrigger,
           selectedAction,
+          cloneProviders,
         );
         if (!body) return null;
 
