@@ -440,6 +440,26 @@ function requireAppConversation(
 }
 
 /**
+ * Merge patch that turns `current` into `next` for the Cloud app-server's
+ * key-by-key tags PATCH: added or changed keys are set, keys missing from
+ * `next` are sent as `null` to delete them, and unchanged keys are left out
+ * so server-managed keys carried over verbatim are never rejected.
+ */
+function conversationTagsReplacePatch(
+  current: Record<string, string>,
+  next: Record<string, string>,
+): Record<string, string | null> {
+  const patch: Record<string, string | null> = {};
+  for (const [key, value] of Object.entries(next)) {
+    if (current[key] !== value) patch[key] = value;
+  }
+  for (const key of Object.keys(current)) {
+    if (!(key in next)) patch[key] = null;
+  }
+  return patch;
+}
+
+/**
  * Options for {@link AgentServerConversationService.createConversation}.
  */
 export interface CreateConversationOptions {
@@ -1183,17 +1203,28 @@ class AgentServerConversationService {
   }
 
   /**
-   * Replaces the conversation's complete server-side tag map (the local
+   * Replaces the conversation's complete server-side tag map. The local
    * agent-server PATCH is replace-all, so callers must merge user edits with
-   * any reserved/internal keys before calling). Mirrors
-   * `updateConversationTitle`; local agent-server conversations only — Cloud
-   * callers go through {@link updateConversationTagFlags}, which uses the
-   * app-server's merge patch instead.
+   * any reserved/internal keys before calling. The Cloud app-server patches
+   * tags key-by-key instead, so there the current map is read first and only
+   * the keys that differ are sent (added/changed keys set, missing keys
+   * deleted); keys carried over unchanged, including server-managed ones,
+   * stay out of the patch. Mirrors `updateConversationTitle`.
    */
   static async updateConversationTags(
     conversationId: string,
     tags: Record<string, string>,
   ): Promise<AppConversation> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      const [current] = await batchGetCloudConversations([conversationId]);
+      const currentTags =
+        requireAppConversation(current, conversationId).tags ?? {};
+      return updateCloudConversationTags(
+        conversationId,
+        conversationTagsReplacePatch(currentTags, tags),
+      );
+    }
+
     await new ConversationClient(
       getAgentServerClientOptions(),
     ).updateConversation(conversationId, {

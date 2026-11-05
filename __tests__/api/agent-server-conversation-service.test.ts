@@ -321,6 +321,74 @@ describe("AgentServerConversationService", () => {
       ).rejects.toThrow("gone");
     });
 
+    it("replaces the tag map on Cloud as a merge patch of only the changed keys", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+      const current = makeDirectConversation({
+        tags: {
+          origin: "slack",
+          agentprofileid: "profile-1",
+          automationsetup: "draft",
+          automationeditid: "automation-9",
+        },
+      });
+      const updated = makeDirectConversation({
+        tags: {
+          origin: "slack",
+          agentprofileid: "profile-1",
+          automationsetup: "draft",
+          automationdraftid: "draft-1",
+        },
+      });
+      const reads = captureRequests(["get"], [current]);
+      const writes = captureRequests(["patch"], updated);
+
+      await expect(
+        AgentServerConversationService.updateConversationTags("conv-1", {
+          origin: "slack",
+          agentprofileid: "profile-1",
+          automationsetup: "draft",
+          automationdraftid: "draft-1",
+        }),
+      ).resolves.toEqual(updated);
+
+      // The Cloud PATCH merges server-side, so the writer reads the current
+      // map and sends only the keys that differ: unchanged keys, including
+      // the server-managed agentprofileid, stay out of the request and the
+      // dropped key is deleted via null.
+      expect(reads).toEqual([
+        expect.objectContaining({
+          method: "GET",
+          url: `${cloudBackend.host}/api/v1/app-conversations?ids=conv-1`,
+        }),
+      ]);
+      expect(writes).toEqual([
+        expect.objectContaining({
+          method: "PATCH",
+          url: `${cloudBackend.host}/api/v1/app-conversations/conv-1`,
+          body: {
+            tags: { automationdraftid: "draft-1", automationeditid: null },
+          },
+        }),
+      ]);
+      expect(mockUpdateConversation).not.toHaveBeenCalled();
+    });
+
+    it("rejects Cloud tag updates when the conversation is missing", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+      captureRequests(["get"], [null]);
+      const writes = captureRequests(["patch"], makeDirectConversation());
+
+      await expect(
+        AgentServerConversationService.updateConversationTags("gone", {
+          automationsetup: "draft",
+        }),
+      ).rejects.toThrow("gone");
+
+      expect(writes).toEqual([]);
+    });
+
     it("applies tag flags locally as a full replacement map merged with current tags", async () => {
       const refreshedTags = {
         origin: "slack",
