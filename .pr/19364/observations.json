@@ -1,0 +1,60 @@
+[
+  {
+    "run": "base",
+    "parent_exit_code": 1,
+    "ports_listening": {
+      "18890": false,
+      "18891": false,
+      "18892": false,
+      "18893": false
+    },
+    "ingress_crashes": 4,
+    "static_restarts_after_giveup": 1,
+    "error_exits_after_giveup": [
+      "[agent-server] Exited with code 143",
+      "[automation] Exited with code 143"
+    ]
+  },
+  {
+    "run": "base3",
+    "parent_exit_code": 1,
+    "ports_listening": {
+      "18890": false,
+      "18891": false,
+      "18892": false,
+      "18893": false
+    },
+    "ingress_crashes": 4,
+    "static_restarts_after_giveup": 1,
+    "error_exits_after_giveup": [
+      "[agent-server] Exited with code 143",
+      "[automation] Exited with code 143"
+    ]
+  },
+  {
+    "run": "fixed",
+    "parent_exit_code": 1,
+    "ports_listening": {
+      "18890": false,
+      "18891": false,
+      "18892": false,
+      "18893": false
+    },
+    "ingress_crashes": 4,
+    "static_restarts_after_giveup": 0,
+    "error_exits_after_giveup": []
+  },
+  {
+    "run": "fixed3",
+    "parent_exit_code": 1,
+    "ports_listening": {
+      "18890": false,
+      "18891": false,
+      "18892": false,
+      "18893": false
+    },
+    "ingress_crashes": 4,
+    "static_restarts_after_giveup": 0,
+    "error_exits_after_giveup": []
+  }
+]
