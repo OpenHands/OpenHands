@@ -857,10 +857,12 @@ export function AutomationSetupPanel({
       const update = conversationTagUpdateQueueRef.current
         .catch(() => undefined)
         .then(async () => {
-          const nextTags = buildNextTags(latestConversationTagsRef.current);
+          const currentTags = latestConversationTagsRef.current;
+          const nextTags = buildNextTags(currentTags);
           const updatedConversation =
-            await AgentServerConversationService.updateConversationTags(
+            await AgentServerConversationService.replaceConversationTags(
               conversationId,
+              currentTags,
               nextTags,
             );
           const savedTags = updatedConversation.tags ?? nextTags;
