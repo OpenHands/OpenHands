@@ -124,6 +124,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const { getNativeIntegration, deploymentMode } = useNativeGitIntegrations();
   const {
     trackAutomationSetupOpened,
+    trackAutomationSetupBlocked,
     trackAutomationSetupValidated,
     trackAutomationSetupCreated,
     trackAutomationSetupFailed,
@@ -268,8 +269,31 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   useEffect(() => {
     if (emittedOpenRef.current) return;
     emittedOpenRef.current = true;
-    trackAutomationSetupOpened({ automationId: entry.id });
+    trackAutomationSetupOpened({
+      automationId: entry.id,
+      entryPoint: "setup_dialog",
+    });
   }, [entry.id, trackAutomationSetupOpened]);
+
+  const emittedBlockedRef = useRef(false);
+  useEffect(() => {
+    if (emittedBlockedRef.current) return;
+    if (!prerequisites.isBlocked) return;
+    emittedBlockedRef.current = true;
+    trackAutomationSetupBlocked({
+      automationId: entry.id,
+      stage: "prerequisites",
+      reason:
+        prerequisites.blockingIntegrations.map(({ id }) => id).join(",") ||
+        "integration_missing",
+      errorCode: "prerequisites_blocked",
+    });
+  }, [
+    entry.id,
+    prerequisites.isBlocked,
+    prerequisites.blockingIntegrations,
+    trackAutomationSetupBlocked,
+  ]);
 
   // An entry the published interface cannot create is refused here rather than
   // at the moment of creating: a bundle needs two endpoints a manifest from
@@ -283,6 +307,19 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const isUnsupported =
     capabilities.supported === false || missingEndpoints.length > 0;
   const unmet = [...capabilities.unmet, ...missingEndpoints];
+
+  const emittedUnsupportedRef = useRef(false);
+  useEffect(() => {
+    if (emittedUnsupportedRef.current) return;
+    if (!isUnsupported) return;
+    emittedUnsupportedRef.current = true;
+    trackAutomationSetupBlocked({
+      automationId: entry.id,
+      stage: "prerequisites",
+      reason: unmet.join(",") || "unsupported",
+      errorCode: "unsupported",
+    });
+  }, [entry.id, isUnsupported, unmet, trackAutomationSetupBlocked]);
   const showPrerequisites =
     prerequisites.blockingIntegrations.length > 0 ||
     prerequisites.warningIntegrations.length > 0;
@@ -380,6 +417,15 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     );
     if (Object.keys(failures).length > 0) {
       setLocalErrors(failures);
+      Object.entries(failures).forEach(([field, error]) => {
+        trackAutomationSetupBlocked({
+          automationId: entry.id,
+          stage: "form",
+          reason: "local_validation",
+          field,
+          errorCode: error.code,
+        });
+      });
       return;
     }
     setLocalErrors({});
@@ -392,6 +438,23 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     );
     if (result && hasAnyError(result)) {
       setServiceErrors(result);
+      Object.entries(result.fieldErrors).forEach(([field]) => {
+        trackAutomationSetupBlocked({
+          automationId: entry.id,
+          stage: "preflight",
+          reason: "service_validation",
+          field,
+          errorCode: "service_error",
+        });
+      });
+      result.formErrors.forEach(() => {
+        trackAutomationSetupBlocked({
+          automationId: entry.id,
+          stage: "preflight",
+          reason: "service_validation",
+          errorCode: "service_error",
+        });
+      });
       return;
     }
 
@@ -431,6 +494,23 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
         normalizeServiceErrors(getApiErrorBody(error), actionPayload),
         errorMap,
       );
+      Object.entries(mapped.fieldErrors).forEach(([field]) => {
+        trackAutomationSetupBlocked({
+          automationId: entry.id,
+          stage: "submit",
+          reason: "service_validation",
+          field,
+          errorCode: "service_error",
+        });
+      });
+      if (mapped.formErrors.length > 0 || !hasAnyError(mapped)) {
+        trackAutomationSetupBlocked({
+          automationId: entry.id,
+          stage: "submit",
+          reason: "service_validation",
+          errorCode: "service_error",
+        });
+      }
       setServiceErrors(
         hasAnyError(mapped)
           ? mapped
