@@ -237,7 +237,7 @@ function EventsContent({
                   id="webhook-source-id"
                   name="source"
                   required
-                  pattern="[a-z0-9]([a-z0-9-]{0,48}[a-z0-9])?"
+                  pattern="[a-z0-9]([a-z0-9\-]{0,48}[a-z0-9])?"
                   maxLength={50}
                   placeholder={t(I18nKey.AUTOMATIONS$EVENTS$SOURCE_PLACEHOLDER)}
                   aria-describedby="webhook-source-help"

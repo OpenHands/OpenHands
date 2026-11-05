@@ -238,6 +238,38 @@ describe("automation Events page", () => {
     expect(await screen.findByText("Issues")).toBeInTheDocument();
   });
 
+  it("gives the source ID a pattern browsers compile with the v flag", async () => {
+    server.use(
+      http.get("*/api/automation/v1/webhooks", () =>
+        HttpResponse.json({ webhooks: [], total: 0 }),
+      ),
+    );
+    renderEvents();
+    await screen.findByText(I18nKey.AUTOMATIONS$EVENTS$EMPTY);
+    await userEvent.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EVENTS$ADD }),
+    );
+    const pattern = document
+      .getElementById("webhook-source-id")
+      ?.getAttribute("pattern");
+    expect(pattern).toBeTruthy();
+    // HTML compiles a pattern attribute as ^(?:pattern)$ with the v flag; an
+    // invalid one is ignored, so the browser would accept any ID.
+    const compiled = new RegExp(`^(?:${pattern})$`, "v");
+    for (const valid of ["issues", "a", "my-source-1", "a".repeat(50)]) {
+      expect(compiled.test(valid)).toBe(true);
+    }
+    for (const invalid of [
+      "QA_bad id",
+      "-issues",
+      "issues-",
+      "Issues",
+      "a".repeat(51),
+    ]) {
+      expect(compiled.test(invalid)).toBe(false);
+    }
+  });
+
   it("shows server validation errors without creating a source", async () => {
     server.use(
       http.get("*/api/automation/v1/webhooks", () =>
