@@ -8,6 +8,15 @@ import {
 } from "react";
 
 /**
+ * Distance from the bottom (px) still treated as "pinned to the bottom".
+ *
+ * Shared with the virtualized list's anchor correction: the two "am I pinned"
+ * checks have to agree, or the anchor correction and autoscroll disagree about
+ * the same frame.
+ */
+export const BOTTOM_THRESHOLD_PX = 20;
+
+/**
  * @param followContent Content is growing in place (a streamed reply), so keep
  *   the bottom in view frame by frame while the user is pinned to it.
  */
@@ -28,10 +37,8 @@ export function useScrollToBottom(
 
   // Check if the scroll position is at the bottom
   const isAtBottom = useCallback((element: HTMLElement): boolean => {
-    // Use a fixed 20px buffer
-    const bottomThreshold = 20;
     const bottomPosition = element.scrollTop + element.clientHeight;
-    return bottomPosition >= element.scrollHeight - bottomThreshold;
+    return bottomPosition >= element.scrollHeight - BOTTOM_THRESHOLD_PX;
   }, []);
 
   // Handle scroll events

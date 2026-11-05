@@ -17,7 +17,6 @@ import {
   isStreamingDeltaEvent,
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
-import { cn } from "#/utils/utils";
 import { EventMessage } from "./event-message";
 import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
 import {
@@ -31,10 +30,6 @@ import { getSingleToolEvent } from "./event-message-components/event-group-summa
 import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
 import { getStepKey, StepDisclosureContext } from "./step-disclosure-context";
-import {
-  PLAIN_ROW_MARGIN_RESET_CLASSNAME,
-  VIRTUAL_ROW_MARGIN_RESET_CLASSNAME,
-} from "./row-margins";
 import { useModelStore } from "#/stores/model-store";
 import { ModelMessages } from "#/components/features/chat/model-messages";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
@@ -197,7 +192,14 @@ export const Messages: React.FC<MessagesProps> = React.memo(
 
     const maybeRenderSecretRequest = (eventId: string | undefined) => {
       const request = eventId && secretRequests.byAnchorId.get(eventId);
-      return request ? <SecretRequestCard request={request} /> : null;
+      // Inside the virtual shell a card in a row unmounts as soon as the reader
+      // scrolls more than the overscan away, which loses the draft they typed
+      // and — worse — drops the per-call `onSuccess` that reports the result to
+      // the agent while the save is in flight, leaving the tool call unanswered.
+      // Keep every pending card in `trailingContent` while virtualizing; the
+      // plain list never unmounts a row, so it keeps the card next to its call.
+      if (!request || shouldVirtualize) return null;
+      return <SecretRequestCard request={request} />;
     };
 
     // One activity group lasts until visible agent text or an actionable event.
@@ -443,12 +445,18 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     }, [rowKeys, pruneExpansion]);
 
     // Stable item-key accessor. TanStack compares this callback by identity when
-    // deciding whether to rebuild its measurement cache; an inline arrow would
-    // look like a new key extractor on every render and invalidate the cache
-    // (recomputing offsets and remounting rows for no reason).
+    // deciding whether to rebuild its measurement cache, and an inline arrow —
+    // or a callback closing over `rowKeys`, which is a fresh array whenever
+    // `renderedItems` changes — would look like a new key extractor on every
+    // append and invalidate the cache. Read the keys through a ref so the
+    // identity really is stable: the count still drives a rebuild (offsets are
+    // recomputed; the sizes in TanStack's `itemSizeCache` survive), but
+    // unrelated re-renders no longer reset the memo.
+    const rowKeysRef = React.useRef(rowKeys);
+    rowKeysRef.current = rowKeys;
     const getItemKey = React.useCallback(
-      (index: number) => rowKeys[index],
-      [rowKeys],
+      (index: number) => rowKeysRef.current[index],
+      [],
     );
 
     // The virtualizer's scroll element is the chat column, which also holds
@@ -475,14 +483,28 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // every append instead of tracking just the rows that changed.
     const plainRowObserver = React.useRef<ResizeObserver | null>(null);
     const observedPlainRows = React.useRef<Set<Element>>(new Set());
+    // A box can also be added to a row that already exists — a `/model` card
+    // anchored to a loaded event, a secret card, a pending bubble joining a
+    // session group. None of those resize the row's existing boxes, so the
+    // ResizeObserver never fires and the row keeps its stale, shorter height
+    // until the next crossing seeds the shell from it. Watch each wrapper's own
+    // child list instead, which fires only when a box is added or removed.
+    const plainRowMutationObserver = React.useRef<MutationObserver | null>(
+      null,
+    );
 
-    // Re-measure one row in place. The observer below calls this for a row that
-    // resizes, and leaving the other rows' cached heights untouched keeps the
-    // work proportional to the row that changed instead of the whole list.
-    const measurePlainRowInPlace = React.useCallback((row: Element) => {
-      const measured = measurePlainRow(row.parentElement ?? row);
-      if (measured) plainItemHeights.current.set(measured[0], measured[1]);
-    }, []);
+    // Re-measure one row in place, from its `data-row-key` wrapper. The
+    // observers below call this for a row whose boxes resized or whose child
+    // list changed, and leaving the other rows' cached heights untouched keeps
+    // the work proportional to the row that changed instead of the whole list.
+    const measurePlainRowWrapper = React.useCallback(
+      (wrapper: Element | null) => {
+        if (!wrapper) return;
+        const measured = measurePlainRow(wrapper);
+        if (measured) plainItemHeights.current.set(measured[0], measured[1]);
+      },
+      [],
+    );
 
     const getPlainRowObserver = React.useCallback(() => {
       if (plainRowObserver.current || typeof ResizeObserver === "undefined") {
@@ -490,11 +512,26 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       }
       plainRowObserver.current = new ResizeObserver((entries) => {
         for (const entry of entries) {
-          measurePlainRowInPlace(entry.target);
+          measurePlainRowWrapper(entry.target.parentElement);
         }
       });
       return plainRowObserver.current;
-    }, [measurePlainRowInPlace]);
+    }, [measurePlainRowWrapper]);
+
+    const getPlainRowMutationObserver = React.useCallback(() => {
+      if (
+        plainRowMutationObserver.current ||
+        typeof MutationObserver === "undefined"
+      ) {
+        return plainRowMutationObserver.current;
+      }
+      plainRowMutationObserver.current = new MutationObserver((records) => {
+        for (const record of records) {
+          measurePlainRowWrapper(record.target as Element);
+        }
+      });
+      return plainRowMutationObserver.current;
+    }, [measurePlainRowWrapper]);
 
     // Keep the cache current while the plain list is mounted: it seeds the
     // shell's geometry when the list later virtualizes. Only rows added since
@@ -515,6 +552,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         plainRowObserver.current?.disconnect();
         plainRowObserver.current = null;
         observedPlainRows.current.clear();
+        plainRowMutationObserver.current?.disconnect();
+        plainRowMutationObserver.current = null;
         return undefined;
       }
       const list = plainListRef.current;
@@ -523,8 +562,13 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       // Observe each row's boxes, not the wrapper: the wrapper is
       // `display: contents` and has no box of its own.
       const observer = getPlainRowObserver();
+      const mutationObserver = getPlainRowMutationObserver();
       const currentRows = new Set<Element>();
       for (const child of Array.from(list.children)) {
+        // Watch the wrapper's child list so a box added next to an existing one
+        // re-measures the row even though nothing resized. Re-observing a node
+        // is idempotent, so no bookkeeping is needed.
+        mutationObserver?.observe(child, { childList: true });
         for (const row of Array.from(child.children)) {
           currentRows.add(row);
           if (observedPlainRows.current.has(row)) continue;
@@ -547,7 +591,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       scrollParent,
       rowKeys,
       getPlainRowObserver,
-      measurePlainRowInPlace,
+      getPlainRowMutationObserver,
+      measurePlainRowWrapper,
     ]);
 
     React.useEffect(
@@ -555,6 +600,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         plainRowObserver.current?.disconnect();
         plainRowObserver.current = null;
         observedPlainRows.current.clear();
+        plainRowMutationObserver.current?.disconnect();
+        plainRowMutationObserver.current = null;
       },
       [],
     );
@@ -568,11 +615,24 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     const initialMeasurementsCacheRef = React.useRef<VirtualItem[] | undefined>(
       undefined,
     );
+    // Average of the rows measured while plain, computed once and shared by the
+    // seed's fallback and the post-switch estimate so the two agree.
+    const measuredAverageRef = React.useRef<number | null>(null);
     if (shouldVirtualize) {
       if (initialMeasurementsCacheRef.current === undefined) {
+        const heights = rowKeys.map(
+          (key) => plainItemHeights.current.get(key) ?? 0,
+        );
+        const measured = heights.filter((height) => height > 0);
+        measuredAverageRef.current = measured.length
+          ? Math.round(
+              measured.reduce((total, height) => total + height, 0) /
+                measured.length,
+            )
+          : null;
         initialMeasurementsCacheRef.current = buildInitialMeasurements(
           rowKeys,
-          rowKeys.map((key) => plainItemHeights.current.get(key) ?? 0),
+          heights,
           ROW_GAP_PX,
         );
       }
@@ -580,6 +640,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       // Reset while plain, so a later switch back to the shell re-seeds from
       // the heights current at that moment rather than a stale snapshot.
       initialMeasurementsCacheRef.current = undefined;
+      measuredAverageRef.current = null;
     }
 
     // Estimate for rows that mount after the switch (appended, or re-measured)
@@ -588,19 +649,16 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // biases the shell's own total: `chat-interface` restores the reader's
     // offset on "load older" from the shell's height delta, so a total built
     // from an over-tall estimate over-counts the prepended page and drags the
-    // visible content up. Freeze the average of the rows measured while plain
-    // (plus the row gap, which the measurement includes) once, since the
-    // captured heights stop changing after the switch.
+    // visible content up. Read the average the seed used (plus the row gap) so
+    // both fall back to the same number; the captured heights stop changing
+    // after the switch, so it stays frozen.
     const estimatedRowHeightRef = React.useRef<number | null>(null);
     if (shouldVirtualize) {
       if (estimatedRowHeightRef.current === null) {
-        const heights = [...plainItemHeights.current.values()];
-        estimatedRowHeightRef.current = heights.length
-          ? Math.round(
-              heights.reduce((total, height) => total + height, 0) /
-                heights.length,
-            ) + ROW_GAP_PX
-          : ESTIMATED_ROW_HEIGHT;
+        estimatedRowHeightRef.current =
+          measuredAverageRef.current === null
+            ? ESTIMATED_ROW_HEIGHT
+            : measuredAverageRef.current + ROW_GAP_PX;
       }
     } else {
       estimatedRowHeightRef.current = null;
@@ -733,7 +791,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
           </div>
         )}
-        {secretRequests.unanchored.map((request) => (
+        {(shouldVirtualize
+          ? pendingSecretRequests
+          : secretRequests.unanchored
+        ).map((request) => (
           <SecretRequestCard key={request.toolCallId} request={request} />
         ))}
         <ConversationConfirmationButtons />
@@ -745,17 +806,9 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         <>
           {/*
             The wrapper is `display: contents`, so it adds no box: the rows keep
-            the scroll column's own flex gap and their `last:` margins. It is
-            only here to scope one correction — with a per-row wrapper each
-            row's last element becomes a `:last-child`, so its `last:mb-4`
-            would fire on every row instead of only the final one. The rule
-            neutralizes that margin on every row but the last, and only on the
-            elements that actually carry it.
+            the scroll column's own flex gap and the column's bottom padding.
           */}
-          <div
-            ref={plainListRef}
-            className={cn("contents", PLAIN_ROW_MARGIN_RESET_CLASSNAME)}
-          >
+          <div ref={plainListRef} className="contents">
             {renderedItems.map((item) => {
               const itemKey = renderedItemKey(item);
               return (
@@ -808,16 +861,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 // `gap-2` restores the intra-row spacing the plain list gets
                 // from the scroll column's own flex gap (its row wrapper is
                 // `display: contents`, so a row's siblings are spaced by the
-                // column). The margin correction mirrors the plain wrapper's
-                // reset: each message is the last child of its own row, so its
-                // `last:mb-4` would fire on every row instead of only the final
-                // one. Scoped to the elements that carry `last:mb-4`, so it
-                // leaves other margins (an `EventGroup`'s `my-1`) alone.
-                className={cn(
-                  "flex flex-col gap-2",
-                  virtualRow.index < renderedItems.length - 1 &&
-                    VIRTUAL_ROW_MARGIN_RESET_CLASSNAME,
-                )}
+                // column).
+                className="flex flex-col gap-2"
                 style={{
                   position: "absolute",
                   top: 0,

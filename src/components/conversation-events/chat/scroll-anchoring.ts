@@ -1,7 +1,7 @@
 import type { VirtualItem } from "@tanstack/react-virtual";
+import { BOTTOM_THRESHOLD_PX } from "#/hooks/use-scroll-to-bottom";
 
-/** Distance from the bottom (px) still treated as "pinned to the bottom". */
-export const BOTTOM_THRESHOLD_PX = 20;
+export { BOTTOM_THRESHOLD_PX };
 
 /**
  * Seeds the virtualizer's measurement cache from the plain list's own row
@@ -120,7 +120,7 @@ interface SizeChangeInstance {
  * previous one wrote.
  */
 export const anchorScrollOnItemSizeChange = (
-  item: Pick<VirtualItem, "start">,
+  item: Pick<VirtualItem, "start" | "end">,
   delta: number,
   instance: SizeChangeInstance,
 ): boolean => {
@@ -134,6 +134,13 @@ export const anchorScrollOnItemSizeChange = (
   const pinned =
     offset + element.clientHeight >= element.scrollHeight - BOTTOM_THRESHOLD_PX;
   if (item.start >= offset && !pinned) return false;
+
+  // Only a row *entirely* above the viewport shifts the content under it. A row
+  // that straddles the top edge (its end is below the offset) is what the
+  // reader is looking at — a group they just expanded — and the plain list
+  // leaves it where it is. Adding its whole growth to `scrollTop` would push
+  // the thing they opened out of view.
+  if (!pinned && item.end > offset) return false;
 
   element.scrollTop = offset + delta;
   return false;

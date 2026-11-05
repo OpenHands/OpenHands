@@ -1,5 +1,5 @@
 import React from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { Messages } from "#/components/conversation-events/chat/messages";
 import {
@@ -91,6 +91,24 @@ const renderMessages = (events: OpenHandsEvent[], withScrollParent = true) =>
   renderWithProviders(
     <Harness events={events} withScrollParent={withScrollParent} />,
   );
+
+// The cases below install per-element `getBoundingClientRect` and
+// `getComputedStyle` spies and stub the observer globals; without restoring
+// them the file only passes in its written order. Snapshot the baseline in
+// `beforeEach` (after the setup file's `beforeAll` has installed its
+// ResizeObserver stub) so each case starts from it, and put it back by hand:
+// `vi.unstubAllGlobals()` would also drop the setup's stub for later cases.
+let baselineResizeObserver: typeof ResizeObserver | undefined;
+let baselineMutationObserver: typeof MutationObserver | undefined;
+beforeEach(() => {
+  baselineResizeObserver = window.ResizeObserver;
+  baselineMutationObserver = window.MutationObserver;
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.stubGlobal("ResizeObserver", baselineResizeObserver);
+  vi.stubGlobal("MutationObserver", baselineMutationObserver);
+});
 
 describe("Messages virtualization", () => {
   beforeEach(() => {

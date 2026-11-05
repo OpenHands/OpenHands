@@ -108,9 +108,9 @@ describe("anchorScrollOnItemSizeChange", () => {
 
     // Always false: the helper applies the correction itself, so the virtualizer
     // must not add its own on top.
-    expect(anchorScrollOnItemSizeChange({ start: 100 }, 50, instance)).toBe(
-      false,
-    );
+    expect(
+      anchorScrollOnItemSizeChange({ start: 100, end: 150 }, 50, instance),
+    ).toBe(false);
     expect(element.scrollTop).toBe(550);
   });
 
@@ -119,18 +119,18 @@ describe("anchorScrollOnItemSizeChange", () => {
     // the reader is pinned and the row's growth must be followed.
     const { element, instance } = makeInstance(600, 400, 1000);
 
-    expect(anchorScrollOnItemSizeChange({ start: 800 }, 200, instance)).toBe(
-      false,
-    );
+    expect(
+      anchorScrollOnItemSizeChange({ start: 800, end: 1000 }, 200, instance),
+    ).toBe(false);
     expect(element.scrollTop).toBe(800);
   });
 
   it("leaves a row below the viewport alone when the reader is not pinned", () => {
     const { element, instance } = makeInstance(0, 400, 1000);
 
-    expect(anchorScrollOnItemSizeChange({ start: 800 }, 200, instance)).toBe(
-      false,
-    );
+    expect(
+      anchorScrollOnItemSizeChange({ start: 800, end: 1000 }, 200, instance),
+    ).toBe(false);
     expect(element.scrollTop).toBe(0);
   });
 
@@ -142,9 +142,9 @@ describe("anchorScrollOnItemSizeChange", () => {
     // new 200px (`scrollHeight - delta` = 800) would wrongly move the offset.
     const { element, instance } = makeInstance(500, 400, 1000);
 
-    expect(anchorScrollOnItemSizeChange({ start: 600 }, 200, instance)).toBe(
-      false,
-    );
+    expect(
+      anchorScrollOnItemSizeChange({ start: 600, end: 800 }, 200, instance),
+    ).toBe(false);
     expect(element.scrollTop).toBe(500);
   });
 
@@ -157,9 +157,9 @@ describe("anchorScrollOnItemSizeChange", () => {
       1000,
     );
 
-    expect(anchorScrollOnItemSizeChange({ start: 800 }, 100, instance)).toBe(
-      false,
-    );
+    expect(
+      anchorScrollOnItemSizeChange({ start: 800, end: 900 }, 100, instance),
+    ).toBe(false);
     expect(element.scrollTop).toBe(600 - BOTTOM_THRESHOLD_PX + 100);
   });
 
@@ -177,20 +177,46 @@ describe("anchorScrollOnItemSizeChange", () => {
     // A stale cached offset that is 16px behind the live position.
     const instance = { scrollElement: element, scrollOffset: 984 };
 
-    expect(anchorScrollOnItemSizeChange({ start: 900 }, 16, instance)).toBe(
-      false,
-    );
+    expect(
+      anchorScrollOnItemSizeChange({ start: 900, end: 1000 }, 16, instance),
+    ).toBe(false);
     // Live position (1000) plus the delta — not the cached 984.
     expect(element.scrollTop).toBe(1016);
   });
 
+  it("leaves a row straddling the top edge alone, even while scrolling history", () => {
+    // The reader opened a group whose top is a few pixels above the fold; the
+    // plain list keeps it there via the browser's own scroll anchoring. Adding
+    // its whole growth to `scrollTop` would move the thing they opened off the
+    // top of the screen.
+    const { element, instance } = makeInstance(100, 400, 1000);
+
+    expect(
+      anchorScrollOnItemSizeChange({ start: 85, end: 121 }, 81, instance),
+    ).toBe(false);
+    expect(element.scrollTop).toBe(100);
+  });
+
+  it("still corrects a row entirely above the viewport", () => {
+    const { element, instance } = makeInstance(200, 400, 1000);
+
+    expect(
+      anchorScrollOnItemSizeChange({ start: 100, end: 200 }, 81, instance),
+    ).toBe(false);
+    expect(element.scrollTop).toBe(281);
+  });
+
   it("does nothing without a scroll element or for a zero delta", () => {
     expect(
-      anchorScrollOnItemSizeChange({ start: 0 }, 10, { scrollElement: null }),
+      anchorScrollOnItemSizeChange({ start: 0, end: 10 }, 10, {
+        scrollElement: null,
+      }),
     ).toBe(false);
 
     const { element, instance } = makeInstance(100, 400, 1000);
-    expect(anchorScrollOnItemSizeChange({ start: 0 }, 0, instance)).toBe(false);
+    expect(
+      anchorScrollOnItemSizeChange({ start: 0, end: 10 }, 0, instance),
+    ).toBe(false);
     expect(element.scrollTop).toBe(100);
   });
 });

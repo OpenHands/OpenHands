@@ -185,7 +185,6 @@ export function ChatMessage({
           type === "agent" &&
           "border border-[#597ff4] bg-tertiary p-4 mt-2",
         pendingStatus === "error" && "border border-status-error/40",
-        !isPendingUserMessage && "last:mb-4",
       )}
     >
       <div
@@ -278,7 +277,7 @@ export function ChatMessage({
 
   if (type === "user" && pendingStatus === "error") {
     return (
-      <div className="flex w-fit max-w-full flex-col items-end gap-1.5 self-end last:mb-4">
+      <div className="flex w-fit max-w-full flex-col items-end gap-1.5 self-end">
         {messageBubble}
         <div
           role="alert"
@@ -313,7 +312,7 @@ export function ChatMessage({
 
   if (type === "user" && pendingStatus === "sending" && showPendingStatus) {
     return (
-      <div className="flex w-full max-w-full flex-col last:mb-4">
+      <div className="flex w-full max-w-full flex-col">
         {messageBubble}
         <div className="mt-4 w-full py-1 text-sm">
           {pendingLabel ? (
