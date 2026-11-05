@@ -271,8 +271,10 @@ describe("recommended automations", () => {
       "linear-issue-to-bitbucket-pr",
       "jira-issue-to-pr",
       "qa-changes",
+      "jira-data-center-issue-to-bitbucket-data-center-pr",
       "jira-issue-to-gitlab-mr",
       "research-brief-writer",
+      "bitbucket-data-center-pr-reviewer",
       "jira-issue-to-bitbucket-pr",
       "github-delivery-watchdog",
       "github-issue-triage",
@@ -306,7 +308,7 @@ describe("recommended automations", () => {
     expect(moreHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$MORE_TITLE,
     );
-    expect(within(moreHeading).getByText("18")).toBeInTheDocument();
+    expect(within(moreHeading).getByText("20")).toBeInTheDocument();
 
     const moreSection = screen.getByTestId(
       "recommended-automations-beta-section",
@@ -1397,9 +1399,13 @@ describe("recommended automations", () => {
       // Act
       renderLauncher({ withBackendProvider: true });
 
-      // Assert
+      // Assert — ahead of the proven templates; the catalog's own Data Center
+      // templates use the reported integrations too.
       await screen.findByTestId("recommended-automation-card-news-digest");
-      expect(cardOrder()[0]).toBe("news-digest");
+      const order = cardOrder();
+      expect(order.indexOf("news-digest")).toBeLessThan(
+        order.indexOf("slack-channel-monitor"),
+      );
       expect(
         within(
           screen.getByTestId("recommended-automations-beta-section"),

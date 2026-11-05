@@ -134,6 +134,7 @@ import {
   automationRepositoriesChanged,
   buildAutomationRepoSources,
 } from "#/utils/automation-repo-sources";
+import { EVENT_SOURCE_GUIDES } from "#/utils/automation-event-sources";
 
 const DEFAULT_TIMEZONE = "America/New_York";
 const DEFAULT_TIME = "09:00";
@@ -417,35 +418,12 @@ function eventTypeMatches(pattern: string, eventKey: string): boolean {
     : pattern === eventKey;
 }
 
-// Test payloads shaped like each Data Center source's webhook, which names its
-// event in `webhookEvent` (Jira) or `eventKey` (Bitbucket).
-const EVENT_TEST_PAYLOAD_SAMPLES: Record<
-  string,
-  (eventKey: string) => Record<string, unknown>
-> = {
-  jira_dc: (eventKey) => ({
-    webhookEvent: eventKey,
-    issue: { key: "PROJ-1", fields: { summary: "Example issue" } },
-    comment: { body: "Example comment" },
-  }),
-  bitbucket_data_center: (eventKey) => ({
-    eventKey,
-    pullRequest: {
-      id: 1,
-      title: "Example pull request",
-      toRef: {
-        displayId: "main",
-        repository: { slug: "repo", project: { key: "PROJ" } },
-      },
-    },
-  }),
-};
-
 function buildDefaultEventTestPayload(
   eventSource: string = DEFAULT_EVENT_SOURCE,
   eventKey: string = DEFAULT_EVENT_KEY,
 ): string {
-  const sample = EVENT_TEST_PAYLOAD_SAMPLES[eventSource];
+  // A source Canvas knows gets a payload shaped like its webhook.
+  const sample = EVENT_SOURCE_GUIDES[eventSource]?.samplePayload;
   return `${JSON.stringify(
     sample
       ? sample(eventKey)
@@ -923,10 +901,12 @@ export function AutomationSetupPanel({
       const update = conversationTagUpdateQueueRef.current
         .catch(() => undefined)
         .then(async () => {
-          const nextTags = buildNextTags(latestConversationTagsRef.current);
+          const currentTags = latestConversationTagsRef.current;
+          const nextTags = buildNextTags(currentTags);
           const updatedConversation =
-            await AgentServerConversationService.updateConversationTags(
+            await AgentServerConversationService.replaceConversationTags(
               conversationId,
+              currentTags,
               nextTags,
             );
           const savedTags = updatedConversation.tags ?? nextTags;

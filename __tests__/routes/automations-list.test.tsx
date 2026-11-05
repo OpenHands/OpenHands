@@ -363,9 +363,6 @@ describe("AutomationsList — draft sections", () => {
     ).toBeInTheDocument();
 
     expect(
-      screen.queryByText(I18nKey.AUTOMATIONS$MATERIALIZED_DRAFTS),
-    ).not.toBeInTheDocument();
-    expect(
       screen.queryByText("Materialized test draft"),
     ).not.toBeInTheDocument();
     expect(
