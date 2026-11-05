@@ -95,10 +95,7 @@ import {
 import { isPlanFilePath } from "#/utils/plan-file";
 
 export type WebSocketConnectionState =
-  | "CONNECTING"
-  | "OPEN"
-  | "CLOSED"
-  | "CLOSING";
+  "CONNECTING" | "OPEN" | "CLOSED" | "CLOSING";
 
 /**
  * A message submitted while its cloud conversation had no runtime URL yet
@@ -784,8 +781,7 @@ export function ConversationWebSocketProvider({
           // AgentErrorEvent errors are displayed inline in the chat, not as banners
           if (isDisplayableErrorEvent(event)) {
             const errorEvent = event as
-              | ConversationErrorEvent
-              | ServerErrorEvent;
+              ConversationErrorEvent | ServerErrorEvent;
             const classification =
               "classification" in errorEvent ? errorEvent.classification : null;
             trackError({
@@ -1079,8 +1075,7 @@ export function ConversationWebSocketProvider({
           // AgentErrorEvent errors are displayed inline in the chat, not as banners
           if (isDisplayableErrorEvent(event)) {
             const errorEvent = event as
-              | ConversationErrorEvent
-              | ServerErrorEvent;
+              ConversationErrorEvent | ServerErrorEvent;
             const classification =
               "classification" in errorEvent ? errorEvent.classification : null;
             trackError({
