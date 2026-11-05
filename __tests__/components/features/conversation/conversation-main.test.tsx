@@ -143,6 +143,7 @@ vi.mock(
   () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { createPortal } = require("react-dom");
+    const automationDraftLabel = "Unsaved automation name";
     return {
       AutomationSetupPanel: ({
         conversationId,
@@ -167,7 +168,7 @@ vi.mock(
               data-testid="automation-setup-panel"
               data-conversation-id={conversationId ?? ""}
             >
-              <input aria-label="Unsaved automation name" defaultValue="" />
+              <input aria-label={automationDraftLabel} defaultValue="" />
             </div>
           </>
         );
