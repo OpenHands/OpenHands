@@ -89,6 +89,8 @@ describe("useDraftPersistence", () => {
       const conversationId = "conv-restore-1";
       const savedDraft = "Previously saved draft message";
       const chatInputRef = createMockChatInputRef();
+      const inputListener = vi.fn();
+      chatInputRef.current?.addEventListener("input", inputListener);
 
       vi.mocked(conversationLocalStorage.getConversationState).mockReturnValue({
         selectedTab: "files",
@@ -105,6 +107,7 @@ describe("useDraftPersistence", () => {
 
       // Assert - draft should be restored to the DOM element
       expect(chatInputRef.current?.textContent).toBe(savedDraft);
+      expect(inputListener).toHaveBeenCalledTimes(1);
     });
 
     it("clears input on mount then restores draft if exists", () => {
@@ -530,6 +533,8 @@ describe("useDraftPersistence", () => {
       const chatInputRef = createMockChatInputRef(
         "  Draft typed during init  ",
       );
+      const inputListener = vi.fn();
+      chatInputRef.current!.addEventListener("input", inputListener);
 
       vi.mocked(conversationLocalStorage.getConversationState).mockReturnValue({
         selectedTab: "files",
@@ -564,6 +569,7 @@ describe("useDraftPersistence", () => {
       expect(chatInputRef.current?.textContent).toBe(
         "  Draft typed during init  ",
       );
+      expect(inputListener).toHaveBeenCalledTimes(1);
       expect(result.current.isRestored).toBe(true);
     });
 
@@ -706,6 +712,8 @@ describe("useDraftPersistence", () => {
     it("restores and preserves a saved home prompt", () => {
       sessionStorage.setItem(HOME_PROMPT_DRAFT_KEY, "  saved home prompt  ");
       const chatInputRef = createMockChatInputRef();
+      const inputListener = vi.fn();
+      chatInputRef.current.addEventListener("input", inputListener);
 
       const { result, unmount } = renderHook(() =>
         useDraftPersistence(undefined, chatInputRef),
@@ -715,6 +723,7 @@ describe("useDraftPersistence", () => {
         conversationLocalStorage.useConversationLocalStorageState,
       ).toHaveBeenCalledWith("");
       expect(chatInputRef.current.textContent).toBe("  saved home prompt  ");
+      expect(inputListener).toHaveBeenCalledTimes(1);
       expect(result.current.isRestored).toBe(true);
 
       unmount();
