@@ -20,7 +20,15 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { server as mswServer } from "#/mocks/node";
 import {
   buildAgentServerAutomationEnv,
@@ -1303,6 +1311,71 @@ describe("superviseService", () => {
       "The supervise-give-up-test exited 3 times (last: 3)",
     );
   }, 15_000);
+
+  it.each([false, true])(
+    "cancels peer restarts during shutdown (restart already pending: %s)",
+    async (pendingRestart) => {
+      let peerStarts = 0;
+      const logs: { name: string; line: string; level: string }[] = [];
+      setServiceLogListener((name: string, line: string, level: string) => {
+        logs.push({ name, line, level });
+      });
+      try {
+        superviseService(
+          "healthy-peer",
+          (hooks: object) => {
+            peerStarts += 1;
+            return spawnService(
+              "healthy-peer",
+              process.execPath,
+              pendingRestart ? exitWith(7) : stayUp,
+              hooks,
+            );
+          },
+          { onFailure: vi.fn(), restartDelayMs: 1000 },
+        );
+        if (pendingRestart) {
+          await vi.waitFor(() =>
+            expect(
+              logs.some(
+                (log) =>
+                  log.name === "healthy-peer" &&
+                  log.line.startsWith("exited with code"),
+              ),
+            ).toBe(true),
+          );
+        }
+        const previousErrors = logs.filter(
+          (log) => log.name === "healthy-peer" && log.level === "error",
+        ).length;
+        const failure = await new Promise<Error>((resolve) => {
+          superviseService(
+            "failed-front-door",
+            (hooks: object) =>
+              spawnService(
+                "failed-front-door",
+                process.execPath,
+                exitWith(3),
+                hooks,
+              ),
+            { onFailure: resolve, maxRestarts: 0, restartDelayMs: 0 },
+          );
+        });
+        expect(failure.message).toContain(
+          "The failed-front-door exited 1 times (last: 3)",
+        );
+        expect(peerStarts).toBe(1);
+        expect(
+          logs.filter(
+            (log) => log.name === "healthy-peer" && log.level === "error",
+          ),
+        ).toHaveLength(previousErrors);
+      } finally {
+        setServiceLogListener(null);
+      }
+    },
+    15_000,
+  );
 });
 
 describe("dev-with-automation CLI", () => {
@@ -1540,6 +1613,9 @@ describe("dev-with-automation CLI", () => {
         );
         expect(banner, output).toBeGreaterThan(-1);
         expect(failure, output).toBeGreaterThan(banner);
+        expect(output.slice(failure)).not.toMatch(
+          /Restarting \(|Exited with code/,
+        );
         expect(await isListening(stack.ingressPort)).toBe(false);
       } finally {
         await stack.stop();
