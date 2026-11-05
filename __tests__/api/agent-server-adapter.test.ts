@@ -594,6 +594,56 @@ describe("buildStartConversationRequest", () => {
       },
     );
 
+    it("describes the deployment's event sources in the automation form tool", () => {
+      const formTool = (payload: {
+        client_tools: Array<{
+          name: string;
+          description: string;
+          parameters: unknown;
+        }>;
+      }) =>
+        payload.client_tools.find(
+          (tool) => tool.name === AUTOMATION_FORM_UPDATE_TOOL_NAME,
+        );
+      const withSources = formTool(
+        buildStartConversationRequest({
+          ...PROFILE,
+          settings: DEFAULT_SETTINGS,
+          automationSetup: true,
+          automationSetupCapabilities: {
+            ready: true,
+            triggerKinds: ["cron", "event"],
+            eventSources: ["bitbucket_data_center", "jira_dc"],
+            eventTypes: [],
+            eventTypesBySource: {
+              bitbucket_data_center: ["pr:opened"],
+              jira_dc: ["jira:issue_updated"],
+            },
+            triggers: {},
+            features: [],
+          },
+        }),
+      );
+      const unknown = formTool(
+        buildStartConversationRequest({
+          ...PROFILE,
+          settings: DEFAULT_SETTINGS,
+          automationSetup: true,
+          automationSetupCapabilities: null,
+        }),
+      );
+
+      expect(withSources?.description).toContain(
+        "* bitbucket_data_center (Bitbucket Data Center): event keys pr:opened.",
+      );
+      expect(withSources?.description).toContain(
+        "* jira_dc (Jira Data Center): event keys jira:issue_updated.",
+      );
+      expect(unknown?.description).toContain("event sources could not be read");
+      // Same tool name, same schema: the agent-server accepts both.
+      expect(withSources?.parameters).toEqual(unknown?.parameters);
+    });
+
     it("sends the client tool when resuming a conversation", () => {
       const payload = buildStartConversationRequest({
         ...PROFILE,

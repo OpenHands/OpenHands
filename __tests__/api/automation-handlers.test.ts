@@ -91,6 +91,19 @@ describe("Automation MSW Handlers", () => {
           // Newer than the pinned fixture as well: the providers whose
           // repositories a run clones.
           repoProviders: ["bitbucket", "github", "gitlab"],
+          // And the built-in Data Center sources, with their own event keys.
+          eventSources: ["bitbucket_data_center", "github", "jira_dc"],
+          eventTypesBySource: {
+            github: capabilitiesFixture.responses.supported.body.eventTypes,
+            bitbucket_data_center: expect.arrayContaining([
+              "pr:opened",
+              "pr:from_ref_updated",
+            ]),
+            jira_dc: expect.arrayContaining([
+              "jira:issue_created",
+              "jira:issue_updated",
+            ]),
+          },
         },
       });
     });
@@ -112,6 +125,41 @@ describe("Automation MSW Handlers", () => {
         expect({ status: res.status, body: data }).toEqual({
           status: exchange.response.status,
           body: exchange.response.body,
+        });
+      },
+    );
+
+    it.each([
+      { source: "bitbucket_data_center", on: "pr:*", errors: [] },
+      { source: "bitbucket_data_center", on: "pr:opened", errors: [] },
+      { source: "jira_dc", on: "jira:issue_updated", errors: [] },
+      {
+        source: "jira_dc",
+        on: "pr:opened",
+        errors: [
+          {
+            field: "trigger.on",
+            code: "event_type_not_delivered",
+            message:
+              "No jira_dc webhook delivering pr:opened is registered for this organization.",
+          },
+        ],
+      },
+    ])(
+      "checks a $source trigger on $on against that source's event keys",
+      async ({ source, on, errors }) => {
+        const res = await fetch("/api/automation/v1/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            endpoint: "/v1/presets",
+            draft: { trigger: { type: "event", source, on } },
+          }),
+        });
+
+        expect(await res.json()).toEqual({
+          valid: errors.length === 0,
+          errors,
         });
       },
     );

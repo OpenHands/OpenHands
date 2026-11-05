@@ -464,6 +464,57 @@ describe("validateSetupEntry", () => {
     expect(result).toEqual({ valid: true, errors: [] });
   });
 
+  // A repository picker names the provider whose repositories it lists. The
+  // Data Center and Azure DevOps integrations are providers the host can list
+  // from, so a template for either may ask for a repository the same way.
+  it.each(["bitbucket_data_center", "azure_devops"])(
+    "admits a repository field that lists %s repositories",
+    (provider) => {
+      // Arrange
+      const entry = createSetupEntry({
+        setup: createSetup({
+          form: formWithField("repository", {
+            type: "repo-picker",
+            label: "Repository",
+            help: "Which repository to watch.",
+            provider,
+            required: true,
+          }),
+        }),
+      });
+
+      // Act
+      const result = validateSetupEntry(entry);
+
+      // Assert
+      expect(result).toEqual({ valid: true, errors: [] });
+    },
+  );
+
+  it("refuses a repository field for a provider the host cannot list", () => {
+    // Arrange
+    const entry = createSetupEntry({
+      setup: createSetup({
+        form: formWithField("repository", {
+          type: "repo-picker",
+          label: "Repository",
+          help: "Which repository to watch.",
+          provider: "sourcehut",
+          required: true,
+        }),
+      }),
+    });
+
+    // Act
+    const result = validateSetupEntry(entry);
+
+    // Assert
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain(
+      "setup.form.args.repository.provider: is not a supported provider",
+    );
+  });
+
   it("reports every problem at once so an author sees the whole picture", () => {
     // Arrange
     const candidate = createSetupEntryWith({ name: "", description: "" });

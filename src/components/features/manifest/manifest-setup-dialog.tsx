@@ -49,6 +49,7 @@ import {
 } from "#/manifests/manifest-error-map";
 import { automationDetailPath } from "#/manifests/automation-interface";
 import { findAutomationCommand } from "#/utils/automation-catalog";
+import { automationCloneProviders } from "#/utils/automation-repo-sources";
 import type { GitRepository } from "#/types/git";
 import type { Provider } from "#/types/settings";
 import type {
@@ -239,6 +240,13 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     fields,
     llmProfileOptions,
   ]);
+  // A repository only reaches `repos` when the deployment's runs can clone
+  // from its provider; otherwise the entry's prompt clones it.
+  const repoProviders = capabilities.capabilities?.repoProviders;
+  const cloneProviders = useMemo(
+    () => automationCloneProviders(repoProviders),
+    [repoProviders],
+  );
   const payload = useMemo(
     () =>
       buildCreatePayload(
@@ -247,8 +255,9 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
         undefined,
         selectedTrigger,
         selectedAction,
+        cloneProviders,
       ),
-    [entry, values, selectedTrigger, selectedAction],
+    [entry, values, selectedTrigger, selectedAction, cloneProviders],
   );
   const errorMap = useMemo(
     () => deriveErrorMap(entry, selectedTrigger, selectedAction),
@@ -349,6 +358,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
         valuesRef.current,
         selectedTrigger,
         selectedAction,
+        cloneProviders,
       ).then((result) => {
         if (result) setServiceErrors(result);
       });
@@ -374,7 +384,12 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     }
     setLocalErrors({});
 
-    const result = await runPreflight(values, selectedTrigger, selectedAction);
+    const result = await runPreflight(
+      values,
+      selectedTrigger,
+      selectedAction,
+      cloneProviders,
+    );
     if (result && hasAnyError(result)) {
       setServiceErrors(result);
       return;
