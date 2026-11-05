@@ -252,6 +252,11 @@ export interface CloudIntegrationsConfig {
    * servers (`feature_flags.enable_org_mcp_servers`).
    */
   isOrgMcpServersEnabled: boolean;
+  /**
+   * Whether the instance enables service accounts, and with them automations
+   * that run as a service account.
+   */
+  isServiceAccountsEnabled: boolean;
 }
 
 export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsConfig> {
@@ -265,6 +270,7 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
       enable_linear?: boolean;
       deployment_mode?: string;
       enable_org_mcp_servers?: boolean;
+      enable_service_accounts?: boolean;
     };
   }>({
     backend,
@@ -280,6 +286,8 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
     deploymentMode: config.feature_flags?.deployment_mode ?? null,
     isOrgMcpServersEnabled:
       config.feature_flags?.enable_org_mcp_servers === true,
+    isServiceAccountsEnabled:
+      config.feature_flags?.enable_service_accounts === true,
   };
 }
 

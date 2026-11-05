@@ -21,6 +21,33 @@ describe("SettingsSection", () => {
     expect(screen.getByText("jdoe@acme.com")).toBeInTheDocument();
     expect(screen.getByText("10m")).toBeInTheDocument();
     expect(screen.getByText("Apr 10, 2024")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("service-account-badge"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("AUTOMATIONS$DETAIL$CREATED_BY"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("badges a service account under Runs As and shows its creator", () => {
+    render(
+      <SettingsSection
+        automation={automation}
+        runsAs="ci-bot"
+        runsAsServiceAccount
+        createdBy="jdoe@acme.com"
+      />,
+    );
+
+    expect(screen.getByText("ci-bot")).toBeInTheDocument();
+    expect(screen.getByTestId("service-account-badge")).toHaveAttribute(
+      "title",
+      "AUTOMATIONS$SERVICE_ACCOUNT_LABEL",
+    );
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$CREATED_BY"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("jdoe@acme.com")).toBeInTheDocument();
   });
 
   it("leaves out runs-as and timeout when there is nothing to show", () => {

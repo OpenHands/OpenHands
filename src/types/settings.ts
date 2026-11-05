@@ -34,12 +34,7 @@ export type SettingsValue =
   | { [key: string]: SettingsValue };
 
 export type SettingsValueType =
-  | "string"
-  | "integer"
-  | "number"
-  | "boolean"
-  | "array"
-  | "object";
+  "string" | "integer" | "number" | "boolean" | "array" | "object";
 
 export type SettingProminence = "critical" | "major" | "minor";
 

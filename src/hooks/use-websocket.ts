@@ -9,8 +9,7 @@ export interface WebSocketHookOptions {
    * advances on every frame would otherwise re-render the owner per event.
    */
   queryParams?:
-    | Record<string, string | boolean>
-    | (() => Record<string, string | boolean>);
+    Record<string, string | boolean> | (() => Record<string, string | boolean>);
   sessionApiKey?: string | null;
   onOpen?: (event: Event) => void;
   onClose?: (event: CloseEvent) => void;

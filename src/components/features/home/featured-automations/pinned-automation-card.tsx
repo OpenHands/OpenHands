@@ -110,6 +110,7 @@ export function PinnedAutomationCard({
     automation,
     t,
     canManage: actions.canManage,
+    canEdit: actions.canEdit,
     isRunPending: actions.isRunPending,
     isCancelPending: actions.isCancelPending,
     canCancel: actions.canCancel,

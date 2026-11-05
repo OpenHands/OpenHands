@@ -1,4 +1,4 @@
-import { Server } from "lucide-react";
+import { ArrowRightLeft, Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
@@ -23,19 +23,22 @@ interface DetailHeaderProps {
    */
   onToggleKeepAlive?: () => void;
   isKeepAlivePending?: boolean;
-  /** When provided (and the user can manage), the header shows an Edit button. */
+  /** When provided (and the user can edit), the header shows an Edit button. */
   onEdit?: () => void;
   onDelete: () => void;
+  /** When provided, the kebab menu shows a Change Runs As entry. */
+  onChangeRunAs?: () => void;
   onExport: () => void;
   onDownloadTarball: () => void;
   onRunNow?: () => void;
   isRunningNow?: boolean;
   /** Whether the caller may mutate this automation (manage perm or owner). */
   canManage?: boolean;
+  /** Whether the caller may edit this automation. Defaults to `canManage`. */
+  canEdit?: boolean;
   /**
    * Whether the caller may flip the enabled switch. Defaults to `canManage`;
-   * pass `false` for a disabled automation the caller did not create, since
-   * non-creators may only turn automations off.
+   * pass `false` when the caller may only turn the automation off or not at all.
    */
   canToggle?: boolean;
 }
@@ -50,11 +53,13 @@ export function DetailHeader({
   isKeepAlivePending = false,
   onEdit,
   onDelete,
+  onChangeRunAs,
   onExport,
   onDownloadTarball,
   onRunNow,
   isRunningNow = false,
   canManage = true,
+  canEdit = canManage,
   canToggle = canManage,
 }: DetailHeaderProps) {
   const { t } = useTranslation("openhands");
@@ -96,6 +101,15 @@ export function DetailHeader({
           },
         ]
       : []),
+    ...(onChangeRunAs
+      ? [
+          {
+            label: t(I18nKey.AUTOMATIONS$CHANGE_RUN_AS),
+            icon: <ArrowRightLeft className="size-4" aria-hidden />,
+            onClick: onChangeRunAs,
+          },
+        ]
+      : []),
     ...(canManage
       ? [
           {
@@ -127,7 +141,7 @@ export function DetailHeader({
             : t(I18nKey.AUTOMATIONS$RUN_NOW)}
         </button>
       )}
-      {canManage && onEdit && (
+      {canEdit && onEdit && (
         <button
           type="button"
           data-testid="automation-detail-edit"
