@@ -12,6 +12,8 @@ export interface WebSocketHookOptions {
     | Record<string, string | boolean>
     | (() => Record<string, string | boolean>);
   sessionApiKey?: string | null;
+  /** Reconnect when the logical connection changes without changing its URL. */
+  connectionKey?: string;
   onOpen?: (event: Event) => void;
   onClose?: (event: CloseEvent) => void;
   onMessage?: (event: MessageEvent) => void;
@@ -27,6 +29,7 @@ const RECONNECT_BASE_DELAY_MS = 1_000;
 const RECONNECT_MAX_DELAY_MS = 30_000;
 
 export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
+  const connectionKey = options?.connectionKey;
   const [isConnected, setIsConnected] = React.useState(false);
   const [error, setError] = React.useState<Error | null>(null);
   const [isReconnecting, setIsReconnecting] = React.useState(false);
@@ -194,7 +197,7 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
         wsRef.current = null;
       }
     };
-  }, [url, connectWebSocket]);
+  }, [url, connectWebSocket, connectionKey]);
 
   const sendMessage = React.useCallback(
     (data: string | Blob | BufferSource) => {
