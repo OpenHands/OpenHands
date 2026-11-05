@@ -63,8 +63,10 @@ export function GenericDropdownMenu<T>({
   numberOfRecentItems = 0,
   itemKey,
 }: GenericDropdownMenuProps<T>) {
-  const hasItems = filteredItems.length > 0;
-  const showEmptyState = !hasItems && !stickyTopItem && !stickyFooterItem;
+  // The sticky footer renders outside the list, so it must not suppress the
+  // empty state: with no matching items the list shows the consumer's empty
+  // state (instead of a lone sticky header) and the footer stays below it.
+  const showEmptyState = filteredItems.length === 0;
 
   // Always render the menu container (even when closed) so getMenuProps is always called
   // This prevents the downshift warning about forgetting to call getMenuProps
@@ -87,7 +89,7 @@ export function GenericDropdownMenu<T>({
       <div
         className={cn(
           "absolute z-10 w-full bg-tertiary border border-border-input rounded-lg shadow-none",
-          "focus:outline-none mt-1 z-[9999]",
+          "focus:outline-none mt-1 z-9999",
           stickyTopItem || stickyFooterItem ? "max-h-60" : "max-h-60",
         )}
       >
@@ -98,7 +100,7 @@ export function GenericDropdownMenu<T>({
               "w-full overflow-auto p-1 custom-scrollbar-always",
               dropdownMenuListClassName,
               stickyTopItem || stickyFooterItem
-                ? "max-h-[calc(15rem-3rem)]"
+                ? "home-dropdown-sticky-list"
                 : "max-h-60", // Reserve space for sticky items
             ),
             onScroll,

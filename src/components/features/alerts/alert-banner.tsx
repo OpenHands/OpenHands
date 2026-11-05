@@ -116,7 +116,7 @@ export function AlertBanner({
     <div
       data-testid="alert-banner"
       className={cn(
-        "bg-base border border-primary text-contrast p-4 rounded",
+        "bg-canvas-base border border-primary text-contrast p-4 rounded",
         "flex flex-row items-center justify-between m-1",
         currentPath === "/" && "mt-3 mr-3",
       )}
@@ -133,7 +133,7 @@ export function AlertBanner({
         data-testid="dismiss-button"
         onClick={() => setDismissedAt(updatedAt)}
         className={cn(
-          "bg-base rounded-full w-5 h-5 flex items-center justify-center cursor-pointer",
+          "bg-canvas-base rounded-full w-5 h-5 flex items-center justify-center cursor-pointer",
         )}
       >
         <CloseIcon />

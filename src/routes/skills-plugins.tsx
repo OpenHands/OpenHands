@@ -1,6 +1,9 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { ExtensionsNavigation } from "#/components/features/skills/extensions-navigation";
+import {
+  ExtensionsNavigation,
+  ExtensionsCompactNavigation,
+} from "#/components/features/skills/extensions-navigation";
 import { PluginCard } from "#/components/features/plugins/plugin-card";
 import { PluginsToolbar } from "#/components/features/plugins/plugins-toolbar";
 import { PluginDetailModal } from "#/components/features/plugins/plugin-detail-modal";
@@ -123,11 +126,12 @@ export default function SkillsPluginsScreen() {
   return (
     <div
       data-testid="skills-plugins-screen"
-      className="flex h-full gap-4 md:gap-6 md:pl-8 lg:gap-10 lg:pl-10"
+      className="flex h-full gap-4 lg:gap-10 lg:pl-10"
     >
       <ExtensionsNavigation />
       <main className={cn(settingsLikeMainScrollClassName, "h-full")}>
         <div className="mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6">
+          <ExtensionsCompactNavigation />
           <div className="flex min-w-0 items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <h2 className="text-xl font-semibold leading-6 text-foreground">

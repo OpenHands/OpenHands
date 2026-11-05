@@ -233,6 +233,37 @@ test.describe("auth mode: public gate", () => {
     await expect(homeLauncher).not.toBeVisible({ timeout: 2_000 });
   });
 
+  // Regression for #17901: the global free-models query ran with no backend
+  // and toasted "No backend is configured." over first-run onboarding and
+  // the API-key screen.
+  test("shows no missing-backend error toast on first run or the API-key screen", async ({
+    page,
+  }) => {
+    // The unguarded query failed right after first paint, so a toast that
+    // has not shown up within this window is not coming.
+    const expectNoMissingBackendToast = async () => {
+      const toastAppeared = await page
+        .getByText("No backend is configured.")
+        .first()
+        .waitFor({ state: "visible", timeout: 6_000 })
+        .then(
+          () => true,
+          () => false,
+        );
+      expect(toastAppeared).toBe(false);
+    };
+
+    await page.goto(PUBLIC_MODE_URL, { waitUntil: "domcontentloaded" });
+    await waitForTestId(page, "onboarding-step-check-backend");
+    await expectNoMissingBackendToast();
+
+    await page.getByTestId("onboarding-skip").click();
+    await waitForTestId(page, "api-key-entry-screen");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForTestId(page, "api-key-entry-screen");
+    await expectNoMissingBackendToast();
+  });
+
   test("rejects an incorrect key with an inline error", async ({ page }) => {
     await openPublicAuthScreenFromFirstRun(page);
 
@@ -252,7 +283,17 @@ test.describe("auth mode: public gate", () => {
     // Should show an error status (not navigate away).
     const statusEl = page.getByTestId("api-key-entry-status");
     await expect(statusEl).toBeVisible({ timeout: 10_000 });
-    await expect(statusEl).toHaveClass(/text-red/);
+    await expect(statusEl).toContainText("Invalid API key");
+    await expect(page.getByTestId("api-key-entry-screen")).toBeVisible();
+    await statusEl.evaluate((element) => {
+      const scope = element.closest("[data-agent-server-ui]");
+      if (!scope) throw new Error("Agent Server UI theme scope not found");
+      (scope as HTMLElement).style.setProperty(
+        "--oh-feedback-error",
+        "#8b1029",
+      );
+    });
+    await expect(statusEl).toHaveCSS("color", "rgb(139, 16, 41)");
   });
 
   test("allows access after pasting the correct key", async ({ page }) => {

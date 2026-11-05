@@ -1,7 +1,5 @@
 import { Settings } from "#/types/settings";
 
-export const LATEST_SETTINGS_VERSION = 5;
-
 export const DEFAULT_SETTINGS: Settings = {
   llm_model: "openai/gpt-5.6-sol",
   llm_base_url: "",
@@ -34,7 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   title_llm_profile: null,
   agent_settings_schema: null,
   agent_settings: {
-    schema_version: 6,
+    schema_version: 8,
     agent_kind: "openhands",
     agent: "CodeActAgent",
     llm: {
@@ -48,8 +46,6 @@ export const DEFAULT_SETTINGS: Settings = {
       critic_enabled: false,
       enable_iterative_refinement: false,
     },
-    enable_sub_agents: false,
-    enable_switch_llm_tool: true,
     mcp_config: {},
   },
   conversation_settings_schema: null,
@@ -59,8 +55,3 @@ export const DEFAULT_SETTINGS: Settings = {
     security_analyzer: "llm",
   },
 };
-
-/**
- * Get the default settings
- */
-export const getDefaultSettings = (): Settings => DEFAULT_SETTINGS;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
@@ -112,28 +112,17 @@ export function MetaProfileEditor({
     return [...byId.values()];
   }, [providerConnections, createdProviderConnections]);
   const showRouterConnectionPicker = !isEdit;
-  const [routerConnectionId, setRouterConnectionId] = useState(() =>
-    selectRouterConnectionByDefault && providerConnections.length > 0
-      ? providerConnections[0].id
-      : NO_ROUTER_CONNECTION_KEY,
-  );
-
-  useEffect(() => {
-    if (
-      !showRouterConnectionPicker ||
-      routerConnectionId ||
-      !selectRouterConnectionByDefault ||
-      connectionOptions.length === 0
-    ) {
-      return;
-    }
-    setRouterConnectionId(connectionOptions[0].id);
-  }, [
-    connectionOptions,
-    routerConnectionId,
-    selectRouterConnectionByDefault,
-    showRouterConnectionPicker,
-  ]);
+  // `null` until the user picks a connection. "Don't create profiles" is the
+  // empty key, so the template default must not be stored in the same state
+  // or it would overwrite that choice.
+  const [chosenRouterConnectionId, setChosenRouterConnectionId] = useState<
+    string | null
+  >(null);
+  const routerConnectionId =
+    chosenRouterConnectionId ??
+    (selectRouterConnectionByDefault && connectionOptions.length > 0
+      ? connectionOptions[0].id
+      : NO_ROUTER_CONNECTION_KEY);
 
   // The classifier dropdown is driven by saved LLM profile names, but a router
   // template can name a classifier (e.g. ``minimax-m3``) before any profiles
@@ -185,7 +174,7 @@ export function MetaProfileEditor({
       ...existing.filter((item) => item.id !== connection.id),
     ]);
     onProviderConnectionCreated?.(connection);
-    setRouterConnectionId(connection.id);
+    setChosenRouterConnectionId(connection.id);
   };
 
   const handleSave = () => {
@@ -225,7 +214,7 @@ export function MetaProfileEditor({
         {isDuplicateName ? (
           <p
             data-testid="meta-profile-name-taken"
-            className="text-xs text-red-400"
+            className="text-xs text-feedback-error"
           >
             {t(I18nKey.SETTINGS$META_PROFILE_NAME_TAKEN)}
           </p>
@@ -251,7 +240,7 @@ export function MetaProfileEditor({
             }))
           }
         />
-        <p className="text-xs text-[var(--oh-muted)]">
+        <p className="text-xs text-muted">
           {t(I18nKey.SETTINGS$META_PROFILE_CLASSIFIER_HELP)}
         </p>
       </div>
@@ -280,7 +269,7 @@ export function MetaProfileEditor({
             )}
           />
         </label>
-        <p className="text-xs text-[var(--oh-muted)]">
+        <p className="text-xs text-muted">
           {t(I18nKey.SETTINGS$META_PROFILE_PROMPT_TEMPLATE_HELP, {
             instance_text: INSTANCE_TEXT_PLACEHOLDER_TEXT,
             model_table: MODEL_TABLE_PLACEHOLDER_TEXT,
@@ -314,7 +303,7 @@ export function MetaProfileEditor({
             )}
           />
         </label>
-        <p className="text-xs text-[var(--oh-muted)]">
+        <p className="text-xs text-muted">
           {t(I18nKey.SETTINGS$META_PROFILE_MODEL_TABLE_HELP, {
             model_table: MODEL_TABLE_PLACEHOLDER_TEXT,
           })}
@@ -331,13 +320,13 @@ export function MetaProfileEditor({
             selectedKey={routerConnectionId}
             isDisabled={isSaving}
             onSelectionChange={(key) =>
-              setRouterConnectionId(
+              setChosenRouterConnectionId(
                 key ? String(key) : NO_ROUTER_CONNECTION_KEY,
               )
             }
           />
           <div className="flex flex-wrap items-center gap-3">
-            <p className="text-xs text-[var(--oh-muted)]">
+            <p className="text-xs text-muted">
               {t(I18nKey.SETTINGS$META_PROFILE_CREATE_ROUTER_PROFILES_HELP)}
             </p>
             <BrandButton

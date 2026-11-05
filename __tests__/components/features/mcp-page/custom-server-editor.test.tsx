@@ -20,6 +20,8 @@ import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { CustomServerEditor } from "#/components/features/mcp-page/custom-server-editor";
 import { useSettings } from "#/hooks/query/use-settings";
+import { createAgentServerQueryClient } from "#/query-client-config";
+import * as toastHandlers from "#/utils/custom-toast-handlers";
 
 import type { Settings } from "#/types/settings";
 import type { MCPServerConfig } from "#/types/mcp-server";
@@ -130,14 +132,13 @@ function EditOAuthEditorOnceSettingsLoaded({
   );
 }
 
-function renderWith(ui: React.ReactNode) {
+function renderWith(
+  ui: React.ReactNode,
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   return render(ui, {
     wrapper: ({ children }) => (
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
+      <QueryClientProvider client={client}>
         <ActiveBackendProvider>{children}</ActiveBackendProvider>
       </QueryClientProvider>
     ),
@@ -189,6 +190,40 @@ describe("CustomServerEditor", () => {
       tools: [],
     });
   });
+
+  it.each([
+    ["Save", "submit-button"],
+    ["Test connection", "mcp-test-connection"],
+  ])(
+    "shows one error toast when %s cannot test the connection",
+    async (_, button) => {
+      // Arrange: use the app's global mutation handler and the real editor hooks.
+      vi.spyOn(McpService, "testServer").mockRejectedValue(
+        new AxiosError("Agent Server unavailable"),
+      );
+      const errorToast = vi
+        .spyOn(toastHandlers, "displayErrorToast")
+        .mockImplementation(() => {});
+      const onClose = vi.fn();
+      renderWith(
+        <EditEditorOnceSettingsLoaded onClose={onClose} />,
+        createAgentServerQueryClient(),
+      );
+      await screen.findByTestId("mcp-custom-editor");
+
+      // Act
+      fireEvent.click(screen.getByTestId(button));
+
+      // Assert: the failure is reported once and no save or dismissal follows.
+      await waitFor(() => expect(errorToast).toHaveBeenCalled());
+      await waitFor(() => expect(screen.getByTestId(button)).toBeEnabled());
+      expect(errorToast.mock.calls).toEqual([["Agent Server unavailable"]]);
+      expect(SettingsService.createMcpServer).not.toHaveBeenCalled();
+      expect(SettingsService.patchMcpServer).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByTestId("mcp-custom-editor")).toBeInTheDocument();
+    },
+  );
 
   it("keeps the modal open and does not call onClose when the add mutation fails", async () => {
     // Simulate a backend rejection — the editor should surface the
@@ -299,6 +334,30 @@ describe("CustomServerEditor", () => {
     await waitFor(() =>
       expect(screen.getByTestId("mcp-test-message")).toHaveTextContent(
         "MCP$TEST_ERROR_CREDENTIALS",
+      ),
+    );
+  });
+
+  it("explains a stdio connection failure from Test connection as a command that could not start", async () => {
+    // Arrange: editing an installed stdio server whose command cannot spawn.
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithMcp(),
+    );
+    vi.spyOn(McpService, "testServer").mockResolvedValue({
+      ok: false,
+      error: "Client failed to connect: [Errno 2] No such file or directory",
+      error_kind: "connection",
+    });
+    renderWith(<EditEditorOnceSettingsLoaded onClose={vi.fn()} />);
+    await screen.findByTestId("mcp-custom-editor");
+
+    // Act
+    fireEvent.click(screen.getByTestId("mcp-test-connection"));
+
+    // Assert: the stdio-specific message, not the URL hint.
+    await waitFor(() =>
+      expect(screen.getByTestId("mcp-test-message")).toHaveTextContent(
+        "MCP$TEST_ERROR_STDIO_START",
       ),
     );
   });

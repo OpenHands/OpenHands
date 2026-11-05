@@ -3,7 +3,6 @@ import {
   FREE_MODEL_SUFFIX,
   formatModelNameForDisplay,
   formatNativeModelName,
-  formatProviderModelNameForDisplay,
   isFreeOpenHandsModel,
 } from "#/utils/format-model-name";
 
@@ -32,22 +31,15 @@ describe("formatNativeModelName", () => {
 
   it("labels only DB-flagged OpenHands free-model routes as free", () => {
     for (const fullModel of FREE_MODELS) {
-      const name = fullModel.slice("openhands/".length);
       expect(formatModelNameForDisplay(fullModel, FREE_MODELS)).toBe(
         `${fullModel}${FREE_MODEL_SUFFIX}`,
       );
-      expect(
-        formatProviderModelNameForDisplay("openhands", name, FREE_MODELS),
-      ).toBe(`${name}${FREE_MODEL_SUFFIX}`);
       expect(isFreeOpenHandsModel(fullModel, FREE_MODELS)).toBe(true);
     }
 
     expect(formatModelNameForDisplay("openai/glm-5.2", FREE_MODELS)).toBe(
       "openai/glm-5.2",
     );
-    expect(
-      formatProviderModelNameForDisplay("openai", "glm-5.2", FREE_MODELS),
-    ).toBe("glm-5.2");
     expect(isFreeOpenHandsModel("openai/glm-5.2", FREE_MODELS)).toBe(false);
   });
 

@@ -1,8 +1,10 @@
+import { AUTOMATION_FORM_UPDATE_TOOL_NAME } from "#/constants/automation-form";
 import {
   CANVAS_UI_CLIENT_TOOL_NAME,
   LEGACY_CANVAS_UI_TOOL_NAME,
 } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
+import { REQUEST_SECRET_TOOL_NAME } from "#/constants/secret-request";
 
 import {
   OpenHandsEvent,
@@ -17,10 +19,15 @@ import {
   BrowserNavigateAction,
   SwitchLLMObservation,
   ClassifyAndSwitchLLMObservation,
+  AutomationFormUpdateAction,
   CanvasUIAction,
   LaunchChildConversationAction,
+  RequestSecretAction,
 } from "./core";
-import { AgentErrorEvent } from "./core/events/observation-event";
+import {
+  AgentErrorEvent,
+  UserRejectObservation,
+} from "./core/events/observation-event";
 import { MessageEvent } from "./core/events/message-event";
 import { ActionEvent } from "./core/events/action-event";
 import {
@@ -74,6 +81,17 @@ export const isObservationEvent = (
   event.observation !== null &&
   typeof event.observation === "object" &&
   "kind" in event.observation;
+
+/**
+ * Type guard function to check if an event is a user reject observation
+ * (an action rejected in confirmation mode or blocked by a PreToolUse hook)
+ */
+export const isUserRejectObservation = (
+  event: OpenHandsEvent,
+): event is UserRejectObservation =>
+  event.source === "environment" &&
+  "action_id" in event &&
+  "rejection_reason" in event;
 
 /**
  * Type guard function to check if an event is an agent error event
@@ -198,6 +216,11 @@ export const isCanvasUIActionEvent = (
   (event.tool_name === LEGACY_CANVAS_UI_TOOL_NAME ||
     event.tool_name === CANVAS_UI_CLIENT_TOOL_NAME);
 
+export const isAutomationFormUpdateActionEvent = (
+  event: OpenHandsEvent,
+): event is ActionEvent<AutomationFormUpdateAction> =>
+  isActionEvent(event) && event.tool_name === AUTOMATION_FORM_UPDATE_TOOL_NAME;
+
 /**
  * Type guard for launch-child-conversation tool ActionEvents.
  *
@@ -209,6 +232,12 @@ export const isLaunchChildConversationActionEvent = (
 ): event is ActionEvent<LaunchChildConversationAction> =>
   isActionEvent(event) &&
   event.tool_name === LAUNCH_CHILD_CONVERSATION_TOOL_NAME;
+
+/** Type guard for request-secret tool ActionEvents. */
+export const isRequestSecretActionEvent = (
+  event: OpenHandsEvent,
+): event is ActionEvent<RequestSecretAction> =>
+  isActionEvent(event) && event.tool_name === REQUEST_SECRET_TOOL_NAME;
 
 /**
  * Type guard function to check if an event is a system prompt event

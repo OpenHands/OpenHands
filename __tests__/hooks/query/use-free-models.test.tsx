@@ -1,4 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HttpError } from "@openhands/typescript-client";
+import { LLMMetadataClient } from "@openhands/typescript-client/clients";
 import { renderHook, waitFor } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +11,9 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import { callCloudProxy } from "#/api/cloud/proxy";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { createAgentServerQueryClient } from "#/query-client-config";
+import * as ToastHandlers from "#/utils/custom-toast-handlers";
 import {
   useDefaultModel,
   useFreeModels,
@@ -33,6 +38,21 @@ const wrapper = ({ children }: { children: React.ReactNode }) => {
     defaultOptions: { queries: { retry: false } },
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+};
+
+// The app's providers: its query client (with the global error toast
+// handler) and the registry-backed active backend.
+const appProvidersWrapper = () => {
+  const client = createAgentServerQueryClient();
+  client.setDefaultOptions({ queries: { retry: false } });
+  function AppProviders({ children }: { children: React.ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>
+        <ActiveBackendProvider>{children}</ActiveBackendProvider>
+      </QueryClientProvider>
+    );
+  }
+  return AppProviders;
 };
 
 function useHydratedFreeModelState() {
@@ -64,6 +84,7 @@ describe("useHydrateFreeModels", () => {
       defaultModel: null,
     });
     vi.mocked(callCloudProxy).mockReset();
+    vi.restoreAllMocks();
   });
 
   it("fetches OpenHands model flags with the backend-compatible page limit", async () => {
@@ -98,5 +119,64 @@ describe("useHydrateFreeModels", () => {
       expect(result.current.freeModels.has("openhands/glm-5.2")).toBe(true),
     );
     expect(result.current.defaultModel).toBe("openhands/glm-5.2");
+  });
+
+  it("settles without fetching or toasting while no backend is configured", async () => {
+    const toastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
+    setRegisteredBackends([]);
+
+    renderHook(() => useHydratedFreeModelState(), {
+      wrapper: appProvidersWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(useFreeModelsStore.getState().defaultModelReady).toBe(true),
+    );
+    expect(toastSpy).not.toHaveBeenCalled();
+    expect(useFreeModelsStore.getState().defaultModel).toBeNull();
+  });
+
+  it.each(["local", "cloud"] as const)(
+    "settles quietly when the registered %s backend is unreachable",
+    async (kind) => {
+      const toastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
+      const backend: Backend = { ...cloudBackend, kind };
+      setRegisteredBackends([backend]);
+      setActiveSelection({ backendId: backend.id, orgId: null });
+      const unavailable = new HttpError(503, "Service Unavailable", {
+        detail: `${kind} backend unavailable`,
+      });
+      vi.spyOn(
+        LLMMetadataClient.prototype,
+        "getVerifiedModels",
+      ).mockRejectedValue(unavailable);
+      vi.mocked(callCloudProxy).mockRejectedValue(unavailable);
+
+      renderHook(() => useHydratedFreeModelState(), {
+        wrapper: appProvidersWrapper(),
+      });
+
+      await waitFor(() =>
+        expect(useFreeModelsStore.getState().defaultModelReady).toBe(true),
+      );
+      expect(toastSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still toasts ordinary post-bootstrap query failures", async () => {
+    const toastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
+    const client = createAgentServerQueryClient();
+    const error = new Error("Conversation action failed");
+    await expect(
+      client.fetchQuery({
+        queryKey: ["conversation-action-test"],
+        queryFn: async () => {
+          throw error;
+        },
+        retry: false,
+      }),
+    ).rejects.toBe(error);
+    expect(toastSpy).toHaveBeenCalledWith(error.message);
+    client.clear();
   });
 });

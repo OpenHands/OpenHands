@@ -9,7 +9,11 @@ export interface ParsedGitRemoteUrl {
    * can build links from this directly. `url` keeps the original remote.
    */
   host: string | null;
-  /** Path-style identifier, normalized to `owner/repo` (no leading slash, no `.git` suffix). */
+  /**
+   * Path-style identifier, normalized to `owner/repo` (no leading slash, no
+   * `.git` suffix) and percent-decoded for display (`Web Apps`, not
+   * `Web%20Apps`). Link builders re-encode each segment.
+   */
   repository: string | null;
   /** Best-effort provider detection from the host. `null` for unrecognized/self-hosted hosts. */
   provider: Provider | null;
@@ -42,6 +46,29 @@ function stripGitSuffix(path: string): string {
   return path.replace(/\.git$/, "");
 }
 
+/**
+ * Percent-decode each `/`-separated path segment. The WHATWG `URL.pathname`
+ * keeps the remote's encoding (`Web%20Apps`), but `repository` doubles as a
+ * display label and as input to the link builders, which re-encode each
+ * segment -- so decode here. A segment with a malformed escape (for example
+ * `%E0%A4%A`) falls back to its raw text rather than throwing, and a decoded
+ * `%2F` stays encoded: it would otherwise split the segment in two and an
+ * Azure `org/a%2Fb/_git/r` would lose its `_git` layout downstream.
+ */
+function decodePathSegments(path: string): string {
+  return path
+    .split("/")
+    .map((segment) => {
+      try {
+        const decoded = decodeURIComponent(segment);
+        return decoded.includes("/") ? segment : decoded;
+      } catch {
+        return segment;
+      }
+    })
+    .join("/");
+}
+
 function detectProvider(host: string | null): Provider | null {
   if (!host) return null;
   return KNOWN_HOSTS[host.toLowerCase()] ?? null;
@@ -70,7 +97,9 @@ function buildParsedGitRemoteUrl(
   rawPath: string,
 ): ParsedGitRemoteUrl {
   const host = rawHost ? toWebHost(rawHost) : rawHost;
-  const path = stripGitSuffix(rawPath.replace(/^\/+|\/+$/g, ""));
+  const path = decodePathSegments(
+    stripGitSuffix(rawPath.replace(/^\/+|\/+$/g, "")),
+  );
   const provider = detectProvider(host);
   const repository =
     provider === "azure_devops" ? normalizeAzureDevOpsPath(path) : path;

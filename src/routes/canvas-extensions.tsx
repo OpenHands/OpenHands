@@ -1,7 +1,10 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { ExternalLink } from "lucide-react";
-import { ExtensionsNavigation } from "#/components/features/skills/extensions-navigation";
+import {
+  ExtensionsNavigation,
+  ExtensionsCompactNavigation,
+} from "#/components/features/skills/extensions-navigation";
 import { AddCanvasExtensionModal } from "#/components/features/canvas-extensions/add-canvas-extension-modal";
 import { CanvasExtensionCard } from "#/components/features/canvas-extensions/canvas-extension-card";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -35,6 +38,7 @@ type PendingAction =
 const CANVAS_EXTENSIONS_DOCS_URL =
   "https://docs.openhands.dev/openhands/usage/agent-canvas/canvas-extensions";
 
+// @spec WN-001 — Apps trust notice uses theme-aware warning feedback
 export default function CanvasExtensionsScreen() {
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
@@ -89,6 +93,7 @@ export default function CanvasExtensionsScreen() {
       <ExtensionsNavigation />
       <main className={cn(settingsLikeMainScrollClassName, "h-full")}>
         <div className="mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6">
+          <ExtensionsCompactNavigation />
           <div className="flex min-w-0 items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <h2 className="text-xl font-semibold leading-6 text-foreground">
@@ -121,7 +126,7 @@ export default function CanvasExtensionsScreen() {
             </BrandButton>
           </div>
 
-          <div className="rounded-xl border border-amber-400/30 bg-amber-400/5 px-4 py-3 text-sm text-amber-100">
+          <div className="rounded-xl border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-feedback-warning">
             {t(I18nKey.SETTINGS$APPS_TRUST_NOTICE)}
           </div>
 

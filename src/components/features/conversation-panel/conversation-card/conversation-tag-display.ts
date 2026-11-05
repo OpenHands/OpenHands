@@ -4,6 +4,14 @@
  */
 
 import { I18nKey } from "#/i18n/declaration";
+import {
+  AUTOMATION_SETUP_TAG_KEY,
+  AUTOMATION_SETUP_TAG_VALUE,
+} from "#/utils/automation-draft-tags";
+
+export function isAutomationSetupTagKey(key: string): boolean {
+  return key.trim().toLowerCase() === AUTOMATION_SETUP_TAG_KEY;
+}
 
 /** Max characters shown on a chip before hard truncation with an ellipsis. */
 export const TAG_CHIP_VALUE_MAX_LENGTH = 14;
@@ -23,6 +31,7 @@ export type ConversationTagLabelKind =
   | "repo"
   | "branch"
   | "workspace"
+  | "automation_setup"
   | "app_mode"
   | "work_tools"
   | "work_wsid"
@@ -55,6 +64,8 @@ export function getConversationTagLabelKind(
     case "workspace":
     case "working_dir":
       return "workspace";
+    case AUTOMATION_SETUP_TAG_KEY:
+      return "automation_setup";
     case "appmode":
     case "app_mode":
     case "mode":
@@ -104,6 +115,8 @@ export function getConversationTagLabel(
       return t(I18nKey.CONVERSATION_PANEL$PREVIEW_BRANCH);
     case "workspace":
       return t(I18nKey.CONVERSATION_PANEL$PREVIEW_WORKSPACE);
+    case "automation_setup":
+      return t(I18nKey.AUTOMATION_SETUP$TITLE);
     case "app_mode":
       return t(I18nKey.CONVERSATION_PANEL$PREVIEW_APP_MODE);
     case "work_tools":
@@ -115,7 +128,18 @@ export function getConversationTagLabel(
   }
 }
 
-/** ``Branch: main`` — used by chip ``title`` tooltips. Bare tags (empty
+export function getConversationTagValueLabel(
+  key: string,
+  value: string,
+  t: (key: I18nKey) => string,
+): string {
+  if (isAutomationSetupTagKey(key) && value === AUTOMATION_SETUP_TAG_VALUE) {
+    return t(I18nKey.AUTOMATIONS$DETAIL$DRAFT);
+  }
+  return value;
+}
+
+/** ``Branch: main`` - used by chip ``title`` tooltips. Bare tags (empty
  * value) show the label alone, no dangling colon. */
 export function formatConversationTagTooltip(
   key: string,
@@ -123,7 +147,8 @@ export function formatConversationTagTooltip(
   t: (key: I18nKey) => string,
 ): string {
   const label = getConversationTagLabel(key, t);
-  return value ? `${label}: ${value}` : label;
+  const valueLabel = getConversationTagValueLabel(key, value, t);
+  return valueLabel ? `${label}: ${valueLabel}` : label;
 }
 
 /**

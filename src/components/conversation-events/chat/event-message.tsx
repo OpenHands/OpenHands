@@ -11,6 +11,7 @@ import {
 import {
   isActionEvent,
   isObservationEvent,
+  isUserRejectObservation,
   isAgentErrorEvent,
   isUserMessageEvent,
   isPlanningFileEditorObservationEvent,
@@ -19,6 +20,7 @@ import {
   isStreamingDeltaEvent,
   isConversationStateUpdateEvent,
   isGoalConversationStateUpdateEvent,
+  isMessageEvent,
 } from "#/types/agent-server/type-guards";
 import { useConfig } from "#/hooks/query/use-config";
 import { useConversationStore } from "#/stores/conversation-store";
@@ -34,18 +36,19 @@ import { GenericEventMessageWrapper } from "./event-message-components/generic-e
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
 import { CollapsibleThinking } from "./event-message-components/collapsible-thinking";
 import { HookExecutionEventMessage } from "./event-message-components/hook-execution-event-message";
+import { CorrectiveNudgeMessage } from "./event-message-components/corrective-nudge-message";
 import { createSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
+import { parseMessageFromEvent } from "./event-content-helpers/parse-message-from-event";
+import { isCorrectiveNudge } from "./event-content-helpers/should-render-event";
 import { shouldShowPlanPreview } from "./hooks/use-plan-preview-events";
 import { getReasoningContent, splitInlineThink } from "./event-thought-helpers";
 import { useStreamedText } from "#/hooks/use-streamed-text";
 
 interface EventMessageProps {
   event: OpenHandsEvent & { isFromPlanningAgent?: boolean };
-  /** @deprecated Prefer the stable correspondingAction prop. */
-  messages?: OpenHandsEvent[];
   /**
    * The action paired with an observation. null means the caller performed
-   * the lookup and found no action; undefined keeps legacy messages lookup.
+   * the lookup and found no action.
    */
   correspondingAction?: ActionEvent | null;
   isLastMessage: boolean;
@@ -62,6 +65,7 @@ interface EventMessageProps {
    * Has no effect on `ThinkAction`, whose thought IS its action body.
    */
   suppressThought?: boolean;
+  suppressReasoning?: boolean;
 }
 
 const getActivatedSkills = (event: MessageEvent): string[] =>
@@ -174,13 +178,13 @@ function PlanningObservationPreview({
 
 function EventMessageComponent({
   event,
-  messages,
   correspondingAction: suppliedCorrespondingAction,
   isLastMessage,
   isInLast10Actions,
   planPreviewEventIds,
   showPlanPreview,
   suppressThought = false,
+  suppressReasoning = false,
 }: EventMessageProps) {
   const { data: config } = useConfig();
   const planContent = useConversationStore((state) => state.planContent);
@@ -195,11 +199,14 @@ function EventMessageComponent({
   // Read isFromPlanningAgent directly from the event object
   const isFromPlanningAgent = event.isFromPlanningAgent || false;
 
-  // Streaming slots render on a clock rather than at the granularity the
-  // network delivered (#15493). Unconditional: hooks cannot be nested in the
-  // per-kind branches below, and a non-slot event has no streamed content.
+  // Smooth live deltas, then show the complete durable reply immediately.
+  const finishedReply =
+    isMessageEvent(event) && event.source === "agent"
+      ? parseMessageFromEvent(event)
+      : "";
   const streamedContent = useStreamedText(
-    isStreamingDeltaEvent(event) ? (event.content ?? "") : "",
+    isStreamingDeltaEvent(event) ? (event.content ?? "") : finishedReply,
+    isStreamingDeltaEvent(event),
   );
 
   // Common props for components that need them
@@ -217,7 +224,7 @@ function EventMessageComponent({
     isConversationStateUpdateEvent(event) &&
     isGoalConversationStateUpdateEvent(event)
   ) {
-    return <GoalStatusContent status={event.value} />;
+    return <GoalStatusContent status={event.value} eventId={event.id} />;
   }
 
   // Agent error events
@@ -239,28 +246,35 @@ function EventMessageComponent({
     );
   }
 
-  if (isStreamingDeltaEvent(event)) {
+  const renderStreamingReply = (reasoning: string) => {
     // Route an inline <think> block to the thinking section, not the bubble.
     const { reasoning: inlineThink, message } = splitInlineThink(
       streamedContent,
       { streaming: true },
     );
-    const reasoningContent = [event.reasoning_content ?? "", inlineThink]
+    const reasoningContent = [reasoning, inlineThink]
       .filter(Boolean)
       .join("\n\n");
     return (
       <>
-        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
+        {!suppressReasoning && reasoningContent && (
+          <CollapsibleThinking content={reasoningContent} />
+        )}
         {message && (
           <ChatMessage
             type="agent"
             message={message}
             isFromPlanningAgent={isFromPlanningAgent}
             timestamp={event.timestamp}
+            isStreaming
           />
         )}
       </>
     );
+  };
+
+  if (isStreamingDeltaEvent(event)) {
+    return renderStreamingReply(event.reasoning_content ?? "");
   }
 
   // Finish actions
@@ -286,7 +300,6 @@ function EventMessageComponent({
     const reasoningContent = getReasoningContent(event);
     return (
       <>
-        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
         {!suppressThought && (
           <ThoughtEventMessage
             event={event}
@@ -296,6 +309,7 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          reasoning={suppressReasoning ? "" : reasoningContent}
         />
       </>
     );
@@ -326,13 +340,8 @@ function EventMessageComponent({
       return null;
     }
 
-    // Find the action that this observation is responding to
-    const correspondingAction =
-      suppliedCorrespondingAction === undefined
-        ? messages?.find(
-            (msg) => isActionEvent(msg) && msg.id === event.action_id,
-          )
-        : (suppliedCorrespondingAction ?? undefined);
+    // The action that this observation is responding to
+    const correspondingAction = suppliedCorrespondingAction ?? undefined;
 
     // Skip ThoughtEventMessage for ThinkAction (thought IS the action)
     const shouldShowThought =
@@ -348,7 +357,6 @@ function EventMessageComponent({
 
     return (
       <>
-        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
         {shouldShowThought && (
           <ThoughtEventMessage
             event={correspondingAction}
@@ -358,6 +366,7 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          reasoning={suppressReasoning ? "" : reasoningContent}
           correspondingAction={
             correspondingAction && isActionEvent(correspondingAction)
               ? correspondingAction
@@ -368,9 +377,38 @@ function EventMessageComponent({
     );
   }
 
+  // Rejected actions - render thought + the rejected action
+  if (isUserRejectObservation(event)) {
+    const correspondingAction = suppliedCorrespondingAction ?? undefined;
+    const reasoningContent = correspondingAction
+      ? getReasoningContent(correspondingAction)
+      : "";
+
+    return (
+      <>
+        {!suppressThought && correspondingAction && (
+          <ThoughtEventMessage
+            event={correspondingAction}
+            isFromPlanningAgent={isFromPlanningAgent}
+          />
+        )}
+        <GenericEventMessageWrapper
+          event={event}
+          isLastMessage={isLastMessage}
+          reasoning={suppressReasoning ? "" : reasoningContent}
+          correspondingAction={correspondingAction}
+        />
+      </>
+    );
+  }
+
   // Message events (user and assistant messages)
   if (!isActionEvent(event) && !isObservationEvent(event)) {
     const messageEvent = event as MessageEvent;
+
+    if (isCorrectiveNudge(messageEvent)) {
+      return <CorrectiveNudgeMessage event={messageEvent} />;
+    }
 
     // Check if this is a user message that should display a Skill Ready event
     if (isUserMessageEvent(event) && shouldShowSkillReadyEvent(messageEvent)) {
@@ -385,6 +423,7 @@ function EventMessageComponent({
     return (
       <UserAssistantEventMessage
         event={messageEvent}
+        suppressReasoning={suppressReasoning}
         {...commonProps}
         isLastMessage={isLastMessage}
       />

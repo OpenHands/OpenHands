@@ -24,6 +24,14 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-color-base-secondary": "var(--cool-grey-925)",
   "--oh-color-danger": "#e76a5e",
   "--oh-color-success": "#a5e75e",
+  // @spec MCP-004 — Form feedback follows readable theme text roles
+  "--oh-feedback-error": "var(--oh-color-danger)",
+  "--oh-feedback-success": "var(--oh-color-success)",
+  "--oh-markdown-alert-note": "#8EC5FF",
+  "--oh-markdown-alert-tip": "#5EE9B5",
+  "--oh-markdown-alert-important": "#D8B4FE",
+  "--oh-markdown-alert-warning": "#FFE02A",
+  "--oh-markdown-alert-caution": "#FFB3BF",
   "--oh-color-basic": "var(--cool-grey-400)",
   "--oh-color-tertiary": "var(--cool-grey-800)",
   "--oh-color-tertiary-light": "var(--cool-grey-300)",
@@ -60,6 +68,8 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-success": "#a5e75e",
   "--oh-success-foreground": "var(--cool-grey-950)",
   "--oh-warning-foreground": "var(--cool-grey-950)",
+  // @spec WN-001 — Embedded roots can override warning text color
+  "--oh-feedback-warning": "#c9b974",
   "--oh-danger": "#e76a5e",
   "--oh-danger-foreground": "var(--cool-grey-50)",
   "--oh-segment": "var(--cool-grey-925)",

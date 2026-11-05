@@ -41,15 +41,18 @@ non-trivial PR easy to review.
 
 Use the temporary **`.pr/`** directory for PR-only artifacts. Before relying on automatic
 cleanup, verify that the target repository has an enabled
-`.github/workflows/pr-artifacts.yml` workflow that removes `.pr/` after approval.
+`.github/workflows/pr-artifacts.yml` workflow that opens or updates a cleanup PR after
+artifacts reach `main`.
 
-- Same-repository PR with verified cleanup workflow: the workflow removes `.pr/` after
-  approval.
-- Fork PR, or repository without a verified cleanup workflow: remove `.pr/` manually before
-  merge.
+- Same-repository or fork PR with a verified cleanup workflow: `.pr/` is removed
+  automatically through a cleanup PR after the PR merges to `main`.
+- Repository without a verified cleanup workflow: remove `.pr/` manually before merge.
 
-The design doc is a review aid that lives with the branch while the PR is open. It must not
-ship in the merged tree.
+The design doc is a temporary review aid. In repositories with verified post-merge cleanup,
+it remains available throughout review and is removed from `main` after merge. Keep the
+essential design summary in the PR description: intent, important before/after behavior or
+API shape, compatibility, risk, and code references. Use commit-pinned document links so
+cleanup or branch deletion does not break access.
 
 ## Workflow
 
@@ -102,17 +105,21 @@ ship in the merged tree.
    git add .pr/design.html
    git commit -m "docs(.pr): design doc for <PR topic>"
    git push <head-repo-remote> HEAD:<headRefName>
+   git rev-parse HEAD
    ```
-   Query the base repository's visibility before choosing the link:
+   Use the resulting full SHA as `<doc-commit-sha>` in document links. Refresh the document
+   and its link when substantive changes affect the design; a cleanup-only commit does not
+   need a new link. Query the base repository's visibility before choosing the link:
    ```bash
    gh repo view <base-owner>/<base-repo> --json visibility,url
    ```
    - **Public repository:** add an htmlpreview link near the top of the PR description,
-     pointing at the **fork and branch the PR is opened from** (it renders before merge):
+     pointing at the **PR head repository and commit containing the document**:
      ```
-     📄 Design doc: https://htmlpreview.github.io/?https://github.com/<fork-owner>/<repo>/blob/<pr-branch>/.pr/design.html
+     📄 Design doc: https://htmlpreview.github.io/?https://github.com/<fork-owner>/<repo>/blob/<doc-commit-sha>/.pr/design.html
      ```
-   - **Private or internal repository:** link the access-controlled GitHub blob and include
+   - **Private or internal repository:** link the access-controlled GitHub blob at the same
+     document commit and include
      local download/open instructions, or use an existing access-controlled artifact
      service. Never send the document through htmlpreview or another public host.
 
@@ -150,9 +157,9 @@ ship in the merged tree.
 5. **Self-contained & offline.** One HTML file, inline CSS/SVG, no external scripts or
    assets, opens by double-click, and survives being copied to another machine.
 6. **`.pr/` only, and temporary.** The doc is a review aid, not project docs. Keep it in
-   `.pr/` and ensure it is removed before merge. Rely on automatic cleanup only when the
-   repository's workflow has been verified; otherwise remove it manually. Do not move design
-   HTML into `docs/` or ship it in the merged tree.
+   `.pr/` and rely on post-merge cleanup only when the repository's workflow has been
+   verified; otherwise remove it manually before merge. Do not move design HTML into
+   `docs/` or keep it permanently in the merged tree.
 
 ## Anti-patterns
 
@@ -162,7 +169,7 @@ ship in the merged tree.
   location.
 - ❌ Only the after-state when something changed - reviewers want the *contrast*.
 - ❌ A design doc on a trivial PR - noise. Skip it.
-- ❌ Committing the HTML outside `.pr/` (e.g. `docs/`), where it would merge into `main`.
+- ❌ Committing the HTML outside `.pr/` (e.g. `docs/`), where post-merge cleanup will not remove it.
 - ❌ Publishing a private-repository design doc through htmlpreview, GitHub Pages, or another
   public host. Use the private/local preview path in the craft reference. Use GitHub Pages
   only with explicit user authorization after verifying private Pages access control.

@@ -97,7 +97,7 @@ export function GitControlBarRepoButton({
             data-testid="git-control-bar-connect-repo-icon"
           />
         ) : (
-          <RepoForkedIcon width={12} height={12} color="white" />
+          <RepoForkedIcon width={12} height={12} />
         )}
       </div>
       <div

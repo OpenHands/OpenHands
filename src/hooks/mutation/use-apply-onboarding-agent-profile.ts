@@ -1,10 +1,16 @@
 import { useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { HttpError } from "@openhands/typescript-client";
 import AgentProfilesService, {
   WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
   type AgentProfileSaveInput,
 } from "#/api/agent-profiles-service/agent-profiles-service.api";
+import { mergeAgentProfileSaveInput } from "#/components/features/settings/agent-profiles/merge-agent-profile-save-input";
 import { useSaveAgentProfile } from "#/hooks/mutation/use-save-agent-profile";
 import { useActivateAgentProfile } from "#/hooks/mutation/use-activate-agent-profile";
+import { isNoBackend } from "#/api/backend-registry/active-store";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
 
 /**
  * The well-known agent profile onboarding configures. Conversations launch from
@@ -22,26 +28,45 @@ export const ONBOARDING_AGENT_PROFILE_NAME =
  * an OpenHands profile pointing at the LLM profile onboarding just created, or
  * an ACP profile for the chosen provider (which owns its own LLM — no key).
  *
- * Best-effort: a failure (e.g. an older backend without `/api/agent-profiles`)
- * is swallowed so onboarding is never blocked — the global agent_settings the
- * setup steps already wrote remain the fallback.
+ * Best-effort: a failure is swallowed so onboarding is never blocked; the
+ * error shows when the user starts a conversation.
  */
 export function useApplyOnboardingAgentProfile() {
+  const queryClient = useQueryClient();
+  const { backend } = useActiveBackend();
   const saveProfile = useSaveAgentProfile();
   const activateProfile = useActivateAgentProfile();
 
   return useCallback(
     async (profile: AgentProfileSaveInput) => {
       try {
-        // Overwrite (not merge) is intentional: the `default` profile is the
-        // baseline that mirrors the current onboarding choice, not a durable
-        // store of per-profile customizations (home-launch resolves it via
-        // agent_settings — see `useCreateConversation`). Re-onboarding resets it
-        // to the fresh choice; users wanting durable custom config create a
-        // named profile, which the editor saves via `mergeAgentProfileSaveInput`.
+        if (backend.kind === "local" && !isNoBackend(backend)) {
+          // A failed migration retries later and merges over this save.
+          await ensureDefaultAgentProfileMigrated(
+            queryClient,
+            backend.id,
+          ).catch(() => undefined);
+        }
+        // An OpenHands choice merges over the stored `default`: it carries the
+        // user's migrated skills, condenser and verification, which
+        // re-onboarding must keep. An ACP choice replaces the profile, so a
+        // previous provider's command never runs under the new one.
+        const stored =
+          profile.agent_kind === "openhands"
+            ? await AgentProfilesService.getProfile(
+                ONBOARDING_AGENT_PROFILE_NAME,
+              )
+                .then((detail) => detail.profile)
+                .catch((error: unknown) => {
+                  if (error instanceof HttpError && error.status === 404) {
+                    return null;
+                  }
+                  throw error;
+                })
+            : null;
         await saveProfile.mutateAsync({
           name: ONBOARDING_AGENT_PROFILE_NAME,
-          profile,
+          profile: mergeAgentProfileSaveInput(stored, profile),
         });
         // activate needs the stable id; the save response only echoes the name.
         const detail = await AgentProfilesService.getProfile(
@@ -53,6 +78,6 @@ export function useApplyOnboardingAgentProfile() {
         console.error("Failed to configure onboarding agent profile:", error);
       }
     },
-    [saveProfile, activateProfile],
+    [queryClient, backend, saveProfile, activateProfile],
   );
 }

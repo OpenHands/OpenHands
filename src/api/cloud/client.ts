@@ -25,7 +25,7 @@ function requireCloudBackend(backend?: Backend): Backend {
  * backend's orgId across an unrelated API key, which the cloud backend
  * rejects when api_key_org_id and X-Org-Id disagree.
  */
-function activeOrgForBackend(backend: Backend): string | null {
+export function activeOrgForBackend(backend: Backend): string | null {
   const active = getActiveBackend();
   return active.backend.id === backend.id ? active.orgId : null;
 }

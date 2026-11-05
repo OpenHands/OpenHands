@@ -5,6 +5,7 @@ import { useConversationOverviewStats } from "#/hooks/use-conversation-overview-
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useConversationPrimaryRepository } from "#/hooks/use-conversation-primary-repository";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { ConversationOverviewDiffsRow } from "./conversation-overview-diffs-row";
 import { ConversationOverviewContextMenu } from "./conversation-overview-context-menu";
 import { ConversationOverviewGitSection } from "./conversation-overview-git-section";
@@ -80,6 +81,7 @@ export function ConversationOverviewPanel() {
   const { isConnected: isGitConnected } = useConversationPrimaryRepository();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuAnchorRef = useRef<HTMLButtonElement>(null);
+  useCloseOnEscape(isMenuOpen, () => setIsMenuOpen(false), menuAnchorRef);
 
   const isPinned = (section: ConversationOverviewSection) =>
     isOverviewSectionPinned(section, state.unpinnedOverviewSections ?? []);

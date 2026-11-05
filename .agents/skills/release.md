@@ -50,6 +50,7 @@ Open the release PR and confirm:
 
 - **The version** in the title matches expectations. It is computed from the merged commit types — if it looks wrong, check the conventional types of the PR titles merged since the last release. To force a specific version, merge a commit to `main` whose message contains a `Release-As: X.Y.Z` footer.
 - **The staged bumps** cover all version surfaces (`package.json`, `package-lock.json`, `config/defaults.json`, `README.md`, `README.windows.md`) and the notes list the expected changes.
+- **Temporary artifacts are absent.** Release PRs fail the required Ubuntu CI check while their committed tree contains `.pr/`. Merge the artifact-cleanup PR and let release-please update the release PR before merging it.
 
 ---
 

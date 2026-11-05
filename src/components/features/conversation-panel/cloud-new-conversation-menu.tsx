@@ -116,6 +116,7 @@ export function CloudNewConversationMenu({
     setSelectedProvider(fallback);
   }, [providers, selectedProvider, lastSelectedProvider]);
 
+  const repositoryQueriesEnabled = open && !!selectedProvider;
   const {
     data: repoPages,
     isLoading,
@@ -123,10 +124,17 @@ export function CloudNewConversationMenu({
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
-  } = useGitRepositories({ provider: selectedProvider });
+  } = useGitRepositories({
+    provider: selectedProvider,
+    enabled: repositoryQueriesEnabled,
+  });
 
   const { data: searchResults, isLoading: isSearchLoading } =
-    useSearchRepositories(debouncedQuery, selectedProvider);
+    useSearchRepositories(
+      debouncedQuery,
+      selectedProvider,
+      !repositoryQueriesEnabled,
+    );
 
   const allRepositories = React.useMemo(
     () => repoPages?.pages.flatMap((page) => page.items) ?? [],
@@ -308,7 +316,7 @@ export function CloudNewConversationMenu({
 
           <ul
             className={cn(
-              "max-h-[40vh] overflow-y-auto custom-scrollbar-always sm:max-h-70",
+              "new-conversation-menu-height overflow-y-auto custom-scrollbar-always sm:max-h-70",
               dropdownMenuListClassName,
             )}
           >

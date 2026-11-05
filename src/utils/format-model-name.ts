@@ -11,8 +11,6 @@ export const FREE_OPENHANDS_MODELS = {
   "openhands/deepseek-v4-flash": "OpenHands DeepSeek V4 Flash",
 } as const;
 
-export const FREE_OPENHANDS_MODEL_IDS = Object.keys(FREE_OPENHANDS_MODELS);
-
 /**
  * Set of free ``provider/model`` ids. The frontend no longer hardcodes which
  * OpenHands models are free — the set is sourced from the backend model list
@@ -48,16 +46,6 @@ export function formatModelNameForDisplay(
 ): string | null {
   if (!model) return null;
   return appendFreeSuffix(model, isFreeOpenHandsModel(model, freeModels));
-}
-
-export function formatProviderModelNameForDisplay(
-  provider: string | null | undefined,
-  model: string | null | undefined,
-  freeModels: FreeModelSet = EMPTY_FREE_MODELS,
-): string | null {
-  if (!model) return null;
-  const fullModel = provider ? `${provider}/${model}` : model;
-  return appendFreeSuffix(model, isFreeOpenHandsModel(fullModel, freeModels));
 }
 
 /**

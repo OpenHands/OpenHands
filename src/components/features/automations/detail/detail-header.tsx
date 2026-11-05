@@ -1,3 +1,4 @@
+import { Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
@@ -13,6 +14,13 @@ import { ActiveStatusBadge } from "./active-status-badge";
 interface DetailHeaderProps {
   automation: Automation;
   onToggle: () => void;
+  /**
+   * When provided, the kebab menu offers flipping `keep_alive`. Omit it when
+   * the setting does not apply or cannot be changed (local backend, no
+   * permission, draft, or forced on).
+   */
+  onToggleKeepAlive?: () => void;
+  isKeepAlivePending?: boolean;
   /** When provided (and the user can manage), the kebab menu shows an Edit entry. */
   onEdit?: () => void;
   onDelete: () => void;
@@ -33,6 +41,8 @@ interface DetailHeaderProps {
 export function DetailHeader({
   automation,
   onToggle,
+  onToggleKeepAlive,
+  isKeepAlivePending = false,
   onEdit,
   onDelete,
   onExport,
@@ -77,6 +87,19 @@ export function DetailHeader({
           },
         ]
       : []),
+    ...(onToggleKeepAlive
+      ? [
+          {
+            label:
+              automation.keep_alive === true
+                ? t(I18nKey.AUTOMATIONS$STOP_KEEPING_SANDBOX_ALIVE)
+                : t(I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE),
+            icon: <Server className="size-4" aria-hidden />,
+            onClick: onToggleKeepAlive,
+            disabled: isKeepAlivePending,
+          },
+        ]
+      : []),
     ...(canManage
       ? [
           {
@@ -90,14 +113,14 @@ export function DetailHeader({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-medium text-content">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <h1 className="min-w-0 break-words text-xl font-medium text-content">
             {automation.name}
           </h1>
-          <ActiveStatusBadge active={automation.enabled} />
+          <ActiveStatusBadge automation={automation} />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {canManage && onRunNow && (
             <button
               type="button"

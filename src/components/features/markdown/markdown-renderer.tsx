@@ -15,6 +15,8 @@ import { table, th, td } from "./table";
 import { blockquote } from "./blockquote";
 import { hr } from "./horizontal-rule";
 import { remarkGithubAlerts } from "./remark-github-alerts";
+import { advanceStableMarkdownBoundary } from "#/utils/split-stable-markdown";
+import { RevealClock, rehypeFadeInWords } from "./rehype-fade-in-words";
 
 // Build a sanitize schema that extends rehype-sanitize's defaults with a
 // few markdown-friendly additions. The defaults strip `<script>`, event
@@ -50,13 +52,18 @@ export const MARKDOWN_SANITIZE_SCHEMA: Schema = {
   attributes: {
     ...defaultSchema.attributes,
     "*": [...(defaultSchema.attributes?.["*"] ?? []), "className", "id"],
-    // `["rel", "noopener", "noreferrer", "nofollow"]` (rehype-sanitize's
-    // "[attrName, ...allowed-values]" form) requires `rel` to be EXACTLY
-    // one of those tokens — it would strip the standard, space-separated
-    // `rel="noopener noreferrer"` and reintroduce a reverse-tabnabbing
-    // vector on `target="_blank"` links. None of the `rel` keywords
-    // execute code or navigate, so allowing any rel value is safe.
-    a: ["href", "title", "target", "rel"],
+    // Call sites without `includeStandard` skip the `anchor` component, so
+    // this schema alone guards `rel`/`target` on untrusted markdown.
+    // `rel`: drop the `opener` token (it hands the opened page
+    // `window.opener`). A regexp, not a value list, because sanitize tests it
+    // per token on an array `rel` but against the whole value on a string.
+    // `target`: only `_blank`/`_self`, so links can't retarget the app frame.
+    a: [
+      "href",
+      "title",
+      ["target", "_blank", "_self"],
+      ["rel", /^(?!.*(?:^|\s)opener(?:\s|$))/i],
+    ],
     img: [
       ...(defaultSchema.attributes?.img ?? []),
       "src",
@@ -117,6 +124,99 @@ interface MarkdownRendererProps {
    * blocks, anchor targets, etc.).
    */
   allowHtml?: boolean;
+  /**
+   * The content is still being appended to (a streamed reply). Finished
+   * blocks are then parsed once and only the tail is re-parsed per update,
+   * so a long reply does not cost a full parse every frame. Newly revealed
+   * words fade in.
+   */
+  streaming?: boolean;
+}
+
+const remarkPlugins: PluggableList = [
+  remarkGithubAlerts,
+  remarkGfm,
+  remarkBreaks,
+];
+
+// `rehype-raw` parses raw HTML embedded in the markdown into the rehype
+// tree. `rehype-sanitize` then strips anything dangerous (scripts,
+// event handlers, `javascript:` URLs, etc.). The order matters: sanitize
+// must run *after* raw so it sees the parsed HTML nodes.
+const htmlRehypePlugins: PluggableList = [
+  rehypeRaw,
+  [rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
+];
+
+function MarkdownBlockComponent({
+  source,
+  components,
+  rehypePlugins,
+  clock,
+  blockStart,
+}: {
+  source: string;
+  components: Components;
+  rehypePlugins: PluggableList | undefined;
+  /** Set while streaming: fade in words as they are revealed. */
+  clock: RevealClock | undefined;
+  blockStart: number;
+}) {
+  return (
+    <Markdown
+      components={components}
+      remarkPlugins={remarkPlugins}
+      rehypePlugins={
+        clock
+          ? [
+              ...(rehypePlugins ?? []),
+              [rehypeFadeInWords, { clock, blockStart }],
+            ]
+          : rehypePlugins
+      }
+    >
+      {source}
+    </Markdown>
+  );
+}
+
+const MarkdownBlock = React.memo(MarkdownBlockComponent);
+
+/**
+ * Split streamed markdown into its stable blocks plus the tail, remembering
+ * the boundaries so each update parses only the text after the last one, and
+ * record when each part was revealed. Text that is not an extension of the
+ * previous render (a retry) starts over, shown at once.
+ */
+function useStreamedMarkdownBlocks(text: string, streaming: boolean) {
+  const previousRef = React.useRef({ text: "", offsets: [0] });
+  const [clock] = React.useState(() => new RevealClock());
+
+  const blocks = React.useMemo(() => {
+    if (!streaming) {
+      return [{ source: text, start: 0 }];
+    }
+    const previous = previousRef.current;
+    const isExtension = text.startsWith(previous.text);
+    if (isExtension) {
+      clock.advance(text.length);
+    } else {
+      clock.reset(text.length);
+    }
+    const offsets = isExtension ? [...previous.offsets] : [0];
+    const last = offsets[offsets.length - 1];
+    const boundary = advanceStableMarkdownBoundary(text, last);
+    if (boundary > last) {
+      offsets.push(boundary);
+    }
+    previousRef.current = { text, offsets };
+    return offsets.map((start, index) => ({
+      source: text.slice(start, offsets[index + 1]),
+      start,
+    }));
+  }, [text, streaming, clock]);
+
+  return { blocks, clock: streaming ? clock : undefined };
 }
 
 /**
@@ -139,52 +239,62 @@ function MarkdownRendererComponent({
   includeStandard = false,
   includeHeadings = false,
   allowHtml = true,
+  streaming = false,
 }: MarkdownRendererProps) {
-  // Build the components object with defaults and optional additions
-  const components: Components = {
-    code,
-    ul,
-    ol,
-    li,
-    hr,
-    table,
-    th,
-    td,
-    blockquote,
-    ...(includeStandard && {
-      a: anchor,
-      p: paragraph,
+  // Build the components object with defaults and optional additions.
+  // Memoized so streamed blocks that did not change skip re-rendering.
+  const components = React.useMemo<Components>(
+    () => ({
+      code,
+      ul,
+      ol,
+      li,
+      hr,
+      table,
+      th,
+      td,
+      blockquote,
+      ...(includeStandard && {
+        a: anchor,
+        p: paragraph,
+      }),
+      ...(includeHeadings && {
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6,
+      }),
+      ...customComponents, // Custom components override defaults
     }),
-    ...(includeHeadings && {
-      h1,
-      h2,
-      h3,
-      h4,
-      h5,
-      h6,
-    }),
-    ...customComponents, // Custom components override defaults
-  };
+    [customComponents, includeStandard, includeHeadings],
+  );
 
-  const markdownContent = content ?? children ?? "";
+  const { blocks, clock } = useStreamedMarkdownBlocks(
+    content ?? children ?? "",
+    streaming,
+  );
+  const rehypePlugins = allowHtml ? htmlRehypePlugins : undefined;
 
-  // `rehype-raw` parses raw HTML embedded in the markdown into the rehype
-  // tree. `rehype-sanitize` then strips anything dangerous (scripts,
-  // event handlers, `javascript:` URLs, etc.). The order matters: sanitize
-  // must run *after* raw so it sees the parsed HTML nodes.
-  const rehypePlugins: PluggableList | undefined = allowHtml
-    ? [rehypeRaw, [rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]]
-    : undefined;
-
+  // Blocks render as siblings in one wrapper, joined by the newline the
+  // parser puts between top-level blocks, so the DOM (and `first:` / `last:`
+  // spacing) matches the finished message rendered in one piece.
   return (
     <div data-testid="markdown-renderer">
-      <Markdown
-        components={components}
-        remarkPlugins={[remarkGithubAlerts, remarkGfm, remarkBreaks]}
-        rehypePlugins={rehypePlugins}
-      >
-        {markdownContent}
-      </Markdown>
+      {blocks.map(({ source, start }, index) => (
+        // Blocks only ever append, so the index is a stable identity.
+        <React.Fragment key={index}>
+          {index > 0 && "\n"}
+          <MarkdownBlock
+            source={source}
+            components={components}
+            rehypePlugins={rehypePlugins}
+            clock={clock}
+            blockStart={start}
+          />
+        </React.Fragment>
+      ))}
     </div>
   );
 }

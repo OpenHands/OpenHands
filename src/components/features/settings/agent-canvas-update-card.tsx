@@ -18,7 +18,10 @@ import { AGENT_CANVAS_CLIENT_VERSION } from "#/api/client-source";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { BaseModalTitle } from "#/components/shared/modals/confirmation-modals/base-modal";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
-import { ModalBody } from "#/components/shared/modals/modal-body";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  ModalBody,
+} from "#/components/shared/modals/modal-body";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { useLatestAgentCanvasVersion } from "#/hooks/query/use-latest-agent-canvas-version";
 import DockerIcon from "#/icons/docker.svg?react";
@@ -163,7 +166,10 @@ function AgentCanvasUpdateModal({
     <ModalBackdrop onClose={onClose}>
       <ModalBody
         width="md"
-        className="relative flex max-h-[80vh] flex-col items-start overflow-auto border border-border"
+        className={cn(
+          "relative flex max-h-[80vh] flex-col items-start overflow-auto border border-border",
+          MODAL_MAX_WIDTH_VIEWPORT,
+        )}
         testID="agent-canvas-update-modal"
       >
         <ModalCloseButton
@@ -316,7 +322,7 @@ export function AgentCanvasUpdateCard({
               <span
                 data-testid="agent-canvas-update-badge"
                 className={cn(
-                  "inline-flex shrink-0 items-center gap-1 text-[10px] font-medium leading-none",
+                  "inline-flex shrink-0 items-center gap-1 text-3xs font-medium leading-none",
                   updateAvailable
                     ? "rounded-full border border-transparent bg-[#1E3A5F] px-1.5 py-0.5 text-[#3B82F6]"
                     : "text-success",

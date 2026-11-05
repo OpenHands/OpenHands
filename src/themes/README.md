@@ -37,6 +37,21 @@ them; changing the page background alone is not a complete theme.
   high-emphasis ink (white in dark palettes, dark in light palettes); its
   paired `contrast-foreground` is for inverse pills and tooltips. Opacity and
   state variants such as `hover:bg-contrast/10` retain their stated values.
+- Use `feedback-error`, `feedback-success`, and `feedback-warning` for small
+  validation, connection, and warning messages. These text roles meet 4.5:1 on
+  the built-in modal surface and leave the general danger/success/warning control
+  colors unchanged. Embedded hosts can override `--oh-feedback-error`,
+  `--oh-feedback-success`, and `--oh-feedback-warning` for their surfaces.
+- GitHub Markdown alerts own five `--oh-markdown-alert-*` roles: note, tip,
+  important, warning, and caution. Each supplies title/icon ink, the left border,
+  and a 5% panel tint. Built-in values keep text readable over Markdown host
+  surfaces, including one level of nested alerts; bodies use `contrast` and
+  underlined links retain `link`. Embedded hosts can override the five roles
+  through `styleOverrides` for their own surfaces.
+- Use `focus` for keyboard outlines and rings on neutral controls. The default
+  role meets 3:1 against base, modal, raised, and interactive-hover surfaces;
+  retain the control's outline width/offset and preserve host `--oh-focus`
+  overrides. Check the settled color after a focus transition.
 - Literal white is reserved for fixed-color surfaces (for example the blue
   Plan control, an image-lightbox scrim, or a document preview). Do not globally
   redefine white or add theme-specific selectors that reinterpret utilities.

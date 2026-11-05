@@ -431,7 +431,7 @@ export function ConversationTabs({
           </div>
         </div>
       </div>
-      {isTabActive("planner") && (
+      {isTabActive("planner") && variant !== "compact" && (
         <div
           className={cn(
             "flex h-10 min-h-10 shrink-0 items-center border-t border-border pl-2.5 pr-1",
@@ -449,7 +449,7 @@ export function ConversationTabs({
             )}
             data-testid="planner-tab-build-button"
           >
-            <Typography.Text className="text-[11px] font-normal leading-5 text-contrast-foreground">
+            <Typography.Text className="text-2xs font-normal leading-5 text-contrast-foreground">
               {/* eslint-disable-next-line i18next/no-literal-string */}
               {t(I18nKey.COMMON$BUILD)} ⌘↩
             </Typography.Text>

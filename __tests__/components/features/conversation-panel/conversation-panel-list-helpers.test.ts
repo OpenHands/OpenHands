@@ -21,6 +21,7 @@ import {
   UNNAMED_AUTOMATION_FACET,
 } from "#/components/features/conversation-panel/conversation-panel-list-helpers";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core";
 
 const base: Omit<AppConversation, "id" | "title" | "workspace"> = {
@@ -298,17 +299,18 @@ describe("conversation-panel-list-helpers", () => {
     ]);
 
     expect([
+      ...getGroupDiscoveryConversationIds(items, pageByConversationId, "local"),
+    ]).toEqual(["none-1", "alpha-1"]);
+
+    expect([
       ...getGroupDiscoveryConversationIds(
         items,
         pageByConversationId,
         "local",
+        {
+          forceIncludeConversationId: "none-2",
+        },
       ),
-    ]).toEqual(["none-1", "alpha-1"]);
-
-    expect([
-      ...getGroupDiscoveryConversationIds(items, pageByConversationId, "local", {
-        forceIncludeConversationId: "none-2",
-      }),
     ]).toEqual(["none-1", "alpha-1", "none-2"]);
 
     const grouped = groupConversations(items, "local", "updated", {
@@ -737,6 +739,7 @@ describe("conversation-panel-list-helpers", () => {
           title: "internal title stamp",
           automationname: "Nightly Audit",
           automationtrigger: "cron",
+          automationsetup: "draft",
         },
       },
       {
@@ -751,15 +754,21 @@ describe("conversation-panel-list-helpers", () => {
       { ...base, id: "t4", title: "t4", tags: null },
     ];
     expect(collectTagFacets(conversations)).toEqual([
+      "automationsetup=draft",
       "origin=slack",
       "owner=alice",
       "project=fracture",
     ]);
   });
 
-  it("formats bare-tag facets (empty value) as just the key", () => {
+  it("formats bare-tag facets (empty value) and setup facets readably", () => {
+    const t = (key: I18nKey) =>
+      key === I18nKey.AUTOMATIONS$DETAIL$DRAFT ? "Draft" : "Automation setup";
     expect(formatTagFacetLabel("work=")).toBe("work");
     expect(formatTagFacetLabel("project=fracture")).toBe("project=fracture");
+    expect(formatTagFacetLabel("automationsetup=draft", t)).toBe(
+      "Automation setup: Draft",
+    );
   });
 
   const tagFilterFixtures: AppConversation[] = [
@@ -821,6 +830,54 @@ describe("conversation-panel-list-helpers", () => {
         tagFilterFacets,
       ).map((c) => c.id),
     ).toEqual(["untagged", "slack", "alice", "both"]);
+  });
+
+  it("recovers a legacy local_repo conversation by matching working_dir to a known workspace (#17386)", () => {
+    // No selected_workspace (localStorage was cleared / another browser), but
+    // the runtime working_dir equals a registered workspace folder.
+    const legacy: AppConversation = {
+      ...base,
+      id: "legacy-local-repo",
+      title: "legacy",
+      selected_workspace: null,
+      workspace: { working_dir: "/Users/jane/projects/openhands/" },
+    };
+    // A worktree conversation's working_dir is unique and matches nothing, so
+    // it stays under "No workspace" until its server tag regroups it.
+    const worktree: AppConversation = {
+      ...base,
+      id: "legacy-worktree",
+      title: "worktree",
+      selected_workspace: null,
+      workspace: { working_dir: "/Users/jane/projects/openhands/wt-abc" },
+    };
+
+    const groups = groupConversations(
+      [legacy, worktree],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      [
+        {
+          id: "ws1",
+          name: "openhands",
+          path: "/Users/jane/projects/openhands",
+        },
+      ],
+    );
+
+    const byId = new Map(groups.map((g) => [g.id, g]));
+    expect(byId.get("ws:/Users/jane/projects/openhands")?.label).toBe(
+      "openhands",
+    );
+    expect(
+      byId
+        .get("ws:/Users/jane/projects/openhands")
+        ?.conversations.map((c) => c.id),
+    ).toEqual(["legacy-local-repo"]);
+    expect(
+      byId.get("__none_workspace")?.conversations.map((c) => c.id),
+    ).toEqual(["legacy-worktree"]);
   });
 });
 

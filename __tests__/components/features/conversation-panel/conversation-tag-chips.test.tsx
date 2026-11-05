@@ -204,6 +204,17 @@ describe("ConversationTagChips", () => {
     expect(chip).toHaveAttribute("title", "Work");
   });
 
+  it("shows automation setup draft as a readable key/value chip", () => {
+    renderWithProviders(
+      <ConversationTagChips tags={[["automationsetup", "draft"]]} />,
+    );
+
+    const chip = screen.getByTestId("conversation-card-tag-chip");
+    const expected = "AUTOMATION_SETUP$TITLE: AUTOMATIONS$DETAIL$DRAFT";
+    expect(chip).toHaveTextContent(expected);
+    expect(chip).toHaveAttribute("title", expected);
+  });
+
   it("safely truncates emoji values while preserving the full tooltip", () => {
     const longValue = "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀";
     renderWithProviders(<ConversationTagChips tags={[["mood", longValue]]} />);

@@ -11,6 +11,7 @@ import {
   sidebarNavLabelClassName,
   sidebarNavRowClassName,
 } from "#/components/features/sidebar/sidebar-layout";
+import { getCommandMenuShortcutKey } from "./command-menu-items";
 
 interface CommandMenuTriggerProps {
   collapsed: boolean;
@@ -62,8 +63,8 @@ export function CommandMenuTrigger({ collapsed }: CommandMenuTriggerProps) {
         <span className={sidebarNavLabelClassName(collapsed)}>{label}</span>
       </span>
       {!collapsed ? (
-        <kbd className="rounded-md border border-border bg-black/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-dim">
-          {t(I18nKey.COMMAND_MENU$SHORTCUT)}
+        <kbd className="rounded-md border border-border bg-black/20 px-1.5 py-0.5 command-menu-trigger-hint font-semibold uppercase text-text-dim">
+          {t(getCommandMenuShortcutKey())}
         </kbd>
       ) : null}
     </button>

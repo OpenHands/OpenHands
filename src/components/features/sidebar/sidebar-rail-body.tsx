@@ -6,7 +6,6 @@ import {
   Plus,
   Server,
   Settings,
-  PanelsTopLeft,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -43,6 +42,7 @@ import {
   sidebarNavRowClassName,
 } from "./sidebar-layout";
 import { useCanvasExtensionsRuntime } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
+import { CanvasExtensionIcon } from "#/components/features/canvas-extensions/canvas-extension-icon";
 import type { Backend } from "#/api/backend-registry/types";
 
 const ICON_SIZE = 18;
@@ -98,6 +98,7 @@ export function SidebarRailBody({
   const { pages: canvasExtensionPages } = useCanvasExtensionsRuntime();
   const backendCloseTimerRef = collapsedBackendCloseTimer;
   const { isPinnedRoute, togglePinnedRoute } = usePinnedHomeRoute();
+  const [backendMenuOpen, setBackendMenuOpen] = React.useState(false);
 
   const buildPinAction = (path: string, testId: string) => {
     const pinned = isPinnedRoute(path);
@@ -271,7 +272,12 @@ export function SidebarRailBody({
             label={page.contribution.nav_label || page.contribution.title}
             testId={`sidebar-canvas-extension-${page.extension.name}-${page.contribution.id}`}
             collapsed={collapsed}
-            icon={<PanelsTopLeft width={ICON_SIZE} height={ICON_SIZE} />}
+            icon={
+              <CanvasExtensionIcon
+                extension={page.extension}
+                size={ICON_SIZE}
+              />
+            }
           />
         ))}
       </nav>
@@ -359,7 +365,7 @@ export function SidebarRailBody({
                 <span className="relative inline-flex size-4.5 shrink-0 items-center justify-center">
                   <BackendStatusDot
                     isConnected={activeBackendHealth?.isConnected ?? null}
-                    className="absolute -left-0.5 -top-0.5 z-[1] pointer-events-none"
+                    className="absolute -left-0.5 -top-0.5 z-1 pointer-events-none"
                   />
                   <Server width={ICON_SIZE} height={ICON_SIZE} />
                 </span>
@@ -390,7 +396,14 @@ export function SidebarRailBody({
 
       {!collapsed ? (
         <>
-          <div className="mb-2 shrink-0 pr-2.5">
+          {/* Keep the card's space while the backend menu covers it, so the
+              list above doesn't jump when the menu opens on hover. */}
+          <div
+            className={cn(
+              "mb-2 shrink-0 pr-2.5",
+              backendMenuOpen && "invisible",
+            )}
+          >
             <SidebarOnboardingChecklist collapsed={collapsed} />
           </div>
           <div
@@ -400,7 +413,11 @@ export function SidebarRailBody({
             )}
           >
             <AgentCanvasVersionTile hideWhenUpToDate />
-            <BackendSelector sidebarCollapsed={collapsed} openUpward />
+            <BackendSelector
+              sidebarCollapsed={collapsed}
+              openUpward
+              onMenuOpenChange={setBackendMenuOpen}
+            />
           </div>
         </>
       ) : null}

@@ -1,0 +1,128 @@
+import { AUTOMATION_FORM_UPDATE_TOOL_NAME } from "#/constants/automation-form";
+import type { DeploymentCapabilities } from "#/manifests/types";
+import { describeEventSources } from "#/utils/automation-event-sources";
+import type { ClientToolSpec } from "./canvas-ui-client-tool";
+
+export {
+  AUTOMATION_FORM_UPDATE_ACTION_KIND,
+  AUTOMATION_FORM_UPDATE_TOOL_NAME,
+} from "#/constants/automation-form";
+
+const AUTOMATION_FORM_UPDATE_DESCRIPTION = `Update the automation setup form that is open beside this conversation. Use this to propose the automation the user asks for and to fill, revise, or complete its configuration fields; the user reviews the form and saves or creates the automation from it.
+
+The user can keep editing the form while you converse. By default, your updates fill empty fields or fields the user has not manually edited. If the user already edited a field, do not overwrite it unless they explicitly asked you to replace their value; set overwrite_user_edits=true only in that case.
+
+Useful fields:
+* kind: "prompt", "plugin", or "custom".
+* name: short automation name.
+* prompt: natural-language instruction for prompt/plugin automations.
+* repository: optional repository the run clones, for prompt/plugin automations: its URL on any of this instance's git providers (GitHub, GitLab, Bitbucket Cloud or Data Center, Azure DevOps), or owner/repo for GitHub.
+* pluginSource and pluginRef: source and optional ref for the first plugin. The form can hold more than one plugin; these fields only change the first.
+* customCode, entrypoint, setupScriptPath, setupScript: custom Python bundle fields.
+* triggerKind: "cron" or "event".
+* frequency: "once", "hourly", "daily", "weekdays", "weekly", or "custom" for cron triggers.
+* time, scheduleDateTime, timezone, weekday, customSchedule: cron scheduling fields. "scheduleDateTime" is a local "YYYY-MM-DDTHH:MM" value used when frequency is "once". "weekday" is "0" (Sunday) through "6" (Saturday) and applies when frequency is "weekly".
+* eventSource, eventKey, eventFilter: event trigger fields. eventSource is one of this deployment's event sources listed below, eventKey one of that source's event keys (a trailing * matches a family, such as "pr:*" or "jira:issue_*"), and eventFilter an optional JMESPath expression over the webhook payload that must be true for a run to start.
+* model: LLM profile name for this automation. Leave empty to use the active profile. This does not change the conversation composer.
+* agentProfileId: agent profile id for this automation. Leave empty to use the active agent profile. This does not change the conversation.
+* showTimeout and timeoutSeconds: optional timeout controls.
+
+Call this with only the fields you are changing. After calling it, briefly tell the user which fields you filled and ask them to review anything uncertain.`;
+
+// The agent-server caches one parameters schema per client tool name for the
+// life of the process, so this schema never varies between conversations;
+// only the description does.
+const AUTOMATION_FORM_UPDATE_PARAMETERS: ClientToolSpec["parameters"] = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    fields: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        kind: { type: "string", enum: ["prompt", "plugin", "custom"] },
+        name: { type: "string" },
+        prompt: { type: "string" },
+        repository: { type: "string" },
+        pluginSource: { type: "string" },
+        pluginRef: { type: "string" },
+        customCode: { type: "string" },
+        entrypoint: { type: "string" },
+        setupScriptPath: { type: "string" },
+        setupScript: { type: "string" },
+        triggerKind: { type: "string", enum: ["cron", "event"] },
+        frequency: {
+          type: "string",
+          enum: ["once", "hourly", "daily", "weekdays", "weekly", "custom"],
+        },
+        time: { type: "string", description: "24-hour HH:MM time." },
+        scheduleDateTime: {
+          type: "string",
+          description:
+            "Local date and time, YYYY-MM-DDTHH:MM, for a one-time schedule.",
+        },
+        timezone: { type: "string" },
+        weekday: {
+          type: "string",
+          enum: ["0", "1", "2", "3", "4", "5", "6"],
+          description:
+            "Day of week for a weekly schedule. 0 is Sunday and 6 is Saturday.",
+        },
+        customSchedule: { type: "string", description: "Cron expression." },
+        eventSource: { type: "string" },
+        eventKey: { type: "string" },
+        eventFilter: { type: "string" },
+        model: {
+          type: "string",
+          description:
+            "LLM profile name for this automation. Empty uses the active profile and does not change the conversation.",
+        },
+        agentProfileId: {
+          type: "string",
+          description:
+            "Agent profile id for this automation. Empty uses the active agent profile and does not change the conversation.",
+        },
+        showTimeout: { type: "boolean" },
+        timeoutSeconds: { type: "string" },
+      },
+      description: "Automation form field values to patch in the visible UI.",
+    },
+    overwrite_user_edits: {
+      type: "boolean",
+      description:
+        "Set true only when the user explicitly asks you to replace values they edited manually.",
+    },
+  },
+  required: ["fields"],
+};
+
+/**
+ * The form tool for one setup conversation. Its description names the event
+ * sources the deployment reports, so the assistant fills `eventSource`,
+ * `eventKey` and `eventFilter` from what this instance delivers.
+ */
+export function buildAutomationFormUpdateClientTool(
+  capabilities?: DeploymentCapabilities | null,
+): ClientToolSpec {
+  return {
+    name: AUTOMATION_FORM_UPDATE_TOOL_NAME,
+    description: `${AUTOMATION_FORM_UPDATE_DESCRIPTION}\n\n${describeEventSources(capabilities)}`,
+    parameters: AUTOMATION_FORM_UPDATE_PARAMETERS,
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+  };
+}
+
+/**
+ * System-message suffix for a setup conversation, sent with the form tool.
+ * The sandbox can also reach the automation API, and keyword-triggered skills
+ * describe creating automations there, which would skip the user's review of
+ * the form.
+ */
+export const AUTOMATION_SETUP_SYSTEM_SUFFIX = `This conversation is an automation setup session. The automation setup form is open beside the chat, and the user saves, tests, or creates the automation from that form after reviewing it.
+* When the user asks for an automation, or for a change to one, propose it by filling the form with the ${AUTOMATION_FORM_UPDATE_TOOL_NAME} tool. Use only the event sources that tool's description lists.
+* Do not create, update, enable, run, or delete automations, drafts, or custom webhooks through the automation API in this conversation, with curl, a script, or any other tool, even when a skill describes how or the user asks you to deploy. Point the user to the form's Save draft, Test, and Create Automation buttons instead.`;
