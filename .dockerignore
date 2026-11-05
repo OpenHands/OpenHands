@@ -37,3 +37,6 @@ Thumbs.db
 artifacts/
 *.tgz
 *.log
+
+# Test-only preview: keep the vendored extensions package.
+!vendor/openhands-extensions-0.39.0-pr907-cdf56cd.tgz

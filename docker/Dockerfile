@@ -31,6 +31,8 @@ WORKDIR /build
 
 # Cache-friendly: package files first
 COPY package.json package-lock.json ./
+# Test-only preview: the extensions package built from OpenHands/extensions#907.
+COPY vendor/ ./vendor/
 RUN npm ci
 
 # Copy everything needed for the build

@@ -12,10 +12,12 @@ import { SetupFormField } from "#/components/features/manifest/manifest-form-fie
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import type { Backend } from "#/api/backend-registry/types";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import GitService from "#/api/git-service/git-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import type {
   SetupFormField as SetupFormFieldDefinition,
   SetupFormValue,
+  SetupGitProvider,
 } from "#/manifests/types";
 
 const LOCAL_BACKEND: Backend = {
@@ -106,11 +108,42 @@ const REPOSITORIES_FIELD: SetupFormFieldDefinition = {
   multiple: true,
 };
 
-/** The git providers the user has connected natively on the active backend. */
-function connectNatively(...providers: string[]) {
+/**
+ * The git providers the user has connected natively on the active backend. A
+ * pair names the host the server reports for a self-managed connection.
+ */
+function connectNatively(
+  ...providers: Array<string | [provider: string, host: string]>
+) {
   vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
     ...MOCK_DEFAULT_USER_SETTINGS,
-    provider_tokens_set: Object.fromEntries(providers.map((p) => [p, null])),
+    provider_tokens_set: Object.fromEntries(
+      providers.map((p) => (typeof p === "string" ? [p, null] : p)),
+    ),
+  });
+}
+
+/**
+ * What the instance's integration for a provider lists: one installation
+ * holding one repository. Data Center and Azure DevOps repositories are
+ * listed per installation, which is how the picker reads them on a cloud
+ * backend.
+ */
+function listRepository(provider: SetupGitProvider, fullName: string) {
+  vi.spyOn(GitService, "getUserInstallations").mockResolvedValue({
+    items: ["1"],
+    next_page_id: null,
+  });
+  vi.spyOn(GitService, "retrieveInstallationRepositories").mockResolvedValue({
+    items: [
+      {
+        id: "1",
+        full_name: fullName,
+        git_provider: provider,
+        is_public: false,
+      },
+    ],
+    next_page_id: null,
   });
 }
 
@@ -309,5 +342,77 @@ describe("SetupFormField repo-picker", () => {
     // that cannot load.
     expect(screen.queryByTestId("git-repo-dropdown")).toBeNull();
     expect(onValueChange).toHaveBeenLastCalledWith("group/project");
+  });
+
+  // The service clones a Data Center or Azure DevOps repository only from its
+  // full URL, so a picked repository is stored as the address on the connected
+  // host, the way the generic automation form stores one, while the picker
+  // keeps showing the repository by name.
+  it.each([
+    {
+      provider: "bitbucket_data_center" as SetupGitProvider,
+      host: "https://bitbucket.example.com",
+      fullName: "ENG/payments",
+      address: "https://bitbucket.example.com/scm/ENG/payments.git",
+    },
+    {
+      provider: "azure_devops" as SetupGitProvider,
+      host: "fabrikam",
+      fullName: "fabrikam/web/app",
+      address: "https://dev.azure.com/fabrikam/web/_git/app",
+    },
+  ])(
+    "stores the address of a repository picked from a $provider connection",
+    async ({ provider, host, fullName, address }) => {
+      // Arrange
+      connectNatively([provider, host]);
+      listRepository(provider, fullName);
+      const { onValueChange, user } = renderRepositoryField(CLOUD_BACKEND, {
+        field: { ...REPOSITORY_FIELD, provider },
+      });
+
+      // Act
+      await user.click(await screen.findByTestId("git-repo-dropdown"));
+      await user.click(await screen.findByText(fullName));
+
+      // Assert
+      expect(onValueChange).toHaveBeenLastCalledWith(address);
+    },
+  );
+
+  it("lets a repository be typed when the Data Center connection's host is not reported", async () => {
+    // Arrange — without the host there is no address to store for a listed
+    // repository, so the list would offer entries the request cannot carry.
+    connectNatively("bitbucket_data_center");
+    const { onValueChange, user } = renderRepositoryField(CLOUD_BACKEND, {
+      field: { ...REPOSITORY_FIELD, provider: "bitbucket_data_center" },
+    });
+
+    // Act
+    await user.type(
+      screen.getByTestId("setup-field-repository"),
+      "https://bitbucket.example.com/scm/ENG/payments.git",
+    );
+
+    // Assert
+    expect(screen.queryByTestId("git-repo-dropdown")).toBeNull();
+    expect(onValueChange).toHaveBeenLastCalledWith(
+      "https://bitbucket.example.com/scm/ENG/payments.git",
+    );
+  });
+
+  it("asks for a Data Center repository by its URL when the template states no format", () => {
+    // Arrange — a template states the format of everything it declares except
+    // a repository, and `owner/repo` is not a shape the service clones a Data
+    // Center repository from.
+    renderRepositoryField(LOCAL_BACKEND, {
+      field: { ...REPOSITORY_FIELD, provider: "bitbucket_data_center" },
+    });
+
+    // Assert
+    expect(screen.getByTestId("setup-field-repository")).toHaveAttribute(
+      "placeholder",
+      "SETUP$BITBUCKET_DATA_CENTER_REPOSITORY_PLACEHOLDER",
+    );
   });
 });
