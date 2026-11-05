@@ -11,6 +11,7 @@ import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import { buildAgentCanvasUrl } from "#/utils/base-path";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 
 import { useDownloadConversation } from "./use-download-conversation";
 import {
@@ -183,8 +184,9 @@ export function useConversationNameContextMenu({
       return;
     }
 
-    navigator.clipboard.writeText(shareUrl);
-    displaySuccessToast(t(I18nKey.CONVERSATION$LINK_COPIED));
+    void copyToClipboard(shareUrl).then((ok) => {
+      if (ok) displaySuccessToast(t(I18nKey.CONVERSATION$LINK_COPIED));
+    });
   };
 
   return {
