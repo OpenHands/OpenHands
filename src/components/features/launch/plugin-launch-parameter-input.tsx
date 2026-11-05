@@ -1,6 +1,7 @@
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { cn } from "#/utils/utils";
 
+const SELECT_PLACEHOLDER = "— select —";
 export interface PluginLaunchParameterInputProps {
   pluginIndex: number;
   paramKey: string;
@@ -15,6 +16,14 @@ export interface PluginLaunchParameterInputProps {
   helpText?: string;
   /** UI hint: "textarea" renders a multi-line input for string fields. */
   widget?: "textarea";
+  /**
+   * Schema-declared type, used to pick the widget when the runtime value
+   * doesn't reflect it (e.g. an integer rendered as "5"). When absent, the
+   * widget is inferred from `typeof paramValue`.
+   */
+  fieldType?: "string" | "number" | "integer" | "boolean";
+  /** Whether the field is required (renders the asterisk + placeholder). */
+  required?: boolean;
   onParameterChange: (
     pluginIndex: number,
     paramKey: string,
@@ -31,15 +40,29 @@ export function PluginLaunchParameterInput({
   enumValues,
   helpText,
   widget,
+  fieldType,
+  required = false,
   onParameterChange,
 }: PluginLaunchParameterInputProps) {
   const inputId = `plugin-${pluginIndex}-param-${paramKey}`;
-  const displayLabel = label ?? paramKey;
+  const displayLabel = required
+    ? `${label ?? paramKey} *`
+    : (label ?? paramKey);
+  // Schema type wins over runtime typeof: an integer rendered as "5" is still
+  // an integer, and a boolean with no value is still a checkbox.
+  const effectiveType =
+    fieldType ??
+    (typeof paramValue === "number"
+      ? "number"
+      : typeof paramValue === "boolean"
+        ? "boolean"
+        : "string");
 
   if (options && options.length > 0) {
     // Recover the raw enum value (number/boolean/string) by matching the
     // selected display string; fall back to the string for unknown values.
     const resolveEnumValue = (selected: string): unknown => {
+      if (selected === "") return undefined;
       const index = enumValues
         ? enumValues.findIndex((v) => String(v) === selected)
         : -1;
@@ -61,6 +84,9 @@ export function PluginLaunchParameterInput({
           }
           className="w-full rounded-md border border-tertiary-light bg-input px-3 py-2 text-contrast focus:border-primary focus:outline-none"
         >
+          {!required && (
+            <option value={SELECT_PLACEHOLDER}>{SELECT_PLACEHOLDER}</option>
+          )}
           {options.map((option) => (
             <option key={option} value={option}>
               {option}
@@ -76,7 +102,7 @@ export function PluginLaunchParameterInput({
     );
   }
 
-  if (typeof paramValue === "boolean") {
+  if (effectiveType === "boolean") {
     return (
       <label
         htmlFor={inputId}
@@ -86,7 +112,7 @@ export function PluginLaunchParameterInput({
           id={inputId}
           data-testid={inputId}
           type="checkbox"
-          checked={paramValue}
+          checked={Boolean(paramValue)}
           onChange={(e) =>
             onParameterChange(pluginIndex, paramKey, e.target.checked)
           }
@@ -97,20 +123,30 @@ export function PluginLaunchParameterInput({
     );
   }
 
-  if (typeof paramValue === "number") {
+  if (effectiveType === "integer" || effectiveType === "number") {
+    const isInteger = effectiveType === "integer";
     return (
       <SettingsInput
         testId={inputId}
         name={`plugin-${pluginIndex}-param-${paramKey}`}
         type="number"
         label={displayLabel}
-        value={String(paramValue)}
+        value={
+          paramValue === undefined || paramValue === null
+            ? ""
+            : String(paramValue)
+        }
         className="w-full"
+        step={isInteger ? 1 : undefined}
         onChange={(value) =>
           onParameterChange(
             pluginIndex,
             paramKey,
-            value === "" ? 0 : parseFloat(value) || 0,
+            value === ""
+              ? undefined
+              : isInteger
+                ? parseInt(value, 10) || 0
+                : parseFloat(value) || 0,
           )
         }
       />

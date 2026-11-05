@@ -15,6 +15,10 @@ export interface PluginLaunchPluginSectionProps {
   getPluginDisplayName: (plugin: PluginSpec) => string;
   /** Manifest schema fields (automation mode with preflight), if available. */
   schemaFields?: SchemaFormField[];
+  /** True when the section auto-expanded from the preflight arrival (vs a
+   * user toggle). The smooth-scroll only fires on auto-expand, so a user
+   * toggling a section open doesn't yank the page under them. */
+  autoExpanded?: boolean;
   onParameterChange: (
     pluginIndex: number,
     paramKey: string,
@@ -29,6 +33,7 @@ export function PluginLaunchPluginSection({
   onToggle,
   getPluginDisplayName,
   schemaFields,
+  autoExpanded = false,
   onParameterChange,
 }: PluginLaunchPluginSectionProps) {
   const { t } = useTranslation("openhands");
@@ -36,17 +41,17 @@ export function PluginLaunchPluginSection({
     plugin.parameters && Object.keys(plugin.parameters).length > 0;
   const expandedRef = useRef<HTMLDivElement>(null);
 
-  // Scroll the expanded fields into view so the user sees them without
-  // hunting. Fires when the section auto-expands from the preflight arrival
-  // or when the user toggles it open.
+  // Scroll the expanded fields into view when the section auto-expands from
+  // the preflight arrival. A user-initiated toggle does not scroll — the user
+  // is already looking at the section header and a scroll would be jarring.
   useEffect(() => {
-    if (isExpanded && expandedRef.current) {
+    if (autoExpanded && isExpanded && expandedRef.current) {
       expandedRef.current.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
     }
-  }, [isExpanded]);
+  }, [autoExpanded, isExpanded]);
 
   if (!hasParams) {
     return null;
@@ -99,6 +104,8 @@ export function PluginLaunchPluginSection({
                   enumValues={field?.enumValues}
                   helpText={field?.helpText}
                   widget={field?.widget}
+                  fieldType={field?.type}
+                  required={field?.required}
                   onParameterChange={onParameterChange}
                 />
               );

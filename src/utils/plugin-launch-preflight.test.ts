@@ -6,6 +6,7 @@ import {
   buildCronTrigger,
   configSchemaToFormFields,
   pluginSpecTemplateId,
+  stripEmptyConfigValues,
 } from "./plugin-launch-preflight";
 
 function makePreflight(
@@ -40,7 +41,7 @@ describe("configSchemaToFormFields", () => {
       label: "Repository",
       required: true,
     });
-    expect(fields[1]).toMatchObject({ key: "count", type: "number" });
+    expect(fields[1]).toMatchObject({ key: "count", type: "integer" });
     expect(fields[2]).toMatchObject({
       key: "verbose",
       type: "boolean",
@@ -107,17 +108,44 @@ describe("applySchemaDefaults", () => {
 
   it("fills schema defaults for keys the URL omitted", () => {
     const merged = applySchemaDefaults({ count: 7 }, fields);
-    expect(merged).toEqual({ count: 7, repo: "org/repo", verbose: false });
+    // Only real defaults are filled; count (URL-encoded) and verbose (no
+    // default) are left as-is.
+    expect(merged).toEqual({ count: 7, repo: "org/repo" });
   });
 
   it("never overwrites URL-encoded values", () => {
     const merged = applySchemaDefaults({ repo: "other/repo" }, fields);
     expect(merged.repo).toBe("other/repo");
   });
+
+  it("does not pre-fill empty values for fields without defaults", () => {
+    // verbose has no default; it must not be pre-filled with false, which
+    // would install a broken automation (boolean false sent as a real value)
+    // and mask a required-check failure on the backend.
+    const merged = applySchemaDefaults({}, fields);
+    expect(merged).toEqual({ repo: "org/repo" });
+    expect("verbose" in merged).toBe(false);
+  });
+});
+
+describe("stripEmptyConfigValues", () => {
+  it("removes undefined, null, and empty-string values", () => {
+    const cleaned = stripEmptyConfigValues({
+      feeds: "https://example.com/rss",
+      topics: "",
+      max_items: undefined,
+      verbose: null,
+      kept: 0,
+    });
+    expect(cleaned).toEqual({
+      feeds: "https://example.com/rss",
+      kept: 0,
+    });
+  });
 });
 
 describe("pluginSpecTemplateId", () => {
-  it("includes source, repo_path, and ref", () => {
+  it("includes source, repo_path, and ref as positional slots", () => {
     const plugin: PluginSpec = {
       source: "github:org/recipe",
       ref: "v2",
@@ -125,7 +153,7 @@ describe("pluginSpecTemplateId", () => {
       parameters: null,
     };
     expect(pluginSpecTemplateId(plugin)).toBe(
-      "plugin-spec:github:org/recipe/plugins/recipe/v2",
+      "plugin-spec:github:org/recipe|plugins/recipe|v2",
     );
   });
 
@@ -136,7 +164,28 @@ describe("pluginSpecTemplateId", () => {
       repo_path: null,
       parameters: null,
     };
-    expect(pluginSpecTemplateId(plugin)).toBe("plugin-spec:github:org/recipe");
+    expect(pluginSpecTemplateId(plugin)).toBe(
+      "plugin-spec:github:org/recipe||",
+    );
+  });
+
+  it("does not collide when repo_path contains a value that matches a ref", () => {
+    // With a `/`-joined id, `github:org/repo|main` and `github:org/repo/main`
+    // with no ref would both produce `plugin-spec:github:org/repo/main`.
+    // Positional slots keep them distinct.
+    const a: PluginSpec = {
+      source: "github:org/repo",
+      ref: "main",
+      repo_path: null,
+      parameters: null,
+    };
+    const b: PluginSpec = {
+      source: "github:org/repo",
+      ref: null,
+      repo_path: "main",
+      parameters: null,
+    };
+    expect(pluginSpecTemplateId(a)).not.toBe(pluginSpecTemplateId(b));
   });
 });
 

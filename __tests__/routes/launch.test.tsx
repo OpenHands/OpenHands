@@ -663,6 +663,12 @@ describe("LaunchRoute", () => {
       expect(
         screen.getByTestId("plugin-preflight-loading"),
       ).toBeInTheDocument();
+      // Tick trust first so the button's disabled state is solely from the
+      // pending preflight, not from the trust check. Without this, the test
+      // passes for the wrong reason: trust is false, so the button is
+      // disabled regardless of the preflight state.
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("trust-checkbox"));
       expect(screen.getByTestId("start-conversation-button")).toBeDisabled();
     });
 

@@ -11,7 +11,7 @@ import type { PluginSpecPreflightResponse } from "#/api/automation-service/autom
 /** One schema property rendered as a typed input. */
 export interface SchemaFormField {
   key: string;
-  type: "string" | "number" | "boolean";
+  type: "string" | "number" | "integer" | "boolean";
   label: string;
   helpText?: string;
   required: boolean;
@@ -39,11 +39,10 @@ export interface SchemaFormField {
 type ConfigSchemaProperty = Record<string, unknown>;
 
 function propertyType(property: ConfigSchemaProperty): SchemaFormField["type"] {
-  return property.type === "number" || property.type === "integer"
-    ? "number"
-    : property.type === "boolean"
-      ? "boolean"
-      : "string";
+  if (property.type === "integer") return "integer";
+  if (property.type === "number") return "number";
+  if (property.type === "boolean") return "boolean";
+  return "string";
 }
 
 /**
@@ -85,9 +84,11 @@ export function configSchemaToFormFields(
 
 /**
  * Apply a schema to URL-pre-encoded parameters: fields the schema declares but
- * the URL omitted get their schema default (or a type-appropriate empty value)
- * pre-filled, so the form shows the full expected shape rather than only what
- * the badge author encoded.
+ * the URL omitted get their schema default pre-filled (so the form shows the
+ * full expected shape). Fields with no default are left undefined — the backend
+ * applies its own defaults, and the create request omits them, so a required
+ * field that the user never touched surfaces as a 422 rather than silently
+ * installing a broken automation with an empty-string value.
  */
 export function applySchemaDefaults(
   parameters: Record<string, unknown>,
@@ -98,31 +99,39 @@ export function applySchemaDefaults(
     if (merged[field.key] !== undefined) continue;
     if (field.defaultValue !== undefined) {
       merged[field.key] = field.defaultValue;
-      continue;
     }
-    switch (field.type) {
-      case "number":
-        merged[field.key] = 0;
-        break;
-      case "boolean":
-        merged[field.key] = false;
-        break;
-      default:
-        merged[field.key] = field.enumValues?.[0] ?? field.options?.[0] ?? "";
-    }
+    // No default: leave undefined. The field renders empty, the create
+    // request omits it, and a required field surfaces as a 422.
   }
   return merged;
 }
 
 /**
+ * Strip fields the user left empty (undefined, empty string, null) so the
+ * create request only carries values the user actually set. Prevents an
+ * empty string from passing a required check on the backend (key present,
+ * value falsy) while also avoiding 422s for optional numeric fields sent as
+ * 0 when the user never touched them.
+ */
+export function stripEmptyConfigValues(
+  config: Record<string, unknown>,
+): Record<string, unknown> {
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config)) {
+    if (value === undefined || value === null || value === "") continue;
+    cleaned[key] = value;
+  }
+  return cleaned;
+}
+
+/**
  * Stable template id for install dedupe: repeated badge clicks return the
- * existing automation (HTTP 200) instead of creating a duplicate.
+ * existing automation (HTTP 200) instead of creating a duplicate. Uses
+ * positional slots rather than a `/`-joined path so values containing `/`
+ * (common for repo_path) can't collide with a different source/ref/path combo.
  */
 export function pluginSpecTemplateId(plugin: PluginSpec): string {
-  const path = [plugin.source, plugin.repo_path, plugin.ref]
-    .filter((part): part is string => Boolean(part))
-    .join("/");
-  return `plugin-spec:${path}`;
+  return `plugin-spec:${plugin.source}|${plugin.repo_path ?? ""}|${plugin.ref ?? ""}`;
 }
 
 /**

@@ -17,6 +17,8 @@ import { PluginLaunchPluginSection } from "./plugin-launch-plugin-section";
 import {
   SchemaFormField,
   applySchemaDefaults,
+  buildCronTrigger,
+  stripEmptyConfigValues,
 } from "#/utils/plugin-launch-preflight";
 
 interface PluginLaunchModalProps {
@@ -80,6 +82,10 @@ export function PluginLaunchModal({
     },
   );
   const [trustConfirmed, setTrustConfirmed] = React.useState(false);
+  // Tracks sections that auto-expanded from the preflight arrival (vs a user
+  // toggle). The smooth-scroll only fires for auto-expanded sections.
+  const [autoExpandedSections, setAutoExpandedSections] =
+    React.useState<ExpandedState>({});
 
   // Manifest-aware automation install (OpenHands#18793): when the backend
   // serves a plugin-spec preflight, seed typed fields from the schema and
@@ -104,6 +110,13 @@ export function PluginLaunchModal({
       // Expand every section that now has schema-seeded parameters.
       setExpandedSections((prev) => {
         const next = { ...prev };
+        pluginConfigs.forEach((_, index) => {
+          next[index] = true;
+        });
+        return next;
+      });
+      setAutoExpandedSections(() => {
+        const next: ExpandedState = {};
         pluginConfigs.forEach((_, index) => {
           next[index] = true;
         });
@@ -140,6 +153,11 @@ export function PluginLaunchModal({
       ...prev,
       [index]: !prev[index],
     }));
+    // A user toggle clears the auto-expanded flag so the smooth-scroll
+    // doesn't fire again if they re-expand.
+    setAutoExpandedSections((prev) =>
+      prev[index] ? { ...prev, [index]: false } : prev,
+    );
   };
 
   const updateParameter = (
@@ -206,15 +224,22 @@ export function PluginLaunchModal({
   const handleStartConversation = () => {
     if (unsupportedParameters) return;
     if (mode === "automation") {
-      if (isCronSuggestion) {
-        onInstallAutomation?.(pluginConfigs, {
-          type: "cron",
-          schedule: triggerSchedule,
-          timezone: triggerTimezone,
-        });
-        return;
-      }
-      onInstallAutomation?.(pluginConfigs);
+      // Strip empty values so the create request only carries fields the user
+      // actually set. An empty string would pass a required check (key present)
+      // on the backend while a 0 for an untouched optional numeric field 422s.
+      const cleanedPlugins = pluginConfigs.map((plugin) => ({
+        ...plugin,
+        parameters:
+          plugin.parameters != null
+            ? stripEmptyConfigValues(plugin.parameters)
+            : plugin.parameters,
+      }));
+      const trigger = buildCronTrigger(
+        suggestedTrigger,
+        triggerSchedule,
+        triggerTimezone,
+      );
+      onInstallAutomation?.(cleanedPlugins, trigger);
       return;
     }
     onStartConversation(pluginConfigs, message);
@@ -265,6 +290,7 @@ export function PluginLaunchModal({
                   onToggle={() => toggleSection(index)}
                   getPluginDisplayName={getPluginDisplayName}
                   schemaFields={preflightFields}
+                  autoExpanded={!!autoExpandedSections[index]}
                   onParameterChange={updateParameter}
                 />
               ))}
