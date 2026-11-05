@@ -54,7 +54,8 @@ export class TarTooLargeError extends Error {
 const asciiDecoder = new TextDecoder("ascii");
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
-function isGzip(bytes: Uint8Array): boolean {
+/** Whether the bytes start with the gzip magic number. */
+export function isGzip(bytes: Uint8Array): boolean {
   return bytes[0] === GZIP_MAGIC[0] && bytes[1] === GZIP_MAGIC[1];
 }
 
