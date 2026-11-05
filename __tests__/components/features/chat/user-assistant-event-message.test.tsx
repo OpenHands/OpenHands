@@ -171,7 +171,11 @@ describe("UserAssistantEventMessage — branch action", () => {
     await waitFor(() =>
       expect(screen.getByTestId("chat-input").textContent).toBe("Hello world"),
     );
+    expect(screen.getByTestId("submit-button")).toBeEnabled();
     expect(onSubmit).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("submit-button"));
+    expect(onSubmit).toHaveBeenCalledWith("Hello world");
   });
 
   it("does not prefill the composer when the message has no parent (inclusive fallback)", async () => {
