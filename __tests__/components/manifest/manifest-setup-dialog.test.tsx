@@ -532,6 +532,38 @@ describe("SetupDialog", () => {
     });
   });
 
+  it("leaves a repository the deployment's runs cannot clone out of repos", async () => {
+    // Arrange — the entry picks a GitHub repository and this service's runs
+    // clone GitLab ones only, so the repository reaches the prompt alone.
+    mocks.capabilities.mockReturnValue({
+      capabilities: { ...CRON_ONLY_CAPABILITIES, repoProviders: ["gitlab"] },
+      supported: true,
+      unmet: [],
+      isLoading: false,
+    });
+    mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert — neither preflight nor creation is sent the repository.
+    await waitFor(() => expect(mocks.runAction).toHaveBeenCalled());
+    expect(
+      vi.mocked(AutomationService.validateDraft).mock.calls[0][0].draft,
+    ).not.toHaveProperty("repos");
+    expect(mocks.runAction.mock.calls[0][2]).toEqual({
+      name: "Widget monitor - OpenHands/agent-server-gui",
+      prompt: "Report on Widgets in OpenHands/agent-server-gui.",
+      trigger: { type: "cron", schedule: "*/15 * * * *" },
+    });
+  });
+
   it("waits for LLM profiles before continuing", () => {
     // Arrange — profile names come from the backend, not the manifest, so the
     // form should not validate while that closed set is still unknown.
