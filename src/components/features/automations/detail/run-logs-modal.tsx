@@ -124,7 +124,7 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
           {t(I18nKey.AUTOMATIONS$DETAIL$RUN_LABEL)}
         </dt>
         <dd>
-          <span className="inline-flex rounded-md bg-surface-raised px-2 py-0.5 font-mono text-[10px] font-medium text-muted">
+          <span className="inline-flex rounded-md bg-surface-raised px-2 py-0.5 font-mono text-3xs font-medium text-muted">
             {run.status}
           </span>
         </dd>
@@ -153,7 +153,7 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
               </p>
               <pre
                 data-testid="automation-task-metadata"
-                className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-black/30 p-2 font-mono text-[11px] leading-4 text-content"
+                className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-black/30 p-2 font-mono text-2xs leading-4 text-content"
               >
                 {taskMetadataText}
               </pre>

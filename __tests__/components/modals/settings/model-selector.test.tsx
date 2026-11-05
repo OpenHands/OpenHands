@@ -53,7 +53,6 @@ vi.mock("react-i18next", () => ({
       const translations: Record<string, string> = {
         LLM$PROVIDER: "LLM Provider",
         LLM$MODEL: "LLM Model",
-        LLM$SELECT_PROVIDER_PLACEHOLDER: "Select a provider",
         LLM$SELECT_MODEL_PLACEHOLDER: "Select a model",
       };
       return translations[key] || key;

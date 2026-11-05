@@ -27,7 +27,7 @@ export const EVENT_GROUP_MIN_SIZE = 2;
  * Returns true if the given event is one of the action / observation cards
  * that we want to fold into an `EventGroup` when several appear in a row.
  *
- * Successful hook runs fold into the surrounding run; blocked or failed hooks
+ * Successful and blocked hooks fold into the surrounding run; failed hooks
  * stay visible on their own. Events that have their own dedicated rendering
  * (FinishAction, AgentError, MessageEvent, PlanPreview, markdown
  * file artifacts, TaskTracker) are treated as group breakers.
@@ -65,7 +65,7 @@ export const isGroupableEvent = (
   if (isACPToolCallEvent(event)) return event.status !== "failed";
 
   if (isHookExecutionEvent(event)) {
-    return event.success && !event.blocked;
+    return event.success || event.blocked;
   }
 
   // A rejected action stays wherever the action itself was: in its run, or
@@ -150,7 +150,16 @@ export const groupEvents = (
 
   const flushRun = (size = minSize) => {
     if (!run) return;
-    if (run.session || run.reasoning?.length || run.events.length >= size) {
+    const loneBlockedHook =
+      !run.session &&
+      !run.reasoning?.length &&
+      run.events.length === 1 &&
+      isHookExecutionEvent(run.events[0]) &&
+      run.events[0].blocked;
+    if (
+      !loneBlockedHook &&
+      (run.session || run.reasoning?.length || run.events.length >= size)
+    ) {
       items.push({
         kind: "group",
         ...run,

@@ -64,13 +64,22 @@ export interface SendMessageRequest {
   content: MessageContent[];
 }
 
+export interface ConversationTitleGeneration {
+  status: "pending" | "generated" | "fallback";
+  title: string;
+  deadline_at: string;
+}
+
 export interface AppConversationStartRequest {
+  generate_title_on_submit?: boolean;
   // Re-provision an EXISTING conversation (waking a recycled sandbox) instead
   // of minting a new one. The backend keys the rebuilt conversation on this id
   // and, for ACP, resumes it from the durable event store with a bootstrap
   // prompt (OpenHands#14640). Omit/null to create a fresh conversation.
   conversation_id?: string | null;
   initial_message?: SendMessageRequest | null;
+  // Appended to the started agent's system message by the app-server.
+  system_message_suffix?: string | null;
   processors?: unknown[]; // EventCallbackProcessor - keeping as unknown for now
   llm_model?: string | null;
   // One-off launch on a saved LLM profile (by name), without activating it.
@@ -117,6 +126,7 @@ export type AppConversationStartTaskStatus =
   | "ERROR";
 
 export interface AppConversationStartTask {
+  title_generation?: ConversationTitleGeneration | null;
   id: string;
   created_by_user_id: string | null;
   status: AppConversationStartTaskStatus;
@@ -145,6 +155,7 @@ export interface LaunchedAgentProfile {
 }
 
 export interface AppConversation {
+  title_generation?: ConversationTitleGeneration | null;
   id: string;
   created_by_user_id: string | null;
   selected_repository: string | null;

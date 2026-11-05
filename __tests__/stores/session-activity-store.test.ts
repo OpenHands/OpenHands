@@ -22,7 +22,7 @@ it("retains observed steps and disclosure state across launch, task and conversa
   ).toMatchObject({
     id: storeEntry().id,
     steps: ["WAITING_FOR_SANDBOX", "READY"],
-    phase: "complete",
+    phase: "connecting",
     open: true,
   });
   expect(
@@ -40,6 +40,10 @@ it("deduplicates an active resume but retains a later real resume", () => {
   expect(useSessionActivityStore.getState().entries[key]).toHaveLength(1);
   store.observe(key, "READY");
   store.begin(key, "resume");
+  expect(useSessionActivityStore.getState().entries[key]).toHaveLength(1);
+  store.complete(key, storeEntry().id);
+  expect(storeEntry().phase).toBe("complete");
+  store.begin(key, "resume");
   expect(useSessionActivityStore.getState().entries[key]).toHaveLength(2);
   store.remove(key);
   expect(useSessionActivityStore.getState().entries[key]).toBeUndefined();
@@ -48,3 +52,17 @@ it("deduplicates an active resume but retains a later real resume", () => {
 function storeEntry() {
   return useSessionActivityStore.getState().entries[key][0];
 }
+
+it("tracks the latest repeated phase without duplicating its history", () => {
+  const store = useSessionActivityStore.getState();
+  store.begin(key, "initialize");
+  store.observe(key, "WAITING_FOR_SANDBOX");
+  store.observe(key, "PREPARING_REPOSITORY");
+  store.observe(key, "WAITING_FOR_SANDBOX");
+  expect(storeEntry()).toMatchObject({
+    currentStatus: "WAITING_FOR_SANDBOX",
+    steps: ["WAITING_FOR_SANDBOX", "PREPARING_REPOSITORY"],
+  });
+  store.observe(key, "PREPARING_REPOSITORY");
+  expect(storeEntry().currentStatus).toBe("PREPARING_REPOSITORY");
+});

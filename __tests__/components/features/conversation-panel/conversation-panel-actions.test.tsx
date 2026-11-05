@@ -1,4 +1,18 @@
-import { screen, waitFor, within, act } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  CONVERSATION_QUERY_KEYS,
+  DEFAULT_CONVERSATION_PAGE_SIZE,
+} from "#/hooks/query/query-keys";
+import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
+import { NavigationProvider } from "#/context/navigation-context";
+import {
+  screen,
+  waitFor,
+  within,
+  act,
+  fireEvent,
+} from "@testing-library/react";
+
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -29,6 +43,15 @@ import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 
+const { translate } = vi.hoisted(() => ({ translate: (key: string) => key }));
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
+  useTranslation: () => ({
+    t: translate,
+    i18n: { language: "en", exists: () => false },
+  }),
+}));
+
 const mockStopConversationMutate = vi.fn();
 vi.mock("#/hooks/mutation/use-unified-stop-conversation", () => ({
   useUnifiedPauseConversation: () => ({ mutate: mockStopConversationMutate }),
@@ -41,6 +64,34 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
 
 describe("ConversationPanel conversation actions", () => {
   setupConversationPanelTest();
+
+  it("starts the selected Cloud metadata request on navigation, but not a modified click", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+    renderWithProviders(
+      <ActiveBackendProvider>
+        <RouterStub />
+      </ActiveBackendProvider>,
+    );
+    const cards = await screen.findAllByTestId("conversation-card");
+    const link = cards[0].closest("a")!;
+    const cid = link
+      .getAttribute("href")!
+      .split("/conversations/")[1]
+      .split("?")[0];
+    vi.spyOn(
+      AgentServerConversationService,
+      "batchGetAppConversations",
+    ).mockResolvedValue([]);
+    fireEvent.click(link, { ctrlKey: true });
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).not.toHaveBeenCalled();
+    fireEvent.click(link);
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).toHaveBeenCalledWith([cid]);
+  });
 
   it("shows startup activity on a pending launch and switches to its error indicator", async () => {
     setRegisteredBackends([cloudBackend]);
@@ -62,9 +113,10 @@ describe("ConversationPanel conversation actions", () => {
           name: "CONVERSATION$STARTING_CONVERSATION",
         }),
       ).toBeInTheDocument();
-      expect(
-        screen.getByText("Investigate the startup indicator"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("SIDEBAR$NEW_CHAT")).toHaveAttribute(
+        "aria-busy",
+        "true",
+      );
       act(() =>
         useConversationLaunchStore
           .getState()
@@ -78,9 +130,114 @@ describe("ConversationPanel conversation actions", () => {
       expect(
         screen.getByTestId("conversation-status-error"),
       ).toBeInTheDocument();
+      expect(
+        screen.getByText("Investigate the startup indicator"),
+      ).not.toHaveAttribute("aria-busy");
     } finally {
       act(() => useConversationLaunchStore.getState().remove(id));
     }
+  });
+
+  it("keeps pending titles in retained cards until generation finishes", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+    const conversation = createMockConversation({
+      id: "title-transition",
+      title: "Review the login flow",
+      title_generation: {
+        status: "pending",
+        title: "Review the login flow",
+        deadline_at: new Date(Date.now() + 60000).toISOString(),
+      },
+    });
+    vi.mocked(
+      AgentServerConversationService.searchConversations,
+    ).mockResolvedValue({
+      items: [conversation],
+      next_page_id: null,
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    renderWithProviders(
+      <QueryClientProvider client={client}>
+        <ActiveBackendProvider>
+          <ConversationPanel />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+    const card = await screen.findByTestId("conversation-card");
+    expect(within(card).getByText("SIDEBAR$NEW_CHAT")).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    act(() =>
+      client.setQueryData(
+        CONVERSATION_QUERY_KEYS.paginated(
+          DEFAULT_CONVERSATION_PAGE_SIZE,
+          cloudBackend.id,
+          "org-2",
+        ),
+        {
+          pages: [
+            {
+              items: [
+                {
+                  ...conversation,
+                  title: "Login flow review",
+                  title_generation: {
+                    ...conversation.title_generation,
+                    status: "generated",
+                    title: "Login flow review",
+                  },
+                },
+              ],
+              next_page_id: null,
+            },
+          ],
+          pageParams: [null],
+        },
+      ),
+    );
+    expect(
+      await within(card).findByText("Login flow review"),
+    ).not.toHaveAttribute("aria-busy");
+  });
+
+  it("refreshes a retained row's relative timestamp as time passes", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const now = Date.now();
+    vi.mocked(
+      AgentServerConversationService.searchConversations,
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "clock",
+          updated_at: new Date(now - 120000).toISOString(),
+        }),
+      ],
+      next_page_id: null,
+    });
+    const navigate = vi.fn();
+    const panel = (isNavigating: boolean) => (
+      <NavigationProvider
+        value={{
+          currentPath: "/",
+          conversationId: null,
+          isNavigating,
+          navigate,
+        }}
+      >
+        <ConversationPanel />
+      </NavigationProvider>
+    );
+    const { rerender } = renderWithProviders(panel(false));
+    const [card] = await screen.findAllByTestId("conversation-card");
+    expect(card.querySelector("time")).toHaveTextContent("2m");
+
+    vi.setSystemTime(now + 120000);
+    rerender(panel(true));
+    expect(card.querySelector("time")).toHaveTextContent("4m");
   });
 
   it("should cancel deleting a conversation", async () => {
@@ -1334,6 +1491,75 @@ describe("ConversationPanel conversation actions", () => {
       await waitFor(() => {
         expect(navigate).toHaveBeenCalledWith("/conversations/task-9f");
       });
+    });
+
+    it("uses the latest navigation guard when starting from a retained row", async () => {
+      const user = userEvent.setup();
+      const navigate = vi.fn();
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+      vi.spyOn(AgentProfilesService, "listProfiles").mockResolvedValue({
+        profiles: [],
+        active_agent_profile_id: null,
+      });
+      vi.mocked(
+        AgentServerConversationService.searchConversations,
+      ).mockResolvedValue({
+        items: [
+          createMockConversation({
+            id: "guarded",
+            sandbox_id: "owned-sandbox",
+            sandbox_status: "RUNNING",
+          }),
+        ],
+        next_page_id: null,
+      });
+      const create = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue({
+          id: "guard-task",
+          created_by_user_id: null,
+          status: "WORKING",
+          detail: null,
+          app_conversation_id: null,
+          agent_server_url: null,
+          request: {},
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      const panel = (isNavigating: boolean) => (
+        <ActiveBackendProvider>
+          <NavigationProvider
+            value={{
+              currentPath: "/",
+              conversationId: null,
+              isNavigating,
+              navigate,
+            }}
+          >
+            <RouterStub />
+          </NavigationProvider>
+        </ActiveBackendProvider>
+      );
+      const { rerender } = renderWithProviders(panel(false));
+      const [card] = await screen.findAllByTestId("conversation-card");
+      await user.click(within(card).getByTestId("ellipsis-button"));
+
+      rerender(panel(true));
+      await user.click(
+        screen.getByTestId("new-conversation-in-sandbox-button"),
+      );
+      expect(create).not.toHaveBeenCalled();
+
+      rerender(panel(false));
+      await user.click(within(card).getByTestId("ellipsis-button"));
+      await user.click(
+        screen.getByTestId("new-conversation-in-sandbox-button"),
+      );
+      await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ sandboxId: "owned-sandbox" }),
+      );
     });
 
     it("offers no sandbox item for a conversation without a sandbox", async () => {

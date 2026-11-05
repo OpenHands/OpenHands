@@ -82,7 +82,7 @@ export function ChatInputModelMenuContent({
               ContextMenu <ul> without exposing the section label as a
               selectable menu item (the label text is still announced). */}
           <li role="presentation" className="px-2 pt-1 pb-0.5">
-            <Typography.Text className="text-[11px] font-medium text-text-dim uppercase tracking-wide leading-4">
+            <Typography.Text className="text-2xs font-medium text-text-dim uppercase tracking-wide leading-4">
               {t(I18nKey.MODEL$AVAILABLE_MODELS)}
             </Typography.Text>
           </li>

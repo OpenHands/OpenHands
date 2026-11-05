@@ -1,6 +1,12 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
+import {
+  act,
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { PendingUserMessages } from "#/components/features/chat/pending-user-messages";
@@ -69,11 +75,19 @@ describe("PendingUserMessages", () => {
       text: "continue my work",
     });
     const { rerender } = renderWithProviders(
-      <PendingUserMessages pendingLabel={I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX} />,
+      <PendingUserMessages
+        pendingLabel={I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX}
+      />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX);
-    rerender(<PendingUserMessages pendingLabel={I18nKey.CHAT_INTERFACE$CONNECTING} />);
-    expect(screen.getByRole("status")).toHaveTextContent(I18nKey.CHAT_INTERFACE$CONNECTING);
+    expect(screen.getByRole("status")).toHaveTextContent(
+      I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX,
+    );
+    rerender(
+      <PendingUserMessages pendingLabel={I18nKey.CHAT_INTERFACE$CONNECTING} />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      I18nKey.CHAT_INTERFACE$CONNECTING,
+    );
     rerender(<PendingUserMessages />);
     expect(screen.getByTestId("chat-message-sending")).toHaveTextContent(
       I18nKey.CHAT_INTERFACE$MESSAGE_SENDING,
@@ -84,15 +98,55 @@ describe("PendingUserMessages", () => {
         .getState()
         .markPendingMessageError(id, "Resume failed"),
     );
-    rerender(<PendingUserMessages pendingLabel={I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX} />);
+    rerender(
+      <PendingUserMessages
+        pendingLabel={I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX}
+      />,
+    );
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByTestId("chat-message-retry")).toBeVisible();
     fireEvent.click(screen.getByTestId("chat-message-retry"));
-    expect(screen.getByRole("status")).toHaveTextContent(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX);
+    expect(screen.getByRole("status")).toHaveTextContent(
+      I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX,
+    );
     fireEvent.click(screen.getByTestId("chat-message-stop"));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(useConversationStore.getState().messageRestoreIfEmpty?.text).toBe(
       "continue my work",
+    );
+  });
+
+  it("retains delivery errors, retry and stop while session progress owns the status", () => {
+    const id = useOptimisticUserMessageStore
+      .getState()
+      .enqueuePendingMessage({
+        conversationId: ACTIVE_CONVO,
+        text: "Continue safely",
+      });
+    renderWithProviders(
+      <PendingUserMessages
+        showPendingStatus={false}
+        pendingLabel={I18nKey.CHAT_INTERFACE$CONNECTING}
+      />,
+    );
+    expect(screen.getByTestId("user-message")).toHaveAttribute(
+      "data-pending-status",
+      "sending",
+    );
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    act(() =>
+      useOptimisticUserMessageStore
+        .getState()
+        .markPendingMessageError(id, "Network unavailable"),
+    );
+    expect(screen.getByTestId("chat-message-retry")).toBeVisible();
+    fireEvent.click(screen.getByTestId("chat-message-retry"));
+    expect(mockSend).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("chat-message-stop"));
+    expect(screen.queryByTestId("user-message")).not.toBeInTheDocument();
+    expect(useConversationStore.getState().messageRestoreIfEmpty?.text).toBe(
+      "Continue safely",
     );
   });
 
@@ -145,9 +199,9 @@ describe("PendingUserMessages", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("user-message")).not.toBeInTheDocument();
     });
-    expect(useOptimisticUserMessageStore.getState().pendingMessages).toHaveLength(
-      0,
-    );
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages,
+    ).toHaveLength(0);
     expect(useConversationStore.getState().messageRestoreIfEmpty).toEqual(
       expect.objectContaining({ text: "cancel me" }),
     );
@@ -165,12 +219,10 @@ describe("PendingUserMessages", () => {
   });
 
   it("shows an error state with a retry link when the message is in 'error'", () => {
-    const id = useOptimisticUserMessageStore
-      .getState()
-      .enqueuePendingMessage({
-        conversationId: ACTIVE_CONVO,
-        text: "broken message",
-      });
+    const id = useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+      conversationId: ACTIVE_CONVO,
+      text: "broken message",
+    });
     useOptimisticUserMessageStore
       .getState()
       .markPendingMessageError(id, "Server unavailable");
@@ -185,12 +237,10 @@ describe("PendingUserMessages", () => {
   });
 
   it("removes a failed message when dismiss is clicked", async () => {
-    const id = useOptimisticUserMessageStore
-      .getState()
-      .enqueuePendingMessage({
-        conversationId: ACTIVE_CONVO,
-        text: "dismiss me",
-      });
+    const id = useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+      conversationId: ACTIVE_CONVO,
+      text: "dismiss me",
+    });
     useOptimisticUserMessageStore
       .getState()
       .markPendingMessageError(id, "Server unavailable");
@@ -203,19 +253,17 @@ describe("PendingUserMessages", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("user-message")).not.toBeInTheDocument();
     });
-    expect(useOptimisticUserMessageStore.getState().pendingMessages).toHaveLength(
-      0,
-    );
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages,
+    ).toHaveLength(0);
   });
 
   it("re-sends and flips back to 'sending' when retry is clicked", async () => {
     mockSend.mockResolvedValueOnce({ queued: false });
-    const id = useOptimisticUserMessageStore
-      .getState()
-      .enqueuePendingMessage({
-        conversationId: ACTIVE_CONVO,
-        text: "retry me",
-      });
+    const id = useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+      conversationId: ACTIVE_CONVO,
+      text: "retry me",
+    });
     useOptimisticUserMessageStore
       .getState()
       .markPendingMessageError(id, "Server unavailable");
@@ -234,8 +282,7 @@ describe("PendingUserMessages", () => {
     );
 
     await waitFor(() => {
-      const [entry] =
-        useOptimisticUserMessageStore.getState().pendingMessages;
+      const [entry] = useOptimisticUserMessageStore.getState().pendingMessages;
       expect(entry.status).toBe("sending");
       expect(entry.errorMessage).toBeUndefined();
     });
@@ -243,12 +290,10 @@ describe("PendingUserMessages", () => {
 
   it("flips back to 'error' if the retry attempt also fails", async () => {
     mockSend.mockRejectedValueOnce(new Error("still broken"));
-    const id = useOptimisticUserMessageStore
-      .getState()
-      .enqueuePendingMessage({
-        conversationId: ACTIVE_CONVO,
-        text: "retry me",
-      });
+    const id = useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+      conversationId: ACTIVE_CONVO,
+      text: "retry me",
+    });
     useOptimisticUserMessageStore
       .getState()
       .markPendingMessageError(id, "Server unavailable");
@@ -259,8 +304,7 @@ describe("PendingUserMessages", () => {
     await user.click(screen.getByTestId("chat-message-retry"));
 
     await waitFor(() => {
-      const [entry] =
-        useOptimisticUserMessageStore.getState().pendingMessages;
+      const [entry] = useOptimisticUserMessageStore.getState().pendingMessages;
       expect(entry.status).toBe("error");
       expect(entry.errorMessage).toBe("still broken");
     });

@@ -24,8 +24,10 @@ import { ChatMessage } from "./chat-message";
  */
 export function PendingUserMessages({
   pendingLabel,
+  showPendingStatus = true,
 }: {
   pendingLabel?: string;
+  showPendingStatus?: boolean;
 } = {}) {
   const { t } = useTranslation("openhands");
   const { conversationId } = useOptionalConversationId();
@@ -118,6 +120,7 @@ export function PendingUserMessages({
             conversationId?.startsWith("task-") ? undefined : message.status
           }
           pendingLabel={pendingLabel}
+          showPendingStatus={showPendingStatus}
           onRetry={
             message.status === "error"
               ? () => handleRetry(message.id)

@@ -127,6 +127,7 @@ import {
   automationRepositoriesChanged,
   buildAutomationRepoSources,
 } from "#/utils/automation-repo-sources";
+import { EVENT_SOURCE_GUIDES } from "#/utils/automation-event-sources";
 
 const DEFAULT_TIMEZONE = "America/New_York";
 const DEFAULT_TIME = "09:00";
@@ -268,6 +269,12 @@ interface AutomationSetupPanelProps {
   toolbarPortal?: HTMLElement | null;
   showInlineHeader?: boolean;
   reserveComposerSpace?: boolean;
+  /**
+   * Starts the setup conversation for a prompt when the panel is not inside
+   * one yet (the create page). Without it the Ask Agent button can only send
+   * into an existing conversation.
+   */
+  onAskAgent?: (prompt: string) => void;
 }
 
 function titleCase(value: string): string {
@@ -403,35 +410,12 @@ function eventTypeMatches(pattern: string, eventKey: string): boolean {
     : pattern === eventKey;
 }
 
-// Test payloads shaped like each Data Center source's webhook, which names its
-// event in `webhookEvent` (Jira) or `eventKey` (Bitbucket).
-const EVENT_TEST_PAYLOAD_SAMPLES: Record<
-  string,
-  (eventKey: string) => Record<string, unknown>
-> = {
-  jira_dc: (eventKey) => ({
-    webhookEvent: eventKey,
-    issue: { key: "PROJ-1", fields: { summary: "Example issue" } },
-    comment: { body: "Example comment" },
-  }),
-  bitbucket_data_center: (eventKey) => ({
-    eventKey,
-    pullRequest: {
-      id: 1,
-      title: "Example pull request",
-      toRef: {
-        displayId: "main",
-        repository: { slug: "repo", project: { key: "PROJ" } },
-      },
-    },
-  }),
-};
-
 function buildDefaultEventTestPayload(
   eventSource: string = DEFAULT_EVENT_SOURCE,
   eventKey: string = DEFAULT_EVENT_KEY,
 ): string {
-  const sample = EVENT_TEST_PAYLOAD_SAMPLES[eventSource];
+  // A source Canvas knows gets a payload shaped like its webhook.
+  const sample = EVENT_SOURCE_GUIDES[eventSource]?.samplePayload;
   return `${JSON.stringify(
     sample
       ? sample(eventKey)
@@ -719,6 +703,7 @@ export function AutomationSetupPanel({
   toolbarPortal,
   showInlineHeader = true,
   reserveComposerSpace = false,
+  onAskAgent,
 }: AutomationSetupPanelProps) {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
@@ -811,6 +796,9 @@ export function AutomationSetupPanel({
   const [existingRepositories, setExistingRepositories] = useState(
     draft.existingRepositories ?? [],
   );
+  const [existingEventTrigger, setExistingEventTrigger] = useState(
+    draft.existingEventTrigger,
+  );
   const [canUpdateRepositories, setCanUpdateRepositories] = useState(
     draft.canUpdateRepositories ?? false,
   );
@@ -851,7 +839,12 @@ export function AutomationSetupPanel({
   useEffect(() => {
     setExistingRepositories(draft.existingRepositories ?? []);
     setCanUpdateRepositories(draft.canUpdateRepositories ?? false);
-  }, [draft.existingRepositories, draft.canUpdateRepositories]);
+    setExistingEventTrigger(draft.existingEventTrigger);
+  }, [
+    draft.existingRepositories,
+    draft.canUpdateRepositories,
+    draft.existingEventTrigger,
+  ]);
 
   const updateConversationTags = useCallback(
     async (
@@ -864,10 +857,12 @@ export function AutomationSetupPanel({
       const update = conversationTagUpdateQueueRef.current
         .catch(() => undefined)
         .then(async () => {
-          const nextTags = buildNextTags(latestConversationTagsRef.current);
+          const currentTags = latestConversationTagsRef.current;
+          const nextTags = buildNextTags(currentTags);
           const updatedConversation =
-            await AgentServerConversationService.updateConversationTags(
+            await AgentServerConversationService.replaceConversationTags(
               conversationId,
+              currentTags,
               nextTags,
             );
           const savedTags = updatedConversation.tags ?? nextTags;
@@ -950,6 +945,7 @@ export function AutomationSetupPanel({
         setExistingCustomTarballPath(next.existingCustomTarballPath ?? "");
         setExistingRepositories(next.existingRepositories ?? []);
         setCanUpdateRepositories(next.canUpdateRepositories ?? false);
+        setExistingEventTrigger(next.existingEventTrigger);
         setForm(nextForm);
       })
       .catch((error: unknown) => {
@@ -1296,6 +1292,9 @@ export function AutomationSetupPanel({
   const buildTrigger = () =>
     triggerKind === "event"
       ? {
+          // Fields the form does not edit, such as `destination`, keep the
+          // values the edited automation already has.
+          ...(isEditingExisting ? existingEventTrigger : {}),
           type: "event",
           source: eventSource.trim() || DEFAULT_EVENT_SOURCE,
           on: eventKeyPayload(eventKey),
@@ -2316,6 +2315,7 @@ export function AutomationSetupPanel({
                     setEventTestPayload(value);
                   }}
                   setCustomWebhookField={updateCustomWebhook}
+                  onAskAgent={onAskAgent}
                 />
               )}
 
@@ -3238,6 +3238,7 @@ function EventFields({
   setEventFilter,
   setEventTestPayload,
   setCustomWebhookField,
+  onAskAgent,
 }: {
   eventSource: string;
   eventKey: string;
@@ -3260,6 +3261,7 @@ function EventFields({
     field: FieldName,
     value: CustomWebhookFormState[FieldName],
   ) => void;
+  onAskAgent?: (prompt: string) => void;
 }) {
   const { t } = useTranslation("openhands");
   const { send } = useSendMessage();
@@ -3372,11 +3374,18 @@ function EventFields({
             data-testid="automation-setup-ask-agent"
             className={cn(addOptionButtonClassName, "h-9 gap-1.5")}
             onClick={() => {
+              const prompt = t(I18nKey.AUTOMATION_SETUP$ASK_AGENT_EVENT_PROMPT);
+              // Outside a setup conversation there is nothing to send into:
+              // start one with the prompt instead of dropping the click.
+              if (onAskAgent) {
+                onAskAgent(prompt);
+                return;
+              }
               requestAutomationSetupAgent();
               void send({
                 action: "message",
                 args: {
-                  content: t(I18nKey.AUTOMATION_SETUP$ASK_AGENT_EVENT_PROMPT),
+                  content: prompt,
                 },
               });
             }}

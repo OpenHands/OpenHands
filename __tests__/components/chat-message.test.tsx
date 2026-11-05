@@ -12,64 +12,102 @@ import { ChatMessage } from "#/components/features/chat/chat-message";
 
 describe("ChatMessage", () => {
   it.each(["user", "agent"] as const)(
-    "shows the recorded timestamp when a %s message is hovered",
+    "shows the exact timestamp from the %s message's relative label",
     async (type) => {
       const user = userEvent.setup();
-      const timestamp = "2026-04-16T19:32:29.828Z";
+      const timestamp = new Date(Date.now() - 30 * 60_000).toISOString();
       const expected = new Date(timestamp).toLocaleString("en", {
         dateStyle: "medium",
         timeStyle: "short",
       });
-
       render(<ChatMessage type={type} message="Hello" timestamp={timestamp} />);
-
-      const message = screen.getByTestId(`${type}-message`);
-      await user.hover(message);
-
-      const tooltip = await screen.findByRole("tooltip");
-      expect(tooltip).toHaveTextContent(expected);
-      expect(tooltip.querySelector("time")).toHaveAttribute(
-        "datetime",
-        timestamp,
-      );
+      await user.hover(screen.getByTestId(`${type}-message`));
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+      const label = screen.getByRole("button", { name: expected });
+      expect(label).toHaveTextContent("30 minutes ago");
+      await user.hover(label);
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(expected);
     },
   );
 
-  it("waits for a resting pointer before showing the timestamp", () => {
+  it("refreshes a visible relative label and catches up when hovered again", () => {
     vi.useFakeTimers();
     try {
+      vi.setSystemTime(new Date("2026-11-02T12:00:00Z"));
       render(
         <ChatMessage
           type="agent"
           message="Hello"
-          timestamp="2026-04-16T19:32:29.828Z"
+          timestamp="2026-11-02T11:30:00Z"
         />,
       );
-
-      fireEvent.mouseEnter(screen.getByTestId("agent-message"));
+      const message = screen.getByTestId("agent-message");
+      fireEvent.mouseEnter(message);
+      expect(screen.getByTestId("message-timestamp")).toHaveTextContent(
+        "30 minutes ago",
+      );
       act(() => {
-        vi.advanceTimersByTime(300);
+        vi.advanceTimersByTime(60_000);
       });
-      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
-
+      expect(screen.getByTestId("message-timestamp")).toHaveTextContent(
+        "31 minutes ago",
+      );
+      fireEvent.mouseLeave(message);
       act(() => {
-        vi.advanceTimersByTime(500);
+        vi.advanceTimersByTime(3_600_000);
       });
-      expect(screen.getByRole("tooltip")).toBeInTheDocument();
-
-      fireEvent.mouseLeave(screen.getByTestId("agent-message"));
-      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+      fireEvent.mouseEnter(message);
+      expect(screen.getByTestId("message-timestamp")).toHaveTextContent(
+        "1 hour ago",
+      );
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("does not fabricate a timestamp for an invalid value", () => {
-    render(<ChatMessage type="user" message="Hello" timestamp="not-a-date" />);
-
-    expect(screen.getByTestId("user-message")).not.toHaveAttribute("tabindex");
-    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  it("makes the exact timestamp available to keyboard focus", async () => {
+    const timestamp = "2026-04-16T19:32:29.828Z";
+    const expected = new Date(timestamp).toLocaleString("en", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+    render(<ChatMessage type="agent" message="Hello" timestamp={timestamp} />);
+    const button = screen.getByRole("button", { name: expected });
+    await userEvent.setup().tab();
+    expect(button).toHaveFocus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(expected);
   });
+
+  it.each([undefined, "not-a-date"])(
+    "does not fabricate a timestamp for %s",
+    (timestamp) => {
+      render(<ChatMessage type="user" message="Hello" timestamp={timestamp} />);
+      expect(screen.queryByTestId("message-timestamp")).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(["sending", "error"] as const)(
+    "keeps the timestamp out of %s feedback",
+    (pendingStatus) => {
+      render(
+        <ChatMessage
+          type="user"
+          message="Hello"
+          timestamp="2026-11-02T11:30:00Z"
+          pendingStatus={pendingStatus}
+        />,
+      );
+      fireEvent.mouseEnter(screen.getByTestId("user-message"));
+      expect(screen.queryByTestId("message-timestamp")).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId(
+          pendingStatus === "error"
+            ? "chat-message-error"
+            : "chat-message-sending",
+        ),
+      ).toBeInTheDocument();
+    },
+  );
 
   it("does not update the parent while measuring user-message truncation", async () => {
     // Regression test for the React warning:

@@ -1,3 +1,4 @@
+import { useLayoutEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 import {
   fireEvent,
@@ -33,6 +34,11 @@ import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { AgentState } from "#/types/agent-state";
 import { useConversationStore } from "#/stores/conversation-store";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
+import {
+  sessionActivityKey,
+  useSessionActivityStore,
+} from "#/stores/session-activity-store";
 import { useGoalStore } from "#/stores/goal-store";
 import { act } from "@testing-library/react";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
@@ -508,6 +514,73 @@ describe("ChatInterface - Scroll-up loads older events", () => {
     // prevTop + (newHeight - prevHeight) = 50 + (6000 - 5000) = 1050.
     expect(setScrollTop).not.toHaveBeenCalledWith(1050);
   });
+
+  it.each(["cached", "hydrated"])(
+    "does not fetch older history before the initial bottom scroll (%s)",
+    async (mode) => {
+      setupPaginationTest();
+      const initialEvents = useEventStore.getState().events;
+      if (mode === "hydrated") {
+        useEventStore
+          .getState()
+          .clearEventsForConversation("test-conversation-id");
+      }
+      function HydratedChat() {
+        useLayoutEffect(() => {
+          if (mode === "hydrated")
+            useEventStore.getState().addEvents(initialEvents);
+        }, []);
+        return <ChatInterface />;
+      }
+      const actual = await vi.importActual<
+        typeof import("#/hooks/use-load-older-events")
+      >("#/hooks/use-load-older-events");
+      vi.mocked(useLoadOlderEvents).mockImplementation(
+        actual.useLoadOlderEvents,
+      );
+      const { CONVERSATION_QUERY_KEYS } =
+        await import("#/hooks/query/query-keys");
+      const backend = makeDefaultLocalBackend() ?? NO_BACKEND;
+      queryClient.setQueryData(
+        CONVERSATION_QUERY_KEYS.detail(
+          "test-conversation-id",
+          backend.id,
+          null,
+        ),
+        { conversation_id: "test-conversation-id", conversation_url: null },
+      );
+      const { default: events } =
+        await import("#/api/event-service/event-service.api");
+      const search = vi
+        .spyOn(events, "searchEvents")
+        .mockImplementation((_id, _url, _key, options) =>
+          options?.timestampLt
+            ? Promise.resolve({ items: [], next_page_id: null })
+            : new Promise(() => {}),
+        );
+      vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(
+        function (this: HTMLElement) {
+          return this.querySelector('[data-testid="user-message"]')
+            ? 5000
+            : 500;
+        },
+      );
+      vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(
+        800,
+      );
+      vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
+
+      renderWithQueryClient(<HydratedChat />, queryClient);
+      const olderCalls = () =>
+        search.mock.calls.filter((call) => call[3]?.timestampLt);
+      expect(olderCalls()).toHaveLength(0);
+
+      fireEvent.wheel(screen.getByTestId("chat-scroll-container"), {
+        deltaY: -100,
+      });
+      await waitFor(() => expect(olderCalls()).toHaveLength(1));
+    },
+  );
 
   it("auto-loads older events when the chat content does not overflow the viewport", async () => {
     // No overflow ⇒ no scrollbar ⇒ user can't trigger loadOlder by
@@ -1622,4 +1695,255 @@ describe("ChatInterface - recovery visibility", () => {
       screen.getByText(I18nKey.CHAT_INTERFACE$STILL_RECONNECTING),
     ).toBeVisible();
   });
+});
+
+describe("ChatInterface - session connection handoff", () => {
+  beforeEach(() => {
+    vi.mocked(useConfig).mockReturnValue({ data: {} } as ReturnType<
+      typeof useConfig
+    >);
+    vi.mocked(useUnifiedUploadFiles).mockReturnValue({
+      mutateAsync: vi.fn(),
+    } as unknown as ReturnType<typeof useUnifiedUploadFiles>);
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.RUNNING,
+    });
+    useSessionActivityStore.setState({ entries: {} });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+    useErrorMessageStore.getState().removeErrorMessage();
+    useEventStore.setState({
+      events: [],
+      uiEvents: [],
+      eventIds: new Set(),
+      loadedConversationId: "test-conversation-id",
+    });
+  });
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    useSessionActivityStore.setState({ entries: {} });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+  });
+
+  it("does not flash empty-chat suggestions while reconnecting saved session history", () => {
+    const { backend, orgId } = getActiveBackend();
+    const key = sessionActivityKey(backend.id, orgId, "test-conversation-id");
+    const activity = useSessionActivityStore.getState();
+    activity.begin(key, "initialize");
+    activity.observe(key, "READY");
+    activity.complete(
+      key,
+      useSessionActivityStore.getState().entries[key][0].id,
+    );
+    vi.spyOn(conversationWebSocket, "useConversationWebSocket").mockReturnValue(
+      {
+        connectionState: "CONNECTING",
+        mainConnectionState: "CONNECTING",
+        recoveryState: "idle",
+        isLoadingHistory: false,
+        hasConnectedOnce: false,
+        sendMessage: vi.fn(),
+        reconnect: vi.fn(),
+      },
+    );
+    renderWithProviders(
+      <MemoryRouter>
+        <ChatInterface />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
+    expect(screen.getByTestId("event-group-toggle")).toBeVisible();
+  });
+
+  it("shows empty-chat suggestions once a started session is connected with no history", () => {
+    const { backend, orgId } = getActiveBackend();
+    const key = sessionActivityKey(backend.id, orgId, "test-conversation-id");
+    const activity = useSessionActivityStore.getState();
+    activity.begin(key, "initialize");
+    activity.observe(key, "READY");
+    activity.complete(
+      key,
+      useSessionActivityStore.getState().entries[key][0].id,
+    );
+    vi.spyOn(conversationWebSocket, "useConversationWebSocket").mockReturnValue(
+      {
+        connectionState: "OPEN",
+        mainConnectionState: "OPEN",
+        recoveryState: "idle",
+        isLoadingHistory: false,
+        hasConnectedOnce: true,
+        sendMessage: vi.fn(),
+        reconnect: vi.fn(),
+      },
+    );
+    renderWithProviders(
+      <MemoryRouter>
+        <ChatInterface />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("chat-suggestions")).toBeInTheDocument();
+    expect(screen.getByTestId("event-group-toggle")).toBeVisible();
+  });
+
+  it("keeps empty-chat suggestions hidden while a started session is still pending", () => {
+    const { backend, orgId } = getActiveBackend();
+    const key = sessionActivityKey(backend.id, orgId, "test-conversation-id");
+    const activity = useSessionActivityStore.getState();
+    activity.begin(key, "initialize");
+    vi.spyOn(conversationWebSocket, "useConversationWebSocket").mockReturnValue(
+      {
+        connectionState: "OPEN",
+        mainConnectionState: "OPEN",
+        recoveryState: "idle",
+        isLoadingHistory: false,
+        hasConnectedOnce: true,
+        sendMessage: vi.fn(),
+        reconnect: vi.fn(),
+      },
+    );
+    renderWithProviders(
+      <MemoryRouter>
+        <ChatInterface />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
+  });
+
+  it.each(["initialize", "resume"] as const)(
+    "keeps %s, connecting and message delivery in one group",
+    (kind) => {
+      const conversationId = "test-conversation-id";
+      const { backend, orgId } = getActiveBackend();
+      const key = sessionActivityKey(backend.id, orgId, conversationId);
+      const history: MessageEvent[] =
+        kind === "resume"
+          ? [
+              {
+                id: "previous-reply",
+                timestamp: "2026-10-01T00:00:00Z",
+                source: "agent",
+                llm_message: {
+                  role: "assistant",
+                  content: [{ type: "text", text: "Previous answer" }],
+                },
+                activated_skills: [],
+                extended_content: [],
+              },
+            ]
+          : [];
+      useEventStore.setState({
+        events: history,
+        uiEvents: history,
+        eventIds: new Set(history.map((e) => e.id)),
+      });
+      vi.mocked(useLoadOlderEvents).mockReturnValue({
+        isLoading: false,
+        hasMore: true,
+        loadOlder: vi.fn().mockResolvedValue(undefined),
+      });
+      const activity = useSessionActivityStore.getState();
+      activity.begin(key, kind, history.at(-1)?.id);
+      activity.observe(key, "READY");
+      const pending = useOptimisticUserMessageStore.getState();
+      pending.enqueuePendingMessage({
+        conversationId,
+        text: "Please continue",
+      });
+      const socket = {
+        connectionState: "CONNECTING" as "CONNECTING" | "OPEN",
+        mainConnectionState: "CONNECTING" as "CONNECTING" | "OPEN",
+        recoveryState: "idle" as const,
+        isLoadingHistory: false,
+        sendMessage: vi.fn(),
+        reconnect: vi.fn(),
+        hasConnectedOnce: false,
+      };
+      vi.spyOn(
+        conversationWebSocket,
+        "useConversationWebSocket",
+      ).mockImplementation(() => socket);
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+      });
+      client.setQueryData(
+        ["user", "conversation", conversationId, backend.id, orgId],
+        { id: conversationId, sandbox_status: "RUNNING" },
+      );
+      const view = () => (
+        <QueryClientProvider client={client}>
+          <MemoryRouter>
+            <ChatInterface />
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+      const page = renderWithProviders(view());
+      const header = screen.getByTestId("event-group-toggle");
+      expect(
+        screen.queryByTestId("chat-message-sending"),
+      ).not.toBeInTheDocument();
+      expect(header).not.toHaveTextContent(I18nKey.ACTION_MESSAGE$THINK);
+      expect(screen.getAllByRole("status")).toHaveLength(1);
+      expect(
+        within(screen.getByTestId("chat-scroll-container")).queryByText(
+          I18nKey.CHAT_INTERFACE$CONNECTING,
+        ),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("user-message").compareDocumentPosition(header) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      fireEvent.click(header);
+      expect(header).toHaveAttribute("aria-expanded", "true");
+
+      socket.connectionState = socket.mainConnectionState = "OPEN";
+      page.rerender(view());
+      expect(
+        screen.queryByTestId("chat-message-sending"),
+      ).not.toBeInTheDocument();
+      expect(header).not.toHaveTextContent(I18nKey.ACTION_MESSAGE$THINK);
+      const echo: MessageEvent = {
+        id: "echo",
+        timestamp: new Date().toISOString(),
+        source: "user",
+        llm_message: {
+          role: "user",
+          content: [{ type: "text", text: "Please continue" }],
+        },
+        activated_skills: [],
+        extended_content: [],
+      };
+      vi.mocked(useLoadOlderEvents).mockReturnValue({
+        isLoading: false,
+        hasMore: false,
+        loadOlder: vi.fn().mockResolvedValue(undefined),
+      });
+      act(() => {
+        pending.consumeMatchingPendingMessage(
+          conversationId,
+          "Please continue",
+          echo,
+        );
+        useEventStore.setState({
+          events: [...history, echo],
+          uiEvents: [...history, echo],
+          eventIds: new Set([...history, echo].map((e) => e.id)),
+        });
+      });
+      expect(screen.getByTestId("event-group-toggle")).toBe(header);
+      expect(header).toHaveAttribute("aria-expanded", "true");
+      expect(header).toHaveTextContent(I18nKey.ACTION_MESSAGE$THINK);
+      expect(screen.getAllByTestId("user-message")).toHaveLength(1);
+      expect(
+        screen.getByTestId("user-message").compareDocumentPosition(header) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      act(() => {
+        pending.enqueuePendingMessage({
+          conversationId,
+          text: "Another message",
+        });
+      });
+      expect(screen.getByTestId("chat-message-sending")).toBeVisible();
+    },
+  );
 });

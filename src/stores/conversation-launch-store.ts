@@ -9,6 +9,7 @@ export const CONVERSATION_LAUNCH_PREFIX = "launch-";
 
 export interface ConversationLaunch {
   id: string;
+  startedAt?: number;
   backendId: string;
   orgId: string | null;
   message: string;
@@ -47,7 +48,10 @@ export const useConversationLaunchStore = create<LaunchState>((set, get) => ({
         "initialize",
       );
     set((state) => ({
-      launches: { ...state.launches, [id]: { ...launch, id } },
+      launches: {
+        ...state.launches,
+        [id]: { ...launch, id, startedAt: Date.now() },
+      },
     }));
     return id;
   },

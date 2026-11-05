@@ -247,6 +247,11 @@ export interface CloudIntegrationsConfig {
    * for an OpenHands Enterprise install, or null when it reports neither.
    */
   deploymentMode: string | null;
+  /**
+   * Whether the instance's Settings > MCP page also lists organization MCP
+   * servers (`feature_flags.enable_org_mcp_servers`).
+   */
+  isOrgMcpServersEnabled: boolean;
 }
 
 export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsConfig> {
@@ -259,6 +264,7 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
       enable_jira_dc?: boolean;
       enable_linear?: boolean;
       deployment_mode?: string;
+      enable_org_mcp_servers?: boolean;
     };
   }>({
     backend,
@@ -272,6 +278,8 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
     isLinearEnabled: config.feature_flags?.enable_linear === true,
     isSlackEnabled: config.slack_enabled === true,
     deploymentMode: config.feature_flags?.deployment_mode ?? null,
+    isOrgMcpServersEnabled:
+      config.feature_flags?.enable_org_mcp_servers === true,
   };
 }
 

@@ -271,10 +271,14 @@ describe("isGroupableEvent", () => {
     expect(isGroupableEvent(makeHookExecutionEvent("h1"))).toBe(true);
   });
 
-  it("keeps blocked and failed hook runs out of groups", () => {
+  it("groups blocked hooks but keeps failed hook runs outside", () => {
     expect(
-      isGroupableEvent({ ...makeHookExecutionEvent("h1"), blocked: true }),
-    ).toBe(false);
+      isGroupableEvent({
+        ...makeHookExecutionEvent("h1"),
+        blocked: true,
+        success: false,
+      }),
+    ).toBe(true);
     expect(
       isGroupableEvent({ ...makeHookExecutionEvent("h2"), success: false }),
     ).toBe(false);

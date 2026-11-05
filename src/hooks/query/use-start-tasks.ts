@@ -38,7 +38,12 @@ export const useStartTasks = (
   const ids = Object.values(launches)
     .filter(
       (launch) =>
-        !launch.listed &&
+        (!launch.listed ||
+          queryClient.getQueryData<AppConversationStartTask>(
+            CONVERSATION_QUERY_KEYS.startTask(
+              launch.targetId?.slice(5) ?? null,
+            ),
+          )?.title_generation?.status === "pending") &&
         launch.backendId === backend.id &&
         launch.orgId === orgId &&
         launch.targetId?.startsWith("task-"),
@@ -56,6 +61,12 @@ export const useStartTasks = (
       meta: { disableToast: true },
       refetchInterval: (query: Query<AppConversationStartTask | null>) => {
         const task = query.state.data;
+        if (
+          task?.title_generation?.status === "pending" &&
+          Date.now() < Date.parse(task.title_generation.deadline_at) &&
+          task.status !== "ERROR"
+        )
+          return 500;
         return query.state.status === "error" ||
           !task ||
           task.status === "READY" ||
@@ -67,7 +78,7 @@ export const useStartTasks = (
   });
   const readyIds = tasks
     .filter((task) => task.status === "READY")
-    .map((task) => task.id)
+    .map((task) => `${task.id}:${task.title_generation?.status ?? "legacy"}`)
     .join(",");
   const seenReady = useRef(new Set<string>());
   useEffect(() => {
@@ -75,6 +86,9 @@ export const useStartTasks = (
     if (ready.some((id) => !seenReady.current.has(id))) {
       void queryClient.invalidateQueries({
         queryKey: ["user", "conversations"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["user", "conversation"],
       });
     }
     seenReady.current = new Set(ready);

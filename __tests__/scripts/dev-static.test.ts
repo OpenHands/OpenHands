@@ -46,6 +46,24 @@ describe("dev-static", () => {
     });
   });
 
+  it("allows the resolved frontend port, not a fixed 3001, in automation CORS", () => {
+    const env = buildAutomationBackendEnv(
+      {
+        agentServerPort: 18000,
+        ingressPort: 8000,
+        vitePort: 41234,
+        sessionApiKey: "shared-session-key",
+        stateDir: "/tmp/agent-canvas-state",
+      },
+      {},
+    );
+
+    expect(env.AUTOMATION_CORS_ORIGINS).toBe(
+      "http://localhost:8000,http://127.0.0.1:8000," +
+        "http://localhost:41234,http://127.0.0.1:41234",
+    );
+  });
+
   it("keeps reusable frontend builds free of session credentials", () => {
     const env = buildFrontendEnv(
       { viteWorkingDir: "/tmp/workspace" },

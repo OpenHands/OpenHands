@@ -51,8 +51,10 @@ interface ConversationCardProps {
   onEditTags?: () => void;
   showOptions?: boolean;
   title: string;
+  titlePending?: boolean;
   selectedRepository: RepositorySelection | null;
   lastUpdatedAt: string;
+  timestampLabel?: string;
   createdAt?: string;
   executionStatus?: ExecutionStatus | null;
   isStarting?: boolean;
@@ -95,8 +97,10 @@ export function ConversationCard({
   onEditTags,
   showOptions,
   title,
+  titlePending,
   selectedRepository,
   lastUpdatedAt,
+  timestampLabel,
   createdAt,
   conversationId,
   executionStatus,
@@ -205,7 +209,7 @@ export function ConversationCard({
         if (data.vscode_url) {
           const transformedUrl = transformVSCodeUrl(data.vscode_url);
           if (transformedUrl) {
-            window.open(transformedUrl, "_blank");
+            window.open(transformedUrl, "_blank", "noopener,noreferrer");
           }
         }
         // VS Code URL not available
@@ -299,6 +303,7 @@ export function ConversationCard({
         <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
           <ConversationCardHeader
             title={title}
+            titlePending={titlePending}
             titleMode={titleMode}
             onTitleSave={onTitleSave}
             executionStatus={executionStatus}
@@ -333,7 +338,9 @@ export function ConversationCard({
                 hasHoverActions && hoverRevealYieldClassName(contextMenuOpen),
               )}
             >
-              <time>{formatTimeDelta(lastUpdatedAt ?? createdAt)}</time>
+              <time>
+                {timestampLabel ?? formatTimeDelta(lastUpdatedAt ?? createdAt)}
+              </time>
             </p>
           )}
 
@@ -380,7 +387,10 @@ export function ConversationCard({
                       hoverRevealPinnedTimestampClassName(contextMenuOpen),
                     )}
                   >
-                    <time>{formatTimeDelta(lastUpdatedAt ?? createdAt)}</time>
+                    <time>
+                      {timestampLabel ??
+                        formatTimeDelta(lastUpdatedAt ?? createdAt)}
+                    </time>
                   </p>
                 </div>
               ) : null}

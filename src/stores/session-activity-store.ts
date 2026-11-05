@@ -8,8 +8,9 @@ export interface SessionActivity {
   id: string;
   kind: "initialize" | "resume";
   startedAt: number;
-  phase: "pending" | "complete" | "failed";
+  phase: "pending" | "connecting" | "complete" | "failed";
   steps: AppConversationStartTaskStatus[];
+  currentStatus?: AppConversationStartTaskStatus;
   open: boolean;
   detailsOpen?: boolean;
   afterEventId?: string;
@@ -40,7 +41,9 @@ function readEntries(value: unknown): Record<string, SessionActivity[]> {
             typeof entry.id === "string" &&
             ["initialize", "resume"].includes(entry.kind) &&
             Number.isFinite(entry.startedAt) &&
-            ["pending", "complete", "failed"].includes(entry.phase) &&
+            ["pending", "connecting", "complete", "failed"].includes(
+              entry.phase,
+            ) &&
             typeof entry.open === "boolean" &&
             Array.isArray(entry.steps) &&
             entry.steps.every((step: unknown) => typeof step === "string"),
@@ -57,6 +60,7 @@ interface SessionActivityState {
     afterEventId?: string,
   ) => void;
   observe: (key: string, status: AppConversationStartTaskStatus) => void;
+  complete: (key: string, id: string) => void;
   transfer: (from: string, to: string) => void;
   setOpen: (key: string, id: string, open: boolean) => void;
   setDetailsOpen: (key: string, id: string, open: boolean) => void;
@@ -72,7 +76,7 @@ export const useSessionActivityStore = create<SessionActivityState>()(
         set((state) => {
           const previous = state.entries[key] ?? [];
           if (
-            previous.at(-1)?.phase === "pending" ||
+            ["pending", "connecting"].includes(previous.at(-1)?.phase ?? "") ||
             (kind === "initialize" &&
               previous.some((entry) => entry.kind === kind))
           )
@@ -102,15 +106,17 @@ export const useSessionActivityStore = create<SessionActivityState>()(
         set((state) => {
           const entries = state.entries[key];
           const last = entries?.at(-1);
-          if (!last || last.steps.at(-1) === status) return state;
+          if (!last || (last.currentStatus ?? last.steps.at(-1)) === status)
+            return state;
           const next: SessionActivity = {
             ...last,
+            currentStatus: status,
             steps: last.steps.includes(status)
               ? last.steps
               : [...last.steps, status],
             phase:
               status === "READY"
-                ? "complete"
+                ? "connecting"
                 : status === "ERROR"
                   ? "failed"
                   : "pending",
@@ -119,6 +125,18 @@ export const useSessionActivityStore = create<SessionActivityState>()(
             entries: {
               ...state.entries,
               [key]: [...entries.slice(0, -1), next],
+            },
+          };
+        }),
+      complete: (key, id) =>
+        set((state) => {
+          const entries = state.entries[key];
+          const last = entries?.at(-1);
+          if (last?.id !== id || last.phase !== "connecting") return state;
+          return {
+            entries: {
+              ...state.entries,
+              [key]: [...entries.slice(0, -1), { ...last, phase: "complete" }],
             },
           };
         }),

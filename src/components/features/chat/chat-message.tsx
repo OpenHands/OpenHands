@@ -7,8 +7,7 @@ import type { SourceType } from "#/types/agent-server/core/base/common";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { I18nKey } from "#/i18n/declaration";
 import { TextShimmer } from "#/components/shared/text-shimmer";
-import { formatEventTimestamp } from "#/utils/format-event-timestamp";
-import { useTimestampHover } from "#/hooks/use-timestamp-hover";
+import { MessageTimestamp } from "./message-timestamp";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
 import { PendingStopIcon } from "./pending-stop-icon";
 import {
@@ -30,6 +29,7 @@ interface ChatMessageProps {
   isFromPlanningAgent?: boolean;
   pendingStatus?: ChatMessagePendingStatus;
   pendingLabel?: string;
+  showPendingStatus?: boolean;
   onRetry?: () => void;
   onDismiss?: () => void;
   onStop?: () => void;
@@ -46,22 +46,21 @@ export function ChatMessage({
   isFromPlanningAgent = false,
   pendingStatus,
   pendingLabel,
+  showPendingStatus = true,
   onRetry,
   onDismiss,
   onStop,
   timestamp,
   isStreaming = false,
 }: React.PropsWithChildren<ChatMessageProps>) {
-  const { t, i18n } = useTranslation("openhands");
+  const { t } = useTranslation("openhands");
   const [isHovering, setIsHovering] = React.useState(false);
-  const timestampHover = useTimestampHover();
   const [isCopy, setIsCopy] = React.useState(false);
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isTruncatable, setIsTruncatable] = React.useState(false);
   const [isSingleLinePendingMessage, setIsSingleLinePendingMessage] =
     React.useState(true);
   const pendingMessageContentRef = React.useRef<HTMLDivElement>(null);
-  const timestampLabel = formatEventTimestamp(timestamp, i18n?.language);
 
   React.useEffect(() => {
     setIsExpanded(false);
@@ -159,11 +158,9 @@ export function ChatMessage({
       data-pending-status={pendingStatus}
       onMouseEnter={() => {
         setIsHovering(true);
-        timestampHover.show();
       }}
       onMouseLeave={() => {
         setIsHovering(false);
-        timestampHover.hide();
       }}
       className={cn(
         "rounded-xl relative w-fit max-w-full flex flex-col",
@@ -255,26 +252,20 @@ export function ChatMessage({
       ) : null}
 
       {children}
+      {timestamp && !isPendingUserMessage && (
+        <MessageTimestamp
+          timestamp={timestamp}
+          active={isHovering}
+          align={type === "user" ? "right" : "left"}
+        />
+      )}
     </article>
-  );
-
-  const messageBubbleWithTimestamp = timestampLabel ? (
-    <StyledTooltip
-      content={<time dateTime={timestamp}>{timestampLabel}</time>}
-      placement="top"
-      isOpen={timestampHover.isVisible}
-      tooltipClassName="pointer-events-none"
-    >
-      {messageBubble}
-    </StyledTooltip>
-  ) : (
-    messageBubble
   );
 
   if (type === "user" && pendingStatus === "error") {
     return (
       <div className="flex w-fit max-w-full flex-col items-end gap-1.5 self-end last:mb-4">
-        {messageBubbleWithTimestamp}
+        {messageBubble}
         <div
           role="alert"
           data-testid="chat-message-error"
@@ -306,10 +297,10 @@ export function ChatMessage({
     );
   }
 
-  if (type === "user" && pendingStatus === "sending") {
+  if (type === "user" && pendingStatus === "sending" && showPendingStatus) {
     return (
       <div className="flex w-full max-w-full flex-col last:mb-4">
-        {messageBubbleWithTimestamp}
+        {messageBubble}
         <div className="mt-4 w-full py-1 text-sm">
           {pendingLabel ? (
             <div
@@ -341,5 +332,5 @@ export function ChatMessage({
     );
   }
 
-  return messageBubbleWithTimestamp;
+  return messageBubble;
 }

@@ -1,0 +1,28 @@
+08:33:20 [ingress] ║      * (default) → http://localhost:18963                     ║
+08:33:20 [ingress] ║                                                               ║
+08:33:20 [ingress] ╚═══════════════════════════════════════════════════════════════╝
+✗ The ingress exited 4 times (last: signal SIGKILL). Its [ingress] log lines show why.
+08:33:22 [agent-server] Stopping...
+08:33:22 [automation] Stopping...
+08:33:22 [static] Stopping...
+08:33:22 [static] Restarting (1/3)...
+08:33:22 [automation] Exited with code 143
+08:33:22 [agent-server] Exited with code 143
+08:33:23 [static] Starting on port 18963...
+08:33:23 [static] Serving from: /home/user/OpenHands/build
+08:33:23 [static] Static-server + proxy listening on http://127.0.0.1:18963/
+08:33:23 [static] Static dir: /home/user/OpenHands/build
+08:33:23 [static] Base path: /
+08:33:23 [static] /api/automation -> http://127.0.0.1:18962
+08:33:23 [static] /openapi.json -> http://127.0.0.1:18961
+08:33:23 [static] /server_info -> http://127.0.0.1:18961
+08:33:23 [static] /sockets -> http://127.0.0.1:18961
+08:33:23 [static] /health -> http://127.0.0.1:18961
+08:33:23 [static] /vscode -> http://127.0.0.1:19961
+08:33:23 [static] /ready -> http://127.0.0.1:18961
+08:33:23 [static] /alive -> http://127.0.0.1:18961
+08:33:23 [static] /redoc -> http://127.0.0.1:18961
+08:33:23 [static] /docs -> http://127.0.0.1:18961
+08:33:23 [static] /api -> http://127.0.0.1:18961
+08:33:23 [static] * (default) -> static files + SPA fallback
+08:33:25 [static] Force stopping...

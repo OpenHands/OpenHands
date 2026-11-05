@@ -1,3 +1,5 @@
+import { useSessionActivities } from "#/hooks/use-session-activities";
+import { useSessionActivityStore } from "#/stores/session-activity-store";
 import { ChatProgressContext } from "#/context/chat-progress-context";
 import {
   CHAT_BODY_CLASS_NAME,
@@ -335,6 +337,41 @@ export function ChatInterface({
     [pendingMessages, conversationId],
   );
 
+  const { key: sessionKey, sessions } = useSessionActivities(conversationId);
+  const session = sessions.at(-1);
+  const isSessionStarting =
+    session?.phase === "pending" || session?.phase === "connecting";
+  // A session group exists only in the tab that started or resumed the
+  // conversation. Until its socket is open and history has loaded, the chat
+  // cannot know whether saved events are on their way, so the empty state
+  // waits; once it is known to be empty, the suggestions show as in any tab.
+  const sessionHistoryKnown =
+    sessions.length === 0 ||
+    (!isSessionStarting &&
+      conversationWebSocket?.connectionState === "OPEN" &&
+      !conversationWebSocket.isLoadingHistory);
+  const hasSendingMessages = pendingMessages.some(
+    (message) =>
+      message.status === "sending" &&
+      conversationId &&
+      matchesPendingConversationId(conversationId, message.conversationId),
+  );
+  React.useLayoutEffect(() => {
+    if (
+      session?.phase === "connecting" &&
+      conversationWebSocket?.connectionState === "OPEN" &&
+      !hasSendingMessages
+    ) {
+      useSessionActivityStore.getState().complete(sessionKey, session.id);
+    }
+  }, [
+    sessionKey,
+    session?.id,
+    session?.phase,
+    conversationWebSocket?.connectionState,
+    hasSendingMessages,
+  ]);
+
   let pendingMessageLabel: string | undefined;
   if (activeConversation?.id === conversationId) {
     if (sandboxStatus === "PAUSED" || sandboxStatus === "STARTING") {
@@ -546,9 +583,16 @@ export function ChatInterface({
   });
   React.useEffect(() => {
     const target = scrollRef.current;
-    if (!target) return;
+    if (!target || allConversationEvents.length === 0) return;
+    // Initial scrolling is scheduled for the next frame, so scrollTop may still be zero.
+    if (target.scrollHeight > target.clientHeight + SCROLL_TOP_THRESHOLD_PX)
+      return;
     maybeLoadOlderRef.current(target);
-  }, [renderableEvents.length, hasMoreOlderEvents]);
+  }, [
+    allConversationEvents.length,
+    renderableEvents.length,
+    hasMoreOlderEvents,
+  ]);
 
   // Create a ScrollProvider with the scroll hook values
   const scrollProviderValue = {
@@ -586,6 +630,15 @@ export function ChatInterface({
     t,
   });
 
+  const pendingUserMessages = React.useMemo(
+    () => (
+      <PendingUserMessages
+        pendingLabel={pendingMessageLabel}
+        showPendingStatus={!isSessionStarting}
+      />
+    ),
+    [pendingMessageLabel, isSessionStarting],
+  );
   const isComposerDocked = Boolean(composerDockTarget);
   const isMinimalComposer = isComposerDocked || minimalComposer;
   const composer = (
@@ -623,7 +676,8 @@ export function ChatInterface({
     <WorkspaceFilesForChatProvider>
       <ScrollProvider value={scrollProviderValue}>
         <div className={CHAT_BODY_CLASS_NAME} data-testid="chat-interface">
-          {!hasSubstantiveAgentActions &&
+          {sessionHistoryKnown &&
+            !hasSubstantiveAgentActions &&
             !hasPendingUserMessages &&
             !userEventsExist &&
             !hasModelEntries &&
@@ -632,7 +686,7 @@ export function ChatInterface({
             totalEvents === 0 &&
             !isArchivedConversation &&
             // With no usable LLM the suggestions can't be acted on (the input is
-            // disabled). They're also a `pointer-events-auto` overlay that would
+            // disabled). Their chips would also
             // sit over the LlmNotConfiguredBanner below and swallow clicks on its
             // setup button — so hide them and let the banner be the lone CTA.
             !llmBlocked &&
@@ -694,26 +748,20 @@ export function ChatInterface({
               anchorEventId={null}
             />
 
-            {showConversationMessages && renderableEvents.length > 0 && (
+            {!isTask && showConversationMessages && (
               <Messages
                 hasOlderEvents={hasMoreOlderEvents}
                 messages={renderableEvents}
                 allEvents={allConversationEvents}
+                pendingMessages={pendingUserMessages}
+                pendingSessionId={isSessionStarting ? session?.id : undefined}
               />
             )}
-
-            {/*
-            Render the local pending-message queue independently so messages
-            the user just submitted show up immediately (with a faded "sending"
-            treatment) even before any real conversation event has come back
-            from the server. Entries drain (FIFO) when the matching
-            UserMessageEvent echoes back over the WebSocket, so this never
-            double-renders alongside the real event list.
-          */}
-            <PendingUserMessages pendingLabel={pendingMessageLabel} />
-            {isTask && <TaskStartupProgress />}
-            {!isTask && renderableEvents.length === 0 && (
-              <Messages messages={[]} allEvents={allConversationEvents} />
+            {isTask && (
+              <>
+                {pendingUserMessages}
+                <TaskStartupProgress />
+              </>
             )}
 
             {/* Goal-loop status sits at the end of the message flow — above the
