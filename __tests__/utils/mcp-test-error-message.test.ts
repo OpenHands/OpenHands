@@ -71,4 +71,51 @@ describe("makeMcpTestErrorMessage", () => {
       makeMcpTestErrorMessage(t, "credentials", "invalid_auth", "stdio"),
     ).toBe("Credential check failed: invalid_auth");
   });
+
+  it.each([
+    "<!DOCTYPE html> <html><body>Not found</body></html>",
+    '<html lang="en"><body>Not found</body></html>',
+    "<!doctype HTML>\n<HTML>Not found</HTML>",
+  ])(
+    "omits an HTML response body while retaining the failure detail: %s",
+    (body) => {
+      const message = makeMcpTestErrorMessage(
+        t,
+        "connection",
+        `Client failed to connect: Registration failed: 404 \n${body}`,
+        "shttp",
+      );
+
+      expect(message).toBe(
+        "Could not reach the server (check the URL and server type): Client failed to connect: Registration failed: 404",
+      );
+    },
+  );
+
+  it.each([
+    ["connection", "stdio", "Could not start the server command"],
+    ["credentials", "shttp", "Credential check failed"],
+    ["unknown", "sse", "Connection failed"],
+  ] as const)(
+    "omits HTML for a %s error from a %s server",
+    (kind, serverType, prefix) => {
+      expect(
+        makeMcpTestErrorMessage(
+          t,
+          kind,
+          "Request failed: 502 <html><body>Bad gateway</body></html>",
+          serverType,
+        ),
+      ).toBe(`${prefix}: Request failed: 502`);
+    },
+  );
+
+  it.each([
+    "  invalid_auth\nTry again.  ",
+    "Expected <token>, got <htmlish> instead",
+  ])("preserves non-HTML error details verbatim: %s", (detail) => {
+    expect(makeMcpTestErrorMessage(t, "credentials", detail, "shttp")).toBe(
+      `Credential check failed: ${detail}`,
+    );
+  });
 });

@@ -18,6 +18,11 @@ export function makeMcpTestErrorMessage(
   error: string,
   serverType: MCPServerType | undefined,
 ): string {
+  // Failed provider requests can append an entire HTML response body. Keep
+  // the useful failure detail without displaying the document in the UI.
+  const htmlStart = error.search(/<(?:!doctype\s+html|html)(?=[\s>])/i);
+  const detail = htmlStart === -1 ? error : error.slice(0, htmlStart).trimEnd();
+
   switch (errorKind) {
     case "timeout":
       return t(I18nKey.MCP$TEST_ERROR_TIMEOUT);
@@ -25,11 +30,11 @@ export function makeMcpTestErrorMessage(
       return t(I18nKey.MCP$TEST_ERROR_AUTHORIZATION);
     case "connection":
       return serverType === "stdio"
-        ? t(I18nKey.MCP$TEST_ERROR_STDIO_START, { error })
-        : t(I18nKey.MCP$TEST_ERROR_CONNECTION, { error });
+        ? t(I18nKey.MCP$TEST_ERROR_STDIO_START, { error: detail })
+        : t(I18nKey.MCP$TEST_ERROR_CONNECTION, { error: detail });
     case "credentials":
-      return t(I18nKey.MCP$TEST_ERROR_CREDENTIALS, { error });
+      return t(I18nKey.MCP$TEST_ERROR_CREDENTIALS, { error: detail });
     default:
-      return t(I18nKey.MCP$TEST_ERROR_UNKNOWN, { error });
+      return t(I18nKey.MCP$TEST_ERROR_UNKNOWN, { error: detail });
   }
 }

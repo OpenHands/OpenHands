@@ -711,7 +711,7 @@ export function MCPServerForm({
           className={
             testMessage.ok
               ? "text-sm text-feedback-success whitespace-pre-wrap"
-              : "text-sm text-feedback-error whitespace-pre-wrap"
+              : "max-w-full text-sm text-feedback-error whitespace-pre-wrap break-words"
           }
         >
           {testMessage.text}
