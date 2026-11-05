@@ -15,6 +15,7 @@ import { usePersistentExpansion } from "#/stores/message-expansion-store";
  * `open` is undefined until the user toggles the row.
  */
 export interface StepDisclosure {
+  detailsOnly?: boolean;
   open: boolean | undefined;
   setOpen: (open: boolean) => void;
 }

@@ -71,7 +71,7 @@ export interface CustomWebhookCreateRequest {
   webhook_secret?: string;
 }
 
-export interface CustomWebhookCreateResponse {
+export interface CustomWebhook {
   id: string;
   org_id: string;
   name: string;
@@ -83,6 +83,14 @@ export interface CustomWebhookCreateResponse {
   enabled: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface CustomWebhookListResponse {
+  webhooks: CustomWebhook[];
+  total: number;
+}
+
+export interface CustomWebhookCreateResponse extends CustomWebhook {
   webhook_secret?: string | null;
 }
 
@@ -755,11 +763,32 @@ class AutomationService {
     return data;
   }
 
+  static async listCustomWebhooks(options: {
+    limit: number;
+    offset: number;
+  }): Promise<CustomWebhookListResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("webhooks") || "/v1/webhooks"}`;
+    if (active.kind === "cloud") {
+      return callCloudProxy<CustomWebhookListResponse>({
+        backend: active,
+        method: "GET",
+        path: `${path}?limit=${options.limit}&offset=${options.offset}`,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+    const { data } = await localAutomationAxios.get<CustomWebhookListResponse>(
+      path,
+      { params: options },
+    );
+    return data;
+  }
+
   static async createCustomWebhook(
     body: CustomWebhookCreateRequest,
   ): Promise<CustomWebhookCreateResponse> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}/v1/webhooks`;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("webhooks") || "/v1/webhooks"}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<CustomWebhookCreateResponse>({

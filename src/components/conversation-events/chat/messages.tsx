@@ -27,6 +27,7 @@ import {
   RenderedItem,
 } from "./group-events";
 import { buildActionById } from "./event-thought-helpers";
+import { getSingleToolEvent } from "./event-message-components/event-group-summary";
 import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
 import { getStepKey, StepDisclosureContext } from "./step-disclosure-context";
@@ -294,6 +295,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       event: OpenHandsEvent,
       index: number,
       suppressThought: boolean,
+      detailsOnly = false,
     ) => {
       const stepKey = getStepKey(event);
       return (
@@ -301,6 +303,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           key={stepKey}
           value={{
             open: openRows.get(stepKey),
+            detailsOnly,
             setOpen: (open) => setRowOpen(stepKey, open),
           }}
         >
@@ -357,6 +360,9 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       }
 
       const groupKey = getGroupKey(item);
+      const singleTool = getSingleToolEvent(item.events);
+      const showSingleToolDetails =
+        item.events.length === 1 && !item.session && !item.reasoning?.length;
       // A group that forms around a step the user opened starts open, so
       // that step stays visible.
       const groupOpen =
@@ -375,20 +381,30 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             allEvents={allEvents}
             isLive={isAgentRunning && renderedItemKey(item) === tailItemKey}
             open={groupOpen}
-            onOpenChange={(open) =>
-              item.session
-                ? useSessionActivityStore
-                    .getState()
-                    .setOpen(sessionKey, item.session.id, open)
-                : setRowOpen(`group:${groupKey}`, open)
-            }
+            onOpenChange={(open) => {
+              if (item.session)
+                useSessionActivityStore
+                  .getState()
+                  .setOpen(sessionKey, item.session.id, open);
+              else setRowOpen(`group:${groupKey}`, open);
+            }}
           >
-            {item.session && <SessionActivityDetails session={item.session} />}
+            {item.session && (
+              <SessionActivityDetails
+                session={item.session}
+                nested={item.events.length > 0}
+              />
+            )}
             {[
               ...item.events.map((event) => ({
                 index: eventIndexes.get(event)!,
                 order: 1,
-                node: renderEventMessage(event, eventIndexes.get(event)!, true),
+                node: renderEventMessage(
+                  event,
+                  eventIndexes.get(event)!,
+                  true,
+                  event === singleTool && showSingleToolDetails,
+                ),
               })),
               ...(item.reasoning ?? []).map((reasoning) => ({
                 index: reasoning.index,

@@ -6,8 +6,11 @@ import {
   getAutomationIcon,
   getAutomationLaunchPrompt,
   getAutomationAvailability,
+  getTemplateLogoIds,
   rankByAvailability,
   resolveAutomationImpactStatement,
+  splitBySuggestion,
+  SUGGESTED_TEMPLATE_LIMIT,
 } from "#/utils/automation-catalog";
 import type { Automation } from "#/types/automation";
 
@@ -29,7 +32,11 @@ vi.mock("@openhands/extensions/automations", async (importOriginal) => {
     },
     {
       id: "impact-unknown-basis",
-      impact: { basis: "run-counter", one: "1 widget", other: "{{count}} widgets" },
+      impact: {
+        basis: "run-counter",
+        one: "1 widget",
+        other: "{{count}} widgets",
+      },
     },
     {
       id: "impact-markup",
@@ -41,7 +48,11 @@ vi.mock("@openhands/extensions/automations", async (importOriginal) => {
     },
     {
       id: "impact-no-count",
-      impact: { basis: "completed-runs", one: "one check", other: "many checks" },
+      impact: {
+        basis: "completed-runs",
+        one: "one check",
+        other: "many checks",
+      },
     },
     {
       id: "impact-foreign-placeholder",
@@ -130,6 +141,34 @@ describe("getAutomationIcon", () => {
         icon: "not-a-real-slug",
       } as unknown as Parameters<typeof getAutomationIcon>[0]),
     ).toBeNull();
+  });
+});
+
+describe("getTemplateLogoIds", () => {
+  it("names the repository provider of a template that declares no integration", () => {
+    expect(getTemplateLogoIds(automationById("github-pr-reviewer"))).toEqual([
+      "github",
+    ]);
+  });
+
+  it("lists a provider once when it is both declared and picked", () => {
+    expect(getTemplateLogoIds(automationById("github-repo-monitor"))).toEqual([
+      "github",
+    ]);
+  });
+
+  it("stands a built-in Data Center integration in with its product's logo", () => {
+    // Arrange — no integration and no picker, like the Data Center templates.
+    const entry = {
+      ...automationById("news-digest"),
+      requires: {
+        integrations: {},
+        builtInIntegrations: ["jira_dc", "bitbucket_data_center"],
+      },
+    } as unknown as RecommendedAutomation;
+
+    // Act / Assert
+    expect(getTemplateLogoIds(entry)).toEqual(["jira", "bitbucket"]);
   });
 });
 
@@ -319,23 +358,46 @@ describe("getAutomationAvailability", () => {
     expect(unlikely.has("news-digest")).toBe(false);
   });
 
-  it("offers a Data Center template on an Enterprise instance missing part of it, ranked last", () => {
-    // Arrange
+  it("ranks a Data Center template last only when the instance uses the other kind", () => {
+    // Arrange — Bitbucket Data Center with Jira Cloud rather than Jira Data Center.
+    const instance = {
+      deploymentMode: "self_hosted",
+      builtInIntegrations: new Set(["bitbucket_data_center", "jira"]),
+    };
+
+    // Act
+    const { hidden, unlikely, suggested } = getAutomationAvailability(
+      instance,
+      catalog,
+    );
+
+    // Assert
+    expect(hidden.has("jira-dc-to-bitbucket-dc")).toBe(false);
+    expect(unlikely.get("jira-dc-to-bitbucket-dc")).toEqual(["jira_dc"]);
+    expect(suggested.get("bitbucket-dc-reviewer")).toEqual([
+      "bitbucket_data_center",
+    ]);
+  });
+
+  it("suggests a Data Center template on an instance reporting part of it, without evidence against the rest", () => {
+    // Arrange — Bitbucket Data Center, no Jira of either kind reported.
     const instance = {
       deploymentMode: "self_hosted",
       builtInIntegrations: new Set(["bitbucket_data_center"]),
     };
 
     // Act
-    const { hidden, unlikely } = getAutomationAvailability(instance, catalog);
+    const { unlikely, suggested } = getAutomationAvailability(
+      instance,
+      catalog,
+    );
 
     // Assert
-    expect(hidden.has("jira-dc-to-bitbucket-dc")).toBe(false);
-    expect(unlikely.get("jira-dc-to-bitbucket-dc")).toEqual(["jira_dc"]);
-    expect(unlikely.has("bitbucket-dc-reviewer")).toBe(false);
+    expect(unlikely.has("jira-dc-to-bitbucket-dc")).toBe(false);
+    expect(suggested.has("jira-dc-to-bitbucket-dc")).toBe(true);
   });
 
-  it("leaves OpenHands Cloud's catalog alone apart from hiding Data Center templates", () => {
+  it("leaves OpenHands Cloud's catalog alone, Data Center templates included", () => {
     // Arrange
     const instance = {
       deploymentMode: "cloud",
@@ -346,14 +408,11 @@ describe("getAutomationAvailability", () => {
     const { hidden, unlikely } = getAutomationAvailability(instance, catalog);
 
     // Assert
-    expect([...hidden]).toEqual([
-      "bitbucket-dc-reviewer",
-      "jira-dc-to-bitbucket-dc",
-    ]);
+    expect(hidden.size).toBe(0);
     expect(unlikely.size).toBe(0);
   });
 
-  it("hides only Data Center templates while the instance's integrations are unknown", () => {
+  it("hides nothing while the instance's integrations are unknown", () => {
     // Arrange — a local backend, or a cloud instance whose config is loading.
     const instance = { deploymentMode: null, builtInIntegrations: null };
 
@@ -361,11 +420,70 @@ describe("getAutomationAvailability", () => {
     const { hidden, unlikely } = getAutomationAvailability(instance, catalog);
 
     // Assert
-    expect([...hidden]).toEqual([
-      "bitbucket-dc-reviewer",
-      "jira-dc-to-bitbucket-dc",
-    ]);
+    expect(hidden.size).toBe(0);
     expect(unlikely.size).toBe(0);
+  });
+
+  it("keeps every template in its default place on an Enterprise instance that reports no git provider", () => {
+    // Arrange — sign-up by password, nothing else set up.
+    const instance = {
+      deploymentMode: "self_hosted",
+      builtInIntegrations: new Set<string>(),
+    };
+
+    // Act
+    const { unlikely, suggested } = getAutomationAvailability(
+      instance,
+      catalog,
+    );
+
+    // Assert
+    expect(unlikely.has("github-reviewer")).toBe(false);
+    expect(unlikely.has("jira-to-github")).toBe(false);
+    expect(unlikely.size).toBe(0);
+    expect(suggested.size).toBe(0);
+  });
+
+  it("suggests the templates using an integration the user connected, on any backend", () => {
+    // Arrange — a local backend with the Atlassian Rovo MCP server installed.
+    const instance = {
+      deploymentMode: null,
+      builtInIntegrations: null,
+      connectedIntegrations: new Set(["atlassian-rovo"]),
+    };
+
+    // Act
+    const { suggested, unlikely } = getAutomationAvailability(
+      instance,
+      catalog,
+    );
+
+    // Assert
+    expect(Object.fromEntries(suggested)).toEqual({
+      "jira-to-bitbucket": ["atlassian-rovo"],
+      "jira-to-github": ["atlassian-rovo"],
+    });
+    expect(unlikely.size).toBe(0);
+  });
+
+  it("does not rank a template last for an integration the user connected themselves", () => {
+    // Arrange — Bitbucket Data Center instance, user installed the GitHub MCP.
+    const instance = {
+      deploymentMode: "self_hosted",
+      builtInIntegrations: new Set(["bitbucket_data_center"]),
+      connectedIntegrations: new Set(["github"]),
+    };
+
+    // Act
+    const { suggested, unlikely } = getAutomationAvailability(
+      instance,
+      catalog,
+    );
+
+    // Assert
+    expect(unlikely.has("github-reviewer")).toBe(false);
+    expect(suggested.get("github-reviewer")).toEqual(["github"]);
+    expect(unlikely.get("jira-to-bitbucket")).toEqual(["bitbucket"]);
   });
 
   it("keeps hiding what an Enterprise instance never offers", () => {
@@ -380,6 +498,35 @@ describe("getAutomationAvailability", () => {
 
     // Assert
     expect(hidden.has("custom-automation")).toBe(true);
+  });
+});
+
+describe("splitBySuggestion", () => {
+  it("leads with the matched templates, fills with featured ones and stops at the limit", () => {
+    // Arrange
+    const automations = Array.from({ length: 12 }, (_, i) => ({
+      id: `t${i}`,
+    }));
+    const suggested = new Map(
+      ["t9", "t10", "t11"].map((id) => [id, ["github"]] as const),
+    );
+
+    // Act
+    const groups = splitBySuggestion(automations, () => true, { suggested });
+
+    // Assert
+    expect(groups.suggested).toHaveLength(SUGGESTED_TEMPLATE_LIMIT);
+    expect(groups.suggested.map(({ id }) => id)).toEqual([
+      "t9",
+      "t10",
+      "t11",
+      "t0",
+      "t1",
+      "t2",
+      "t3",
+      "t4",
+    ]);
+    expect(groups.more.map(({ id }) => id)).toEqual(["t5", "t6", "t7", "t8"]);
   });
 });
 

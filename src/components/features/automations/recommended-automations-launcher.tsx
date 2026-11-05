@@ -47,7 +47,6 @@ import {
 import { RecommendedAutomationsRail } from "./recommended-automations-rail";
 import { RecommendedAutomationsSection } from "./recommended-automations-section";
 import { ResponderDeploymentModal } from "./responder-deployment-modal";
-import { UnlikelyIntegrationNoticeModal } from "./unlikely-integration-notice-modal";
 import type { TemplateFilters } from "./template-filter-chips";
 
 interface RecommendedAutomationsLauncherProps {
@@ -150,18 +149,6 @@ export function RecommendedAutomationsLauncher({
     deploymentMode,
     isLoading: isNativeIntegrationsLoading,
   } = useNativeGitIntegrations();
-  const {
-    hidden: hiddenAutomationIds,
-    unlikely: unlikelyAutomations,
-    suggested: suggestedAutomations,
-  } = useMemo(
-    () => getAutomationAvailability({ deploymentMode, builtInIntegrations }),
-    [deploymentMode, builtInIntegrations],
-  );
-  const [unlikelyNotice, setUnlikelyNotice] = useState<{
-    automation: RecommendedAutomation;
-    missing: readonly string[];
-  } | null>(null);
   const { isSlackConnected, isJiraConnected } =
     useBuiltInIntegrationConnections({
       slackEnabled: isSlackEnabled,
@@ -175,6 +162,34 @@ export function RecommendedAutomationsLauncher({
           parseMcpConfig(settings?.agent_settings?.mcp_config),
       ).filter((server) => server.enabled !== false),
     [settings?.agent_settings?.mcp_config, settings?.mcp_config],
+  );
+
+  // Integrations the user has set up themselves move the templates that use
+  // them into Suggested.
+  const connectedIntegrations = useMemo(
+    () =>
+      new Set(
+        MCP_MARKETPLACE.filter(
+          (entry) =>
+            findInstalledEntryMatch(entry, installedMcpConfig) ||
+            getNativeIntegration(entry.id)?.isConnected === true,
+        ).map((entry) => entry.id),
+      ),
+    [getNativeIntegration, installedMcpConfig],
+  );
+
+  const {
+    hidden: hiddenAutomationIds,
+    unlikely: unlikelyAutomations,
+    suggested: suggestedAutomations,
+  } = useMemo(
+    () =>
+      getAutomationAvailability({
+        deploymentMode,
+        builtInIntegrations,
+        connectedIntegrations,
+      }),
+    [deploymentMode, builtInIntegrations, connectedIntegrations],
   );
 
   const launchAutomation = useCallback(
@@ -297,30 +312,11 @@ export function RecommendedAutomationsLauncher({
       isCreatingConversation ||
       installQueue.length > 0 ||
       deploymentChoiceAutomation !== null ||
-      builtInChoice !== null ||
-      unlikelyNotice !== null
+      builtInChoice !== null
     ) {
       return;
     }
 
-    // The instance does not appear to have an integration this template
-    // needs. Say so once, and let the user continue: the report is a hint.
-    const missing = unlikelyAutomations.get(automation.id);
-    if (missing) {
-      setUnlikelyNotice({ automation, missing });
-      return;
-    }
-
-    selectAutomation(automation);
-  };
-
-  const handleUnlikelyNoticeContinue = () => {
-    const automation = unlikelyNotice?.automation;
-    setUnlikelyNotice(null);
-    if (automation) selectAutomation(automation);
-  };
-
-  const selectAutomation = (automation: RecommendedAutomation) => {
     // GitHub/Slack responders poll continuously; let the user choose where the
     // responder runs before committing to the local setup flow. On a cloud
     // backend the responder already runs in the cloud, so there is no choice.
@@ -475,15 +471,6 @@ export function RecommendedAutomationsLauncher({
           onClose={cancelInstallFlow}
           onSuccess={handleInstallSuccess}
           mcpOnly
-        />
-      )}
-
-      {unlikelyNotice && (
-        <UnlikelyIntegrationNoticeModal
-          automationName={unlikelyNotice.automation.name}
-          missing={unlikelyNotice.missing}
-          onContinue={handleUnlikelyNoticeContinue}
-          onCancel={() => setUnlikelyNotice(null)}
         />
       )}
 

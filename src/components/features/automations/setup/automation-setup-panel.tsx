@@ -268,6 +268,12 @@ interface AutomationSetupPanelProps {
   toolbarPortal?: HTMLElement | null;
   showInlineHeader?: boolean;
   reserveComposerSpace?: boolean;
+  /**
+   * Starts the setup conversation for a prompt when the panel is not inside
+   * one yet (the create page). Without it the Ask Agent button can only send
+   * into an existing conversation.
+   */
+  onAskAgent?: (prompt: string) => void;
 }
 
 function titleCase(value: string): string {
@@ -719,6 +725,7 @@ export function AutomationSetupPanel({
   toolbarPortal,
   showInlineHeader = true,
   reserveComposerSpace = false,
+  onAskAgent,
 }: AutomationSetupPanelProps) {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
@@ -811,6 +818,9 @@ export function AutomationSetupPanel({
   const [existingRepositories, setExistingRepositories] = useState(
     draft.existingRepositories ?? [],
   );
+  const [existingEventTrigger, setExistingEventTrigger] = useState(
+    draft.existingEventTrigger,
+  );
   const [canUpdateRepositories, setCanUpdateRepositories] = useState(
     draft.canUpdateRepositories ?? false,
   );
@@ -851,7 +861,12 @@ export function AutomationSetupPanel({
   useEffect(() => {
     setExistingRepositories(draft.existingRepositories ?? []);
     setCanUpdateRepositories(draft.canUpdateRepositories ?? false);
-  }, [draft.existingRepositories, draft.canUpdateRepositories]);
+    setExistingEventTrigger(draft.existingEventTrigger);
+  }, [
+    draft.existingRepositories,
+    draft.canUpdateRepositories,
+    draft.existingEventTrigger,
+  ]);
 
   const updateConversationTags = useCallback(
     async (
@@ -950,6 +965,7 @@ export function AutomationSetupPanel({
         setExistingCustomTarballPath(next.existingCustomTarballPath ?? "");
         setExistingRepositories(next.existingRepositories ?? []);
         setCanUpdateRepositories(next.canUpdateRepositories ?? false);
+        setExistingEventTrigger(next.existingEventTrigger);
         setForm(nextForm);
       })
       .catch((error: unknown) => {
@@ -1296,6 +1312,9 @@ export function AutomationSetupPanel({
   const buildTrigger = () =>
     triggerKind === "event"
       ? {
+          // Fields the form does not edit, such as `destination`, keep the
+          // values the edited automation already has.
+          ...(isEditingExisting ? existingEventTrigger : {}),
           type: "event",
           source: eventSource.trim() || DEFAULT_EVENT_SOURCE,
           on: eventKeyPayload(eventKey),
@@ -2316,6 +2335,7 @@ export function AutomationSetupPanel({
                     setEventTestPayload(value);
                   }}
                   setCustomWebhookField={updateCustomWebhook}
+                  onAskAgent={onAskAgent}
                 />
               )}
 
@@ -3238,6 +3258,7 @@ function EventFields({
   setEventFilter,
   setEventTestPayload,
   setCustomWebhookField,
+  onAskAgent,
 }: {
   eventSource: string;
   eventKey: string;
@@ -3260,6 +3281,7 @@ function EventFields({
     field: FieldName,
     value: CustomWebhookFormState[FieldName],
   ) => void;
+  onAskAgent?: (prompt: string) => void;
 }) {
   const { t } = useTranslation("openhands");
   const { send } = useSendMessage();
@@ -3372,11 +3394,18 @@ function EventFields({
             data-testid="automation-setup-ask-agent"
             className={cn(addOptionButtonClassName, "h-9 gap-1.5")}
             onClick={() => {
+              const prompt = t(I18nKey.AUTOMATION_SETUP$ASK_AGENT_EVENT_PROMPT);
+              // Outside a setup conversation there is nothing to send into:
+              // start one with the prompt instead of dropping the click.
+              if (onAskAgent) {
+                onAskAgent(prompt);
+                return;
+              }
               requestAutomationSetupAgent();
               void send({
                 action: "message",
                 args: {
-                  content: t(I18nKey.AUTOMATION_SETUP$ASK_AGENT_EVENT_PROMPT),
+                  content: prompt,
                 },
               });
             }}

@@ -1,6 +1,13 @@
 import type { SessionActivity } from "#/stores/session-activity-store";
-import { sessionActivityTitle } from "./session-activity";
+import {
+  sessionActivityTitle,
+  sessionActivityLiveTitle,
+} from "./session-activity";
 import React from "react";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
+import { SuccessIndicator } from "#/components/features/chat/success-indicator";
+import { getObservationResult } from "../event-content-helpers/get-observation-result";
+import { formatEventTimestamp } from "#/utils/format-event-timestamp";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
 import { OpenHandsEvent } from "#/types/agent-server/core";
@@ -8,9 +15,14 @@ import {
   isActionEvent,
   isACPToolCallEvent,
   isAgentErrorEvent,
+  isObservationEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { I18nKey } from "#/i18n/declaration";
-import { getEventGroupSummaryParts } from "./event-group-summary";
+import {
+  getEventGroupSummaryParts,
+  getSingleToolEvent,
+} from "./event-group-summary";
 import { DisclosureCaret } from "#/components/shared/disclosure-caret";
 import { getEventContent } from "../event-content-helpers/get-event-content";
 import { IsInEventGroupContext } from "../../../features/chat/is-in-event-group-context";
@@ -50,10 +62,10 @@ interface EventGroupProps {
  * "Thinking" between steps, with a spinner. Hook runs never take over the
  * title; they are quick and fire between steps.
  *
- * Collapsed otherwise: what the steps did, e.g. "Ran 3 commands · Read 1 file".
+ * Collapsed otherwise: what the steps did, e.g. "Ran 3 commands, read a file".
  *
- * Expanded: the children in a bordered list, so each individual
- * action/observation can still be expanded the way it was before grouping.
+ * Expanded: one tool reveals its details directly; multiple tools keep their
+ * individual disclosures in a bordered list.
  */
 export function EventGroup({
   events,
@@ -65,7 +77,7 @@ export function EventGroup({
   onOpenChange,
   children,
 }: EventGroupProps) {
-  const { t } = useTranslation("openhands");
+  const { t, i18n } = useTranslation("openhands");
   const [localExpanded, setLocalExpanded] = React.useState(false);
   const expanded = open ?? localExpanded;
   const toggleExpanded = () =>
@@ -79,12 +91,41 @@ export function EventGroup({
 
   const lookupSource = allEvents ?? events;
   let summary: React.ReactNode = getEventGroupSummaryParts(events, lookupSource)
-    .map(({ key, count }) => t(key, { count }))
-    .join(" · ");
+    .map(({ key, count }, index) => {
+      const context = [
+        count === 1 ? "single" : "",
+        index > 0 ? "continuation" : "",
+      ]
+        .filter(Boolean)
+        .join("_");
+      return t(key, { count, context: context || undefined });
+    })
+    .join(t(I18nKey.EVENT_GROUP$SUMMARY_SEPARATOR));
 
   summary ||= t(
     session ? sessionActivityTitle(session) : I18nKey.THINKING$TITLE,
   );
+
+  const singleTool = getSingleToolEvent(events);
+  if (singleTool) {
+    const actionId =
+      isObservationEvent(singleTool) || isUserRejectObservation(singleTool)
+        ? singleTool.action_id
+        : undefined;
+    const action = lookupSource.find(
+      (event) => isActionEvent(event) && event.id === actionId,
+    );
+    summary = (
+      <PathInteractiveContext.Provider value={false}>
+        {
+          getEventContent(
+            singleTool,
+            action && isActionEvent(action) ? action : undefined,
+          ).title
+        }
+      </PathInteractiveContext.Provider>
+    );
+  }
 
   if (isLive) {
     // An action still in the UI events is in flight, unless an AgentErrorEvent
@@ -108,7 +149,15 @@ export function EventGroup({
   }
 
   if (session && session.phase !== "complete")
-    summary = t(sessionActivityTitle(session));
+    summary = t(sessionActivityLiveTitle(session));
+  const timestampLabel = formatEventTimestamp(
+    singleTool?.timestamp,
+    i18n?.language,
+  );
+  const singleResult =
+    singleTool && isObservationEvent(singleTool)
+      ? getObservationResult(singleTool)
+      : undefined;
   const busy =
     session?.phase === "pending" ||
     session?.phase === "connecting" ||
@@ -129,29 +178,46 @@ export function EventGroup({
       >
         {busy ? summary : null}
       </span>
-      <button
-        id={buttonId}
-        type="button"
-        onClick={toggleExpanded}
-        aria-controls={contentId}
-        aria-expanded={expanded}
-        aria-label={
-          expanded
-            ? t(I18nKey.EVENT_GROUP$COLLAPSE)
-            : t(I18nKey.EVENT_GROUP$EXPAND)
-        }
-        data-testid="event-group-toggle"
-        className="flex max-w-full items-center gap-2 text-left text-muted cursor-pointer"
+      <StyledTooltip
+        content={<time dateTime={singleTool?.timestamp}>{timestampLabel}</time>}
+        placement="top"
+        isDisabled={!timestampLabel}
       >
-        <span className="truncate">{summary}</span>
-        <DisclosureCaret open={expanded} />
-        {busy && (
-          <LoaderCircle
-            data-testid="spinner-icon"
-            className="h-3.5 w-3.5 flex-shrink-0 animate-spin text-muted motion-reduce:animate-none"
-          />
-        )}
-      </button>
+        <button
+          id={buttonId}
+          type="button"
+          onClick={toggleExpanded}
+          aria-controls={contentId}
+          aria-expanded={expanded}
+          aria-label={
+            expanded
+              ? t(I18nKey.EVENT_GROUP$COLLAPSE)
+              : t(I18nKey.EVENT_GROUP$EXPAND)
+          }
+          data-testid="event-group-toggle"
+          className="flex max-w-full items-center gap-2 text-left text-muted cursor-pointer"
+        >
+          <span className="truncate">{summary}</span>
+          <DisclosureCaret open={expanded} />
+          {singleResult === "timeout" && (
+            <SuccessIndicator status={singleResult} />
+          )}
+          {singleTool && isUserRejectObservation(singleTool) && (
+            <span
+              data-testid="rejected-indicator"
+              className="shrink-0 text-danger"
+            >
+              {t(I18nKey.EVENT$REJECTED)}
+            </span>
+          )}
+          {busy && (
+            <LoaderCircle
+              data-testid="spinner-icon"
+              className="h-3.5 w-3.5 flex-shrink-0 animate-spin text-muted motion-reduce:animate-none"
+            />
+          )}
+        </button>
+      </StyledTooltip>
 
       {expanded && (
         <div
