@@ -252,7 +252,7 @@ describe("vite library build", () => {
     // Require the setup rail and editor geometry in the extracted stylesheet;
     // every recipe must remain a scoped utility even inside media conditions.
     expect(declarations(recipe("automation-setup-content"))).toMatchObject({
-      "max-width": "800px",
+      "max-width": "56rem",
     });
     expect(
       declarations(recipe("automation-setup-scroll-gutter")),
@@ -322,7 +322,7 @@ describe("vite library build", () => {
       "--automation-setup-cron-width": "14rem",
       "--automation-setup-datetime-width": "15rem",
       "--automation-setup-time-width": "9.5rem",
-      "--automation-setup-timezone-width": "16rem",
+      "--automation-setup-timezone-width": "12.5rem",
     };
     expect(declarations(scheduleRow)).toMatchObject(scheduleWidths);
     for (const property of Object.keys(scheduleWidths)) {

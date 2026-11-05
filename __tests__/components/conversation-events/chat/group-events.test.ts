@@ -537,6 +537,31 @@ describe("groupEvents", () => {
     }
   });
 
+  it("keeps a hoisted thought's reasoning with its own step", () => {
+    const a0 = makeBashAction("a0");
+    const a1 = {
+      ...makeBashAction("a1", [{ type: "text", text: "Next I'll run it" }]),
+      reasoning_content: "Weighing whether to run it",
+    };
+    const o0 = makeBashObservation("o0", "a0");
+    const o1 = makeBashObservation("o1", "a1");
+
+    const result = groupEvents([o0, o1], 1, [a0, o0, a1, o1], 1);
+
+    // Stranding the reasoning in its own group (or the previous one) gives it
+    // the same key and open state as the step it belongs to.
+    expect(result).toEqual([
+      { kind: "group", events: [o0], startIndex: 0 },
+      { kind: "thought", action: a1, index: 1 },
+      {
+        kind: "group",
+        events: [o1],
+        startIndex: 1,
+        reasoning: [{ id: "a1", text: "Weighing whether to run it", index: 1 }],
+      },
+    ]);
+  });
+
   it("ignores empty thoughts", () => {
     const events = [
       makeBashAction("a1", [{ type: "text", text: "   " }]),

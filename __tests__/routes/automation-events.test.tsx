@@ -50,7 +50,10 @@ vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
 const localBackend: Backend = {
   id: "local-1",
   name: "Local",
-  host: "http://localhost:8000",
+  // Same origin as the jsdom page: under msw 3 a cross-origin request carrying
+  // the session header first sends a CORS preflight (OPTIONS), which the
+  // handlers below do not answer, so the page never receives its sources.
+  host: window.location.origin,
   apiKey: "session-key",
   kind: "local",
 };
