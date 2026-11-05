@@ -55,6 +55,7 @@ export interface CloudApiKeyMetadata {
  */
 export interface CloudSetupGuideSteps {
   org_llm: boolean;
+  git_provider: boolean;
   mcp_server: boolean;
   automation: boolean;
   invite: boolean;
