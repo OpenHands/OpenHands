@@ -11,6 +11,7 @@ import {
 } from "#/types/agent-server/type-guards";
 import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
 import type { SessionActivity } from "#/stores/session-activity-store";
+import { parseDateAsUTC } from "#/utils/format-time-delta";
 import { parseMessageFromEvent } from "./event-content-helpers/parse-message-from-event";
 import {
   getReasoningContent,
@@ -140,7 +141,9 @@ export const groupEvents = (
         anchor >= 0
           ? anchor + 1
           : events.findIndex(
-              (event) => Date.parse(event.timestamp ?? "") >= session.startedAt,
+              (event) =>
+                parseDateAsUTC(event.timestamp ?? "").getTime() >=
+                session.startedAt,
             );
       if (index < 0) index = events.length;
       if (events[index]?.source === "user") index += 1;
