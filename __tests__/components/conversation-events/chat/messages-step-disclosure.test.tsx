@@ -7,6 +7,7 @@ import {
   ACPToolCallEvent,
   ActionEvent,
   HookExecutionEvent,
+  MessageEvent,
   ObservationEvent,
   OpenHandsEvent,
   SecurityRisk,
@@ -196,6 +197,54 @@ describe("Messages: opened steps and groups survive live updates", () => {
       "aria-expanded",
       "false",
     );
+  });
+});
+
+describe("Messages: reasoning in a finished conversation", () => {
+  beforeEach(() => {
+    agent.state = AgentState.FINISHED;
+  });
+
+  it("reveals a reply's reasoning with one click on its Thinking group", async () => {
+    const user = userEvent.setup();
+    const reply: MessageEvent = {
+      id: "reply",
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      llm_message: {
+        role: "assistant",
+        content: [{ type: "text", text: "All done." }],
+        reasoning_content: "Checking the tests passed",
+      },
+      activated_skills: [],
+      extended_content: [],
+    };
+    renderChat([reply], [reply]);
+
+    await user.click(screen.getByTestId("event-group-toggle"));
+
+    expect(screen.getByText("Checking the tests passed")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("collapsible-thinking-toggle"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps an action's reasoning in its step's group, below its message", async () => {
+    const user = userEvent.setup();
+    const a1 = {
+      ...action("a1", "pwd"),
+      thought: [{ type: "text" as const, text: "Now the directory." }],
+      reasoning_content: "Need the working directory",
+    };
+    renderChat([observation(a1)], [a1, observation(a1)]);
+
+    await user.click(screen.getByTestId("event-group-toggle"));
+
+    const group = screen.getByTestId("event-group-content");
+    await user.click(within(group).getByTestId("collapsible-thinking-toggle"));
+    expect(
+      within(group).getByText("Need the working directory"),
+    ).toBeInTheDocument();
   });
 });
 
