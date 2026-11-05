@@ -71,10 +71,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Node.js with npm cache
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24.22.1"
           cache: npm
@@ -127,7 +127,7 @@ jobs:
           fi
 
       - name: Upload DMG artifact (${{ matrix.arch }})
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: agent-canvas-macos-dmg-${{ matrix.arch }}
           path: dist-electron/*.dmg
@@ -153,10 +153,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Node.js with npm cache
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24.22.1"
           cache: npm
@@ -221,3 +221,4 @@ jobs:
           printf '%s\n\n%s\n' "$body" "$(cat "$note_file")" \
             | gh release edit "$RELEASE_TAG" --notes-file -
           echo "Appended macOS install note to $RELEASE_TAG."
+

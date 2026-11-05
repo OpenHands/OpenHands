@@ -47,7 +47,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Reject temporary artifacts in release PRs
         if: >-
@@ -64,7 +64,7 @@ jobs:
           fi
 
       - name: Set up Node.js with npm cache
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24.22.1"
           cache: npm
@@ -220,7 +220,7 @@ jobs:
 
       - name: Set up Node.js
         if: steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24.22.1"
           cache: npm
@@ -260,7 +260,7 @@ jobs:
       - name: Cache Playwright browsers
         if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         id: pw_cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw_version.outputs.version }}
@@ -432,7 +432,7 @@ jobs:
       - name: Upload live E2E artifacts
         id: upload_live_artifacts
         if: always() && steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: live-agent-server-e2e
           if-no-files-found: ignore
@@ -501,3 +501,4 @@ jobs:
       - name: Fail live E2E job when tests fail
         if: always() && steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         run: exit "${{ steps.live_status.outputs.exit_code }}"
+

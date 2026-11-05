@@ -69,15 +69,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.pull_request.head.sha || '' }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4.7.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -187,7 +187,7 @@ jobs:
 
       - name: Build & Push (${{ matrix.arch }})
         id: build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: docker/Dockerfile
@@ -249,7 +249,7 @@ jobs:
           cat "build-info/${{ matrix.arch }}.json"
 
       - name: Upload build info artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: build-info-${{ matrix.arch }}
           path: build-info/${{ matrix.arch }}.json
@@ -269,7 +269,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Download build info artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: build-info-*
           merge-multiple: true
@@ -283,10 +283,10 @@ jobs:
           echo "Using SHORT_SHA: $SHORT_SHA"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4.7.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -364,7 +364,7 @@ jobs:
           cat manifest-info/manifests.json
 
       - name: Upload manifest info artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: manifest-info
           path: manifest-info/manifests.json
@@ -383,14 +383,14 @@ jobs:
 
     steps:
       - name: Download build info artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: build-info-*
           merge-multiple: true
           path: build-info
 
       - name: Download manifest info artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: manifest-info
           path: manifest-info
@@ -549,9 +549,10 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Update PR description with docker image details
-        uses: nefrob/pr-description@v1.3.0
+        uses: nefrob/pr-description@30859d560129561327a48ec569ec3b6aa62dd2c9 # v1.3.0
         with:
           content: ${{ steps.generate_description.outputs.pr_content }}
           regex: "<!-- AGENT_CANVAS_DOCKER_START -->.*?<!-- AGENT_CANVAS_DOCKER_END -->"
           regexFlags: s
           token: ${{ secrets.GITHUB_TOKEN }}
+

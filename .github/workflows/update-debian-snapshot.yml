@@ -25,7 +25,7 @@ jobs:
       IMAGE: openhands/agent-canvas:snapshot-update
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC }}
       - name: Select newest snapshot older than seven days
@@ -88,3 +88,4 @@ jobs:
           else
             gh pr create --repo "$REPO" --base main --head "$BRANCH" --title "chore(canvas): update Debian snapshot to $SNAPSHOT" --body "$BODY"
           fi
+

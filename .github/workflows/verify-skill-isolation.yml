@@ -37,7 +37,7 @@ jobs:
             # the PR or execute its code in this pull_request_target workflow.
             # .github/scripts/tests/verify-skill-isolation.cjs runs this exact
             # script body, so keep `script: |` the last key in this file.
-            - uses: actions/github-script@v9
+            - uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
               with:
                   script: |
                       try {
@@ -108,3 +108,4 @@ jobs:
                         // Fail closed: when the file list cannot be trusted, do not pass.
                         core.setFailed(`Verify skill isolation could not run: ${error.message}`);
                       }
+
