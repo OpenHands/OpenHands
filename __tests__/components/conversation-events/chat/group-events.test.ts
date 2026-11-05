@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   groupEvents,
   isGroupableEvent,
+  renderedItemKey,
 } from "#/components/conversation-events/chat/group-events";
 import {
   ActionEvent,
@@ -678,4 +679,57 @@ it("keeps image-only replies visible after their grouped reasoning", () => {
     reasoning: [{ text: "Inspecting the result" }],
   });
   expect(items[1]).toEqual({ kind: "single", event: reply, index: 0 });
+});
+
+describe("renderedItemKey stability", () => {
+  it("keeps a group's key when its first action is replaced by its observation", () => {
+    const action = makeBashAction("a1");
+    const observation = makeBashObservation("o1", "a1");
+    // The UI list swaps the finished action for its observation in place; the
+    // full history keeps both. Keying on `events[0].id` would rename the row
+    // the moment the observation lands, remounting it and dropping its state.
+    const [before] = groupEvents([action], 1, [action]);
+    const [after] = groupEvents([observation], 1, [action, observation]);
+    expect(renderedItemKey(before)).toBe(renderedItemKey(after));
+    expect(renderedItemKey(after)).toBe("group-a1");
+  });
+
+  it("keys a reasoning-only group by its reasoning id, not its position", () => {
+    const reply: MessageEvent = {
+      ...makeUserMessage("reply"),
+      source: "agent",
+      llm_message: {
+        role: "assistant",
+        content: [{ type: "text", text: "" }],
+        reasoning_content: "only reasoning",
+      },
+    };
+    const page = [makeUserMessage("u1"), reply, makeUserMessage("u2")];
+    const withOlder = [makeUserMessage("u0a"), makeUserMessage("u0b"), ...page];
+    // Prepending older events shifts every index, so a positional key would
+    // rename the group and lose its open state on "load older".
+    const [pageGroup] = groupEvents(page, 1, page, 1).filter(
+      (item) => item.kind === "group",
+    );
+    const [olderGroup] = groupEvents(withOlder, 1, withOlder, 1).filter(
+      (item) => item.kind === "group",
+    );
+    expect(renderedItemKey(pageGroup)).toBe("group-reply");
+    expect(renderedItemKey(olderGroup)).toBe(renderedItemKey(pageGroup));
+  });
+
+  it("keys a session group by its session id", () => {
+    const session = {
+      id: "startup",
+      kind: "initialize" as const,
+      startedAt: 0,
+      phase: "complete" as const,
+      steps: [],
+      open: true,
+    };
+    const [group] = groupEvents([makeBashAction("a1")], 1, undefined, 1, [
+      session,
+    ]);
+    expect(renderedItemKey(group)).toBe("group-startup");
+  });
 });

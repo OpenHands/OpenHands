@@ -28,6 +28,11 @@ import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { useIsRevealingStreamedText } from "#/hooks/use-streamed-text";
 import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
 import { useClampDragSelection } from "#/hooks/chat/use-clamp-drag-selection";
+import {
+  type ScrollAnchor,
+  captureScrollAnchor,
+  scrollAnchorOffset,
+} from "./scroll-anchor";
 import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edit";
 import { WorkspaceFilesForChatProvider } from "./chat-markdown-path-code";
 import { ChatSuggestions } from "./chat-suggestions";
@@ -139,6 +144,16 @@ export function ChatInterface({
   const { t } = useTranslation("openhands");
   const scrollRef = React.useRef<HTMLDivElement>(null);
   useClampDragSelection(scrollRef);
+  // The message list virtualizes against this element, so it needs the DOM
+  // node itself (a ref owned here would never re-render `Messages` once
+  // populated). The callback is stable so React attaches it once per mount
+  // instead of detaching and re-attaching it on every render.
+  const [scrollElement, setScrollElement] =
+    React.useState<HTMLDivElement | null>(null);
+  const setScrollNode = React.useCallback((node: HTMLDivElement | null) => {
+    scrollRef.current = node;
+    setScrollElement(node);
+  }, []);
   // A streamed reply grows inside one event as it is revealed, so follow it
   // frame by frame while it does.
   const isRevealingStreamedText = useIsRevealingStreamedText();
@@ -271,12 +286,27 @@ export function ChatInterface({
     scrollHeight: number;
     scrollTop: number;
   } | null>(null);
+  // Row anchor captured with the height delta. The height delta is exact only
+  // while the list is plain; once it virtualizes, the prepended rows are still
+  // at the estimate in the commit that applies it, so the reader lands off by
+  // the rows' (measured - estimate) sum. A second pass puts the anchored row
+  // back once the rows have settled (see the effect below).
+  const preserveScrollAnchor = React.useRef<ScrollAnchor | null>(null);
+  const restoreScrollAnchor = React.useCallback(() => {
+    const anchor = preserveScrollAnchor.current;
+    const element = scrollRef.current;
+    preserveScrollAnchor.current = null;
+    if (!anchor || !element) return;
+    const next = scrollAnchorOffset(element, anchor);
+    if (next !== null) element.scrollTop = next;
+  }, []);
 
   React.useEffect(() => {
     // A pending history load may be discarded during a conversation switch.
     // Do not let the previous conversation's saved scroll geometry affect the
     // next conversation's scroll restoration.
     preserveScrollPosition.current = null;
+    preserveScrollAnchor.current = null;
   }, [conversationId]);
 
   const maybeLoadOlder = React.useCallback(
@@ -294,6 +324,7 @@ export function ChatInterface({
         scrollHeight: target.scrollHeight,
         scrollTop: target.scrollTop,
       };
+      preserveScrollAnchor.current = captureScrollAnchor(target);
       loadOlder().catch((error) => {
         preserveScrollPosition.current = null;
         const message =
@@ -567,6 +598,20 @@ export function ChatInterface({
     scrollDomToBottom,
   ]);
 
+  // Second pass for the "load older" restore above. The height delta it applies
+  // is exact only while the list is plain; once it virtualizes the prepended
+  // rows are still at the estimate in that commit, so the reader lands off by
+  // their (measured - estimate) sum. Once the prepended rows have reported
+  // their sizes (the virtualizer's total height settles), put the anchored row
+  // back at its recorded offset. `restoreScrollAnchor` clears the anchor on the
+  // first run, so this fires once per load and only when one is pending; the
+  // plain path leaves the anchor unset, so it stays a no-op there.
+  React.useLayoutEffect(() => {
+    if (!preserveScrollAnchor.current) return;
+    const id = requestAnimationFrame(restoreScrollAnchor);
+    return () => cancelAnimationFrame(id);
+  }, [renderableEvents.length, hasPendingUserMessages, restoreScrollAnchor]);
+
   // Auto-load older events when the chat content doesn't overflow the
   // scroll area (no scrollbar to drag, no wheel events past 0). We
   // re-run only when the rendered list grows or `hasMore` flips, NOT
@@ -698,7 +743,7 @@ export function ChatInterface({
           {/* Note: We only hide chat suggestions when there's a user message */}
 
           <div
-            ref={scrollRef}
+            ref={setScrollNode}
             data-testid="chat-scroll-container"
             onScroll={(e) => {
               onChatBodyScroll(e.currentTarget);
@@ -755,6 +800,7 @@ export function ChatInterface({
                 allEvents={allConversationEvents}
                 pendingMessages={pendingUserMessages}
                 pendingSessionId={isSessionStarting ? session?.id : undefined}
+                scrollParent={scrollElement}
               />
             )}
             {isTask && (

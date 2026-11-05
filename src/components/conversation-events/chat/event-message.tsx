@@ -258,7 +258,10 @@ function EventMessageComponent({
     return (
       <>
         {!suppressReasoning && reasoningContent && (
-          <CollapsibleThinking content={reasoningContent} />
+          <CollapsibleThinking
+            content={reasoningContent}
+            expansionId={`reasoning-${event.id}`}
+          />
         )}
         {message && (
           <ChatMessage
@@ -292,7 +295,12 @@ function EventMessageComponent({
   // (usually English) differs from the conversation language.
   if (isActionEvent(event) && event.action.kind === "ThinkAction") {
     const thinkAction = event as ActionEvent<ThinkAction>;
-    return <CollapsibleThinking content={thinkAction.action.thought} />;
+    return (
+      <CollapsibleThinking
+        content={thinkAction.action.thought}
+        expansionId={`reasoning-${thinkAction.id}`}
+      />
+    );
   }
 
   // Action events - render thought + action (will be replaced by thought + observation)

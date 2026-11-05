@@ -13,7 +13,11 @@ import {
 } from "#/types/agent-server/core";
 import { ExecuteBashAction } from "#/types/agent-server/core/base/action";
 import { ExecuteBashObservation } from "#/types/agent-server/core/base/observation";
-import { createUserMessageEvent, renderWithProviders } from "test-utils";
+import {
+  createUserMessageEvent,
+  createPlanningObservationEvent,
+  renderWithProviders,
+} from "test-utils";
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({ data: {} }),
@@ -235,6 +239,27 @@ describe("Messages: live status at the end of the chat", () => {
     expect(screen.queryByTestId("live-thinking")).not.toBeInTheDocument();
     expect(screen.getByTestId("event-group-toggle")).toBeInTheDocument();
     expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
+  });
+
+  it("keeps the last group live behind a hidden planning observation", () => {
+    const message = createUserMessageEvent("m1");
+    const a1 = action("a1", "ls");
+    const a2 = action("a2", "pwd");
+    const obs1 = observation(a1);
+    const obs2 = observation(a2);
+    // A planning observation that is not the phase's PLAN.md preview renders
+    // nothing, so it cannot sit "after" the group.
+    const hiddenPlan = createPlanningObservationEvent("plan-1", "a2");
+    hiddenPlan.observation.path = "/workspace/notes.md";
+
+    const ui = [message, obs1, obs2, hiddenPlan];
+    renderChat(ui, [message, a1, obs1, a2, obs2, hiddenPlan]);
+
+    // The group is the visible tail: it stays live and no Thinking line shows.
+    expect(screen.queryByTestId("live-thinking")).not.toBeInTheDocument();
+    expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+      /ACTION_MESSAGE\$THINK/,
+    );
   });
 });
 

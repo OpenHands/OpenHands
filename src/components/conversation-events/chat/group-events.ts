@@ -15,6 +15,7 @@ import { parseMessageFromEvent } from "./event-content-helpers/parse-message-fro
 import {
   getReasoningContent,
   splitInlineThink,
+  buildActionById,
   getThoughtSourceAction,
 } from "./event-thought-helpers";
 
@@ -89,6 +90,42 @@ export type RenderedItem =
     };
 
 /**
+ * Stable key for a group item, shared by React keys and the expansion store.
+ *
+ * An action and the observation that replaces it in place must resolve to the
+ * same key: `handleEventForUI` swaps a finished action for its observation, so
+ * keying on `events[0].id` would rename (and remount) the live group the moment
+ * its first observation lands, dropping the state the user had opened. The
+ * paired action's id is used instead. A reasoning-only group is keyed by its
+ * reasoning id, which does not shift when older events are prepended, rather
+ * than by its position.
+ */
+export const getGroupKey = (
+  item: Extract<RenderedItem, { kind: "group" }>,
+): string => {
+  if (item.session) return item.session.id;
+  const reasoning = item.reasoning?.[0];
+  if (reasoning && reasoning.index <= item.startIndex) return reasoning.id;
+  const first = item.events[0];
+  const eventKey =
+    first &&
+    (isObservationEvent(first) || isUserRejectObservation(first)
+      ? (first.action_id ?? first.id)
+      : first.id);
+  return eventKey ?? `group-${item.startIndex}`;
+};
+
+/**
+ * Stable identity for a rendered item. Shared by the plain and virtualized
+ * lists so React keys and virtualizer item keys agree.
+ */
+export const renderedItemKey = (item: RenderedItem): string => {
+  if (item.kind === "single") return `single-${item.event.id}`;
+  if (item.kind === "thought") return `thought-${item.action.id}`;
+  return `group-${getGroupKey(item)}`;
+};
+
+/**
  * Walk a list of UI events and bucket consecutive groupable events into
  * `group` items. Anything that breaks the run, or runs shorter than
  * `EVENT_GROUP_MIN_SIZE`, is emitted as `single` items so they keep rendering
@@ -107,6 +144,10 @@ export type RenderedItem =
  * `trailingMinSize` applies to the run at the very end of `events`. While the
  * agent is working, pass 1 so the stage it is on is a group from its first
  * step and does not jump from a lone row into a group when a second arrives.
+ *
+ * Pass `actionById` (from {@link buildActionById}) when the caller already
+ * indexed the same history — `Messages` keeps one such map per render — so the
+ * grouping does not scan the whole history for every observation.
  */
 export const groupEvents = (
   events: OpenHandsEvent[],
@@ -114,6 +155,7 @@ export const groupEvents = (
   allEvents: OpenHandsEvent[] = events,
   trailingMinSize: number = minSize,
   sessions: readonly SessionActivity[] = [],
+  actionById: Map<string, ActionEvent> = buildActionById(allEvents),
 ): RenderedItem[] => {
   if (minSize < 1 || trailingMinSize < 1) {
     throw new Error("minSize must be at least 1");
@@ -218,10 +260,7 @@ export const groupEvents = (
     }
     const correspondingAction =
       isObservationEvent(event) || isUserRejectObservation(event)
-        ? allEvents.find(
-            (candidate): candidate is ActionEvent =>
-              isActionEvent(candidate) && candidate.id === event.action_id,
-          )
+        ? (actionById.get(event.action_id ?? "") ?? undefined)
         : undefined;
     if (isGroupableEvent(event, correspondingAction)) {
       const reasoningAction = isActionEvent(event)
@@ -241,7 +280,11 @@ export const groupEvents = (
           ];
         }
       }
-      const thoughtAction = getThoughtSourceAction(event, allEvents);
+      const thoughtAction = getThoughtSourceAction(
+        event,
+        allEvents,
+        actionById,
+      );
       if (thoughtAction && !emittedThoughtActionIds.has(thoughtAction.id)) {
         flushRun();
         emittedThoughtActionIds.add(thoughtAction.id);

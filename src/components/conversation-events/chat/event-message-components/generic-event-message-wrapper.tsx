@@ -86,7 +86,10 @@ export function GenericEventMessageWrapper({
   ) {
     return (
       <>
-        <CollapsibleThinking content={reasoning} />
+        <CollapsibleThinking
+          content={reasoning}
+          expansionId={`reasoning-${event.id}`}
+        />
         <div>{details}</div>
       </>
     );

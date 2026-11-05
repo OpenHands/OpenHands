@@ -10,6 +10,8 @@ import { TextShimmer } from "#/components/shared/text-shimmer";
 import { MessageTimestamp } from "./message-timestamp";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
 import { PendingStopIcon } from "./pending-stop-icon";
+import { useEventExpansionKey } from "./row-expansion-context";
+import { usePersistentExpansion } from "#/stores/message-expansion-store";
 import {
   UserMessageBody,
   chatBubbleMarkdownComponents,
@@ -56,15 +58,27 @@ export function ChatMessage({
   const { t } = useTranslation("openhands");
   const [isHovering, setIsHovering] = React.useState(false);
   const [isCopy, setIsCopy] = React.useState(false);
-  const [isExpanded, setIsExpanded] = React.useState(false);
+  // A long user prompt's "view more" expansion survives a virtualized row
+  // unmounting and remounting, like the other row controls.
+  const truncationKey = useEventExpansionKey("truncation");
+  const [isExpanded, , setExpanded] = usePersistentExpansion(
+    truncationKey,
+    false,
+  );
   const [isTruncatable, setIsTruncatable] = React.useState(false);
   const [isSingleLinePendingMessage, setIsSingleLinePendingMessage] =
     React.useState(true);
   const pendingMessageContentRef = React.useRef<HTMLDivElement>(null);
 
+  // Collapse again only when the text itself changes (a streaming reply growing
+  // in place). Resetting on mount would clobber the state a remounted row just
+  // restored from the store, defeating the persistence above.
+  const previousMessageRef = React.useRef(message);
   React.useEffect(() => {
-    setIsExpanded(false);
-  }, [message]);
+    if (previousMessageRef.current === message) return;
+    previousMessageRef.current = message;
+    setExpanded(false);
+  }, [message, setExpanded]);
 
   const handleCopyToClipboard = async () => {
     await navigator.clipboard.writeText(message);
@@ -171,7 +185,6 @@ export function ChatMessage({
           type === "agent" &&
           "border border-[#597ff4] bg-tertiary p-4 mt-2",
         pendingStatus === "error" && "border border-status-error/40",
-        !isPendingUserMessage && "last:mb-4",
       )}
     >
       <div
@@ -247,7 +260,7 @@ export function ChatMessage({
           aria-expanded={false}
           aria-label={t(I18nKey.COMMON$VIEW_MORE)}
           className="absolute inset-0 z-[1] cursor-pointer rounded-xl border-0 bg-transparent p-0"
-          onClick={() => setIsExpanded(true)}
+          onClick={() => setExpanded(true)}
         />
       ) : null}
 
@@ -264,7 +277,7 @@ export function ChatMessage({
 
   if (type === "user" && pendingStatus === "error") {
     return (
-      <div className="flex w-fit max-w-full flex-col items-end gap-1.5 self-end last:mb-4">
+      <div className="flex w-fit max-w-full flex-col items-end gap-1.5 self-end">
         {messageBubble}
         <div
           role="alert"
@@ -299,7 +312,7 @@ export function ChatMessage({
 
   if (type === "user" && pendingStatus === "sending" && showPendingStatus) {
     return (
-      <div className="flex w-full max-w-full flex-col last:mb-4">
+      <div className="flex w-full max-w-full flex-col">
         {messageBubble}
         <div className="mt-4 w-full py-1 text-sm">
           {pendingLabel ? (

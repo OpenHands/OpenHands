@@ -11,7 +11,7 @@ export function CorrectiveNudgeMessage({ event }: CorrectiveNudgeMessageProps) {
     <div
       role="note"
       data-testid="corrective-nudge-message"
-      className="mt-6 flex w-full items-start gap-1.5 text-sm italic text-muted last:mb-4"
+      className="mt-6 flex w-full items-start gap-1.5 text-sm italic text-muted"
     >
       <InfoCircleIcon
         width={14}
