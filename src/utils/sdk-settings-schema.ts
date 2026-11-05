@@ -6,7 +6,7 @@ import {
   SettingsSectionSchema,
   SettingsValue,
 } from "#/types/settings";
-import { getSettingsFieldConstraints } from "#/utils/sdk-settings-field-metadata";
+import { resolveNumericConstraints } from "#/utils/sdk-settings-field-metadata";
 import {
   LLM_AUTH_TYPE_KEY,
   LLM_SUBSCRIPTION_VENDOR_KEY,
@@ -372,12 +372,27 @@ export function coerceFieldValue(
       throw new Error(`Expected an integer value, received: ${stringValue}`);
     }
 
-    const constraints = getSettingsFieldConstraints(field.key);
-    if (constraints?.min != null && parsedValue < constraints.min) {
-      throw new Error(`${field.label} must be at least ${constraints.min}`);
+    // Consume SDK-supplied constraints first, fall back to the frontend's
+    // hardcoded per-field metadata map (for older agent-servers that do
+    // not expose these descriptors).
+    const constraints = resolveNumericConstraints(field);
+    if (constraints?.min != null) {
+      if (constraints.exclusive_min && parsedValue <= constraints.min) {
+        throw new Error(
+          `${field.label} must be greater than ${constraints.min}`,
+        );
+      }
+      if (!constraints.exclusive_min && parsedValue < constraints.min) {
+        throw new Error(`${field.label} must be at least ${constraints.min}`);
+      }
     }
-    if (constraints?.max != null && parsedValue > constraints.max) {
-      throw new Error(`${field.label} must be at most ${constraints.max}`);
+    if (constraints?.max != null) {
+      if (constraints.exclusive_max && parsedValue >= constraints.max) {
+        throw new Error(`${field.label} must be less than ${constraints.max}`);
+      }
+      if (!constraints.exclusive_max && parsedValue > constraints.max) {
+        throw new Error(`${field.label} must be at most ${constraints.max}`);
+      }
     }
 
     return parsedValue;
@@ -445,22 +460,40 @@ function isFieldVisibleInView(
   return VIEW_PROMINENCES[view].has(field.prominence);
 }
 
+/**
+ * Build a PATCH payload limited to the caller's current view tier.
+ *
+ * Contrary to the old behaviour, this no longer injects defaults for fields
+ * outside the active view. The backend PATCH endpoint only applies keys that
+ * are actually sent — anything omitted stays untouched. Resetting hidden keys
+ * to their schema default on save caused user-edited settings to vanish the
+ * moment they switched away from a view tier. The caller (e.g.
+ * `SdkSectionPage`) is responsible for pre-filtering `schema` to the sections
+ * its page owns; fields the page never renders never appear in `dirty`, so
+ * they never reach the payload.
+ *
+ * This function therefore behaves identically to {@link buildSdkSettingsPayload}
+ * — it exists solely to preserve the `…ForView` API surface used by callers
+ * that may later need view-scoped differential handling.
+ */
 export function buildSdkSettingsPayloadForView(
   schema: SettingsSchema,
   values: SettingsFormValues,
   dirty: SettingsDirtyState,
-  view: SettingsView,
+  _view: SettingsView,
 ): SdkSettingsPayload {
+  // View visibility is still consulted so that fields which the current view
+  // cannot reach (and therefore cannot possibly have become dirty) never leak
+  // into the payload. Crucially though, non-visible-but-previously-dirty
+  // fields are NOT reset to defaults — they are simply omitted, letting the
+  // backend leave them untouched.
   const payload = buildSdkSettingsPayload(schema, values, dirty) as Record<
     string,
     unknown
   >;
 
-  for (const field of getSchemaFields(schema)) {
-    if (!isFieldVisibleInView(field, view)) {
-      setDotted(payload, field.key, field.default ?? null);
-    }
-  }
+  // NOTE: deliberately NOT setting field.default for invisible fields here.
+  // That was the bug that clobbered hidden user settings on save.
 
   return payload as SdkSettingsPayload;
 }
