@@ -1,7 +1,10 @@
 import { useSessionActivities } from "#/hooks/use-session-activities";
 import { useSessionActivityStore } from "#/stores/session-activity-store";
 import { SessionActivityDetails } from "./event-message-components/session-activity";
-import { CollapsibleThinking } from "./event-message-components/collapsible-thinking";
+import {
+  CollapsibleThinking,
+  ThinkingContent,
+} from "./event-message-components/collapsible-thinking";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
@@ -256,6 +259,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             item.session?.open ??
             openRows.get(`group:${groupKey}`) ??
             item.events.some((event) => openRows.get(getStepKey(event)));
+          const Reasoning =
+            item.events.length === 0 && !item.session
+              ? ThinkingContent
+              : CollapsibleThinking;
           return (
             <React.Fragment key={`group-${groupKey}`}>
               {pendingSessionId &&
@@ -299,7 +306,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                     index: reasoning.index,
                     order: 0,
                     node: (
-                      <CollapsibleThinking
+                      <Reasoning
                         key={`reasoning-${reasoning.id}`}
                         content={reasoning.text}
                       />
