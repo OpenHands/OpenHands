@@ -8,6 +8,7 @@ import { ActionEvent, SecurityRisk } from "#/types/agent-server/core";
 import {
   ThinkAction,
   ExecuteBashAction,
+  FinishAction,
 } from "#/types/agent-server/core/base/action";
 import { renderWithProviders } from "test-utils";
 
@@ -85,6 +86,35 @@ const createBashActionEvent = (
     function: {
       name: "execute_bash",
       arguments: JSON.stringify({ command }),
+    },
+  },
+  llm_response_id: `response_${id}`,
+  security_risk: SecurityRisk.UNKNOWN,
+  ...overrides,
+});
+
+const createFinishActionEvent = (
+  id: string,
+  message: string,
+  overrides?: Partial<ActionEvent<FinishAction>>,
+): ActionEvent<FinishAction> => ({
+  id,
+  timestamp: new Date().toISOString(),
+  source: "agent",
+  thought: [],
+  thinking_blocks: [],
+  action: {
+    kind: "FinishAction",
+    message,
+  },
+  tool_name: "finish",
+  tool_call_id: `call_finish_${id}`,
+  tool_call: {
+    id: `call_finish_${id}`,
+    type: "function",
+    function: {
+      name: "finish",
+      arguments: JSON.stringify({ message }),
     },
   },
   llm_response_id: `response_${id}`,
@@ -255,5 +285,140 @@ describe("EventMessage - ThinkAction rendering", () => {
     expect(screen.getByTestId("step-thinking")).toHaveTextContent(
       "Extended thinking block content here.",
     );
+  });
+});
+
+describe("EventMessage - FinishAction reasoning rendering", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.INIT,
+    } as unknown as ReturnType<typeof useAgentState>);
+  });
+
+  it("renders reasoning_content as a collapsible section", async () => {
+    const finishEvent = createFinishActionEvent(
+      "finish-reasoning",
+      "Task completed successfully.",
+      {
+        reasoning_content: "Reviewed test suite and verified all cases pass.",
+      },
+    );
+
+    renderWithProviders(
+      <EventMessage
+        event={finishEvent}
+        isLastMessage={true}
+        isInLast10Actions={true}
+      />,
+    );
+
+    expect(screen.getByTestId("collapsible-thinking")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("collapsible-thinking-content"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Task completed successfully."),
+    ).toBeInTheDocument();
+  });
+
+  it("does not render a collapsible section without reasoning", () => {
+    const finishEvent = createFinishActionEvent(
+      "finish-no-reasoning",
+      "All done without thinking.",
+    );
+
+    renderWithProviders(
+      <EventMessage
+        event={finishEvent}
+        isLastMessage={true}
+        isInLast10Actions={true}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("collapsible-thinking"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("All done without thinking."),
+    ).toBeInTheDocument();
+  });
+
+  it("does not render a collapsible section for whitespace-only reasoning", () => {
+    const finishEvent = createFinishActionEvent(
+      "finish-whitespace-reasoning",
+      "Done with empty reasoning.",
+      {
+        reasoning_content: "   \n\t  ",
+      },
+    );
+
+    renderWithProviders(
+      <EventMessage
+        event={finishEvent}
+        isLastMessage={true}
+        isInLast10Actions={true}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("collapsible-thinking"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Done with empty reasoning."),
+    ).toBeInTheDocument();
+  });
+
+  it("renders thinking_blocks as a collapsible section", async () => {
+    const user = userEvent.setup();
+    const finishEvent = createFinishActionEvent(
+      "finish-thinking-blocks",
+      "Done with thinking blocks.",
+      {
+        thinking_blocks: [
+          {
+            type: "thinking",
+            thinking: "Anthropic finish reasoning block.",
+            signature: "sig456",
+          },
+        ],
+      },
+    );
+
+    renderWithProviders(
+      <EventMessage
+        event={finishEvent}
+        isLastMessage={true}
+        isInLast10Actions={true}
+      />,
+    );
+
+    expect(screen.getByTestId("collapsible-thinking")).toBeInTheDocument();
+    await user.click(screen.getByTestId("collapsible-thinking-toggle"));
+    expect(
+      screen.getByText("Anthropic finish reasoning block."),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves the assistant message untouched without reasoning", () => {
+    const finishEvent = createFinishActionEvent(
+      "finish-raw-message",
+      "ACP completed: done with all steps.",
+    );
+
+    renderWithProviders(
+      <EventMessage
+        event={finishEvent}
+        isLastMessage={true}
+        isInLast10Actions={true}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("collapsible-thinking"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("ACP completed: done with all steps."),
+    ).toBeInTheDocument();
   });
 });
