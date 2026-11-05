@@ -169,6 +169,18 @@ const GIT_PROVIDER_INTEGRATION_IDS: ReadonlySet<string> = new Set([
   "bitbucket",
 ]);
 
+/**
+ * The git providers a template is about, by integration id: the ones it
+ * declares and the provider of its repository picker.
+ */
+export function getTemplateGitProviderIds(
+  automation: RecommendedAutomation,
+): string[] {
+  return getTemplateIntegrationIds(automation).filter((id) =>
+    GIT_PROVIDER_INTEGRATION_IDS.has(id),
+  );
+}
+
 /** Every git provider an instance can report as built in. */
 const BUILT_IN_GIT_PROVIDER_IDS: ReadonlySet<string> = new Set([
   ...GIT_PROVIDER_INTEGRATION_IDS,
