@@ -1766,6 +1766,15 @@ describe("AgentServerConversationService", () => {
           automationdraftid: "draft-1",
           automationmaterializeddraftid: "auto-1",
         },
+        automationSetupCapabilities: {
+          ready: true,
+          triggerKinds: ["cron", "event"],
+          eventSources: ["jira_dc"],
+          eventTypes: [],
+          eventTypesBySource: { jira_dc: ["jira:issue_updated"] },
+          triggers: {},
+          features: [],
+        },
         agentProfileKind: "openhands",
       });
 
@@ -1773,7 +1782,7 @@ describe("AgentServerConversationService", () => {
       const [request] = requests;
       const body = request.body as {
         tags?: Record<string, string>;
-        client_tools: Array<{ name: string }>;
+        client_tools: Array<{ name: string; description: string }>;
       };
       expect(body.tags).toEqual({
         automationsetup: "draft",
@@ -1785,6 +1794,10 @@ describe("AgentServerConversationService", () => {
         "launch_child_conversation",
         "automation_form_update",
       ]);
+      // The form tool carries this deployment's event sources.
+      expect(body.client_tools[2].description).toContain(
+        "* jira_dc (Jira Data Center): event keys jira:issue_updated.",
+      );
     });
 
     it("does not forward automation client tools to cloud ACP conversations", async () => {

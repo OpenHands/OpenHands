@@ -79,7 +79,8 @@ import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
 import { toAcpModelOptions } from "#/constants/acp-providers";
 import { isPlannerConversationOf } from "#/utils/plan-file";
 import { buildAutomationSetupModeTags } from "#/utils/automation-draft-tags";
-import { AUTOMATION_FORM_UPDATE_CLIENT_TOOL } from "../automation-form-client-tool";
+import { buildAutomationFormUpdateClientTool } from "../automation-form-client-tool";
+import type { DeploymentCapabilities } from "#/manifests/types";
 import { CANVAS_UI_CLIENT_TOOL } from "../canvas-ui-client-tool";
 import { LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL } from "../launch-child-conversation-client-tool";
 import type {
@@ -445,6 +446,8 @@ export interface CreateConversationOptions {
   initialUserMsg?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  /** The automation service's capabilities, for the setup assistant's form tool. */
+  automationSetupCapabilities?: DeploymentCapabilities | null;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   metadata?: ConversationMetadata | null;
@@ -539,6 +542,7 @@ class AgentServerConversationService {
       initialUserMsg,
       automationSetup,
       automationSetupTags,
+      automationSetupCapabilities,
       conversationInstructions,
       plugins,
       metadata,
@@ -605,7 +609,9 @@ class AgentServerConversationService {
               client_tools: [
                 CANVAS_UI_CLIENT_TOOL,
                 LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
-                AUTOMATION_FORM_UPDATE_CLIENT_TOOL,
+                buildAutomationFormUpdateClientTool(
+                  automationSetupCapabilities,
+                ),
               ],
             }
           : {}),
@@ -651,6 +657,7 @@ class AgentServerConversationService {
       query: initialUserMsg,
       automationSetup,
       automationSetupTags,
+      automationSetupCapabilities,
       conversationInstructions,
       plugins,
       conversationId,
