@@ -243,7 +243,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           const groupKey =
             item.session?.id ??
             (item.reasoning?.[0] && item.reasoning[0].index <= item.startIndex
-              ? item.reasoning[0].id
+              ? `reasoning:${item.reasoning[0].id}`
               : item.events[0]
                 ? isObservationEvent(item.events[0]) ||
                   isUserRejectObservation(item.events[0])

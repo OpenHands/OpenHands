@@ -448,3 +448,27 @@ it("opens a lone blocked hook directly and preserves it when another tool joins"
     within(screen.getByTestId("event-group-content")).getByText(hook.reason!),
   ).toBeVisible();
 });
+
+describe("Messages: reasoning group identity", () => {
+  it("opens reasoning independently and removes it when history changes", async () => {
+    agent.state = AgentState.AWAITING_USER_INPUT;
+    const actions = Array.from({ length: 8 }, (_, i) => ({
+      ...action(`old-${i}`, "pwd"),
+      thought: [{ type: "text" as const, text: `Checking step ${i}` }],
+      reasoning_content: `Reasoning for step ${i}`,
+    }));
+    const done = actions.flatMap((a, i) => [
+      observation(a),
+      createUserMessageEvent(`old-prompt-${i}`),
+    ]);
+    const { rerender } = renderChat(done, [...actions, ...done]);
+    await userEvent
+      .setup()
+      .click(screen.getAllByTestId("event-group-toggle")[0]);
+    expect(screen.getAllByTestId("event-group-content")).toHaveLength(1);
+
+    const message = createUserMessageEvent("new-prompt");
+    rerender(<Messages messages={[message]} allEvents={[message]} />);
+    expect(screen.queryAllByTestId("event-group-toggle")).toHaveLength(0);
+  });
+});
