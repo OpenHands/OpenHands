@@ -224,6 +224,15 @@ export const groupEvents = (
           )
         : undefined;
     if (isGroupableEvent(event, correspondingAction)) {
+      // Hoist the thought before attaching the action's reasoning, so the
+      // reasoning lands in the step's own group rather than a "Thinking"-only
+      // group that shares the step's key and open state.
+      const thoughtAction = getThoughtSourceAction(event, allEvents);
+      if (thoughtAction && !emittedThoughtActionIds.has(thoughtAction.id)) {
+        flushRun();
+        emittedThoughtActionIds.add(thoughtAction.id);
+        items.push({ kind: "thought", action: thoughtAction, index });
+      }
       const reasoningAction = isActionEvent(event)
         ? event
         : correspondingAction;
@@ -240,12 +249,6 @@ export const groupEvents = (
             { id: reasoningAction.id, text: reasoning, index },
           ];
         }
-      }
-      const thoughtAction = getThoughtSourceAction(event, allEvents);
-      if (thoughtAction && !emittedThoughtActionIds.has(thoughtAction.id)) {
-        flushRun();
-        emittedThoughtActionIds.add(thoughtAction.id);
-        items.push({ kind: "thought", action: thoughtAction, index });
       }
       if (!run) run = { events: [], startIndex: index };
       run.events.push(event);
