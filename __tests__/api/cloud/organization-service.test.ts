@@ -8,6 +8,7 @@ import {
   getCloudOrganizationMember,
   getCloudOrganizations,
   getCurrentCloudApiKey,
+  listCloudServiceAccounts,
 } from "#/api/cloud/organization-service.api";
 import type { Backend } from "#/api/backend-registry/types";
 
@@ -140,5 +141,36 @@ describe("cloud organization-service", () => {
       headers: { Authorization: "Bearer bearer-token" },
     });
     expect(result).toEqual(member);
+  });
+
+  it("listCloudServiceAccounts follows next_page_id across pages", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          items: [
+            { id: "sa-1", org_id: "org-1", name: "a", is_disabled: false },
+          ],
+          next_page_id: "100",
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          items: [
+            { id: "sa-2", org_id: "org-1", name: "b", is_disabled: true },
+          ],
+          next_page_id: null,
+        }),
+      );
+
+    const result = await listCloudServiceAccounts("org-1", cloudBackend);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      `${cloudBackend.host}/api/organizations/org-1/service-accounts?limit=100`,
+    );
+    expect(fetchMock.mock.calls[1]![0]).toBe(
+      `${cloudBackend.host}/api/organizations/org-1/service-accounts?limit=100&page_id=100`,
+    );
+    expect(result.map((account) => account.id)).toEqual(["sa-1", "sa-2"]);
   });
 });

@@ -83,6 +83,10 @@ import {
 import { Divider } from "#/ui/divider";
 import { cn } from "#/utils/utils";
 import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
+import {
+  useServiceAccountRunAsEnabled,
+  useServiceAccounts,
+} from "#/hooks/query/use-service-accounts";
 import { AUTOMATION_DETAIL_QUERY_KEY } from "#/hooks/query/use-automation-detail";
 import { AUTOMATIONS_QUERY_KEY } from "#/hooks/query/use-automations";
 import {
@@ -189,6 +193,7 @@ const TIMEZONE_OPTIONS = [
 const AUTOMATION_SETUP_FIELD_RENDER_ORDER: AutomationSetupField[] = [
   "kind",
   "name",
+  "runAsUserId",
   "prompt",
   "pluginSource",
   "pluginRef",
@@ -233,6 +238,7 @@ const DEFAULT_CUSTOM_WEBHOOK_SIGNATURE_SCHEME: CustomWebhookSignatureScheme =
 
 const NON_CHARACTER_STREAM_FIELDS = new Set<AutomationSetupField>([
   "kind",
+  "runAsUserId",
   "triggerKind",
   "frequency",
   "weekday",
@@ -451,6 +457,7 @@ function buildInitialForm(
   return {
     kind,
     name: form.name ?? deriveName(prompt),
+    runAsUserId: form.runAsUserId ?? "",
     prompt,
     repository: form.repository ?? "",
     pluginSource: pluginEntries[0]?.source ?? "",
@@ -718,6 +725,8 @@ export function AutomationSetupPanel({
     ? (getAutomationFormSession(conversationId) ?? draft)
     : draft;
   const [form, setForm] = useState(() => buildInitialForm(initialDraft));
+  const serviceAccountRunAsEnabled = useServiceAccountRunAsEnabled();
+  const serviceAccounts = useServiceAccounts().data;
   const [eventTestPayload, setEventTestPayload] = useState(() =>
     buildDefaultEventTestPayload(DEFAULT_EVENT_SOURCE, DEFAULT_EVENT_KEY),
   );
@@ -1004,6 +1013,7 @@ export function AutomationSetupPanel({
   const {
     kind,
     name,
+    runAsUserId,
     prompt,
     repository,
     pluginSource,
@@ -1309,6 +1319,9 @@ export function AutomationSetupPanel({
           ),
           timezone: timezone.trim() || DEFAULT_TIMEZONE,
         };
+  // Only a new automation picks who it runs as; an existing one uses Change Runs As.
+  const showRunAsPicker = serviceAccountRunAsEnabled && !isEditingExisting;
+  const newAutomationRunAsId = showRunAsPicker ? runAsUserId : "";
   const buildPresetBody = (): SetupRequestBody => {
     const trimmedPrompt = prompt.trim();
     const body: SetupRequestBody = {
@@ -1332,6 +1345,7 @@ export function AutomationSetupPanel({
       body.plugins = configuredPlugins;
     }
     if (model.trim()) body.model = model.trim();
+    if (newAutomationRunAsId) body.run_as_user_id = newAutomationRunAsId;
     return body;
   };
   const buildCustomBody = (tarballPath: string): SetupRequestBody =>
@@ -1345,6 +1359,7 @@ export function AutomationSetupPanel({
       ...(showTimeout && timeoutSeconds.trim()
         ? { timeout: Number(timeoutSeconds) }
         : {}),
+      ...(newAutomationRunAsId ? { run_as_user_id: newAutomationRunAsId } : {}),
     }) as SetupRequestBody;
   /**
    * The request body sent to a server-backed draft. Custom drafts reference a
@@ -1423,6 +1438,7 @@ export function AutomationSetupPanel({
       agentProfileId,
       showTimeout,
       timeoutSeconds,
+      newAutomationRunAsId,
     ],
   );
   const isDraftDirty = savedDraftRequestKey
@@ -2073,6 +2089,52 @@ export function AutomationSetupPanel({
                   className={formControlFieldClassName}
                 />
               </Field>
+
+              {showRunAsPicker ? (
+                <Field label={t(I18nKey.AUTOMATION_SETUP$RUN_AS)}>
+                  <div className="relative">
+                    <select
+                      data-testid="automation-setup-run-as"
+                      value={runAsUserId}
+                      onChange={(event) =>
+                        updateField("runAsUserId", event.target.value)
+                      }
+                      className={cn(
+                        formControlFieldClassName,
+                        "appearance-none pr-8",
+                      )}
+                    >
+                      <option value="">
+                        {t(I18nKey.AUTOMATIONS$RUN_AS_ME)}
+                      </option>
+                      {/* A resumed draft's service account may be disabled or deleted by
+                          now. Keep it selected, shown by its id. */}
+                      {runAsUserId &&
+                      !(serviceAccounts ?? []).some(
+                        (account) =>
+                          account.id === runAsUserId && !account.is_disabled,
+                      ) ? (
+                        <option value={runAsUserId}>
+                          {(serviceAccounts ?? []).find(
+                            (account) => account.id === runAsUserId,
+                          )?.name ?? runAsUserId}
+                        </option>
+                      ) : null}
+                      {(serviceAccounts ?? [])
+                        .filter((account) => !account.is_disabled)
+                        .map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.name}
+                          </option>
+                        ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+                      aria-hidden
+                    />
+                  </div>
+                </Field>
+              ) : null}
 
               {isHydratingServerDraft ? (
                 <p

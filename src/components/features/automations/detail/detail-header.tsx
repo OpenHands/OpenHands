@@ -1,4 +1,4 @@
-import { Server } from "lucide-react";
+import { ArrowRightLeft, Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
@@ -21,19 +21,22 @@ interface DetailHeaderProps {
    */
   onToggleKeepAlive?: () => void;
   isKeepAlivePending?: boolean;
-  /** When provided (and the user can manage), the kebab menu shows an Edit entry. */
+  /** When provided (and the user can edit), the kebab menu shows an Edit entry. */
   onEdit?: () => void;
   onDelete: () => void;
+  /** When provided, the kebab menu shows a Change Runs As entry. */
+  onChangeRunAs?: () => void;
   onExport: () => void;
   onDownloadTarball: () => void;
   onRunNow?: () => void;
   isRunningNow?: boolean;
   /** Whether the caller may mutate this automation (manage perm or owner). */
   canManage?: boolean;
+  /** Whether the caller may edit this automation. Defaults to `canManage`. */
+  canEdit?: boolean;
   /**
    * Whether the caller may flip the enabled switch. Defaults to `canManage`;
-   * pass `false` for a disabled automation the caller did not create, since
-   * non-creators may only turn automations off.
+   * pass `false` when the caller may only turn the automation off or not at all.
    */
   canToggle?: boolean;
 }
@@ -45,11 +48,13 @@ export function DetailHeader({
   isKeepAlivePending = false,
   onEdit,
   onDelete,
+  onChangeRunAs,
   onExport,
   onDownloadTarball,
   onRunNow,
   isRunningNow = false,
   canManage = true,
+  canEdit = canManage,
   canToggle = canManage,
 }: DetailHeaderProps) {
   const { t } = useTranslation("openhands");
@@ -67,7 +72,7 @@ export function DetailHeader({
       onClick: onDownloadTarball,
     },
     // Write items — only when the user may mutate this automation.
-    ...(canManage && onEdit
+    ...(canEdit && onEdit
       ? [
           {
             label: t(I18nKey.AUTOMATIONS$EDIT),
@@ -97,6 +102,15 @@ export function DetailHeader({
             icon: <Server className="size-4" aria-hidden />,
             onClick: onToggleKeepAlive,
             disabled: isKeepAlivePending,
+          },
+        ]
+      : []),
+    ...(onChangeRunAs
+      ? [
+          {
+            label: t(I18nKey.AUTOMATIONS$CHANGE_RUN_AS),
+            icon: <ArrowRightLeft className="size-4" aria-hidden />,
+            onClick: onChangeRunAs,
           },
         ]
       : []),
