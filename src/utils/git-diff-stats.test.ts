@@ -1,16 +1,12 @@
 import { describe, expect, it } from "vitest";
-import {
-  countGitChangeDiffStats,
-  countTextDiffStats,
-  countUnifiedDiffStats,
-} from "./git-diff-stats";
+import { countGitChangeDiffStats } from "./git-diff-stats";
 
-describe("countTextDiffStats", () => {
+describe("countGitChangeDiffStats (text path)", () => {
   it("counts additions and deletions for an interleaved edit", () => {
     // Line 2 was replaced, a line was appended.
     const original = ["a", "b", "c"].join("\n");
     const modified = ["a", "b2", "c", "d"].join("\n");
-    expect(countTextDiffStats(original, modified)).toEqual({
+    expect(countGitChangeDiffStats({ original, modified })).toEqual({
       additions: 2,
       deletions: 1,
     });
@@ -19,7 +15,7 @@ describe("countTextDiffStats", () => {
   it("handles duplicate lines", () => {
     const original = ["x", "x", "y"].join("\n");
     const modified = ["x", "y"].join("\n");
-    expect(countTextDiffStats(original, modified)).toEqual({
+    expect(countGitChangeDiffStats({ original, modified })).toEqual({
       additions: 0,
       deletions: 1,
     });
@@ -28,28 +24,37 @@ describe("countTextDiffStats", () => {
   it("handles a moved line without counting an addition", () => {
     const original = ["a", "b", "c"].join("\n");
     const modified = ["b", "c", "a"].join("\n");
-    expect(countTextDiffStats(original, modified)).toEqual({
+    expect(countGitChangeDiffStats({ original, modified })).toEqual({
       additions: 1,
       deletions: 1,
     });
   });
 
   it("counts an empty original as pure additions", () => {
-    expect(countTextDiffStats("", "a\nb")).toEqual({
-      additions: 2,
-      deletions: 0,
-    });
+    expect(countGitChangeDiffStats({ original: "", modified: "a\nb" })).toEqual(
+      {
+        additions: 2,
+        deletions: 0,
+      },
+    );
   });
 
   it("counts an empty modified as pure deletions", () => {
-    expect(countTextDiffStats("a\nb", "")).toEqual({
-      additions: 0,
-      deletions: 2,
-    });
+    expect(countGitChangeDiffStats({ original: "a\nb", modified: "" })).toEqual(
+      {
+        additions: 0,
+        deletions: 2,
+      },
+    );
   });
 
   it("counts a full rewrite", () => {
-    expect(countTextDiffStats("old\ncontent", "new\ncontent")).toEqual({
+    expect(
+      countGitChangeDiffStats({
+        original: "old\ncontent",
+        modified: "new\ncontent",
+      }),
+    ).toEqual({
       additions: 1,
       deletions: 1,
     });
@@ -66,7 +71,9 @@ describe("countGitChangeDiffStats", () => {
       "-removed",
       "+added",
     ].join("\n");
-    expect(countGitChangeDiffStats({ diff: unified })).toEqual({
+    expect(
+      countGitChangeDiffStats({ diff: unified, original: "", modified: "" }),
+    ).toEqual({
       additions: 1,
       deletions: 1,
     });
