@@ -22,8 +22,10 @@ const dockerfile = readFileSync(
  * bundle are declared.
  */
 function frontendBuildStage(): string {
-  const start = dockerfile.indexOf("FROM node:24-slim AS frontend-build");
-  const end = dockerfile.indexOf("\nFROM ", start + 1);
+  // Match the stage by name: the base image tag is pinned upstream and moves on its own.
+  const from = /^FROM \S+ AS frontend-build$/m.exec(dockerfile);
+  const start = from?.index ?? -1;
+  const end = start === -1 ? -1 : dockerfile.indexOf("\nFROM ", start + 1);
   if (start === -1 || end === -1) {
     throw new Error("frontend-build stage is missing from docker/Dockerfile");
   }
