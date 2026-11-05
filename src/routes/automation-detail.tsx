@@ -258,9 +258,9 @@ export default function AutomationDetail() {
       (creatorQuery.isError ? automation.user_id : null);
   }
   const isDraft = isDraftAutomation(automation);
-  // Non-creators may turn an automation off but not back on. Draft test
-  // artifacts are finalized through the draft setup flow, not this toggle.
-  const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
+  // Draft test artifacts are finalized through the draft setup flow, not
+  // this toggle.
+  const canToggle = canManage && !isDraft;
   // `keep_alive` only matters on cloud, where each run gets its own sandbox.
   // An automation service that does not return it would reject it in a PATCH.
   const canToggleKeepAlive =
@@ -293,10 +293,9 @@ export default function AutomationDetail() {
             canManage={canManage}
             canToggle={canToggle}
           />
-          {/* The service lets only the creator change tags. */}
           <AutomationTagsEditor
             automation={automation}
-            canEdit={isOwner && !isDraft}
+            canEdit={canManage && !isDraft}
           />
           <DisabledReasonBanner automation={automation} />
           {automation.prompt ? (

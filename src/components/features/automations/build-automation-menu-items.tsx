@@ -11,7 +11,7 @@ interface BuildAutomationMenuItemsOptions {
   automation: Automation;
   t: (key: I18nKey) => string;
   canManage: boolean;
-  /** Whether the caller may flip `enabled`; non-creators may only turn off. */
+  /** Whether the caller may flip `enabled`; false for draft test artifacts. */
   canToggle: boolean;
   onRunNow: (id: string) => void;
   isRunPending: boolean;

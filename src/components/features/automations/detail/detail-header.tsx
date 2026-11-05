@@ -32,8 +32,8 @@ interface DetailHeaderProps {
   canManage?: boolean;
   /**
    * Whether the caller may flip the enabled switch. Defaults to `canManage`;
-   * pass `false` for a disabled automation the caller did not create, since
-   * non-creators may only turn automations off.
+   * pass `false` for a draft test artifact, which the draft setup flow
+   * finalizes instead.
    */
   canToggle?: boolean;
 }

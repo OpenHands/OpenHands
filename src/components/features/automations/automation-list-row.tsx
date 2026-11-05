@@ -70,9 +70,9 @@ export function AutomationListRow({
   // Write actions on a specific automation: manage OR creator (escape hatch).
   const canManage = hasManagePermission || isOwner;
   const isDraft = isDraftAutomation(automation);
-  // Non-creators may turn an automation off but not back on. Draft test
-  // artifacts are finalized through the draft setup flow, not this toggle.
-  const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
+  // Draft test artifacts are finalized through the draft setup flow, not
+  // this toggle.
+  const canToggle = canManage && !isDraft;
 
   const handleView = () => {
     navigate?.(`/automations/${automation.id}`);
