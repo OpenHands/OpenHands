@@ -36,8 +36,17 @@ export function SecretForm({
   const { t } = useTranslation("openhands");
 
   const { data: secrets } = useSearchSecrets();
-  const { mutate: createSecret, isPending: isCreating } = useCreateSecret();
-  const { mutate: updateSecret, isPending: isUpdating } = useUpdateSecret();
+  // `onSaved` rides the mutation itself rather than a per-call `mutate`
+  // callback: the chat can unmount this form while a save is in flight (the
+  // virtualized list remounts a secret-request card across the virtualization
+  // threshold), and TanStack Query drops per-call callbacks with the unmounted
+  // observer — the saved secret would never reach the waiting agent.
+  const { mutate: createSecret, isPending: isCreating } = useCreateSecret({
+    onSuccess: onSaved,
+  });
+  const { mutate: updateSecret, isPending: isUpdating } = useUpdateSecret({
+    onSuccess: onSaved,
+  });
   const isSaving = isCreating || isUpdating;
 
   const [error, setError] = React.useState<string | null>(null);
@@ -88,10 +97,7 @@ export function SecretForm({
       { name, value, description },
       {
         onSettled: closeUnlessKeptOpen,
-        onSuccess: () => {
-          invalidateSecrets();
-          onSaved?.({ name, description });
-        },
+        onSuccess: invalidateSecrets,
       },
     );
   };
@@ -106,10 +112,7 @@ export function SecretForm({
       { secretToEdit, name, description, value },
       {
         onSettled: closeUnlessKeptOpen,
-        onSuccess: () => {
-          invalidateSecrets();
-          onSaved?.({ name, description });
-        },
+        onSuccess: invalidateSecrets,
       },
     );
   };

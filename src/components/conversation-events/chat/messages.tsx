@@ -851,6 +851,9 @@ export const Messages: React.FC<MessagesProps> = React.memo(
               <div
                 key={virtualRow.key}
                 data-index={virtualRow.index}
+                // The "load older" anchor finds a row by key; the plain wrapper
+                // carries it too, so both list shapes anchor the same way.
+                data-row-key={renderedItemKey(item)}
                 ref={rowVirtualizer.measureElement}
                 data-testid="virtualized-message-row"
                 // The scroll column is a flex column and the user bubble

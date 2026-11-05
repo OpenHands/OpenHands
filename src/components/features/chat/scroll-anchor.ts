@@ -14,7 +14,14 @@
  * have settled. The second pass is a no-op when the row is not mounted (it
  * virtualized out of the window), so it can only improve the height-delta
  * result.
+ *
+ * Both list shapes expose the row key on a `[data-row-key]` element — the
+ * plain wrapper and the virtual row — and both are measured from the space the
+ * row occupies (`occupiedRowTop`), not the element's own rectangle: the plain
+ * wrapper is `display: contents` and has no box of its own.
  */
+
+import { occupiedRowTop } from "#/components/conversation-events/chat/scroll-anchoring";
 
 export interface ScrollAnchor {
   /** The row's `data-row-key`. */
@@ -35,7 +42,7 @@ export function captureScrollAnchor(element: HTMLElement): ScrollAnchor | null {
   for (const row of rows) {
     const key = row.getAttribute("data-row-key");
     if (!key) continue;
-    const offset = row.getBoundingClientRect().top - containerTop;
+    const offset = occupiedRowTop(row) - containerTop;
     if (offset >= 0) return { key, offset };
   }
   return null;
@@ -56,6 +63,6 @@ export function scrollAnchorOffset(
   if (!row) return null;
 
   const containerTop = element.getBoundingClientRect().top;
-  const offset = row.getBoundingClientRect().top - containerTop;
+  const offset = occupiedRowTop(row) - containerTop;
   return element.scrollTop + (offset - anchor.offset);
 }

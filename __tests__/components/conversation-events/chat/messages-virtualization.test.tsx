@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { Messages } from "#/components/conversation-events/chat/messages";
 import {
+  captureScrollAnchor,
+  scrollAnchorOffset,
+} from "#/components/features/chat/scroll-anchor";
+import {
   createUserMessageEvent,
   createPlanningObservationEvent,
   renderWithProviders,
@@ -675,6 +679,84 @@ describe("Messages virtualization", () => {
 
     const [row] = screen.getAllByTestId("virtualized-message-row");
     expect(row.className).toContain("flex-col");
+  });
+
+  it("exposes the row key on each virtual row so the scroll anchor can find it", () => {
+    // The "load older" restore finds a row by `data-row-key`. The plain wrapper
+    // carries it, and so must the virtual row, or the second pass is a no-op
+    // once the list virtualizes.
+    renderMessages(buildEvents(400));
+
+    const rows = screen.getAllByTestId("virtualized-message-row");
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0]).toHaveAttribute("data-row-key", "single-message-0");
+  });
+
+  it("anchors the load-older restore on a virtual row after older events prepend", () => {
+    // Regression for the reported bug: virtual rows had no `data-row-key`, so
+    // `captureScrollAnchor` returned null and the second restoration pass did
+    // nothing — the reader drifted when the prepended rows' measured sizes
+    // differed from their estimates.
+    const scrollTop = 550;
+    const olderRowHeight = 115; // estimate is 100, so two rows add 30px
+    let olderCount = 0;
+    const topFor = (key: string): number => {
+      const older = /^single-older-(\d+)$/.exec(key);
+      if (older) return Number(older[1]) * olderRowHeight - scrollTop;
+      const message = /^single-message-(\d+)$/.exec(key);
+      if (message) {
+        return (
+          olderCount * olderRowHeight + Number(message[1]) * 100 - scrollTop
+        );
+      }
+      return 0;
+    };
+    const rectAt = (top: number): DOMRect =>
+      ({
+        width: 800,
+        height: 600,
+        top,
+        left: 0,
+        right: 800,
+        bottom: top + 600,
+        x: 0,
+        y: top,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    // jsdom does not apply the row's `translateY`, so report each row's
+    // viewport top directly from its key.
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const key = this.getAttribute("data-row-key");
+        return rectAt(key ? topFor(key) : 0);
+      },
+    );
+
+    const { rerender } = renderMessages(buildEvents(400));
+    const parent = screen.getByTestId("scroll-parent");
+    Object.defineProperty(parent, "scrollTop", {
+      configurable: true,
+      get: () => scrollTop,
+      set: () => {},
+    });
+
+    // Row 6 is the first at or below the top edge: 600 - 550 = 50.
+    const anchorBefore = captureScrollAnchor(parent);
+    expect(anchorBefore).toEqual({ key: "single-message-6", offset: 50 });
+
+    // An older page prepends: the two older rows measure taller than their
+    // estimate, pushing the anchored row 30px down.
+    olderCount = 2;
+    const older = [
+      createUserMessageEvent("older-0"),
+      createUserMessageEvent("older-1"),
+    ];
+    rerender(
+      <Harness events={[...older, ...buildEvents(400)]} withScrollParent />,
+    );
+
+    // The anchored row is still mounted, now 230px down: 550 + (280 - 50).
+    expect(scrollAnchorOffset(parent, anchorBefore!)).toBe(780);
   });
 
   it("shifts rows back by the list's measured scroll margin", () => {

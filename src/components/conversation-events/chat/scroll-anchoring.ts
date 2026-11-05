@@ -93,6 +93,21 @@ export const measurePlainRow = (wrapper: Element): [string, number] | null => {
   return [rowKey, occupiedRowHeight(first, last)];
 };
 
+/**
+ * Viewport-space top edge of the space a row occupies. A virtual row is a real
+ * box, so its own rectangle is the answer. The plain wrapper is
+ * `display: contents` and has no box of its own (an empty rectangle), so fall
+ * back to its first child's border box minus that child's top margin — the same
+ * edge the flex layout gives the row.
+ */
+export const occupiedRowTop = (wrapper: Element): number => {
+  const own = wrapper.getBoundingClientRect();
+  if (own.height > 0) return own.top;
+  const first = wrapper.firstElementChild;
+  if (!first) return own.top;
+  return first.getBoundingClientRect().top - verticalMargins(first).top;
+};
+
 interface SizeChangeInstance {
   scrollElement: Element | null;
 }

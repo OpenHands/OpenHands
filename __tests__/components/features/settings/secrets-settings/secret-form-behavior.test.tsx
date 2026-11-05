@@ -25,12 +25,50 @@ vi.mock("#/hooks/query/use-get-secrets", () => ({
   useSearchSecrets: () => ({ data: mocks.secrets }),
 }));
 
+// The hooks now take the caller's `onSuccess` and fold it into the mutation
+// itself (so it survives the form unmounting mid-save). The fakes mirror that:
+// when the captured `onSuccess` runs, they run the hook-level callback with the
+// saved secret's identity and then the per-call callback, like TanStack does.
 vi.mock("#/hooks/mutation/use-create-secret", () => ({
-  useCreateSecret: () => ({ mutate: mocks.create }),
+  useCreateSecret: (options?: {
+    onSuccess?: (secret: { name: string; description?: string }) => void;
+  }) => ({
+    mutate: (
+      variables: { name: string; description?: string },
+      callbacks?: { onSuccess?: () => void },
+    ) =>
+      mocks.create(variables, {
+        ...callbacks,
+        onSuccess: () => {
+          options?.onSuccess?.({
+            name: variables.name,
+            description: variables.description,
+          });
+          callbacks?.onSuccess?.();
+        },
+      }),
+  }),
 }));
 
 vi.mock("#/hooks/mutation/use-update-secret", () => ({
-  useUpdateSecret: () => ({ mutate: mocks.update }),
+  useUpdateSecret: (options?: {
+    onSuccess?: (secret: { name: string; description?: string }) => void;
+  }) => ({
+    mutate: (
+      variables: { name: string; description?: string },
+      callbacks?: { onSuccess?: () => void },
+    ) =>
+      mocks.update(variables, {
+        ...callbacks,
+        onSuccess: () => {
+          options?.onSuccess?.({
+            name: variables.name,
+            description: variables.description,
+          });
+          callbacks?.onSuccess?.();
+        },
+      }),
+  }),
 }));
 
 interface RenderFormOptions {
