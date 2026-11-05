@@ -70,3 +70,43 @@ describe("copyToClipboard", () => {
     expect(document.body.children.length).toBe(before);
   });
 });
+
+describe("copyToClipboard focus restoration", () => {
+  const originalClipboard = navigator.clipboard;
+  const originalSelect = HTMLTextAreaElement.prototype.select;
+
+  afterEach(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      writable: true,
+      value: originalClipboard,
+    });
+    HTMLTextAreaElement.prototype.select = originalSelect;
+    vi.restoreAllMocks();
+    document.body.innerHTML = "";
+  });
+
+  it("returns focus to the element that had it before the fallback", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    });
+    document.execCommand = vi.fn().mockReturnValue(true);
+
+    // jsdom's select() is a no-op; a real browser moves focus onto the
+    // textarea, which is what strands the keyboard user once it is removed.
+    HTMLTextAreaElement.prototype.select = function select(this: HTMLTextAreaElement) {
+      this.focus();
+    };
+
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+    button.focus();
+    expect(document.activeElement).toBe(button);
+
+    await copyToClipboard("hello");
+
+    expect(document.activeElement).toBe(button);
+  });
+});
