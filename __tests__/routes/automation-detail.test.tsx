@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { HttpError } from "@openhands/typescript-client";
+import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 
 import { I18nKey } from "#/i18n/declaration";
 
@@ -109,6 +110,15 @@ const detailMocks = vi.hoisted(() => ({
   createConversationMutate: vi.fn(),
   navigate: vi.fn(),
 }));
+
+const mermaidMock = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  parse: vi.fn().mockResolvedValue({ diagramType: "flowchart" }),
+  render: vi
+    .fn()
+    .mockResolvedValue({ svg: '<svg data-testid="flow-diagram-svg"></svg>' }),
+}));
+vi.mock("mermaid", () => ({ default: mermaidMock }));
 
 vi.mock("#/hooks/mutation/use-create-conversation", () => ({
   useCreateConversation: () => ({
@@ -383,6 +393,70 @@ describe("AutomationDetail — backend-change guard", () => {
     // Assert — the off-state gate prevents the dispatch API from firing.
     expect(runNow).toBeDisabled();
     expect(AutomationService.dispatchAutomation).not.toHaveBeenCalled();
+  });
+});
+
+describe("AutomationDetail — description", () => {
+  const templateEntry = AUTOMATION_CATALOG.find(
+    (entry) => entry.id === "github-pr-reviewer",
+  )!;
+  // The whole route renders before the section does, which can exceed the
+  // default 1 s wait when the suite runs alongside others.
+  const LOAD = { timeout: 5000 };
+  const fromTemplate: Automation = {
+    ...automation,
+    description: null,
+    preset_metadata: {
+      template: { id: templateEntry.id, version: "1.0.0", config: {} },
+    },
+  };
+
+  it("shows the template's description when the automation has none", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(fromTemplate);
+
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(
+      await screen.findByTestId("automation-description-content", {}, LOAD),
+    ).toHaveTextContent(templateEntry.description);
+  });
+
+  it("prefers the automation's own description over its template's", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...fromTemplate,
+      description: "Written for this automation.",
+    });
+
+    // Act
+    renderDetail();
+
+    // Assert
+    const content = await screen.findByTestId(
+      "automation-description-content",
+      {},
+      LOAD,
+    );
+    expect(content).toHaveTextContent("Written for this automation.");
+    expect(content).not.toHaveTextContent(templateEntry.description);
+  });
+
+  it("draws how it runs when there is no description or template", async () => {
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(
+      await screen.findByText(I18nKey.AUTOMATIONS$DETAIL$HOW_IT_RUNS, {}, LOAD),
+    ).toBeInTheDocument();
+    // Earlier tests may have drawn this automation already; rendered SVGs
+    // are cached, so assert what is shown rather than the Mermaid call.
+    expect(
+      await screen.findByTestId("mermaid-diagram", {}, LOAD),
+    ).toContainElement(screen.getByTestId("flow-diagram-svg"));
   });
 });
 

@@ -31,6 +31,7 @@ import {
 import { DetailHeader } from "#/components/features/automations/detail/detail-header";
 import { AutomationTagsEditor } from "#/components/features/automations/detail/automation-tags-editor";
 import { DisabledReasonBanner } from "#/components/features/automations/detail/disabled-reason-banner";
+import { DescriptionSection } from "#/components/features/automations/detail/description-section";
 import { TriggerSection } from "#/components/features/automations/detail/trigger-section";
 import { ActionSection } from "#/components/features/automations/detail/action-section";
 import { SettingsSection } from "#/components/features/automations/detail/settings-section";
@@ -52,6 +53,8 @@ import {
 import AutomationService from "#/api/automation-service/automation-service.api";
 import type { Automation, ChangeRunAsRequest } from "#/types/automation";
 import { isDraftAutomation, isKeepAliveForced } from "#/utils/automation-state";
+import { getAutomationTemplateOverview } from "#/utils/automation-catalog";
+import { buildAutomationFlowDiagram } from "#/utils/automation-flow-diagram";
 import {
   getAutomationExportFilename,
   serializeAutomation,
@@ -294,6 +297,11 @@ export default function AutomationDetail() {
     person = personQuery.data?.email ?? (personQuery.isError ? personId : null);
   }
   const isDraft = isDraftAutomation(automation);
+  // Without its own description, an automation shows what the template it
+  // was created from says about it.
+  const templateOverview = automation.description
+    ? null
+    : getAutomationTemplateOverview(automation);
   // `keep_alive` only matters on cloud, where each run gets its own sandbox.
   // An automation service that does not return it would reject it in a PATCH.
   // Changing it is an edit, so it follows canEdit.
@@ -353,6 +361,24 @@ export default function AutomationDetail() {
             />
           ) : null}
           <DisabledReasonBanner automation={automation} />
+          {/* Own description, else the template's, else a diagram built
+              from the automation's settings, so every automation has one. */}
+          {automation.description ? (
+            <DescriptionSection description={automation.description} />
+          ) : templateOverview ? (
+            <DescriptionSection
+              description={templateOverview.description}
+              diagram={
+                templateOverview.diagram ??
+                buildAutomationFlowDiagram(automation, t)
+              }
+            />
+          ) : (
+            <DescriptionSection
+              title={t(I18nKey.AUTOMATIONS$DETAIL$HOW_IT_RUNS)}
+              diagram={buildAutomationFlowDiagram(automation, t)}
+            />
+          )}
           {/* Same order as the setup form: what starts it, what it does,
               how it runs, then what it has done. */}
           <div className="flex flex-col">

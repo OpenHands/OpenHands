@@ -113,6 +113,11 @@ export interface Automation {
   /** LLM/model profile name used when no agent profile is selected. */
   model?: string | null;
   /**
+   * Author-written Markdown explaining what the automation does. A
+   * ```mermaid block in it renders as a diagram on the detail page.
+   */
+  description?: string | null;
+  /**
    * Maximum run time in seconds. `null`/omitted uses the server default
    * (600s, 10 min); the deployment reports the maximum it accepts.
    */

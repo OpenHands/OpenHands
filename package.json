@@ -45,6 +45,7 @@
     "isbot": "5.2.2",
     "lucide-react": "1.25.0",
     "mdast-util-from-markdown": "2.0.3",
+    "mermaid": "12.2.0",
     "monaco-editor": "0.57.0",
     "posthog-js": "1.415.0",
     "react": "19.3.1",
