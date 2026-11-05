@@ -117,10 +117,6 @@ export function buildAutomationFormUpdateClientTool(
   };
 }
 
-/** The tool as sent when the deployment's capabilities are not known. */
-export const AUTOMATION_FORM_UPDATE_CLIENT_TOOL: ClientToolSpec =
-  buildAutomationFormUpdateClientTool();
-
 /**
  * System-message suffix for a setup conversation, sent with the form tool.
  * The sandbox can also reach the automation API, and keyword-triggered skills

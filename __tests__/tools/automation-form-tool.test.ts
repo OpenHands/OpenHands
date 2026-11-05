@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   AUTOMATION_FORM_UPDATE_ACTION_KIND,
-  AUTOMATION_FORM_UPDATE_CLIENT_TOOL,
   AUTOMATION_FORM_UPDATE_TOOL_NAME,
   buildAutomationFormUpdateClientTool,
 } from "#/api/automation-form-client-tool";
 import type { DeploymentCapabilities } from "#/manifests/types";
+
+// The tool as sent when the deployment's capabilities are not known.
+const defaultTool = buildAutomationFormUpdateClientTool();
 
 // An Enterprise instance with Jira and Bitbucket Data Center built in.
 const DATA_CENTER_CAPABILITIES: DeploymentCapabilities = {
@@ -33,7 +35,7 @@ describe("automation_form_update client tool", () => {
     expect(AUTOMATION_FORM_UPDATE_ACTION_KIND).toBe(
       "ClientAction_automation_form_update",
     );
-    expect(AUTOMATION_FORM_UPDATE_CLIENT_TOOL).toMatchObject({
+    expect(defaultTool).toMatchObject({
       name: AUTOMATION_FORM_UPDATE_TOOL_NAME,
       parameters: {
         type: "object",
@@ -73,7 +75,7 @@ describe("automation_form_update client tool", () => {
   });
 
   it("describes repositories on any of the instance's git providers", () => {
-    const repositoryLine = AUTOMATION_FORM_UPDATE_CLIENT_TOOL.description
+    const repositoryLine = defaultTool.description
       .split("\n")
       .find((line) => line.startsWith("* repository:"));
 
@@ -154,15 +156,9 @@ describe("automation_form_update client tool", () => {
       DATA_CENTER_CAPABILITIES,
     );
 
-    expect(withSources.name).toBe(AUTOMATION_FORM_UPDATE_CLIENT_TOOL.name);
-    expect(withSources.parameters).toEqual(
-      AUTOMATION_FORM_UPDATE_CLIENT_TOOL.parameters,
-    );
-    expect(withSources.annotations).toEqual(
-      AUTOMATION_FORM_UPDATE_CLIENT_TOOL.annotations,
-    );
-    expect(withSources.description).not.toBe(
-      AUTOMATION_FORM_UPDATE_CLIENT_TOOL.description,
-    );
+    expect(withSources.name).toBe(defaultTool.name);
+    expect(withSources.parameters).toEqual(defaultTool.parameters);
+    expect(withSources.annotations).toEqual(defaultTool.annotations);
+    expect(withSources.description).not.toBe(defaultTool.description);
   });
 });
