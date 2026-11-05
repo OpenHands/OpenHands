@@ -23,7 +23,14 @@ interface ManifestSubpageLayoutProps {
   children: React.ReactNode;
 }
 
-function SubPageNavLink({ item }: { item: SubPageNavItem }) {
+function SubPageNavLink({
+  item,
+  inStrip = false,
+}: {
+  item: SubPageNavItem;
+  /** In the mobile strip, links keep their natural width and the strip scrolls. */
+  inStrip?: boolean;
+}) {
   return (
     <NavigationLink
       to={item.to}
@@ -33,6 +40,7 @@ function SubPageNavLink({ item }: { item: SubPageNavItem }) {
         cn(
           sidebarNavRowClassName(),
           "truncate whitespace-nowrap",
+          inStrip && "w-auto shrink-0",
           isActive
             ? SIDEBAR_ROW_INTERACTIVE_CLASS.active
             : SIDEBAR_ROW_INTERACTIVE_CLASS.idle,
@@ -81,7 +89,7 @@ export function ManifestSubpageLayout({
             className="lg:hidden flex gap-1 overflow-x-auto border-b border-border pb-2"
           >
             {items.map((item) => (
-              <SubPageNavLink key={item.to} item={item} />
+              <SubPageNavLink key={item.to} item={item} inStrip />
             ))}
           </nav>
           {children}
