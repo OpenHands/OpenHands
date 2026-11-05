@@ -180,153 +180,52 @@ describe("ChooseAgentStep", () => {
     expect(call.agent_settings_diff).toEqual({ agent_kind: "openhands" });
   });
 
-  it("persists an ACP diff for Claude Code that leaves the model to the agent", async () => {
-    const save = vi.spyOn(SettingsService, "saveSettings");
-    const { onNext } = renderStep("claude-code");
-    const user = userEvent.setup();
-
-    await user.click(screen.getByTestId("onboarding-agent-next"));
-
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
-      expect(onNext).toHaveBeenCalledTimes(1);
-    });
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
-    expect(call.agent_settings_diff).toEqual({
-      agent_kind: "acp",
-      acp_server: "claude-code",
-      // Default-command path: the backend resolves the command from its
-      // own registry, so we don't pin a stale command here.
-      acp_command: [],
-      // ``acp_args: []`` is reset on every save so an API-set
-      // ``acp_args`` can't survive and concatenate onto the spawn
-      // command at conversation-create time.
-      acp_args: [],
-      // No model: Claude Code starts on its own default.
-      acp_model: null,
-    });
-  });
-
   it.each([
-    ["codex", "codex"],
-    ["gemini-cli", "gemini-cli"],
-    ["pi", "pi"],
-    ["opencode", "opencode"],
-  ])("persists acp_server=%s for the matching tile", async (id, expected) => {
-    const save = vi.spyOn(SettingsService, "saveSettings");
-    renderStep(id as OnboardingAgentId);
-    const user = userEvent.setup();
+    ["claude-code", "Claude Code"],
+    ["codex", "Codex"],
+    ["gemini-cli", "Gemini CLI"],
+    ["pi", "Pi"],
+    ["opencode", "OpenCode"],
+  ])(
+    "advances on Next without writing settings for %s on a local backend",
+    async (id) => {
+      const save = vi.spyOn(SettingsService, "saveSettings");
+      const { onNext } = renderStep(id as OnboardingAgentId);
+      const user = userEvent.setup();
 
-    await user.click(screen.getByTestId("onboarding-agent-next"));
+      await user.click(screen.getByTestId("onboarding-agent-next"));
 
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
-    });
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
-    expect(
-      (call.agent_settings_diff as Record<string, unknown>).acp_server,
-    ).toBe(expected);
-    // Canvas preselects the *preferred* default model — the registry default
-    // for Codex, but the Vertex-safe override (gemini-2.5-pro) for Gemini:
-    // gemini-cli re-resolves flash ids to its own default, which 404s on many
-    // Vertex projects (software-agent-sdk#3532).
-    expect(
-      (call.agent_settings_diff as Record<string, unknown>).acp_model,
-    ).toBe(getAcpPreferredDefaultModel(expected));
-    expect(call.agent_settings_diff).toMatchObject({
-      acp_command: [],
-      acp_args: [],
-    });
-  });
-
-  it("rebuilds the diff cleanly when the user flips between ACP providers", async () => {
-    // Bot-flagged: would a stale claude-code selection leak into a
-    // subsequent codex save? The helper rebuilds from the current
-    // selectedAgentId on each Next click, so no — but pin it.
-    const save = vi.spyOn(SettingsService, "saveSettings");
-    const { rerender } = render(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <ChooseAgentStep
-          selectedAgentId="claude-code"
-          onSelect={vi.fn()}
-          onNext={vi.fn()}
-        />
-      </QueryClientProvider>,
-    );
-    const user = userEvent.setup();
-    await user.click(screen.getByTestId("onboarding-agent-next"));
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
-    });
-    expect(
-      (
-        save.mock.calls[0]?.[0] as {
-          agent_settings_diff?: Record<string, unknown>;
-        }
-      ).agent_settings_diff?.acp_server,
-    ).toBe("claude-code");
-
-    // Switch the *parent's* selection (the modal's setSelectedAgentId)
-    // and click Next again — the second save should carry codex, not
-    // a stale claude-code value.
-    save.mockClear();
-    rerender(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <ChooseAgentStep
-          selectedAgentId="codex"
-          onSelect={vi.fn()}
-          onNext={vi.fn()}
-        />
-      </QueryClientProvider>,
-    );
-    await user.click(screen.getByTestId("onboarding-agent-next"));
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
-    });
-    expect(
-      (
-        save.mock.calls[0]?.[0] as {
-          agent_settings_diff?: Record<string, unknown>;
-        }
-      ).agent_settings_diff?.acp_server,
-    ).toBe("codex");
-  });
-
-  it("does not advance when the save mutation fails", async () => {
-    vi.spyOn(SettingsService, "saveSettings").mockRejectedValueOnce(
-      new Error("boom"),
-    );
-    const { onNext } = renderStep("claude-code");
-    const user = userEvent.setup();
-
-    await user.click(screen.getByTestId("onboarding-agent-next"));
-
-    // saveSettings rejects → onSuccess is not called → onNext stays untouched.
-    await waitFor(
-      () => {
-        expect(SettingsService.saveSettings).toHaveBeenCalledTimes(1);
-      },
-      { timeout: 1000 },
-    );
-    expect(onNext).not.toHaveBeenCalled();
-  });
+      expect(onNext).toHaveBeenCalledTimes(1);
+      expect(save).not.toHaveBeenCalled();
+    },
+  );
 });
+
+function renderCloudStep(initial: OnboardingAgentId = "openhands") {
+  const onSelect = vi.fn();
+  const onNext = vi.fn();
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <ActiveBackendProvider>
+        <ChooseAgentStep
+          selectedAgentId={initial}
+          onSelect={onSelect}
+          onNext={onNext}
+        />
+      </ActiveBackendProvider>
+    </QueryClientProvider>,
+  );
+  return { onSelect, onNext };
+}
 
 describe("ChooseAgentStep on a cloud backend", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
     __resetActiveStoreForTests();
     setRegisteredBackends([
       {
@@ -372,5 +271,150 @@ describe("ChooseAgentStep on a cloud backend", () => {
       screen.queryByTestId("onboarding-agent-option-opencode"),
     ).not.toBeInTheDocument();
     expect(onSelect).toHaveBeenCalledWith("openhands");
+  });
+
+  it("persists an ACP diff for Claude Code that leaves the model to the agent", async () => {
+    const save = vi.spyOn(SettingsService, "saveSettings");
+    const { onNext } = renderCloudStep("claude-code");
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("onboarding-agent-next"));
+
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(onNext).toHaveBeenCalledTimes(1);
+    });
+    const call = save.mock.calls[0]?.[0] as {
+      agent_settings_diff?: Record<string, unknown>;
+    };
+    expect(call.agent_settings_diff).toEqual({
+      agent_kind: "acp",
+      acp_server: "claude-code",
+      // Default-command path: the backend resolves the command from its
+      // own registry, so we don't pin a stale command here.
+      acp_command: [],
+      // ``acp_args: []`` is reset on every save so an API-set
+      // ``acp_args`` can't survive and concatenate onto the spawn
+      // command at conversation-create time.
+      acp_args: [],
+      // No model: Claude Code starts on its own default.
+      acp_model: null,
+    });
+  });
+
+  it.each([
+    ["codex", "codex"],
+    ["gemini-cli", "gemini-cli"],
+  ])("persists acp_server=%s for the matching tile", async (id, expected) => {
+    const save = vi.spyOn(SettingsService, "saveSettings");
+    renderCloudStep(id as OnboardingAgentId);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("onboarding-agent-next"));
+
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledTimes(1);
+    });
+    const call = save.mock.calls[0]?.[0] as {
+      agent_settings_diff?: Record<string, unknown>;
+    };
+    expect(
+      (call.agent_settings_diff as Record<string, unknown>).acp_server,
+    ).toBe(expected);
+    // Canvas preselects the *preferred* default model — the registry default
+    // for Codex, but the Vertex-safe override (gemini-2.5-pro) for Gemini:
+    // gemini-cli re-resolves flash ids to its own default, which 404s on many
+    // Vertex projects (software-agent-sdk#3532).
+    expect(
+      (call.agent_settings_diff as Record<string, unknown>).acp_model,
+    ).toBe(getAcpPreferredDefaultModel(expected));
+    expect(call.agent_settings_diff).toMatchObject({
+      acp_command: [],
+      acp_args: [],
+    });
+  });
+
+  it("rebuilds the diff cleanly when the user flips between ACP providers", async () => {
+    // Bot-flagged: would a stale claude-code selection leak into a
+    // subsequent codex save? The helper rebuilds from the current
+    // selectedAgentId on each Next click, so no — but pin it.
+    const save = vi.spyOn(SettingsService, "saveSettings");
+    const { rerender } = render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <ActiveBackendProvider>
+          <ChooseAgentStep
+            selectedAgentId="claude-code"
+            onSelect={vi.fn()}
+            onNext={vi.fn()}
+          />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("onboarding-agent-next"));
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledTimes(1);
+    });
+    expect(
+      (
+        save.mock.calls[0]?.[0] as {
+          agent_settings_diff?: Record<string, unknown>;
+        }
+      ).agent_settings_diff?.acp_server,
+    ).toBe("claude-code");
+
+    // Switch the *parent's* selection (the modal's setSelectedAgentId)
+    // and click Next again — the second save should carry codex, not
+    // a stale claude-code value.
+    save.mockClear();
+    rerender(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <ActiveBackendProvider>
+          <ChooseAgentStep
+            selectedAgentId="codex"
+            onSelect={vi.fn()}
+            onNext={vi.fn()}
+          />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+    await user.click(screen.getByTestId("onboarding-agent-next"));
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledTimes(1);
+    });
+    expect(
+      (
+        save.mock.calls[0]?.[0] as {
+          agent_settings_diff?: Record<string, unknown>;
+        }
+      ).agent_settings_diff?.acp_server,
+    ).toBe("codex");
+  });
+
+  it("does not advance when the save mutation fails", async () => {
+    vi.spyOn(SettingsService, "saveSettings").mockRejectedValueOnce(
+      new Error("boom"),
+    );
+    const { onNext } = renderCloudStep("claude-code");
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("onboarding-agent-next"));
+
+    // saveSettings rejects → onSuccess is not called → onNext stays untouched.
+    await waitFor(
+      () => {
+        expect(SettingsService.saveSettings).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 1000 },
+    );
+    expect(onNext).not.toHaveBeenCalled();
   });
 });
