@@ -1,5 +1,5 @@
 import React from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1106,6 +1106,48 @@ describe("BackendVersion", () => {
         `manage-backends-execution-mode-${local.name}`,
       ),
     ).toHaveTextContent("BACKEND$EXECUTION_MODE_DOCKER");
+  });
+
+  it("does not share its cache entry with the plain version query", async () => {
+    // `backend-form-modal` reads the same host under the plain
+    // ["backend-version", host, key] query and expects a string. A shared key
+    // would hand it the { version, executionMode } object and render
+    // "v[object Object]", so the two queries must stay separate.
+    const local: Backend = {
+      id: "local-cache-isolation",
+      name: "LocalCacheIsolation",
+      host: "http://127.0.0.1:18000",
+      apiKey: "key",
+      kind: "local",
+    };
+    getServerInfoMock.mockResolvedValue({
+      version: "1.59.0",
+      execution_runtime: "docker",
+    });
+
+    const probe = vi.fn();
+    function PlainVersionProbe() {
+      const { data } = useQuery({
+        queryKey: ["backend-version", local.host, local.apiKey],
+        queryFn: async () => "plain-version",
+        staleTime: Infinity,
+      });
+      probe(data);
+      return null;
+    }
+
+    renderInQueryClient(
+      <>
+        <BackendVersion backend={local} />
+        <PlainVersionProbe />
+      </>,
+    );
+
+    await screen.findByTestId(
+      `manage-backends-execution-mode-${local.name}`,
+    );
+    // The probe's own queryFn ran, so it did not inherit BackendVersion's entry.
+    expect(probe).toHaveBeenLastCalledWith("plain-version");
   });
 
   it("omits the execution mode when the backend does not report one", async () => {

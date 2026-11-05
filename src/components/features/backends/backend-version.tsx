@@ -23,7 +23,10 @@ function executionModeLabel(
 export function BackendVersion({ backend }: { backend: Backend }) {
   const { t } = useTranslation("openhands");
   const { data } = useQuery({
-    queryKey: ["backend-version", backend.host, backend.apiKey],
+    // Own key: this query returns the version together with the execution
+    // mode, while `backend-form-modal` reads the same host with the plain
+    // version key and would render the object as `[object Object]`.
+    queryKey: ["backend-version-with-runtime", backend.host, backend.apiKey],
     queryFn: async () => {
       const info = await new ServerClient(
         getAgentServerClientOptions({
