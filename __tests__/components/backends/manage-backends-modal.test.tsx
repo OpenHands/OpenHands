@@ -1085,6 +1085,46 @@ describe("BackendVersion", () => {
     ).not.toBeInTheDocument();
     expect(getServerInfoMock).not.toHaveBeenCalled();
   });
+
+  it("shows the execution mode the backend reports", async () => {
+    const local: Backend = {
+      id: "local-exec-mode",
+      name: "LocalExecMode",
+      host: "http://127.0.0.1:18000",
+      apiKey: "key",
+      kind: "local",
+    };
+    getServerInfoMock.mockResolvedValue({
+      version: "1.59.0",
+      execution_runtime: "docker",
+    });
+
+    renderInQueryClient(<BackendVersion backend={local} />);
+
+    expect(
+      await screen.findByTestId(
+        `manage-backends-execution-mode-${local.name}`,
+      ),
+    ).toHaveTextContent("BACKEND$EXECUTION_MODE_DOCKER");
+  });
+
+  it("omits the execution mode when the backend does not report one", async () => {
+    const local: Backend = {
+      id: "local-no-exec-mode",
+      name: "LocalNoExecMode",
+      host: "http://127.0.0.1:18000",
+      apiKey: "key",
+      kind: "local",
+    };
+    getServerInfoMock.mockResolvedValue({ version: "1.59.0" });
+
+    renderInQueryClient(<BackendVersion backend={local} />);
+
+    await screen.findByTestId(`manage-backends-version-${local.name}`);
+    expect(
+      screen.queryByTestId(`manage-backends-execution-mode-${local.name}`),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("BackendRow", () => {
