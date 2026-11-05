@@ -62,6 +62,19 @@ function countTextDiffStats(
   let originalIndex = 0;
   let modifiedIndex = 0;
 
+  // Counts of each line value among the remaining original lines (from
+  // originalIndex onward). Maintained incrementally so the membership lookup
+  // below stays O(1) instead of re-scanning a shrinking suffix array for every
+  // modified line (quadratic on large diffs). Counts are needed because the
+  // same line value can appear multiple times in the remainder.
+  const remainingOriginalLineCounts = new Map<string, number>();
+  for (const line of originalLines) {
+    remainingOriginalLineCounts.set(
+      line,
+      (remainingOriginalLineCounts.get(line) ?? 0) + 1,
+    );
+  }
+
   while (
     originalIndex < originalLines.length ||
     modifiedIndex < modifiedLines.length
@@ -74,6 +87,10 @@ function countTextDiffStats(
       modifiedIndex < modifiedLines.length &&
       originalLine === modifiedLine
     ) {
+      remainingOriginalLineCounts.set(
+        originalLine,
+        (remainingOriginalLineCounts.get(originalLine) ?? 0) - 1,
+      );
       originalIndex += 1;
       modifiedIndex += 1;
       continue;
@@ -82,7 +99,7 @@ function countTextDiffStats(
     if (
       modifiedIndex < modifiedLines.length &&
       (originalIndex >= originalLines.length ||
-        !originalLines.slice(originalIndex).includes(modifiedLine))
+        !remainingOriginalLineCounts.get(modifiedLine))
     ) {
       additions += 1;
       modifiedIndex += 1;
@@ -90,6 +107,10 @@ function countTextDiffStats(
     }
 
     if (originalIndex < originalLines.length) {
+      remainingOriginalLineCounts.set(
+        originalLine,
+        (remainingOriginalLineCounts.get(originalLine) ?? 0) - 1,
+      );
       deletions += 1;
       originalIndex += 1;
     }
