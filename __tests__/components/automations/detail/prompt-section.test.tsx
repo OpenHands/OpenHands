@@ -3,11 +3,11 @@ import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 
 import { I18nKey } from "#/i18n/declaration";
-import { PromptBody } from "#/components/features/automations/detail/prompt-section";
+import { PromptSection } from "#/components/features/automations/detail/prompt-section";
 
-describe("PromptBody", () => {
+describe("PromptSection", () => {
   it("does not show a toggle for short prompts", () => {
-    render(<PromptBody prompt="Short prompt." />);
+    render(<PromptSection prompt="Short prompt." />);
 
     expect(screen.getByTestId("automation-prompt-content")).toHaveTextContent(
       "Short prompt.",
@@ -32,7 +32,7 @@ describe("PromptBody", () => {
       },
     });
 
-    render(<PromptBody prompt={longPrompt} />);
+    render(<PromptSection prompt={longPrompt} />);
 
     expect(screen.getByTestId("automation-prompt-fade")).toBeInTheDocument();
     expect(screen.getByTestId("automation-prompt-content")).toHaveClass("max-h-60");

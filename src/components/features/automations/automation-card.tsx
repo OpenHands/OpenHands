@@ -35,7 +35,6 @@ import {
   shouldShowAutomationRunSummaryHovercard,
 } from "#/components/features/home/featured-automations/automation-run-health";
 import { isDraftAutomation } from "#/utils/automation-state";
-import { describeSchedule } from "#/utils/automation-trigger-description";
 
 /** Run insights shown when the manifest declares the dashboard surface. */
 export interface AutomationInsightsProps {
@@ -70,8 +69,7 @@ export function AutomationCard({
   const isDraft = isDraftAutomation(automation);
 
   const scheduleLabel =
-    describeSchedule(automation.trigger, t, i18n.language) ??
-    automation.trigger.type;
+    automation.trigger.schedule_human || automation.trigger.type;
   const pills = useMemo(
     () => buildAutomationMetadataPills(automation, scheduleLabel),
     [automation, scheduleLabel],

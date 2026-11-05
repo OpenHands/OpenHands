@@ -36,7 +36,6 @@ import {
   shortenAutomationRunSummary,
   shouldShowAutomationRunSummaryHovercard,
 } from "./automation-run-health";
-import { describeSchedule } from "#/utils/automation-trigger-description";
 
 interface PinnedAutomationCardProps {
   automation: Automation;
@@ -88,8 +87,7 @@ export function PinnedAutomationCard({
     latestRun?.status === AutomationRunStatus.COMPLETED ||
     latestRun?.status === AutomationRunStatus.FAILED;
   const scheduleLabel =
-    describeSchedule(automation.trigger, t, i18n.language) ??
-    automation.trigger.type;
+    automation.trigger.schedule_human || automation.trigger.type;
   const pills = useMemo(
     () => buildAutomationMetadataPills(automation, scheduleLabel),
     [automation, scheduleLabel],

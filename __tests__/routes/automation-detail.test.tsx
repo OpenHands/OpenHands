@@ -231,8 +231,8 @@ afterEach(() => {
   __resetActiveStoreForTests();
 });
 
-describe("AutomationDetail — Edit in the header", () => {
-  it("shows Edit beside Run now instead of inside the actions menu", async () => {
+describe("AutomationDetail — Edit in the kebab menu", () => {
+  it("shows Edit in the kebab menu when the active backend is local", async () => {
     // Arrange — default beforeEach selects the local backend.
     const user = userEvent.setup();
     renderDetail();
@@ -244,13 +244,13 @@ describe("AutomationDetail — Edit in the header", () => {
     // in tests because `t` is mocked to return the key itself.
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
 
-    // Assert — one Edit control, and it is the header button.
+    // Assert — Edit entry is present alongside the other actions.
     expect(
-      screen.getAllByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
-    ).toEqual([screen.getByTestId("automation-detail-edit")]);
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    ).toBeInTheDocument();
   });
 
-  it("opens the setup page from the header when the active backend is cloud", async () => {
+  it("opens the setup page from the kebab menu when the active backend is cloud", async () => {
     // Arrange — switch to the cloud backend BEFORE rendering so the
     // detail page mounts under cloud (the backend-change guard would
     // otherwise stop the fetch).
@@ -261,8 +261,11 @@ describe("AutomationDetail — Edit in the header", () => {
       expect(AutomationService.getAutomation).toHaveBeenCalledTimes(1);
     });
 
-    // Act
-    await user.click(await screen.findByTestId("automation-detail-edit"));
+    // Act — open the kebab menu and pick Edit.
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    );
 
     // Assert — Edit opens the setup form without starting or seeding an agent
     // conversation. The permission model (mocked to canManage above) decides
@@ -271,6 +274,9 @@ describe("AutomationDetail — Edit in the header", () => {
     expect(detailMocks.navigate).toHaveBeenCalledWith(
       "/automations/setup?automationId=auto-1",
     );
+    expect(
+      screen.queryByTestId("edit-automation-name"),
+    ).not.toBeInTheDocument();
   });
 });
 

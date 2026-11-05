@@ -1,5 +1,5 @@
 import { type KeyboardEvent, useState } from "react";
-import { Pencil, Plus, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
@@ -94,26 +94,9 @@ export function AutomationTagsEditor({
             type="button"
             data-testid="automation-tags-edit"
             onClick={() => setDraft(savedTags)}
-            aria-label={
-              savedTags.length > 0
-                ? t(I18nKey.AUTOMATIONS$EDIT_TAGS)
-                : undefined
-            }
-            title={
-              savedTags.length > 0
-                ? t(I18nKey.AUTOMATIONS$EDIT_TAGS)
-                : undefined
-            }
-            className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted hover:border-muted hover:text-foreground"
+            className="text-xs text-muted hover:text-foreground"
           >
-            {savedTags.length > 0 ? (
-              <Pencil className="size-3" aria-hidden="true" />
-            ) : (
-              <>
-                <Plus className="size-3" aria-hidden="true" />
-                {t(I18nKey.AUTOMATIONS$ADD_TAG)}
-              </>
-            )}
+            {t(I18nKey.AUTOMATIONS$EDIT_TAGS)}
           </button>
         ) : null}
       </div>

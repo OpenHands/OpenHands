@@ -1,0 +1,209 @@
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
+import type { Automation } from "#/types/automation";
+import CogIcon from "#/icons/cog.svg?react";
+import GitBranchIcon from "#/icons/git-branch.svg?react";
+import CheckCircleIcon from "#/icons/check-circle.svg?react";
+import CalendarIcon from "#/icons/calendar.svg?react";
+import SparkleIcon from "#/icons/sparkle.svg?react";
+import UserIcon from "#/icons/user.svg?react";
+import { Zap } from "lucide-react";
+import BellIcon from "#/icons/bell.svg?react";
+import CodeTagIcon from "#/icons/code-tag.svg?react";
+import LinkExternalIcon from "#/icons/link-external.svg?react";
+import { formatEventOn } from "#/utils/automation-schedule";
+import { automationRepositoryLabel } from "#/utils/automation-repo-sources";
+import { SectionCard } from "./section-card";
+import { ConfigField } from "./config-field";
+import { BranchBadge } from "./branch-badge";
+
+interface ConfigurationSectionProps {
+  automation: Automation;
+  /**
+   * Identity the automation runs as: a person's email (or raw user id when
+   * the email could not be resolved), or a service account's name (its raw id
+   * when a manager's lookup failed, or a generic label for a member).
+   * Omitted/null hides the field (local backends, or while the lookup is
+   * still in flight).
+   */
+  runsAs?: string | null;
+  /** `runsAs` is a service account: show the SA badge next to it. */
+  runsAsServiceAccount?: boolean;
+  /**
+   * The person who created the automation, resolved like `runsAs`. Passed
+   * only when it differs from `runsAs` (an automation that runs as a service
+   * account); omitted/null hides the field.
+   */
+  createdBy?: string | null;
+}
+
+const FILTER_TRUNCATE_LENGTH = 60;
+
+function FilterExpression({ filter }: { filter: string }) {
+  const { t } = useTranslation("openhands");
+  const [expanded, setExpanded] = useState(false);
+  const isLong = filter.length > FILTER_TRUNCATE_LENGTH;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="font-mono break-all">
+        {isLong && !expanded
+          ? `${filter.slice(0, FILTER_TRUNCATE_LENGTH)}…`
+          : filter}
+      </span>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
+          className="text-xs text-muted hover:text-content self-start"
+        >
+          {expanded
+            ? t(I18nKey.SETTINGS$SKILLS_SHOW_LESS)
+            : t(I18nKey.SETTINGS$SKILLS_SHOW_MORE)}
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function ConfigurationSection({
+  automation,
+  runsAs,
+  runsAsServiceAccount = false,
+  createdBy,
+}: ConfigurationSectionProps) {
+  const { t } = useTranslation("openhands");
+  const isEvent = automation.trigger.type === "event";
+
+  let scheduleDisplay = automation.trigger.schedule ?? "";
+  if (automation.trigger.schedule_human) {
+    scheduleDisplay = automation.timezone
+      ? `${automation.trigger.schedule_human} (${automation.timezone})`
+      : automation.trigger.schedule_human;
+  }
+
+  const triggerDisplay = isEvent
+    ? t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER_EVENT)
+    : t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER_SCHEDULE);
+
+  return (
+    <SectionCard
+      icon={<CogIcon className="size-4" />}
+      title={t(I18nKey.AUTOMATIONS$DETAIL$CONFIGURATION)}
+    >
+      <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+        {automation.repositories && automation.repositories.length > 0 && (
+          <ConfigField
+            icon={<GitBranchIcon className="size-3.5" />}
+            label={t(I18nKey.AUTOMATIONS$DETAIL$REPOSITORIES)}
+          >
+            <ul className="flex flex-col gap-1">
+              {automation.repositories.map((repository) => (
+                <li
+                  key={`${repository.url}@${repository.ref ?? ""}`}
+                  data-testid="automation-repository"
+                  className="flex flex-wrap items-center gap-1"
+                >
+                  <span className="break-all">
+                    {automationRepositoryLabel(repository)}
+                  </span>
+                  {repository.ref && <BranchBadge branch={repository.ref} />}
+                </li>
+              ))}
+            </ul>
+          </ConfigField>
+        )}
+
+        <ConfigField
+          icon={<CheckCircleIcon className="size-3.5" />}
+          label={t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
+        >
+          {triggerDisplay}
+        </ConfigField>
+
+        {!isEvent && (
+          <ConfigField
+            icon={<CalendarIcon className="size-3.5" />}
+            label={t(I18nKey.AUTOMATIONS$DETAIL$SCHEDULE)}
+          >
+            {scheduleDisplay}
+          </ConfigField>
+        )}
+
+        {isEvent && automation.trigger.source && (
+          <ConfigField
+            icon={<Zap className="size-3.5" aria-hidden="true" />}
+            label={t(I18nKey.AUTOMATIONS$DETAIL$EVENT_SOURCE)}
+          >
+            {automation.trigger.source}
+          </ConfigField>
+        )}
+
+        {isEvent && automation.trigger.on && (
+          <ConfigField
+            icon={<LinkExternalIcon className="size-3.5" />}
+            label={t(I18nKey.AUTOMATIONS$DETAIL$EVENT_TYPE)}
+          >
+            {formatEventOn(automation.trigger.on)}
+          </ConfigField>
+        )}
+
+        {isEvent && automation.trigger.filter && (
+          <ConfigField
+            icon={<CodeTagIcon className="size-3.5" />}
+            label={t(I18nKey.AUTOMATIONS$DETAIL$EVENT_FILTER)}
+          >
+            <FilterExpression filter={automation.trigger.filter} />
+          </ConfigField>
+        )}
+
+        {runsAs && (
+          <ConfigField
+            icon={<UserIcon className="size-3.5" />}
+            label={t(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS)}
+          >
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="break-all">{runsAs}</span>
+              {runsAsServiceAccount && (
+                <span
+                  data-testid="service-account-badge"
+                  title={t(I18nKey.AUTOMATIONS$SERVICE_ACCOUNT_LABEL)}
+                  className="rounded-md bg-surface-raised px-1.5 py-0.5 text-xs font-medium text-muted"
+                >
+                  {t(I18nKey.AUTOMATIONS$SERVICE_ACCOUNT_BADGE)}
+                </span>
+              )}
+            </span>
+          </ConfigField>
+        )}
+
+        {createdBy && (
+          <ConfigField
+            icon={<UserIcon className="size-3.5" />}
+            label={t(I18nKey.AUTOMATIONS$DETAIL$CREATED_BY)}
+          >
+            <span className="break-all">{createdBy}</span>
+          </ConfigField>
+        )}
+
+        <ConfigField
+          icon={<SparkleIcon className="size-3.5" />}
+          label={t(I18nKey.AUTOMATIONS$DETAIL$MODEL)}
+        >
+          {automation.model ?? t(I18nKey.COMMON$ACTIVE_PROFILE)}
+        </ConfigField>
+
+        {automation.notification && (
+          <ConfigField
+            icon={<BellIcon className="size-3.5" />}
+            label={t(I18nKey.AUTOMATIONS$DETAIL$NOTIFICATION)}
+          >
+            {automation.notification}
+          </ConfigField>
+        )}
+      </div>
+    </SectionCard>
+  );
+}

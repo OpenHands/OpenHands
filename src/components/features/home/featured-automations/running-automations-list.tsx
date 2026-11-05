@@ -28,6 +28,7 @@ import {
   deriveRunHealth,
   formatTriggerSourceLabel,
   getTriggerEventLabel,
+  getTriggerScheduleLabel,
   getTriggerSource,
 } from "./automation-run-health";
 import {
@@ -43,7 +44,6 @@ import {
   getRunStatusLabelKey,
   HomeAutomationRunTooltip,
 } from "./home-automation-run-tooltip";
-import { describeSchedule } from "#/utils/automation-trigger-description";
 
 interface RunningAutomationRowProps {
   item: HomeAutomationActivityItem;
@@ -56,18 +56,14 @@ function RunningAutomationRow({
   automation,
   runState,
 }: RunningAutomationRowProps) {
-  const { t, i18n } = useTranslation("openhands");
+  const { t } = useTranslation("openhands");
   const { isPinned, togglePin } = useHomePinnedAutomations();
   const actions = useHomeAutomationActions(automation, runState.latestRun);
   const pinned = isPinned(item.id);
   const isEventTrigger = automation.trigger.type === "event";
   const TriggerIcon = isEventTrigger ? Zap : ClockIcon;
   const triggerEventLabel = getTriggerEventLabel(automation);
-  const triggerScheduleLabel = describeSchedule(
-    automation.trigger,
-    t,
-    i18n.language,
-  );
+  const triggerScheduleLabel = getTriggerScheduleLabel(automation);
   const triggerSource = getTriggerSource(automation);
   const hasTriggerMeta = Boolean(
     triggerEventLabel || triggerScheduleLabel || triggerSource,
