@@ -358,7 +358,7 @@ describe("useConversationNameContextMenu", () => {
     });
 
     const copyClick = clickEvent();
-    act(() => result.current.handleCopyShareLink(copyClick.event));
+    await act(async () => result.current.handleCopyShareLink(copyClick.event));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       `${window.location.origin}/shared/conversations/conv-active`,
     );

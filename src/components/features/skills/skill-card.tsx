@@ -15,6 +15,7 @@ import {
   extensionModuleCardInteractiveClassName,
   extensionModuleCardSurfaceClassName,
 } from "#/utils/extension-module-card-classes";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 
 interface SkillCardProps {
   skill: SkillInfo;
@@ -44,8 +45,9 @@ export function SkillCard({
       return;
     }
 
-    await navigator.clipboard.writeText(skill.source);
-    setSourceCopied(true);
+    if (await copyToClipboard(skill.source)) {
+      setSourceCopied(true);
+    }
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {

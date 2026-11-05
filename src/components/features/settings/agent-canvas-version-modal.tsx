@@ -19,6 +19,7 @@ import NpmIcon from "#/icons/npm.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 
 const COPY_FEEDBACK_MS = 2000;
 
@@ -82,8 +83,8 @@ export function AgentCanvasVersionModal({
     }
   }, [selectedTab]);
 
-  const copyCommand = React.useCallback(() => {
-    void navigator.clipboard?.writeText(command);
+  const copyCommand = React.useCallback(async () => {
+    if (!(await copyToClipboard(command))) return;
     setCopied(true);
     if (copiedTimeoutRef.current !== null) {
       window.clearTimeout(copiedTimeoutRef.current);

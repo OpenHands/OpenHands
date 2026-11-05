@@ -32,6 +32,7 @@ import {
   statusToneBadgeClassName,
   statusToneBannerClassName,
 } from "#/utils/status-tone-classes";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 
 const COPY_FEEDBACK_MS = 2000;
 
@@ -79,8 +80,8 @@ function UpdateCommandTabs() {
     }
   }, [selectedTab]);
 
-  const copyCommand = useCallback(() => {
-    void navigator.clipboard?.writeText(command);
+  const copyCommand = useCallback(async () => {
+    if (!(await copyToClipboard(command))) return;
     setCopied(true);
     if (copiedTimeoutRef.current !== null) {
       window.clearTimeout(copiedTimeoutRef.current);
