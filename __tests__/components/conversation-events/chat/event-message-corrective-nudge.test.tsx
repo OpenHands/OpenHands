@@ -23,6 +23,11 @@ vi.mock("#/hooks/use-conversation-id", () => ({
 const CORRECTIVE_NUDGE_TEXT =
   "Your last response did not include a function call or a message. Please use a tool to proceed with the task.";
 
+// Emitted by the SDK when a Stop hook blocks the agent from finishing
+// (`ACP_STOP_HOOK_FEEDBACK_PREFIX` in local_conversation.py).
+const STOP_HOOK_FEEDBACK_TEXT =
+  "[Stop hook feedback] The task appears complete, but automation runs must end by calling the finish tool. Please call the finish tool now with the final task outcome.";
+
 const createMessageEvent = (
   source: MessageEvent["source"],
   role: MessageEvent["llm_message"]["role"],
@@ -48,7 +53,7 @@ const renderEvent = (event: MessageEvent) =>
     />,
   );
 
-describe("EventMessage - empty-response corrective nudge", () => {
+describe("EventMessage - SDK corrective nudges", () => {
   beforeEach(() => {
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.INIT,
@@ -70,12 +75,28 @@ describe("EventMessage - empty-response corrective nudge", () => {
     expect(screen.queryByTestId("environment-message")).not.toBeInTheDocument();
   });
 
+  it("renders the Stop hook feedback as an informational note instead of a chat message", () => {
+    const event = createMessageEvent(
+      "environment",
+      "user",
+      STOP_HOOK_FEEDBACK_TEXT,
+    );
+
+    renderEvent(event);
+
+    const note = screen.getByTestId("corrective-nudge-message");
+    expect(note).toHaveTextContent(STOP_HOOK_FEEDBACK_TEXT);
+    expect(note.querySelector("svg")).toBeInTheDocument();
+    expect(screen.queryByTestId("environment-message")).not.toBeInTheDocument();
+  });
+
   it.each([
     ["user", "user", "Please fix the failing test"],
     ["agent", "assistant", "I fixed the failing test"],
     ["environment", "user", "Some other framework message"],
     // Only the framework's own nudge qualifies, not a user typing its text.
     ["user", "user", CORRECTIVE_NUDGE_TEXT],
+    ["user", "user", STOP_HOOK_FEEDBACK_TEXT],
   ] as const)(
     "keeps the regular chat message for a %s-sourced %s message",
     (source, role, text) => {
