@@ -3,12 +3,7 @@ import type { AutomationRepository } from "#/types/automation";
 export type AutomationSetupKind = "prompt" | "plugin" | "custom";
 export type AutomationSetupTriggerKind = "cron" | "event";
 export type AutomationSetupFrequency =
-  | "once"
-  | "hourly"
-  | "daily"
-  | "weekdays"
-  | "weekly"
-  | "custom";
+  "once" | "hourly" | "daily" | "weekdays" | "weekly" | "custom";
 export type AutomationSetupFieldUpdateSource = "agent" | "user";
 
 export interface AutomationSetupFormValues {
