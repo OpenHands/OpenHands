@@ -10,11 +10,7 @@ import type { ACPModelOption } from "#/constants/acp-providers";
  * Local agent-server conversations do not carry this field (null).
  */
 export type SandboxStatus =
-  | "PAUSED"
-  | "RUNNING"
-  | "STARTING"
-  | "MISSING"
-  | "ERROR";
+  "PAUSED" | "RUNNING" | "STARTING" | "MISSING" | "ERROR";
 
 // Plugin specification for starting conversations with plugins
 export interface PluginSpec {
@@ -78,6 +74,8 @@ export interface AppConversationStartRequest {
   // prompt (OpenHands#14640). Omit/null to create a fresh conversation.
   conversation_id?: string | null;
   initial_message?: SendMessageRequest | null;
+  // Appended to the started agent's system message by the app-server.
+  system_message_suffix?: string | null;
   processors?: unknown[]; // EventCallbackProcessor - keeping as unknown for now
   llm_model?: string | null;
   // One-off launch on a saved LLM profile (by name), without activating it.

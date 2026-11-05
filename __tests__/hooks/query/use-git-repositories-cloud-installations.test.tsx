@@ -170,4 +170,66 @@ describe("useGitRepositories with cloud installations", () => {
       requestedPaths().some((path) => path.includes("/repositories/search")),
     ).toBe(false);
   });
+
+  it("lists GitHub repositories directly when the token has no GitHub App installations", async () => {
+    // Arrange: a GitHub OAuth app token, so the instance reports no
+    // installations; the flat listing (no installation_id) has one repository.
+    vi.mocked(SettingsService.getSettings).mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      provider_tokens_set: { github: null },
+    });
+    serveCloud([], { "": { first: [repo("acme/api", "github")] } });
+
+    // Act
+    const { result } = renderHook(
+      () => useGitRepositories({ provider: "github" }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(1));
+
+    // Assert
+    expect(
+      result.current.data?.pages[0].items.map((item) => item.full_name),
+    ).toEqual(["acme/api"]);
+    const repoQueries = requestedPaths()
+      .filter((path) => path.includes("/repositories/search"))
+      .map((path) => new URL(`https://x${path}`).searchParams);
+    expect(
+      repoQueries.map((params) => [
+        params.get("provider"),
+        params.get("installation_id"),
+      ]),
+    ).toEqual([["github", null]]);
+  });
+
+  it("keeps listing GitHub repositories per installation when the token has installations", async () => {
+    // Arrange: a GitHub App token with one installation. The flat listing
+    // also has a repository, which must not be requested.
+    vi.mocked(SettingsService.getSettings).mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      provider_tokens_set: { github: null },
+    });
+    serveCloud(["42"], {
+      "42": { first: [repo("acme/api", "github")] },
+      "": { first: [repo("acme/not-installed", "github")] },
+    });
+
+    // Act
+    const { result } = renderHook(
+      () => useGitRepositories({ provider: "github" }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(1));
+
+    // Assert
+    expect(
+      result.current.data?.pages[0].items.map((item) => item.full_name),
+    ).toEqual(["acme/api"]);
+    const repoQueries = requestedPaths()
+      .filter((path) => path.includes("/repositories/search"))
+      .map((path) => new URL(`https://x${path}`).searchParams);
+    expect(repoQueries.map((params) => params.get("installation_id"))).toEqual([
+      "42",
+    ]);
+  });
 });
