@@ -50,7 +50,7 @@ vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
 const localBackend: Backend = {
   id: "local-1",
   name: "Local",
-  host: "http://localhost:8000",
+  host: window.location.origin,
   apiKey: "session-key",
   kind: "local",
 };
