@@ -353,17 +353,17 @@ export default function AutomationDetail() {
             canEdit={canEdit && !isDraft}
           />
           <DisabledReasonBanner automation={automation} />
-          {automation.prompt ? (
-            <PromptSection prompt={automation.prompt} />
-          ) : (
-            <ScriptSection automation={automation} />
-          )}
           <ConfigurationSection
             automation={automation}
             runsAs={runsAs}
             runsAsServiceAccount={runsAsService}
             createdBy={createdBy}
           />
+          {automation.prompt ? (
+            <PromptSection prompt={automation.prompt} />
+          ) : (
+            <ScriptSection automation={automation} />
+          )}
           {automation.plugins && automation.plugins.length > 0 && (
             <PluginsSection plugins={automation.plugins} />
           )}

@@ -842,6 +842,36 @@ describe("AutomationDetail — script automations", () => {
       screen.queryByTestId("automation-prompt-content"),
     ).not.toBeInTheDocument();
   });
+
+  it("puts Configuration above the script bundle", async () => {
+    // Arrange
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      prompt: null,
+      entrypoint: "python main.py",
+    });
+    vi.mocked(AutomationService.fetchTarballBytes).mockResolvedValue(
+      new Uint8Array(
+        await packTarGzip([{ name: "main.py", content: "print('hi')\n" }]),
+      ),
+    );
+
+    // Act
+    renderDetail();
+    const scriptFile = await screen.findByTestId("automation-script-file");
+
+    // Assert: the configuration card precedes the script card in the document,
+    // so reaching it does not mean scrolling past the bundle.
+    const configurationHeading = screen.getByRole("heading", {
+      name: I18nKey.AUTOMATIONS$DETAIL$CONFIGURATION,
+    });
+    expect(
+      configurationHeading.compareDocumentPosition(scriptFile) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });
 
 describe("AutomationDetail — keep sandbox alive", () => {
