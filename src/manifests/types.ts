@@ -28,7 +28,17 @@ export type SetupFieldType =
   | "plugin-sources"
   | "tarball-upload";
 
-export type SetupGitProvider = "github" | "gitlab" | "bitbucket";
+/**
+ * The provider whose repositories a `repo-picker` lists. The hosted services
+ * and the two integrations an OpenHands Enterprise instance connects to a
+ * self-managed Bitbucket Data Center or to Azure DevOps.
+ */
+export type SetupGitProvider =
+  | "github"
+  | "gitlab"
+  | "bitbucket"
+  | "bitbucket_data_center"
+  | "azure_devops";
 
 export type SetupTriggerKind = "cron" | "event";
 

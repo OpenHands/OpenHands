@@ -271,8 +271,10 @@ describe("recommended automations", () => {
       "linear-issue-to-bitbucket-pr",
       "jira-issue-to-pr",
       "qa-changes",
+      "jira-data-center-issue-to-bitbucket-data-center-pr",
       "jira-issue-to-gitlab-mr",
       "research-brief-writer",
+      "bitbucket-data-center-pr-reviewer",
       "jira-issue-to-bitbucket-pr",
       "github-delivery-watchdog",
       "github-issue-triage",
@@ -306,7 +308,7 @@ describe("recommended automations", () => {
     expect(moreHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$MORE_TITLE,
     );
-    expect(within(moreHeading).getByText("18")).toBeInTheDocument();
+    expect(within(moreHeading).getByText("20")).toBeInTheDocument();
 
     const moreSection = screen.getByTestId(
       "recommended-automations-beta-section",
@@ -429,6 +431,23 @@ describe("recommended automations", () => {
         "recommended-automation-icon-incident-retrospective-drafter",
       ),
     ).toHaveAttribute("data-layout", "quadrants");
+  });
+
+  it("shows the repository provider's logo for a template that declares no integration", () => {
+    render(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    // The GitHub workers use the connected account's token, so they declare
+    // no integration; their repository picker is what makes them GitHub's.
+    const badge = screen.getByTestId(
+      "recommended-automation-icon-github-pr-reviewer",
+    );
+    expect(badge.querySelector('img[alt="GitHub logo"]')).toBeInTheDocument();
   });
 
   it("shows the declared glyph instead of a logo stack when an entry names one", () => {
@@ -1324,6 +1343,50 @@ describe("recommended automations", () => {
     );
   });
 
+  it("suggests the proven templates on an Enterprise instance with nothing set up", async () => {
+    // Arrange — sign-up by password, no git provider or integration.
+    await activateCloudBackend({ deploymentMode: "self_hosted" });
+
+    // Act
+    renderLauncher({ withBackendProvider: true });
+
+    // Assert
+    await screen.findByTestId("recommended-automation-card-github-pr-reviewer");
+    const more = screen.getByTestId("recommended-automations-beta-section");
+    for (const id of [
+      "github-pr-reviewer",
+      "github-issue-to-pr",
+      "news-digest",
+    ]) {
+      expect(
+        within(more).queryByTestId(`recommended-automation-card-${id}`),
+      ).not.toBeInTheDocument();
+    }
+  });
+
+  it("suggests a template using an MCP server the user installed", async () => {
+    // Arrange
+    await activateCloudBackend({
+      settings: settingsWithMcpConfig({
+        linear: { url: "https://mcp.linear.app/mcp" },
+      }),
+    });
+
+    // Act
+    renderLauncher({ withBackendProvider: true });
+
+    // Assert
+    await screen.findByTestId(
+      "recommended-automation-card-linear-triage-assistant",
+    );
+    expect(cardOrder()[0]).toBe("linear-triage-assistant");
+    expect(
+      within(
+        screen.getByTestId("recommended-automations-beta-section"),
+      ).queryByTestId("recommended-automation-card-linear-triage-assistant"),
+    ).not.toBeInTheDocument();
+  });
+
   it("suggests first the templates using an integration an Enterprise instance reports", async () => {
     await withBuiltInRequirement(["bitbucket_data_center"], async () => {
       // Arrange
@@ -1336,9 +1399,13 @@ describe("recommended automations", () => {
       // Act
       renderLauncher({ withBackendProvider: true });
 
-      // Assert
+      // Assert — ahead of the proven templates; the catalog's own Data Center
+      // templates use the reported integrations too.
       await screen.findByTestId("recommended-automation-card-news-digest");
-      expect(cardOrder()[0]).toBe("news-digest");
+      const order = cardOrder();
+      expect(order.indexOf("news-digest")).toBeLessThan(
+        order.indexOf("slack-channel-monitor"),
+      );
       expect(
         within(
           screen.getByTestId("recommended-automations-beta-section"),
@@ -1395,7 +1462,7 @@ describe("recommended automations", () => {
     );
   });
 
-  it("does not offer Data Center templates on OpenHands Cloud", async () => {
+  it("offers Data Center templates on OpenHands Cloud too", async () => {
     await withBuiltInRequirement(["bitbucket_data_center"], async () => {
       // Arrange
       await activateCloudBackend({
@@ -1414,8 +1481,8 @@ describe("recommended automations", () => {
         ),
       ).toBeInTheDocument();
       expect(
-        screen.queryByTestId("recommended-automation-card-news-digest"),
-      ).not.toBeInTheDocument();
+        screen.getByTestId("recommended-automation-card-news-digest"),
+      ).toBeInTheDocument();
     });
   });
 

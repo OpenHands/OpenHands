@@ -53,6 +53,30 @@ describe("buildAutomationMetadataPills", () => {
     expect(screen.getByTestId("automation-source-logo")).toBeInTheDocument();
   });
 
+  it("draws a Data Center event source with its product's logo", () => {
+    renderPills(
+      buildAutomationMetadataPills(
+        buildAutomation({
+          trigger: {
+            type: "event",
+            on: "pr:opened",
+            source: "bitbucket_data_center",
+          },
+        }),
+        "unused",
+      ),
+    );
+
+    // The badge (not the generic plug) carries the catalog entry's name.
+    expect(screen.getByTestId("automation-source-logo")).toHaveAttribute(
+      "title",
+      "Bitbucket",
+    );
+    expect(screen.getByTestId("pill-event-source")).toHaveTextContent(
+      "Bitbucket Data Center",
+    );
+  });
+
   it("renders a fallback icon when the source is not in the catalog", () => {
     renderPills(
       buildAutomationMetadataPills(

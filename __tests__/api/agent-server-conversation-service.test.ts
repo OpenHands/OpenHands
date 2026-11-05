@@ -21,6 +21,7 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { AUTOMATION_SETUP_SYSTEM_SUFFIX } from "#/api/automation-form-client-tool";
 import HooksService from "#/api/hooks-service";
 import LLMSubscriptionService from "#/api/llm-subscription-service";
 import {
@@ -366,6 +367,56 @@ describe("AgentServerConversationService", () => {
           method: "PATCH",
           url: `${cloudBackend.host}/api/v1/app-conversations/conv-1`,
           body: { tags: { pinned: null, archived: "true" } },
+        }),
+      ]);
+      expect(mockUpdateConversation).not.toHaveBeenCalled();
+    });
+
+    it("replaces a local tag map with the complete new map", async () => {
+      const nextTags = { owner: "alice", automationdraftid: "draft-1" };
+      mockUpdateConversation.mockResolvedValue(undefined);
+      mockHttpGet.mockResolvedValue({
+        data: [makeDirectConversation({ tags: nextTags })],
+      });
+
+      const result =
+        await AgentServerConversationService.replaceConversationTags(
+          "conv-1",
+          { owner: "alice", automationeditid: "auto-1" },
+          nextTags,
+        );
+
+      expect(mockUpdateConversation).toHaveBeenCalledWith("conv-1", {
+        tags: nextTags,
+      });
+      expect(result.tags).toEqual(nextTags);
+    });
+
+    it("replaces a Cloud tag map by patching only the keys that change", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+      const updated = makeDirectConversation({
+        tags: { agentprofileid: "profile-1", automationdraftid: "draft-1" },
+      });
+      const requests = captureRequests(["patch"], updated);
+
+      await expect(
+        AgentServerConversationService.replaceConversationTags(
+          "conv-1",
+          { agentprofileid: "profile-1", automationeditid: "auto-1" },
+          { agentprofileid: "profile-1", automationdraftid: "draft-1" },
+        ),
+      ).resolves.toEqual(updated);
+
+      // A dropped key is deleted with null. The unchanged agentprofileid is a
+      // server-managed key the app server would reject, so it is not sent.
+      expect(requests).toEqual([
+        expect.objectContaining({
+          method: "PATCH",
+          url: `${cloudBackend.host}/api/v1/app-conversations/conv-1`,
+          body: {
+            tags: { automationdraftid: "draft-1", automationeditid: null },
+          },
         }),
       ]);
       expect(mockUpdateConversation).not.toHaveBeenCalled();
@@ -1766,6 +1817,15 @@ describe("AgentServerConversationService", () => {
           automationdraftid: "draft-1",
           automationmaterializeddraftid: "auto-1",
         },
+        automationSetupCapabilities: {
+          ready: true,
+          triggerKinds: ["cron", "event"],
+          eventSources: ["jira_dc"],
+          eventTypes: [],
+          eventTypesBySource: { jira_dc: ["jira:issue_updated"] },
+          triggers: {},
+          features: [],
+        },
         agentProfileKind: "openhands",
       });
 
@@ -1773,18 +1833,26 @@ describe("AgentServerConversationService", () => {
       const [request] = requests;
       const body = request.body as {
         tags?: Record<string, string>;
-        client_tools: Array<{ name: string }>;
+        client_tools: Array<{ name: string; description: string }>;
+        system_message_suffix?: string;
       };
       expect(body.tags).toEqual({
         automationsetup: "draft",
         automationdraftid: "draft-1",
         automationmaterializeddraftid: "auto-1",
       });
+      // The agent is told to propose through the form, not the automation API.
+      expect(body.system_message_suffix).toContain("automation_form_update");
+      expect(body.system_message_suffix).toBe(AUTOMATION_SETUP_SYSTEM_SUFFIX);
       expect(body.client_tools.map((tool) => tool.name)).toEqual([
         "canvas_ui_control",
         "launch_child_conversation",
         "automation_form_update",
       ]);
+      // The form tool carries this deployment's event sources.
+      expect(body.client_tools[2].description).toContain(
+        "* jira_dc (Jira Data Center): event keys jira:issue_updated.",
+      );
     });
 
     it("does not forward automation client tools to cloud ACP conversations", async () => {
@@ -1808,9 +1876,32 @@ describe("AgentServerConversationService", () => {
       const body = request.body as {
         tags?: Record<string, string>;
         client_tools?: Array<{ name: string }>;
+        system_message_suffix?: string;
       };
       expect(body.tags).toEqual({ automationsetup: "draft" });
       expect(body.client_tools).toBeUndefined();
+      expect(body.system_message_suffix).toBeUndefined();
+    });
+
+    it("leaves an ordinary cloud conversation's system message alone", async () => {
+      const requests = captureRequests(["post"], {
+        id: "task-chat",
+        status: "WORKING",
+        app_conversation_id: null,
+        agent_server_url: null,
+        request: {},
+        created_at: "2024-01-01",
+        updated_at: "2024-01-01",
+      });
+
+      await AgentServerConversationService.createConversation({
+        initialUserMsg: "Create a daily report automation",
+        agentProfileKind: "openhands",
+      });
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0].body).not.toHaveProperty("system_message_suffix");
+      expect(requests[0].body).not.toHaveProperty("client_tools");
     });
 
     // Connect Repo on an existing cloud conversation must reach the server, so
