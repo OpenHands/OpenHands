@@ -173,11 +173,22 @@ describe("useChatInputLlmProfileState", () => {
 
   it("prefers the profile stamped on the conversation over a model match", () => {
     useActiveConversationMock.mockReturnValue({
+      data: { active_profile: "Smart", llm_model: "claude-opus" },
+    });
+    const { result } = renderState();
+    // The stamp is validated against the backend model; "Smart" runs
+    // claude-opus, so the stamp is consistent and is trusted.
+    expect(result.current.currentProfileName).toBe("Smart");
+  });
+
+  it("ignores a stamped profile whose model diverged from the backend", () => {
+    useActiveConversationMock.mockReturnValue({
       data: { active_profile: "Smart", llm_model: "gpt-4o-mini" },
     });
     const { result } = renderState();
-    // model "gpt-4o-mini" would match "Fast", but the stamped profile wins.
-    expect(result.current.currentProfileName).toBe("Smart");
+    // "Smart" runs claude-opus, so the localStorage stamp no longer matches
+    // the running backend model; fall through to the model match (#19292).
+    expect(result.current.currentProfileName).toBe("Fast");
   });
 
   it("falls back to the profile whose model matches the running llm_model", () => {
