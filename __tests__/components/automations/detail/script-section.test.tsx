@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HttpError } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
@@ -94,6 +95,33 @@ describe("ScriptSection", () => {
       screen.getAllByTestId("automation-script-file")[0],
     ).toHaveTextContent("print('hi')");
     expect(AutomationService.fetchTarballBytes).toHaveBeenCalledWith("auto-1");
+  });
+
+  it("keeps each file closed until its header is clicked", async () => {
+    // Arrange
+    vi.spyOn(AutomationService, "fetchTarballBytes").mockResolvedValue(
+      new Uint8Array(
+        await packTarGzip([
+          { name: "main.py", content: "print('hi')\n" },
+          { name: "config.json", content: "{}\n" },
+        ]),
+      ),
+    );
+    renderSection();
+    const [mainFile, configFile] = await screen.findAllByTestId(
+      "automation-script-file",
+    );
+    expect(mainFile).not.toHaveAttribute("open");
+    expect(configFile).not.toHaveAttribute("open");
+
+    // Act
+    await userEvent.click(
+      within(mainFile).getByTestId("automation-script-file-toggle"),
+    );
+
+    // Assert
+    expect(mainFile).toHaveAttribute("open");
+    expect(configFile).not.toHaveAttribute("open");
   });
 
   it("shows a loading message until the bundle arrives", () => {

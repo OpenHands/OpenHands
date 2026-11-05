@@ -43,6 +43,14 @@ import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabiliti
 import { AUTOMATION_DETAIL_QUERY_KEY } from "#/hooks/query/use-automation-detail";
 import { AUTOMATIONS_QUERY_KEY } from "#/hooks/query/use-automations";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import type { Backend } from "#/api/backend-registry/types";
+import { server } from "#/mocks/node";
+import { http, HttpResponse } from "msw";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
 import type { Automation } from "#/types/automation";
 import type { Provider } from "#/types/settings";
@@ -137,10 +145,13 @@ vi.mock(
   "#/api/conversation-service/agent-server-conversation-service.api",
   () => ({
     default: {
-      updateConversationTags: vi.fn(
-        async (_conversationId: string, tags: Record<string, string>) => ({
-          tags,
-        }),
+      updateConversationTags: vi.fn(),
+      replaceConversationTags: vi.fn(
+        async (
+          _conversationId: string,
+          _currentTags: Record<string, string> | null | undefined,
+          tags: Record<string, string>,
+        ) => ({ tags }),
       ),
     },
   }),
@@ -172,6 +183,17 @@ vi.mock("#/hooks/use-send-message", () => ({
 
 vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
   useDeploymentCapabilities: vi.fn(() => ({ data: null, isLoading: false })),
+}));
+
+const serviceAccountMocks = vi.hoisted(() => ({ enabled: false }));
+vi.mock("#/hooks/query/use-service-accounts", () => ({
+  useServiceAccountRunAsEnabled: () => serviceAccountMocks.enabled,
+  useServiceAccounts: () => ({
+    data: [
+      { id: "sa-1", org_id: "org-1", name: "ci-bot", is_disabled: false },
+      { id: "sa-2", org_id: "org-1", name: "old-bot", is_disabled: true },
+    ],
+  }),
 }));
 
 vi.mock("#/hooks/query/use-agent-profiles", () => ({
@@ -338,6 +360,7 @@ function renderSessionBoundPanel(conversationId: string) {
 
 describe("AutomationSetupPanel", () => {
   beforeEach(() => {
+    serviceAccountMocks.enabled = false;
     window.sessionStorage.clear();
     vi.clearAllMocks();
     // By default the deployment does not advertise server-backed drafts, so
@@ -351,8 +374,10 @@ describe("AutomationSetupPanel", () => {
       false,
     );
     vi.mocked(
-      AgentServerConversationService.updateConversationTags,
-    ).mockImplementation(async (_conversationId, tags) => ({ tags }) as never);
+      AgentServerConversationService.replaceConversationTags,
+    ).mockImplementation(
+      async (_conversationId, _currentTags, tags) => ({ tags }) as never,
+    );
     mockUseGitRepositories.mockReturnValue(createGitRepositoriesQueryResult());
     mockUseSearchRepositories.mockReturnValue({
       data: undefined,
@@ -1634,6 +1659,72 @@ describe("AutomationSetupPanel", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/automations/automation-1");
   });
 
+  it("creates the automation as the chosen service account", async () => {
+    serviceAccountMocks.enabled = true;
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-1",
+    });
+
+    const user = userEvent.setup();
+    renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+    const picker = screen.getByTestId("automation-setup-run-as");
+    // Disabled accounts are not offered.
+    expect(
+      within(picker).queryByRole("option", { name: "old-bot" }),
+    ).not.toBeInTheDocument();
+    await user.selectOptions(picker, "sa-1");
+    expect(getAutomationFormSession("conv-1")?.form?.runAsUserId).toBe("sa-1");
+    await user.click(screen.getByTestId("automation-setup-create"));
+
+    await waitFor(() =>
+      expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+        expect.objectContaining({ run_as_user_id: "sa-1" }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("restores the selected service account after the setup handoff", () => {
+    serviceAccountMocks.enabled = true;
+
+    renderPanel({
+      prompt: "Review every pull request",
+      kind: "prompt",
+      form: { runAsUserId: "sa-1" },
+    });
+
+    expect(screen.getByTestId("automation-setup-run-as")).toHaveValue("sa-1");
+  });
+
+  it("creates as the caller by default and without the picker when service account run-as is off", async () => {
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-1",
+    });
+
+    const user = userEvent.setup();
+    renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+    expect(
+      screen.queryByTestId("automation-setup-run-as"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("automation-setup-create"));
+
+    await waitFor(() =>
+      expect(AutomationService.createAutomationDraft).toHaveBeenCalled(),
+    );
+    expect(
+      vi.mocked(AutomationService.createAutomationDraft).mock.calls[0][0],
+    ).not.toHaveProperty("run_as_user_id");
+  });
+
+  it("does not offer the run-as picker when editing an existing automation", () => {
+    serviceAccountMocks.enabled = true;
+    renderPanel(setupDraftFromAutomation(savedReviewer()));
+
+    expect(
+      screen.queryByTestId("automation-setup-run-as"),
+    ).not.toBeInTheDocument();
+  });
+
   it("hides the event filter until Add Event Filter is clicked", async () => {
     const user = userEvent.setup();
     renderPanel();
@@ -1962,9 +2053,10 @@ describe("AutomationSetupPanel", () => {
 
       await waitFor(() =>
         expect(
-          AgentServerConversationService.updateConversationTags,
+          AgentServerConversationService.replaceConversationTags,
         ).toHaveBeenCalledWith(
           "conv-1",
+          null,
           expect.objectContaining({ automationsetup: "draft" }),
         ),
       );
@@ -2000,7 +2092,7 @@ describe("AutomationSetupPanel", () => {
       });
 
       expect(
-        AgentServerConversationService.updateConversationTags,
+        AgentServerConversationService.replaceConversationTags,
       ).not.toHaveBeenCalled();
     });
 
@@ -2230,9 +2322,10 @@ describe("AutomationSetupPanel", () => {
 
       await waitFor(() =>
         expect(
-          AgentServerConversationService.updateConversationTags,
+          AgentServerConversationService.replaceConversationTags,
         ).toHaveBeenCalledWith(
           "conv-1",
+          { existing: "tag", automationsetup: "draft" },
           expect.objectContaining({
             existing: "tag",
             automationsetup: "draft",
@@ -2240,6 +2333,82 @@ describe("AutomationSetupPanel", () => {
           }),
         ),
       );
+    });
+
+    describe("on a Cloud backend", () => {
+      const cloudBackend: Backend = {
+        id: "cloud-1",
+        name: "Enterprise",
+        host: "https://app.example.test",
+        apiKey: "bearer-token",
+        kind: "cloud",
+      };
+
+      afterEach(() => {
+        window.localStorage.clear();
+        __resetActiveStoreForTests();
+      });
+
+      // OpenHands Enterprise and SaaS keep the tags on the app server, where the
+      // local agent-server client threw "No backend is configured." after the
+      // draft was saved.
+      it("saves a draft and tags the conversation through the app server", async () => {
+        // Arrange: the real conversation service, with the old and the new tag
+        // method, so the panel cannot fall back to the local-only one.
+        const { default: service } = await vi.importActual<{
+          default: typeof AgentServerConversationService;
+        }>("#/api/conversation-service/agent-server-conversation-service.api");
+        vi.mocked(
+          AgentServerConversationService.updateConversationTags,
+        ).mockImplementation((...args) =>
+          service.updateConversationTags(...args),
+        );
+        vi.mocked(
+          AgentServerConversationService.replaceConversationTags,
+        ).mockImplementation((...args) =>
+          service.replaceConversationTags(...args),
+        );
+        setRegisteredBackends([cloudBackend]);
+        setActiveSelection({ backendId: cloudBackend.id });
+        const patches: unknown[] = [];
+        server.use(
+          http.patch(
+            `${cloudBackend.host}/api/v1/app-conversations/conv-1`,
+            async ({ request }) => {
+              patches.push(await request.json());
+              return HttpResponse.json({
+                id: "conv-1",
+                tags: {
+                  agentprofileid: "profile-1",
+                  automationsetup: "draft",
+                  automationdraftid: "draft-1",
+                },
+              });
+            },
+          ),
+        );
+        vi.mocked(AutomationService.createServerDraft).mockResolvedValue(
+          dispatchableDraft,
+        );
+        const user = userEvent.setup();
+        renderPanel(undefined, "conv-1", {
+          agentprofileid: "profile-1",
+          automationsetup: "draft",
+        });
+
+        // Act
+        await user.click(screen.getByTestId("automation-setup-save-draft"));
+
+        // Assert: success, and only the changed key is patched (the app
+        // server rejects its own keys such as agentprofileid).
+        await waitFor(() =>
+          expect(mockToastSuccess).toHaveBeenCalledWith(
+            "AUTOMATION_SETUP$DRAFT_SAVED",
+          ),
+        );
+        expect(displayErrorToast).not.toHaveBeenCalled();
+        expect(patches).toEqual([{ tags: { automationdraftid: "draft-1" } }]);
+      });
     });
 
     it("stores the server draft id in the pending setup session after saving", async () => {
@@ -2263,8 +2432,146 @@ describe("AutomationSetupPanel", () => {
         ),
       );
       expect(
-        AgentServerConversationService.updateConversationTags,
+        AgentServerConversationService.replaceConversationTags,
       ).not.toHaveBeenCalled();
+    });
+
+    describe("service account run-as", () => {
+      beforeEach(() => {
+        serviceAccountMocks.enabled = true;
+        mockSavedDraftEcho({ validationErrors: null });
+      });
+
+      const runAsOf = (call: unknown[] | undefined) =>
+        (call?.[0] as { draft: { run_as_user_id?: string } }).draft
+          .run_as_user_id;
+
+      it("keeps the run-as identity through save draft, reopen, save and create", async () => {
+        const user = userEvent.setup();
+        const first = renderPanel();
+        await user.selectOptions(
+          screen.getByTestId("automation-setup-run-as"),
+          "sa-1",
+        );
+        await user.click(screen.getByTestId("automation-setup-save-draft"));
+        await waitFor(() =>
+          expect(AutomationService.createServerDraft).toHaveBeenCalled(),
+        );
+        const savedBody = vi.mocked(AutomationService.createServerDraft).mock
+          .calls[0][0];
+        expect(runAsOf([savedBody])).toBe("sa-1");
+        first.unmount();
+
+        // Reopen: the server returns the saved draft.
+        vi.mocked(AutomationService.getServerDraft).mockResolvedValue(
+          echoSavedDraft(savedBody),
+        );
+        renderPanel({ prompt: "", kind: "prompt" }, "conv-1", {
+          automationdraftid: "draft-1",
+        });
+
+        await waitFor(() =>
+          expect(screen.getByTestId("automation-setup-run-as")).toHaveValue(
+            "sa-1",
+          ),
+        );
+        await user.type(screen.getByTestId("automation-setup-name"), " v2");
+        await user.click(screen.getByTestId("automation-setup-save-draft"));
+        await waitFor(() =>
+          expect(AutomationService.updateServerDraft).toHaveBeenCalled(),
+        );
+        expect(
+          runAsOf(
+            vi
+              .mocked(AutomationService.updateServerDraft)
+              .mock.calls[0].slice(1),
+          ),
+        ).toBe("sa-1");
+
+        vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+          id: "automation-1",
+        });
+        await user.click(screen.getByTestId("automation-setup-create"));
+        await waitFor(() =>
+          expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+            expect.objectContaining({ run_as_user_id: "sa-1" }),
+            expect.anything(),
+          ),
+        );
+      });
+
+      it("marks the draft unsaved after a run-as-only change", async () => {
+        const user = userEvent.setup();
+        renderPanel();
+        await user.click(screen.getByTestId("automation-setup-save-draft"));
+        await waitFor(() =>
+          expect(
+            screen.getByTestId("automation-setup-save-state"),
+          ).toHaveTextContent("AUTOMATION_SETUP$SAVED_JUST_NOW"),
+        );
+
+        await user.selectOptions(
+          screen.getByTestId("automation-setup-run-as"),
+          "sa-1",
+        );
+
+        expect(
+          screen.getByTestId("automation-setup-save-state"),
+        ).toHaveTextContent("AUTOMATION_SETUP$UNSAVED_CHANGES");
+      });
+
+      it("shows a resumed draft that runs as a service account as saved", async () => {
+        vi.mocked(AutomationService.getServerDraft).mockResolvedValue({
+          ...dispatchableDraft,
+          name: "Saved Tagged Draft",
+          draft: {
+            prompt: "Use the persisted draft body",
+            run_as_user_id: "sa-1",
+          } as never,
+        });
+
+        renderPanel({ prompt: "", kind: "prompt" }, "conv-1", {
+          automationdraftid: "draft-1",
+        });
+
+        await waitFor(() =>
+          expect(screen.getByTestId("automation-setup-run-as")).toHaveValue(
+            "sa-1",
+          ),
+        );
+        await waitFor(() =>
+          expect(
+            screen.getByTestId("automation-setup-save-state"),
+          ).toHaveTextContent("AUTOMATION_SETUP$SAVED_JUST_NOW"),
+        );
+      });
+
+      it("keeps a resumed run-as identity that is no longer listed, shown by its id", async () => {
+        vi.mocked(AutomationService.getServerDraft).mockResolvedValue({
+          ...dispatchableDraft,
+          name: "Saved Tagged Draft",
+          draft: {
+            prompt: "Use the persisted draft body",
+            run_as_user_id: "sa-gone",
+          } as never,
+        });
+
+        renderPanel({ prompt: "", kind: "prompt" }, "conv-1", {
+          automationdraftid: "draft-1",
+        });
+
+        await waitFor(() =>
+          expect(screen.getByTestId("automation-setup-run-as")).toHaveValue(
+            "sa-gone",
+          ),
+        );
+        expect(
+          within(screen.getByTestId("automation-setup-run-as")).getByRole(
+            "option",
+            { name: "sa-gone" },
+          ),
+        ).toBeInTheDocument();
+      });
     });
 
     it("hydrates a tagged server draft when the panel opens", async () => {
@@ -2321,10 +2628,10 @@ describe("AutomationSetupPanel", () => {
           resolveSetupTagWrite = resolve;
         },
       );
-      vi.mocked(AgentServerConversationService.updateConversationTags)
+      vi.mocked(AgentServerConversationService.replaceConversationTags)
         .mockImplementationOnce(() => setupTagWrite as never)
         .mockImplementationOnce(
-          async (_conversationId, tags) => ({ tags }) as never,
+          async (_conversationId, _currentTags, tags) => ({ tags }) as never,
         );
 
       const user = userEvent.setup();
@@ -2332,7 +2639,7 @@ describe("AutomationSetupPanel", () => {
 
       await waitFor(() =>
         expect(
-          AgentServerConversationService.updateConversationTags,
+          AgentServerConversationService.replaceConversationTags,
         ).toHaveBeenCalledTimes(1),
       );
 
@@ -2341,7 +2648,7 @@ describe("AutomationSetupPanel", () => {
         expect(AutomationService.createServerDraft).toHaveBeenCalled(),
       );
       expect(
-        AgentServerConversationService.updateConversationTags,
+        AgentServerConversationService.replaceConversationTags,
       ).toHaveBeenCalledTimes(1);
 
       resolveSetupTagWrite!({
@@ -2350,19 +2657,22 @@ describe("AutomationSetupPanel", () => {
 
       await waitFor(() =>
         expect(
-          AgentServerConversationService.updateConversationTags,
+          AgentServerConversationService.replaceConversationTags,
         ).toHaveBeenCalledTimes(2),
       );
+      // The draft write starts from the tags the setup-mode write saved.
       expect(
-        vi.mocked(AgentServerConversationService.updateConversationTags).mock
-          .calls[1][1],
-      ).toEqual(
+        vi
+          .mocked(AgentServerConversationService.replaceConversationTags)
+          .mock.calls[1].slice(1),
+      ).toEqual([
+        { existing: "tag", automationsetup: "draft" },
         expect.objectContaining({
           existing: "tag",
           automationsetup: "draft",
           automationdraftid: "draft-1",
         }),
-      );
+      ]);
     });
 
     it("shows a missing-draft message and creates a fresh draft after a tagged draft was deleted", async () => {
@@ -2392,9 +2702,10 @@ describe("AutomationSetupPanel", () => {
         expect.anything(),
       );
       expect(
-        AgentServerConversationService.updateConversationTags,
+        AgentServerConversationService.replaceConversationTags,
       ).toHaveBeenCalledWith(
         "conv-1",
+        expect.anything(),
         expect.objectContaining({ automationdraftid: "draft-2" }),
       );
     });
@@ -2905,9 +3216,10 @@ describe("AutomationSetupPanel", () => {
         ),
       );
       expect(
-        AgentServerConversationService.updateConversationTags,
+        AgentServerConversationService.replaceConversationTags,
       ).toHaveBeenCalledWith(
         "conv-1",
+        expect.objectContaining({ automationdraftid: "draft-1" }),
         expect.not.objectContaining({ automationdraftid: expect.any(String) }),
       );
       expect(mockNavigate).toHaveBeenCalledWith(

@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import TerminalIcon from "#/icons/terminal.svg?react";
@@ -93,19 +94,27 @@ export function ScriptSection({ automation }: ScriptSectionProps) {
 
         {entries && entries.length > 0
           ? orderEntries(entries, entrypointPath).map((entry) => (
-              <div
+              // Collapsed by default: a bundle can hold thousands of lines.
+              <details
                 key={entry.path}
                 data-testid="automation-script-file"
-                className="overflow-hidden rounded-lg border border-border"
+                className="group overflow-hidden rounded-lg border border-border"
               >
-                <div className="flex items-center gap-2 border-b border-border bg-black/20 px-3 py-2 font-mono text-xs text-content">
+                <summary
+                  data-testid="automation-script-file-toggle"
+                  className="flex cursor-pointer list-none items-center gap-2 bg-black/20 px-3 py-2 font-mono text-xs text-content group-open:border-b group-open:border-border [&::-webkit-details-marker]:hidden"
+                >
+                  <ChevronRight
+                    aria-hidden
+                    className="size-3.5 shrink-0 text-muted transition-transform group-open:rotate-90"
+                  />
                   <span className="truncate">{entry.path}</span>
                   {entry.path === entrypointPath ? (
                     <span className="shrink-0 rounded-md bg-surface-raised px-2 py-0.5 text-3xs font-medium text-muted">
                       {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_ENTRYPOINT)}
                     </span>
                   ) : null}
-                </div>
+                </summary>
                 {entry.text === null ? (
                   <p className="px-3 py-2 text-xs italic text-muted">
                     {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_BINARY_FILE)}
@@ -118,7 +127,7 @@ export function ScriptSection({ automation }: ScriptSectionProps) {
                     />
                   </div>
                 )}
-              </div>
+              </details>
             ))
           : null}
       </div>

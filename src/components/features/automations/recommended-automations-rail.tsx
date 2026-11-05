@@ -16,7 +16,7 @@ import { McpLogoBadge } from "#/components/features/mcp-logo-badge";
 import { getMarketplaceEntryById } from "#/utils/mcp-marketplace-utils";
 import {
   getAutomationIcon,
-  getIntegrationIds,
+  getTemplateLogoIds,
 } from "#/utils/automation-catalog";
 import {
   flattenRecommendedRailGroups,
@@ -54,7 +54,7 @@ const RAIL_ICON_ROW_CLASS_NAME = "flex h-10 items-start";
 function integrationEntries(
   automation: RecommendedAutomation,
 ): MarketplaceEntry[] {
-  return getIntegrationIds(automation).flatMap((id) => {
+  return getTemplateLogoIds(automation).flatMap((id) => {
     const entry = getMarketplaceEntryById(id, MCP_MARKETPLACE);
     return entry ? [entry] : [];
   });

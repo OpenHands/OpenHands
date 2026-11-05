@@ -41,8 +41,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          # Same pin as ci.yml (nodejs/node#63487).
-          node-version: "24.15"
+          node-version: "24.22.1"
           cache: npm
 
       - name: Use pinned npm

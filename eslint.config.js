@@ -493,8 +493,6 @@ export default [
     // Keep broad string scanning away from unrelated program tags.
     files: [
       "src/components/features/backends/backend-status-dot.tsx",
-      "src/components/features/conversation-panel/start-task-card/start-task-status-badge.tsx",
-      "src/components/features/conversation-panel/start-task-card/start-task-status-indicator.tsx",
       "src/components/features/markdown/blockquote.tsx",
       "src/components/features/mcp-page/mcp-server-health.tsx",
     ],
