@@ -88,13 +88,13 @@ export function useAutomationPermissions(): AutomationPermissionsResult {
 }
 
 /**
- * Resolve whether the current user is the creator of the given automation.
+ * Resolve whether the current user owns an automation that runs as a person.
  *
  * - Local: always `true` (the local user owns every automation; and since
  *   local always has `manage_automations`, the distinction is moot).
- * - Cloud: compares `automation.user_id` with the caller's `user_id` from
- *   `GET /api/organizations/{orgId}/me`. Returns `false` while the id is
- *   still loading so the creator escape hatch never flashes open prematurely.
+ * - Cloud service-account run-as: always `false`; the backend requires
+ *   `manage_automations` and gives the recorded creator no owner escape.
+ * - Cloud person run-as: compares `automation.user_id` with the caller's id.
  */
 export function useIsAutomationOwner(automation: Automation): boolean {
   const { backend } = useActiveBackend();
@@ -103,6 +103,7 @@ export function useIsAutomationOwner(automation: Automation): boolean {
   const userIds = useCloudCurrentUserId();
 
   if (backend.kind !== "cloud") return true;
+  if (automation.run_as_kind === "service") return false;
 
   const entry = userIds[backend.id];
   if (!entry || entry.isLoading || !entry.userId) return false;

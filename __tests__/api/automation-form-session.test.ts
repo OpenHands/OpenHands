@@ -70,4 +70,20 @@ describe("automation form session", () => {
     expect(session?.existingRepositories).toEqual(repositories);
     expect(session?.canUpdateRepositories).toBe(true);
   });
+
+  it("keeps the selected run-as identity through form session updates", () => {
+    initializeAutomationFormSession("conv-1", {
+      prompt: "Review pull requests.",
+      kind: "prompt",
+      form: { runAsUserId: "sa-1" },
+    });
+
+    patchAutomationFormSession(
+      "conv-1",
+      { name: "Reviewer" },
+      { source: "user" },
+    );
+
+    expect(getAutomationFormSession("conv-1")?.form?.runAsUserId).toBe("sa-1");
+  });
 });

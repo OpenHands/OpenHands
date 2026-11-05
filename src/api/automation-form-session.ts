@@ -45,6 +45,7 @@ const AUTOMATION_SETUP_FREQUENCIES: AutomationSetupFrequency[] = [
 ];
 const STRING_FIELDS = [
   "name",
+  "runAsUserId",
   "prompt",
   "repository",
   "pluginSource",

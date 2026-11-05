@@ -9,9 +9,8 @@ export interface AutomationAccess {
   /** Turn off, delete, run now: `manage_automations` or the owner. */
   canManage: boolean;
   /**
-   * Edit the automation. The service lets the owner edit an automation that
-   * runs as them, and `manage_automations` holders edit one that runs as a
-   * service account.
+   * Edit the automation. A person may edit one that runs as them;
+   * `manage_automations` is required when it runs as a service account.
    */
   canEdit: boolean;
   /** Flip `enabled`. Turning off needs `canManage`; turning on needs `canEdit`. */

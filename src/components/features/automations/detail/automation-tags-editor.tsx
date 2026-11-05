@@ -22,8 +22,8 @@ const TAG_ERROR_KEYS: Record<AutomationTagError, I18nKey> = {
 interface AutomationTagsEditorProps {
   automation: Automation;
   /**
-   * Whether the caller may change tags: the creator, or a manager of a
-   * automation that runs as a service account. Everyone else sees them read-only.
+   * Whether the caller may change tags: the person it runs as, or a manager
+   * when it runs as a service account. Everyone else sees them read-only.
    */
   canEdit: boolean;
 }

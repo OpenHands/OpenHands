@@ -1,4 +1,4 @@
-import { Server } from "lucide-react";
+import { ArrowRightLeft, Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
@@ -24,6 +24,8 @@ interface DetailHeaderProps {
   /** When provided (and the user can edit), the kebab menu shows an Edit entry. */
   onEdit?: () => void;
   onDelete: () => void;
+  /** When provided, the kebab menu shows a Change Runs As entry. */
+  onChangeRunAs?: () => void;
   onExport: () => void;
   onDownloadTarball: () => void;
   onRunNow?: () => void;
@@ -46,6 +48,7 @@ export function DetailHeader({
   isKeepAlivePending = false,
   onEdit,
   onDelete,
+  onChangeRunAs,
   onExport,
   onDownloadTarball,
   onRunNow,
@@ -99,6 +102,15 @@ export function DetailHeader({
             icon: <Server className="size-4" aria-hidden />,
             onClick: onToggleKeepAlive,
             disabled: isKeepAlivePending,
+          },
+        ]
+      : []),
+    ...(onChangeRunAs
+      ? [
+          {
+            label: t(I18nKey.AUTOMATIONS$CHANGE_RUN_AS),
+            icon: <ArrowRightLeft className="size-4" aria-hidden />,
+            onClick: onChangeRunAs,
           },
         ]
       : []),

@@ -1658,6 +1658,7 @@ describe("AutomationSetupPanel", () => {
       within(picker).queryByRole("option", { name: "old-bot" }),
     ).not.toBeInTheDocument();
     await user.selectOptions(picker, "sa-1");
+    expect(getAutomationFormSession("conv-1")?.form?.runAsUserId).toBe("sa-1");
     await user.click(screen.getByTestId("automation-setup-create"));
 
     await waitFor(() =>
@@ -1666,6 +1667,18 @@ describe("AutomationSetupPanel", () => {
         expect.anything(),
       ),
     );
+  });
+
+  it("restores the selected service account after the setup handoff", () => {
+    serviceAccountMocks.enabled = true;
+
+    renderPanel({
+      prompt: "Review every pull request",
+      kind: "prompt",
+      form: { runAsUserId: "sa-1" },
+    });
+
+    expect(screen.getByTestId("automation-setup-run-as")).toHaveValue("sa-1");
   });
 
   it("creates as the caller by default and without the picker when service account run-as is off", async () => {

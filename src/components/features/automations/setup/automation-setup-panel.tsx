@@ -192,6 +192,7 @@ const TIMEZONE_OPTIONS = [
 const AUTOMATION_SETUP_FIELD_RENDER_ORDER: AutomationSetupField[] = [
   "kind",
   "name",
+  "runAsUserId",
   "prompt",
   "pluginSource",
   "pluginRef",
@@ -238,6 +239,7 @@ const DEFAULT_CUSTOM_WEBHOOK_SIGNATURE_SCHEME: CustomWebhookSignatureScheme =
 
 const NON_CHARACTER_STREAM_FIELDS = new Set<AutomationSetupField>([
   "kind",
+  "runAsUserId",
   "triggerKind",
   "frequency",
   "weekday",
@@ -473,6 +475,7 @@ function buildInitialForm(
   return {
     kind,
     name: form.name ?? deriveName(prompt),
+    runAsUserId: form.runAsUserId ?? "",
     prompt,
     repository: form.repository ?? "",
     pluginSource: pluginEntries[0]?.source ?? "",
@@ -500,12 +503,6 @@ function buildInitialForm(
     showTimeout: form.showTimeout ?? false,
     timeoutSeconds: form.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS,
   };
-}
-
-/** The service account id stored in a server draft body; empty for the caller. */
-function runAsFromDraftBody(body: unknown): string {
-  const runAs = (body as { run_as_user_id?: unknown } | null)?.run_as_user_id;
-  return typeof runAs === "string" ? runAs : "";
 }
 
 function DraftStatusBar({
@@ -745,10 +742,6 @@ export function AutomationSetupPanel({
     ? (getAutomationFormSession(conversationId) ?? draft)
     : draft;
   const [form, setForm] = useState(() => buildInitialForm(initialDraft));
-  // The "Runs as" field: the service account a new automation runs as;
-  // empty means the caller. It is saved in the server draft body
-  // (`run_as_user_id`) and restored from there when a saved draft is reopened.
-  const [runAsUserId, setRunAsUserId] = useState("");
   const serviceAccountRunAsEnabled = useServiceAccountRunAsEnabled();
   const serviceAccounts = useServiceAccounts().data;
   const [eventTestPayload, setEventTestPayload] = useState(() =>
@@ -1006,7 +999,6 @@ export function AutomationSetupPanel({
         setServerDraft(saved);
         setDraftRuns([]);
         setForm(nextForm);
-        setRunAsUserId(runAsFromDraftBody(saved.draft));
         saveDraftInFormSession(saved, nextForm);
       })
       .catch((error: unknown) => {
@@ -1036,6 +1028,7 @@ export function AutomationSetupPanel({
   const {
     kind,
     name,
+    runAsUserId,
     prompt,
     repository,
     pluginSource,
@@ -1341,7 +1334,7 @@ export function AutomationSetupPanel({
           ),
           timezone: timezone.trim() || DEFAULT_TIMEZONE,
         };
-  // Only a new automation picks who it runs as; an existing one keeps it.
+  // Only a new automation picks who it runs as; an existing one uses Change Runs As.
   const showRunAsPicker = serviceAccountRunAsEnabled && !isEditingExisting;
   const newAutomationRunAsId = showRunAsPicker ? runAsUserId : "";
   const buildPresetBody = (): SetupRequestBody => {
@@ -2118,7 +2111,9 @@ export function AutomationSetupPanel({
                     <select
                       data-testid="automation-setup-run-as"
                       value={runAsUserId}
-                      onChange={(event) => setRunAsUserId(event.target.value)}
+                      onChange={(event) =>
+                        updateField("runAsUserId", event.target.value)
+                      }
                       className={cn(
                         formControlFieldClassName,
                         "appearance-none pr-8",
