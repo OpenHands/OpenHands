@@ -705,6 +705,44 @@ it("keeps image-only replies visible after their grouped reasoning", () => {
   expect(items[1]).toEqual({ kind: "single", event: reply, index: 0 });
 });
 
+it("keeps reasoning in order and deduplicates an action only within its group", () => {
+  const reasoningOnly: MessageEvent = {
+    ...makeUserMessage("reasoning-only"),
+    source: "agent",
+    llm_message: {
+      role: "assistant",
+      content: [],
+      reasoning_content: "First consider the approach",
+    },
+  };
+  const action = {
+    ...makeBashAction("command"),
+    reasoning_content: "Then inspect the workspace",
+  };
+  const observation = makeBashObservation("result", action.id);
+  const separator = makeUserMessage("next-turn");
+  const events = [reasoningOnly, action, observation, separator, observation];
+
+  const items = groupEvents(events, 1);
+
+  expect(items).toMatchObject([
+    {
+      kind: "group",
+      reasoning: [
+        { id: reasoningOnly.id, text: "First consider the approach", index: 0 },
+        { id: action.id, text: "Then inspect the workspace", index: 1 },
+      ],
+    },
+    { kind: "single", event: separator },
+    {
+      kind: "group",
+      reasoning: [
+        { id: action.id, text: "Then inspect the workspace", index: 4 },
+      ],
+    },
+  ]);
+});
+
 it("places an unanchored resume after UTC history without timezone suffixes", () => {
   vi.stubEnv("TZ", "America/New_York");
   try {
