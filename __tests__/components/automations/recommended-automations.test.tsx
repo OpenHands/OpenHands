@@ -225,6 +225,7 @@ describe("recommended automations", () => {
       data: settingsWithMcpConfig({}),
     });
     vi.spyOn(SecretsService, "getSecretsOrThrow").mockResolvedValue([]);
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
     mockCreateSecret.mockResolvedValue(undefined);
     // Pre-flight connectivity test must pass so save mutations are reached.
     vi.spyOn(McpService, "testServer").mockResolvedValue({
@@ -271,8 +272,10 @@ describe("recommended automations", () => {
       "linear-issue-to-bitbucket-pr",
       "jira-issue-to-pr",
       "qa-changes",
+      "jira-data-center-issue-to-bitbucket-data-center-pr",
       "jira-issue-to-gitlab-mr",
       "research-brief-writer",
+      "bitbucket-data-center-pr-reviewer",
       "jira-issue-to-bitbucket-pr",
       "github-delivery-watchdog",
       "github-issue-triage",
@@ -306,7 +309,7 @@ describe("recommended automations", () => {
     expect(moreHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$MORE_TITLE,
     );
-    expect(within(moreHeading).getByText("18")).toBeInTheDocument();
+    expect(within(moreHeading).getByText("20")).toBeInTheDocument();
 
     const moreSection = screen.getByTestId(
       "recommended-automations-beta-section",
@@ -1397,9 +1400,13 @@ describe("recommended automations", () => {
       // Act
       renderLauncher({ withBackendProvider: true });
 
-      // Assert
+      // Assert — ahead of the proven templates; the catalog's own Data Center
+      // templates use the reported integrations too.
       await screen.findByTestId("recommended-automation-card-news-digest");
-      expect(cardOrder()[0]).toBe("news-digest");
+      const order = cardOrder();
+      expect(order.indexOf("news-digest")).toBeLessThan(
+        order.indexOf("slack-channel-monitor"),
+      );
       expect(
         within(
           screen.getByTestId("recommended-automations-beta-section"),
@@ -1408,12 +1415,81 @@ describe("recommended automations", () => {
     });
   });
 
-  it("sets up a template the instance does not look ready for without a notice", async () => {
+  it("tells a self-hosted instance with GitHub set up no way what the template needs", async () => {
+    // Arrange
+    await activateCloudBackend({ deploymentMode: "self_hosted" });
+    renderLauncher({ withBackendProvider: true });
+
+    // Act
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-github-pr-reviewer",
+      ),
+    );
+
+    // Assert
+    const notice = await screen.findByTestId("provider-setup-notice");
+    expect(notice).toHaveTextContent("GitHub code review");
+    expect(notice).toHaveTextContent(
+      "RECOMMENDED_AUTOMATIONS$PROVIDER_NOT_CONFIGURED",
+    );
+    expect(notice).toHaveTextContent(
+      "RECOMMENDED_AUTOMATIONS$PROVIDER_ALTERNATIVE",
+    );
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("continues from the notice into installing the GitHub MCP server", async () => {
+    // Arrange
+    await activateCloudBackend({ deploymentMode: "self_hosted" });
+    renderLauncher({ withBackendProvider: true });
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-github-pr-reviewer",
+      ),
+    );
+    await screen.findByTestId("provider-setup-notice");
+
+    // Act
+    fireEvent.click(screen.getByTestId("provider-setup-notice-continue"));
+
+    // Assert
+    const modal = await screen.findByTestId("mcp-install-modal");
+    expect(modal).toHaveTextContent("GitHub");
+    expect(screen.getByTestId("mcp-install-field-api_key")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("provider-setup-notice"),
+    ).not.toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("closes the notice without setting up the template", async () => {
+    // Arrange
+    await activateCloudBackend({ deploymentMode: "self_hosted" });
+    renderLauncher({ withBackendProvider: true });
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-github-pr-reviewer",
+      ),
+    );
+    await screen.findByTestId("provider-setup-notice");
+
+    // Act
+    fireEvent.click(screen.getByTestId("provider-setup-notice-cancel"));
+
+    // Assert
+    expect(
+      screen.queryByTestId("provider-setup-notice"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mcp-install-modal")).not.toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("sets up a template without a notice when its GitHub MCP server is installed", async () => {
     // Arrange
     await activateCloudBackend({
       deploymentMode: "self_hosted",
-      providersConfigured: ["bitbucket_data_center"],
-      jiraDcEnabled: true,
+      settings: settingsWithGithubMcp(),
     });
     renderLauncher({ withBackendProvider: true });
 
@@ -1425,12 +1501,40 @@ describe("recommended automations", () => {
     );
 
     // Assert
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith(
         "/automations/new/github-pr-reviewer",
       ),
     );
+    expect(
+      screen.queryByTestId("provider-setup-notice"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("sets up a template without a notice when its GitHub token secret is saved", async () => {
+    // Arrange
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([
+      { name: "GITHUB_PERSONAL_ACCESS_TOKEN" },
+    ]);
+    await activateCloudBackend({ deploymentMode: "self_hosted" });
+    renderLauncher({ withBackendProvider: true });
+
+    // Act
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-github-pr-reviewer",
+      ),
+    );
+
+    // Assert
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        "/automations/new/github-pr-reviewer",
+      ),
+    );
+    expect(
+      screen.queryByTestId("provider-setup-notice"),
+    ).not.toBeInTheDocument();
   });
 
   it("sets up a template the instance looks ready for", async () => {

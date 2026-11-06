@@ -11,10 +11,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import { NavigationProvider } from "#/context/navigation-context";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
-import {
-  useConversationDisplayTitle,
-  useConversationDisplayTitleState,
-} from "#/hooks/use-conversation-display-title";
+import { useConversationDisplayTitleState } from "#/hooks/use-conversation-display-title";
 import { CONVERSATION_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 let client: QueryClient;
@@ -74,9 +71,9 @@ afterEach(() => {
 it("keeps both titles through launch, task and saved metadata, then adopts generated and renamed titles together", async () => {
   const { result, rerender } = renderHook(
     () => {
-      const header = useConversationDisplayTitle();
-      const sidebar = useConversationDisplayTitle();
-      return [header(routeId), sidebar(routeId)];
+      const header = useConversationDisplayTitleState();
+      const sidebar = useConversationDisplayTitleState();
+      return [header(routeId).title, sidebar(routeId).title];
     },
     { wrapper },
   );
@@ -135,9 +132,12 @@ it("keeps a generated title in the sidebar after leaving the conversation and is
     .update(launchId, { conversationId: id });
   client.setQueryData(detailKey, metadata("Startup explained"));
   routeId = "another-chat";
-  const { result } = renderHook(() => useConversationDisplayTitle()(id), {
-    wrapper,
-  });
+  const { result } = renderHook(
+    () => useConversationDisplayTitleState()(id).title,
+    {
+      wrapper,
+    },
+  );
   expect(result.current).toBe("Startup explained");
   act(() => setActiveSelection({ backendId: "cloud", orgId: "org-2" }));
   expect(result.current).not.toBe("Startup explained");
@@ -158,9 +158,12 @@ it("does not reuse a different organization's cached task prompt", () => {
       },
     },
   });
-  const { result } = renderHook(() => useConversationDisplayTitle()(routeId), {
-    wrapper,
-  });
+  const { result } = renderHook(
+    () => useConversationDisplayTitleState()(routeId).title,
+    {
+      wrapper,
+    },
+  );
   expect(result.current).toBe(prompt);
   act(() => setActiveSelection({ backendId: "cloud", orgId: "org-2" }));
   expect(result.current).not.toBe("Private task prompt");

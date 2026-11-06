@@ -48,6 +48,7 @@ import { makeDefaultLocalBackend } from "#/api/backend-registry/default-backend"
 import { NO_BACKEND } from "#/api/backend-registry/active-store";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { I18nKey } from "#/i18n/declaration";
+import EventService from "#/api/event-service/event-service.api";
 
 const mockSend = vi.fn();
 vi.mock("#/hooks/use-send-message", () => ({
@@ -1620,6 +1621,7 @@ describe("ChatInterface - recovery visibility", () => {
         recoveryState: "retryable",
         sendMessage: vi.fn().mockResolvedValue({ queued: false }),
         isLoadingHistory: false,
+        isHistoryReady: false,
         reconnect: vi.fn(),
         hasConnectedOnce: true,
       },
@@ -1725,6 +1727,195 @@ describe("ChatInterface - session connection handoff", () => {
     useOptimisticUserMessageStore.getState().clearPendingMessages();
   });
 
+  describe("failed REST history recovery", () => {
+    // Keep the real socket hook, provider, and history query in the path. Only
+    // the browser transport and EventService responses are controlled here.
+    class HistoryWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSED = 3;
+      static instances: HistoryWebSocket[] = [];
+
+      readyState = HistoryWebSocket.CONNECTING;
+      onopen: ((event: Event) => void) | null = null;
+      onmessage: ((event: globalThis.MessageEvent) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      send = vi.fn();
+
+      constructor(readonly url: string) {
+        HistoryWebSocket.instances.push(this);
+      }
+
+      open() {
+        this.readyState = HistoryWebSocket.OPEN;
+        this.onopen?.(new Event("open"));
+      }
+
+      receive(frame: unknown) {
+        this.onmessage?.(
+          new window.MessageEvent("message", { data: JSON.stringify(frame) }),
+        );
+      }
+
+      close(code = 1000) {
+        this.readyState = HistoryWebSocket.CLOSED;
+        this.onclose?.(new CloseEvent("close", { code }));
+      }
+    }
+
+    let queryClient: QueryClient;
+    let originalWebSocket: typeof WebSocket;
+
+    beforeEach(() => {
+      HistoryWebSocket.instances = [];
+      originalWebSocket = globalThis.WebSocket;
+      vi.stubGlobal("WebSocket", HistoryWebSocket);
+      queryClient = new QueryClient({
+        defaultOptions: { queries: { retryDelay: 0 } },
+      });
+    });
+
+    afterEach(() => {
+      cleanup();
+      queryClient.clear();
+      globalThis.WebSocket = originalWebSocket;
+    });
+
+    const renderFailedHistory = async (
+      eventCount: number,
+      hasSession = true,
+    ) => {
+      const conversationId = "test-conversation-id";
+      const conversationUrl = `http://localhost:8000/api/conversations/${conversationId}`;
+      const { backend, orgId } = getActiveBackend();
+      if (hasSession) {
+        const key = sessionActivityKey(backend.id, orgId, conversationId);
+        const activity = useSessionActivityStore.getState();
+        activity.begin(key, "initialize");
+        activity.observe(key, "READY");
+        activity.complete(
+          key,
+          useSessionActivityStore.getState().entries[key][0].id,
+        );
+      }
+      vi.spyOn(EventService, "getEventCount").mockResolvedValue(eventCount);
+      const search = vi
+        .spyOn(EventService, "searchEvents")
+        .mockRejectedValue(new Error("HTTP 502"));
+      queryClient.setQueryData(
+        ["user", "conversation", conversationId, backend.id, orgId],
+        {
+          id: conversationId,
+          sandbox_status: null,
+          conversation_url: conversationUrl,
+          session_api_key: null,
+          sub_conversation_ids: [],
+        },
+      );
+      renderWithProviders(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <conversationWebSocket.ConversationWebSocketProvider
+              conversationId={conversationId}
+              conversationUrl={conversationUrl}
+            >
+              <ChatInterface />
+            </conversationWebSocket.ConversationWebSocketProvider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => expect(HistoryWebSocket.instances).toHaveLength(1));
+      // Exhausting the real query's retry opens the supported full-log fallback.
+      expect(search).toHaveBeenCalledTimes(2);
+      const socket = HistoryWebSocket.instances[0];
+      expect(new URL(socket.url).searchParams.get("after_seq")).toBe("-1");
+      return socket;
+    };
+
+    const savedMessage: MessageEvent = {
+      id: "saved-user-message",
+      timestamp: "2026-11-05T10:00:00Z",
+      source: "user",
+      llm_message: {
+        role: "user",
+        content: [{ type: "text", text: "Saved conversation history" }],
+      },
+      activated_skills: [],
+      extended_content: [],
+    };
+
+    it.each([
+      { tab: "originating", hasSession: true },
+      { tab: "another", hasSession: false },
+    ])(
+      "keeps suggestions hidden while saved history replays in the $tab tab",
+      async ({ hasSession }) => {
+        const socket = await renderFailedHistory(1, hasSession);
+
+        act(() => socket.open());
+        expect
+          .soft(screen.queryByTestId("chat-suggestions"))
+          .not.toBeInTheDocument();
+        act(() =>
+          socket.receive({ type: "sync", from_seq: -1, through_seq: 0 }),
+        );
+        expect
+          .soft(screen.queryByTestId("chat-suggestions"))
+          .not.toBeInTheDocument();
+        act(() =>
+          socket.receive({ type: "durable", seq: 0, event: savedMessage }),
+        );
+
+        expect(
+          await screen.findByText("Saved conversation history"),
+        ).toBeVisible();
+        expect(
+          screen.queryByTestId("chat-suggestions"),
+        ).not.toBeInTheDocument();
+      },
+    );
+
+    it("shows a truly empty fallback after sync and waits for replay again on reconnect", async () => {
+      const socket = await renderFailedHistory(0);
+
+      act(() => socket.open());
+      expect
+        .soft(screen.queryByTestId("chat-suggestions"))
+        .not.toBeInTheDocument();
+      act(() =>
+        socket.receive({ type: "sync", from_seq: -1, through_seq: null }),
+      );
+      expect(screen.getByTestId("chat-suggestions")).toBeInTheDocument();
+
+      // The conversation can gain history while disconnected. A previous empty
+      // sync must not let a new transport OPEN bypass this connection's replay.
+      act(() => socket.close(1006));
+      await waitFor(() => expect(HistoryWebSocket.instances).toHaveLength(2), {
+        timeout: 2000,
+      });
+      const reconnected = HistoryWebSocket.instances[1];
+      act(() => reconnected.open());
+      expect
+        .soft(screen.queryByTestId("chat-suggestions"))
+        .not.toBeInTheDocument();
+      act(() =>
+        reconnected.receive({ type: "sync", from_seq: -1, through_seq: 0 }),
+      );
+      expect
+        .soft(screen.queryByTestId("chat-suggestions"))
+        .not.toBeInTheDocument();
+      act(() =>
+        reconnected.receive({ type: "durable", seq: 0, event: savedMessage }),
+      );
+
+      expect(
+        await screen.findByText("Saved conversation history"),
+      ).toBeVisible();
+      expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
+    });
+  });
+
   it("does not flash empty-chat suggestions while reconnecting saved session history", () => {
     const { backend, orgId } = getActiveBackend();
     const key = sessionActivityKey(backend.id, orgId, "test-conversation-id");
@@ -1741,6 +1932,7 @@ describe("ChatInterface - session connection handoff", () => {
         mainConnectionState: "CONNECTING",
         recoveryState: "idle",
         isLoadingHistory: false,
+        isHistoryReady: false,
         hasConnectedOnce: false,
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
@@ -1771,6 +1963,7 @@ describe("ChatInterface - session connection handoff", () => {
         mainConnectionState: "OPEN",
         recoveryState: "idle",
         isLoadingHistory: false,
+        isHistoryReady: true,
         hasConnectedOnce: true,
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
@@ -1796,6 +1989,7 @@ describe("ChatInterface - session connection handoff", () => {
         mainConnectionState: "OPEN",
         recoveryState: "idle",
         isLoadingHistory: false,
+        isHistoryReady: true,
         hasConnectedOnce: true,
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
@@ -1854,6 +2048,7 @@ describe("ChatInterface - session connection handoff", () => {
         mainConnectionState: "CONNECTING" as "CONNECTING" | "OPEN",
         recoveryState: "idle" as const,
         isLoadingHistory: false,
+        isHistoryReady: false,
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
         hasConnectedOnce: false,
@@ -1896,6 +2091,7 @@ describe("ChatInterface - session connection handoff", () => {
       expect(header).toHaveAttribute("aria-expanded", "true");
 
       socket.connectionState = socket.mainConnectionState = "OPEN";
+      socket.isHistoryReady = true;
       page.rerender(view());
       expect(
         screen.queryByTestId("chat-message-sending"),

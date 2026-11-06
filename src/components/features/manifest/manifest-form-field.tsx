@@ -3,8 +3,13 @@ import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { GitRepoDropdown } from "#/components/features/home/git-repo-dropdown";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useSettings } from "#/hooks/query/use-settings";
 import { useUserProviders } from "#/hooks/use-user-providers";
 import { I18nKey } from "#/i18n/declaration";
+import {
+  automationRepositoryAddress,
+  providerHostKnown,
+} from "#/utils/automation-repo-sources";
 import {
   formControlMultilineFieldClassName,
   formControlSettingsFieldClassName,
@@ -17,7 +22,23 @@ import type {
   SetupFieldOption,
   SetupFormField as SetupFormFieldDefinition,
   SetupFormValue,
+  SetupGitProvider,
 } from "#/manifests/types";
+
+/**
+ * The format hint for a repository the manifest states no placeholder for. A
+ * hosted provider's repository is its `owner/repo` path; a Data Center or
+ * Azure DevOps repository is cloned from its URL alone, so that is what the
+ * field asks for when it cannot be picked.
+ */
+const REPOSITORY_PLACEHOLDER_KEYS: Record<SetupGitProvider, I18nKey> = {
+  github: I18nKey.SETUP$REPOSITORY_PLACEHOLDER,
+  gitlab: I18nKey.SETUP$REPOSITORY_PLACEHOLDER,
+  bitbucket: I18nKey.SETUP$REPOSITORY_PLACEHOLDER,
+  bitbucket_data_center:
+    I18nKey.SETUP$BITBUCKET_DATA_CENTER_REPOSITORY_PLACEHOLDER,
+  azure_devops: I18nKey.SETUP$AZURE_DEVOPS_REPOSITORY_PLACEHOLDER,
+};
 
 export interface SetupFormFieldProps {
   /** The record key the field is declared under, and what `{{form.x}}` reads. */
@@ -63,22 +84,37 @@ export function SetupFormField({
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
   const { providers: connectedProviders } = useUserProviders();
+  const providerHosts = useSettings().data?.provider_tokens_set;
   const testId = `setup-field-${name}`;
   const help = <p className="text-xs text-muted">{field.help}</p>;
+
+  const provider: SetupGitProvider = field.provider ?? "github";
+  const providerHost = providerHosts?.[provider];
 
   // Listing a user's repositories is a cloud-backend capability: `GitService`
   // answers with an empty page on any other backend, so the picker would offer
   // a source that can never respond. On a cloud backend it lists through the
   // instance's native integration for the field's provider, which a user who
-  // connected that provider through an MCP server instead does not have.
+  // connected that provider through an MCP server instead does not have. A
+  // listed repository is stored by its address, so a self-managed connection
+  // whose host the server does not report has nothing to store either.
   const canListRepositories =
     backend.kind === "cloud" &&
-    connectedProviders.includes(field.provider ?? "github");
+    connectedProviders.includes(provider) &&
+    providerHostKnown(provider, providerHost);
+
+  // What the form stores for a picked repository, the way the generic
+  // automation form stores one: GitHub's `owner/repo`, and for the others the
+  // URL on the connected host, which is the only form the service clones a
+  // Data Center or Azure DevOps repository from.
+  const repositoryAddress = (repository: GitRepository): string =>
+    automationRepositoryAddress(provider, repository.full_name, providerHost) ??
+    repository.full_name;
 
   // The format hint is host copy: a manifest states the format of everything it
   // declares except a repository, whose shape the host derives.
   const repositoryPlaceholder =
-    field.placeholder ?? t(I18nKey.SETUP$REPOSITORY_PLACEHOLDER);
+    field.placeholder ?? t(REPOSITORY_PLACEHOLDER_KEYS[provider]);
 
   if (field.type === "repo-picker" && field.multiple) {
     return (
@@ -89,6 +125,7 @@ export function SetupFormField({
           field={field}
           values={fieldValues(value)}
           canListRepositories={canListRepositories}
+          repositoryAddress={repositoryAddress}
           placeholder={repositoryPlaceholder}
           disabled={disabled}
           onChange={onChange}
@@ -105,14 +142,14 @@ export function SetupFormField({
       <div className="flex w-full flex-col gap-2.5">
         <FieldLabel field={field} />
         <GitRepoDropdown
-          provider={field.provider ?? "github"}
+          provider={provider}
           value={repository?.id ?? null}
           repositoryName={repository?.full_name ?? fieldText(value) ?? null}
           placeholder={field.placeholder}
           disabled={disabled}
           onChange={(selected) => {
             onRepositoryChange(selected ?? null);
-            onChange(selected?.full_name ?? "");
+            onChange(selected ? repositoryAddress(selected) : "");
             onBlur();
           }}
         />

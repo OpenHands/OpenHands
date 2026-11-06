@@ -138,9 +138,10 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       // Simulate: history is loading but events already exist in store (e.g., remount)
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: true,
+        isHistoryReady: false,
         connectionState: "OPEN",
         mainConnectionState: "OPEN",
-      recoveryState: "idle",
+        recoveryState: "idle",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
         hasConnectedOnce: true,
@@ -168,9 +169,10 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       // Simulate: first load, no events yet
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: true,
+        isHistoryReady: false,
         connectionState: "OPEN",
         mainConnectionState: "OPEN",
-      recoveryState: "idle",
+        recoveryState: "idle",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
         hasConnectedOnce: true,
@@ -192,9 +194,10 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
     it("hides skeleton when a pending user message is visible during history load", () => {
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: true,
+        isHistoryReady: false,
         connectionState: "OPEN",
         mainConnectionState: "OPEN",
-      recoveryState: "idle",
+        recoveryState: "idle",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
         hasConnectedOnce: true,
@@ -225,9 +228,10 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       // Simulate: component re-mounts when WebSocket has already finished loading
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: false,
+        isHistoryReady: true,
         connectionState: "OPEN",
         mainConnectionState: "OPEN",
-      recoveryState: "idle",
+        recoveryState: "idle",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
         hasConnectedOnce: true,

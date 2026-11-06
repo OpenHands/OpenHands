@@ -13,7 +13,8 @@ import path from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it, afterEach } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { server as mswServer } from "#/mocks/node";
 import {
   assertPortsFree,
   buildSafeDevConfig,
@@ -47,6 +48,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+
+beforeAll(() => mswServer.close());
+afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -621,20 +625,20 @@ describe("buildAgentServerCommand", () => {
       "--python",
       ">=3.12,<3.15",
       "--from",
-      "openhands-agent-server==1.59.0",
+      "openhands-agent-server==1.60.1",
       "--with",
-      "openhands-sdk==1.59.0",
+      "openhands-sdk==1.60.1",
       "--with",
-      "openhands-tools==1.59.0",
+      "openhands-tools==1.60.1",
       "--with",
-      "openhands-workspace==1.59.0",
+      "openhands-workspace==1.60.1",
       "--with",
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
       "canvas_ui_tool",
     ]);
-    expect(cmd.source).toBe("PyPI (1.59.0, default)");
+    expect(cmd.source).toBe("PyPI (1.60.1, default)");
   });
 
   it("uses specific PyPI version when OH_AGENT_SERVER_VERSION is set with all packages pinned", () => {

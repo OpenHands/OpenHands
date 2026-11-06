@@ -54,6 +54,34 @@ describe("WebSocket error event handling", () => {
     expect(sendMock).not.toHaveBeenCalled();
   });
 
+  it("keeps hook execution events inline without showing a toast", () => {
+    // Shape of a hook event as the app server serves it from persisted
+    // history: `error` is present but null.
+    handle({
+      id: "hook-1",
+      timestamp: "2026-07-12T00:00:00.000Z",
+      source: "hook",
+      kind: "HookExecutionEvent",
+      hook_event_type: "Stop",
+      hook_command: "python finish_tool_hook.py",
+      success: true,
+      blocked: false,
+      exit_code: 0,
+      reason: null,
+      tool_name: null,
+      action_id: null,
+      message_id: null,
+      stdout: "",
+      stderr: "",
+      error: null,
+      additional_context: null,
+      hook_input: { reason: "agent_finished" },
+    });
+
+    expect(displayErrorToastMock).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
   it("shows the session-expired message for 401 server errors", () => {
     handle({
       error: "raw unauthorized error",

@@ -331,6 +331,9 @@ export default defineConfig(({ mode }) => {
         // the browser and dev crashes with ``ReferenceError: exports is not
         // defined`` on the first import of agent-settings.tsx.
         "shell-quote",
+        // Imported lazily by the markdown ```mermaid renderer. Its ESM build
+        // imports CJS packages (dayjs) that fail when served raw.
+        "mermaid",
         "unist-util-visit",
         "uuid",
         "zustand",
