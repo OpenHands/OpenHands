@@ -22,7 +22,9 @@ export default [
     route("extensions/:extensionName/*", "routes/canvas-extension-page.tsx"),
     route("mcp", "routes/mcp.tsx"),
     route("marketplaces", "routes/marketplaces.tsx"),
-    route("marketplaces/:marketplaceName", "routes/marketplace-detail.tsx"),
+    route("marketplaces/:marketplaceName", "routes/marketplaces.tsx", {
+      id: "marketplaces-selected",
+    }),
     route("settings", "routes/settings.tsx", [
       index("routes/settings-index.tsx"),
       route("llm", "routes/llm-settings.tsx"),

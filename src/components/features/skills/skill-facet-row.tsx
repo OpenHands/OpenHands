@@ -3,18 +3,22 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 
-interface SkillFacetRowProps {
-  labelKey: I18nKey;
+/** A row is labelled by a translation key, or by a literal (free-text tags). */
+type SkillFacetRowLabel =
+  { labelKey: I18nKey; label?: never } | { label: string; labelKey?: never };
+
+type SkillFacetRowProps = SkillFacetRowLabel & {
   count: number;
   checked: boolean;
   disabled: boolean;
   icon?: LucideIcon;
   testId: string;
   onToggle: () => void;
-}
+};
 
 export function SkillFacetRow({
   labelKey,
+  label: literalLabel,
   count,
   checked,
   disabled,
@@ -23,7 +27,7 @@ export function SkillFacetRow({
   onToggle,
 }: SkillFacetRowProps) {
   const { t } = useTranslation("openhands");
-  const label = t(labelKey);
+  const label = literalLabel ?? t(labelKey);
 
   return (
     <button

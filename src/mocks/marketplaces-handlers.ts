@@ -8,6 +8,7 @@ import knownSources from "#/fixtures/marketplaces/known-sources.json";
 import type {
   AddMarketplaceRequest,
   CatalogEntry,
+  CatalogEntryIcon,
   CatalogEntryInstall,
   CatalogError,
   CatalogKind,
@@ -42,6 +43,7 @@ interface SeedEntry {
   runs_code: boolean;
   transport?: "stdio" | "http";
   requires?: string[];
+  icon?: CatalogEntryIcon;
 }
 
 interface KnownSource {
@@ -102,6 +104,12 @@ function defaultMarketplaceEntries(): SeedEntry[] {
       .slice(0, 5),
     runs_code: false,
     transport: "http",
+    icon: {
+      logo_url: integration.logoUrl ?? null,
+      bg: integration.iconBg ?? null,
+      color: integration.iconColor ?? null,
+      slug: null,
+    },
   }));
 
   const apps: SeedEntry[] = APPS_CATALOG.map((app) => ({
@@ -120,10 +128,16 @@ function defaultMarketplaceEntries(): SeedEntry[] {
     version: automation.version,
     runs_code: Boolean(automation.setup?.bundle),
     requires: Object.keys(automation.requires.integrations),
+    icon: automation.icon
+      ? { logo_url: null, bg: null, color: null, slug: automation.icon }
+      : undefined,
   }));
 
   return [...mcp, ...skills, ...plugins, ...apps, ...automations].map(
-    (entry) => ({ ...entry, tags: Array.from(new Set(entry.tags)) }),
+    (entry) => ({
+      ...entry,
+      tags: Array.from(new Set(entry.tags.map((tag) => tag.toLowerCase()))),
+    }),
   );
 }
 
@@ -256,6 +270,7 @@ function toEntry(seed: SeedEntry, stored: StoredMarketplace): CatalogEntry {
     install: state.installs[id] ?? notInstalled(),
     requires: seed.requires ?? [],
     transport: seed.transport ?? null,
+    icon: seed.icon ?? null,
   };
 }
 

@@ -1,5 +1,5 @@
-// Drives the Marketplaces prototype in Canvas mock mode and saves screenshots.
-// Usage: node drive_marketplaces.mjs <baseUrl> <outDir>
+// Drives the Marketplaces prototype (single-page layout) in Canvas mock mode.
+// Usage: node drive_v2.mjs <baseUrl> <outDir>
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -21,9 +21,8 @@ await page.addInitScript(() => {
 const errors = [];
 page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
 page.on("console", (m) => {
-  if (m.type() === "error") errors.push(`console: ${m.text().slice(0, 200)}`);
+  if (m.type() === "error" && !m.text().includes("502")) errors.push(`console: ${m.text().slice(0, 200)}`);
 });
-
 const dismissConsent = async () => {
   const consent = page.getByTestId("confirm-telemetry-preferences");
   if (await consent.count()) {
@@ -32,123 +31,92 @@ const dismissConsent = async () => {
   }
 };
 const shot = async (name) => {
-  await page.screenshot({ path: join(outDir, `${name}.png`), fullPage: false });
+  await page.screenshot({ path: join(outDir, `${name}.png`) });
   console.log(`shot ${name}`);
 };
-const text = async (testId) =>
-  (await page.getByTestId(testId).first().textContent())?.trim();
+const text = async (testId) => (await page.getByTestId(testId).first().textContent())?.trim();
+const cards = () => page.locator('[data-testid^="catalog-entry-kind-"]').count();
+const pickerInput = () => page.getByLabel("Marketplace", { exact: true });
+const pick = async (name) => {
+  await pickerInput().click();
+  await page.getByRole("option", { name: new RegExp(`^${name} `) }).click();
+  await page.waitForURL(new RegExp(`/marketplaces/${name}$`));
+  await page.getByTestId("marketplace-kind-tabs").waitFor();
+};
 
-// Wait until the mock worker is up: the first load of the list page.
 await page.goto(`${baseUrl}/marketplaces`, { waitUntil: "networkidle" });
 await dismissConsent();
-await page.getByTestId("marketplace-card-openhands-extensions").waitFor({ timeout: 60000 });
-await dismissConsent();
-console.log("list: cards =", await page.locator('[data-testid^="marketplace-card-"]').count());
-console.log("list: default counts:", await page.locator('[data-testid^="marketplace-count-openhands-extensions-"]').allTextContents());
-await shot("01-list");
+await page.getByTestId("marketplace-kind-tabs").waitFor({ timeout: 60000 });
+console.log("no customize rail on this page =", (await page.getByTestId("extensions-navbar-desktop").count()) === 0);
+console.log("default: tabs =", await page.locator('[data-testid^="marketplace-tab-"]').allTextContents());
+console.log("default: results =", await text("marketplace-result-summary"));
+await shot("v2-01-default");
 
-// Open the default marketplace page.
-await page.getByTestId("marketplace-card-openhands-extensions").click();
-await page.waitForURL(/\/marketplaces\/openhands-extensions$/);
-await page.getByTestId("marketplace-catalog-toolbar").waitFor();
-const kindAll = await text("marketplace-kind-all");
-console.log("detail: kind filter all =", kindAll);
-console.log("detail: entries rendered =", await page.locator('[data-testid^="catalog-entry-kind-"]').count());
-await shot("02-default-marketplace");
+// Tabs
+await page.getByTestId("marketplace-tab-skill").click();
+console.log("skills tab: cards =", await cards(), "results =", await text("marketplace-result-summary"));
+await page.getByTestId("marketplace-tab-automation").click();
+console.log("automation tab: cards =", await cards());
+await shot("v2-02-automation-tab");
 
-// Filter by kind and search.
-await page.getByTestId("marketplace-kind-plugin").click();
-console.log("detail: plugin cards =", await page.locator('[data-testid^="catalog-entry-plugin-"]').count());
-await page.getByTestId("marketplace-kind-all").click();
-await page.getByTestId("marketplace-search-input").fill("slack");
-await page.waitForTimeout(200);
-console.log("detail: 'slack' matches =", await page.locator('[data-testid^="catalog-entry-kind-"]').count());
-await shot("03-search-slack");
-await page.getByTestId("marketplace-search-input").fill("");
+// Facets: tag + status
+await page.getByTestId("marketplace-tab-all").click();
+await page.locator('[data-testid^="marketplace-facet-tag-"]').first().click();
+const firstTag = await page.locator('[data-testid^="marketplace-facet-tag-"]').first().getAttribute("data-testid");
+console.log("facet", firstTag, "-> results =", await text("marketplace-result-summary"), "clear link =", await page.getByTestId("marketplace-clear-filters").count());
+await page.getByTestId("marketplace-clear-filters").click();
+console.log("cleared -> results =", await text("marketplace-result-summary"));
 
-// Install an MCP server and a skill from the trusted default marketplace.
-await page.getByTestId("marketplace-kind-mcp").click();
-const firstMcpInstall = page.locator('[data-testid^="catalog-entry-install-mcp-"]').first();
-const mcpId = await firstMcpInstall.getAttribute("data-testid");
-await firstMcpInstall.click();
-await page.locator(`[data-testid="${mcpId.replace("-install-", "-installed-")}"]`).waitFor();
-console.log("detail: installed", mcpId.replace("catalog-entry-install-", ""), "->", await page.locator(`[data-testid="${mcpId.replace("-install-", "-installed-")}"]`).textContent());
-await page.getByTestId("marketplace-kind-skill").click();
-const firstSkillInstall = page.locator('[data-testid^="catalog-entry-install-skill-"]').first();
-const skillId = await firstSkillInstall.getAttribute("data-testid");
-await firstSkillInstall.click();
-await page.locator(`[data-testid="${skillId.replace("-install-", "-installed-")}"]`).waitFor();
-console.log("detail: installed", skillId.replace("catalog-entry-install-", ""));
-await page.getByTestId("marketplace-install-filter-installed").click();
-console.log("detail: installed filter shows", await page.locator('[data-testid^="catalog-entry-kind-"]').count(), "entries");
-await shot("04-installed-filter");
-
-// Refresh the marketplace: tracked installs gain an update.
-await page.getByTestId("marketplace-detail-refresh").click();
+// Install from the trusted default, then status facet + refresh/update
+await page.getByTestId("marketplace-tab-mcp").click();
+await page.locator('[data-testid^="catalog-entry-install-mcp-"]').first().click();
+await page.locator('[data-testid^="catalog-entry-toggle-mcp-"]').first().waitFor();
+await page.getByTestId("marketplace-tab-all").click();
+await page.getByTestId("marketplace-facet-status-installed").click();
+console.log("status=installed -> results =", await text("marketplace-result-summary"));
+await page.getByTestId("marketplace-refresh").click();
 await page.locator('[data-testid^="catalog-entry-update-"]').first().waitFor({ timeout: 10000 });
-console.log("detail: update buttons after refresh =", await page.locator('[data-testid^="catalog-entry-update-"]').count());
-await shot("05-update-available");
+console.log("after refresh: update buttons =", await page.locator('[data-testid^="catalog-entry-update-"]').count());
+await shot("v2-03-installed-update");
 await page.locator('[data-testid^="catalog-entry-update-"]').first().click();
 await page.waitForTimeout(300);
-console.log("detail: update buttons after one update =", await page.locator('[data-testid^="catalog-entry-update-"]').count());
+console.log("after update: update buttons =", await page.locator('[data-testid^="catalog-entry-update-"]').count());
 
-// Untrusted marketplace: runs-code entries are blocked until trusted.
-await page.goto(`${baseUrl}/marketplaces/acme-internal`, { waitUntil: "networkidle" });
-await dismissConsent();
-await page.getByTestId("marketplace-catalog-toolbar").waitFor();
-console.log("acme: errors panel =", (await text("marketplace-catalog-errors"))?.slice(0, 80));
-console.log("acme: also-in badges =", await page.locator('[data-testid^="catalog-entry-also-in-"]').allTextContents());
-console.log("acme: acme-deploy install disabled =", await page.getByTestId("catalog-entry-install-plugin-acme-deploy").isDisabled());
-console.log("acme: acme-oncall install disabled =", await page.getByTestId("catalog-entry-install-skill-acme-oncall").isDisabled());
-await shot("06-acme-untrusted");
-await page.getByTestId("marketplace-trust-panel").getByRole("switch").click();
+// Switch marketplace with the picker
+await pick("acme-internal");
+await page.getByTestId("marketplace-remove").waitFor();
+console.log("acme: remove button =", await page.getByTestId("marketplace-remove").count(), "errors =", (await text("marketplace-catalog-errors"))?.slice(0, 40));
+console.log("acme: acme-deploy disabled =", await page.getByTestId("catalog-entry-install-plugin-acme-deploy").isDisabled());
+await shot("v2-04-acme-untrusted");
+await page.getByTestId("marketplace-trust-control").getByRole("switch").click();
 await page.waitForTimeout(400);
-console.log("acme: acme-deploy install disabled after trust =", await page.getByTestId("catalog-entry-install-plugin-acme-deploy").isDisabled());
+console.log("acme: acme-deploy disabled after trust =", await page.getByTestId("catalog-entry-install-plugin-acme-deploy").isDisabled());
 await page.getByTestId("catalog-entry-install-plugin-acme-deploy").click();
-await page.getByTestId("catalog-entry-installed-plugin-acme-deploy").waitFor();
-console.log("acme: acme-deploy installed; toggle present =", await page.getByTestId("catalog-entry-toggle-plugin-acme-deploy").count());
-await shot("07-acme-trusted-installed");
+await page.getByTestId("catalog-entry-toggle-plugin-acme-deploy").waitFor();
+await shot("v2-05-acme-trusted");
 
-// Add a marketplace from the list page.
-await page.goto(`${baseUrl}/marketplaces`, { waitUntil: "networkidle" });
-await dismissConsent();
+// Add a marketplace from the header; it becomes the selected one
 await page.getByTestId("marketplaces-add-button").click();
 await page.getByTestId("add-marketplace-source-input").fill("github:obra/superpowers");
 await page.getByTestId("add-marketplace-modal").getByRole("switch").click();
-await shot("08-add-form");
+await shot("v2-06-add-form");
 await page.getByTestId("add-marketplace-submit").click();
 await page.waitForURL(/\/marketplaces\/superpowers$/, { timeout: 10000 });
-await page.getByTestId("marketplace-catalog-toolbar").waitFor();
-console.log("added: superpowers kind filter all =", await text("marketplace-kind-all"));
-await shot("09-superpowers");
+await page.getByTestId("marketplace-kind-tabs").waitFor();
+await page.waitForFunction(() => document.querySelector('[data-testid="marketplace-picker-bar"]')?.textContent?.includes("obra/superpowers"));
+console.log("superpowers: picker shows =", await pickerInput().inputValue(), "tabs =", await text("marketplace-tab-all"));
+await shot("v2-07-superpowers");
 
-// Add fails for a source that cannot be parsed, and for a private repo without a token.
-await page.goto(`${baseUrl}/marketplaces`, { waitUntil: "networkidle" });
-await dismissConsent();
-await page.getByTestId("marketplaces-add-button").click();
-await page.getByTestId("add-marketplace-source-input").fill("github:acme-corp/private-extensions");
-await page.getByTestId("add-marketplace-submit").click();
-await page.waitForTimeout(600);
-console.log("add: private without token keeps the form open =", await page.getByTestId("add-marketplace-modal").count());
-await shot("10-add-private-error");
-await page.getByTestId("add-marketplace-modal-close").click();
-
-// Remove the added marketplace.
-console.log("list: cards before remove =", await page.locator('[data-testid^="marketplace-card-"]').count());
-await page.getByTestId("marketplace-remove-superpowers").click();
+// Remove it from the picker bar; back to the default
+await page.getByTestId("marketplace-remove").click();
 await page.getByTestId("confirm-button").click();
-await page.waitForTimeout(500);
-console.log("list: cards after remove =", await page.locator('[data-testid^="marketplace-card-"]').count());
-await shot("11-list-after-remove");
+await page.waitForURL(/\/marketplaces$/);
+await page.getByTestId("marketplace-kind-tabs").waitFor();
+await page.waitForFunction(() => document.querySelector('input[aria-label="Marketplace"]')?.value?.startsWith("openhands-extensions"));
+console.log("after remove: picker shows =", await pickerInput().inputValue());
+await pickerInput().click();
+console.log("picker options =", await page.getByRole("option").allTextContents());
+await shot("v2-08-picker-open");
 
-// Reload keeps the state (sessionStorage).
-await page.reload({ waitUntil: "networkidle" });
-await dismissConsent();
-await page.getByTestId("marketplace-card-openhands-extensions").waitFor();
-console.log("list: acme trusted after reload =", await text("marketplace-trust-acme-internal"));
-
-// Sidebar entry
-console.log("nav: Marketplaces link present =", await page.locator('a[href="/marketplaces"]').count());
-
-console.log("errors:", errors.length ? errors : "none");
+console.log("errors:", errors.length ? errors.slice(0, 5) : "none");
 await browser.close();

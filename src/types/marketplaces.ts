@@ -50,6 +50,16 @@ export interface CatalogEntryInstall {
   policy: "track" | "pin";
 }
 
+/** What the card shows in its icon slot; absent means the kind's own icon. */
+export interface CatalogEntryIcon {
+  /** MCP servers: the integration's logo and brand colors. */
+  logo_url: string | null;
+  bg: string | null;
+  color: string | null;
+  /** Automation templates: the manifest icon slug. */
+  slug: string | null;
+}
+
 export interface CatalogEntry {
   /** `${kind}:${name}@${marketplace}` */
   id: string;
@@ -68,6 +78,7 @@ export interface CatalogEntry {
   requires: string[];
   /** MCP servers: how the server is reached. */
   transport: "stdio" | "http" | null;
+  icon: CatalogEntryIcon | null;
 }
 
 export interface CatalogError {
