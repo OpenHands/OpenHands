@@ -360,6 +360,7 @@ export const useAutoResize = (
       element.textContent = value.text;
       smartResize();
       focusContentEditableAtEnd(element);
+      element.dispatchEvent(new InputEvent("input", { bubbles: true }));
       onValueApplied?.(); // one-shot: let the caller clear the value
       return true;
     };

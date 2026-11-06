@@ -107,6 +107,32 @@ describe("useDraftPersistence", () => {
       expect(chatInputRef.current?.textContent).toBe(savedDraft);
     });
 
+    it("dispatches an input event when restoring draft so submit controls sync", () => {
+      // Arrange
+      const conversationId = "conv-restore-input-event";
+      const savedDraft = "Draft for input event dispatch";
+      const chatInputRef = createMockChatInputRef();
+      const onInput = vi.fn();
+      chatInputRef.current?.addEventListener("input", onInput);
+
+      vi.mocked(conversationLocalStorage.getConversationState).mockReturnValue({
+        selectedTab: "files",
+        unpinnedTabs: [],
+        conversationMode: "code",
+        subConversationTaskId: null,
+        draftMessage: savedDraft,
+        filesTabDiffView: null,
+        filesTabContentViewMode: "rich",
+      });
+
+      // Act
+      renderHook(() => useDraftPersistence(conversationId, chatInputRef));
+
+      // Assert - an input event must be dispatched to trigger onInput handlers
+      expect(chatInputRef.current?.textContent).toBe(savedDraft);
+      expect(onInput).toHaveBeenCalledTimes(1);
+    });
+
     it("clears input on mount then restores draft if exists", () => {
       // Arrange
       const conversationId = "conv-restore-2";
