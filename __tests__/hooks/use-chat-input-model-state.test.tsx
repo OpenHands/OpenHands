@@ -105,6 +105,28 @@ describe("useChatInputModelState", () => {
     );
   });
 
+  it("keeps the actual model label but hides choices when the host fixes a chat's model", () => {
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isActiveAcpConversation: true, isAcpContext: true }),
+    );
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        agent_kind: "acp",
+        acp_server: "codex",
+        llm_model: "gpt-6.1-sol",
+        acp_allow_model_switch: false,
+        acp_available_models: [
+          { id: "gpt-6.1-sol", label: "GPT-6.1 Sol" },
+          { id: "another", label: "Another" },
+        ],
+      },
+    });
+    const { result } = renderHook(() => useChatInputModelState());
+    expect(result.current.currentModelId).toBe("gpt-6.1-sol");
+    expect(result.current.displayModel).toBe("GPT-6.1 Sol");
+    expect(result.current.showAcpPicker).toBe(false);
+  });
+
   it("active ACP: lists the models the conversation's session reported", () => {
     const live = [
       { id: "default", label: "Default (recommended)" },

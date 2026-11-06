@@ -129,6 +129,7 @@ export interface DirectConversationInfo {
      */
     kind?: string | null;
     acp_model?: string | null;
+    acp_allow_model_switch?: boolean | null;
     /**
      * ACP CLI identity (``claude-code`` / ``codex`` / ``gemini-cli``) from the
      * SDK's ``ACPAgent.acp_server`` (#3692). Preferred fallback when the
@@ -448,6 +449,9 @@ export function toAppConversation(
     pr_number: [],
     agent_kind: isAcp ? "acp" : "openhands",
     acp_server: acpServer,
+    acp_allow_model_switch: isAcp
+      ? (info.agent?.acp_allow_model_switch ?? null)
+      : null,
     acp_available_models: isAcp
       ? toAcpModelOptions(info.available_models)
       : null,

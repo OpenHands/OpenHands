@@ -42568,5 +42568,41 @@
     "uk": "Створено",
     "ca": "Creada per",
     "id": "Dibuat oleh"
+  },
+  "ACP_PERMISSION_REQUIRED": {
+    "en": "Permission required",
+    "ja": "許可が必要です",
+    "zh-CN": "需要授权",
+    "zh-TW": "需要授權",
+    "ko-KR": "권한이 필요합니다",
+    "no": "Tillatelse kreves",
+    "it": "Autorizzazione richiesta",
+    "pt": "Permissão necessária",
+    "es": "Se requiere permiso",
+    "ar": "الإذن مطلوب",
+    "fr": "Autorisation requise",
+    "tr": "İzin gerekli",
+    "de": "Berechtigung erforderlich",
+    "uk": "Потрібен дозвіл",
+    "ca": "Cal permís",
+    "id": "Izin diperlukan"
+  },
+  "ACP_PERMISSION_INCOMPLETE": {
+    "en": "Request details are incomplete. Approval is disabled.",
+    "ja": "リクエストの詳細が不完全なため、承認できません。",
+    "zh-CN": "请求详情不完整，无法批准。",
+    "zh-TW": "請求詳細資料不完整，無法批准。",
+    "ko-KR": "요청 세부 정보가 불완전하여 승인할 수 없습니다.",
+    "no": "Forespørselen er ufullstendig. Godkjenning er deaktivert.",
+    "it": "I dettagli della richiesta sono incompleti. Approvazione disabilitata.",
+    "pt": "Os detalhes da solicitação estão incompletos. A aprovação está desativada.",
+    "es": "Los detalles de la solicitud están incompletos. La aprobación está desactivada.",
+    "ar": "تفاصيل الطلب غير مكتملة. الموافقة معطلة.",
+    "fr": "Les détails de la demande sont incomplets. L’approbation est désactivée.",
+    "tr": "İstek ayrıntıları eksik. Onay devre dışı.",
+    "de": "Die Anfragedetails sind unvollständig. Eine Genehmigung ist deaktiviert.",
+    "uk": "Деталі запиту неповні. Схвалення вимкнено.",
+    "ca": "Els detalls de la sol·licitud són incomplets. L’aprovació està desactivada.",
+    "id": "Detail permintaan tidak lengkap. Persetujuan dinonaktifkan."
   }
 }

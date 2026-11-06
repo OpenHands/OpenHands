@@ -188,6 +188,8 @@ export interface AppConversation {
    * Empty before the session starts and on servers that don't report models.
    */
   acp_available_models?: ACPModelOption[] | null;
+  /** Explicit host policy; false keeps an existing chat's model fixed. */
+  acp_allow_model_switch?: boolean | null;
   /**
    * Server-side key-value tags from the agent-server's
    * ``ConversationInfo.tags`` (settable at creation and via
