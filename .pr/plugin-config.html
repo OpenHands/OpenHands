@@ -1,0 +1,887 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reviewable plugin configuration edits</title><style>body{margin:0;background:#fdfdfb;color:#202020;font:16px/1.6 system-ui}main{max-width:1000px;margin:40px auto;padding:0 25px}h1{font-size:36px;line-height:1.2}h2{margin-top:42px}a{color:#2854a0}nav{display:flex;gap:20px;flex-wrap:wrap;border-bottom:1px solid #ddd;padding:15px 0}section{border-bottom:1px solid #ddd;padding-bottom:25px}.callout{padding:16px;background:#eaf0fb;border-left:4px solid #2854a0}table{border-collapse:collapse;width:100%}td,th{padding:10px;text-align:left;border-bottom:1px solid #ddd}code,pre{background:#f1efe9;font:13px/1.5 ui-monospace,monospace}pre{padding:15px;overflow:auto;max-height:450px}svg{width:100%;height:auto}svg text{font:15px system-ui;fill:#202020}.old{fill:#f1efe9;stroke:#888;stroke-dasharray:6 4}.new{fill:#eaf0fb;stroke:#2854a0;stroke-width:2}.delta{stroke:#b25b0e;stroke-width:3;stroke-dasharray:6 4}small{color:#666}</style><main><h1>Reviewable plugin configuration edits</h1><p>Existing executable plugin automations gain a configuration editor. The help agent proposes changes to the form; the user saves them to the same automation.</p><p class="callout">★ Additive automation API integration, gated by <code>pluginConfigUpdate</code>. The form keeps source/pins and runtime selection fixed. Backend schema validation rejects the entire update on invalid configuration.</p>
+<p>Source: <a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/components/features/automations/setup/automation-setup-panel.tsx#L1922">src/components/features/automations/setup/automation-setup-panel.tsx:1922</a> · Backend contract: <a href="https://github.com/OpenHands/automation/pull/708">automation #708</a></p>
+<nav><a href="#hydrate">Edit starts from the stored config</a><a href="#session">Agent proposals remain form edits</a><a href="#tool">The agent sees and can propose config</a><a href="#context">Context includes the executable plugin</a><a href="#save">Save writes the same automation</a></nav>
+<section><h2>API: configuration joins the existing update</h2><table><tr><th>Before</th><th>After</th></tr><tr><td>PATCH existing ID<br>name, trigger, timeout</td><td>PATCH the same ID<br>name, trigger, timeout, <strong>config</strong></td></tr></table><p>Configuration is a full replacement object. Omitting it preserves the backend value; the editor supplies the complete current object. No new Agent Server endpoint or minimum-version requirement.</p><a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/api/automation-service/automation-service.api.ts#L669">src/api/automation-service/automation-service.api.ts:669</a></section>
+<section id="hydrate"><h2>Edit starts from the stored config</h2><p><small>✏️ src/utils/automation-edit-draft.ts</small></p><figure><svg viewBox="0 0 900 135" role="img" aria-labelledby="hydrate-title"><title id="hydrate-title">Edit starts from the stored config before and after</title><a href="https://github.com/OpenHands/OpenHands/blob/1741fa4b5d637aa1091dfc94fda36ae3ed3f3f01/src/utils/automation-edit-draft.ts#L103"><rect class="old" x="5" y="10" width="395" height="95" rx="6"/><text x="25" y="40">Before</text><text x="25" y="68">setupDraftFromAutomation</text><text x="25" y="90">line 103</text></a><path class="delta" d="M410 55 H475 l-12 -8 m12 8 l-12 8"/><a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/utils/automation-edit-draft.ts#L104"><rect class="new" x="490" y="10" width="405" height="95" rx="6"/><text x="510" y="40">After</text><text x="510" y="68">setupDraftFromAutomation</text><text x="510" y="90">line 104</text></a></svg><figcaption><strong>Before:</strong> Plugin spec was absent from the edit draft. <strong>After:</strong> Carries existingPluginSpec and formatted pluginConfig into the existing editor.</figcaption></figure><p><a href="https://github.com/OpenHands/OpenHands/blob/1741fa4b5d637aa1091dfc94fda36ae3ed3f3f01/src/utils/automation-edit-draft.ts#L103">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/utils/automation-edit-draft.ts#L104">After source</a></p><details><summary>Diff</summary><pre>diff --git a/src/utils/automation-edit-draft.ts b/src/utils/automation-edit-draft.ts
+index 97479ccacf..84918e4ebe 100644
+--- a/src/utils/automation-edit-draft.ts
++++ b/src/utils/automation-edit-draft.ts
+@@ -24,6 +24,7 @@ const HOURLY_CRON = &quot;0 * * * *&quot;;
+ const REPOSITORY_UPDATABLE_PRESET_TYPES = new Set([&quot;prompt&quot;, &quot;plugin&quot;]);
+ 
+ function setupKind(automation: Automation): AutomationSetupKind {
++  if (automation.plugin_spec) return &quot;custom&quot;;
+   if ((automation.plugins?.length ?? 0) &gt; 0) return &quot;plugin&quot;;
+   if (!automation.prompt?.trim() &amp;&amp; automation.entrypoint) return &quot;custom&quot;;
+   return &quot;prompt&quot;;
+@@ -118,6 +119,9 @@ export function setupDraftFromAutomation(
+       (automation.repository ?? &quot;&quot;),
+     model: automation.model ?? &quot;&quot;,
+     agentProfileId: automation.agent_profile_id ?? &quot;&quot;,
++    ...(automation.plugin_spec
++      ? { pluginConfig: JSON.stringify(automation.plugin_spec.config, null, 2) }
++      : {}),
+     entrypoint: automation.entrypoint ?? &quot;&quot;,
+     setupScriptPath: automation.setup_script_path ?? &quot;&quot;,
+     ...(trigger.type === &quot;event&quot;
+@@ -145,6 +149,9 @@ export function setupDraftFromAutomation(
+     prompt,
+     kind,
+     editingAutomationId: automation.id,
++    ...(automation.plugin_spec
++      ? { existingPluginSpec: automation.plugin_spec }
++      : {}),
+     existingRepositories: automation.repositories ?? [],
+     canUpdateRepositories: canUpdateRepositories(automation),
+     ...(Object.keys(existingEventTrigger).length &gt; 0
+</pre></details></section>
+<section id="session"><h2>Agent proposals remain form edits</h2><p><small>✏️ src/api/automation-form-session.ts</small></p><figure><svg viewBox="0 0 900 135" role="img" aria-labelledby="session-title"><title id="session-title">Agent proposals remain form edits before and after</title><a href="https://github.com/OpenHands/OpenHands/blob/1741fa4b5d637aa1091dfc94fda36ae3ed3f3f01/src/api/automation-form-session.ts#L276"><rect class="old" x="5" y="10" width="395" height="95" rx="6"/><text x="25" y="40">Before</text><text x="25" y="68">patchAutomationFormSession</text><text x="25" y="90">line 276</text></a><path class="delta" d="M410 55 H475 l-12 -8 m12 8 l-12 8"/><a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/api/automation-form-session.ts#L280"><rect class="new" x="490" y="10" width="405" height="95" rx="6"/><text x="510" y="40">After</text><text x="510" y="68">patchAutomationFormSession</text><text x="510" y="90">line 280</text></a></svg><figcaption><strong>Before:</strong> No accepted pluginConfig form field. <strong>After:</strong> Accepts config text and skips source, runtime and kind changes for executable plugins.</figcaption></figure><p><a href="https://github.com/OpenHands/OpenHands/blob/1741fa4b5d637aa1091dfc94fda36ae3ed3f3f01/src/api/automation-form-session.ts#L276">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/api/automation-form-session.ts#L280">After source</a></p><details><summary>Diff</summary><pre>diff --git a/src/api/automation-form-session.ts b/src/api/automation-form-session.ts
+index 84391b44e1..b584446e4c 100644
+--- a/src/api/automation-form-session.ts
++++ b/src/api/automation-form-session.ts
+@@ -51,6 +51,7 @@ const STRING_FIELDS = [
+   &quot;pluginSource&quot;,
+   &quot;pluginRef&quot;,
+   &quot;pluginList&quot;,
++  &quot;pluginConfig&quot;,
+   &quot;customCode&quot;,
+   &quot;entrypoint&quot;,
+   &quot;setupScriptPath&quot;,
+@@ -205,6 +206,9 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
+     ...(normalizedPlugins.length &gt; 0 ? { plugins: normalizedPlugins } : {}),
+     form: normalizedForm,
+     ...(editingAutomationId ? { editingAutomationId } : {}),
++    ...(value.existingPluginSpec
++      ? { existingPluginSpec: value.existingPluginSpec }
++      : {}),
+     ...(existingCustomTarballPath ? { existingCustomTarballPath } : {}),
+     ...(existingRepositories.length &gt; 0 ? { existingRepositories } : {}),
+     ...(value.canUpdateRepositories === true
+@@ -308,6 +312,26 @@ export function patchAutomationFormSession(
+ 
+   for (const [fieldName, value] of Object.entries(normalizedPatch)) {
+     const field = fieldName as AutomationSetupField;
++    if (
++      existing.existingPluginSpec &amp;&amp;
++      [
++        &quot;kind&quot;,
++        &quot;prompt&quot;,
++        &quot;repository&quot;,
++        &quot;pluginSource&quot;,
++        &quot;pluginRef&quot;,
++        &quot;pluginList&quot;,
++        &quot;customCode&quot;,
++        &quot;entrypoint&quot;,
++        &quot;setupScriptPath&quot;,
++        &quot;setupScript&quot;,
++        &quot;model&quot;,
++        &quot;agentProfileId&quot;,
++      ].includes(field)
++    ) {
++      result.skipped.push(field);
++      continue;
++    }
+     const currentValue = nextForm[field];
+     const metadata = nextMetadata[field];
+     const userDirty = metadata?.userDirty === true;
+</pre></details></section>
+<section id="tool"><h2>The agent sees and can propose config</h2><p><small>✏️ src/api/automation-form-client-tool.ts</small></p><figure><svg viewBox="0 0 900 135" role="img" aria-labelledby="tool-title"><title id="tool-title">The agent sees and can propose config before and after</title><a href="https://github.com/OpenHands/OpenHands/blob/1741fa4b5d637aa1091dfc94fda36ae3ed3f3f01/src/api/automation-form-client-tool.ts#L35"><rect class="old" x="5" y="10" width="395" height="95" rx="6"/><text x="25" y="40">Before</text><text x="25" y="68">AUTOMATION_FORM_UPDATE_PARAMETERS</text><text x="25" y="90">line 35</text></a><path class="delta" d="M410 55 H475 l-12 -8 m12 8 l-12 8"/><a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/api/automation-form-client-tool.ts#L36"><rect class="new" x="490" y="10" width="405" height="95" rx="6"/><text x="510" y="40">After</text><text x="510" y="68">AUTOMATION_FORM_UPDATE_PARAMETERS</text><text x="510" y="90">line 36</text></a></svg><figcaption><strong>Before:</strong> The tool could propose filters but no executable plugin config. <strong>After:</strong> Adds pluginConfig as a complete JSON object string and directs review through Save.</figcaption></figure><p><a href="https://github.com/OpenHands/OpenHands/blob/1741fa4b5d637aa1091dfc94fda36ae3ed3f3f01/src/api/automation-form-client-tool.ts#L35">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/api/automation-form-client-tool.ts#L36">After source</a></p><details><summary>Diff</summary><pre>diff --git a/src/api/automation-form-client-tool.ts b/src/api/automation-form-client-tool.ts
+index 8511c06a54..29381b0414 100644
+--- a/src/api/automation-form-client-tool.ts
++++ b/src/api/automation-form-client-tool.ts
+@@ -18,6 +18,7 @@ Useful fields:
+ * prompt: natural-language instruction for prompt/plugin automations.
+ * repository: optional repository the run clones, for prompt/plugin automations: its URL on any of this instance&#x27;s git providers (GitHub, GitLab, Bitbucket Cloud or Data Center, Azure DevOps), or owner/repo for GitHub.
+ * pluginSource and pluginRef: source and optional ref for the first plugin. The form can hold more than one plugin; these fields only change the first.
++* pluginConfig: the complete configuration JSON object, encoded as a string, for an existing executable plugin. Preserve keys the user did not ask to change. Its source and runtime fields are fixed in this editor. If adding a repository, also update eventFilter when it has a separate repository allowlist.
+ * customCode, entrypoint, setupScriptPath, setupScript: custom Python bundle fields.
+ * triggerKind: &quot;cron&quot; or &quot;event&quot;.
+ * frequency: &quot;once&quot;, &quot;hourly&quot;, &quot;daily&quot;, &quot;weekdays&quot;, &quot;weekly&quot;, or &quot;custom&quot; for cron triggers.
+@@ -46,6 +47,11 @@ const AUTOMATION_FORM_UPDATE_PARAMETERS: ClientToolSpec[&quot;parameters&quot;] = {
+         repository: { type: &quot;string&quot; },
+         pluginSource: { type: &quot;string&quot; },
+         pluginRef: { type: &quot;string&quot; },
++        pluginConfig: {
++          type: &quot;string&quot;,
++          description:
++            &quot;Complete plugin configuration as a JSON object string. Only for an existing executable plugin.&quot;,
++        },
+         customCode: { type: &quot;string&quot; },
+         entrypoint: { type: &quot;string&quot; },
+         setupScriptPath: { type: &quot;string&quot; },
+@@ -125,4 +131,4 @@ export function buildAutomationFormUpdateClientTool(
+  */
+ export const AUTOMATION_SETUP_SYSTEM_SUFFIX = `This conversation is an automation setup session. The automation setup form is open beside the chat, and the user saves, tests, or creates the automation from that form after reviewing it.
+ * When the user asks for an automation, or for a change to one, propose it by filling the form with the ${AUTOMATION_FORM_UPDATE_TOOL_NAME} tool. Use only the event sources that tool&#x27;s description lists.
+-* Do not create, update, enable, run, or delete automations, drafts, or custom webhooks through the automation API in this conversation, with curl, a script, or any other tool, even when a skill describes how or the user asks you to deploy. Point the user to the form&#x27;s Save draft, Test, and Create Automation buttons instead.`;
++* Do not create, update, enable, run, or delete automations, drafts, or custom webhooks through the automation API in this conversation, with curl, a script, or any other tool, even when a skill describes how or the user asks you to deploy. Point the user to the form&#x27;s Save (existing automation), Save draft, Test, and Create Automation buttons instead.`;
+</pre></details></section>
+<section id="context"><h2>Context includes the executable plugin</h2><p><small>✏️ src/utils/automation-setup-context.ts</small></p><figure><svg viewBox="0 0 900 135" role="img" aria-labelledby="context-title"><title id="context-title">Context includes the executable plugin before and after</title><a href="https://github.com/OpenHands/OpenHands/blob/1741fa4b5d637aa1091dfc94fda36ae3ed3f3f01/src/utils/automation-setup-context.ts#L4"><rect class="old" x="5" y="10" width="395" height="95" rx="6"/><text x="25" y="40">Before</text><text x="25" y="68">buildAutomationSetupContext</text><text x="25" y="90">line 4</text></a><path class="delta" d="M410 55 H475 l-12 -8 m12 8 l-12 8"/><a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/utils/automation-setup-context.ts#L4"><rect class="new" x="490" y="10" width="405" height="95" rx="6"/><text x="510" y="40">After</text><text x="510" y="68">buildAutomationSetupContext</text><text x="510" y="90">line 4</text></a></svg><figcaption><strong>Before:</strong> Selected automation context lacked executable plugin metadata. <strong>After:</strong> Includes executablePlugin source metadata and the current pluginConfig form value.</figcaption></figure><p><a href="https://github.com/OpenHands/OpenHands/blob/1741fa4b5d637aa1091dfc94fda36ae3ed3f3f01/src/utils/automation-setup-context.ts#L4">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/utils/automation-setup-context.ts#L4">After source</a></p><details><summary>Diff</summary><pre>diff --git a/src/utils/automation-setup-context.ts b/src/utils/automation-setup-context.ts
+index 3e845c6dfb..64787c111d 100644
+--- a/src/utils/automation-setup-context.ts
++++ b/src/utils/automation-setup-context.ts
+@@ -9,6 +9,9 @@ export function buildAutomationSetupContext(
+     automationId: draft.editingAutomationId ?? null,
+     draftId: draft.serverDraftId ?? null,
+     kind: draft.kind,
++    ...(draft.existingPluginSpec
++      ? { executablePlugin: draft.existingPluginSpec.plugin }
++      : {}),
+     prompt: draft.prompt,
+     ...form,
+   };
+</pre></details></section>
+<section id="save"><h2>Save writes the same automation</h2><p><small>✏️ src/components/features/automations/setup/automation-setup-panel.tsx</small></p><figure><svg viewBox="0 0 900 135" role="img" aria-labelledby="save-title"><title id="save-title">Save writes the same automation before and after</title><a href="https://github.com/OpenHands/OpenHands/blob/1741fa4b5d637aa1091dfc94fda36ae3ed3f3f01/src/components/features/automations/setup/automation-setup-panel.tsx#L1892"><rect class="old" x="5" y="10" width="395" height="95" rx="6"/><text x="25" y="40">Before</text><text x="25" y="68">buildExistingAutomationBody</text><text x="25" y="90">line 1892</text></a><path class="delta" d="M410 55 H475 l-12 -8 m12 8 l-12 8"/><a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/components/features/automations/setup/automation-setup-panel.tsx#L1922"><rect class="new" x="490" y="10" width="405" height="95" rx="6"/><text x="510" y="40">After</text><text x="510" y="68">buildExistingAutomationBody</text><text x="510" y="90">line 1922</text></a></svg><figcaption><strong>Before:</strong> Generic custom-script edit omitted plugin configuration. <strong>After:</strong> Shows the JSON editor; parses config and patches config plus trigger on the same ID. Source and runtime are preserved.</figcaption></figure><p><a href="https://github.com/OpenHands/OpenHands/blob/1741fa4b5d637aa1091dfc94fda36ae3ed3f3f01/src/components/features/automations/setup/automation-setup-panel.tsx#L1892">Before source</a> · <a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/components/features/automations/setup/automation-setup-panel.tsx#L1922">After source</a></p><details><summary>Diff</summary><pre>diff --git a/src/components/features/automations/setup/automation-setup-panel.tsx b/src/components/features/automations/setup/automation-setup-panel.tsx
+index fcb33581db..2b9a2d6b80 100644
+--- a/src/components/features/automations/setup/automation-setup-panel.tsx
++++ b/src/components/features/automations/setup/automation-setup-panel.tsx
+@@ -1,3 +1,4 @@
++import type { AutomationUpdate } from &quot;#/types/automation&quot;;
+ import {
+   useCallback,
+   useEffect,
+@@ -146,6 +147,7 @@ const DEFAULT_CUSTOM_SCHEDULE = &quot;0 9 * * *&quot;;
+ const DEFAULT_EVENT_SOURCE = &quot;github&quot;;
+ // Capability feature: preset repositories can be changed with PATCH.
+ const REPO_UPDATE_FEATURE = &quot;repoUpdate&quot;;
++const PLUGIN_CONFIG_UPDATE_FEATURE = &quot;pluginConfigUpdate&quot;;
+ const AGENT_PROFILES_FEATURE = &quot;agentProfiles&quot;;
+ /**
+  * Used when the deployment has not advertised its event sources yet. These are
+@@ -206,6 +208,7 @@ const AUTOMATION_SETUP_FIELD_RENDER_ORDER: AutomationSetupField[] = [
+   &quot;pluginSource&quot;,
+   &quot;pluginRef&quot;,
+   &quot;pluginList&quot;,
++  &quot;pluginConfig&quot;,
+   &quot;repository&quot;,
+   &quot;customCode&quot;,
+   &quot;entrypoint&quot;,
+@@ -255,6 +258,7 @@ const NON_CHARACTER_STREAM_FIELDS = new Set&lt;AutomationSetupField&gt;([
+   &quot;showTimeout&quot;,
+   &quot;time&quot;,
+   &quot;pluginList&quot;,
++  &quot;pluginConfig&quot;,
+ ]);
+ const streamingFieldHighlightClassName =
+   &quot;rounded-xl ring-2 ring-[#D5C76B]/80 ring-offset-2 ring-offset-base shadow-[0_0_24px_rgba(213,199,107,0.24)]&quot;;
+@@ -368,6 +372,19 @@ function buildStarterPython(prompt: string): string {
+   return `import json\nimport os\nimport urllib.request\n\n\ndef fire_callback(status=&quot;COMPLETED&quot;, error=None):\n    url = os.environ.get(&quot;AUTOMATION_CALLBACK_URL&quot;, &quot;&quot;)\n    if not url:\n        return\n    body = {&quot;status&quot;: status, &quot;run_id&quot;: os.environ.get(&quot;AUTOMATION_RUN_ID&quot;, &quot;&quot;)}\n    if error:\n        body[&quot;error&quot;] = error\n    request = urllib.request.Request(\n        url,\n        data=json.dumps(body).encode(),\n        headers={\n            &quot;Content-Type&quot;: &quot;application/json&quot;,\n            &quot;Authorization&quot;: f&quot;Bearer {os.environ.get(&#x27;AUTOMATION_CALLBACK_API_KEY&#x27;, &#x27;&#x27;)}&quot;,\n        },\n    )\n    urllib.request.urlopen(request, timeout=10)\n\n\ndef main():\n    prompt = ${JSON.stringify(prompt)}\n    print(f&quot;Automation prompt: {prompt}&quot;)\n\n\nif __name__ == &quot;__main__&quot;:\n    try:\n        main()\n        fire_callback(&quot;COMPLETED&quot;)\n    except Exception as exc:\n        fire_callback(&quot;FAILED&quot;, str(exc))\n        raise\n`;
+ }
+ 
++function parsePluginConfig(value: string): Record&lt;string, unknown&gt; | null {
++  try {
++    const parsed: unknown = JSON.parse(value);
++    return parsed !== null &amp;&amp;
++      typeof parsed === &quot;object&quot; &amp;&amp;
++      !Array.isArray(parsed)
++      ? (parsed as Record&lt;string, unknown&gt;)
++      : null;
++  } catch {
++    return null;
++  }
++}
++
+ function existingTarballDisplayName(path: string): string {
+   const trimmed = path.trim();
+   if (!trimmed) return &quot;&quot;;
+@@ -474,6 +491,7 @@ function buildInitialForm(
+       pluginEntries.length &gt; 0
+         ? serializeAutomationSetupPluginList(pluginEntries)
+         : &quot;&quot;,
++    pluginConfig: form.pluginConfig ?? &quot;{}&quot;,
+     customCode: form.customCode ?? buildStarterPython(prompt),
+     entrypoint: form.entrypoint ?? DEFAULT_CUSTOM_ENTRYPOINT,
+     setupScriptPath: form.setupScriptPath ?? DEFAULT_CUSTOM_SETUP_SCRIPT_PATH,
+@@ -732,6 +750,7 @@ const ACTION_SECTION_FIELDS: readonly AutomationSetupField[] = [
+   &quot;pluginSource&quot;,
+   &quot;pluginRef&quot;,
+   &quot;pluginList&quot;,
++  &quot;pluginConfig&quot;,
+   &quot;customCode&quot;,
+   &quot;entrypoint&quot;,
+   &quot;setupScriptPath&quot;,
+@@ -842,6 +861,12 @@ export function AutomationSetupPanel({
+     getAutomationEditIdFromTags(conversationTags) ||
+     &quot;&quot;;
+   const isEditingExisting = editingAutomationId.length &gt; 0;
++  const [existingPluginSpec, setExistingPluginSpec] = useState(
++    draft.existingPluginSpec,
++  );
++  const pluginConfigEditable = (
++    deploymentCapabilities.data?.features ?? []
++  ).includes(PLUGIN_CONFIG_UPDATE_FEATURE);
+   const [existingCustomTarballPath, setExistingCustomTarballPath] = useState(
+     draft.existingCustomTarballPath ?? &quot;&quot;,
+   );
+@@ -998,6 +1023,7 @@ export function AutomationSetupPanel({
+         setExistingRepositories(next.existingRepositories ?? []);
+         setCanUpdateRepositories(next.canUpdateRepositories ?? false);
+         setExistingEventTrigger(next.existingEventTrigger);
++        setExistingPluginSpec(next.existingPluginSpec);
+         setForm(nextForm);
+       })
+       .catch((error: unknown) =&gt; {
+@@ -1629,6 +1655,10 @@ export function AutomationSetupPanel({
+     });
+   };
+   const validateRequiredFields = (): boolean =&gt; {
++    if (existingPluginSpec)
++      return (
++        pluginConfigEditable &amp;&amp; parsePluginConfig(form.pluginConfig) !== null
++      );
+     if (!prompt.trim() &amp;&amp; kind !== &quot;custom&quot;) {
+       setStatusMessage({
+         kind: &quot;error&quot;,
+@@ -1897,6 +1927,11 @@ export function AutomationSetupPanel({
+       timeout:
+         showTimeout &amp;&amp; timeoutSeconds.trim() ? Number(timeoutSeconds) : null,
+     };
++    if (existingPluginSpec) {
++      delete body.model;
++      body.config = parsePluginConfig(form.pluginConfig);
++      return body as AutomationUpdate;
++    }
+     if (kind === &quot;custom&quot;) {
+       // Without the capability the picker is hidden; keep the stored profile.
+       body.agent_profile_id = canSelectAgentProfile
+@@ -2031,7 +2066,12 @@ export function AutomationSetupPanel({
+             variant=&quot;primary&quot;
+             testId=&quot;automation-setup-save&quot;
+             className={compactToolbarButtonClassName}
+-            isDisabled={isSubmitting}
++            isDisabled={
++              isSubmitting ||
++              (!!existingPluginSpec &amp;&amp;
++                (!pluginConfigEditable ||
++                  parsePluginConfig(form.pluginConfig) === null))
++            }
+             aria-busy={isSubmitting}
+             onClick={handleSaveExisting}
+           &gt;
+@@ -2326,299 +2366,347 @@ export function AutomationSetupPanel({
+                   icon={&lt;TerminalIcon className=&quot;size-4&quot; /&gt;}
+                   title={t(I18nKey.AUTOMATIONS$SECTION$ACTION)}
+                 &gt;
+-                  &lt;div className=&quot;flex flex-col gap-5&quot;&gt;
+-                    &lt;div className=&quot;flex flex-col gap-2.5&quot;&gt;
+-                      &lt;div className=&quot;flex w-full items-center gap-2&quot;&gt;
+-                        &lt;span className=&quot;flex items-center gap-2 text-sm&quot;&gt;
+-                          {kind === &quot;custom&quot;
+-                            ? t(I18nKey.AUTOMATION_SETUP$CUSTOM_PYTHON)
+-                            : t(I18nKey.AUTOMATIONS$PROMPT)}
+-                          {agentUpdatedSuffix(
+-                            kind === &quot;custom&quot; ? &quot;customCode&quot; : &quot;prompt&quot;,
+-                          ) ? (
+-                            &lt;span className=&quot;font-normal text-muted&quot;&gt;
+-                              {agentUpdatedSuffix(
+-                                kind === &quot;custom&quot; ? &quot;customCode&quot; : &quot;prompt&quot;,
+-                              )}
+-                            &lt;/span&gt;
+-                          ) : null}
+-                        &lt;/span&gt;
+-                        &lt;button
+-                          type=&quot;button&quot;
+-                          data-testid={
+-                            kind === &quot;custom&quot;
+-                              ? &quot;automation-setup-kind-prompt&quot;
+-                              : &quot;automation-setup-kind-custom&quot;
+-                          }
+-                          onClick={() =&gt;
+-                            updateField(
+-                              &quot;kind&quot;,
+-                              kind === &quot;custom&quot; ? &quot;prompt&quot; : &quot;custom&quot;,
+-                            )
++                  {existingPluginSpec ? (
++                    &lt;div className=&quot;flex flex-col gap-3&quot;&gt;
++                      &lt;p className=&quot;break-all text-sm text-muted&quot;&gt;
++                        {existingPluginSpec.plugin.source}
++                      &lt;/p&gt;
++                      &lt;Field
++                        label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_CONFIG)}
++                        suffix={agentUpdatedSuffix(&quot;pluginConfig&quot;)}
++                        errorText={
++                          parsePluginConfig(form.pluginConfig) === null
++                            ? t(I18nKey.AUTOMATION_SETUP$PLUGIN_CONFIG_INVALID)
++                            : undefined
++                        }
++                      &gt;
++                        &lt;textarea
++                          data-testid=&quot;automation-setup-plugin-config&quot;
++                          aria-label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_CONFIG)}
++                          value={form.pluginConfig}
++                          readOnly={!pluginConfigEditable}
++                          rows={14}
++                          onChange={(event) =&gt;
++                            updateField(&quot;pluginConfig&quot;, event.target.value)
+                           }
+                           className={cn(
+-                            addOptionButtonClassName,
+-                            &quot;ml-auto gap-1.5&quot;,
+-                            streamingHighlightClassName(
+-                              streamingField === &quot;kind&quot;,
+-                            ),
++                            formControlFieldClassName,
++                            &quot;h-auto resize-y font-mono&quot;,
+                           )}
++                        /&gt;
++                      &lt;/Field&gt;
++                      &lt;p className=&quot;text-sm text-muted&quot;&gt;
++                        {t(
++                          pluginConfigEditable
++                            ? I18nKey.AUTOMATION_SETUP$PLUGIN_CONFIG_HELP
++                            : I18nKey.AUTOMATION_SETUP$PLUGIN_CONFIG_UNAVAILABLE,
++                        )}
++                      &lt;/p&gt;
++                    &lt;/div&gt;
++                  ) : (
++                    &lt;div className=&quot;flex flex-col gap-5&quot;&gt;
++                      &lt;div className=&quot;flex flex-col gap-2.5&quot;&gt;
++                        &lt;div className=&quot;flex w-full items-center gap-2&quot;&gt;
++                          &lt;span className=&quot;flex items-center gap-2 text-sm&quot;&gt;
++                            {kind === &quot;custom&quot;
++                              ? t(I18nKey.AUTOMATION_SETUP$CUSTOM_PYTHON)
++                              : t(I18nKey.AUTOMATIONS$PROMPT)}
++                            {agentUpdatedSuffix(
++                              kind === &quot;custom&quot; ? &quot;customCode&quot; : &quot;prompt&quot;,
++                            ) ? (
++                              &lt;span className=&quot;font-normal text-muted&quot;&gt;
++                                {agentUpdatedSuffix(
++                                  kind === &quot;custom&quot; ? &quot;customCode&quot; : &quot;prompt&quot;,
++                                )}
++                              &lt;/span&gt;
++                            ) : null}
++                          &lt;/span&gt;
++                          &lt;button
++                            type=&quot;button&quot;
++                            data-testid={
++                              kind === &quot;custom&quot;
++                                ? &quot;automation-setup-kind-prompt&quot;
++                                : &quot;automation-setup-kind-custom&quot;
++                            }
++                            onClick={() =&gt;
++                              updateField(
++                                &quot;kind&quot;,
++                                kind === &quot;custom&quot; ? &quot;prompt&quot; : &quot;custom&quot;,
++                              )
++                            }
++                            className={cn(
++                              addOptionButtonClassName,
++                              &quot;ml-auto gap-1.5&quot;,
++                              streamingHighlightClassName(
++                                streamingField === &quot;kind&quot;,
++                              ),
++                            )}
++                          &gt;
++                            {kind === &quot;custom&quot; ? (
++                              &lt;FileText className=&quot;size-4&quot; aria-hidden /&gt;
++                            ) : (
++                              &lt;Code2 className=&quot;size-4&quot; aria-hidden /&gt;
++                            )}
++                            {kind === &quot;custom&quot;
++                              ? t(I18nKey.AUTOMATIONS$PROMPT)
++                              : t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
++                          &lt;/button&gt;
++                        &lt;/div&gt;
++                        &lt;SetupKindCrossfade
++                          view={kind === &quot;custom&quot; ? &quot;custom&quot; : &quot;prompt&quot;}
+                         &gt;
+-                          {kind === &quot;custom&quot; ? (
+-                            &lt;FileText className=&quot;size-4&quot; aria-hidden /&gt;
++                          {kind !== &quot;custom&quot; ? (
++                            &lt;AutomationSetupPromptStack
++                              prompt={prompt}
++                              repository={repository}
++                              updatedSuffix={agentUpdatedSuffix(&quot;prompt&quot;)}
++                              repositorySuffix={agentUpdatedSuffix(
++                                &quot;repository&quot;,
++                              )}
++                              isStreaming={streamingField === &quot;prompt&quot;}
++                              errorText={fieldError(&quot;prompt&quot;)}
++                              showTitle={false}
++                              onPromptChange={(value) =&gt;
++                                updateField(&quot;prompt&quot;, value)
++                              }
++                              onRepositoryChange={(value) =&gt;
++                                updateField(&quot;repository&quot;, value)
++                              }
++                              repositoryReadOnly={!repositoriesEditable}
++                              model={model}
++                              onModelChange={(value) =&gt;
++                                updateField(&quot;model&quot;, value)
++                              }
++                            /&gt;
++                          ) : hasExistingCustomBundle ? (
++                            &lt;ExistingCustomBundleSummary
++                              tarballPath={existingCustomTarballPath}
++                            /&gt;
+                           ) : (
+-                            &lt;Code2 className=&quot;size-4&quot; aria-hidden /&gt;
++                            &lt;CustomCodeFields
++                              code={customCode}
++                              entrypoint={entrypoint}
++                              setupScriptPath={setupScriptPath}
++                              setupScript={setupScript}
++                              updatedSuffixes={{
++                                customCode: agentUpdatedSuffix(&quot;customCode&quot;),
++                                entrypoint: agentUpdatedSuffix(&quot;entrypoint&quot;),
++                                setupScriptPath:
++                                  agentUpdatedSuffix(&quot;setupScriptPath&quot;),
++                                setupScript: agentUpdatedSuffix(&quot;setupScript&quot;),
++                              }}
++                              streamingField={streamingField}
++                              onCodeChange={(value) =&gt;
++                                updateField(&quot;customCode&quot;, value)
++                              }
++                              onEntrypointChange={(value) =&gt;
++                                updateField(&quot;entrypoint&quot;, value)
++                              }
++                              onSetupScriptPathChange={(value) =&gt;
++                                updateField(&quot;setupScriptPath&quot;, value)
++                              }
++                              onSetupScriptChange={(value) =&gt;
++                                updateField(&quot;setupScript&quot;, value)
++                              }
++                            /&gt;
+                           )}
+-                          {kind === &quot;custom&quot;
+-                            ? t(I18nKey.AUTOMATIONS$PROMPT)
+-                            : t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
+-                        &lt;/button&gt;
+-                      &lt;/div&gt;
+-                      &lt;SetupKindCrossfade
+-                        view={kind === &quot;custom&quot; ? &quot;custom&quot; : &quot;prompt&quot;}
+-                      &gt;
+-                        {kind !== &quot;custom&quot; ? (
+-                          &lt;AutomationSetupPromptStack
+-                            prompt={prompt}
+-                            repository={repository}
+-                            updatedSuffix={agentUpdatedSuffix(&quot;prompt&quot;)}
+-                            repositorySuffix={agentUpdatedSuffix(&quot;repository&quot;)}
+-                            isStreaming={streamingField === &quot;prompt&quot;}
+-                            errorText={fieldError(&quot;prompt&quot;)}
+-                            showTitle={false}
+-                            onPromptChange={(value) =&gt;
+-                              updateField(&quot;prompt&quot;, value)
+-                            }
+-                            onRepositoryChange={(value) =&gt;
+-                              updateField(&quot;repository&quot;, value)
+-                            }
+-                            repositoryReadOnly={!repositoriesEditable}
++                        &lt;/SetupKindCrossfade&gt;
++                        {kind === &quot;custom&quot; &amp;&amp; canSelectAgentProfile ? (
++                          &lt;SetupProfilePickers
+                             model={model}
+                             onModelChange={(value) =&gt;
+                               updateField(&quot;model&quot;, value)
+                             }
+-                          /&gt;
+-                        ) : hasExistingCustomBundle ? (
+-                          &lt;ExistingCustomBundleSummary
+-                            tarballPath={existingCustomTarballPath}
+-                          /&gt;
+-                        ) : (
+-                          &lt;CustomCodeFields
+-                            code={customCode}
+-                            entrypoint={entrypoint}
+-                            setupScriptPath={setupScriptPath}
+-                            setupScript={setupScript}
+-                            updatedSuffixes={{
+-                              customCode: agentUpdatedSuffix(&quot;customCode&quot;),
+-                              entrypoint: agentUpdatedSuffix(&quot;entrypoint&quot;),
+-                              setupScriptPath:
+-                                agentUpdatedSuffix(&quot;setupScriptPath&quot;),
+-                              setupScript: agentUpdatedSuffix(&quot;setupScript&quot;),
+-                            }}
+-                            streamingField={streamingField}
+-                            onCodeChange={(value) =&gt;
+-                              updateField(&quot;customCode&quot;, value)
+-                            }
+-                            onEntrypointChange={(value) =&gt;
+-                              updateField(&quot;entrypoint&quot;, value)
+-                            }
+-                            onSetupScriptPathChange={(value) =&gt;
+-                              updateField(&quot;setupScriptPath&quot;, value)
+-                            }
+-                            onSetupScriptChange={(value) =&gt;
+-                              updateField(&quot;setupScript&quot;, value)
++                            agentProfileId={agentProfileId}
++                            onAgentProfileChange={(value) =&gt;
++                              updateField(&quot;agentProfileId&quot;, value)
+                             }
+                           /&gt;
+-                        )}
+-                      &lt;/SetupKindCrossfade&gt;
+-                      {kind === &quot;custom&quot; &amp;&amp; canSelectAgentProfile ? (
+-                        &lt;SetupProfilePickers
+-                          model={model}
+-                          onModelChange={(value) =&gt; updateField(&quot;model&quot;, value)}
+-                          agentProfileId={agentProfileId}
+-                          onAgentProfileChange={(value) =&gt;
+-                            updateField(&quot;agentProfileId&quot;, value)
+-                          }
+-                        /&gt;
+-                      ) : null}
+-                      {kind === &quot;custom&quot; &amp;&amp; !canSelectAgentProfile ? (
+-                        &lt;SetupModelPill
+-                          value={model}
+-                          onChange={(value) =&gt; updateField(&quot;model&quot;, value)}
+-                        /&gt;
+-                      ) : null}
+-                    &lt;/div&gt;
++                        ) : null}
++                        {kind === &quot;custom&quot; &amp;&amp; !canSelectAgentProfile ? (
++                          &lt;SetupModelPill
++                            value={model}
++                            onChange={(value) =&gt; updateField(&quot;model&quot;, value)}
++                          /&gt;
++                        ) : null}
++                      &lt;/div&gt;
+ 
+-                    {visiblePluginEntries.length &gt; 0 ? (
+-                      &lt;div
+-                        data-testid=&quot;automation-setup-plugin-module&quot;
+-                        className=&quot;flex flex-col gap-3 rounded-xl border border-border bg-base-secondary p-4&quot;
+-                      &gt;
+-                        {visiblePluginEntries.map((entry, index) =&gt; (
+-                          &lt;div
+-                            key={`plugin-${index}`}
+-                            className={cn(
+-                              &quot;flex min-w-0 gap-2&quot;,
+-                              index === 0 ? &quot;items-end&quot; : &quot;items-center&quot;,
+-                            )}
+-                          &gt;
+-                            &lt;div className=&quot;grid min-w-0 flex-1 gap-3 md:automation-setup-details-grid&quot;&gt;
+-                              &lt;Field
+-                                label={t(
+-                                  I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE,
+-                                )}
+-                                showLabel={index === 0}
+-                                suffix={
+-                                  index === 0
+-                                    ? agentUpdatedSuffix(&quot;pluginSource&quot;)
+-                                    : undefined
+-                                }
+-                                isStreaming={
+-                                  index === 0 &amp;&amp;
+-                                  streamingField === &quot;pluginSource&quot;
+-                                }
+-                              &gt;
+-                                &lt;input
+-                                  data-testid={
++                      {visiblePluginEntries.length &gt; 0 ? (
++                        &lt;div
++                          data-testid=&quot;automation-setup-plugin-module&quot;
++                          className=&quot;flex flex-col gap-3 rounded-xl border border-border bg-base-secondary p-4&quot;
++                        &gt;
++                          {visiblePluginEntries.map((entry, index) =&gt; (
++                            &lt;div
++                              key={`plugin-${index}`}
++                              className={cn(
++                                &quot;flex min-w-0 gap-2&quot;,
++                                index === 0 ? &quot;items-end&quot; : &quot;items-center&quot;,
++                              )}
++                            &gt;
++                              &lt;div className=&quot;grid min-w-0 flex-1 gap-3 md:automation-setup-details-grid&quot;&gt;
++                                &lt;Field
++                                  label={t(
++                                    I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE,
++                                  )}
++                                  showLabel={index === 0}
++                                  suffix={
+                                     index === 0
+-                                      ? &quot;automation-setup-plugin-source&quot;
+-                                      : `automation-setup-plugin-source-${index}`
++                                      ? agentUpdatedSuffix(&quot;pluginSource&quot;)
++                                      : undefined
++                                  }
++                                  isStreaming={
++                                    index === 0 &amp;&amp;
++                                    streamingField === &quot;pluginSource&quot;
+                                   }
+-                                  value={entry.source}
+-                                  aria-label={
++                                &gt;
++                                  &lt;input
++                                    data-testid={
++                                      index === 0
++                                        ? &quot;automation-setup-plugin-source&quot;
++                                        : `automation-setup-plugin-source-${index}`
++                                    }
++                                    value={entry.source}
++                                    aria-label={
++                                      index === 0
++                                        ? undefined
++                                        : t(
++                                            I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE,
++                                          )
++                                    }
++                                    placeholder={t(
++                                      I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE_PLACEHOLDER,
++                                    )}
++                                    onChange={(event) =&gt;
++                                      writePlugins(
++                                        pluginEntries.map(
++                                          (plugin, entryIndex) =&gt;
++                                            entryIndex === index
++                                              ? {
++                                                  ...plugin,
++                                                  source: event.target.value,
++                                                }
++                                              : plugin,
++                                        ),
++                                      )
++                                    }
++                                    className={formControlFieldClassName}
++                                  /&gt;
++                                &lt;/Field&gt;
++                                &lt;Field
++                                  label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}
++                                  showLabel={index === 0}
++                                  suffix={
+                                     index === 0
+-                                      ? undefined
+-                                      : t(
+-                                          I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE,
+-                                        )
++                                      ? agentUpdatedSuffix(&quot;pluginRef&quot;)
++                                      : undefined
+                                   }
+-                                  placeholder={t(
+-                                    I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE_PLACEHOLDER,
+-                                  )}
+-                                  onChange={(event) =&gt;
+-                                    writePlugins(
+-                                      pluginEntries.map((plugin, entryIndex) =&gt;
+-                                        entryIndex === index
+-                                          ? {
+-                                              ...plugin,
+-                                              source: event.target.value,
+-                                            }
+-                                          : plugin,
+-                                      ),
+-                                    )
++                                  isStreaming={
++                                    index === 0 &amp;&amp;
++                                    streamingField === &quot;pluginRef&quot;
+                                   }
+-                                  className={formControlFieldClassName}
+-                                /&gt;
+-                              &lt;/Field&gt;
+-                              &lt;Field
+-                                label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}
+-                                showLabel={index === 0}
+-                                suffix={
+-                                  index === 0
+-                                    ? agentUpdatedSuffix(&quot;pluginRef&quot;)
+-                                    : undefined
+-                                }
+-                                isStreaming={
+-                                  index === 0 &amp;&amp; streamingField === &quot;pluginRef&quot;
+-                                }
++                                &gt;
++                                  &lt;input
++                                    data-testid={
++                                      index === 0
++                                        ? &quot;automation-setup-plugin-ref&quot;
++                                        : `automation-setup-plugin-ref-${index}`
++                                    }
++                                    value={entry.ref}
++                                    aria-label={
++                                      index === 0
++                                        ? undefined
++                                        : t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)
++                                    }
++                                    placeholder={t(
++                                      I18nKey.AUTOMATION_SETUP$PLUGIN_REF_PLACEHOLDER,
++                                    )}
++                                    onChange={(event) =&gt;
++                                      writePlugins(
++                                        pluginEntries.map(
++                                          (plugin, entryIndex) =&gt;
++                                            entryIndex === index
++                                              ? {
++                                                  ...plugin,
++                                                  ref: event.target.value,
++                                                }
++                                              : plugin,
++                                        ),
++                                      )
++                                    }
++                                    className={formControlFieldClassName}
++                                  /&gt;
++                                &lt;/Field&gt;
++                              &lt;/div&gt;
++                              &lt;div
++                                className={cn(
++                                  &quot;flex shrink-0 items-center&quot;,
++                                  index === 0 &amp;&amp; formControlHeightClassName,
++                                )}
+                               &gt;
+-                                &lt;input
++                                &lt;button
++                                  type=&quot;button&quot;
+                                   data-testid={
+                                     index === 0
+-                                      ? &quot;automation-setup-plugin-ref&quot;
+-                                      : `automation-setup-plugin-ref-${index}`
++                                      ? &quot;automation-setup-plugin-remove&quot;
++                                      : `automation-setup-plugin-remove-${index}`
+                                   }
+-                                  value={entry.ref}
+-                                  aria-label={
+-                                    index === 0
+-                                      ? undefined
+-                                      : t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)
+-                                  }
+-                                  placeholder={t(
+-                                    I18nKey.AUTOMATION_SETUP$PLUGIN_REF_PLACEHOLDER,
+-                                  )}
+-                                  onChange={(event) =&gt;
+-                                    writePlugins(
+-                                      pluginEntries.map((plugin, entryIndex) =&gt;
+-                                        entryIndex === index
+-                                          ? {
+-                                              ...plugin,
+-                                              ref: event.target.value,
+-                                            }
+-                                          : plugin,
+-                                      ),
+-                                    )
++                                  aria-label={`${t(I18nKey.COMMON$REMOVE)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
++                                  className=&quot;inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted hover:bg-white/10 hover:text-white&quot;
++                                  onMouseDown={(event) =&gt;
++                                    event.preventDefault()
+                                   }
+-                                  className={formControlFieldClassName}
+-                                /&gt;
+-                              &lt;/Field&gt;
++                                  onClick={() =&gt; {
++                                    const nextEntries = pluginEntries.filter(
++                                      (_, entryIndex) =&gt; entryIndex !== index,
++                                    );
++                                    writePlugins(nextEntries);
++                                    if (
++                                      nextEntries.length === 0 &amp;&amp;
++                                      kind === &quot;plugin&quot;
++                                    ) {
++                                      updateField(&quot;kind&quot;, &quot;prompt&quot;);
++                                    }
++                                  }}
++                                &gt;
++                                  &lt;X className=&quot;size-4&quot; aria-hidden /&gt;
++                                &lt;/button&gt;
++                              &lt;/div&gt;
+                             &lt;/div&gt;
+-                            &lt;div
+-                              className={cn(
+-                                &quot;flex shrink-0 items-center&quot;,
+-                                index === 0 &amp;&amp; formControlHeightClassName,
+-                              )}
+-                            &gt;
+-                              &lt;button
+-                                type=&quot;button&quot;
+-                                data-testid={
+-                                  index === 0
+-                                    ? &quot;automation-setup-plugin-remove&quot;
+-                                    : `automation-setup-plugin-remove-${index}`
+-                                }
+-                                aria-label={`${t(I18nKey.COMMON$REMOVE)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
+-                                className=&quot;inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted hover:bg-white/10 hover:text-white&quot;
+-                                onMouseDown={(event) =&gt; event.preventDefault()}
+-                                onClick={() =&gt; {
+-                                  const nextEntries = pluginEntries.filter(
+-                                    (_, entryIndex) =&gt; entryIndex !== index,
+-                                  );
+-                                  writePlugins(nextEntries);
+-                                  if (
+-                                    nextEntries.length === 0 &amp;&amp;
+-                                    kind === &quot;plugin&quot;
+-                                  ) {
+-                                    updateField(&quot;kind&quot;, &quot;prompt&quot;);
+-                                  }
+-                                }}
+-                              &gt;
+-                                &lt;X className=&quot;size-4&quot; aria-hidden /&gt;
+-                              &lt;/button&gt;
+-                            &lt;/div&gt;
+-                          &lt;/div&gt;
+-                        ))}
+-                        &lt;button
+-                          type=&quot;button&quot;
+-                          data-testid=&quot;automation-setup-add-plugin&quot;
+-                          onClick={addPlugin}
+-                          className={cn(
+-                            addOptionButtonClassName,
+-                            streamingHighlightClassName(
+-                              streamingField === &quot;pluginSource&quot;,
+-                            ),
+-                          )}
+-                        &gt;
+-                          {`${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
+-                        &lt;/button&gt;
+-                      &lt;/div&gt;
+-                    ) : kind !== &quot;custom&quot; ? (
+-                      &lt;div className=&quot;flex&quot;&gt;
+-                        &lt;button
+-                          type=&quot;button&quot;
+-                          data-testid=&quot;automation-setup-add-plugin&quot;
+-                          onClick={addPlugin}
+-                          className={cn(
+-                            addOptionButtonClassName,
+-                            streamingHighlightClassName(
+-                              streamingField === &quot;pluginSource&quot;,
+-                            ),
+-                          )}
+-                        &gt;
+-                          {`${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
+-                        &lt;/button&gt;
+-                      &lt;/div&gt;
+-                    ) : null}
+-                  &lt;/div&gt;
++                          ))}
++                          &lt;button
++                            type=&quot;button&quot;
++                            data-testid=&quot;automation-setup-add-plugin&quot;
++                            onClick={addPlugin}
++                            className={cn(
++                              addOptionButtonClassName,
++                              streamingHighlightClassName(
++                                streamingField === &quot;pluginSource&quot;,
++                              ),
++                            )}
++                          &gt;
++                            {`${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
++                          &lt;/button&gt;
++                        &lt;/div&gt;
++                      ) : kind !== &quot;custom&quot; ? (
++                        &lt;div className=&quot;flex&quot;&gt;
++                          &lt;button
++                            type=&quot;button&quot;
++                            data-testid=&quot;automation-setup-add-plugin&quot;
++                            onClick={addPlugin}
++                            className={cn(
++                              addOptionButtonClassName,
++                              streamingHighlightClassName(
++                                streamingField === &quot;pluginSource&quot;,
++                              ),
++                            )}
++                          &gt;
++                            {`${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
++                          &lt;/button&gt;
++                        &lt;/div&gt;
++                      ) : null}
++                    &lt;/div&gt;
++                  )}
+                 &lt;/SectionCard&gt;
+               &lt;/div&gt;
+ 
+</pre></details></section>
+<section><h2>Supporting types, copy and tests</h2><table><tr><th>File</th><th>Change</th></tr>
+<tr><td><a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/types/automation.ts#L1">src/types/automation.ts:1</a></td><td>AutomationPluginSpec and optional update config type.</td></tr>
+<tr><td><a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/api/automation-setup-types.ts#L1">src/api/automation-setup-types.ts:1</a></td><td>Config text and saved executable-plugin metadata on the draft.</td></tr>
+<tr><td><a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/api/automation-service/automation-service.api.ts#L1">src/api/automation-service/automation-service.api.ts:1</a></td><td>Accept AutomationUpdate; existing transport is unchanged.</td></tr>
+<tr><td><a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/src/i18n/translation.json#L1">src/i18n/translation.json:1</a></td><td>Configuration label, help, invalid-JSON and unsupported-backend messages in all locales.</td></tr>
+<tr><td><a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/__tests__/components/automations/automation-setup-panel.test.tsx#L1">__tests__/components/automations/automation-setup-panel.test.tsx:1</a></td><td>Agent proposal, same-ID Save payload, invalid JSON, and missing capability.</td></tr>
+<tr><td><a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/__tests__/components/automations/automation-setup-draft-service.test.ts#L1">__tests__/components/automations/automation-setup-draft-service.test.ts:1</a></td><td>Fixture gains the required config text field.</td></tr>
+<tr><td><a href="https://github.com/OpenHands/OpenHands/blob/a40bc06d46575abe87bc4a39e6125aa844856e1d/.agents/skills/frontend-development/references/guide.md#L1">.agents/skills/frontend-development/references/guide.md:1</a></td><td>Documents executable-plugin editing invariants.</td></tr>
+</table></section><section><h2>Evidence and release boundaries</h2><p>133 focused tests passed, along with lint and build. Real local Claude Sonnet 4.5 proposed config and filter changes through the form; Save and reload retained the automation ID. Invalid JSON and backend schema rejection recovered after correction.</p><p><a href="https://github.com/user-attachments/assets/03fb5fa7-dc0e-4598-91bd-36b36d49e200">Real-agent UI recording</a> · <a href="https://github.com/user-attachments/assets/135f3950-872b-4626-88da-9654003e5696">Validation recovery</a></p><p>The UI is stacked on <a href="https://github.com/OpenHands/OpenHands/pull/19451">#19451</a> for selected-automation context and immediate navigation. Editing requires automation #708. Git Sync serialization is a separate automation-service fix; sync directly commits to the configured branch and does not open PRs. Live tests used Local/OpenHands; Cloud and ACP were not live-tested. The local fixture remained inactive and emitted no external reviewer events.</p></section></main></html>
