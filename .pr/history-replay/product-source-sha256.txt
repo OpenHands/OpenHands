@@ -1,3 +1,0 @@
-3312e6a140da2c2da569391e8b1315e4dba917e3234ee14b859b0baebde1db38  src/components/features/chat/chat-interface.tsx
-bcac46edcb048b9dfba81a7c9418fe136894d64807730f9a5243c2f94f0b860c  src/contexts/conversation-websocket-context.tsx
-49e344ef663be730ac80be1f8e29125d9f3410d3b3c0e8505b9e8a3afd9164ba  src/hooks/use-websocket.ts
