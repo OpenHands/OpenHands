@@ -18,6 +18,7 @@ Useful fields:
 * prompt: natural-language instruction for prompt/plugin automations.
 * repository: optional repository the run clones, for prompt/plugin automations: its URL on any of this instance's git providers (GitHub, GitLab, Bitbucket Cloud or Data Center, Azure DevOps), or owner/repo for GitHub.
 * pluginSource and pluginRef: source and optional ref for the first plugin. The form can hold more than one plugin; these fields only change the first.
+* pluginConfig: the complete configuration JSON object, encoded as a string, for an existing executable plugin. Preserve keys the user did not ask to change. Its source and runtime fields are fixed in this editor. If adding a repository, also update eventFilter when it has a separate repository allowlist.
 * customCode, entrypoint, setupScriptPath, setupScript: custom Python bundle fields.
 * triggerKind: "cron" or "event".
 * frequency: "once", "hourly", "daily", "weekdays", "weekly", or "custom" for cron triggers.
@@ -46,6 +47,11 @@ const AUTOMATION_FORM_UPDATE_PARAMETERS: ClientToolSpec["parameters"] = {
         repository: { type: "string" },
         pluginSource: { type: "string" },
         pluginRef: { type: "string" },
+        pluginConfig: {
+          type: "string",
+          description:
+            "Complete plugin configuration as a JSON object string. Only for an existing executable plugin.",
+        },
         customCode: { type: "string" },
         entrypoint: { type: "string" },
         setupScriptPath: { type: "string" },
@@ -125,4 +131,4 @@ export function buildAutomationFormUpdateClientTool(
  */
 export const AUTOMATION_SETUP_SYSTEM_SUFFIX = `This conversation is an automation setup session. The automation setup form is open beside the chat, and the user saves, tests, or creates the automation from that form after reviewing it.
 * When the user asks for an automation, or for a change to one, propose it by filling the form with the ${AUTOMATION_FORM_UPDATE_TOOL_NAME} tool. Use only the event sources that tool's description lists.
-* Do not create, update, enable, run, or delete automations, drafts, or custom webhooks through the automation API in this conversation, with curl, a script, or any other tool, even when a skill describes how or the user asks you to deploy. Point the user to the form's Save draft, Test, and Create Automation buttons instead.`;
+* Do not create, update, enable, run, or delete automations, drafts, or custom webhooks through the automation API in this conversation, with curl, a script, or any other tool, even when a skill describes how or the user asks you to deploy. Point the user to the form's Save (existing automation), Save draft, Test, and Create Automation buttons instead.`;

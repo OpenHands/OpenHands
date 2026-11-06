@@ -1,3 +1,4 @@
+import type { AutomationUpdate } from "#/types/automation";
 import {
   useCallback,
   useEffect,
@@ -146,6 +147,7 @@ const DEFAULT_CUSTOM_SCHEDULE = "0 9 * * *";
 const DEFAULT_EVENT_SOURCE = "github";
 // Capability feature: preset repositories can be changed with PATCH.
 const REPO_UPDATE_FEATURE = "repoUpdate";
+const PLUGIN_CONFIG_UPDATE_FEATURE = "pluginConfigUpdate";
 const AGENT_PROFILES_FEATURE = "agentProfiles";
 /**
  * Used when the deployment has not advertised its event sources yet. These are
@@ -206,6 +208,7 @@ const AUTOMATION_SETUP_FIELD_RENDER_ORDER: AutomationSetupField[] = [
   "pluginSource",
   "pluginRef",
   "pluginList",
+  "pluginConfig",
   "repository",
   "customCode",
   "entrypoint",
@@ -255,6 +258,7 @@ const NON_CHARACTER_STREAM_FIELDS = new Set<AutomationSetupField>([
   "showTimeout",
   "time",
   "pluginList",
+  "pluginConfig",
 ]);
 const streamingFieldHighlightClassName =
   "rounded-xl ring-2 ring-[#D5C76B]/80 ring-offset-2 ring-offset-base shadow-[0_0_24px_rgba(213,199,107,0.24)]";
@@ -368,6 +372,19 @@ function buildStarterPython(prompt: string): string {
   return `import json\nimport os\nimport urllib.request\n\n\ndef fire_callback(status="COMPLETED", error=None):\n    url = os.environ.get("AUTOMATION_CALLBACK_URL", "")\n    if not url:\n        return\n    body = {"status": status, "run_id": os.environ.get("AUTOMATION_RUN_ID", "")}\n    if error:\n        body["error"] = error\n    request = urllib.request.Request(\n        url,\n        data=json.dumps(body).encode(),\n        headers={\n            "Content-Type": "application/json",\n            "Authorization": f"Bearer {os.environ.get('AUTOMATION_CALLBACK_API_KEY', '')}",\n        },\n    )\n    urllib.request.urlopen(request, timeout=10)\n\n\ndef main():\n    prompt = ${JSON.stringify(prompt)}\n    print(f"Automation prompt: {prompt}")\n\n\nif __name__ == "__main__":\n    try:\n        main()\n        fire_callback("COMPLETED")\n    except Exception as exc:\n        fire_callback("FAILED", str(exc))\n        raise\n`;
 }
 
+function parsePluginConfig(value: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed !== null &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function existingTarballDisplayName(path: string): string {
   const trimmed = path.trim();
   if (!trimmed) return "";
@@ -474,6 +491,7 @@ function buildInitialForm(
       pluginEntries.length > 0
         ? serializeAutomationSetupPluginList(pluginEntries)
         : "",
+    pluginConfig: form.pluginConfig ?? "{}",
     customCode: form.customCode ?? buildStarterPython(prompt),
     entrypoint: form.entrypoint ?? DEFAULT_CUSTOM_ENTRYPOINT,
     setupScriptPath: form.setupScriptPath ?? DEFAULT_CUSTOM_SETUP_SCRIPT_PATH,
@@ -732,6 +750,7 @@ const ACTION_SECTION_FIELDS: readonly AutomationSetupField[] = [
   "pluginSource",
   "pluginRef",
   "pluginList",
+  "pluginConfig",
   "customCode",
   "entrypoint",
   "setupScriptPath",
@@ -842,6 +861,12 @@ export function AutomationSetupPanel({
     getAutomationEditIdFromTags(conversationTags) ||
     "";
   const isEditingExisting = editingAutomationId.length > 0;
+  const [existingPluginSpec, setExistingPluginSpec] = useState(
+    draft.existingPluginSpec,
+  );
+  const pluginConfigEditable = (
+    deploymentCapabilities.data?.features ?? []
+  ).includes(PLUGIN_CONFIG_UPDATE_FEATURE);
   const [existingCustomTarballPath, setExistingCustomTarballPath] = useState(
     draft.existingCustomTarballPath ?? "",
   );
@@ -998,6 +1023,7 @@ export function AutomationSetupPanel({
         setExistingRepositories(next.existingRepositories ?? []);
         setCanUpdateRepositories(next.canUpdateRepositories ?? false);
         setExistingEventTrigger(next.existingEventTrigger);
+        setExistingPluginSpec(next.existingPluginSpec);
         setForm(nextForm);
       })
       .catch((error: unknown) => {
@@ -1629,6 +1655,10 @@ export function AutomationSetupPanel({
     });
   };
   const validateRequiredFields = (): boolean => {
+    if (existingPluginSpec)
+      return (
+        pluginConfigEditable && parsePluginConfig(form.pluginConfig) !== null
+      );
     if (!prompt.trim() && kind !== "custom") {
       setStatusMessage({
         kind: "error",
@@ -1897,6 +1927,11 @@ export function AutomationSetupPanel({
       timeout:
         showTimeout && timeoutSeconds.trim() ? Number(timeoutSeconds) : null,
     };
+    if (existingPluginSpec) {
+      delete body.model;
+      body.config = parsePluginConfig(form.pluginConfig);
+      return body as AutomationUpdate;
+    }
     if (kind === "custom") {
       // Without the capability the picker is hidden; keep the stored profile.
       body.agent_profile_id = canSelectAgentProfile
@@ -2031,7 +2066,12 @@ export function AutomationSetupPanel({
             variant="primary"
             testId="automation-setup-save"
             className={compactToolbarButtonClassName}
-            isDisabled={isSubmitting}
+            isDisabled={
+              isSubmitting ||
+              (!!existingPluginSpec &&
+                (!pluginConfigEditable ||
+                  parsePluginConfig(form.pluginConfig) === null))
+            }
             aria-busy={isSubmitting}
             onClick={handleSaveExisting}
           >
@@ -2326,299 +2366,347 @@ export function AutomationSetupPanel({
                   icon={<TerminalIcon className="size-4" />}
                   title={t(I18nKey.AUTOMATIONS$SECTION$ACTION)}
                 >
-                  <div className="flex flex-col gap-5">
-                    <div className="flex flex-col gap-2.5">
-                      <div className="flex w-full items-center gap-2">
-                        <span className="flex items-center gap-2 text-sm">
-                          {kind === "custom"
-                            ? t(I18nKey.AUTOMATION_SETUP$CUSTOM_PYTHON)
-                            : t(I18nKey.AUTOMATIONS$PROMPT)}
-                          {agentUpdatedSuffix(
-                            kind === "custom" ? "customCode" : "prompt",
-                          ) ? (
-                            <span className="font-normal text-muted">
-                              {agentUpdatedSuffix(
-                                kind === "custom" ? "customCode" : "prompt",
-                              )}
-                            </span>
-                          ) : null}
-                        </span>
-                        <button
-                          type="button"
-                          data-testid={
-                            kind === "custom"
-                              ? "automation-setup-kind-prompt"
-                              : "automation-setup-kind-custom"
-                          }
-                          onClick={() =>
-                            updateField(
-                              "kind",
-                              kind === "custom" ? "prompt" : "custom",
-                            )
+                  {existingPluginSpec ? (
+                    <div className="flex flex-col gap-3">
+                      <p className="break-all text-sm text-muted">
+                        {existingPluginSpec.plugin.source}
+                      </p>
+                      <Field
+                        label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_CONFIG)}
+                        suffix={agentUpdatedSuffix("pluginConfig")}
+                        errorText={
+                          parsePluginConfig(form.pluginConfig) === null
+                            ? t(I18nKey.AUTOMATION_SETUP$PLUGIN_CONFIG_INVALID)
+                            : undefined
+                        }
+                      >
+                        <textarea
+                          data-testid="automation-setup-plugin-config"
+                          aria-label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_CONFIG)}
+                          value={form.pluginConfig}
+                          readOnly={!pluginConfigEditable}
+                          rows={14}
+                          onChange={(event) =>
+                            updateField("pluginConfig", event.target.value)
                           }
                           className={cn(
-                            addOptionButtonClassName,
-                            "ml-auto gap-1.5",
-                            streamingHighlightClassName(
-                              streamingField === "kind",
-                            ),
+                            formControlFieldClassName,
+                            "h-auto resize-y font-mono",
                           )}
+                        />
+                      </Field>
+                      <p className="text-sm text-muted">
+                        {t(
+                          pluginConfigEditable
+                            ? I18nKey.AUTOMATION_SETUP$PLUGIN_CONFIG_HELP
+                            : I18nKey.AUTOMATION_SETUP$PLUGIN_CONFIG_UNAVAILABLE,
+                        )}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-5">
+                      <div className="flex flex-col gap-2.5">
+                        <div className="flex w-full items-center gap-2">
+                          <span className="flex items-center gap-2 text-sm">
+                            {kind === "custom"
+                              ? t(I18nKey.AUTOMATION_SETUP$CUSTOM_PYTHON)
+                              : t(I18nKey.AUTOMATIONS$PROMPT)}
+                            {agentUpdatedSuffix(
+                              kind === "custom" ? "customCode" : "prompt",
+                            ) ? (
+                              <span className="font-normal text-muted">
+                                {agentUpdatedSuffix(
+                                  kind === "custom" ? "customCode" : "prompt",
+                                )}
+                              </span>
+                            ) : null}
+                          </span>
+                          <button
+                            type="button"
+                            data-testid={
+                              kind === "custom"
+                                ? "automation-setup-kind-prompt"
+                                : "automation-setup-kind-custom"
+                            }
+                            onClick={() =>
+                              updateField(
+                                "kind",
+                                kind === "custom" ? "prompt" : "custom",
+                              )
+                            }
+                            className={cn(
+                              addOptionButtonClassName,
+                              "ml-auto gap-1.5",
+                              streamingHighlightClassName(
+                                streamingField === "kind",
+                              ),
+                            )}
+                          >
+                            {kind === "custom" ? (
+                              <FileText className="size-4" aria-hidden />
+                            ) : (
+                              <Code2 className="size-4" aria-hidden />
+                            )}
+                            {kind === "custom"
+                              ? t(I18nKey.AUTOMATIONS$PROMPT)
+                              : t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
+                          </button>
+                        </div>
+                        <SetupKindCrossfade
+                          view={kind === "custom" ? "custom" : "prompt"}
                         >
-                          {kind === "custom" ? (
-                            <FileText className="size-4" aria-hidden />
+                          {kind !== "custom" ? (
+                            <AutomationSetupPromptStack
+                              prompt={prompt}
+                              repository={repository}
+                              updatedSuffix={agentUpdatedSuffix("prompt")}
+                              repositorySuffix={agentUpdatedSuffix(
+                                "repository",
+                              )}
+                              isStreaming={streamingField === "prompt"}
+                              errorText={fieldError("prompt")}
+                              showTitle={false}
+                              onPromptChange={(value) =>
+                                updateField("prompt", value)
+                              }
+                              onRepositoryChange={(value) =>
+                                updateField("repository", value)
+                              }
+                              repositoryReadOnly={!repositoriesEditable}
+                              model={model}
+                              onModelChange={(value) =>
+                                updateField("model", value)
+                              }
+                            />
+                          ) : hasExistingCustomBundle ? (
+                            <ExistingCustomBundleSummary
+                              tarballPath={existingCustomTarballPath}
+                            />
                           ) : (
-                            <Code2 className="size-4" aria-hidden />
+                            <CustomCodeFields
+                              code={customCode}
+                              entrypoint={entrypoint}
+                              setupScriptPath={setupScriptPath}
+                              setupScript={setupScript}
+                              updatedSuffixes={{
+                                customCode: agentUpdatedSuffix("customCode"),
+                                entrypoint: agentUpdatedSuffix("entrypoint"),
+                                setupScriptPath:
+                                  agentUpdatedSuffix("setupScriptPath"),
+                                setupScript: agentUpdatedSuffix("setupScript"),
+                              }}
+                              streamingField={streamingField}
+                              onCodeChange={(value) =>
+                                updateField("customCode", value)
+                              }
+                              onEntrypointChange={(value) =>
+                                updateField("entrypoint", value)
+                              }
+                              onSetupScriptPathChange={(value) =>
+                                updateField("setupScriptPath", value)
+                              }
+                              onSetupScriptChange={(value) =>
+                                updateField("setupScript", value)
+                              }
+                            />
                           )}
-                          {kind === "custom"
-                            ? t(I18nKey.AUTOMATIONS$PROMPT)
-                            : t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
-                        </button>
-                      </div>
-                      <SetupKindCrossfade
-                        view={kind === "custom" ? "custom" : "prompt"}
-                      >
-                        {kind !== "custom" ? (
-                          <AutomationSetupPromptStack
-                            prompt={prompt}
-                            repository={repository}
-                            updatedSuffix={agentUpdatedSuffix("prompt")}
-                            repositorySuffix={agentUpdatedSuffix("repository")}
-                            isStreaming={streamingField === "prompt"}
-                            errorText={fieldError("prompt")}
-                            showTitle={false}
-                            onPromptChange={(value) =>
-                              updateField("prompt", value)
-                            }
-                            onRepositoryChange={(value) =>
-                              updateField("repository", value)
-                            }
-                            repositoryReadOnly={!repositoriesEditable}
+                        </SetupKindCrossfade>
+                        {kind === "custom" && canSelectAgentProfile ? (
+                          <SetupProfilePickers
                             model={model}
                             onModelChange={(value) =>
                               updateField("model", value)
                             }
-                          />
-                        ) : hasExistingCustomBundle ? (
-                          <ExistingCustomBundleSummary
-                            tarballPath={existingCustomTarballPath}
-                          />
-                        ) : (
-                          <CustomCodeFields
-                            code={customCode}
-                            entrypoint={entrypoint}
-                            setupScriptPath={setupScriptPath}
-                            setupScript={setupScript}
-                            updatedSuffixes={{
-                              customCode: agentUpdatedSuffix("customCode"),
-                              entrypoint: agentUpdatedSuffix("entrypoint"),
-                              setupScriptPath:
-                                agentUpdatedSuffix("setupScriptPath"),
-                              setupScript: agentUpdatedSuffix("setupScript"),
-                            }}
-                            streamingField={streamingField}
-                            onCodeChange={(value) =>
-                              updateField("customCode", value)
-                            }
-                            onEntrypointChange={(value) =>
-                              updateField("entrypoint", value)
-                            }
-                            onSetupScriptPathChange={(value) =>
-                              updateField("setupScriptPath", value)
-                            }
-                            onSetupScriptChange={(value) =>
-                              updateField("setupScript", value)
+                            agentProfileId={agentProfileId}
+                            onAgentProfileChange={(value) =>
+                              updateField("agentProfileId", value)
                             }
                           />
-                        )}
-                      </SetupKindCrossfade>
-                      {kind === "custom" && canSelectAgentProfile ? (
-                        <SetupProfilePickers
-                          model={model}
-                          onModelChange={(value) => updateField("model", value)}
-                          agentProfileId={agentProfileId}
-                          onAgentProfileChange={(value) =>
-                            updateField("agentProfileId", value)
-                          }
-                        />
-                      ) : null}
-                      {kind === "custom" && !canSelectAgentProfile ? (
-                        <SetupModelPill
-                          value={model}
-                          onChange={(value) => updateField("model", value)}
-                        />
-                      ) : null}
-                    </div>
+                        ) : null}
+                        {kind === "custom" && !canSelectAgentProfile ? (
+                          <SetupModelPill
+                            value={model}
+                            onChange={(value) => updateField("model", value)}
+                          />
+                        ) : null}
+                      </div>
 
-                    {visiblePluginEntries.length > 0 ? (
-                      <div
-                        data-testid="automation-setup-plugin-module"
-                        className="flex flex-col gap-3 rounded-xl border border-border bg-base-secondary p-4"
-                      >
-                        {visiblePluginEntries.map((entry, index) => (
-                          <div
-                            key={`plugin-${index}`}
-                            className={cn(
-                              "flex min-w-0 gap-2",
-                              index === 0 ? "items-end" : "items-center",
-                            )}
-                          >
-                            <div className="grid min-w-0 flex-1 gap-3 md:automation-setup-details-grid">
-                              <Field
-                                label={t(
-                                  I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE,
-                                )}
-                                showLabel={index === 0}
-                                suffix={
-                                  index === 0
-                                    ? agentUpdatedSuffix("pluginSource")
-                                    : undefined
-                                }
-                                isStreaming={
-                                  index === 0 &&
-                                  streamingField === "pluginSource"
-                                }
-                              >
-                                <input
-                                  data-testid={
-                                    index === 0
-                                      ? "automation-setup-plugin-source"
-                                      : `automation-setup-plugin-source-${index}`
-                                  }
-                                  value={entry.source}
-                                  aria-label={
-                                    index === 0
-                                      ? undefined
-                                      : t(
-                                          I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE,
-                                        )
-                                  }
-                                  placeholder={t(
-                                    I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE_PLACEHOLDER,
-                                  )}
-                                  onChange={(event) =>
-                                    writePlugins(
-                                      pluginEntries.map((plugin, entryIndex) =>
-                                        entryIndex === index
-                                          ? {
-                                              ...plugin,
-                                              source: event.target.value,
-                                            }
-                                          : plugin,
-                                      ),
-                                    )
-                                  }
-                                  className={formControlFieldClassName}
-                                />
-                              </Field>
-                              <Field
-                                label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}
-                                showLabel={index === 0}
-                                suffix={
-                                  index === 0
-                                    ? agentUpdatedSuffix("pluginRef")
-                                    : undefined
-                                }
-                                isStreaming={
-                                  index === 0 && streamingField === "pluginRef"
-                                }
-                              >
-                                <input
-                                  data-testid={
-                                    index === 0
-                                      ? "automation-setup-plugin-ref"
-                                      : `automation-setup-plugin-ref-${index}`
-                                  }
-                                  value={entry.ref}
-                                  aria-label={
-                                    index === 0
-                                      ? undefined
-                                      : t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)
-                                  }
-                                  placeholder={t(
-                                    I18nKey.AUTOMATION_SETUP$PLUGIN_REF_PLACEHOLDER,
-                                  )}
-                                  onChange={(event) =>
-                                    writePlugins(
-                                      pluginEntries.map((plugin, entryIndex) =>
-                                        entryIndex === index
-                                          ? {
-                                              ...plugin,
-                                              ref: event.target.value,
-                                            }
-                                          : plugin,
-                                      ),
-                                    )
-                                  }
-                                  className={formControlFieldClassName}
-                                />
-                              </Field>
-                            </div>
+                      {visiblePluginEntries.length > 0 ? (
+                        <div
+                          data-testid="automation-setup-plugin-module"
+                          className="flex flex-col gap-3 rounded-xl border border-border bg-base-secondary p-4"
+                        >
+                          {visiblePluginEntries.map((entry, index) => (
                             <div
+                              key={`plugin-${index}`}
                               className={cn(
-                                "flex shrink-0 items-center",
-                                index === 0 && formControlHeightClassName,
+                                "flex min-w-0 gap-2",
+                                index === 0 ? "items-end" : "items-center",
                               )}
                             >
-                              <button
-                                type="button"
-                                data-testid={
-                                  index === 0
-                                    ? "automation-setup-plugin-remove"
-                                    : `automation-setup-plugin-remove-${index}`
-                                }
-                                aria-label={`${t(I18nKey.COMMON$REMOVE)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
-                                className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted hover:bg-white/10 hover:text-white"
-                                onMouseDown={(event) => event.preventDefault()}
-                                onClick={() => {
-                                  const nextEntries = pluginEntries.filter(
-                                    (_, entryIndex) => entryIndex !== index,
-                                  );
-                                  writePlugins(nextEntries);
-                                  if (
-                                    nextEntries.length === 0 &&
-                                    kind === "plugin"
-                                  ) {
-                                    updateField("kind", "prompt");
+                              <div className="grid min-w-0 flex-1 gap-3 md:automation-setup-details-grid">
+                                <Field
+                                  label={t(
+                                    I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE,
+                                  )}
+                                  showLabel={index === 0}
+                                  suffix={
+                                    index === 0
+                                      ? agentUpdatedSuffix("pluginSource")
+                                      : undefined
                                   }
-                                }}
+                                  isStreaming={
+                                    index === 0 &&
+                                    streamingField === "pluginSource"
+                                  }
+                                >
+                                  <input
+                                    data-testid={
+                                      index === 0
+                                        ? "automation-setup-plugin-source"
+                                        : `automation-setup-plugin-source-${index}`
+                                    }
+                                    value={entry.source}
+                                    aria-label={
+                                      index === 0
+                                        ? undefined
+                                        : t(
+                                            I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE,
+                                          )
+                                    }
+                                    placeholder={t(
+                                      I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE_PLACEHOLDER,
+                                    )}
+                                    onChange={(event) =>
+                                      writePlugins(
+                                        pluginEntries.map(
+                                          (plugin, entryIndex) =>
+                                            entryIndex === index
+                                              ? {
+                                                  ...plugin,
+                                                  source: event.target.value,
+                                                }
+                                              : plugin,
+                                        ),
+                                      )
+                                    }
+                                    className={formControlFieldClassName}
+                                  />
+                                </Field>
+                                <Field
+                                  label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}
+                                  showLabel={index === 0}
+                                  suffix={
+                                    index === 0
+                                      ? agentUpdatedSuffix("pluginRef")
+                                      : undefined
+                                  }
+                                  isStreaming={
+                                    index === 0 &&
+                                    streamingField === "pluginRef"
+                                  }
+                                >
+                                  <input
+                                    data-testid={
+                                      index === 0
+                                        ? "automation-setup-plugin-ref"
+                                        : `automation-setup-plugin-ref-${index}`
+                                    }
+                                    value={entry.ref}
+                                    aria-label={
+                                      index === 0
+                                        ? undefined
+                                        : t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)
+                                    }
+                                    placeholder={t(
+                                      I18nKey.AUTOMATION_SETUP$PLUGIN_REF_PLACEHOLDER,
+                                    )}
+                                    onChange={(event) =>
+                                      writePlugins(
+                                        pluginEntries.map(
+                                          (plugin, entryIndex) =>
+                                            entryIndex === index
+                                              ? {
+                                                  ...plugin,
+                                                  ref: event.target.value,
+                                                }
+                                              : plugin,
+                                        ),
+                                      )
+                                    }
+                                    className={formControlFieldClassName}
+                                  />
+                                </Field>
+                              </div>
+                              <div
+                                className={cn(
+                                  "flex shrink-0 items-center",
+                                  index === 0 && formControlHeightClassName,
+                                )}
                               >
-                                <X className="size-4" aria-hidden />
-                              </button>
+                                <button
+                                  type="button"
+                                  data-testid={
+                                    index === 0
+                                      ? "automation-setup-plugin-remove"
+                                      : `automation-setup-plugin-remove-${index}`
+                                  }
+                                  aria-label={`${t(I18nKey.COMMON$REMOVE)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
+                                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted hover:bg-white/10 hover:text-white"
+                                  onMouseDown={(event) =>
+                                    event.preventDefault()
+                                  }
+                                  onClick={() => {
+                                    const nextEntries = pluginEntries.filter(
+                                      (_, entryIndex) => entryIndex !== index,
+                                    );
+                                    writePlugins(nextEntries);
+                                    if (
+                                      nextEntries.length === 0 &&
+                                      kind === "plugin"
+                                    ) {
+                                      updateField("kind", "prompt");
+                                    }
+                                  }}
+                                >
+                                  <X className="size-4" aria-hidden />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                        <button
-                          type="button"
-                          data-testid="automation-setup-add-plugin"
-                          onClick={addPlugin}
-                          className={cn(
-                            addOptionButtonClassName,
-                            streamingHighlightClassName(
-                              streamingField === "pluginSource",
-                            ),
-                          )}
-                        >
-                          {`${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
-                        </button>
-                      </div>
-                    ) : kind !== "custom" ? (
-                      <div className="flex">
-                        <button
-                          type="button"
-                          data-testid="automation-setup-add-plugin"
-                          onClick={addPlugin}
-                          className={cn(
-                            addOptionButtonClassName,
-                            streamingHighlightClassName(
-                              streamingField === "pluginSource",
-                            ),
-                          )}
-                        >
-                          {`${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
+                          ))}
+                          <button
+                            type="button"
+                            data-testid="automation-setup-add-plugin"
+                            onClick={addPlugin}
+                            className={cn(
+                              addOptionButtonClassName,
+                              streamingHighlightClassName(
+                                streamingField === "pluginSource",
+                              ),
+                            )}
+                          >
+                            {`${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
+                          </button>
+                        </div>
+                      ) : kind !== "custom" ? (
+                        <div className="flex">
+                          <button
+                            type="button"
+                            data-testid="automation-setup-add-plugin"
+                            onClick={addPlugin}
+                            className={cn(
+                              addOptionButtonClassName,
+                              streamingHighlightClassName(
+                                streamingField === "pluginSource",
+                              ),
+                            )}
+                          >
+                            {`${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
                 </SectionCard>
               </div>
 

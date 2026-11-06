@@ -216,3 +216,5 @@ summary rows use `automation-summary-columns` (auto / minmax(0, 1fr)); run-log
 details use `sm:run-log-detail-columns` (5rem / minmax(0, 1fr), from 40rem).
 These single-property utilities preserve intrinsic sizing and responsive scope.
 They are static owner recipes, not caller className overrides.
+
+- Executable plugin automations (`plugin_spec`) edit their configuration through the setup form's `pluginConfig` JSON field. The agent proposes that field through `automation_form_update`; only Save sends `config` and the trigger to the existing automation's PATCH endpoint. Preserve the plugin source, pins, and runtime fields. Gate configuration writes on the automation service's `pluginConfigUpdate` capability; older services display the configuration read-only.
