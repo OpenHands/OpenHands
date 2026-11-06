@@ -229,9 +229,10 @@ Preconditions:
   status, disabled Send and Talk, and request log: the App must not turn that
   ordinary worker into a Cat. Repeat with a missing owned ID and a tagged child
   fixture. No create or Voice POST is allowed. For a legacy top-level Cat with
-  only `smolpaws: insider`, open its regular-view Cat badge: either a supported
-  migration/resume or an explicit recovery path is required; silently showing a
-  resumable badge that only leads to a dead end is a failure. Do not broaden the
+  only `smolpaws: insider`, open its regular-view Cat badge: the App must select
+  that same saved Cat, restore its history and allow continuation when idle.
+  Send and Talk follow the usual status, provider and microphone requirements;
+  the absent legacy role alone must not disable them. Do not broaden the
   controller rule to accept children or arbitrary workers to make this pass.
   Return to the valid `<cat-a>` URL and verify its controls recover.
 
