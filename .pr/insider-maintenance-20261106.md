@@ -59,7 +59,9 @@ and Agent Server `f3ae7b564edd2eac7aa8902d601c4da699ac4209`. It began with
 App `9175d281fef8f94517bc3c49e9e0df9eb094284c`, then used the actual Apps UI to
 update to `f97b109a144725d7a9ce3a3f11d2eeb991c5037e`. The checks below used
 synthetic conversations on that isolated backend, with a real Luna subscription
-profile. Screenshots and the detailed ledger are retained privately.
+profile. Screenshots and the detailed ledger are retained privately. The ledger
+records 16 passing entry checks and one blocked fresh provider-audio check;
+this is not a claim that every feature-map branch was executed.
 
 - The saved OpenHands Cat used its terminal to calculate `2 + 3` and returned
   `5`. Opening the regular chat and sending a follow-up continued the same Cat.
@@ -83,6 +85,8 @@ profile. Screenshots and the detailed ledger are retained privately.
   At 820 pixels, the document width was also 820. Reduced motion showed the
   resting Cat state. These are browser viewport checks, not a physical iPad
   result.
+- An unknown Cat ID disabled Send and Talk. Selecting a valid saved Cat restored
+  its normal controls.
 - Voice preflight reported a missing OpenAI key before capture, and no peer
   connection or microphone capture started. This proves that availability
   failure is surfaced without opening media. It does not prove a fresh live
@@ -90,3 +94,8 @@ profile. Screenshots and the detailed ledger are retained privately.
 
 This pass did not exercise Docker-backed worker selection or a physical audio
 round trip. Its local-runtime results do not replace those remaining checks.
+
+Cleanup confirmed that the owned browser and launcher stopped and their ingress,
+Agent Server, automation, frontend and editor ports closed. Private evidence was
+retained. Only the temporary imported subscription credential copy was removed;
+the original credential and shared services were left untouched.

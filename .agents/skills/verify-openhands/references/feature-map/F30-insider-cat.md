@@ -12,7 +12,7 @@ Source: `src/components/features/canvas-extensions/`, `src/routes/canvas-extensi
 ## Sub-features
 
 - `F30.entry`: the enabled App contributes a Cat icon and a Projects entry; its page and nested conversation URLs load inside the selected backend.
-- `F30.create`: the first accepted typed request creates exactly one top-level Cat with its own ID, configured workspace and durable user event; opening New Cat alone creates nothing.
+- `F30.create`: the first accepted typed request creates exactly one top-level Cat on the local runtime, with its own ID, host workspace and durable user event; opening New Cat alone creates nothing.
 - `F30.profile-capabilities`: a new Cat inherits the active OpenHands agent profile's tools and enabled skills, Canvas confirmation/security settings, plus Insider instructions and advertised runtime context; changing an LLM does not supply missing tools.
 - `F30.selected-work`: selecting work preserves the draft and supplies that worker's full identity as data to the next typed Cat request without messaging the worker.
 - `F30.work-filter`: title/ID and workspace filters apply to loaded work; coverage and Load more distinguish a partial list from the whole backend.
@@ -57,7 +57,7 @@ Source: `src/components/features/canvas-extensions/`, `src/routes/canvas-extensi
 
 Preconditions:
 
-- **Draft recipes, not yet live-proven.** Record each actual result in the run's
+- **Recipes describe expected behavior.** Record each actual result in the run's
   evidence ledger; source review and map validation are not passes. Unexecuted
   branches stay `not-run`, and an observed defect keeps its expected result.
 - Use one owned, doctored local stack with this Canvas build and a compatible
@@ -70,6 +70,12 @@ Preconditions:
   filesystem, not the browser's. Record
   `control-openhands api GET /api/canvas-extensions/installed`. App source is
   maintained in `enyst/insider`; it is not a bundled Canvas fixture.
+- New-Cat creation requires an advertised local runtime. On a backend offering
+  both local and Docker runtimes, select a saved host workspace from
+  `control-openhands api GET /api/workspaces`; add one through Canvas and refresh
+  if needed. A selected Docker worker supplies context, never its container path
+  as the new Cat's workspace. Record mixed-runtime branches separately from a
+  local-only pass.
 - Configure an authorized real LLM and an active OpenHands agent profile through
   F10/F13. Record `control-openhands api GET /api/agent-profiles` and the profile's
   tools, enabled skills and confirmation policy. The profile for capability
@@ -129,8 +135,10 @@ Preconditions:
   `control-openhands api GET /api/conversations/<cat-a>` and
   `control-openhands conversation events <cat-a> --kinds MessageEvent --last 10`.
   There is one new top-level conversation tagged `smolpaws: insider` and
-  `insiderrole: controller`, the chosen workspace, and exactly one user request.
-  Reload and inspect the App history: the accepted request remains, the composer
+  `insiderrole: controller`, the chosen host workspace, and exactly one user
+  request. When selectable runtimes include local, inspect the launch request:
+  it explicitly sends `conversation_runtime: "local"`, including on a mixed
+  backend. Reload and inspect the App history: the accepted request remains, the composer
   is clear, and there is no second Cat or duplicate user event.
 
 - **Real tools, skills and backend access (`F30.profile-capabilities`).** Open
@@ -426,6 +434,11 @@ Preconditions:
   SDK changes. Record all three revisions. A test of the bundled demo App is not
   an Insider test; an App source edit without rebuilding/updating its prepared
   bundle is not a test of that edit.
+- Docker-only or unverified runtimes cannot create a new Cat. A refused launch
+  sends no conversation POST, preserves the draft and remains retryable after
+  checking the backend and refreshing. Earlier local-only metadata is still
+  supported; these creation checks do not change existing saved Cats or their
+  Voice resume. A local-only pass does not prove the Docker boundary.
 - The App's role skill is launch context, not a replacement for real profile
   tools or enabled skills. Existing Cats retain their saved configuration;
   reconnecting Voice or changing the LLM does not repair tool-free Cats.
