@@ -341,14 +341,14 @@ export function ChatInterface({
   const session = sessions.at(-1);
   const isSessionStarting =
     session?.phase === "pending" || session?.phase === "connecting";
-  // A session group exists only in the tab that started or resumed the
-  // conversation. Until its socket is open and history has loaded, the chat
-  // cannot know whether saved events are on their way, so the empty state
-  // waits; once it is known to be empty, the suggestions show as in any tab.
+  // An open socket can still be replaying saved messages after a failed REST
+  // preload. Every tab must wait for replay completion before declaring the
+  // chat empty, including tabs without a local session activity group.
   const sessionHistoryKnown =
-    sessions.length === 0 ||
+    conversationWebSocket === null ||
     (!isSessionStarting &&
-      conversationWebSocket?.connectionState === "OPEN" &&
+      conversationWebSocket.connectionState === "OPEN" &&
+      conversationWebSocket.isHistoryReady &&
       !conversationWebSocket.isLoadingHistory);
   const hasSendingMessages = pendingMessages.some(
     (message) =>

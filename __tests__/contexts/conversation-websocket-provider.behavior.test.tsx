@@ -1,7 +1,15 @@
 import React from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import {
   ConversationWebSocketProvider,
   useConversationWebSocket,
@@ -63,6 +71,10 @@ const socketCapture = vi.hoisted(() => ({
 }));
 
 const historyCapture = vi.hoisted(() => ({
+  scope: "test-scope",
+  persistedData: undefined as
+    | { events: OpenHandsEvent[]; afterSeq?: number | null }
+    | undefined,
   result: {
     data: { events: [] as OpenHandsEvent[] } as
       | { events: OpenHandsEvent[]; afterSeq?: number | null }
@@ -100,8 +112,10 @@ vi.mock("#/hooks/use-websocket", () => ({
 
 vi.mock("#/hooks/query/use-conversation-history", () => ({
   useConversationHistory: () => historyCapture.result,
-  usePersistedConversationHistory: () => ({ data: undefined }),
-  getConversationHistoryScope: () => "test-scope",
+  usePersistedConversationHistory: () => ({
+    data: historyCapture.persistedData,
+  }),
+  getConversationHistoryScope: () => historyCapture.scope,
 }));
 
 vi.mock("#/hooks/mutation/use-read-conversation-file", () => ({
@@ -362,6 +376,8 @@ describe("Conversation websocket behavior", () => {
     socketCapture.trackError.mockReset();
     socketCapture.launchChild.mockReset().mockResolvedValue(undefined);
     nextSeq = 0;
+    historyCapture.scope = "test-scope";
+    historyCapture.persistedData = undefined;
     historyCapture.result = {
       data: { events: [] },
       isPending: false,
@@ -678,6 +694,140 @@ describe("Conversation websocket behavior", () => {
 
     expect(socketCapture.mainUrl).toContain("/sockets/session/conv-main");
     expect(queryParamsOf(mainOptions())).toEqual({ after_seq: "-1" });
+  });
+
+  it("waits for contiguous durable replay despite transient and out-of-order frames", () => {
+    socketCapture.mainSocket = makeSocket();
+    renderProvider();
+    queryParamsOf(mainOptions());
+    act(() => mainOptions().onOpen?.(new Event("open")));
+    dispatchMainFrame({ type: "sync", from_seq: -1, through_seq: 1 });
+
+    dispatchMainFrame({
+      type: "transient",
+      event: makeStateEvent("connect-snapshot", "execution_status", "idle"),
+    });
+    expect(contextCapture.current?.isHistoryReady).toBe(false);
+
+    dispatchMainFrame({
+      type: "durable",
+      seq: 1,
+      event: makeMessageEvent("later-message", "assistant", ["second"]),
+    });
+    expect(contextCapture.current?.isHistoryReady).toBe(false);
+
+    dispatchMainFrame({
+      type: "durable",
+      seq: 0,
+      event: makeMessageEvent("earlier-message", "user", ["first"]),
+    });
+    expect(contextCapture.current?.isHistoryReady).toBe(true);
+  });
+
+  it.each([
+    {
+      changed: "conversation",
+      nextProps: { conversationId: "conv-next" },
+    },
+    {
+      changed: "runtime URL",
+      nextProps: { conversationUrl: "https://replacement-runtime.test/api" },
+    },
+    {
+      changed: "session key",
+      nextProps: { sessionApiKey: "replacement-key" },
+    },
+    {
+      changed: "backend history scope",
+      nextProps: {},
+      nextScope: "another-organization",
+    },
+  ])(
+    "requires a new replay before history is ready after changing the $changed",
+    ({ nextProps, nextScope }) => {
+      const props: ProviderProps = {
+        conversationId: "conv-main",
+        conversationUrl: "http://localhost:8000/api/conversations/conv-main",
+        sessionApiKey: "initial-key",
+      };
+      socketCapture.mainSocket = makeSocket();
+      const view = renderProvider(props);
+      queryParamsOf(mainOptions());
+      dispatchMainFrame({ type: "sync", from_seq: -1, through_seq: null });
+      expect(contextCapture.current?.isHistoryReady).toBe(true);
+
+      historyCapture.scope = nextScope ?? historyCapture.scope;
+      view.rerender(
+        <QueryClientProvider client={view.queryClient}>
+          <ConversationWebSocketProvider {...props} {...nextProps}>
+            <ContextProbe />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+
+      // The identity change must invalidate readiness before a socket
+      // lifecycle callback arrives, even if the previous socket was open.
+      expect(contextCapture.current?.isHistoryReady).toBe(false);
+
+      // Returning before either replacement socket opens must not revive the
+      // readiness recorded for the first connection with these coordinates.
+      historyCapture.scope = "test-scope";
+      view.rerender(
+        <QueryClientProvider client={view.queryClient}>
+          <ConversationWebSocketProvider {...props}>
+            <ContextProbe />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+      expect(contextCapture.current?.isHistoryReady).toBe(false);
+      queryParamsOf(mainOptions());
+      act(() => mainOptions().onOpen?.(new Event("open")));
+      dispatchMainFrame({ type: "sync", from_seq: -1, through_seq: null });
+      expect(contextCapture.current?.isHistoryReady).toBe(true);
+    },
+  );
+
+  it("does not treat an empty persisted Cloud page as completed runtime history", () => {
+    onTestFinished(__resetActiveStoreForTests);
+    const cloudBackend: Backend = {
+      id: "persisted-history-cloud",
+      name: "Cloud",
+      host: "https://cloud.test",
+      apiKey: "cloud-key",
+      kind: "cloud",
+    };
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
+    historyCapture.persistedData = { events: [], afterSeq: null };
+    historyCapture.result.data = undefined;
+    historyCapture.result.isPending = true;
+    const props: ProviderProps = {
+      conversationId: "conv-main",
+      conversationUrl: "https://runtime.test/api",
+      sessionApiKey: "runtime-key",
+    };
+    const view = renderProvider(props);
+
+    expect(contextCapture.current?.isLoadingHistory).toBe(false);
+    expect(contextCapture.current?.isHistoryReady).toBe(false);
+    expect(socketCapture.mainUrl).toBe("");
+
+    historyCapture.result.isPending = false;
+    historyCapture.result.isError = true;
+    view.rerender(
+      <QueryClientProvider client={view.queryClient}>
+        <ConversationWebSocketProvider {...props}>
+          <ContextProbe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    expect(socketCapture.mainUrl).toContain("/sockets/session/conv-main");
+    queryParamsOf(mainOptions());
+    act(() => mainOptions().onOpen?.(new Event("open")));
+    expect(contextCapture.current?.isHistoryReady).toBe(false);
+
+    dispatchMainFrame({ type: "sync", from_seq: -1, through_seq: null });
+    expect(contextCapture.current?.isHistoryReady).toBe(true);
   });
 
   it("does not build socket URLs without complete conversation coordinates", () => {
