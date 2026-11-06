@@ -322,7 +322,7 @@ export function AgentCanvasUpdateCard({
               <span
                 data-testid="agent-canvas-update-badge"
                 className={cn(
-                  "inline-flex shrink-0 items-center gap-1 text-[10px] font-medium leading-none",
+                  "inline-flex shrink-0 items-center gap-1 text-3xs font-medium leading-none",
                   updateAvailable
                     ? "rounded-full border border-transparent bg-[#1E3A5F] px-1.5 py-0.5 text-[#3B82F6]"
                     : "text-success",

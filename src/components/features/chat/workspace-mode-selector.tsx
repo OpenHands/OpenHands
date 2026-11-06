@@ -14,16 +14,16 @@ import { WorkspaceModeIcon } from "./workspace-mode-icon";
 
 interface WorkspaceModeSelectorProps {
   value: WorkspaceMode;
+  options: WorkspaceMode[];
   backendKind: BackendKind;
   onChange: (value: WorkspaceMode) => void;
   disabled?: boolean;
   testId?: string;
 }
 
-const WORKSPACE_MODE_OPTIONS: WorkspaceMode[] = ["local_repo", "new_worktree"];
-
 export function WorkspaceModeSelector({
   value,
+  options,
   backendKind,
   onChange,
   disabled = false,
@@ -72,7 +72,7 @@ export function WorkspaceModeSelector({
         disabled={disabled}
         onClick={() => setOpen((next) => !next)}
         className={cn(
-          "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2 py-1 rounded-[100px] truncate relative",
+          "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2 py-1 rounded-pill truncate relative",
           "border border-[rgba(71,74,84,0.50)] bg-transparent text-contrast",
           disabled
             ? "cursor-not-allowed opacity-50"
@@ -97,7 +97,7 @@ export function WorkspaceModeSelector({
             dropdownMenuListClassName,
           )}
         >
-          {WORKSPACE_MODE_OPTIONS.map((option) => {
+          {options.map((option) => {
             const optionLabel = t(getWorkspaceModeI18nKey(option, backendKind));
             return (
               <button

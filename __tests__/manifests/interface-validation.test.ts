@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { validateInterfaceManifest } from "#/manifests/interface-validation";
 import type { InterfaceValidationContext } from "#/manifests/interface-validation";
 import type {
+  InterfaceDashboardFilter,
   InterfaceIconSlug,
   InterfaceManifest,
   InterfaceSubPageId,
@@ -192,6 +193,32 @@ describe("validateInterfaceManifest", () => {
     expect(result).toEqual({ valid: true, errors: [] });
   });
 
+  it("admits a tag filter and the tags endpoint it reads", () => {
+    // Arrange — the tag filter declares captions only; its values are the
+    // org's tags, read from the optional tags endpoint.
+    const base = createInterfaceManifestWithSubPages();
+    const manifest: InterfaceManifest = {
+      ...base,
+      endpoints: { ...base.endpoints, tags: "/v1/tags" },
+      pages: {
+        ...base.pages,
+        list: {
+          ...base.pages.list,
+          filters: [
+            ...base.pages.list.filters!,
+            { id: "tag", label: "Filter widgets by tag", allLabel: "Any tag" },
+          ],
+        },
+      },
+    };
+
+    // Act
+    const result = validateInterfaceManifest(manifest, SUB_PAGE_CONTEXT);
+
+    // Assert
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
   // Each case breaks the sub-page surface in one specific way. As with the
   // base cases, one bad field reverts the whole manifest to host defaults.
   it.each<[string, (manifest: InterfaceManifest) => InterfaceManifest]>([
@@ -335,6 +362,43 @@ describe("validateInterfaceManifest", () => {
                 ],
               },
             ],
+          },
+        },
+      }),
+    ],
+    [
+      // Tag values come from the service, so declared options would be a
+      // second, conflicting source.
+      "a tag filter declaring options",
+      (manifest) => ({
+        ...manifest,
+        pages: {
+          ...manifest.pages,
+          list: {
+            ...manifest.pages.list,
+            filters: [
+              {
+                id: "tag",
+                label: "Filter widgets by tag",
+                allLabel: "Any tag",
+                options: [{ value: "all", label: "Any tag" }],
+              } as InterfaceDashboardFilter,
+            ],
+          },
+        },
+      }),
+    ],
+    [
+      "a tag filter without a caption for its neutral option",
+      (manifest) => ({
+        ...manifest,
+        pages: {
+          ...manifest.pages,
+          list: {
+            ...manifest.pages.list,
+            filters: [
+              { id: "tag", label: "Filter widgets by tag" },
+            ] as InterfaceDashboardFilter[],
           },
         },
       }),

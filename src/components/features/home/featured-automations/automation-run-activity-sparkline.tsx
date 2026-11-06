@@ -130,14 +130,18 @@ function RunActivityBar({
       >
         <span
           className={cn(
-            "w-1 shrink-0 origin-bottom rounded-[1px]",
+            "h-(--automation-run-bar-height) w-1 shrink-0 origin-bottom rounded-[1px]",
             "transition-transform duration-100 ease-out motion-reduce:transition-none",
             // Grow the hovered/focused bar so it reads clearly among neighbors.
             "group-hover/spark-bar:scale-x-[1.4] group-hover/spark-bar:scale-y-[1.15]",
             "group-focus-visible/spark-bar:scale-x-[1.4] group-focus-visible/spark-bar:scale-y-[1.15]",
             barColorClassForStatus(display.badgeStatus),
           )}
-          style={{ height: durationMsToSparklineBarHeightPx(durationMs) }}
+          style={
+            {
+              "--automation-run-bar-height": `${durationMsToSparklineBarHeightPx(durationMs)}px`,
+            } as CSSProperties
+          }
         />
       </NavigationLink>
     </Tooltip>

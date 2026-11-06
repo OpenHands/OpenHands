@@ -166,6 +166,57 @@ describe("the automation interface seam", () => {
     });
   });
 
+  it("admits an Events page only when its route and metadata are declared", async () => {
+    const base = createInterfaceManifestWithSubPages();
+    const seam = await loadSeam({
+      ...base,
+      routes: { ...base.routes, events: "/automations/events" },
+      navigation: {
+        ...base.navigation,
+        subPages: [
+          base.navigation.subPages![0],
+          { page: "events", label: "Events", icon: "activity" },
+          base.navigation.subPages![1],
+        ],
+      },
+      pages: {
+        ...base.pages,
+        events: { title: "Event sources", description: "Manage sources." },
+      },
+      endpoints: { ...base.endpoints, webhooks: "/v1/webhooks" },
+    });
+
+    expect(seam.hasAutomationInterface()).toBe(true);
+    expect(seam.getEventsPageSpec()).toEqual({
+      title: "Event sources",
+      description: "Manage sources.",
+    });
+    expect(seam.getSubPagesSpec()?.map((item) => item.to)).toEqual([
+      "/automations",
+      "/automations/events",
+      "/automations/templates",
+    ]);
+    expect(seam.getAutomationEndpoint("webhooks")).toBe("/v1/webhooks");
+  });
+
+  it("rejects a partial Events manifest instead of exposing a broken route", async () => {
+    const base = createInterfaceManifestWithSubPages();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const seam = await loadSeam({
+      ...base,
+      routes: { ...base.routes, events: "/automations/events" },
+    });
+
+    expect(seam.hasAutomationInterface()).toBe(false);
+    expect(seam.getEventsPageSpec()).toBeNull();
+    expect(warn).toHaveBeenCalledWith(
+      "Rejected the automation interface manifest:",
+      expect.stringContaining(
+        "events route, page, endpoint and navigation must be declared together",
+      ),
+    );
+  });
+
   it("stays unavailable, loudly, when a manifest fails admission", async () => {
     // Arrange
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

@@ -34,6 +34,7 @@ import {
   redactBodyFields,
   networkEntryForOutput,
 } from "./lib/network-bodies.mjs";
+import { networkTiming, orderNetworkEntries } from "./lib/network-timing.mjs";
 import { buildLocator, toCss } from "./lib/selectors.mjs";
 import {
   RECORD_DEFAULTS,
@@ -198,6 +199,7 @@ if (existsSync(eventsPath)) {
 // bodies are never kept.
 const requests = [];
 const requestEntries = new WeakMap();
+const timing = networkTiming();
 
 function redactQuery(search) {
   if (!search) return "";
@@ -303,11 +305,18 @@ function watch(page) {
       body,
       ...bodyDetails,
     };
+    timing.start(entry);
     requestEntries.set(request, entry);
     requests.push(entry);
     if (requests.length > 5000) requests.splice(0, 1000);
   });
+  page.on("requestfinished", (request) => {
+    const entry = requestEntries.get(request);
+    if (entry) timing.complete(entry, "finished");
+  });
   page.on("requestfailed", (request) => {
+    const entry = requestEntries.get(request);
+    if (entry) timing.complete(entry, "failed");
     const failure = request.failure()?.errorText ?? "failed";
     if (failure === "net::ERR_ABORTED") return;
     record("requestfailed", page, {
@@ -318,7 +327,10 @@ function watch(page) {
   });
   page.on("response", (response) => {
     const entry = requestEntries.get(response.request());
-    if (entry) entry.status = response.status();
+    if (entry) {
+      entry.status = response.status();
+      timing.response(entry);
+    }
     if (response.status() >= 400) {
       record("http-error", page, {
         url: response.url().slice(0, 500),
@@ -1214,7 +1226,7 @@ const handlers = {
     }
     return { offline: networkOffline };
   },
-  async network({ clear, external, last, filter, bodies }) {
+  async network({ clear, external, last, filter, bodies, order }) {
     const re = filter ? new RegExp(filter) : null;
     const list = requests.filter(
       (r) =>
@@ -1226,9 +1238,10 @@ const handlers = {
     const result = {
       total: list.length,
       byOrigin,
-      recent: list
-        .slice(-Number(last ?? 15))
-        .map((entry) => networkEntryForOutput(entry, bodies)),
+      order: order ?? "request",
+      recent: orderNetworkEntries(list, order, Number(last ?? 15)).map(
+        (entry) => networkEntryForOutput(entry, bodies),
+      ),
     };
     if (clear) requests.length = 0;
     return result;

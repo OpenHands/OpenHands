@@ -98,7 +98,7 @@ export function AgentCanvasVersionModal({
       onClose={onClose}
       aria-label={t(I18nKey.SETTINGS$VERSION_MODAL_ARIA_LABEL)}
     >
-      <section className="relative flex w-130 max-w-[90vw] flex-col gap-5 rounded-xl border border-border bg-base-secondary p-6 shadow-xl">
+      <section className="relative flex w-130 dialog-viewport-width flex-col gap-5 rounded-xl border border-border bg-base-secondary p-6 shadow-xl">
         <ModalCloseButton
           onClose={onClose}
           testId="agent-canvas-version-modal-close"
