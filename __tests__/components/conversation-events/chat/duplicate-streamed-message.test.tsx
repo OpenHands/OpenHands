@@ -253,10 +253,9 @@ describe("issue #1534 — streamed intermediate message duplication", () => {
     );
 
     fireEvent.click(screen.getByTestId("event-group-toggle"));
-    fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
-    expect(
-      screen.getByTestId("collapsible-thinking-content").textContent ?? "",
-    ).toContain("Considering the request before acting.");
+    expect(screen.getByTestId("thinking-content")).toHaveTextContent(
+      "Considering the request before acting.",
+    );
   });
 });
 
@@ -292,11 +291,8 @@ describe("reasoning on a finished message", () => {
     );
 
     fireEvent.click(screen.getByTestId("event-group-toggle"));
-    expect(screen.getAllByTestId("collapsible-thinking")).toHaveLength(1);
-    fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
-    expect(
-      screen.getByTestId("collapsible-thinking-content"),
-    ).toHaveTextContent(REASONING);
+    expect(screen.getAllByTestId("thinking-content")).toHaveLength(1);
+    expect(screen.getByTestId("thinking-content")).toHaveTextContent(REASONING);
   });
 });
 
@@ -346,10 +342,7 @@ describe("duplicate Thinking blocks", () => {
     );
 
     fireEvent.click(screen.getByTestId("event-group-toggle"));
-    expect(screen.getAllByTestId("collapsible-thinking")).toHaveLength(1);
-    fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
-    expect(
-      screen.getByTestId("collapsible-thinking-content"),
-    ).toHaveTextContent(REASONING);
+    expect(screen.getAllByTestId("thinking-content")).toHaveLength(1);
+    expect(screen.getByTestId("thinking-content")).toHaveTextContent(REASONING);
   });
 });

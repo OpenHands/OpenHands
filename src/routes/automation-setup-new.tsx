@@ -16,6 +16,11 @@ import { InteractiveChatBox } from "#/components/features/chat/interactive-chat-
 import { ComposerDockedProvider } from "#/context/composer-docked-context";
 import { useStartAutomationSetup } from "#/hooks/use-start-automation-setup";
 import { I18nKey } from "#/i18n/declaration";
+import {
+  automationDetailPath,
+  automationListPath,
+} from "#/manifests/automation-interface";
+import { AutomationPageHeader } from "#/components/features/automations/automation-page-header";
 import { buildAutomationDraftTags } from "#/utils/automation-draft-tags";
 import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
@@ -48,9 +53,12 @@ export default function AutomationSetupNew() {
   useEffect(
     () =>
       subscribeAutomationFormSession(PENDING_AUTOMATION_SETUP_ID, (next) => {
-        setDraft(next ?? (automationId || draftId ? null : BLANK_DRAFT));
+        // The panel clears the session when it unmounts, so a cleared session
+        // must not drop the draft: that would unmount the panel and leave the
+        // page on the loading state, since nothing loads the draft again.
+        if (next) setDraft(next);
       }),
-    [automationId, draftId],
+    [],
   );
 
   useEffect(() => {
@@ -104,19 +112,16 @@ export default function AutomationSetupNew() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-canvas-base">
-      <header
-        data-testid="automation-setup-topbar"
-        className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-canvas-base px-3"
-      >
-        <h2 className="min-w-0 truncate text-sm font-medium text-content">
-          {title}
-        </h2>
-        <div
-          ref={setToolbarElement}
-          data-testid="automation-setup-toolbar"
-          className="flex min-w-0 shrink-0 items-center gap-1.5"
-        />
-      </header>
+      <AutomationPageHeader
+        testId="automation-setup-topbar"
+        title={title}
+        backTo={
+          automationId
+            ? automationDetailPath(automationId)
+            : automationListPath()
+        }
+        actionsRef={setToolbarElement}
+      />
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         {draft ? (
           <AutomationSetupPanel

@@ -101,7 +101,7 @@ export function ContextWindowMeter() {
           ref={popoverRef}
           data-testid="context-window-meter-popover"
           className={cn(
-            "absolute bottom-full right-0 z-[60] mb-2 w-70",
+            "absolute bottom-full right-0 z-60 mb-2 w-70",
             "flex flex-col gap-0.5 rounded-md border border-border-subtle bg-surface-raised px-1 py-1 shadow-lg",
           )}
         >

@@ -113,6 +113,11 @@ export interface Automation {
   /** LLM/model profile name used when no agent profile is selected. */
   model?: string | null;
   /**
+   * Author-written Markdown explaining what the automation does. A
+   * ```mermaid block in it renders as a diagram on the detail page.
+   */
+  description?: string | null;
+  /**
    * Maximum run time in seconds. `null`/omitted uses the server default
    * (600s, 10 min); the deployment reports the maximum it accepts.
    */
@@ -175,6 +180,19 @@ export interface AutomationTagCount {
   count: number;
 }
 
+/**
+ * The bundle an export file carries for an automation that runs a script
+ * instead of a prompt, so an import can upload it again.
+ */
+export interface AutomationScriptBundle {
+  /** Shell command the service runs in the unpacked bundle's root. */
+  entrypoint: string;
+  /** Optional setup script path inside the bundle. */
+  setup_script_path?: string;
+  /** The bundle exactly as the service stores it (a gzipped tar), base64-encoded. */
+  tarball_base64: string;
+}
+
 export type AutomationSpec = Omit<
   Automation,
   | "id"
@@ -187,7 +205,10 @@ export type AutomationSpec = Omit<
   | "disabled_reason"
   | "disabled_detail"
   | "disabled_at"
->;
+> & {
+  /** Present for a script automation, whose `prompt` is null. */
+  script?: AutomationScriptBundle;
+};
 
 /** The envelope constants come from the interface manifest's import/export spec. */
 export interface AutomationExportFile {

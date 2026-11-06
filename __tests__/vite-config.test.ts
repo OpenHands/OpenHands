@@ -252,7 +252,7 @@ describe("vite library build", () => {
     // Require the setup rail and editor geometry in the extracted stylesheet;
     // every recipe must remain a scoped utility even inside media conditions.
     expect(declarations(recipe("automation-setup-content"))).toMatchObject({
-      "max-width": "800px",
+      "max-width": "56rem",
     });
     expect(
       declarations(recipe("automation-setup-scroll-gutter")),
@@ -322,7 +322,7 @@ describe("vite library build", () => {
       "--automation-setup-cron-width": "14rem",
       "--automation-setup-datetime-width": "15rem",
       "--automation-setup-time-width": "9.5rem",
-      "--automation-setup-timezone-width": "16rem",
+      "--automation-setup-timezone-width": "12.5rem",
     };
     expect(declarations(scheduleRow)).toMatchObject(scheduleWidths);
     for (const property of Object.keys(scheduleWidths)) {
@@ -599,6 +599,41 @@ describe("vite library build", () => {
     // Compact type tokens must not introduce a line-height default.
     expect(declarations(recipe("text-2xs"))).toEqual({ "font-size": "11px" });
     expect(declarations(recipe("text-3xs"))).toEqual({ "font-size": "10px" });
+
+    for (const [name, size] of Object.entries({
+      "text-4xs": "9px",
+      "text-xs-plus": "13px",
+      "text-sm-plus": "15px",
+      "text-title": "32px",
+    })) {
+      expect(declarations(recipe(name))).toEqual({ "font-size": size });
+    }
+
+    expect(declarations(recipe("metadata-grid-columns"))).toEqual({
+      "grid-template-columns": "auto 1fr",
+    });
+    expect(declarations(recipe("automation-summary-columns"))).toEqual({
+      "grid-template-columns": "auto minmax(0,1fr)",
+    });
+    const runDetails = recipe("sm:run-log-detail-columns");
+    expect(declarations(runDetails)).toEqual({
+      "grid-template-columns": "5rem minmax(0,1fr)",
+    });
+    expect(runDetails.parent).toMatchObject({
+      type: "atrule",
+      name: "media",
+      params: "(width>=40rem)",
+    });
+
+    const radiusContracts = {
+      "rounded-pill": "100px",
+      "rounded-composer": "15px",
+      "rounded-file-action": "7px",
+      "rounded-facet-control": "3px",
+    };
+    for (const [name, radius] of Object.entries(radiusContracts)) {
+      expect(declarations(recipe(name))).toEqual({ "border-radius": radius });
+    }
 
     // `package.json` routes `require` here; stripped CSS imports must not
     // leave it unparseable.

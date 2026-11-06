@@ -30,7 +30,6 @@ import {
   formatTriggerSourceLabel,
   getLastRunTimestamp,
   getTriggerEventLabel,
-  getTriggerScheduleLabel,
   getTriggerSource,
 } from "#/components/features/home/featured-automations/automation-run-health";
 import type { AutomationInsightsProps } from "./automation-card";
@@ -38,6 +37,7 @@ import { toLatestRunState } from "./to-latest-run-state";
 import { AutomationTagPill } from "./automation-tag-pill";
 import { resolveAutomationImpactStatement } from "#/utils/automation-catalog";
 import { isDraftAutomation } from "#/utils/automation-state";
+import { describeSchedule } from "#/utils/automation-trigger-description";
 
 interface AutomationListRowProps {
   automation: Automation;
@@ -87,7 +87,11 @@ export function AutomationListRow({
   const isEventTrigger = automation.trigger.type === "event";
   const TriggerIcon = isEventTrigger ? Zap : ClockIcon;
   const triggerEventLabel = getTriggerEventLabel(automation);
-  const triggerScheduleLabel = getTriggerScheduleLabel(automation);
+  const triggerScheduleLabel = describeSchedule(
+    automation.trigger,
+    t,
+    i18n.language,
+  );
   const triggerSource = getTriggerSource(automation);
   const hasTriggerMeta = Boolean(
     triggerEventLabel || triggerScheduleLabel || triggerSource,
@@ -136,7 +140,7 @@ export function AutomationListRow({
           aria-label={`${automation.name} ${t(statusLabelKey)}`}
           className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
         >
-          <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-2">
+          <div className="grid min-w-0 flex-1 automation-summary-columns gap-x-2">
             <span
               data-testid={`automation-health-${automation.id}`}
               className="inline-flex h-5 w-2.5 shrink-0 items-center justify-center"

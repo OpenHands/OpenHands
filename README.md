@@ -96,10 +96,17 @@ docker run -it --rm \
   -e AGENT_CANVAS_ALLOW_LAN_SESSION_KEY=true \
   -v "$HOME/.openhands:/home/openhands/.openhands" \
   -v "${PROJECTS_PATH}:/projects" \
-  ghcr.io/openhands/agent-canvas:1.35.0 # x-release-please-version
+  ghcr.io/openhands/agent-canvas:1.37.0 # x-release-please-version
 ```
 
 **Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
+
+> [!NOTE]
+> The entrypoint stops the container with exit code 1 when the Agent Server stops answering
+> its `/alive` check for about 30 seconds, so a crash or hang fails visibly instead of leaving
+> a container that returns 502 for every request.
+> Automatic recovery needs a restart policy: use `--restart unless-stopped` instead of
+> `--rm`, or `restart: unless-stopped` in Docker Compose.
 
 The agent will be able to access any project under `PROJECTS_PATH`.
 
