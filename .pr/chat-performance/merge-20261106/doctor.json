@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "failed": [],
+  "warnings": [],
+  "passed": [
+    "port ingress:18800 listening: open",
+    "port agentServer:18801 listening: open",
+    "port automation:18802 listening: open",
+    "port frontend:18803 listening: open",
+    "served build matches this checkout's build inputs: served=4d27c4807a1ac632 run=4d27c4807a1ac632 revision=4fa47edd5d63",
+    "checkout build inputs unchanged since launch: launch=4d27c4807a1ac632 now=4d27c4807a1ac632",
+    "unauthenticated API rejected: status=401",
+    "authenticated settings readable: status=200",
+    "LLM configured: model=openai/gpt-4o-mini",
+    "agent-server reachable: version=1.60.1",
+    "agent-server matches pin: server=1.60.1 pin=1.60.1",
+    "agent-server meets the UI minimum: server=1.60.1 minimum=1.59.0",
+    "automation healthy: status=200",
+    "UI loads without page errors: markers=home-chat-launcher pageErrors=0 testidsInDom=89 (hidden included)"
+  ]
+}

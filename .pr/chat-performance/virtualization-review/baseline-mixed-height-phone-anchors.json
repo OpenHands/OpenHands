@@ -1,0 +1,1169 @@
+{
+  "description": "Lossless for anchor drift and frame geometry; unrelated rows omitted. Full raw source remains in original Control run.",
+  "sourceFile": "baseline-mixed-height-phone-anchors.json",
+  "sourceSha256": "e615a22ba93b831910caa036a084589bb1908ea075e15ea51df0859c0df8fb7e",
+  "revision": "dce9d017abe9ed3d362bc77e0cd3fff2e4931f22",
+  "sdk": "1.59.0",
+  "viewport": "390x844",
+  "fixture": "600 synthetic SDK-persisted MessageEvents, real history API, no model/tool calls",
+  "results": [
+    {
+      "step": 0,
+      "anchorId": 551,
+      "beforeTop": 232,
+      "afterTop": 382,
+      "scrollBy": -150,
+      "drift": 0,
+      "before": {
+        "scrollTop": 200,
+        "scrollHeight": 12648,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 1327,
+        "spinner": false,
+        "anchor": {
+          "id": 551,
+          "top": 232,
+          "height": 264
+        }
+      },
+      "after": {
+        "scrollTop": 12450,
+        "scrollHeight": 25048,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 2227,
+        "spinner": false,
+        "anchor": {
+          "id": 551,
+          "top": 382,
+          "height": 264
+        }
+      },
+      "frames": [
+        {
+          "ms": 0,
+          "scrollTop": 200,
+          "scrollHeight": 12648,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 1327,
+          "spinner": false,
+          "anchor": {
+            "id": 551,
+            "top": 232,
+            "height": 264
+          }
+        },
+        {
+          "ms": 74,
+          "scrollTop": 50,
+          "scrollHeight": 12648,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 1327,
+          "spinner": false,
+          "anchor": {
+            "id": 551,
+            "top": 382,
+            "height": 264
+          }
+        },
+        {
+          "ms": 90,
+          "scrollTop": 107,
+          "scrollHeight": 12705,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 1332,
+          "spinner": true,
+          "anchor": {
+            "id": 551,
+            "top": 382,
+            "height": 264
+          }
+        },
+        {
+          "ms": 181,
+          "scrollTop": 12450,
+          "scrollHeight": 25048,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 2227,
+          "spinner": false,
+          "anchor": {
+            "id": 551,
+            "top": 382,
+            "height": 264
+          }
+        }
+      ]
+    },
+    {
+      "step": 1,
+      "anchorId": 501,
+      "beforeTop": 280,
+      "afterTop": 430,
+      "scrollBy": -150,
+      "drift": 0,
+      "before": {
+        "scrollTop": 200,
+        "scrollHeight": 25048,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 2227,
+        "spinner": false,
+        "anchor": {
+          "id": 501,
+          "top": 280,
+          "height": 312
+        }
+      },
+      "after": {
+        "scrollTop": 12258,
+        "scrollHeight": 37256,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 3123,
+        "spinner": false,
+        "anchor": {
+          "id": 501,
+          "top": 430,
+          "height": 312
+        }
+      },
+      "frames": [
+        {
+          "ms": 1,
+          "scrollTop": 200,
+          "scrollHeight": 25048,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 2227,
+          "spinner": false,
+          "anchor": {
+            "id": 501,
+            "top": 280,
+            "height": 312
+          }
+        },
+        {
+          "ms": 113,
+          "scrollTop": 50,
+          "scrollHeight": 25048,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 2227,
+          "spinner": false,
+          "anchor": {
+            "id": 501,
+            "top": 430,
+            "height": 312
+          }
+        },
+        {
+          "ms": 130,
+          "scrollTop": 107,
+          "scrollHeight": 25105,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 2232,
+          "spinner": true,
+          "anchor": {
+            "id": 501,
+            "top": 430,
+            "height": 312
+          }
+        },
+        {
+          "ms": 227,
+          "scrollTop": 12258,
+          "scrollHeight": 37256,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 3123,
+          "spinner": false,
+          "anchor": {
+            "id": 501,
+            "top": 430,
+            "height": 312
+          }
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "anchorId": 452,
+      "beforeTop": 288,
+      "afterTop": 438,
+      "scrollBy": -150,
+      "drift": 0,
+      "before": {
+        "scrollTop": 200,
+        "scrollHeight": 37256,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 3123,
+        "spinner": false,
+        "anchor": {
+          "id": 452,
+          "top": 288,
+          "height": 264
+        }
+      },
+      "after": {
+        "scrollTop": 12498,
+        "scrollHeight": 49704,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 4024,
+        "spinner": false,
+        "anchor": {
+          "id": 452,
+          "top": 438,
+          "height": 264
+        }
+      },
+      "frames": [
+        {
+          "ms": 1,
+          "scrollTop": 200,
+          "scrollHeight": 37256,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 3123,
+          "spinner": false,
+          "anchor": {
+            "id": 452,
+            "top": 288,
+            "height": 264
+          }
+        },
+        {
+          "ms": 114,
+          "scrollTop": 50,
+          "scrollHeight": 37256,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 3123,
+          "spinner": false,
+          "anchor": {
+            "id": 452,
+            "top": 438,
+            "height": 264
+          }
+        },
+        {
+          "ms": 131,
+          "scrollTop": 107,
+          "scrollHeight": 37313,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 3128,
+          "spinner": true,
+          "anchor": {
+            "id": 452,
+            "top": 438,
+            "height": 264
+          }
+        },
+        {
+          "ms": 209,
+          "scrollTop": 12498,
+          "scrollHeight": 49704,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 4024,
+          "spinner": false,
+          "anchor": {
+            "id": 452,
+            "top": 438,
+            "height": 264
+          }
+        }
+      ]
+    },
+    {
+      "step": 3,
+      "anchorId": 402,
+      "beforeTop": 384,
+      "afterTop": 534,
+      "scrollBy": -150,
+      "drift": 0,
+      "before": {
+        "scrollTop": 200,
+        "scrollHeight": 49704,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 4024,
+        "spinner": false,
+        "anchor": {
+          "id": 402,
+          "top": 384,
+          "height": 312
+        }
+      },
+      "after": {
+        "scrollTop": 12306,
+        "scrollHeight": 61960,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 4921,
+        "spinner": false,
+        "anchor": {
+          "id": 402,
+          "top": 534,
+          "height": 312
+        }
+      },
+      "frames": [
+        {
+          "ms": 1,
+          "scrollTop": 200,
+          "scrollHeight": 49704,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 4024,
+          "spinner": false,
+          "anchor": {
+            "id": 402,
+            "top": 384,
+            "height": 312
+          }
+        },
+        {
+          "ms": 58,
+          "scrollTop": 50,
+          "scrollHeight": 49704,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 4024,
+          "spinner": false,
+          "anchor": {
+            "id": 402,
+            "top": 534,
+            "height": 312
+          }
+        },
+        {
+          "ms": 76,
+          "scrollTop": 107,
+          "scrollHeight": 49761,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 4029,
+          "spinner": true,
+          "anchor": {
+            "id": 402,
+            "top": 534,
+            "height": 312
+          }
+        },
+        {
+          "ms": 169,
+          "scrollTop": 12306,
+          "scrollHeight": 61960,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 4921,
+          "spinner": false,
+          "anchor": {
+            "id": 402,
+            "top": 534,
+            "height": 312
+          }
+        }
+      ]
+    },
+    {
+      "step": 4,
+      "anchorId": 352,
+      "beforeTop": 48,
+      "afterTop": 198,
+      "scrollBy": -150,
+      "drift": 0,
+      "before": {
+        "scrollTop": 200,
+        "scrollHeight": 61960,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 4921,
+        "spinner": false,
+        "anchor": {
+          "id": 352,
+          "top": 48,
+          "height": 360
+        }
+      },
+      "after": {
+        "scrollTop": 12546,
+        "scrollHeight": 74456,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 5823,
+        "spinner": false,
+        "anchor": {
+          "id": 352,
+          "top": 198,
+          "height": 360
+        }
+      },
+      "frames": [
+        {
+          "ms": 1,
+          "scrollTop": 200,
+          "scrollHeight": 61960,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 4921,
+          "spinner": false,
+          "anchor": {
+            "id": 352,
+            "top": 48,
+            "height": 360
+          }
+        },
+        {
+          "ms": 128,
+          "scrollTop": 50,
+          "scrollHeight": 61960,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 4921,
+          "spinner": false,
+          "anchor": {
+            "id": 352,
+            "top": 198,
+            "height": 360
+          }
+        },
+        {
+          "ms": 146,
+          "scrollTop": 107,
+          "scrollHeight": 62017,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 4926,
+          "spinner": true,
+          "anchor": {
+            "id": 352,
+            "top": 198,
+            "height": 360
+          }
+        },
+        {
+          "ms": 226,
+          "scrollTop": 12546,
+          "scrollHeight": 74456,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 5823,
+          "spinner": false,
+          "anchor": {
+            "id": 352,
+            "top": 198,
+            "height": 360
+          }
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "anchorId": 301,
+      "beforeTop": 40,
+      "afterTop": 190,
+      "scrollBy": -150,
+      "drift": 0,
+      "before": {
+        "scrollTop": 200,
+        "scrollHeight": 74456,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 5823,
+        "spinner": false,
+        "anchor": {
+          "id": 301,
+          "top": 40,
+          "height": 72
+        }
+      },
+      "after": {
+        "scrollTop": 12354,
+        "scrollHeight": 86760,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 6721,
+        "spinner": false,
+        "anchor": {
+          "id": 301,
+          "top": 190,
+          "height": 72
+        }
+      },
+      "frames": [
+        {
+          "ms": 2,
+          "scrollTop": 200,
+          "scrollHeight": 74456,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 5823,
+          "spinner": false,
+          "anchor": {
+            "id": 301,
+            "top": 40,
+            "height": 72
+          }
+        },
+        {
+          "ms": 152,
+          "scrollTop": 50,
+          "scrollHeight": 74456,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 5823,
+          "spinner": false,
+          "anchor": {
+            "id": 301,
+            "top": 190,
+            "height": 72
+          }
+        },
+        {
+          "ms": 179,
+          "scrollTop": 107,
+          "scrollHeight": 74513,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 5828,
+          "spinner": true,
+          "anchor": {
+            "id": 301,
+            "top": 190,
+            "height": 72
+          }
+        },
+        {
+          "ms": 266,
+          "scrollTop": 12354,
+          "scrollHeight": 86760,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 6721,
+          "spinner": false,
+          "anchor": {
+            "id": 301,
+            "top": 190,
+            "height": 72
+          }
+        }
+      ]
+    },
+    {
+      "step": 6,
+      "anchorId": 251,
+      "beforeTop": 88,
+      "afterTop": 238,
+      "scrollBy": -150,
+      "drift": 0,
+      "before": {
+        "scrollTop": 200,
+        "scrollHeight": 86760,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 6721,
+        "spinner": false,
+        "anchor": {
+          "id": 251,
+          "top": 88,
+          "height": 120
+        }
+      },
+      "after": {
+        "scrollTop": 12594,
+        "scrollHeight": 99304,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 7624,
+        "spinner": false,
+        "anchor": {
+          "id": 251,
+          "top": 238,
+          "height": 120
+        }
+      },
+      "frames": [
+        {
+          "ms": 3,
+          "scrollTop": 200,
+          "scrollHeight": 86760,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 6721,
+          "spinner": false,
+          "anchor": {
+            "id": 251,
+            "top": 88,
+            "height": 120
+          }
+        },
+        {
+          "ms": 98,
+          "scrollTop": 50,
+          "scrollHeight": 86760,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 6721,
+          "spinner": false,
+          "anchor": {
+            "id": 251,
+            "top": 238,
+            "height": 120
+          }
+        },
+        {
+          "ms": 123,
+          "scrollTop": 107,
+          "scrollHeight": 86817,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 6726,
+          "spinner": true,
+          "anchor": {
+            "id": 251,
+            "top": 238,
+            "height": 120
+          }
+        },
+        {
+          "ms": 201,
+          "scrollTop": 12594,
+          "scrollHeight": 99304,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 7624,
+          "spinner": false,
+          "anchor": {
+            "id": 251,
+            "top": 238,
+            "height": 120
+          }
+        }
+      ]
+    },
+    {
+      "step": 7,
+      "anchorId": 201,
+      "beforeTop": 136,
+      "afterTop": 286,
+      "scrollBy": -150,
+      "drift": 0,
+      "before": {
+        "scrollTop": 200,
+        "scrollHeight": 99304,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 7624,
+        "spinner": false,
+        "anchor": {
+          "id": 201,
+          "top": 136,
+          "height": 168
+        }
+      },
+      "after": {
+        "scrollTop": 12402,
+        "scrollHeight": 111656,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 8523,
+        "spinner": false,
+        "anchor": {
+          "id": 201,
+          "top": 286,
+          "height": 168
+        }
+      },
+      "frames": [
+        {
+          "ms": 2,
+          "scrollTop": 200,
+          "scrollHeight": 99304,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 7624,
+          "spinner": false,
+          "anchor": {
+            "id": 201,
+            "top": 136,
+            "height": 168
+          }
+        },
+        {
+          "ms": 88,
+          "scrollTop": 50,
+          "scrollHeight": 99304,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 7624,
+          "spinner": false,
+          "anchor": {
+            "id": 201,
+            "top": 286,
+            "height": 168
+          }
+        },
+        {
+          "ms": 121,
+          "scrollTop": 107,
+          "scrollHeight": 99361,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 7629,
+          "spinner": true,
+          "anchor": {
+            "id": 201,
+            "top": 286,
+            "height": 168
+          }
+        },
+        {
+          "ms": 217,
+          "scrollTop": 12402,
+          "scrollHeight": 111656,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 8523,
+          "spinner": false,
+          "anchor": {
+            "id": 201,
+            "top": 286,
+            "height": 168
+          }
+        }
+      ]
+    },
+    {
+      "step": 8,
+      "anchorId": 151,
+      "beforeTop": 184,
+      "afterTop": 334,
+      "scrollBy": -150,
+      "drift": 0,
+      "before": {
+        "scrollTop": 200,
+        "scrollHeight": 111656,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 8523,
+        "spinner": false,
+        "anchor": {
+          "id": 151,
+          "top": 184,
+          "height": 216
+        }
+      },
+      "after": {
+        "scrollTop": 12642,
+        "scrollHeight": 124248,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 9427,
+        "spinner": false,
+        "anchor": {
+          "id": 151,
+          "top": 334,
+          "height": 216
+        }
+      },
+      "frames": [
+        {
+          "ms": 2,
+          "scrollTop": 200,
+          "scrollHeight": 111656,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 8523,
+          "spinner": false,
+          "anchor": {
+            "id": 151,
+            "top": 184,
+            "height": 216
+          }
+        },
+        {
+          "ms": 120,
+          "scrollTop": 50,
+          "scrollHeight": 111656,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 8523,
+          "spinner": false,
+          "anchor": {
+            "id": 151,
+            "top": 334,
+            "height": 216
+          }
+        },
+        {
+          "ms": 153,
+          "scrollTop": 107,
+          "scrollHeight": 111713,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 8528,
+          "spinner": true,
+          "anchor": {
+            "id": 151,
+            "top": 334,
+            "height": 216
+          }
+        },
+        {
+          "ms": 258,
+          "scrollTop": 12642,
+          "scrollHeight": 124248,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 9427,
+          "spinner": false,
+          "anchor": {
+            "id": 151,
+            "top": 334,
+            "height": 216
+          }
+        }
+      ]
+    },
+    {
+      "step": 9,
+      "anchorId": 101,
+      "beforeTop": 232,
+      "afterTop": 382,
+      "scrollBy": -150,
+      "drift": 0,
+      "before": {
+        "scrollTop": 200,
+        "scrollHeight": 124248,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 9427,
+        "spinner": false,
+        "anchor": {
+          "id": 101,
+          "top": 232,
+          "height": 264
+        }
+      },
+      "after": {
+        "scrollTop": 12450,
+        "scrollHeight": 136648,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 10327,
+        "spinner": false,
+        "anchor": {
+          "id": 101,
+          "top": 382,
+          "height": 264
+        }
+      },
+      "frames": [
+        {
+          "ms": 2,
+          "scrollTop": 200,
+          "scrollHeight": 124248,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 9427,
+          "spinner": false,
+          "anchor": {
+            "id": 101,
+            "top": 232,
+            "height": 264
+          }
+        },
+        {
+          "ms": 108,
+          "scrollTop": 50,
+          "scrollHeight": 124248,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 9427,
+          "spinner": false,
+          "anchor": {
+            "id": 101,
+            "top": 382,
+            "height": 264
+          }
+        },
+        {
+          "ms": 146,
+          "scrollTop": 107,
+          "scrollHeight": 124305,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 9432,
+          "spinner": true,
+          "anchor": {
+            "id": 101,
+            "top": 382,
+            "height": 264
+          }
+        },
+        {
+          "ms": 248,
+          "scrollTop": 12450,
+          "scrollHeight": 136648,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 10327,
+          "spinner": false,
+          "anchor": {
+            "id": 101,
+            "top": 382,
+            "height": 264
+          }
+        }
+      ]
+    },
+    {
+      "step": 10,
+      "anchorId": 51,
+      "beforeTop": 280,
+      "afterTop": 430,
+      "scrollBy": -150,
+      "drift": 0,
+      "before": {
+        "scrollTop": 200,
+        "scrollHeight": 136648,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 10327,
+        "spinner": false,
+        "anchor": {
+          "id": 51,
+          "top": 280,
+          "height": 312
+        }
+      },
+      "after": {
+        "scrollTop": 12258,
+        "scrollHeight": 148856,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 11223,
+        "spinner": false,
+        "anchor": {
+          "id": 51,
+          "top": 430,
+          "height": 312
+        }
+      },
+      "frames": [
+        {
+          "ms": 2,
+          "scrollTop": 200,
+          "scrollHeight": 136648,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 10327,
+          "spinner": false,
+          "anchor": {
+            "id": 51,
+            "top": 280,
+            "height": 312
+          }
+        },
+        {
+          "ms": 244,
+          "scrollTop": 50,
+          "scrollHeight": 136648,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 10327,
+          "spinner": false,
+          "anchor": {
+            "id": 51,
+            "top": 430,
+            "height": 312
+          }
+        },
+        {
+          "ms": 283,
+          "scrollTop": 107,
+          "scrollHeight": 136705,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 10332,
+          "spinner": true,
+          "anchor": {
+            "id": 51,
+            "top": 430,
+            "height": 312
+          }
+        },
+        {
+          "ms": 393,
+          "scrollTop": 12258,
+          "scrollHeight": 148856,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 11223,
+          "spinner": false,
+          "anchor": {
+            "id": 51,
+            "top": 430,
+            "height": 312
+          }
+        }
+      ]
+    },
+    {
+      "step": 11,
+      "anchorId": 2,
+      "beforeTop": 288,
+      "afterTop": 438,
+      "scrollBy": -150,
+      "drift": 0,
+      "before": {
+        "scrollTop": 200,
+        "scrollHeight": 148856,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 11223,
+        "spinner": false,
+        "anchor": {
+          "id": 2,
+          "top": 288,
+          "height": 264
+        }
+      },
+      "after": {
+        "scrollTop": 50,
+        "scrollHeight": 148856,
+        "clientHeight": 518,
+        "virtual": false,
+        "mountedRows": 0,
+        "domNodes": 11223,
+        "spinner": false,
+        "anchor": {
+          "id": 2,
+          "top": 438,
+          "height": 264
+        }
+      },
+      "frames": [
+        {
+          "ms": 3,
+          "scrollTop": 200,
+          "scrollHeight": 148856,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 11223,
+          "spinner": false,
+          "anchor": {
+            "id": 2,
+            "top": 288,
+            "height": 264
+          }
+        },
+        {
+          "ms": 117,
+          "scrollTop": 50,
+          "scrollHeight": 148856,
+          "clientHeight": 518,
+          "virtual": false,
+          "mountedRows": 0,
+          "domNodes": 11223,
+          "spinner": false,
+          "anchor": {
+            "id": 2,
+            "top": 438,
+            "height": 264
+          }
+        }
+      ]
+    }
+  ],
+  "recording": {
+    "ok": true,
+    "seconds": 35.5,
+    "recordedSeconds": 35.5,
+    "size": "390x844",
+    "fps": 10,
+    "captures": 344,
+    "changes": 26,
+    "misses": 0,
+    "capped": false,
+    "cutSeconds": 0
+  }
+}
