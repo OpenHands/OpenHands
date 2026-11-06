@@ -23,6 +23,7 @@ const MAX_UNPACKED_BYTES = 16 * 1024 * 1024;
  */
 export function useAutomationTarballFiles(
   automation: Pick<Automation, "id" | "updated_at">,
+  { enabled = true }: { enabled?: boolean } = {},
 ) {
   const active = useActiveBackend();
   return useQuery({
@@ -39,7 +40,7 @@ export function useAutomationTarballFiles(
       }),
     staleTime: 5 * 60 * 1000,
     retry: false,
-    enabled: !!automation.id,
+    enabled: !!automation.id && enabled,
     meta: { disableToast: true },
   });
 }
