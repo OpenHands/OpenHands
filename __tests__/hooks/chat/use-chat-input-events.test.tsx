@@ -206,6 +206,51 @@ describe("chat input keyboard events", () => {
     expect(submit).not.toHaveBeenCalled();
   });
 
+  it("does not clear content during active IME composition and ignores keyCode 229 on Enter", () => {
+    const input = createElementRef("");
+    // Simulate IME preedit or empty looking state
+    input.element.innerHTML = "<br>";
+    const submit = vi.fn();
+    const { result } = renderInputEvents({
+      inputRef: input.ref,
+    });
+
+    // 1. Start composition
+    act(() => {
+      result.current.handleCompositionStart();
+    });
+
+    expect(input.element.getAttribute("data-composing")).toBe("true");
+
+    // 2. Input and Blur during composition should NOT clear content / abort IME
+    act(() => {
+      result.current.handleInput();
+      result.current.handleBlur();
+    });
+    expect(input.element.innerHTML).toBe("<br>");
+
+    // 3. Enter with keyCode 229 (typical Windows IME confirmation) should not submit
+    const imeEnter = {
+      key: "Enter",
+      keyCode: 229,
+      nativeEvent: { isComposing: false },
+      preventDefault: vi.fn(),
+    } as unknown as React.KeyboardEvent;
+
+    act(() => {
+      result.current.handleKeyDown(imeEnter, false, submit);
+    });
+    expect(submit).not.toHaveBeenCalled();
+    expect(imeEnter.preventDefault).not.toHaveBeenCalled();
+
+    // 4. End composition restores normal clearing behavior
+    act(() => {
+      result.current.handleCompositionEnd();
+    });
+    expect(input.element.hasAttribute("data-composing")).toBe(false);
+    expect(input.element.innerHTML).toBe("");
+  });
+
   it("increases the input height instead of submitting empty content", () => {
     const increaseHeight = vi.fn();
     const { result } = renderInputEvents({
