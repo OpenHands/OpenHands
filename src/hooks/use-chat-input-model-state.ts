@@ -30,6 +30,8 @@ export interface ChatInputModelState {
   /** The picker's Agent default row, or null when it isn't offered. */
   agentDefaultLabel: string | null;
   showAcpPicker: boolean;
+  /** Whether the model affordance has anything to render at all. */
+  hasModelRows: boolean;
   switchConversationId: string | null;
   destinationPath: AcpModelContext["destinationPath"];
   destinationLabel: string;
@@ -116,8 +118,14 @@ export function useChatInputModelState(): ChatInputModelState {
   if (isAcpContext) {
     displayModel =
       labelForAcpModel(currentModelId, liveModels) ??
-      // The next conversation starts on a default no one has reported yet.
-      (isHomeAcp ? t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT) : null);
+      // Fall back to the agent-default label whenever there's nothing more
+      // specific to show but the picker still has rows to offer: the next
+      // conversation starts on a default no one has reported yet (home), or
+      // this conversation's negotiated model never made it onto the stored
+      // `llm_model` even though its session already has models to offer.
+      (isHomeAcp || liveModels.length > 0
+        ? t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT)
+        : null);
   }
   const availableAcpModels = isAcpContext ? liveModels : [];
   // A home-page pick persists into the active ACP profile, which on cloud is
@@ -127,6 +135,7 @@ export function useChatInputModelState(): ChatInputModelState {
     !isHomeAcp || backend.kind !== "cloud" || canManageOrgProfiles;
   const showAcpPicker =
     isAcpContext && availableAcpModels.length > 0 && canPersistHomeAcpModel;
+  const hasModelRows = showAcpPicker || Boolean(displayModel);
   let agentDefaultLabel: string | null = null;
   if (isHomeAcp && acpProvider && !getAcpPreferredDefaultModel(acpServerKey)) {
     const defaultModelLabel = labelForAcpModel(
@@ -151,6 +160,7 @@ export function useChatInputModelState(): ChatInputModelState {
     availableAcpModels,
     agentDefaultLabel,
     showAcpPicker,
+    hasModelRows,
     switchConversationId,
     destinationPath,
     destinationLabel,

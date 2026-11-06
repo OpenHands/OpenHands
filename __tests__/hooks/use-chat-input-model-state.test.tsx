@@ -538,6 +538,56 @@ describe("useChatInputModelState", () => {
     expect(result.current.showAcpPicker).toBe(true);
   });
 
+  it("active ACP: falls back to the agent-default label when llm_model is unset but the session already has models (#19429)", () => {
+    // The conversation's stored `llm_model` can lag the session's own
+    // negotiated model (or never get set at all) even though the session
+    // has already reported a full list of switchable models. The picker
+    // must still render in that case instead of disappearing.
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: null,
+        acp_available_models: CLAUDE_MODELS,
+      },
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isActiveAcpConversation: true, isAcpContext: true }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.currentModelId).toBeNull();
+    expect(result.current.availableAcpModels).toEqual(CLAUDE_MODELS);
+    expect(result.current.showAcpPicker).toBe(true);
+    expect(result.current.displayModel).toBe(
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
+    );
+    expect(result.current.hasModelRows).toBe(true);
+  });
+
+  it("active ACP: stays hidden when llm_model is unset and the session has no models either", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "c1",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: null,
+        acp_available_models: [],
+      },
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isActiveAcpConversation: true, isAcpContext: true }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.showAcpPicker).toBe(false);
+    expect(result.current.displayModel).toBeNull();
+    expect(result.current.hasModelRows).toBe(false);
+  });
+
   it("showAcpPicker tri-condition: an unknown ACP provider has no model list → no picker", () => {
     useActiveConversationMock.mockReturnValue({
       data: {
