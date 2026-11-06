@@ -509,12 +509,19 @@ export interface ACPEffortChoice {
   label: string;
 }
 
+function fallbackEffortLabel(effort: string): string {
+  return effort.charAt(0).toUpperCase() + effort.slice(1);
+}
+
 export function toAcpEffortChoices(
   options: readonly ACPEffortOption[] | null | undefined,
 ): ACPEffortChoice[] {
   return (options ?? [])
     .filter(({ value }) => value)
-    .map(({ value, name }) => ({ value, label: name?.trim() || value }));
+    .map(({ value, name }) => ({
+      value,
+      label: name?.trim() || fallbackEffortLabel(value),
+    }));
 }
 
 export function labelForAcpEffort(
@@ -522,7 +529,10 @@ export function labelForAcpEffort(
   choices: readonly ACPEffortChoice[],
 ): string | null {
   if (!effort) return null;
-  return choices.find(({ value }) => value === effort)?.label ?? effort;
+  return (
+    choices.find(({ value }) => value === effort)?.label ??
+    fallbackEffortLabel(effort)
+  );
 }
 
 /**

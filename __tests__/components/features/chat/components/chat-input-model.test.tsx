@@ -469,6 +469,32 @@ describe("ChatInputModel", () => {
     });
   });
 
+  it("offers the agent's levels before the session reports its own", () => {
+    discoveryMock.mockReturnValue({
+      models: CLAUDE_MODELS,
+      defaultModelId: "opus[1m]",
+      effortsFor: (model: string | null) =>
+        model === "opus[1m]" ? EFFORTS : [],
+    });
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "opus[1m]",
+        acp_current_effort: "low",
+        acp_available_efforts: [],
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+
+    expect(
+      screen.getByTestId("chat-input-acp-effort-option-low"),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("does not offer a live effort switch on Cloud", () => {
     useActiveBackendMock.mockReturnValue({ backend: { kind: "cloud" } });
     sessionModelsMock.mockReturnValue(CLAUDE_MODELS);

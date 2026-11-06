@@ -125,11 +125,14 @@ export function useChatInputModelState(): ChatInputModelState {
   let selectedEffort: string | null = null;
   let agentDefaultEffortLabel: string | null = null;
   if (isActiveAcpConversation) {
-    // The Cloud app server has no route to switch effort live yet.
-    effortChoices =
-      backend.kind === "cloud"
-        ? []
-        : (conversation?.acp_available_efforts ?? []);
+    const sessionEfforts = conversation?.acp_available_efforts ?? [];
+    // The Cloud app server has no route to switch effort live yet. Until the
+    // session reports its levels, use what the agent offers for this model.
+    if (backend.kind !== "cloud") {
+      effortChoices = sessionEfforts.length
+        ? sessionEfforts
+        : discovered.effortsFor(currentModelId);
+    }
     selectedEffort = conversation?.acp_current_effort ?? null;
   } else if (isHomeAcp) {
     effortChoices = discovered.effortsFor(selectedModelId);

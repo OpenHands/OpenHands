@@ -1017,7 +1017,7 @@ describe("toAppConversation", () => {
     expect(result.acp_current_effort).toBe("high");
     expect(result.acp_available_efforts).toEqual([
       { value: "high", label: "High" },
-      { value: "max", label: "max" },
+      { value: "max", label: "Max" },
     ]);
   });
 
