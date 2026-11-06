@@ -1,176 +1,199 @@
-import { renderHook } from "@testing-library/react";
+import React from "react";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useStartAutomationSetup } from "#/hooks/use-start-automation-setup";
+import { launchConversation } from "#/hooks/mutation/resolve-conversation-launch";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+import {
+  PENDING_AUTOMATION_SETUP_ID,
+  clearAutomationFormSession,
+  getAutomationFormSession,
+  initializeAutomationFormSession,
+} from "#/api/automation-form-session";
+import { NavigationProvider } from "#/context/navigation-context";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
 
-const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(),
-  mutate: vi.fn(),
-  isPending: false,
-  getAutomationFormSession: vi.fn(),
-  initializeAutomationFormSession: vi.fn(),
-  clearAutomationFormSession: vi.fn(),
-  markAutomationSetupHandoff: vi.fn(),
+vi.mock("#/hooks/mutation/resolve-conversation-launch", () => ({
+  launchConversation: vi.fn(),
 }));
-
-vi.mock("#/hooks/mutation/use-create-conversation", () => ({
-  useCreateConversation: () => ({
-    mutate: mocks.mutate,
-    isPending: mocks.isPending,
+vi.mock("#/hooks/use-tracking", () => ({
+  useTracking: () => ({
+    trackConversationCreated: vi.fn(),
+    trackAutomationCreatedButton: vi.fn(),
   }),
 }));
 
-vi.mock("#/api/automation-form-session", () => ({
-  PENDING_AUTOMATION_SETUP_ID: "pending-new-automation",
-  getAutomationFormSession: (...args: unknown[]) =>
-    mocks.getAutomationFormSession(...args),
-  initializeAutomationFormSession: (...args: unknown[]) =>
-    mocks.initializeAutomationFormSession(...args),
-  clearAutomationFormSession: (...args: unknown[]) =>
-    mocks.clearAutomationFormSession(...args),
-}));
-
-vi.mock("#/api/automation-setup-handoff-store", () => ({
-  markAutomationSetupHandoff: (...args: unknown[]) =>
-    mocks.markAutomationSetupHandoff(...args),
-}));
-
-vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackend: () => ({ backend: { kind: "local" } }),
-}));
-
-vi.mock("#/context/navigation-context", () => ({
-  useNavigation: () => ({ navigate: mocks.navigate }),
-}));
-
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({ trackAutomationCreatedButton: vi.fn() }),
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
-}));
-
-describe("useStartAutomationSetup", () => {
-  beforeEach(() => {
-    mocks.navigate.mockReset();
-    mocks.mutate.mockReset();
-    mocks.getAutomationFormSession.mockReset();
-    mocks.initializeAutomationFormSession.mockReset();
-    mocks.clearAutomationFormSession.mockReset();
-    mocks.markAutomationSetupHandoff.mockReset();
-    mocks.isPending = false;
+const navigate = vi.fn();
+const draft = {
+  kind: "prompt" as const,
+  prompt: "Review pull requests",
+  editingAutomationId: "reviewer-123",
+  form: {
+    name: "OSS PR Reviewer",
+    eventFilter: "contains(repos, repository.full_name)",
+  },
+};
+function mount() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
   });
-
-  it("creates the conversation from the prompt and keeps the form draft", () => {
-    const draft = {
-      prompt: "Summarize overnight alerts",
-      kind: "prompt" as const,
-      form: { name: "Incident digest", runAsUserId: "sa-1" },
-    };
-    mocks.getAutomationFormSession.mockReturnValue(draft);
-    mocks.mutate.mockImplementation((_payload, options) => {
-      options?.onSuccess?.({ conversation_id: "conv-prompt" });
-    });
-    const { result } = renderHook(() => useStartAutomationSetup());
-
-    result.current.startConversationFromPrompt("  Watch the inbox  ");
-
-    expect(mocks.mutate).toHaveBeenCalledWith(
-      {
-        query: "Watch the inbox",
-        automationSetup: true,
-        entryPoint: "automations_add",
-      },
-      expect.any(Object),
+  const wrapper = ({ children }: React.PropsWithChildren) =>
+    React.createElement(
+      QueryClientProvider,
+      { client },
+      React.createElement(
+        ActiveBackendProvider,
+        null,
+        React.createElement(NavigationProvider, {
+          children,
+          value: {
+            navigate,
+            currentPath: "/automations/setup",
+            conversationId: null,
+            isNavigating: false,
+          },
+        }),
+      ),
     );
-    expect(mocks.initializeAutomationFormSession).toHaveBeenCalledWith(
-      "conv-prompt",
-      draft,
-    );
-    expect(mocks.clearAutomationFormSession).toHaveBeenCalledWith(
-      "pending-new-automation",
-    );
-    expect(mocks.markAutomationSetupHandoff).toHaveBeenCalledWith(
-      "conv-prompt",
-    );
-    expect(mocks.navigate).toHaveBeenCalledWith("/conversations/conv-prompt");
-  });
+  return renderHook(() => useStartAutomationSetup(), { wrapper });
+}
 
-  it("sends saved draft tags with the initial prompt", () => {
-    const draft = {
-      prompt: "Draft prompt",
-      kind: "prompt" as const,
+beforeEach(() => {
+  vi.mocked(launchConversation).mockReset();
+  navigate.mockReset();
+  useConversationLaunchStore.setState({ launches: {} });
+  clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
+  clearAutomationFormSession("conv-1");
+  setRegisteredBackends([
+    {
+      id: "local-test",
+      kind: "local",
+      name: "Local",
+      host: "http://localhost:8000",
+      apiKey: "test",
+    },
+  ]);
+  setActiveSelection({ backendId: "local-test", orgId: null });
+});
+
+describe("automation setup conversation handoff", () => {
+  it.each(["local", "cloud"] as const)(
+    "opens immediately on %s and carries the selected form through an unmounted launcher",
+    async (kind) => {
+      setRegisteredBackends([
+        {
+          id: "local-test",
+          kind,
+          name: "Test",
+          host: "http://localhost:8000",
+          apiKey: "test",
+        },
+      ]);
+      initializeAutomationFormSession(PENDING_AUTOMATION_SETUP_ID, draft);
+      let finish!: (value: AppConversationStartTask) => void;
+      vi.mocked(launchConversation).mockReturnValue(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      );
+      const hook = mount();
+      act(() =>
+        hook.result.current.startConversationFromPrompt(
+          "Why does this not review docs?",
+        ),
+      );
+      const launch = Object.values(
+        useConversationLaunchStore.getState().launches,
+      )[0];
+      expect(launch.message).toBe("Why does this not review docs?");
+      expect(navigate).toHaveBeenCalledWith(`/conversations/${launch.id}`);
+      await waitFor(() => expect(launchConversation).toHaveBeenCalled());
+      const request = vi.mocked(launchConversation).mock.calls[0][1];
+      expect(request.initialUserMsg).toBe("Why does this not review docs?");
+      expect(request.automationSetupContext).toContain("reviewer-123");
+      expect(request.automationSetupContext).toContain("OSS PR Reviewer");
+      expect(request.automationSetupContext).toContain(draft.form.eventFilter);
+      expect(request.automationSetupTags).toMatchObject({
+        automationeditid: "reviewer-123",
+      });
+      hook.unmount();
+      await act(async () =>
+        finish({
+          id: "conv-1",
+          app_conversation_id: "conv-1",
+        } as AppConversationStartTask),
+      );
+      await waitFor(() =>
+        expect(
+          useConversationLaunchStore.getState().launches[launch.id].targetId,
+        ).toBe("conv-1"),
+      );
+      expect(getAutomationFormSession("conv-1")).toMatchObject(draft);
+      // Completion must not drag the user back after navigating away.
+      expect(navigate).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("passes saved draft identity without treating it as an existing automation", async () => {
+    initializeAutomationFormSession(PENDING_AUTOMATION_SETUP_ID, {
+      prompt: "Review pull requests",
+      kind: "prompt",
       serverDraftId: "draft-1",
-      materializedAutomationId: "auto-draft-1",
-      form: { name: "Saved draft", prompt: "Draft prompt" },
-    };
-    mocks.getAutomationFormSession.mockReturnValue(draft);
-    mocks.mutate.mockImplementation(async (_payload, options) => {
-      await options?.onSuccess?.({ conversation_id: "conv-draft" });
+      materializedAutomationId: "test-automation-1",
     });
-    const { result } = renderHook(() => useStartAutomationSetup());
-
-    result.current.startConversationFromPrompt("  Refine the cadence  ");
-
-    expect(mocks.mutate).toHaveBeenCalledWith(
-      {
-        query: "Refine the cadence",
-        automationSetup: true,
-        automationSetupTags: {
-          automationsetup: "draft",
-          automationdraftid: "draft-1",
-          automationmaterializeddraftid: "auto-draft-1",
-        },
-        entryPoint: "automation_draft_resume",
+    vi.mocked(launchConversation).mockReturnValue(new Promise(() => {}));
+    const hook = mount();
+    act(() =>
+      hook.result.current.startConversationFromPrompt("Finish this draft"),
+    );
+    await waitFor(() => expect(launchConversation).toHaveBeenCalledOnce());
+    expect(vi.mocked(launchConversation).mock.calls[0][1]).toMatchObject({
+      automationSetupTags: {
+        automationdraftid: "draft-1",
+        automationmaterializeddraftid: "test-automation-1",
       },
-      expect.any(Object),
-    );
-    expect(mocks.initializeAutomationFormSession).toHaveBeenCalledWith(
-      "conv-draft",
-      draft,
-    );
-    expect(mocks.navigate).toHaveBeenCalledWith("/conversations/conv-draft");
+      automationSetupContext: expect.stringContaining('"draftId":"draft-1"'),
+    });
   });
 
-  it("sends edited automation tags with the initial prompt", () => {
-    const draft = {
-      prompt: "Existing prompt",
-      kind: "prompt" as const,
-      editingAutomationId: "auto-1",
-      form: { name: "Existing automation", prompt: "Existing prompt" },
-    };
-    mocks.getAutomationFormSession.mockReturnValue(draft);
-    mocks.mutate.mockImplementation(async (_payload, options) => {
-      await options?.onSuccess?.({ conversation_id: "conv-edit" });
-    });
-    const { result } = renderHook(() => useStartAutomationSetup());
-
-    result.current.startConversationFromPrompt("  Adjust this automation  ");
-
-    expect(mocks.mutate).toHaveBeenCalledWith(
-      {
-        query: "Adjust this automation",
-        automationSetup: true,
-        automationSetupTags: {
-          automationsetup: "draft",
-          automationeditid: "auto-1",
-        },
-        entryPoint: "automation_edit",
-      },
-      expect.any(Object),
+  it("retains the draft and reports failure on the pending conversation", async () => {
+    initializeAutomationFormSession(PENDING_AUTOMATION_SETUP_ID, draft);
+    vi.mocked(launchConversation).mockRejectedValue(
+      new Error("Cannot connect"),
     );
-    expect(mocks.initializeAutomationFormSession).toHaveBeenCalledWith(
-      "conv-edit",
-      draft,
+    const hook = mount();
+    act(() => hook.result.current.startConversationFromPrompt("Add docs"));
+    await waitFor(() =>
+      expect(
+        Object.values(useConversationLaunchStore.getState().launches)[0]?.error,
+      ).toBe("Cannot connect"),
     );
-    expect(mocks.navigate).toHaveBeenCalledWith("/conversations/conv-edit");
+    expect(
+      Object.values(useConversationLaunchStore.getState().launches)[0]
+        .automationSetupDraft,
+    ).toMatchObject(draft);
   });
 
-  it("does not create a conversation from an empty prompt", () => {
-    const { result } = renderHook(() => useStartAutomationSetup());
-
-    result.current.startConversationFromPrompt("   ");
-
-    expect(mocks.mutate).not.toHaveBeenCalled();
+  it("ignores empty submissions and duplicate sends", async () => {
+    vi.mocked(launchConversation).mockReturnValue(new Promise(() => {}));
+    const hook = mount();
+    act(() => {
+      hook.result.current.startConversationFromPrompt(" ");
+      hook.result.current.startConversationFromPrompt("Create a digest");
+      hook.result.current.startConversationFromPrompt("Create a digest");
+    });
+    await waitFor(() => expect(launchConversation).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(launchConversation).mock.calls[0][1].initialUserMsg).toBe(
+      "Create a digest",
+    );
+    expect(
+      Object.keys(useConversationLaunchStore.getState().launches),
+    ).toHaveLength(1);
   });
 });

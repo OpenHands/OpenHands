@@ -1068,6 +1068,7 @@ export interface StartConversationOptions {
   query?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
   /**
    * What the automation service reports it supports, so the setup assistant's
    * form tool can name this deployment's event sources. Null when it could
@@ -1157,7 +1158,9 @@ export function buildStartConversationRequest(
     ),
     // Sent with the form tool below, which only OpenHands profiles get.
     options.automationSetup && options.agentProfileKind === "openhands"
-      ? AUTOMATION_SETUP_SYSTEM_SUFFIX
+      ? [AUTOMATION_SETUP_SYSTEM_SUFFIX, options.automationSetupContext]
+          .filter(Boolean)
+          .join("\n\n")
       : null,
   ]
     .filter((suffix): suffix is string => Boolean(suffix))
@@ -1191,6 +1194,11 @@ export function buildStartConversationRequest(
 
   const conversationSettings = buildConfiguredConversationSettings({
     ...sourceConversationOptions,
+    ...(options.automationSetup &&
+    options.agentProfileKind === "acp" &&
+    options.automationSetupContext
+      ? { query: `${options.query ?? ""}\n\n${options.automationSetupContext}` }
+      : {}),
     executionRuntime: options.executionRuntime,
   });
 
@@ -1611,6 +1619,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   query?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
   automationSetupCapabilities?: DeploymentCapabilities | null;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
