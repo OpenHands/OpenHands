@@ -1066,3 +1066,7 @@ code .token {
 @utility conversation-options-bleed-width {
   width: calc(100% + 3rem);
 }
+
+@utility message-word-break {
+  word-break: break-word;
+}
