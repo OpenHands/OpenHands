@@ -204,6 +204,7 @@ describe("AutomationCard", () => {
             summary: {
               total: 4,
               completedTotal: 4,
+              pendingTotal: 0,
               latestRun,
               recentRuns: [latestRun],
               recentSuccessRate: 1,
@@ -231,6 +232,111 @@ describe("AutomationCard", () => {
     expect(screen.getByText("100%")).toBeInTheDocument();
   });
 
+  it("shows the queued run count when runs are pending", () => {
+    const latestRun = createRun({
+      status: AutomationRunStatus.RUNNING,
+      completed_at: null,
+    });
+
+    render(
+      <AutomationCard
+        automation={automation}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+        insights={{
+          spec: insightsSpec satisfies InterfaceListInsights,
+          state: {
+            summary: {
+              total: 9,
+              completedTotal: 5,
+              pendingTotal: 3,
+              latestRun,
+              recentRuns: [latestRun],
+              recentSuccessRate: 1,
+              averageDurationMs: 120_000,
+            },
+            isLoading: false,
+            isError: false,
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("automation-pending-count")).toHaveTextContent(
+      "3 AUTOMATIONS$DETAIL$PENDING",
+    );
+  });
+
+  it("shows no queued run count when nothing is pending", () => {
+    const latestRun = createRun();
+
+    render(
+      <AutomationCard
+        automation={automation}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+        insights={{
+          spec: insightsSpec satisfies InterfaceListInsights,
+          state: {
+            summary: {
+              total: 4,
+              completedTotal: 4,
+              pendingTotal: 0,
+              latestRun,
+              recentRuns: [latestRun],
+              recentSuccessRate: 1,
+              averageDurationMs: 120_000,
+            },
+            isLoading: false,
+            isError: false,
+          },
+        }}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("automation-pending-count"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows no queued run count when the pending count is unknown", () => {
+    const latestRun = createRun();
+
+    render(
+      <AutomationCard
+        automation={automation}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+        insights={{
+          spec: insightsSpec satisfies InterfaceListInsights,
+          state: {
+            summary: {
+              total: 40,
+              completedTotal: null,
+              pendingTotal: null,
+              latestRun,
+              recentRuns: [latestRun],
+              recentSuccessRate: 1,
+              averageDurationMs: 120_000,
+            },
+            isLoading: false,
+            isError: false,
+          },
+        }}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("automation-pending-count"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows the value statement for its completed runs", () => {
     // Arrange — provenance joining back to a catalog entry with an impact
     // declaration, and a summary carrying the lifetime completed count.
@@ -255,6 +361,7 @@ describe("AutomationCard", () => {
             summary: {
               total: 5,
               completedTotal: 4,
+              pendingTotal: 0,
               latestRun,
               recentRuns: [latestRun],
               recentSuccessRate: 1,
