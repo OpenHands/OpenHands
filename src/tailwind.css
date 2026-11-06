@@ -731,6 +731,10 @@ code .token {
 }
 
 /* Window drag handle for the macOS desktop app's hidden title bar. */
+@utility message-word-break {
+  word-break: break-word;
+}
+
 @utility app-region-drag {
   -webkit-app-region: drag;
 }
@@ -1065,8 +1069,4 @@ code .token {
 
 @utility conversation-options-bleed-width {
   width: calc(100% + 3rem);
-}
-
-@utility message-word-break {
-  word-break: break-word;
 }
