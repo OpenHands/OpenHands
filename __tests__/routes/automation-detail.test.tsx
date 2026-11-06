@@ -296,6 +296,87 @@ describe("AutomationDetail — Edit in the header", () => {
   });
 });
 
+describe("AutomationDetail — another user's automation", () => {
+  const disabledAutomation: Automation = {
+    ...automation,
+    enabled: false,
+    tags: ["qa"],
+  };
+
+  async function renderAndOpenMenu() {
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(
+      disabledAutomation,
+    );
+    setActiveSelection({ backendId: cloudBackend.id });
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+  }
+
+  it("lets an admin or owner edit, tag, turn on and delete it", async () => {
+    // Arrange — manage permission, but not the creator.
+    permissionMocks.canManage = true;
+    permissionMocks.isOwner = false;
+
+    // Act
+    await renderAndOpenMenu();
+
+    // Assert
+    expect(
+      screen.getByRole("switch", { name: I18nKey.AUTOMATIONS$TURN_ON }),
+    ).toBeInTheDocument();
+    for (const name of [
+      I18nKey.AUTOMATIONS$EDIT,
+      I18nKey.AUTOMATIONS$TURN_ON,
+      I18nKey.AUTOMATIONS$DELETE,
+    ]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+    expect(screen.getByTestId("automation-tags-edit")).toBeInTheDocument();
+  });
+
+  it("offers a member no write actions", async () => {
+    // Arrange — view only, and not the creator.
+    permissionMocks.canManage = false;
+    permissionMocks.isOwner = false;
+
+    // Act
+    await renderAndOpenMenu();
+
+    // Assert
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    for (const name of [
+      I18nKey.AUTOMATIONS$EDIT,
+      I18nKey.AUTOMATIONS$TURN_ON,
+      I18nKey.AUTOMATIONS$DELETE,
+    ]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+    expect(
+      screen.queryByTestId("automation-tags-edit"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lets a member who created it turn it back on", async () => {
+    // Arrange — view only, but the creator (escape hatch).
+    permissionMocks.canManage = false;
+    permissionMocks.isOwner = true;
+
+    // Act
+    await renderAndOpenMenu();
+
+    // Assert
+    expect(
+      screen.getByRole("switch", { name: I18nKey.AUTOMATIONS$TURN_ON }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("AutomationDetail — delete confirmation", () => {
   it("opens as a named modal dialog with focus inside, and Escape cancels without deleting", async () => {
     // Arrange — open the confirmation from the header kebab.
@@ -690,8 +771,9 @@ describe("AutomationDetail — runs as a service account", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("does not let an admin edit the tags of another member's automation", async () => {
+  it("lets an admin edit the tags of another member's automation", async () => {
     // Arrange — runs as a person, and the caller is a manager but not the creator.
+    permissionMocks.isOwner = false;
     vi.mocked(AutomationService.getAutomation).mockResolvedValue({
       ...automation,
       user_id: "another-member",
@@ -704,10 +786,8 @@ describe("AutomationDetail — runs as a service account", () => {
     renderDetail();
     await screen.findByTestId("automation-tags");
 
-    // Assert — only the creator edits a automation that runs as a person.
-    expect(
-      screen.queryByTestId("automation-tags-edit"),
-    ).not.toBeInTheDocument();
+    // Assert
+    expect(screen.getByTestId("automation-tags-edit")).toBeInTheDocument();
   });
 
   it("shows a member the generic label and never the service account id", async () => {
@@ -1099,8 +1179,8 @@ describe("AutomationDetail — keep sandbox alive", () => {
     },
   );
 
-  it("leaves the item out for a manager who did not create a user-owned automation", async () => {
-    // Arrange — the service lets only the creator change keep_alive here.
+  it("offers the item to a manager who did not create a user-owned automation", async () => {
+    // Arrange — managers may edit an automation that runs as another person.
     permissionMocks.isOwner = false;
     permissionMocks.canManage = true;
     vi.mocked(AutomationService.getAutomation).mockResolvedValue({
@@ -1119,13 +1199,10 @@ describe("AutomationDetail — keep sandbox alive", () => {
 
     // Assert
     expect(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", {
+      screen.getByRole("button", {
         name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
       }),
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
   });
 
   it("offers the item to a manager of an automation that runs as a service account", async () => {
