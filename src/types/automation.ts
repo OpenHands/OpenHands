@@ -47,8 +47,7 @@ export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
  * the org, or back to the caller (managers only).
  */
 export type ChangeRunAsRequest =
-  | { to: "service"; service_account_id: string }
-  | { to: "self" };
+  { to: "service"; service_account_id: string } | { to: "self" };
 
 /** What kind of identity an automation runs as. */
 export type AutomationRunAsKind = "user" | "service";
@@ -113,6 +112,11 @@ export interface Automation {
   agent_profile_id?: string | null;
   /** LLM/model profile name used when no agent profile is selected. */
   model?: string | null;
+  /**
+   * Author-written Markdown explaining what the automation does. A
+   * ```mermaid block in it renders as a diagram on the detail page.
+   */
+  description?: string | null;
   /**
    * Maximum run time in seconds. `null`/omitted uses the server default
    * (600s, 10 min); the deployment reports the maximum it accepts.

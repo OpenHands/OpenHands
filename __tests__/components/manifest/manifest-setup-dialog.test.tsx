@@ -128,7 +128,18 @@ function selfHostedGithub(connected: boolean): NativeGitIntegrations {
   };
 }
 
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    parse: vi.fn().mockResolvedValue({ diagramType: "flowchart" }),
+    render: vi.fn().mockResolvedValue({
+      svg: '<svg data-testid="entry-diagram-svg"></svg>',
+    }),
+  },
+}));
+
 const ENTRY: SetupEntry = createSetupEntry();
+const ENTRY_DIAGRAM = "flowchart TD\n  A --> B";
 const CUSTOM_AUTOMATION_ENTRY = AUTOMATION_CATALOG.find(
   (entry) => entry.id === "custom-automation",
 ) as SetupEntry;
@@ -486,6 +497,26 @@ describe("SetupDialog", () => {
       trigger: { type: "cron", schedule: "*/15 * * * *" },
     });
     expect(mocks.runAction.mock.calls[0][3]).toBe("cron");
+  });
+
+  it("draws the entry's diagram under its description", async () => {
+    // Act
+    renderDialog({ ...ENTRY, diagram: ENTRY_DIAGRAM });
+
+    // Assert
+    expect(await screen.findByTestId("mermaid-diagram")).toContainElement(
+      screen.getByTestId("entry-diagram-svg"),
+    );
+  });
+
+  it("draws no diagram for an entry without one", () => {
+    // Act
+    renderDialog();
+
+    // Assert
+    expect(screen.getByTestId("setup-continue-button")).toBeInTheDocument();
+    expect(screen.queryByTestId("mermaid-diagram-pending")).toBeNull();
+    expect(screen.queryByTestId("mermaid-diagram")).toBeNull();
   });
 
   it("holds an unanswered required field back from the service", async () => {
