@@ -89,6 +89,7 @@ function entry(
     id: `${kind}:${name}@${source.name}`,
     kind,
     name,
+    title: name,
     marketplace: source.name,
     description: `${name} description`,
     tags: ["ops"],

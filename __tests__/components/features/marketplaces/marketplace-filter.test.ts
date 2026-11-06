@@ -24,6 +24,7 @@ function entry(
     id: `${kind}:${name}@m`,
     kind,
     name,
+    title: name,
     marketplace: "m",
     description: `${name} description`,
     tags: overrides.tags ?? [],

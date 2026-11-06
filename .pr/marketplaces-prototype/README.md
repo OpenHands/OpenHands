@@ -16,9 +16,11 @@ and asserts each step; the screenshots are what it saw.
 Layout: no Customize rail. The band at the top picks a marketplace and manages
 it (trust, refresh, remove; add is in the page header). Tabs under it switch
 between the kinds; below, the search bar, the facet menu and the cards follow
-the Skills page. One card component serves every kind: the icon slot shows the
-Skills badge, the MCP integration logo, or the template's manifest icon, and
-the Install button is the same everywhere.
+the Skills page. One card component serves every kind, shaped like the MCP
+library and Skills cards: the icon slot shows the Skills badge, the MCP
+integration logo, the template's manifest icon (or the logos of the
+integrations it needs), or the kind's icon; the circled +/check control at the
+top right installs an entry and switches an installed one on and off.
 
 | Screenshot | What it shows |
 | --- | --- |

@@ -37,6 +37,7 @@ const STORAGE_KEY = "openhands-marketplaces-dev-state";
 interface SeedEntry {
   kind: CatalogKind;
   name: string;
+  title?: string;
   description: string;
   tags: string[];
   version?: string;
@@ -98,6 +99,7 @@ function defaultMarketplaceEntries(): SeedEntry[] {
   const mcp: SeedEntry[] = INTEGRATION_CATALOG.map((integration) => ({
     kind: "mcp",
     name: integration.id,
+    title: integration.name,
     description: integration.description,
     tags: [...(integration.categories ?? []), ...(integration.keywords ?? [])]
       .map((tag) => tag.toLowerCase())
@@ -115,6 +117,7 @@ function defaultMarketplaceEntries(): SeedEntry[] {
   const apps: SeedEntry[] = APPS_CATALOG.map((app) => ({
     kind: "app",
     name: app.id,
+    title: app.name,
     description: app.description,
     tags: app.beta ? ["beta"] : [],
     runs_code: true,
@@ -123,6 +126,7 @@ function defaultMarketplaceEntries(): SeedEntry[] {
   const automations: SeedEntry[] = AUTOMATION_CATALOG.map((automation) => ({
     kind: "automation",
     name: automation.id,
+    title: automation.name,
     description: automation.description,
     tags: [automation.category, ...(automation.triggers ?? [])],
     version: automation.version,
@@ -261,6 +265,7 @@ function toEntry(seed: SeedEntry, stored: StoredMarketplace): CatalogEntry {
     id,
     kind: seed.kind,
     name: seed.name,
+    title: seed.title ?? seed.name,
     marketplace: stored.source.name,
     description: seed.description,
     tags: seed.tags,

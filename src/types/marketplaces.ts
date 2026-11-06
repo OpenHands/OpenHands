@@ -65,6 +65,8 @@ export interface CatalogEntry {
   id: string;
   kind: CatalogKind;
   name: string;
+  /** What the card shows; `name` stays the identifier. */
+  title: string;
   marketplace: string;
   description: string;
   tags: string[];
