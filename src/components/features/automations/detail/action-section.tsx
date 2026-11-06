@@ -2,30 +2,60 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
-import CogIcon from "#/icons/cog.svg?react";
+import TerminalIcon from "#/icons/terminal.svg?react";
 import GitBranchIcon from "#/icons/git-branch.svg?react";
-import CheckCircleIcon from "#/icons/check-circle.svg?react";
-import CalendarIcon from "#/icons/calendar.svg?react";
 import SparkleIcon from "#/icons/sparkle.svg?react";
-import UserIcon from "#/icons/user.svg?react";
-import { Zap } from "lucide-react";
-import BellIcon from "#/icons/bell.svg?react";
 import CodeTagIcon from "#/icons/code-tag.svg?react";
-import LinkExternalIcon from "#/icons/link-external.svg?react";
-import { formatEventOn } from "#/utils/automation-schedule";
+import PuzzleIcon from "#/icons/puzzle.svg?react";
+import UserIcon from "#/icons/user.svg?react";
+import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
+import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { automationRepositoryLabel } from "#/utils/automation-repo-sources";
 import { SectionCard } from "./section-card";
 import { ConfigField } from "./config-field";
 import { BranchBadge } from "./branch-badge";
+import { PluginChip } from "./plugin-chip";
+import { PromptBody } from "./prompt-section";
+import { ScriptBody } from "./script-section";
 
-interface ConfigurationSectionProps {
-  automation: Automation;
-  /**
-   * Identity the automation runs as — the creator's email, or their raw user
-   * id when the email could not be resolved. Omitted/null hides the field
-   * (local backends, or while the lookup is still in flight).
-   */
-  runsAs?: string | null;
+/**
+ * An automation run from an agent profile: the profile, then the LLM profile
+ * it brings, shown the way the setup form shows them.
+ */
+function AgentProfileFields({ id }: { id: string }) {
+  const { t } = useTranslation("openhands");
+  const { data, isLoading } = useAgentProfiles();
+  const { data: llmProfiles } = useLlmProfiles();
+  const profile = data?.profiles?.find((candidate) => candidate.id === id);
+  let name: string;
+  if (profile) name = profile.name;
+  else if (isLoading) name = "…";
+  else name = t(I18nKey.AUTOMATIONS$UNAVAILABLE_AGENT_PROFILE, { id });
+  // An agent profile without its own LLM profile runs on the active one.
+  const llmProfile =
+    profile?.llm_profile_ref ||
+    llmProfiles?.active_profile ||
+    t(I18nKey.COMMON$ACTIVE_PROFILE);
+
+  return (
+    <>
+      <ConfigField
+        icon={<UserIcon className="size-3.5" />}
+        label={t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER)}
+      >
+        <span data-testid="automation-agent-profile-name">{name}</span>
+      </ConfigField>
+      <ConfigField
+        icon={<SparkleIcon className="size-3.5" />}
+        label={t(I18nKey.AUTOMATIONS$DETAIL$MODEL)}
+      >
+        <span data-testid="automation-agent-profile-llm">{llmProfile}</span>
+        <span className="mt-0.5 block text-xs text-muted">
+          {t(I18nKey.AUTOMATIONS$DETAIL$FROM_AGENT_PROFILE)}
+        </span>
+      </ConfigField>
+    </>
+  );
 }
 
 const VALUE_TRUNCATE_LENGTH = 60;
@@ -58,39 +88,56 @@ function ExpandableValue({ value }: { value: string }) {
   );
 }
 
-export function ConfigurationSection({
-  automation,
-  runsAs,
-}: ConfigurationSectionProps) {
+/**
+ * What the automation does once triggered: its prompt or script, then the
+ * model, repositories and plugins it runs with. Mirrors the setup form's
+ * action group.
+ */
+export function ActionSection({ automation }: { automation: Automation }) {
   const { t } = useTranslation("openhands");
-  const isEvent = automation.trigger.type === "event";
+  const repositories = automation.repositories ?? [];
+  const plugins = automation.plugins ?? [];
   const plugin = automation.plugin_spec?.plugin;
   const pluginConfig = Object.entries(automation.plugin_spec?.config ?? {});
 
-  let scheduleDisplay = automation.trigger.schedule ?? "";
-  if (automation.trigger.schedule_human) {
-    scheduleDisplay = automation.timezone
-      ? `${automation.trigger.schedule_human} (${automation.timezone})`
-      : automation.trigger.schedule_human;
-  }
-
-  const triggerDisplay = isEvent
-    ? t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER_EVENT)
-    : t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER_SCHEDULE);
-
   return (
     <SectionCard
-      icon={<CogIcon className="size-4" />}
-      title={t(I18nKey.AUTOMATIONS$DETAIL$CONFIGURATION)}
+      testId="automation-action-section"
+      icon={<TerminalIcon className="size-4" />}
+      title={t(I18nKey.AUTOMATIONS$SECTION$ACTION)}
+      meta={
+        automation.prompt
+          ? t(I18nKey.AUTOMATIONS$DETAIL$PROMPT)
+          : t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT)
+      }
     >
-      <div className="grid grid-cols-2 gap-x-4 gap-y-5">
-        {automation.repositories && automation.repositories.length > 0 && (
+      {automation.prompt ? (
+        <PromptBody prompt={automation.prompt} />
+      ) : (
+        <ScriptBody automation={automation} />
+      )}
+
+      <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5 border-t border-border pt-5">
+        {/* One or the other, as in the setup form: an agent profile brings
+            its own LLM profile. */}
+        {automation.agent_profile_id ? (
+          <AgentProfileFields id={automation.agent_profile_id} />
+        ) : (
+          <ConfigField
+            icon={<SparkleIcon className="size-3.5" />}
+            label={t(I18nKey.AUTOMATIONS$DETAIL$MODEL)}
+          >
+            {automation.model ?? t(I18nKey.COMMON$ACTIVE_PROFILE)}
+          </ConfigField>
+        )}
+
+        {repositories.length > 0 ? (
           <ConfigField
             icon={<GitBranchIcon className="size-3.5" />}
             label={t(I18nKey.AUTOMATIONS$DETAIL$REPOSITORIES)}
           >
             <ul className="flex flex-col gap-1">
-              {automation.repositories.map((repository) => (
+              {repositories.map((repository) => (
                 <li
                   key={`${repository.url}@${repository.ref ?? ""}`}
                   data-testid="automation-repository"
@@ -104,75 +151,7 @@ export function ConfigurationSection({
               ))}
             </ul>
           </ConfigField>
-        )}
-
-        <ConfigField
-          icon={<CheckCircleIcon className="size-3.5" />}
-          label={t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
-        >
-          {triggerDisplay}
-        </ConfigField>
-
-        {!isEvent && (
-          <ConfigField
-            icon={<CalendarIcon className="size-3.5" />}
-            label={t(I18nKey.AUTOMATIONS$DETAIL$SCHEDULE)}
-          >
-            {scheduleDisplay}
-          </ConfigField>
-        )}
-
-        {isEvent && automation.trigger.source && (
-          <ConfigField
-            icon={<Zap className="size-3.5" aria-hidden="true" />}
-            label={t(I18nKey.AUTOMATIONS$DETAIL$EVENT_SOURCE)}
-          >
-            {automation.trigger.source}
-          </ConfigField>
-        )}
-
-        {isEvent && automation.trigger.on && (
-          <ConfigField
-            icon={<LinkExternalIcon className="size-3.5" />}
-            label={t(I18nKey.AUTOMATIONS$DETAIL$EVENT_TYPE)}
-          >
-            {formatEventOn(automation.trigger.on)}
-          </ConfigField>
-        )}
-
-        {isEvent && automation.trigger.filter && (
-          <ConfigField
-            icon={<CodeTagIcon className="size-3.5" />}
-            label={t(I18nKey.AUTOMATIONS$DETAIL$EVENT_FILTER)}
-          >
-            <ExpandableValue value={automation.trigger.filter} />
-          </ConfigField>
-        )}
-
-        {runsAs && (
-          <ConfigField
-            icon={<UserIcon className="size-3.5" />}
-            label={t(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS)}
-          >
-            <span className="break-all">{runsAs}</span>
-          </ConfigField>
-        )}
-
-        <ConfigField
-          icon={<SparkleIcon className="size-3.5" />}
-          label={t(I18nKey.AUTOMATIONS$DETAIL$MODEL)}
-        >
-          {automation.model ?? t(I18nKey.COMMON$ACTIVE_PROFILE)}
-        </ConfigField>
-
-        {automation.timeout != null && (
-          <ConfigField
-            icon={<CalendarIcon className="size-3.5" />}
-            label={t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}
-          >
-            {automation.timeout}
-          </ConfigField>
-        )}
+        ) : null}
 
         {plugin && (
           <>
@@ -230,14 +209,18 @@ export function ConfigurationSection({
           </div>
         )}
 
-        {automation.notification && (
+        {plugins.length > 0 ? (
           <ConfigField
-            icon={<BellIcon className="size-3.5" />}
-            label={t(I18nKey.AUTOMATIONS$DETAIL$NOTIFICATION)}
+            icon={<PuzzleIcon className="size-3.5" />}
+            label={t(I18nKey.AUTOMATIONS$DETAIL$PLUGINS)}
           >
-            {automation.notification}
+            <div className="flex flex-wrap gap-2">
+              {plugins.map((plugin) => (
+                <PluginChip key={plugin} name={plugin} />
+              ))}
+            </div>
           </ConfigField>
-        )}
+        ) : null}
       </div>
     </SectionCard>
   );

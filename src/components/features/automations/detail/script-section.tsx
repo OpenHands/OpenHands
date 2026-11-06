@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ChevronRight } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
-import TerminalIcon from "#/icons/terminal.svg?react";
 import { HighlightedSourceView } from "#/components/features/files-tab/highlighted-source-view";
 import { useAutomationTarballFiles } from "#/hooks/query/use-automation-tarball-files";
 import {
@@ -8,9 +9,9 @@ import {
   type Automation,
 } from "#/types/automation";
 import type { TarEntry } from "#/utils/tar-unpack";
-import { SectionCard } from "./section-card";
+import { cn } from "#/utils/utils";
 
-interface ScriptSectionProps {
+interface ScriptBodyProps {
   automation: Automation;
 }
 
@@ -31,6 +32,18 @@ function findEntrypointPath(
   return null;
 }
 
+/**
+ * macOS tar adds AppleDouble (`._name`) and `__MACOSX/` metadata members and
+ * Finder's `.DS_Store`; none of them are part of what the script runs.
+ */
+function isArchiveMetadata(path: string): boolean {
+  const segments = path.split("/");
+  const name = segments[segments.length - 1];
+  return (
+    segments[0] === "__MACOSX" || name.startsWith("._") || name === ".DS_Store"
+  );
+}
+
 /** Entrypoint first, then the rest by path. */
 function orderEntries(
   entries: TarEntry[],
@@ -43,22 +56,75 @@ function orderEntries(
   });
 }
 
+function ScriptFile({
+  entry,
+  isEntrypoint,
+}: {
+  entry: TarEntry;
+  isEntrypoint: boolean;
+}) {
+  const { t } = useTranslation("openhands");
+  const [isOpen, setIsOpen] = useState(false);
+  const isBinary = entry.text === null;
+
+  return (
+    <div
+      data-testid="automation-script-file"
+      className="overflow-hidden rounded-lg border border-border"
+    >
+      <button
+        type="button"
+        aria-expanded={isBinary ? undefined : isOpen}
+        disabled={isBinary}
+        onClick={() => setIsOpen((open) => !open)}
+        className="flex w-full items-center gap-2 bg-black/20 px-3 py-2 text-left font-mono text-xs text-content enabled:hover:bg-surface-raised"
+      >
+        <ChevronRight
+          className={cn(
+            "size-3.5 shrink-0 text-muted transition-transform",
+            isOpen && "rotate-90",
+            isBinary && "invisible",
+          )}
+          aria-hidden="true"
+        />
+        <span className="truncate">{entry.path}</span>
+        {isEntrypoint ? (
+          <span className="shrink-0 rounded-md bg-surface-raised px-2 py-0.5 text-3xs font-medium text-muted">
+            {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_ENTRYPOINT)}
+          </span>
+        ) : null}
+        {isBinary ? (
+          <span className="ml-auto shrink-0 font-sans italic text-muted">
+            {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_BINARY_FILE)}
+          </span>
+        ) : null}
+      </button>
+      {isOpen && entry.text !== null ? (
+        <div className="max-h-96 overflow-auto border-t border-border">
+          <HighlightedSourceView path={entry.path} text={entry.text} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /**
- * What a script automation runs: the files of its uploaded bundle, read
- * back from the same tarball the kebab menu offers for download. Takes the
- * place of the prompt section for automations that have no prompt.
+ * What a script automation runs: its entrypoint and the files of its uploaded
+ * bundle, read back from the same tarball the kebab menu offers for
+ * download. Each file opens to its source on demand.
  */
-export function ScriptSection({ automation }: ScriptSectionProps) {
+export function ScriptBody({ automation }: ScriptBodyProps) {
   const { t } = useTranslation("openhands");
   // The service builds this bundle at dispatch time; its tarball endpoint
   // rejects the sentinel rather than returning a downloadable archive.
   const isRuntimeBundle =
     automation.tarball_path === PLUGIN_SPEC_RUNTIME_TARBALL_PATH;
   const {
-    data: entries,
+    data: allEntries,
     isPending,
     isError,
   } = useAutomationTarballFiles(automation, { enabled: !isRuntimeBundle });
+  const entries = allEntries?.filter((entry) => !isArchiveMetadata(entry.path));
 
   const entrypointPath = findEntrypointPath(
     automation.entrypoint,
@@ -69,72 +135,46 @@ export function ScriptSection({ automation }: ScriptSectionProps) {
   const unavailable = !isRuntimeBundle && (isError || entries?.length === 0);
 
   return (
-    <SectionCard
-      icon={<TerminalIcon className="size-4" />}
-      title={t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT)}
-    >
-      <div className="flex flex-col gap-4">
-        {automation.entrypoint ? (
-          <code
-            data-testid="automation-script-entrypoint"
-            className="self-start rounded-md bg-surface-raised px-2 py-1 font-mono text-xs text-content break-all whitespace-pre-wrap"
-          >
-            {automation.entrypoint}
-          </code>
-        ) : null}
+    <div className="flex flex-col gap-3">
+      {automation.entrypoint ? (
+        <code
+          data-testid="automation-script-entrypoint"
+          className="self-start rounded-md bg-surface-raised px-2 py-1 font-mono text-xs text-content break-all whitespace-pre-wrap"
+        >
+          {automation.entrypoint}
+        </code>
+      ) : null}
 
-        {isRuntimeBundle ? (
-          <p className="text-sm text-muted">
-            {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_RUNTIME_BUNDLE)}
-          </p>
-        ) : null}
+      {isRuntimeBundle ? (
+        <p className="text-sm text-muted">
+          {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_RUNTIME_BUNDLE)}
+        </p>
+      ) : null}
 
-        {!isRuntimeBundle && isPending ? (
-          <p className="text-sm italic text-muted">
-            {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_LOADING)}
-          </p>
-        ) : null}
+      {!isRuntimeBundle && isPending ? (
+        <p className="text-sm italic text-muted">
+          {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_LOADING)}
+        </p>
+      ) : null}
 
-        {unavailable ? (
-          <p
-            data-testid="automation-script-unavailable"
-            className="text-sm text-muted"
-          >
-            {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_UNAVAILABLE)}
-          </p>
-        ) : null}
+      {unavailable ? (
+        <p
+          data-testid="automation-script-unavailable"
+          className="text-sm text-muted"
+        >
+          {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_UNAVAILABLE)}
+        </p>
+      ) : null}
 
-        {!isRuntimeBundle && entries && entries.length > 0
-          ? orderEntries(entries, entrypointPath).map((entry) => (
-              <div
-                key={entry.path}
-                data-testid="automation-script-file"
-                className="overflow-hidden rounded-lg border border-border"
-              >
-                <div className="flex items-center gap-2 border-b border-border bg-black/20 px-3 py-2 font-mono text-xs text-content">
-                  <span className="truncate">{entry.path}</span>
-                  {entry.path === entrypointPath ? (
-                    <span className="shrink-0 rounded-md bg-surface-raised px-2 py-0.5 text-[10px] font-medium text-muted">
-                      {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_ENTRYPOINT)}
-                    </span>
-                  ) : null}
-                </div>
-                {entry.text === null ? (
-                  <p className="px-3 py-2 text-xs italic text-muted">
-                    {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_BINARY_FILE)}
-                  </p>
-                ) : (
-                  <div className="max-h-96 overflow-auto">
-                    <HighlightedSourceView
-                      path={entry.path}
-                      text={entry.text}
-                    />
-                  </div>
-                )}
-              </div>
-            ))
-          : null}
-      </div>
-    </SectionCard>
+      {!isRuntimeBundle && entries && entries.length > 0
+        ? orderEntries(entries, entrypointPath).map((entry) => (
+            <ScriptFile
+              key={entry.path}
+              entry={entry}
+              isEntrypoint={entry.path === entrypointPath}
+            />
+          ))
+        : null}
+    </div>
   );
 }

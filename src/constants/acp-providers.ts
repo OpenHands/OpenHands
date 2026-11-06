@@ -6,12 +6,7 @@ import type { BackendKind } from "#/api/backend-registry/types";
 import { I18nKey } from "#/i18n/declaration";
 
 export type ACPProviderIcon =
-  | "claude-code"
-  | "codex"
-  | "gemini"
-  | "pi"
-  | "opencode"
-  | "cli-generic";
+  "claude-code" | "codex" | "gemini" | "pi" | "opencode" | "cli-generic";
 
 export const ACP_PROVIDER_FALLBACK_ICON: ACPProviderIcon = "cli-generic";
 
