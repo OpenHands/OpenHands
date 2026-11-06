@@ -208,3 +208,11 @@ When adding code that needs a new string, decide up front which rule it falls un
 registered in cn's text-size theme so color classes stay independent and later
 caller sizes or leading retain the same precedence as the former arbitrary
 sizes. Keep the compiled-CSS and class-composition contracts when changing them.
+
+## Fixed content columns
+
+Static metadata rows use `metadata-grid-columns` (auto / 1fr); automation
+summary rows use `automation-summary-columns` (auto / minmax(0, 1fr)); run-log
+details use `sm:run-log-detail-columns` (5rem / minmax(0, 1fr), from 40rem).
+These single-property utilities preserve intrinsic sizing and responsive scope.
+They are static owner recipes, not caller className overrides.
