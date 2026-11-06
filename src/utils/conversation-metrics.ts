@@ -3,6 +3,7 @@ import type {
   RuntimeConversationInfo,
   RuntimeConversationStats,
   TokenUsage,
+  UsageBreakdownEntry,
 } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 /**
@@ -23,9 +24,10 @@ export function combineUsageMetrics(
   let totalCost = 0;
   let maxBudgetPerTask: number | null = null;
   let combinedTokenUsage: TokenUsage | null = null;
+  const usageBreakdown: UsageBreakdownEntry[] = [];
 
   // Iterate through all metrics and combine them
-  for (const metrics of Object.values(stats.usage_to_metrics)) {
+  for (const [usageId, metrics] of Object.entries(stats.usage_to_metrics)) {
     // Add up costs
     totalCost += metrics.accumulated_cost;
 
@@ -62,13 +64,38 @@ export function combineUsageMetrics(
           ),
         };
       }
+
+      const tokenUsage = metrics.accumulated_token_usage;
+      usageBreakdown.push({
+        usageId,
+        modelName: metrics.model_name,
+        accumulatedCost: metrics.accumulated_cost,
+        usage: {
+          prompt_tokens: tokenUsage.prompt_tokens,
+          completion_tokens: tokenUsage.completion_tokens,
+          cache_read_tokens: tokenUsage.cache_read_tokens,
+          cache_write_tokens: tokenUsage.cache_write_tokens,
+        },
+      });
+    } else {
+      usageBreakdown.push({
+        usageId,
+        modelName: metrics.model_name,
+        accumulatedCost: metrics.accumulated_cost,
+        usage: null,
+      });
     }
   }
+
+  // Costliest entry first: the breakdown exists to explain where the
+  // accumulated cost went, so lead with the models that spent it.
+  usageBreakdown.sort((a, b) => b.accumulatedCost - a.accumulatedCost);
 
   return {
     accumulated_cost: totalCost,
     max_budget_per_task: maxBudgetPerTask,
     accumulated_token_usage: combinedTokenUsage,
+    usage_breakdown: usageBreakdown,
   };
 }
 

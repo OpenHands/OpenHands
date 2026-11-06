@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { UsageBreakdownEntry } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 export interface MetricsState {
   cost: number | null;
@@ -11,6 +12,7 @@ export interface MetricsState {
     context_window: number;
     per_turn_token: number;
   } | null;
+  usage_breakdown: UsageBreakdownEntry[] | null;
 }
 
 export interface MetricsStore extends MetricsState {
@@ -22,6 +24,7 @@ const EMPTY_METRICS: MetricsState = {
   cost: null,
   max_budget_per_task: null,
   usage: null,
+  usage_breakdown: null,
 };
 
 const useMetricsStore = create<MetricsStore>((set) => ({

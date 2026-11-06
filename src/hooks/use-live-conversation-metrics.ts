@@ -30,6 +30,7 @@ export function useLiveConversationMetrics(
     (state) => state.max_budget_per_task,
   );
   const storeUsage = useMetricsStore((state) => state.usage);
+  const storeBreakdown = useMetricsStore((state) => state.usage_breakdown);
   const { data: conversation } = useActiveConversation();
 
   const { data: conversationMetrics } = useConversationMetrics(
@@ -47,6 +48,7 @@ export function useLiveConversationMetrics(
         cost: storeCost,
         max_budget_per_task: storeMaxBudgetPerTask,
         usage: storeUsage,
+        usage_breakdown: storeBreakdown,
       };
     }
 
@@ -73,6 +75,7 @@ export function useLiveConversationMetrics(
                 conversationMetrics.accumulated_token_usage.per_turn_token ?? 0,
             }
           : null,
+        usage_breakdown: conversationMetrics.usage_breakdown ?? null,
       };
     }
 
@@ -80,6 +83,13 @@ export function useLiveConversationMetrics(
       cost: null,
       max_budget_per_task: null,
       usage: null,
+      usage_breakdown: null,
     };
-  }, [conversationMetrics, storeCost, storeMaxBudgetPerTask, storeUsage]);
+  }, [
+    conversationMetrics,
+    storeCost,
+    storeMaxBudgetPerTask,
+    storeUsage,
+    storeBreakdown,
+  ]);
 }

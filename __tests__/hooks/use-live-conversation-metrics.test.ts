@@ -59,6 +59,7 @@ const storeMetrics: MetricsState = {
     context_window: 64_000,
     per_turn_token: 42,
   },
+  usage_breakdown: null,
 };
 
 describe("useLiveConversationMetrics", () => {
@@ -68,6 +69,7 @@ describe("useLiveConversationMetrics", () => {
       cost: null,
       max_budget_per_task: null,
       usage: null,
+      usage_breakdown: null,
     });
     useActiveConversationMock.mockReturnValue({ data: CONVERSATION });
     useConversationMetricsMock.mockReturnValue({ data: undefined });
@@ -116,6 +118,7 @@ describe("useLiveConversationMetrics", () => {
       cost: 1.23,
       max_budget_per_task: 5,
       usage: null,
+      usage_breakdown: null,
     });
   });
 
@@ -135,6 +138,7 @@ describe("useLiveConversationMetrics", () => {
         context_window: 128_000,
         per_turn_token: 500,
       },
+      usage_breakdown: null,
     });
   });
 

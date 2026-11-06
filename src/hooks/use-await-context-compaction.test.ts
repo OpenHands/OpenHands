@@ -47,6 +47,7 @@ describe("useAwaitContextCompaction", () => {
         context_window: 100_000,
         per_turn_token: 10_000,
       },
+      usage_breakdown: null,
     });
   });
 
@@ -78,6 +79,7 @@ describe("useAwaitContextCompaction", () => {
           context_window: 100_000,
           per_turn_token: 4_000,
         },
+        usage_breakdown: null,
       });
     });
 
@@ -156,6 +158,7 @@ describe("useAwaitContextCompaction", () => {
           context_window: 100_000,
           per_turn_token: 4_000,
         },
+        usage_breakdown: null,
       });
     });
 

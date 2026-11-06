@@ -382,12 +382,13 @@ export function ConversationWebSocketProvider({
       // usage_to_metrics is keyed by arbitrary LLM usage ids ("default",
       // "condenser", "profile:<name>:<uuid>", …) — combine across all of
       // them, mirroring getCombinedMetrics on the REST path.
-      const combined = Object.values(usageToMetrics).reduce<{
+      const combined = Object.entries(usageToMetrics).reduce<{
         cost: number;
         maxBudgetPerTask: number | null;
         usage: MetricsState["usage"];
+        breakdown: MetricsState["usage_breakdown"];
       }>(
-        (acc, metrics) => {
+        (acc, [usageId, metrics]) => {
           acc.cost += metrics.accumulated_cost;
           if (
             acc.maxBudgetPerTask === null &&
@@ -419,15 +420,35 @@ export function ConversationWebSocketProvider({
               ),
             };
           }
+          acc.breakdown = [
+            ...(acc.breakdown ?? []),
+            {
+              usageId,
+              modelName: metrics.model_name,
+              accumulatedCost: metrics.accumulated_cost,
+              usage: tokenUsage
+                ? {
+                    prompt_tokens: tokenUsage.prompt_tokens,
+                    completion_tokens: tokenUsage.completion_tokens,
+                    cache_read_tokens: tokenUsage.cache_read_tokens,
+                    cache_write_tokens: tokenUsage.cache_write_tokens,
+                  }
+                : null,
+            },
+          ];
           return acc;
         },
-        { cost: 0, maxBudgetPerTask: null, usage: null },
+        { cost: 0, maxBudgetPerTask: null, usage: null, breakdown: null },
       );
+
+      // Costliest entry first, mirroring combineUsageMetrics on the REST path.
+      combined.breakdown?.sort((a, b) => b.accumulatedCost - a.accumulatedCost);
 
       useMetricsStore.getState().setMetrics({
         cost: combined.cost,
         max_budget_per_task: combined.maxBudgetPerTask,
         usage: combined.usage,
+        usage_breakdown: combined.breakdown,
       });
     },
     [],

@@ -63,6 +63,7 @@ describe("useCompactContextAction (integration)", () => {
       cost: null,
       max_budget_per_task: null,
       usage: usage(50_000),
+      usage_breakdown: null,
     });
     vi.spyOn(
       AgentServerConversationService,
@@ -97,6 +98,7 @@ describe("useCompactContextAction (integration)", () => {
         cost: null,
         max_budget_per_task: null,
         usage: usage(20_000),
+        usage_breakdown: null,
       });
     });
 

@@ -8,6 +8,7 @@ import { CostSection } from "../metrics-modal/cost-section";
 import { UsageSection } from "../metrics-modal/usage-section";
 import { CompactContextButton } from "./compact-context-button";
 import { ContextMeter } from "./context-meter";
+import { ModelBreakdown } from "./model-breakdown";
 import { ProviderBalanceCard } from "./provider-balance-card";
 import { getContextWindowUsagePercentage } from "#/utils/format-token-count";
 
@@ -27,8 +28,14 @@ export function UsagePanel() {
   // plan; the dollar figure is an API-equivalent estimate, not a bill.
   const isAcp = conversation?.agent_kind === "acp";
 
-  const { usage } = metrics;
+  const { usage, usage_breakdown: usageBreakdown } = metrics;
   const hasMetrics = metrics.cost !== null || usage !== null;
+
+  // With a single LLM usage id the combined totals already carry the model's
+  // numbers; the per-model rows only add information once several usage ids
+  // (e.g. "default" + "condenser") contribute to the same Total Cost.
+  const breakdownEntries =
+    usageBreakdown !== null && usageBreakdown.length > 1 ? usageBreakdown : [];
 
   if (!hasMetrics) {
     return (
@@ -77,7 +84,15 @@ export function UsagePanel() {
           <CostSection
             cost={metrics.cost}
             maxBudgetPerTask={metrics.max_budget_per_task}
+            usageTokens={
+              usage !== null
+                ? usage.prompt_tokens + usage.completion_tokens
+                : null
+            }
           />
+          {breakdownEntries.length > 0 && (
+            <ModelBreakdown entries={breakdownEntries} />
+          )}
         </div>
       </div>
 

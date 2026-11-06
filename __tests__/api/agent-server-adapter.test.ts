@@ -879,6 +879,30 @@ describe("toAppConversation", () => {
         context_window: 8000,
         per_turn_token: 120,
       },
+      usage_breakdown: [
+        {
+          usageId: "agent",
+          modelName: "agent-model",
+          accumulatedCost: 1.5,
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 20,
+            cache_read_tokens: 5,
+            cache_write_tokens: 1,
+          },
+        },
+        {
+          usageId: "condenser",
+          modelName: "condenser-model",
+          accumulatedCost: 0.5,
+          usage: {
+            prompt_tokens: 40,
+            completion_tokens: 10,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+          },
+        },
+      ],
     });
   });
 
