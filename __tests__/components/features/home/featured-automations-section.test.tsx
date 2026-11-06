@@ -341,8 +341,9 @@ describe("home automations composer layout", () => {
       "href",
       "/automations/auto-2",
     );
+    // "0 9 * * *" is worded by the shared schedule formatter.
     expect(
-      screen.getByText("Daily at 09:00", { exact: false }),
+      screen.getByText("AUTOMATIONS$SCHEDULE$DAILY_AT", { exact: false }),
     ).toBeInTheDocument();
   });
 
@@ -456,7 +457,9 @@ describe("home automations composer layout", () => {
     expect(
       within(dashboard).getByTestId("pinned-automation-pills-auto-1-wrap"),
     ).toBeInTheDocument();
-    expect(within(dashboard).getByText("Daily at 09:00")).toBeInTheDocument();
+    expect(
+      within(dashboard).getByText("AUTOMATIONS$SCHEDULE$DAILY_AT"),
+    ).toBeInTheDocument();
     expect(
       within(pinnedCard).getByTestId("automation-run-stats"),
     ).toBeInTheDocument();

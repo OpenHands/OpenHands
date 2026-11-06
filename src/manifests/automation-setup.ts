@@ -300,10 +300,16 @@ function repositoryProperty(
   setup: SetupBlock,
   values: SetupFormValues,
   selectedAction?: string | null,
+  cloneProviders?: readonly string[],
 ): SetupRequestBody {
   const repoPicker = findRepoPickerField(setup, selectedAction);
   const repos = repositories(setup, values, selectedAction);
   if (repos.length === 0 || !repoPicker?.field.provider) return {};
+  // The service rejects a provider its runs cannot clone, so such a pick is
+  // left to the entry's prompt, which clones the repository itself.
+  if (cloneProviders && !cloneProviders.includes(repoPicker.field.provider)) {
+    return {};
+  }
 
   const declared = REPO_PROPERTIES.filter((name) =>
     hasPayloadValue(fieldText(values[name])),
@@ -358,6 +364,10 @@ function parsePluginSources(
  * fields under `form.triggers`. Only `prompt` and an event `filter` are
  * declared, because only they cannot be read off the form.
  *
+ * `cloneProviders` are the providers the deployment's runs clone from (its
+ * `repoProviders`); a pick from any other provider sends no `repos`. Omitted,
+ * every provider's are sent.
+ *
  * Returns null for an assisted entry, which hands setup to a conversation
  * instead of sending a body.
  */
@@ -368,6 +378,7 @@ export function buildCreatePayload(
   tarballPath: string = PREFLIGHT_TARBALL_PATH,
   selectedTrigger?: string | null,
   selectedActionKey?: string | null,
+  cloneProviders?: readonly string[],
 ): SetupRequestBody | null {
   const { setup } = entry;
   if (setup.mode !== "direct") return null;
@@ -381,6 +392,7 @@ export function buildCreatePayload(
       tarballPath,
       selectedTrigger,
       selectedActionKey,
+      cloneProviders,
     );
   }
   if (!setup.prompt) return null;
@@ -391,7 +403,7 @@ export function buildCreatePayload(
     name: deriveName(entry, values),
     prompt: interpolateText(setup.prompt, scope),
     ...optionalCreateProperties(setup, values),
-    ...repositoryProperty(setup, values),
+    ...repositoryProperty(setup, values, undefined, cloneProviders),
   };
 
   const trigger = buildTrigger(entry, values, selectedTrigger);
@@ -409,6 +421,7 @@ function buildActionPayload(
   tarballPath: string,
   selectedTrigger?: string | null,
   selectedActionKey?: string | null,
+  cloneProviders?: readonly string[],
 ): SetupRequestBody | null {
   const kind = selectedActionKind(entry, selectedActionKey);
   if (kind === "bundle") return null;
@@ -454,7 +467,10 @@ function buildActionPayload(
     kind === "plugin" ? setup.actions?.plugin : setup.actions?.prompt;
   if (!action) return null;
   payload.prompt = interpolateText(action.prompt, scope);
-  Object.assign(payload, repositoryProperty(setup, values, selectedActionKey));
+  Object.assign(
+    payload,
+    repositoryProperty(setup, values, selectedActionKey, cloneProviders),
+  );
 
   if (kind === "plugin") {
     const pluginAction = setup.actions?.plugin;
@@ -629,6 +645,7 @@ export function buildPreflightBody(
   values: SetupFormValues,
   selectedTrigger?: string | null,
   selectedAction?: string | null,
+  cloneProviders?: readonly string[],
 ): SetupRequestBody | null {
   const draft = buildCreatePayload(
     entry,
@@ -636,6 +653,7 @@ export function buildPreflightBody(
     PREFLIGHT_TARBALL_PATH,
     selectedTrigger,
     selectedAction,
+    cloneProviders,
   );
   if (!draft) return null;
 

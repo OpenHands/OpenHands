@@ -45,9 +45,7 @@ export function DropdownMenu({
         "absolute z-50 overflow-hidden text-contrast min-w-full",
         matchTriggerWidth ? "w-full" : "w-max",
         // Let long labels widen the menu past a narrow trigger, up to a cap.
-        !fitContent &&
-          !matchTriggerWidth &&
-          "max-w-[min(26rem,calc(100vw-2rem))]",
+        !fitContent && !matchTriggerWidth && "dropdown-menu-width",
         openUpward ? "bottom-full mb-1" : "mt-1",
         "bg-tertiary rounded-md context-menu-box-shadow p-1",
         tallMenu ? "max-h-96" : "max-h-60",

@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { createHash } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { server as mswServer } from "#/mocks/node";
 
 import {
   OAuthError,
@@ -14,6 +15,9 @@ import {
   revokeToken,
   signInWithDigitalOcean,
 } from "../../scripts/mars-oauth.mjs";
+
+beforeAll(() => mswServer.close());
+afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
 
 const REDIRECT = "http://127.0.0.1:3000/mars/oauth/callback";
 
