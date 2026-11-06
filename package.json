@@ -48,6 +48,7 @@
     "mermaid": "12.2.0",
     "monaco-editor": "0.57.0",
     "posthog-js": "1.415.0",
+    "qrcode-generator": "2.0.4",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "react-hot-toast": "2.6.0",

@@ -32,15 +32,33 @@ import {
   FIRST_MESSAGE_AUTH_MAX_BYTES,
   FIRST_MESSAGE_AUTH_MAX_PENDING,
   RPC_METHODS,
+  WEB_ONLY_RPC_METHODS,
   createMarsWebBridge,
   mountMarsWebBridge,
   rewriteAgentServerUrls,
 } from "../../scripts/mars-web-bridge.mjs";
 
 // Lets a test take the home folder away; every other call is the real one.
+// A fixed set of network addresses for pairing links, and a home folder a
+// test can take away.
 vi.mock("node:os", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:os")>();
-  return { ...actual, homedir: vi.fn(actual.homedir) };
+  const os = await importOriginal<typeof import("node:os")>();
+  const homedir = vi.fn(os.homedir);
+  const networkInterfaces = () => ({
+    lo: [{ family: "IPv4", internal: true, address: "127.0.0.1" }],
+    docker0: [{ family: "IPv4", internal: false, address: "172.17.0.1" }],
+    tailscale0: [{ family: "IPv4", internal: false, address: "100.101.1.2" }],
+    en0: [
+      { family: "IPv6", internal: false, address: "fe80::1" },
+      { family: "IPv4", internal: false, address: "192.168.1.20" },
+    ],
+  });
+  return {
+    ...os,
+    default: { ...os, homedir, networkInterfaces },
+    homedir,
+    networkInterfaces,
+  };
 });
 
 const SESSION_ID = "sess_a";
@@ -340,6 +358,7 @@ describe("RPC_METHODS", () => {
       unknown
     >;
     for (const method of RPC_METHODS) {
+      if (WEB_ONLY_RPC_METHODS.has(method)) continue;
       expect(typeof bridge[method]).toBe("function");
     }
     expect(RPC_METHODS.has("signInWithOAuth")).toBe(false);
@@ -1417,6 +1436,171 @@ describe("createMarsWebBridge sign-in with DigitalOcean", () => {
 
     expect(response.status).toBe(400);
     expect(await response.text()).toContain("no longer open");
+    await close();
+  });
+});
+
+describe("createMarsWebBridge pairing a new device", () => {
+  const KEY = "canvas-key";
+
+  async function start(
+    host: string,
+    basePath?: string,
+    sessionApiKey: string | null = null,
+  ) {
+    const marsWeb = createMarsWebBridge({
+      bridge: {
+        getTunnel: () => undefined,
+        dispose: async () => {},
+      } as never,
+      env: {},
+      host,
+      key: KEY,
+      sessionApiKey,
+      basePath,
+      log: () => {},
+    });
+    const web = await startWebServer(marsWeb);
+    return {
+      web,
+      close: async () => {
+        await marsWeb.dispose();
+        web.close();
+      },
+    };
+  }
+
+  /** createPairingLink as a keyed page on another address would call it. */
+  function createLinkFrom(origin: string, hostHeader: string) {
+    return new Promise<{ links: string[]; expiresAt: string }>(
+      (resolve, reject) => {
+        const req = httpRequest(
+          `${origin}/mars/rpc/createPairingLink`,
+          {
+            method: "POST",
+            headers: {
+              Host: hostHeader,
+              "Content-Type": "application/json",
+              "X-Session-API-Key": KEY,
+            },
+          },
+          (res) => {
+            let text = "";
+            res.on("data", (chunk) => {
+              text += chunk;
+            });
+            res.on("end", () => resolve(JSON.parse(text).result));
+          },
+        );
+        req.on("error", reject);
+        req.end(JSON.stringify({ args: [] }));
+      },
+    );
+  }
+
+  const redeem = (origin: string, secret: string) =>
+    fetch(`${origin}/mars/pair`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret }),
+    });
+
+  it("lets one new device in, once, with the key and the bridge cookie", async () => {
+    const { web, close } = await start("0.0.0.0");
+    const port = new URL(web.origin).port;
+    const { links } = await createLinkFrom(web.origin, `192.168.1.20:${port}`);
+    const link = new URL(links[0]);
+
+    const first = await redeem(web.origin, link.hash.slice(1));
+    const again = await redeem(web.origin, link.hash.slice(1));
+
+    expect(links).toEqual([`http://192.168.1.20:${port}/pair${link.hash}`]);
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({ result: { sessionApiKey: KEY } });
+    expect(first.headers.get("set-cookie")).toMatch(/^mars_web_auth=/);
+    expect(again.status).toBe(400);
+    expect((await redeem(web.origin, "guessed")).status).toBe(400);
+    await close();
+  });
+
+  it("pairs when the bridge's key is the agent-server's own", async () => {
+    const { web, close } = await start("0.0.0.0", undefined, KEY);
+    const port = new URL(web.origin).port;
+    const { links } = await createLinkFrom(web.origin, `192.168.1.20:${port}`);
+
+    const redeemed = await redeem(web.origin, new URL(links[0]).hash.slice(1));
+
+    expect(await redeemed.json()).toEqual({ result: { sessionApiKey: KEY } });
+    await close();
+  });
+
+  it("refuses to pair when MARS_WEB_KEY is not the agent-server's key", async () => {
+    // A paired device would keep the bridge's key as its backend key, which
+    // the agent-server refuses.
+    const { web, close } = await start(
+      "0.0.0.0",
+      undefined,
+      "agent-server-key",
+    );
+
+    const { status, body } = await rpc(web.origin, "createPairingLink", [], {
+      headers: { "X-Session-API-Key": KEY },
+    });
+
+    expect(status).toBe(400);
+    expect(body.error.message).toBe(
+      "Pairing is off because this Canvas has a separate MARS_WEB_KEY. Enter the session key on the new device instead.",
+    );
+    await close();
+  });
+
+  it("opens the page under the base path Canvas is mounted at", async () => {
+    const { web, close } = await start("0.0.0.0", "/canvas");
+    const port = new URL(web.origin).port;
+
+    const { links } = await createLinkFrom(web.origin, `192.168.1.20:${port}`);
+
+    expect(new URL(links[0]).pathname).toBe("/canvas/pair");
+    await close();
+  });
+
+  it("stops working after five minutes", async () => {
+    const { web, close } = await start("0.0.0.0");
+    const port = new URL(web.origin).port;
+    const { links } = await createLinkFrom(web.origin, `192.168.1.20:${port}`);
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now + 5 * 60_000 + 1);
+
+    const late = await redeem(web.origin, new URL(links[0]).hash.slice(1));
+
+    expect(late.status).toBe(400);
+    clock.mockRestore();
+    await close();
+  });
+
+  it("offers this machine's network addresses to a page on loopback, home network first", async () => {
+    const { web, close } = await start("0.0.0.0");
+    const port = new URL(web.origin).port;
+
+    const { links } = await createLinkFrom(web.origin, `127.0.0.1:${port}`);
+
+    expect(links.map((link) => new URL(link).host)).toEqual([
+      `192.168.1.20:${port}`,
+      `100.101.1.2:${port}`,
+      `172.17.0.1:${port}`,
+    ]);
+    await close();
+  });
+
+  it("offers no link when Canvas listens only on this computer", async () => {
+    const { web, close } = await start("127.0.0.1");
+
+    const { status, body } = await rpc(web.origin, "createPairingLink", [], {
+      headers: { "X-Session-API-Key": KEY },
+    });
+
+    expect(status).toBe(200);
+    expect(body.result.links).toEqual([]);
     await close();
   });
 });

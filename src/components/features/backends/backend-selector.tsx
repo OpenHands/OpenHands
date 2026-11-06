@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useMatch, useNavigate } from "react-router";
-import { Plus, Settings } from "lucide-react";
+import { Plus, Settings, Smartphone } from "lucide-react";
 import { Dropdown } from "#/ui/dropdown/dropdown";
 import { DropdownOption } from "#/ui/dropdown/types";
 import { getLockedCloudHost } from "#/api/agent-server-config";
@@ -29,6 +29,9 @@ import { useConversationStore } from "#/stores/conversation-store";
 import { AddBackendModal } from "./add-backend-modal";
 import { BackendStatusDot } from "./backend-status-dot";
 import { ManageBackendsModal } from "./manage-backends-modal";
+
+/** Rarely opened, and carries the QR encoder: loaded on first use. */
+const AddDeviceDialog = React.lazy(() => import("./add-device-dialog"));
 import { cn } from "#/utils/utils";
 import { formControlTransitionClassName } from "#/utils/form-control-classes";
 import {
@@ -171,6 +174,7 @@ export function BackendSelector({
   const [addBackendModalOpen, setAddBackendModalOpen] = React.useState(false);
   const [manageBackendsModalOpen, setManageBackendsModalOpen] =
     React.useState(false);
+  const [addDeviceOpen, setAddDeviceOpen] = React.useState(false);
 
   const personalWorkspaceLabel = t(I18nKey.BACKEND$PERSONAL_WORKSPACE);
 
@@ -237,6 +241,11 @@ export function BackendSelector({
   }, [onOpenManageBackends, onSelectOption]);
 
   const isLockedToCloud = getLockedCloudHost() !== null;
+  // Only a Canvas server that hosts the bridge can let another device in.
+  const canAddDevice =
+    !isLockedToCloud &&
+    typeof window !== "undefined" &&
+    typeof window.marsBridge?.createPairingLink === "function";
   // A cookie-auth (OHE-hosted) Canvas has nothing to add, manage, or
   // reconnect — its single locked backend is owned by the main-app session.
   const hideBackendFooter =
@@ -272,6 +281,15 @@ export function BackendSelector({
       openManageBackendsModal();
     },
     [openManageBackendsModal, preventDropdownMenuClose],
+  );
+
+  const openAddDevice = React.useCallback(
+    (event: React.SyntheticEvent<HTMLButtonElement>) => {
+      preventDropdownMenuClose(event);
+      onSelectOption?.();
+      setAddDeviceOpen(true);
+    },
+    [onSelectOption, preventDropdownMenuClose],
   );
 
   const handleManageBackendsTouchEnd = React.useCallback(
@@ -324,6 +342,25 @@ export function BackendSelector({
             : I18nKey.BACKEND$MANAGE,
         )}
       </button>
+      {canAddDevice ? (
+        <button
+          type="button"
+          data-testid="add-device-menu-item"
+          onMouseDown={preventDropdownMenuClose}
+          onTouchStart={preventDropdownMenuClose}
+          onTouchEnd={openAddDevice}
+          onClick={openAddDevice}
+          className={cn(
+            dropdownFooterActionClassName,
+            "cursor-pointer rounded-md",
+          )}
+        >
+          <span className={dropdownMenuRowIconWrapperClassName} aria-hidden>
+            <Smartphone width={16} height={16} />
+          </span>
+          {t(I18nKey.DEVICES$ADD_ANOTHER)}
+        </button>
+      ) : null}
     </div>
   );
 
@@ -453,6 +490,11 @@ export function BackendSelector({
         <ManageBackendsModal
           onClose={() => setManageBackendsModalOpen(false)}
         />
+      ) : null}
+      {addDeviceOpen ? (
+        <React.Suspense fallback={null}>
+          <AddDeviceDialog onClose={() => setAddDeviceOpen(false)} />
+        </React.Suspense>
       ) : null}
     </>
   );

@@ -701,6 +701,7 @@ export function startStaticServer(config) {
   const marsWeb = mountMarsWebBridge({
     host: config.host,
     sessionApiKey: config.sessionApiKey || null,
+    basePath,
   });
 
   const server = createServer((req, res) => {

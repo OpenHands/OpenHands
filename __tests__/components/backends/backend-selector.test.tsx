@@ -884,6 +884,28 @@ describe("BackendSelector", () => {
     });
   });
 
+  it("offers Add another device only when this Canvas server can pair one", async () => {
+    renderWithProviders(<BackendSelector />);
+    await openDropdown();
+    expect(screen.queryByTestId("add-device-menu-item")).toBeNull();
+  });
+
+  it("opens the Add another device dialog from the footer", async () => {
+    window.marsBridge = {
+      createPairingLink: vi.fn(async () => ({
+        links: ["http://192.168.1.20:8000/pair#s1"],
+        expiresAt: new Date(Date.now() + 300_000).toISOString(),
+      })),
+    } as never;
+    renderWithProviders(<BackendSelector />);
+
+    const user = await openDropdown();
+    await user.click(screen.getByTestId("add-device-menu-item"));
+
+    expect(await screen.findByTestId("add-device-qr")).toBeInTheDocument();
+    delete window.marsBridge;
+  });
+
   it("hides add-backend footer action when locked to Cloud", async () => {
     vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
 
