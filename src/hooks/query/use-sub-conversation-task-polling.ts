@@ -69,12 +69,7 @@ export const useSubConversationTaskPolling = (
     setConversationState(parentConversationId, {
       subConversationTaskId: null,
     });
-  }, [
-    taskQuery.data,
-    taskId,
-    parentConversationId,
-    setSubConversationTaskId,
-  ]);
+  }, [taskQuery.data, taskId, parentConversationId, setSubConversationTaskId]);
 
   return {
     task: taskQuery.data,
