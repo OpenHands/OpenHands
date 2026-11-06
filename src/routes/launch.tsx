@@ -19,10 +19,7 @@ import {
 import { getApiErrorMessage } from "#/utils/api-error-message";
 
 type ErrorType =
-  | "no_plugins"
-  | "invalid_format"
-  | "creation_failed"
-  | "install_failed";
+  "no_plugins" | "invalid_format" | "creation_failed" | "install_failed";
 
 interface ParseResult {
   plugins: PluginSpec[];
@@ -286,8 +283,7 @@ export default function LaunchRoute() {
           repo_path: plugin.repo_path ?? undefined,
         },
         config: (plugin.parameters ?? undefined) as
-          | Record<string, unknown>
-          | undefined,
+          Record<string, unknown> | undefined,
         trigger,
         // Dedupe repeated badge clicks: the service returns the existing
         // automation (HTTP 200) when this template id is already installed.
