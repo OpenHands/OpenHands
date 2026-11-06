@@ -1,6 +1,11 @@
 {
-    "name": "",
-    "short_name": "",
+    "name": "OpenHands Agent Canvas",
+    "short_name": "OpenHands",
+    "description": "Run AI coding agents with a visual interface",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait-primary",
     "icons": [
         {
             "src": "/android-chrome-192x192.png",
@@ -13,7 +18,6 @@
             "type": "image/png"
         }
     ],
-    "theme_color": "#ffffff",
-    "background_color": "#ffffff",
-    "display": "standalone"
+    "theme_color": "#0B0E14",
+    "background_color": "#0B0E14"
 }
