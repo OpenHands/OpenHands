@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   lockedCloudHost: null as string | null,
   health: {} as Record<string, { isConnected: boolean }>,
   settings: null as { user_consents_to_analytics: boolean | null } | null,
+  browserConsent: "pending" as "granted" | "denied" | "pending",
   hasLoadedSettings: true,
   isSavingSettings: false,
   saveSettings: vi.fn<(args: unknown) => Promise<void>>(),
@@ -73,6 +74,8 @@ vi.mock("#/hooks/mutation/use-save-settings", () => ({
 }));
 
 vi.mock("#/services/telemetry", () => ({
+  getTelemetryConsent: () => mocks.browserConsent,
+  subscribeTelemetryConsent: () => () => {},
   setTelemetryConsent: (value: string) => mocks.setTelemetryConsent(value),
 }));
 
@@ -88,6 +91,7 @@ function prime() {
   mocks.lockedCloudHost = null;
   mocks.health = { local: { isConnected: true } };
   mocks.settings = { user_consents_to_analytics: null };
+  mocks.browserConsent = "pending";
   mocks.hasLoadedSettings = true;
   mocks.isSavingSettings = false;
   mocks.saveSettings.mockResolvedValue(undefined);
@@ -193,6 +197,21 @@ describe("telemetry consent banner", () => {
       screen.queryByTestId("telemetry-consent-form"),
     ).not.toBeInTheDocument();
   });
+
+  it.each(["granted", "denied"] as const)(
+    "does not re-prompt when browser consent is already %s",
+    (browserConsent) => {
+      prime();
+      mocks.browserConsent = browserConsent;
+
+      render(<TelemetryConsentBanner />);
+      advanceBy(50);
+
+      expect(
+        screen.queryByTestId("telemetry-consent-form"),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it("waits 50 ms before revealing the translated preferences", () => {
     renderBanner();
