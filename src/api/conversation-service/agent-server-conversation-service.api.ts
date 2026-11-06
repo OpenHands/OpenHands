@@ -1,4 +1,5 @@
 import {
+  type ACPEffortOption,
   type ACPModelInfo,
   ConversationSortOrder,
   type ForkConversationRequest,
@@ -130,6 +131,15 @@ function numberOrZero(value: unknown): number {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function normalizeAcpEfforts(value: unknown): ACPEffortOption[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) =>
+    isRecord(entry) && typeof entry.value === "string"
+      ? [{ value: entry.value, name: stringOrNull(entry.name) }]
+      : [],
+  );
 }
 
 function normalizeAcpModels(value: unknown): ACPModelInfo[] {
@@ -376,6 +386,8 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     current_model_id: stringOrNull(item.current_model_id),
     current_model_name: stringOrNull(item.current_model_name),
     available_models: normalizeAcpModels(item.available_models),
+    current_effort: stringOrNull(item.current_effort),
+    available_efforts: normalizeAcpEfforts(item.available_efforts),
   };
 }
 
@@ -1429,6 +1441,21 @@ class AgentServerConversationService {
     await new ConversationClient(getAgentServerClientOptions()).switchAcpModel(
       conversationId,
       model,
+    );
+  }
+
+  /**
+   * Switch a started ACP conversation's reasoning effort live (or persist it
+   * for one not yet run). Local backends only: the Cloud app server has no
+   * proxy route for it yet.
+   */
+  static async switchAcpEffort(
+    conversationId: string,
+    effort: string,
+  ): Promise<void> {
+    await new ConversationClient(getAgentServerClientOptions()).switchAcpEffort(
+      conversationId,
+      effort,
     );
   }
 }

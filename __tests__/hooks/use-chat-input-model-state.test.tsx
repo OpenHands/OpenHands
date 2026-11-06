@@ -50,8 +50,11 @@ vi.mock("#/hooks/use-can-manage-org-profiles", () => ({
 
 const useAcpModelDiscoveryMock = vi.fn();
 vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
-  useAcpModelDiscovery: (...args: unknown[]) =>
-    useAcpModelDiscoveryMock(...args),
+  useAcpModelDiscovery: (...args: unknown[]) => ({
+    effortsFor: () => [],
+    defaultEffort: null,
+    ...useAcpModelDiscoveryMock(...args),
+  }),
 }));
 
 const useAcpSessionModelsMock = vi.fn();

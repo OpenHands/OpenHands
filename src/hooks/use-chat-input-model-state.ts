@@ -12,10 +12,13 @@ import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useAcpModelDiscovery } from "#/hooks/query/use-acp-model-discovery";
 import { useAcpSessionModels } from "#/hooks/query/use-acp-session-models";
 import {
+  acpEffortOf,
   getAcpPreferredDefaultModel,
   getAcpProvider,
+  labelForAcpEffort,
   labelForAcpModel,
   resolveEffectiveAcpModel,
+  type ACPEffortChoice,
   type ACPModelOption,
 } from "#/constants/acp-providers";
 import { I18nKey } from "#/i18n/declaration";
@@ -29,6 +32,12 @@ export interface ChatInputModelState {
   availableAcpModels: ACPModelOption[];
   /** The picker's Agent default row, or null when it isn't offered. */
   agentDefaultLabel: string | null;
+  /** Effort levels the picker offers for the selected model; empty hides them. */
+  effortChoices: ACPEffortChoice[];
+  /** The effort the picker marks; null is the agent's own. */
+  selectedEffort: string | null;
+  /** The effort row's Agent default chip, or null when it isn't offered. */
+  agentDefaultEffortLabel: string | null;
   showAcpPicker: boolean;
   switchConversationId: string | null;
   destinationPath: AcpModelContext["destinationPath"];
@@ -112,12 +121,42 @@ export function useChatInputModelState(): ChatInputModelState {
     currentModelId = conversation?.llm_model ?? settings?.llm_model ?? null;
   }
 
+  let effortChoices: ACPEffortChoice[] = [];
+  let selectedEffort: string | null = null;
+  let agentDefaultEffortLabel: string | null = null;
+  if (isActiveAcpConversation) {
+    // The Cloud app server has no route to switch effort live yet.
+    effortChoices =
+      backend.kind === "cloud"
+        ? []
+        : (conversation?.acp_available_efforts ?? []);
+    selectedEffort = conversation?.acp_current_effort ?? null;
+  } else if (isHomeAcp) {
+    effortChoices = discovered.effortsFor(selectedModelId);
+    selectedEffort = acpEffortOf(
+      activeAcpProfile ?? settings?.agent_settings ?? null,
+    );
+    const defaultEffort =
+      selectedModelId === null || selectedModelId === discovered.defaultModelId
+        ? labelForAcpEffort(discovered.defaultEffort, effortChoices)
+        : null;
+    agentDefaultEffortLabel = defaultEffort
+      ? t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS, {
+          model: defaultEffort,
+        })
+      : t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT);
+  }
+
   let displayModel = currentModelId;
   if (isAcpContext) {
     displayModel =
       labelForAcpModel(currentModelId, liveModels) ??
       // The next conversation starts on a default no one has reported yet.
       (isHomeAcp ? t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT) : null);
+    const effortLabel = labelForAcpEffort(selectedEffort, effortChoices);
+    if (displayModel && effortLabel) {
+      displayModel = `${displayModel} · ${effortLabel}`;
+    }
   }
   const availableAcpModels = isAcpContext ? liveModels : [];
   // A home-page pick persists into the active ACP profile, which on cloud is
@@ -150,6 +189,9 @@ export function useChatInputModelState(): ChatInputModelState {
     selectedModelId,
     availableAcpModels,
     agentDefaultLabel,
+    effortChoices: showAcpPicker ? effortChoices : [],
+    selectedEffort,
+    agentDefaultEffortLabel,
     showAcpPicker,
     switchConversationId,
     destinationPath,
