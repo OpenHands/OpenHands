@@ -20,7 +20,8 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { describe, expect, it, afterEach, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { server as mswServer } from "#/mocks/node";
 import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
@@ -54,6 +55,9 @@ import {
   uvicornLogLevel,
 } from "../../scripts/dev-safe.mjs";
 import { createRouter } from "../../scripts/proxy-utils.mjs";
+
+beforeAll(() => mswServer.close());
+afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

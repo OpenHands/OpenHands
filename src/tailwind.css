@@ -793,8 +793,9 @@ code .token {
   scrollbar-gutter: stable;
 }
 
+/* Matches the detail page's max-w-4xl, so view and edit share one column. */
 @utility automation-setup-content {
-  max-width: 800px;
+  max-width: 56rem;
 }
 
 @utility automation-setup-card {
@@ -834,7 +835,7 @@ code .token {
   --automation-setup-cron-width: 14rem;
   --automation-setup-datetime-width: 15rem;
   --automation-setup-time-width: 9.5rem;
-  --automation-setup-timezone-width: 16rem;
+  --automation-setup-timezone-width: 12.5rem;
 }
 
 @utility automation-setup-model-trigger {

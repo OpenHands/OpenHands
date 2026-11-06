@@ -169,6 +169,18 @@ const GIT_PROVIDER_INTEGRATION_IDS: ReadonlySet<string> = new Set([
   "bitbucket",
 ]);
 
+/**
+ * The git providers a template is about, by integration id: the ones it
+ * declares and the provider of its repository picker.
+ */
+export function getTemplateGitProviderIds(
+  automation: RecommendedAutomation,
+): string[] {
+  return getTemplateIntegrationIds(automation).filter((id) =>
+    GIT_PROVIDER_INTEGRATION_IDS.has(id),
+  );
+}
+
 /** Every git provider an instance can report as built in. */
 const BUILT_IN_GIT_PROVIDER_IDS: ReadonlySet<string> = new Set([
   ...GIT_PROVIDER_INTEGRATION_IDS,
@@ -523,6 +535,29 @@ function getAutomationTemplateEntry(
   const { id } = template as Record<string, unknown>;
   if (typeof id !== "string" || id.length === 0) return null;
   return CATALOG_ENTRY_BY_ID.get(id) ?? null;
+}
+
+/**
+ * What the template an automation was created from says about it: the
+ * catalog description and, when the entry ships one, its Mermaid diagram.
+ * Null without template provenance. Read live from the pinned catalog, so a
+ * reworded template reaches every automation created from it.
+ */
+export function getAutomationTemplateOverview(
+  automation: Automation,
+): { description: string; diagram: string | null } | null {
+  const entry = getAutomationTemplateEntry(automation);
+  if (!entry) return null;
+  return { description: entry.description, diagram: getEntryDiagram(entry) };
+}
+
+/**
+ * A catalog entry's Mermaid diagram, or null. The field is newer than some
+ * catalog releases and is published data, so it is read guarded.
+ */
+export function getEntryDiagram(entry: object): string | null {
+  const { diagram } = entry as { diagram?: unknown };
+  return typeof diagram === "string" && diagram.length > 0 ? diagram : null;
 }
 
 /**

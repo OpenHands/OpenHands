@@ -152,16 +152,14 @@ export const useModelStore = create<ModelStore>()(
           const existingIds = new Set(existing.map((e) => e.id));
           const additions = switches
             .filter((sw) => !existingIds.has(sw.id))
-            .map(
-              (sw): ModelListEntry => ({
-                id: sw.id,
-                anchorEventId: sw.anchorEventId,
-                profiles: [],
-                switchedTo: sw.profileName,
-                initiator: sw.initiator,
-                reason: sw.reason,
-              }),
-            );
+            .map((sw): ModelListEntry => ({
+              id: sw.id,
+              anchorEventId: sw.anchorEventId,
+              profiles: [],
+              switchedTo: sw.profileName,
+              initiator: sw.initiator,
+              reason: sw.reason,
+            }));
           if (additions.length === 0) return s;
           return {
             entriesByConversation: {
