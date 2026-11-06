@@ -34,11 +34,7 @@ export type SetupFieldType =
  * self-managed Bitbucket Data Center or to Azure DevOps.
  */
 export type SetupGitProvider =
-  | "github"
-  | "gitlab"
-  | "bitbucket"
-  | "bitbucket_data_center"
-  | "azure_devops";
+  "github" | "gitlab" | "bitbucket" | "bitbucket_data_center" | "azure_devops";
 
 export type SetupTriggerKind = "cron" | "event";
 
@@ -207,6 +203,8 @@ export interface SetupEntry {
   id: string;
   name: string;
   description: string;
+  /** Mermaid source for a small diagram of what the automation does. */
+  diagram?: string;
   /**
    * Version of the template this entry publishes, sent with the create request
    * as provenance. A bundle declares its own at `setup.bundle.version`; a
@@ -285,9 +283,7 @@ export interface ValidateDraftResponse {
  * path an entry shipping its own tarball uses; the other two are presets.
  */
 export type AutomationDraftEndpoint =
-  | "/v1"
-  | "/v1/preset/prompt"
-  | "/v1/preset/plugin";
+  "/v1" | "/v1/preset/prompt" | "/v1/preset/plugin";
 
 /** `POST /v1/drafts` — create a server-backed automation setup draft. */
 export interface CreateAutomationDraftApiRequest {
@@ -349,18 +345,10 @@ export const INTERFACE_VERSION = "1.0";
 
 /** The closed set of runtime-model properties a client may offer for setting. */
 export type AutomationAttributeName =
-  | "name"
-  | "prompt"
-  | "model"
-  | "timeout"
-  | "schedule";
+  "name" | "prompt" | "model" | "timeout" | "schedule";
 
 export type InterfaceAttributeType =
-  | "text"
-  | "textarea"
-  | "number"
-  | "llm-profile"
-  | "schedule";
+  "text" | "textarea" | "number" | "llm-profile" | "schedule";
 
 /** How one settable attribute of an existing Automation is offered. */
 export interface InterfaceAttribute {

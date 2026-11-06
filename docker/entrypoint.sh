@@ -454,15 +454,41 @@ uvicorn_log_level() {
 # Track child PIDs so we can clean up on exit.
 PIDS=()
 
+# >>> docker-exit-status
 cleanup() {
+  # cleanup() runs from the EXIT trap, so it has to carry the status it was
+  # reached with: a hard-coded `exit 0` here rewrites every failure below into
+  # a clean stop, and `restart: on-failure` never fires.
+  local status=$?
+  # Ignore further SIGINT/SIGTERM while shutting down: the `exit 0` trap below
+  # would otherwise fire during the wait and report a failure as a clean stop.
+  trap '' SIGINT SIGTERM
   log "Shutting down..."
-  for pid in "${PIDS[@]}"; do
-    kill "$pid" 2>/dev/null || true
-  done
-  wait 2>/dev/null || true
-  exit 0
+  if [ "${#PIDS[@]}" -gt 0 ]; then
+    for pid in "${PIDS[@]}"; do
+      kill "$pid" 2>/dev/null || true
+    done
+    # A hung service may never act on SIGTERM, which would leave the container
+    # stuck here; force whatever is still running once the timeout passes. The
+    # default stays inside `docker stop`'s 10 s grace.
+    (
+      sleep "$SERVICE_STOP_TIMEOUT"
+      kill -KILL "${PIDS[@]}" 2>/dev/null
+    ) >/dev/null 2>&1 &
+    local watchdog=$!
+    # Wait for the services only. A bare `wait` would also sit out the
+    # keep-alive loop's pending `sleep 10`.
+    wait "${PIDS[@]}" 2>/dev/null || true
+    kill -KILL "$watchdog" 2>/dev/null || true
+  fi
+  exit "$status"
 }
-trap cleanup EXIT SIGINT SIGTERM
+SERVICE_STOP_TIMEOUT="${SERVICE_STOP_TIMEOUT:-8}"
+trap cleanup EXIT
+# A trapped signal is a requested shutdown rather than a crash, so it keeps
+# today's exit 0 through the EXIT trap above.
+trap 'exit 0' SIGINT SIGTERM
+# <<< docker-exit-status
 
 # ── 1. Start Agent Server ────────────────────────────────────────────────────
 log "Starting agent-server on port $AGENT_SERVER_PORT..."
@@ -543,11 +569,53 @@ wait_for_port() {
   log "$name is ready on port $port"
 }
 
+# >>> agent-server-liveness
+# The agent-server is launched through a launcher process that can outlive the
+# server it started, so watching the PID cannot tell whether the backend is
+# still serving. Ask its /alive endpoint instead. An open port is not enough:
+# a hung server still completes the TCP handshake, so the probe needs an HTTP
+# answer within a short timeout. Misses only count once the server has come up
+# (its port opened during startup, or /alive answered later), so a first start
+# slower than the startup wait is not mistaken for a crash. Three consecutive
+# misses at the keep-alive loop's 10 s cadence is roughly the 30 s the issue
+# asks for.
+AGENT_SERVER_MAX_MISSES=3
+AGENT_SERVER_PROBE_TIMEOUT="${AGENT_SERVER_PROBE_TIMEOUT:-2}"
+AGENT_SERVER_MISSES=0
+AGENT_SERVER_UP=0
+
+mark_agent_server_up() {
+  AGENT_SERVER_UP=1
+}
+
+agent_server_responding() {
+  curl -fs -o /dev/null --noproxy '*' --max-time "$AGENT_SERVER_PROBE_TIMEOUT" \
+    "http://127.0.0.1:${AGENT_SERVER_PORT}/alive"
+}
+
+# Returns 0 while the backend answers (or has not come up yet), and 1 once the
+# miss budget runs out.
+track_agent_server_liveness() {
+  if agent_server_responding; then
+    mark_agent_server_up
+    AGENT_SERVER_MISSES=0
+    return 0
+  fi
+  [ "$AGENT_SERVER_UP" -eq 1 ] || return 0
+  AGENT_SERVER_MISSES=$((AGENT_SERVER_MISSES + 1))
+  log "WARNING: agent-server on port $AGENT_SERVER_PORT is not responding ($AGENT_SERVER_MISSES/$AGENT_SERVER_MAX_MISSES)"
+  [ "$AGENT_SERVER_MISSES" -lt "$AGENT_SERVER_MAX_MISSES" ]
+}
+# <<< agent-server-liveness
+
 wait_for_port "$AGENT_SERVER_PORT" "Agent Server" 60 &
 WAIT_PID1=$!
 wait_for_port "$AUTOMATION_PORT" "Automation Server" 60 &
 WAIT_PID2=$!
-wait "$WAIT_PID1" "$WAIT_PID2"
+if wait "$WAIT_PID1"; then
+  mark_agent_server_up
+fi
+wait "$WAIT_PID2"
 
 # ── 4. Start static server (frontend + proxy) ────────────────────────────────
 log "Starting frontend + proxy on port $PORT..."
@@ -664,18 +732,22 @@ fi
 log "All services started. Unified entry point: http://0.0.0.0:${PORT}/"
 
 # Keep the container alive while the static-server (ingress) is running.
-# Backend crashes (agent-server, automation) are tolerated — the proxy
-# returns 502 for downed routes, matching the non-Docker path where each
-# service is an independent host process.
+# Automation-backend crashes are tolerated — the proxy returns 502 for downed
+# routes, matching the non-Docker path where each service is an independent
+# host process.  A dead agent-server is not: every proxied route depends on it,
+# so the container would stay up while serving nothing.
 #
 # Pattern: `sleep & wait $!` makes `wait` (a bash builtin) the foreground
 # operation.  Unlike a bare `sleep`, the builtin `wait` is interrupted
 # immediately when a trapped signal (SIGTERM/SIGINT) arrives, so cleanup()
-# fires without delay.  cleanup() calls `exit 0` to terminate after the
-# trap returns.  The loop re-checks the static-server PID every 10 s so the
-# container exits promptly if the ingress process dies on its own.
+# fires without delay.  The loop re-checks the static-server PID every 10 s so
+# the container exits promptly if the ingress process dies on its own.
 while kill -0 "$STATIC_PID" 2>/dev/null; do
   sleep 10 & wait $!
+  if ! track_agent_server_liveness; then
+    log_error "Agent server on port $AGENT_SERVER_PORT stopped responding — exiting so the restart policy can recover the stack"
+    exit 1
+  fi
 done
 log_error "Static server (PID $STATIC_PID) exited"
 exit 1

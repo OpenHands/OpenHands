@@ -1,5 +1,5 @@
 import { type KeyboardEvent, useState } from "react";
-import { X } from "lucide-react";
+import { Pencil, Plus, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
@@ -21,14 +21,17 @@ const TAG_ERROR_KEYS: Record<AutomationTagError, I18nKey> = {
 
 interface AutomationTagsEditorProps {
   automation: Automation;
-  /** Only the creator may change tags; everyone else sees them read-only. */
+  /**
+   * Whether the caller may change tags: the person it runs as, or a manager
+   * when it runs as a service account. Everyone else sees them read-only.
+   */
   canEdit: boolean;
 }
 
 /**
- * The automation's tags under the detail header. The creator edits them in
- * place and saves the whole list in one PATCH, so a tag the service rejects
- * never leaves the others half-saved.
+ * The automation's tags under the detail header. A caller who may edit
+ * (`canEdit`) changes them in place and saves the whole list in one PATCH,
+ * so a tag the service rejects never leaves the others half-saved.
  */
 export function AutomationTagsEditor({
   automation,
@@ -91,9 +94,26 @@ export function AutomationTagsEditor({
             type="button"
             data-testid="automation-tags-edit"
             onClick={() => setDraft(savedTags)}
-            className="text-xs text-muted hover:text-foreground"
+            aria-label={
+              savedTags.length > 0
+                ? t(I18nKey.AUTOMATIONS$EDIT_TAGS)
+                : undefined
+            }
+            title={
+              savedTags.length > 0
+                ? t(I18nKey.AUTOMATIONS$EDIT_TAGS)
+                : undefined
+            }
+            className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted hover:border-muted hover:text-foreground"
           >
-            {t(I18nKey.AUTOMATIONS$EDIT_TAGS)}
+            {savedTags.length > 0 ? (
+              <Pencil className="size-3" aria-hidden="true" />
+            ) : (
+              <>
+                <Plus className="size-3" aria-hidden="true" />
+                {t(I18nKey.AUTOMATIONS$ADD_TAG)}
+              </>
+            )}
           </button>
         ) : null}
       </div>

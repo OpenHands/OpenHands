@@ -35,13 +35,7 @@ interface ConversationStatusDotProps {
 }
 
 type Visual =
-  | "check"
-  | "working"
-  | "active"
-  | "paused"
-  | "error"
-  | "unknown"
-  | "starting";
+  "check" | "working" | "active" | "paused" | "error" | "unknown" | "starting";
 
 const visualFor = (status: ExecutionStatus | null | undefined): Visual => {
   switch (status) {

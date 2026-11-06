@@ -185,6 +185,17 @@ vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
   useDeploymentCapabilities: vi.fn(() => ({ data: null, isLoading: false })),
 }));
 
+const serviceAccountMocks = vi.hoisted(() => ({ enabled: false }));
+vi.mock("#/hooks/query/use-service-accounts", () => ({
+  useServiceAccountRunAsEnabled: () => serviceAccountMocks.enabled,
+  useServiceAccounts: () => ({
+    data: [
+      { id: "sa-1", org_id: "org-1", name: "ci-bot", is_disabled: false },
+      { id: "sa-2", org_id: "org-1", name: "old-bot", is_disabled: true },
+    ],
+  }),
+}));
+
 vi.mock("#/hooks/query/use-agent-profiles", () => ({
   useAgentProfiles: () => ({
     data: {
@@ -349,6 +360,7 @@ function renderSessionBoundPanel(conversationId: string) {
 
 describe("AutomationSetupPanel", () => {
   beforeEach(() => {
+    serviceAccountMocks.enabled = false;
     window.sessionStorage.clear();
     vi.clearAllMocks();
     // By default the deployment does not advertise server-backed drafts, so
@@ -453,7 +465,7 @@ describe("AutomationSetupPanel", () => {
         scheduleWidth(
           screen.getByTestId("automation-setup-timezone").parentElement!,
         ),
-      ).toBe("16rem");
+      ).toBe("12.5rem");
       expect(
         getComputedStyle(screen.getByTestId("automation-setup-prompt-drawer"))
           .paddingTop,
@@ -1546,9 +1558,19 @@ describe("AutomationSetupPanel", () => {
     ).toHaveAttribute("aria-checked", "true");
     expect(screen.getByTestId("automation-setup-time")).toHaveValue("10:30");
     expect(screen.getByTestId("automation-setup-timezone")).toHaveValue("UTC");
+    // The note sits once in each filled section's title; the fields the
+    // agent filled carry only the mark.
     expect(
-      screen.getAllByText("AUTOMATION_SETUP$FILLED_BY_OPENHANDS").length,
-    ).toBeGreaterThan(0);
+      screen.getByTestId("automation-setup-trigger-group-agent-filled"),
+    ).toHaveTextContent("AUTOMATION_SETUP$FILLED_BY_OPENHANDS");
+    expect(
+      screen.getByTestId("automation-setup-settings-group-agent-filled"),
+    ).toBeInTheDocument();
+    expect(
+      within(nameInput.closest("label")!).getByTestId(
+        "automation-setup-field-suffix",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("shows a weekday dropdown for a weekly schedule", async () => {
@@ -1570,9 +1592,6 @@ describe("AutomationSetupPanel", () => {
     await user.click(screen.getByTestId("automation-setup-frequency-weekly"));
     const weekday = screen.getByTestId("automation-setup-weekday");
     expect(weekday).toHaveValue("1");
-    expect(weekday.parentElement?.parentElement).toHaveTextContent(
-      "AUTOMATION_SETUP$ON",
-    );
     await user.selectOptions(weekday, "3");
 
     await user.click(screen.getByTestId("automation-setup-test"));
@@ -1645,6 +1664,72 @@ describe("AutomationSetupPanel", () => {
       ),
     );
     expect(mockNavigate).toHaveBeenCalledWith("/automations/automation-1");
+  });
+
+  it("creates the automation as the chosen service account", async () => {
+    serviceAccountMocks.enabled = true;
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-1",
+    });
+
+    const user = userEvent.setup();
+    renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+    const picker = screen.getByTestId("automation-setup-run-as");
+    // Disabled accounts are not offered.
+    expect(
+      within(picker).queryByRole("option", { name: "old-bot" }),
+    ).not.toBeInTheDocument();
+    await user.selectOptions(picker, "sa-1");
+    expect(getAutomationFormSession("conv-1")?.form?.runAsUserId).toBe("sa-1");
+    await user.click(screen.getByTestId("automation-setup-create"));
+
+    await waitFor(() =>
+      expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+        expect.objectContaining({ run_as_user_id: "sa-1" }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("restores the selected service account after the setup handoff", () => {
+    serviceAccountMocks.enabled = true;
+
+    renderPanel({
+      prompt: "Review every pull request",
+      kind: "prompt",
+      form: { runAsUserId: "sa-1" },
+    });
+
+    expect(screen.getByTestId("automation-setup-run-as")).toHaveValue("sa-1");
+  });
+
+  it("creates as the caller by default and without the picker when service account run-as is off", async () => {
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-1",
+    });
+
+    const user = userEvent.setup();
+    renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+    expect(
+      screen.queryByTestId("automation-setup-run-as"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("automation-setup-create"));
+
+    await waitFor(() =>
+      expect(AutomationService.createAutomationDraft).toHaveBeenCalled(),
+    );
+    expect(
+      vi.mocked(AutomationService.createAutomationDraft).mock.calls[0][0],
+    ).not.toHaveProperty("run_as_user_id");
+  });
+
+  it("does not offer the run-as picker when editing an existing automation", () => {
+    serviceAccountMocks.enabled = true;
+    renderPanel(setupDraftFromAutomation(savedReviewer()));
+
+    expect(
+      screen.queryByTestId("automation-setup-run-as"),
+    ).not.toBeInTheDocument();
   });
 
   it("hides the event filter until Add Event Filter is clicked", async () => {
@@ -1901,6 +1986,136 @@ describe("AutomationSetupPanel", () => {
       "custom",
     );
     expect(mockNavigate).toHaveBeenCalledWith("/automations/automation-custom");
+  });
+
+  describe("agent profile or LLM profile", () => {
+    const withCapabilities = (features: string[]) =>
+      vi.mocked(useDeploymentCapabilities).mockReturnValue({
+        data: {
+          ready: true,
+          features,
+          triggerKinds: ["cron"],
+          eventSources: [],
+          eventTypes: [],
+          triggers: {},
+        },
+        isLoading: false,
+      } as never);
+
+    beforeEach(() => {
+      vi.mocked(AutomationService.uploadAutomationTarball).mockResolvedValue(
+        "oh-internal://uploads/custom-archive",
+      );
+      vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+        id: "automation-custom",
+      });
+    });
+
+    it("locks the LLM profile to the agent profile's and sends only the agent profile", async () => {
+      withCapabilities(["agentProfiles"]);
+      const user = userEvent.setup();
+      renderPanel({ prompt: "Run a custom security check", kind: "custom" });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      await user.click(
+        screen.getByTestId(
+          "automation-setup-agent-profile-option-agent-reviewer",
+        ),
+      );
+
+      const modelPill = screen.getByTestId("automation-setup-model");
+      expect(modelPill).toHaveTextContent("fast");
+      expect(modelPill).toHaveAttribute("aria-disabled", "true");
+      await user.click(modelPill);
+      expect(
+        screen.queryByTestId("automation-setup-model-popover"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("automation-setup-model-lock"),
+      ).toHaveAccessibleName("AUTOMATION_SETUP$LLM_PROFILE_SET_BY_AGENT");
+
+      await user.click(screen.getByTestId("automation-setup-create"));
+      await waitFor(() =>
+        expect(AutomationService.createAutomationDraft).toHaveBeenCalled(),
+      );
+      const [body] = vi.mocked(AutomationService.createAutomationDraft).mock
+        .calls[0];
+      expect(body).toMatchObject({ agent_profile_id: "agent-reviewer" });
+      expect(body).not.toHaveProperty("model");
+    });
+
+    it("hands the LLM profile back when the agent profile is set to None", async () => {
+      withCapabilities(["agentProfiles"]);
+      const user = userEvent.setup();
+      renderPanel({ prompt: "Run a custom security check", kind: "custom" });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      await user.click(
+        screen.getByTestId(
+          "automation-setup-agent-profile-option-agent-reviewer",
+        ),
+      );
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      await user.click(
+        screen.getByTestId("automation-setup-agent-profile-option-none"),
+      );
+      await user.click(screen.getByTestId("automation-setup-model"));
+      await user.click(
+        screen.getByTestId("automation-setup-model-option-fast"),
+      );
+      await user.click(screen.getByTestId("automation-setup-create"));
+
+      await waitFor(() =>
+        expect(AutomationService.createAutomationDraft).toHaveBeenCalled(),
+      );
+      const [body] = vi.mocked(AutomationService.createAutomationDraft).mock
+        .calls[0];
+      expect(body).toMatchObject({ model: "fast" });
+      expect(body).not.toHaveProperty("agent_profile_id");
+    });
+
+    it("clears a saved model when an edit moves the automation onto an agent profile", async () => {
+      withCapabilities(["agentProfiles"]);
+      vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+        id: "auto-1",
+      } as never);
+      const user = userEvent.setup();
+      renderPanel({
+        prompt: "",
+        kind: "custom",
+        editingAutomationId: "auto-1",
+        form: { kind: "custom", name: "Nightly check", model: "fast" },
+      });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      await user.click(
+        screen.getByTestId(
+          "automation-setup-agent-profile-option-agent-reviewer",
+        ),
+      );
+      await user.click(screen.getByTestId("automation-setup-save"));
+
+      await waitFor(() =>
+        expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+          "auto-1",
+          expect.objectContaining({
+            model: null,
+            agent_profile_id: "agent-reviewer",
+          }),
+        ),
+      );
+    });
+
+    it("offers only the LLM profile when the service cannot run scripts from an agent profile", () => {
+      withCapabilities([]);
+
+      renderPanel({ prompt: "Run a custom security check", kind: "custom" });
+
+      expect(
+        screen.queryByTestId("automation-setup-agent-profile"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("automation-setup-model")).toBeInTheDocument();
+    });
   });
 
   describe("server-backed drafts (PR OpenHands/automation#417)", () => {
@@ -2356,6 +2571,144 @@ describe("AutomationSetupPanel", () => {
       expect(
         AgentServerConversationService.replaceConversationTags,
       ).not.toHaveBeenCalled();
+    });
+
+    describe("service account run-as", () => {
+      beforeEach(() => {
+        serviceAccountMocks.enabled = true;
+        mockSavedDraftEcho({ validationErrors: null });
+      });
+
+      const runAsOf = (call: unknown[] | undefined) =>
+        (call?.[0] as { draft: { run_as_user_id?: string } }).draft
+          .run_as_user_id;
+
+      it("keeps the run-as identity through save draft, reopen, save and create", async () => {
+        const user = userEvent.setup();
+        const first = renderPanel();
+        await user.selectOptions(
+          screen.getByTestId("automation-setup-run-as"),
+          "sa-1",
+        );
+        await user.click(screen.getByTestId("automation-setup-save-draft"));
+        await waitFor(() =>
+          expect(AutomationService.createServerDraft).toHaveBeenCalled(),
+        );
+        const savedBody = vi.mocked(AutomationService.createServerDraft).mock
+          .calls[0][0];
+        expect(runAsOf([savedBody])).toBe("sa-1");
+        first.unmount();
+
+        // Reopen: the server returns the saved draft.
+        vi.mocked(AutomationService.getServerDraft).mockResolvedValue(
+          echoSavedDraft(savedBody),
+        );
+        renderPanel({ prompt: "", kind: "prompt" }, "conv-1", {
+          automationdraftid: "draft-1",
+        });
+
+        await waitFor(() =>
+          expect(screen.getByTestId("automation-setup-run-as")).toHaveValue(
+            "sa-1",
+          ),
+        );
+        await user.type(screen.getByTestId("automation-setup-name"), " v2");
+        await user.click(screen.getByTestId("automation-setup-save-draft"));
+        await waitFor(() =>
+          expect(AutomationService.updateServerDraft).toHaveBeenCalled(),
+        );
+        expect(
+          runAsOf(
+            vi
+              .mocked(AutomationService.updateServerDraft)
+              .mock.calls[0].slice(1),
+          ),
+        ).toBe("sa-1");
+
+        vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+          id: "automation-1",
+        });
+        await user.click(screen.getByTestId("automation-setup-create"));
+        await waitFor(() =>
+          expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+            expect.objectContaining({ run_as_user_id: "sa-1" }),
+            expect.anything(),
+          ),
+        );
+      });
+
+      it("marks the draft unsaved after a run-as-only change", async () => {
+        const user = userEvent.setup();
+        renderPanel();
+        await user.click(screen.getByTestId("automation-setup-save-draft"));
+        await waitFor(() =>
+          expect(
+            screen.getByTestId("automation-setup-save-state"),
+          ).toHaveTextContent("AUTOMATION_SETUP$SAVED_JUST_NOW"),
+        );
+
+        await user.selectOptions(
+          screen.getByTestId("automation-setup-run-as"),
+          "sa-1",
+        );
+
+        expect(
+          screen.getByTestId("automation-setup-save-state"),
+        ).toHaveTextContent("AUTOMATION_SETUP$UNSAVED_CHANGES");
+      });
+
+      it("shows a resumed draft that runs as a service account as saved", async () => {
+        vi.mocked(AutomationService.getServerDraft).mockResolvedValue({
+          ...dispatchableDraft,
+          name: "Saved Tagged Draft",
+          draft: {
+            prompt: "Use the persisted draft body",
+            run_as_user_id: "sa-1",
+          } as never,
+        });
+
+        renderPanel({ prompt: "", kind: "prompt" }, "conv-1", {
+          automationdraftid: "draft-1",
+        });
+
+        await waitFor(() =>
+          expect(screen.getByTestId("automation-setup-run-as")).toHaveValue(
+            "sa-1",
+          ),
+        );
+        await waitFor(() =>
+          expect(
+            screen.getByTestId("automation-setup-save-state"),
+          ).toHaveTextContent("AUTOMATION_SETUP$SAVED_JUST_NOW"),
+        );
+      });
+
+      it("keeps a resumed run-as identity that is no longer listed, shown by its id", async () => {
+        vi.mocked(AutomationService.getServerDraft).mockResolvedValue({
+          ...dispatchableDraft,
+          name: "Saved Tagged Draft",
+          draft: {
+            prompt: "Use the persisted draft body",
+            run_as_user_id: "sa-gone",
+          } as never,
+        });
+
+        renderPanel({ prompt: "", kind: "prompt" }, "conv-1", {
+          automationdraftid: "draft-1",
+        });
+
+        await waitFor(() =>
+          expect(screen.getByTestId("automation-setup-run-as")).toHaveValue(
+            "sa-gone",
+          ),
+        );
+        expect(
+          within(screen.getByTestId("automation-setup-run-as")).getByRole(
+            "option",
+            { name: "sa-gone" },
+          ),
+        ).toBeInTheDocument();
+      });
     });
 
     it("hydrates a tagged server draft when the panel opens", async () => {
@@ -3091,7 +3444,7 @@ describe("AutomationSetupPanel", () => {
     expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByTestId("automation-setup-close"));
-    expect(mockNavigate).toHaveBeenCalledWith("/automations");
+    expect(mockNavigate).toHaveBeenCalledWith("/automations/auto-1");
   });
 
   describe("existing automation request failures", () => {
