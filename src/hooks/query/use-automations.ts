@@ -178,7 +178,7 @@ export function useAutomationTags({ enabled = true } = {}) {
   });
 }
 
-/** Replace an automation's tags; the service lets only its creator do so. */
+/** Replace an automation's tags (manage permission or creator only). */
 export function useUpdateAutomationTags() {
   const queryClient = useQueryClient();
   return useMutation({
