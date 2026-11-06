@@ -30,7 +30,6 @@ import {
   formatTriggerSourceLabel,
   getLastRunTimestamp,
   getTriggerEventLabel,
-  getTriggerScheduleLabel,
   getTriggerSource,
 } from "#/components/features/home/featured-automations/automation-run-health";
 import type { AutomationInsightsProps } from "./automation-card";
@@ -38,6 +37,7 @@ import { toLatestRunState } from "./to-latest-run-state";
 import { AutomationTagPill } from "./automation-tag-pill";
 import { resolveAutomationImpactStatement } from "#/utils/automation-catalog";
 import { isDraftAutomation } from "#/utils/automation-state";
+import { describeSchedule } from "#/utils/automation-trigger-description";
 
 interface AutomationListRowProps {
   automation: Automation;
@@ -87,7 +87,11 @@ export function AutomationListRow({
   const isEventTrigger = automation.trigger.type === "event";
   const TriggerIcon = isEventTrigger ? Zap : ClockIcon;
   const triggerEventLabel = getTriggerEventLabel(automation);
-  const triggerScheduleLabel = getTriggerScheduleLabel(automation);
+  const triggerScheduleLabel = describeSchedule(
+    automation.trigger,
+    t,
+    i18n.language,
+  );
   const triggerSource = getTriggerSource(automation);
   const hasTriggerMeta = Boolean(
     triggerEventLabel || triggerScheduleLabel || triggerSource,
