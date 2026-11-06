@@ -102,8 +102,9 @@ docker run -it --rm \
 **Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
 
 > [!NOTE]
-> The entrypoint stops the container when the Agent Server stops answering on its port, so
-> a crash fails visibly instead of leaving a container that returns 502 for every request.
+> The entrypoint stops the container with exit code 1 when the Agent Server stops answering
+> its `/alive` check for about 30 seconds, so a crash or hang fails visibly instead of leaving
+> a container that returns 502 for every request.
 > Automatic recovery needs a restart policy: use `--restart unless-stopped` instead of
 > `--rm`, or `restart: unless-stopped` in Docker Compose.
 
