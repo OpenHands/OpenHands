@@ -128,7 +128,18 @@ function selfHostedGithub(connected: boolean): NativeGitIntegrations {
   };
 }
 
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    parse: vi.fn().mockResolvedValue({ diagramType: "flowchart" }),
+    render: vi.fn().mockResolvedValue({
+      svg: '<svg data-testid="entry-diagram-svg"></svg>',
+    }),
+  },
+}));
+
 const ENTRY: SetupEntry = createSetupEntry();
+const ENTRY_DIAGRAM = "flowchart TD\n  A --> B";
 const CUSTOM_AUTOMATION_ENTRY = AUTOMATION_CATALOG.find(
   (entry) => entry.id === "custom-automation",
 ) as SetupEntry;
@@ -488,6 +499,26 @@ describe("SetupDialog", () => {
     expect(mocks.runAction.mock.calls[0][3]).toBe("cron");
   });
 
+  it("draws the entry's diagram under its description", async () => {
+    // Act
+    renderDialog({ ...ENTRY, diagram: ENTRY_DIAGRAM });
+
+    // Assert
+    expect(await screen.findByTestId("mermaid-diagram")).toContainElement(
+      screen.getByTestId("entry-diagram-svg"),
+    );
+  });
+
+  it("draws no diagram for an entry without one", () => {
+    // Act
+    renderDialog();
+
+    // Assert
+    expect(screen.getByTestId("setup-continue-button")).toBeInTheDocument();
+    expect(screen.queryByTestId("mermaid-diagram-pending")).toBeNull();
+    expect(screen.queryByTestId("mermaid-diagram")).toBeNull();
+  });
+
   it("holds an unanswered required field back from the service", async () => {
     // Arrange — nothing typed, so two required fields are still empty.
     const { user } = renderDialog();
@@ -528,6 +559,38 @@ describe("SetupDialog", () => {
       name: "Widget monitor - OpenHands/agent-server-gui",
       prompt: "Report on Widgets in OpenHands/agent-server-gui.",
       repos: [{ url: "OpenHands/agent-server-gui", provider: "github" }],
+      trigger: { type: "cron", schedule: "*/15 * * * *" },
+    });
+  });
+
+  it("leaves a repository the deployment's runs cannot clone out of repos", async () => {
+    // Arrange — the entry picks a GitHub repository and this service's runs
+    // clone GitLab ones only, so the repository reaches the prompt alone.
+    mocks.capabilities.mockReturnValue({
+      capabilities: { ...CRON_ONLY_CAPABILITIES, repoProviders: ["gitlab"] },
+      supported: true,
+      unmet: [],
+      isLoading: false,
+    });
+    mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert — neither preflight nor creation is sent the repository.
+    await waitFor(() => expect(mocks.runAction).toHaveBeenCalled());
+    expect(
+      vi.mocked(AutomationService.validateDraft).mock.calls[0][0].draft,
+    ).not.toHaveProperty("repos");
+    expect(mocks.runAction.mock.calls[0][2]).toEqual({
+      name: "Widget monitor - OpenHands/agent-server-gui",
+      prompt: "Report on Widgets in OpenHands/agent-server-gui.",
       trigger: { type: "cron", schedule: "*/15 * * * *" },
     });
   });

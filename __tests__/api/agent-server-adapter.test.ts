@@ -5,6 +5,7 @@ import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import { REQUEST_SECRET_TOOL_NAME } from "#/constants/secret-request";
 import { AUTOMATION_FORM_UPDATE_TOOL_NAME } from "#/constants/automation-form";
+import { AUTOMATION_SETUP_SYSTEM_SUFFIX } from "#/api/automation-form-client-tool";
 
 import {
   ACP_SERVER_TAG_KEY,
@@ -593,6 +594,56 @@ describe("buildStartConversationRequest", () => {
         );
       },
     );
+
+    it("describes the deployment's event sources in the automation form tool", () => {
+      const formTool = (payload: {
+        client_tools: Array<{
+          name: string;
+          description: string;
+          parameters: unknown;
+        }>;
+      }) =>
+        payload.client_tools.find(
+          (tool) => tool.name === AUTOMATION_FORM_UPDATE_TOOL_NAME,
+        );
+      const withSources = formTool(
+        buildStartConversationRequest({
+          ...PROFILE,
+          settings: DEFAULT_SETTINGS,
+          automationSetup: true,
+          automationSetupCapabilities: {
+            ready: true,
+            triggerKinds: ["cron", "event"],
+            eventSources: ["bitbucket_data_center", "jira_dc"],
+            eventTypes: [],
+            eventTypesBySource: {
+              bitbucket_data_center: ["pr:opened"],
+              jira_dc: ["jira:issue_updated"],
+            },
+            triggers: {},
+            features: [],
+          },
+        }),
+      );
+      const unknown = formTool(
+        buildStartConversationRequest({
+          ...PROFILE,
+          settings: DEFAULT_SETTINGS,
+          automationSetup: true,
+          automationSetupCapabilities: null,
+        }),
+      );
+
+      expect(withSources?.description).toContain(
+        "* bitbucket_data_center (Bitbucket Data Center): event keys pr:opened.",
+      );
+      expect(withSources?.description).toContain(
+        "* jira_dc (Jira Data Center): event keys jira:issue_updated.",
+      );
+      expect(unknown?.description).toContain("event sources could not be read");
+      // Same tool name, same schema: the agent-server accepts both.
+      expect(withSources?.parameters).toEqual(unknown?.parameters);
+    });
 
     it("sends the client tool when resuming a conversation", () => {
       const payload = buildStartConversationRequest({
@@ -1284,6 +1335,25 @@ describe("profile launch additions", () => {
       } else {
         expect(appended ?? "").not.toContain("ROUTE_AT_CONVERSATION_START");
       }
+    },
+  );
+
+  it.each([
+    ["an OpenHands setup conversation", "openhands", true, true],
+    ["an ordinary conversation", "openhands", false, false],
+    ["an ACP setup conversation, which gets no form tool", "acp", true, false],
+  ] as const)(
+    "tells the agent to stay on the setup form only in %s",
+    (_case, agentProfileKind, automationSetup, expected) => {
+      const payload = buildStartConversationRequest({
+        settings: DEFAULT_SETTINGS,
+        agentProfileId: "profile-1",
+        agentProfileKind,
+        automationSetup,
+      });
+
+      const appended = additionsOf(payload)?.system_message_suffix_append ?? "";
+      expect(appended.includes(AUTOMATION_SETUP_SYSTEM_SUFFIX)).toBe(expected);
     },
   );
 

@@ -208,12 +208,3 @@ export function useConversationDisplayTitleState() {
     ],
   );
 }
-
-export function useConversationDisplayTitle() {
-  const getState = useConversationDisplayTitleState();
-  return useCallback(
-    (id: string | null, fallback?: string | null) =>
-      getState(id, fallback).title,
-    [getState],
-  );
-}

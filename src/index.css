@@ -159,12 +159,3 @@ code {
 .environment-switch-overlay > div {
   animation: environment-switch-overlay-fade 980ms ease-in-out forwards;
 }
-
-@keyframes conversation-title-reveal {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}

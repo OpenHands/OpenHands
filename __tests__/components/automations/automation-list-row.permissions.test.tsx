@@ -73,6 +73,7 @@ function renderRow(automation: Automation) {
           onRunNow={vi.fn()}
           onExport={vi.fn()}
           onDelete={vi.fn()}
+          onEdit={vi.fn()}
         />
       </ActiveBackendProvider>
     </QueryClientProvider>,
@@ -140,6 +141,39 @@ describe("AutomationListRow — non-creator manager", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("AutomationListRow — edit rule", () => {
+  it("hides Edit from a manager on a automation that runs as a person", async () => {
+    // Arrange — the service lets only the creator edit a automation that runs as a person.
+    const user = userEvent.setup();
+    renderRow(makeAutomation({ run_as_kind: "user" }));
+
+    // Act
+    await openActionsMenu(user);
+
+    // Assert
+    expect(
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers Edit and Turn on to a manager on a disabled automation that runs as a service account", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderRow(makeAutomation({ run_as_kind: "service", enabled: false }));
+
+    // Act
+    await openActionsMenu(user);
+
+    // Assert
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$TURN_ON }),
     ).toBeInTheDocument();
   });
 });
