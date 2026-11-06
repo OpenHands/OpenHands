@@ -432,4 +432,67 @@ describe("MCPServerForm validation", () => {
 
     r2.unmount();
   });
+
+  it.each([
+    ["a STDIO server", "github"],
+    ["another remote server, ignoring case", "Docs"],
+  ])("rejects a remote server name already used by %s", (_label, name) => {
+    const onSubmit = vi.fn();
+    render(
+      <MCPServerForm
+        mode="add"
+        server={{ id: "tmp", type: "shttp" }}
+        existingServers={[
+          { id: "stdio-0", type: "stdio", name: "github", command: "npx" },
+          {
+            id: "shttp-0",
+            type: "shttp",
+            name: "docs",
+            url: "https://docs.example.com/mcp",
+          },
+        ]}
+        onSubmit={onSubmit}
+        onCancel={noop}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("url-input"), {
+      target: { value: "https://other.example.com/mcp" },
+    });
+    fireEvent.change(screen.getByTestId("server-name-input"), {
+      target: { value: name },
+    });
+    fireEvent.click(screen.getByTestId("submit-button"));
+
+    expect(
+      screen.getByText("SETTINGS$MCP_ERROR_NAME_DUPLICATE"),
+    ).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("keeps a remote server's own name when editing it", () => {
+    const onSubmit = vi.fn();
+    const server = {
+      id: "shttp-0",
+      type: "shttp" as const,
+      name: "docs",
+      url: "https://docs.example.com/mcp",
+    };
+    render(
+      <MCPServerForm
+        mode="edit"
+        server={server}
+        existingServers={[server]}
+        onSubmit={onSubmit}
+        onCancel={noop}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("submit-button"));
+
+    expect(
+      screen.queryByText("SETTINGS$MCP_ERROR_NAME_DUPLICATE"),
+    ).not.toBeInTheDocument();
+    expect(onSubmit).toHaveBeenCalled();
+  });
 });
