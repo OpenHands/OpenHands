@@ -50,6 +50,21 @@ function eventKey(on: Automation["trigger"]["on"]): string {
  * `0 * * * *` as custom. Everything else, including one-time dates, stays
  * a raw cron so we do not invent a date the expression does not contain.
  */
+// The setup form edits these event-trigger fields; any other field the service
+// stored (such as `destination`) is carried through an edit unchanged.
+const FORM_EVENT_TRIGGER_FIELDS = new Set(["type", "source", "on", "filter"]);
+
+function eventTriggerExtras(
+  trigger: Automation["trigger"],
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(trigger).filter(
+      ([field, value]) =>
+        !FORM_EVENT_TRIGGER_FIELDS.has(field) && value !== undefined,
+    ),
+  );
+}
+
 function scheduleFields(
   schedule: string | undefined,
   timezone: string | undefined,
@@ -123,12 +138,18 @@ export function setupDraftFromAutomation(
     form.timeoutSeconds = String(automation.timeout);
   }
 
+  const existingEventTrigger =
+    trigger.type === "event" ? eventTriggerExtras(trigger) : {};
+
   return {
     prompt,
     kind,
     editingAutomationId: automation.id,
     existingRepositories: automation.repositories ?? [],
     canUpdateRepositories: canUpdateRepositories(automation),
+    ...(Object.keys(existingEventTrigger).length > 0
+      ? { existingEventTrigger }
+      : {}),
     ...(kind === "custom" && automation.tarball_path
       ? { existingCustomTarballPath: automation.tarball_path }
       : {}),

@@ -1,6 +1,6 @@
 /* Integration: useCompactContextAction end-to-end through real stores. */
 import { act, renderHook } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import useMetricsStore from "#/stores/metrics-store";
@@ -16,7 +16,9 @@ import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { AgentState } from "#/types/agent-state";
 import { subscribeConversationContextChangeRequested } from "#/services/conversation-context-events";
 
-const mutateMock = vi.fn();
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { createAgentServerQueryClient } from "#/query-client-config";
+import { HttpError } from "@openhands/typescript-client";
 const activeConversation = {
   id: "c1",
   conversation_url: null,
@@ -28,13 +30,6 @@ let conversation: Pick<
   "id" | "conversation_url" | "session_api_key" | "agent_kind"
 > | null;
 let agentState: AgentState;
-let mutationPending: boolean;
-vi.mock("#/hooks/mutation/use-condense-conversation", () => ({
-  useCondenseConversation: () => ({
-    mutate: mutateMock,
-    isPending: mutationPending,
-  }),
-}));
 vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => ({ data: conversation }),
 }));
@@ -88,7 +83,7 @@ const unsubscribe: Array<() => void> = [];
 function wrapper({ children }: { children: React.ReactNode }) {
   return React.createElement(
     QueryClientProvider,
-    { client: new QueryClient() },
+    { client: createAgentServerQueryClient() },
     React.createElement(ActiveBackendProvider, null, children),
   );
 }
@@ -98,7 +93,6 @@ describe("useCompactContextAction (integration)", () => {
     vi.useFakeTimers();
     conversation = activeConversation;
     agentState = AgentState.FINISHED;
-    mutationPending = false;
     setRegisteredBackends([backend]);
     setActiveSelection({ backendId: backend.id });
     useEventStore.getState().clearEvents();
@@ -107,21 +101,24 @@ describe("useCompactContextAction (integration)", () => {
       max_budget_per_task: null,
       usage: usage(50_000),
     });
-    mutateMock.mockReset();
-    mutateMock.mockImplementation((_vars, opts) => opts.onSuccess());
+    vi.spyOn(
+      AgentServerConversationService,
+      "condenseConversation",
+    ).mockResolvedValue(undefined);
     successToast.mockClear();
     errorToast.mockClear();
   });
 
   afterEach(() => {
     unsubscribe.splice(0).forEach((dispose) => dispose());
+    vi.restoreAllMocks();
     vi.useRealTimers();
     useEventStore.getState().clearEvents();
     setActiveSelection(null);
     setRegisteredBackends([]);
   });
 
-  it("signals only the owning backend/org/revision synchronously before requesting compaction", () => {
+  it("signals only the owning backend/org/revision synchronously before requesting compaction", async () => {
     const order: string[] = [];
     const onRequested = vi.fn(() => order.push("context-change"));
     const foreignListener = vi.fn();
@@ -138,10 +135,18 @@ describe("useCompactContextAction (integration)", () => {
         ),
       ),
     );
-    mutateMock.mockImplementation(() => order.push("condense-request"));
+    vi.mocked(
+      AgentServerConversationService.condenseConversation,
+    ).mockImplementation(async () => {
+      order.push("condense-request");
+    });
     const { result } = renderHook(() => useCompactContextAction(), { wrapper });
 
-    act(() => result.current.handleCompact());
+    await act(async () => {
+      result.current.handleCompact();
+      expect(order).toEqual(["context-change"]);
+      await vi.advanceTimersByTimeAsync(0);
+    });
 
     expect(onRequested).toHaveBeenCalledExactlyOnceWith({
       conversationId: "c1",
@@ -158,7 +163,7 @@ describe("useCompactContextAction (integration)", () => {
     "loading",
     "confirmation",
     "pending",
-  ])("does not signal or request blocked compaction: %s", (blocked) => {
+  ])("does not signal or request blocked compaction: %s", async (blocked) => {
     if (blocked === "no-conversation") conversation = null;
     if (blocked === "acp")
       conversation = { ...activeConversation, agent_kind: "acp" };
@@ -166,26 +171,46 @@ describe("useCompactContextAction (integration)", () => {
     if (blocked === "loading") agentState = AgentState.LOADING;
     if (blocked === "confirmation")
       agentState = AgentState.AWAITING_USER_CONFIRMATION;
-    if (blocked === "pending") mutationPending = true;
     const onRequested = vi.fn();
     unsubscribe.push(
       subscribeConversationContextChangeRequested(scope, onRequested),
     );
     const { result } = renderHook(() => useCompactContextAction(), { wrapper });
 
+    if (blocked === "pending") {
+      vi.mocked(
+        AgentServerConversationService.condenseConversation,
+      ).mockImplementation(() => new Promise(() => {}));
+      await act(async () => {
+        result.current.handleCompact();
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      onRequested.mockClear();
+      vi.mocked(
+        AgentServerConversationService.condenseConversation,
+      ).mockClear();
+    }
     expect(result.current.isDisabled).toBe(true);
-    act(() => result.current.handleCompact());
+    await act(async () => {
+      result.current.handleCompact();
+      await vi.advanceTimersByTimeAsync(0);
+    });
 
     expect(onRequested).not.toHaveBeenCalled();
-    expect(mutateMock).not.toHaveBeenCalled();
+    expect(
+      AgentServerConversationService.condenseConversation,
+    ).not.toHaveBeenCalled();
   });
 
-  it("toasts counts when condensation lands and metrics drop", () => {
+  it("toasts counts when condensation lands and metrics drop", async () => {
     const { result } = renderHook(() => useCompactContextAction(50_000), {
       wrapper,
     });
 
-    act(() => result.current.handleCompact());
+    await act(async () => {
+      result.current.handleCompact();
+      await vi.advanceTimersByTimeAsync(0);
+    });
     expect(successToast).toHaveBeenCalledWith(
       I18nKey.CONVERSATION$COMPACT_CONTEXT_STARTED,
     );
@@ -205,12 +230,15 @@ describe("useCompactContextAction (integration)", () => {
     expect(errorToast).not.toHaveBeenCalled();
   });
 
-  it("toasts error when no condensation arrives in time", () => {
+  it("toasts error when no condensation arrives in time", async () => {
     const { result } = renderHook(() => useCompactContextAction(50_000), {
       wrapper,
     });
 
-    act(() => result.current.handleCompact());
+    await act(async () => {
+      result.current.handleCompact();
+      await vi.advanceTimersByTimeAsync(0);
+    });
     act(() => {
       vi.advanceTimersByTime(90_000);
     });
@@ -218,5 +246,22 @@ describe("useCompactContextAction (integration)", () => {
     expect(errorToast).toHaveBeenCalledWith(
       I18nKey.CONVERSATION$COMPACT_CONTEXT_FAILED,
     );
+  });
+  it("shows one error for a rejected compaction and allows another attempt", async () => {
+    const reason = "This agent has no condenser configured";
+    vi.mocked(
+      AgentServerConversationService.condenseConversation,
+    ).mockRejectedValue(new HttpError(409, "Conflict", { detail: reason }));
+    const { result } = renderHook(() => useCompactContextAction(50_000), {
+      wrapper,
+    });
+    await act(async () => {
+      result.current.handleCompact();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(errorToast).toHaveBeenCalledExactlyOnceWith(reason);
+    expect(successToast).not.toHaveBeenCalled();
+    expect(result.current.isCompacting).toBe(false);
+    expect(result.current.isDisabled).toBe(false);
   });
 });

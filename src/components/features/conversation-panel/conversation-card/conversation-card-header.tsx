@@ -7,9 +7,11 @@ import { InsiderCatBadge } from "../../conversation/insider-cat-badge";
 
 interface ConversationCardHeaderProps {
   title: string;
+  titlePending?: boolean;
   titleMode: "view" | "edit";
   onTitleSave: (title: string) => void;
   executionStatus?: ExecutionStatus | null;
+  isStarting?: boolean;
   sandboxStatus?: SandboxStatus | null;
   tags?: Record<string, string> | null;
   parentConversationId?: string | null;
@@ -24,9 +26,11 @@ interface ConversationCardHeaderProps {
 
 export function ConversationCardHeader({
   title,
+  titlePending,
   titleMode,
   onTitleSave,
   executionStatus,
+  isStarting,
   sandboxStatus,
   tags,
   parentConversationId,
@@ -35,10 +39,11 @@ export function ConversationCardHeader({
   const archived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
   return (
     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
-      {executionStatus !== undefined && (
+      {(executionStatus !== undefined || isStarting) && (
         <div className="flex w-4.5 shrink-0 items-center justify-center">
           <ConversationStatusDot
             executionStatus={executionStatus}
+            isStarting={isStarting}
             sandboxStatus={sandboxStatus}
             isArchived={archived}
             showTooltip={false}
@@ -52,6 +57,7 @@ export function ConversationCardHeader({
       />
       <ConversationCardTitle
         title={title}
+        titlePending={titlePending}
         titleMode={titleMode}
         onSave={onTitleSave}
         isConversationArchived={archived}

@@ -21,9 +21,7 @@ export type ConversationSortField = "created" | "updated";
 export type ThreadScope = "all" | "relevant";
 export type OrganizeMode = "grouped" | "chronological";
 export type AutomationFilterMode =
-  | "all"
-  | "hide-automations"
-  | "only-automations";
+  "all" | "hide-automations" | "only-automations";
 export type OlderConversationCutoff = "1h" | "1d" | "7d" | "30d";
 
 export const OLDER_CONVERSATION_CUTOFFS = [

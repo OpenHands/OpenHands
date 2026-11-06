@@ -10,6 +10,7 @@ import ConversationService from "#/api/conversation-service/conversation-service
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { DirectConversationInfo } from "#/api/agent-server-adapter";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
 
 const { useActiveBackendMock, useOptionalConversationIdMock, navigateMock } =
   vi.hoisted(() => ({
@@ -113,10 +114,8 @@ describe("UserAssistantEventMessage — branch action", () => {
     navigateMock.mockReset();
     localStorage.clear();
 
-    useActiveBackendMock.mockReturnValue({
-      backend: { kind: "local" },
-      orgId: null,
-    });
+    // The real conversation query verifies its backend against the active store.
+    useActiveBackendMock.mockReturnValue(getActiveBackend());
     useOptionalConversationIdMock.mockReturnValue({ conversationId: "conv-1" });
 
     ConversationService.setCurrentConversation(null);

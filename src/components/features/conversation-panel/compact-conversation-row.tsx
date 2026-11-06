@@ -1,3 +1,4 @@
+import { ConversationTitleText } from "#/components/features/conversation/conversation-title-text";
 import React from "react";
 import { Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
@@ -18,6 +19,7 @@ import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 interface CompactConversationRowProps {
   conversationId: string;
   title: string;
+  titlePending?: boolean;
   selectedRepository: RepositorySelection | null;
   executionStatus?: ExecutionStatus | null;
   sandboxStatus?: SandboxStatus | null;
@@ -51,6 +53,7 @@ interface CompactConversationRowProps {
 export function CompactConversationRow({
   conversationId,
   title,
+  titlePending,
   selectedRepository,
   executionStatus,
   sandboxStatus,
@@ -93,7 +96,10 @@ export function CompactConversationRow({
           className="text-sm font-medium text-contrast truncate"
           title={title}
         >
-          {title || t(I18nKey.CONVERSATION$UNTITLED)}
+          <ConversationTitleText
+            title={title || t(I18nKey.CONVERSATION$UNTITLED)}
+            pending={titlePending}
+          />
         </span>
       </div>
       <ConversationCardFooter

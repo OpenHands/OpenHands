@@ -46,7 +46,7 @@ export function SkillFacetRow({
       <span
         aria-hidden
         className={cn(
-          "flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border",
+          "flex size-3.5 shrink-0 items-center justify-center rounded-facet-control border",
           checked
             ? "border-contrast bg-contrast text-contrast-foreground"
             : "border-border",

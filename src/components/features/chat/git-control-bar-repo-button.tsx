@@ -54,7 +54,7 @@ export function GitControlBarRepoButton({
         target="_blank"
         rel="noopener noreferrer"
         className={cn(
-          "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2.5 py-1 rounded-[100px] flex-1 truncate relative",
+          "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2.5 py-1 rounded-pill flex-1 truncate relative",
           "border border-border bg-transparent hover:border-border-subtle cursor-pointer",
         )}
       >
@@ -81,7 +81,7 @@ export function GitControlBarRepoButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2.5 py-1 rounded-[100px] truncate relative",
+        "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2.5 py-1 rounded-pill truncate relative",
         "border border-[rgba(71,74,84,0.50)] bg-transparent",
         disabled
           ? "cursor-not-allowed opacity-50"

@@ -1,15 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
 import React from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useCreateSecret } from "#/hooks/mutation/use-create-secret";
 import { useUpdateSecret } from "#/hooks/mutation/use-update-secret";
 import { SettingsInput } from "../settings-input";
 import { cn } from "#/utils/utils";
-import {
-  formControlMultilineFieldClassName,
-  formControlSettingsFieldClassName,
-} from "#/utils/form-control-classes";
+import { formControlSettingsFieldClassName } from "#/utils/form-control-classes";
 import { BrandButton } from "../brand-button";
 import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 import { OptionalTag } from "../optional-tag";
@@ -24,8 +22,6 @@ interface SecretFormProps {
   defaultName?: string;
   /** Keep the form open after a failed save so the user can retry. */
   keepOpenOnError?: boolean;
-  /** Visible height of the value field, in lines. */
-  valueRows?: number;
 }
 
 export function SecretForm({
@@ -35,7 +31,6 @@ export function SecretForm({
   onSaved,
   defaultName = "",
   keepOpenOnError = false,
-  valueRows = 8,
 }: SecretFormProps) {
   const queryClient = useQueryClient();
   const { t } = useTranslation("openhands");
@@ -50,6 +45,8 @@ export function SecretForm({
     mode === "edit" && selectedSecret ? selectedSecret : defaultName,
   );
   const [value, setValue] = React.useState("");
+  const [showValue, setShowValue] = React.useState(false);
+  const valueInputId = React.useId();
   const [description, setDescription] = React.useState("");
 
   const secretDescription =
@@ -64,6 +61,7 @@ export function SecretForm({
   React.useEffect(() => {
     setName(mode === "edit" && selectedSecret ? selectedSecret : defaultName);
     setValue("");
+    setShowValue(false);
     setDescription(secretDescription);
     setError(null);
   }, [mode, selectedSecret, secretDescription, defaultName]);
@@ -189,27 +187,46 @@ export function SecretForm({
       />
       {error && <p className="text-danger text-sm">{error}</p>}
 
-      <label className="flex flex-col gap-2.5 w-full min-w-0">
-        <span className="text-sm">
+      <div className="flex flex-col gap-2.5 w-full min-w-0">
+        <label htmlFor={valueInputId} className="text-sm">
           {mode === "add"
             ? t(I18nKey.FORM$VALUE)
             : t(I18nKey.SECRETS$SECRET_VALUE_LEAVE_BLANK)}
-        </span>
-        <textarea
-          data-testid="value-input"
-          name="secret-value"
-          required={mode === "add"}
-          value={value}
-          onChange={(event) => setValue(event.currentTarget.value)}
-          className={cn(
-            "resize-none",
-            formControlMultilineFieldClassName,
-            "placeholder:italic",
-            "disabled:bg-surface-raised disabled:border-border-subtle disabled:cursor-not-allowed",
-          )}
-          rows={valueRows}
-        />
-      </label>
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            id={valueInputId}
+            data-testid="value-input"
+            name="secret-value"
+            type={showValue ? "text" : "password"}
+            autoComplete="new-password"
+            required={mode === "add"}
+            value={value}
+            onChange={(event) => setValue(event.currentTarget.value)}
+            className={cn(
+              formControlSettingsFieldClassName,
+              "disabled:bg-surface-raised disabled:border-border-subtle disabled:cursor-not-allowed",
+            )}
+          />
+          <BrandButton
+            type="button"
+            variant="secondary"
+            ariaLabel={t(
+              showValue
+                ? I18nKey.SECRETS$HIDE_VALUE
+                : I18nKey.SECRETS$SHOW_VALUE,
+            )}
+            isDisabled={isSaving}
+            onClick={() => setShowValue((visible) => !visible)}
+          >
+            {showValue ? (
+              <EyeOff size={16} aria-hidden="true" />
+            ) : (
+              <Eye size={16} aria-hidden="true" />
+            )}
+          </BrandButton>
+        </div>
+      </div>
 
       <label className="flex flex-col gap-2.5 w-full min-w-0">
         <div className="flex items-center gap-2">

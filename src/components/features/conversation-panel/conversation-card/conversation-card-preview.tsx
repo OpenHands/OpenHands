@@ -1,3 +1,4 @@
+import { ConversationTitleText } from "#/components/features/conversation/conversation-title-text";
 import type { ReactNode } from "react";
 import { Folder } from "lucide-react";
 import { FaBitbucket, FaGithub, FaGitlab } from "react-icons/fa6";
@@ -20,6 +21,7 @@ import { getConversationTagIcon } from "./conversation-tag-icons";
 
 interface ConversationCardPreviewProps {
   title: string;
+  titlePending?: boolean;
   executionStatus?: ExecutionStatus | null;
   sandboxStatus?: SandboxStatus | null;
   selectedRepository: RepositorySelection | null;
@@ -35,6 +37,14 @@ interface ConversationCardPreviewProps {
   /** Registry key of the ACP CLI server, resolved to its brand mark. */
   acpServer?: string | null;
   createdAt?: string;
+  /** Id of the agent profile the conversation was launched from. */
+  agentProfileId?: string | null;
+  /**
+   * The launched profile's name, resolved by the panel from the profile list:
+   * a string when known, ``null`` when the list has no such profile (deleted,
+   * another organization), ``undefined`` while the list is still loading.
+   */
+  agentProfileName?: string | null;
   /**
    * Server-side conversation tags. Always shown in the hovercard when present
    * (except keys already covered by repository / branch / directory rows).
@@ -114,6 +124,7 @@ function PreviewValueWithIcon({
 
 export function ConversationCardPreview({
   title,
+  titlePending,
   executionStatus,
   sandboxStatus,
   selectedRepository,
@@ -122,6 +133,8 @@ export function ConversationCardPreview({
   agentKind = null,
   acpServer = null,
   createdAt,
+  agentProfileId = null,
+  agentProfileName,
   tags = null,
   parentConversationId,
   isArchived,
@@ -160,7 +173,7 @@ export function ConversationCardPreview({
           </span>
         ) : null}
         <span className="break-words text-sm font-medium leading-5 text-contrast">
-          {title}
+          <ConversationTitleText title={title} pending={titlePending} />
         </span>
       </div>
 
@@ -213,6 +226,20 @@ export function ConversationCardPreview({
             >
               {llmModel}
             </PreviewValueWithIcon>
+          </PreviewRow>
+        ) : null}
+
+        {agentProfileId && agentProfileName !== undefined ? (
+          <PreviewRow
+            label={t(
+              agentProfileName
+                ? I18nKey.CONVERSATION_PANEL$PREVIEW_AGENT_PROFILE
+                : I18nKey.CONVERSATION_PANEL$PREVIEW_AGENT_PROFILE_ID,
+            )}
+          >
+            <span data-testid="conversation-card-preview-agent-profile">
+              {agentProfileName ?? agentProfileId}
+            </span>
           </PreviewRow>
         ) : null}
 

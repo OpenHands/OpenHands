@@ -25,7 +25,7 @@ ARG AGENT_SERVER_VERSION
 ARG AUTOMATION_VERSION
 
 # ── Stage 1: Build frontend ──────────────────────────────────────────────────
-FROM node:24-slim AS frontend-build
+FROM node:24.22.1-slim AS frontend-build
 
 WORKDIR /build
 
@@ -49,7 +49,7 @@ RUN npm run build
 
 # ── Stage 1b: Generate shell-sourceable defaults from config/defaults.json ──
 # This avoids needing jq/python at container runtime to parse the JSON.
-FROM node:24-slim AS config-gen
+FROM node:24.22.1-slim AS config-gen
 COPY config/defaults.json /tmp/
 RUN node -e " \
   const c = JSON.parse(require('fs').readFileSync('/tmp/defaults.json','utf-8')); \
@@ -150,6 +150,7 @@ COPY scripts/mars-web-bridge.mjs /opt/agent-canvas/mars-web-bridge.mjs
 COPY scripts/mars-tunnel-bridge.mjs /opt/agent-canvas/mars-tunnel-bridge.mjs
 COPY scripts/mars-api.mjs /opt/agent-canvas/mars-api.mjs
 COPY scripts/mars-credentials.mjs /opt/agent-canvas/mars-credentials.mjs
+COPY scripts/mars-secret-store.mjs /opt/agent-canvas/mars-secret-store.mjs
 COPY scripts/mars-oauth.mjs /opt/agent-canvas/mars-oauth.mjs
 COPY scripts/mars-session.mjs /opt/agent-canvas/mars-session.mjs
 COPY scripts/tunnel-client.mjs /opt/agent-canvas/tunnel-client.mjs
