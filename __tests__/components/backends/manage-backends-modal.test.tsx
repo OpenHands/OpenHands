@@ -1096,7 +1096,7 @@ describe("BackendVersion", () => {
     };
     getServerInfoMock.mockResolvedValue({
       version: "1.59.0",
-      execution_runtime: "docker",
+      conversation_runtime: "docker",
     });
 
     renderInQueryClient(<BackendVersion backend={local} />);
@@ -1122,7 +1122,7 @@ describe("BackendVersion", () => {
     };
     getServerInfoMock.mockResolvedValue({
       version: "1.59.0",
-      execution_runtime: "docker",
+      conversation_runtime: "docker",
     });
 
     const probe = vi.fn();

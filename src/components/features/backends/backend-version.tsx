@@ -37,7 +37,7 @@ export function BackendVersion({ backend }: { backend: Backend }) {
       ).getServerInfo();
       return {
         version: getDisplayAgentServerVersion(info),
-        executionMode: info.execution_runtime as ExecutionMode | undefined,
+        executionMode: info.conversation_runtime as ExecutionMode | undefined,
       };
     },
     retry: false,
