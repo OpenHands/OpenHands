@@ -10,6 +10,7 @@ interface DesktopShellBridge {
   platform?: string;
   isFullScreen?: () => boolean;
   onFullScreenChange?: (cb: (isFullScreen: boolean) => void) => () => void;
+  setAppearance?: (appearance: "dark" | "light") => void;
 }
 
 declare global {
@@ -43,4 +44,12 @@ export function subscribeDesktopFullScreen(
   cb: (isFullScreen: boolean) => void,
 ): () => void {
   return getDesktopShell()?.onFullScreenChange?.(cb) ?? (() => {});
+}
+
+/**
+ * Tell the desktop shell which appearance ("dark" | "light") is active so
+ * native window chrome and menus match the selected theme.
+ */
+export function setDesktopThemeAppearance(appearance: "dark" | "light"): void {
+  getDesktopShell()?.setAppearance?.(appearance);
 }
