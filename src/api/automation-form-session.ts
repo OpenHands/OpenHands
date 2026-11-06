@@ -45,6 +45,7 @@ const AUTOMATION_SETUP_FREQUENCIES: AutomationSetupFrequency[] = [
 ];
 const STRING_FIELDS = [
   "name",
+  "runAsUserId",
   "prompt",
   "repository",
   "pluginSource",
@@ -178,6 +179,12 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
   const existingRepositories = readAutomationRepositories(
     value.existingRepositories,
   );
+  const existingEventTrigger =
+    value.existingEventTrigger &&
+    typeof value.existingEventTrigger === "object" &&
+    !Array.isArray(value.existingEventTrigger)
+      ? value.existingEventTrigger
+      : null;
   const serverDraftId =
     typeof value.serverDraftId === "string" ? value.serverDraftId.trim() : "";
   const materializedAutomationId =
@@ -203,6 +210,7 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
     ...(value.canUpdateRepositories === true
       ? { canUpdateRepositories: true }
       : {}),
+    ...(existingEventTrigger ? { existingEventTrigger } : {}),
     ...(serverDraftId ? { serverDraftId } : {}),
     ...(materializedAutomationId ? { materializedAutomationId } : {}),
     ...(fieldMetadata ? { fieldMetadata } : {}),

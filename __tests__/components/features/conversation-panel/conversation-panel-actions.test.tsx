@@ -1,13 +1,29 @@
-import { screen, waitFor, within, act } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  CONVERSATION_QUERY_KEYS,
+  DEFAULT_CONVERSATION_PAGE_SIZE,
+} from "#/hooks/query/query-keys";
+import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
+import { NavigationProvider } from "#/context/navigation-context";
+import {
+  screen,
+  waitFor,
+  within,
+  act,
+  fireEvent,
+} from "@testing-library/react";
+
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
   setupConversationPanelTest,
   createMockConversation,
+  mockConversations,
   renderConversationPanel,
   cloudBackend,
   RouterStub,
 } from "./conversation-panel-test-utils";
+import { withConversationTagFlags } from "#/utils/conversation-tag-flags";
 import { renderWithProviders } from "test-utils";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
@@ -23,7 +39,18 @@ import {
 } from "#/api/backend-registry/active-store";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
+import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+
+const { translate } = vi.hoisted(() => ({ translate: (key: string) => key }));
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
+  useTranslation: () => ({
+    t: translate,
+    i18n: { language: "en", exists: () => false },
+  }),
+}));
 
 const mockStopConversationMutate = vi.fn();
 vi.mock("#/hooks/mutation/use-unified-stop-conversation", () => ({
@@ -37,6 +64,181 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
 
 describe("ConversationPanel conversation actions", () => {
   setupConversationPanelTest();
+
+  it("starts the selected Cloud metadata request on navigation, but not a modified click", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+    renderWithProviders(
+      <ActiveBackendProvider>
+        <RouterStub />
+      </ActiveBackendProvider>,
+    );
+    const cards = await screen.findAllByTestId("conversation-card");
+    const link = cards[0].closest("a")!;
+    const cid = link
+      .getAttribute("href")!
+      .split("/conversations/")[1]
+      .split("?")[0];
+    vi.spyOn(
+      AgentServerConversationService,
+      "batchGetAppConversations",
+    ).mockResolvedValue([]);
+    fireEvent.click(link, { ctrlKey: true });
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).not.toHaveBeenCalled();
+    fireEvent.click(link);
+    expect(
+      AgentServerConversationService.batchGetAppConversations,
+    ).toHaveBeenCalledWith([cid]);
+  });
+
+  it("shows startup activity on a pending launch and switches to its error indicator", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+    const id = useConversationLaunchStore.getState().begin({
+      backendId: cloudBackend.id,
+      orgId: "org-2",
+      message: "Investigate the startup indicator",
+      files: [],
+    });
+    try {
+      renderWithProviders(
+        <ActiveBackendProvider>
+          <RouterStub />
+        </ActiveBackendProvider>,
+      );
+      expect(
+        await screen.findByRole("img", {
+          name: "CONVERSATION$STARTING_CONVERSATION",
+        }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("SIDEBAR$NEW_CHAT")).toHaveAttribute(
+        "aria-busy",
+        "true",
+      );
+      act(() =>
+        useConversationLaunchStore
+          .getState()
+          .update(id, { error: "Start failed" }),
+      );
+      expect(
+        screen.queryByRole("img", {
+          name: "CONVERSATION$STARTING_CONVERSATION",
+        }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("conversation-status-error"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Investigate the startup indicator"),
+      ).not.toHaveAttribute("aria-busy");
+    } finally {
+      act(() => useConversationLaunchStore.getState().remove(id));
+    }
+  });
+
+  it("keeps pending titles in retained cards until generation finishes", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+    const conversation = createMockConversation({
+      id: "title-transition",
+      title: "Review the login flow",
+      title_generation: {
+        status: "pending",
+        title: "Review the login flow",
+        deadline_at: new Date(Date.now() + 60000).toISOString(),
+      },
+    });
+    vi.mocked(
+      AgentServerConversationService.searchConversations,
+    ).mockResolvedValue({
+      items: [conversation],
+      next_page_id: null,
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    renderWithProviders(
+      <QueryClientProvider client={client}>
+        <ActiveBackendProvider>
+          <ConversationPanel />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+    const card = await screen.findByTestId("conversation-card");
+    expect(within(card).getByText("SIDEBAR$NEW_CHAT")).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    act(() =>
+      client.setQueryData(
+        CONVERSATION_QUERY_KEYS.paginated(
+          DEFAULT_CONVERSATION_PAGE_SIZE,
+          cloudBackend.id,
+          "org-2",
+        ),
+        {
+          pages: [
+            {
+              items: [
+                {
+                  ...conversation,
+                  title: "Login flow review",
+                  title_generation: {
+                    ...conversation.title_generation,
+                    status: "generated",
+                    title: "Login flow review",
+                  },
+                },
+              ],
+              next_page_id: null,
+            },
+          ],
+          pageParams: [null],
+        },
+      ),
+    );
+    expect(
+      await within(card).findByText("Login flow review"),
+    ).not.toHaveAttribute("aria-busy");
+  });
+
+  it("refreshes a retained row's relative timestamp as time passes", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const now = Date.now();
+    vi.mocked(
+      AgentServerConversationService.searchConversations,
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "clock",
+          updated_at: new Date(now - 120000).toISOString(),
+        }),
+      ],
+      next_page_id: null,
+    });
+    const navigate = vi.fn();
+    const panel = (isNavigating: boolean) => (
+      <NavigationProvider
+        value={{
+          currentPath: "/",
+          conversationId: null,
+          isNavigating,
+          navigate,
+        }}
+      >
+        <ConversationPanel />
+      </NavigationProvider>
+    );
+    const { rerender } = renderWithProviders(panel(false));
+    const [card] = await screen.findAllByTestId("conversation-card");
+    expect(card.querySelector("time")).toHaveTextContent("2m");
+
+    vi.setSystemTime(now + 120000);
+    rerender(panel(true));
+    expect(card.querySelector("time")).toHaveTextContent("4m");
+  });
 
   it("should cancel deleting a conversation", async () => {
     const user = userEvent.setup();
@@ -121,6 +323,25 @@ describe("ConversationPanel conversation actions", () => {
 
   it("should archive a conversation and remove it from the list", async () => {
     const user = userEvent.setup();
+    const items = mockConversations.map((conversation) => ({
+      ...conversation,
+    }));
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({ items, next_page_id: null });
+    // Stateful fake: tag-flag writes update what later searches return,
+    // mirroring the server round-trip the settle-invalidation performs.
+    vi.spyOn(
+      AgentServerConversationService,
+      "updateConversationTagFlags",
+    ).mockImplementation(async (conversationId, _currentTags, changes) => {
+      const target = items.find(
+        (conversation) => conversation.id === conversationId,
+      )!;
+      target.tags = withConversationTagFlags(target.tags, changes);
+      return target;
+    });
     renderConversationPanel();
 
     let cards = await screen.findAllByTestId("conversation-card");
@@ -145,18 +366,232 @@ describe("ConversationPanel conversation actions", () => {
       ).not.toBeInTheDocument();
     });
 
+    await waitFor(() => {
+      expect(screen.queryByText("Conversation 1")).not.toBeInTheDocument();
+    });
     cards = await screen.findAllByTestId("conversation-card");
     expect(cards).toHaveLength(2);
-    expect(screen.queryByText("Conversation 1")).not.toBeInTheDocument();
+  });
+
+  it("migrates a legacy localStorage pin into a server tag and drains it", async () => {
+    // Pins written before tags existed live in the localStorage store; the
+    // panel replays them into the conversation's tags on load and removes
+    // the legacy entry so the migration cannot run twice.
+    usePinnedConversationsStore
+      .getState()
+      .pinConversation("default-local", "2");
+
+    renderConversationPanel();
+
+    await waitFor(() => {
+      expect(
+        AgentServerConversationService.updateConversationTagFlags,
+      ).toHaveBeenCalledWith("2", undefined, { pinned: true });
+    });
+    await waitFor(() => {
+      expect(
+        usePinnedConversationsStore.getState().pinsByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("2");
+    });
+  });
+
+  it("migrates a legacy localStorage archive into a server tag and drains it", async () => {
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation("default-local", "1");
+    // Stateful fake: the migrated tag must survive the settle refetch,
+    // exactly as it would against a real server.
+    const items = mockConversations.map((conversation) => ({
+      ...conversation,
+    }));
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({ items, next_page_id: null });
+    vi.spyOn(
+      AgentServerConversationService,
+      "updateConversationTagFlags",
+    ).mockImplementation(async (conversationId, _currentTags, changes) => {
+      const target = items.find(
+        (conversation) => conversation.id === conversationId,
+      )!;
+      target.tags = withConversationTagFlags(target.tags, changes);
+      return target;
+    });
+
+    renderConversationPanel();
+
+    await waitFor(() => {
+      expect(
+        AgentServerConversationService.updateConversationTagFlags,
+      ).toHaveBeenCalledWith("1", undefined, { archived: true });
+    });
+    await waitFor(() => {
+      expect(
+        useArchivedConversationsStore.getState().archivesByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("1");
+    });
+    // The archived row leaves the default list once the tag lands
+    // (optimistically, before any refetch).
+    await waitFor(() => {
+      expect(screen.queryByText("Conversation 1")).not.toBeInTheDocument();
+    });
+  });
+
+  it("migrates both legacy flags in one write and drains only after success", async () => {
+    usePinnedConversationsStore
+      .getState()
+      .pinConversation("default-local", "1");
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation("default-local", "1");
+    const conversation = createMockConversation({
+      id: "1",
+      tags: { origin: "automation" },
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({ items: [conversation], next_page_id: null });
+    let finishWrite!: () => void;
+    const write = vi
+      .spyOn(AgentServerConversationService, "updateConversationTagFlags")
+      .mockImplementation(
+        (_id, currentTags, changes) =>
+          new Promise((resolve) => {
+            finishWrite = () => {
+              conversation.tags = withConversationTagFlags(
+                currentTags,
+                changes,
+              );
+              resolve(conversation);
+            };
+          }),
+      );
+
+    renderConversationPanel();
+
+    await waitFor(() => expect(write).toHaveBeenCalledTimes(1));
+    expect(write).toHaveBeenCalledWith(
+      "1",
+      { origin: "automation" },
+      {
+        pinned: true,
+        archived: true,
+      },
+    );
+    expect(
+      usePinnedConversationsStore.getState().pinsByBackendId["default-local"],
+    ).toContain("1");
+    expect(
+      useArchivedConversationsStore.getState().archivesByBackendId[
+        "default-local"
+      ],
+    ).toContain("1");
+
+    await act(async () => finishWrite());
+
+    await waitFor(() => {
+      expect(
+        usePinnedConversationsStore.getState().pinsByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("1");
+      expect(
+        useArchivedConversationsStore.getState().archivesByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("1");
+    });
+    expect(conversation.tags).toEqual({
+      origin: "automation",
+      pinned: "true",
+      archived: "true",
+    });
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains legacy flags after a failed migration and retries on remount", async () => {
+    usePinnedConversationsStore
+      .getState()
+      .pinConversation("default-local", "1");
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation("default-local", "1");
+    let failWrite!: () => void;
+    const write = vi
+      .spyOn(AgentServerConversationService, "updateConversationTagFlags")
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            failWrite = () => reject(new Error("Network unavailable"));
+          }),
+      );
+
+    const { unmount } = renderConversationPanel();
+    await waitFor(() => expect(write).toHaveBeenCalledTimes(1));
+    await act(async () => failWrite());
+
+    expect(
+      usePinnedConversationsStore.getState().pinsByBackendId["default-local"],
+    ).toContain("1");
+    expect(
+      useArchivedConversationsStore.getState().archivesByBackendId[
+        "default-local"
+      ],
+    ).toContain("1");
+    expect(write).toHaveBeenCalledTimes(1);
+    unmount();
+    renderConversationPanel();
+    await waitFor(() => {
+      expect(
+        usePinnedConversationsStore.getState().pinsByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("1");
+      expect(
+        useArchivedConversationsStore.getState().archivesByBackendId[
+          "default-local"
+        ] ?? [],
+      ).not.toContain("1");
+    });
+    expect(write).toHaveBeenCalledTimes(2);
   });
 
   it("shows archived conversations when the preference is on and restores them", async () => {
     // Archiving must stay reversible — that is the whole distinction from
     // deleting, which removes the conversation from the agent server.
     const user = userEvent.setup();
-    useArchivedConversationsStore
-      .getState()
-      .archiveConversation("default-local", "1");
+    const items = [
+      createMockConversation({
+        id: "1",
+        title: "Conversation 1",
+        tags: { archived: "true" },
+      }),
+      createMockConversation({ id: "2", title: "Conversation 2" }),
+      createMockConversation({ id: "3", title: "Conversation 3" }),
+    ];
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items,
+      next_page_id: null,
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "updateConversationTagFlags",
+    ).mockImplementation(async (conversationId, _currentTags, changes) => {
+      const target = items.find(
+        (conversation) => conversation.id === conversationId,
+      )!;
+      target.tags = withConversationTagFlags(target.tags, changes);
+      return target;
+    });
     useConversationPanelPreferencesStore.setState({
       showArchivedConversations: true,
     });
@@ -177,14 +612,14 @@ describe("ConversationPanel conversation actions", () => {
 
     await waitFor(() => {
       expect(
-        useArchivedConversationsStore
-          .getState()
-          .isArchived("default-local", "1"),
-      ).toBe(false);
+        AgentServerConversationService.updateConversationTagFlags,
+      ).toHaveBeenCalledWith("1", { archived: "true" }, { archived: false });
     });
-    expect(
-      screen.queryByTestId("conversation-card-archived-chip"),
-    ).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("conversation-card-archived-chip"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("hides a missing-runtime conversation from the default list, reveals it with the Archived chip, and offers neither action", async () => {
@@ -291,9 +726,21 @@ describe("ConversationPanel conversation actions", () => {
     // An explicit archive whose sandbox is not missing is restorable, so its
     // ⋮ menu offers Unarchive and removing it returns the row to the default
     // list.
-    useArchivedConversationsStore
-      .getState()
-      .archiveConversation("default-local", "1");
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "1",
+          title: "Conversation 1",
+          tags: { archived: "true" },
+        }),
+        createMockConversation({ id: "2", title: "Conversation 2" }),
+        createMockConversation({ id: "3", title: "Conversation 3" }),
+      ],
+      next_page_id: null,
+    });
     useConversationPanelPreferencesStore.setState({
       showArchivedConversations: true,
     });
@@ -325,13 +772,11 @@ describe("ConversationPanel conversation actions", () => {
           id: "gone",
           title: "Gone Conversation",
           sandbox_status: "MISSING",
+          tags: { archived: "true" },
         }),
       ],
       next_page_id: null,
     });
-    useArchivedConversationsStore
-      .getState()
-      .archiveConversation("default-local", "gone");
     useConversationPanelPreferencesStore.setState({
       showArchivedConversations: true,
     });
@@ -1046,6 +1491,75 @@ describe("ConversationPanel conversation actions", () => {
       await waitFor(() => {
         expect(navigate).toHaveBeenCalledWith("/conversations/task-9f");
       });
+    });
+
+    it("uses the latest navigation guard when starting from a retained row", async () => {
+      const user = userEvent.setup();
+      const navigate = vi.fn();
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+      vi.spyOn(AgentProfilesService, "listProfiles").mockResolvedValue({
+        profiles: [],
+        active_agent_profile_id: null,
+      });
+      vi.mocked(
+        AgentServerConversationService.searchConversations,
+      ).mockResolvedValue({
+        items: [
+          createMockConversation({
+            id: "guarded",
+            sandbox_id: "owned-sandbox",
+            sandbox_status: "RUNNING",
+          }),
+        ],
+        next_page_id: null,
+      });
+      const create = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue({
+          id: "guard-task",
+          created_by_user_id: null,
+          status: "WORKING",
+          detail: null,
+          app_conversation_id: null,
+          agent_server_url: null,
+          request: {},
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      const panel = (isNavigating: boolean) => (
+        <ActiveBackendProvider>
+          <NavigationProvider
+            value={{
+              currentPath: "/",
+              conversationId: null,
+              isNavigating,
+              navigate,
+            }}
+          >
+            <RouterStub />
+          </NavigationProvider>
+        </ActiveBackendProvider>
+      );
+      const { rerender } = renderWithProviders(panel(false));
+      const [card] = await screen.findAllByTestId("conversation-card");
+      await user.click(within(card).getByTestId("ellipsis-button"));
+
+      rerender(panel(true));
+      await user.click(
+        screen.getByTestId("new-conversation-in-sandbox-button"),
+      );
+      expect(create).not.toHaveBeenCalled();
+
+      rerender(panel(false));
+      await user.click(within(card).getByTestId("ellipsis-button"));
+      await user.click(
+        screen.getByTestId("new-conversation-in-sandbox-button"),
+      );
+      await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ sandboxId: "owned-sandbox" }),
+      );
     });
 
     it("offers no sandbox item for a conversation without a sandbox", async () => {

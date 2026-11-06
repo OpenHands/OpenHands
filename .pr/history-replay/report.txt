@@ -1,0 +1,111 @@
+LIVE INTEGRATION EVIDENCE — HISTORY READINESS
+
+Scope and limitation
+This is zero-model real-app integration/recovery smoke, not a reproduction of
+the exact failed-initial-REST / WebSocket-OPEN-before-replay race. The unmodified
+verification CLI can terminate/restart the real Agent Server and observe its
+WebSocket lifecycle; it cannot selectively fail the REST history request while
+holding WebSocket replay. No route interception, synthetic replay, model
+responses, driver changes, fixture changes, or feature-map changes were used.
+The exact race is covered separately by the product regression tests.
+
+Baseline runtime
+Checkout: /tmp/odie-history-replay-baseline-20261105
+Git revision: a96855e5e94cbff253813867137cfc5cbd3b9f38
+Doctor build inputs: served/run/current = 8926429f3837eede
+Agent Server 1.59.0; automation 1.26.1; Canvas 1.35.0.
+Configured Chromium verification browser; desktop 1440x1000, phone 390x844.
+Run: history-replay-baseline-20261105 (private local stack).
+
+Baseline results
+- New Chat > Local without workspace: suggestions visible in the creating tab.
+- Initialized session group accepts desktop click and expands.
+- Phone screenshot confirms suggestions and expanded group remain visible.
+- Persisted real user event survives desktop and phone reload; suggestions count 0.
+- Actual Agent Server stop shows reconnecting UI; restart recovers.
+- A second real run:false user event posted after restart arrives through WebSocket.
+- Conversation remains idle; suggestions count 0 after recovery.
+- Doctor passes; no page errors, no final warnings.
+- Stack stopped, five owned ports closed, private state purged, evidence retained.
+
+Artifacts
+baseline-empty-desktop.png / baseline-saved-history-phone.png
+baseline-saved-history-recovery.mp4 / baseline-saved-history-recovery.gif
+baseline-websocket-lifecycle.json (no frame bodies or credentials)
+
+Final after runtime and results
+Checkout: /tmp/odie-history-replay-20261105, based on a96855e5 plus product fix.
+Doctor build inputs: served/run/current = 24f6e28adefb687e-dirty
+Exact product file hashes: product-source-sha256.txt.
+Run: history-replay-verified-20261105, same runtime versions and viewports as baseline.
+- New empty conversation immediately shows suggestions in the creating tab.
+- Desktop session group expands; phone group collapses and expands.
+- Persisted real events survive desktop and phone reload; suggestions count 0.
+- Actual Agent Server stop produces Reconnecting; restart recovers and a new
+  run:false event arrives. Repeated once at fixed desktop viewport for readable video.
+- Final conversation idle, three real user events visible, suggestions count 0.
+- Final owned stack stopped; ingress, Agent Server, automation, frontend and
+  VS Code ports closed. Private run state purged; evidence retained.
+- Doctor passes with zero failures/warnings and zero page errors.
+- No agent/model execution: run:false events, autotitle=false, and dummy loopback
+  model endpoint without validation. No paid provider/model use.
+- Final after PNGs and recovery MP4/GIF come ONLY from this final build, not the
+  intermediate builds checked while implementation review was still underway.
+
+Final artifacts
+after-empty-desktop.png: final empty conversation and expanded session group.
+after-saved-history-phone.png: final settled mobile view after history/recovery.
+after-saved-history-recovery.mp4 / .gif: actual server loss and recovery on desktop;
+34.6 seconds, 1440x1000, 10 fps, 340 captures, zero misses, no cuts or cap.
+after-doctor.json: served/run/checkout stamp and healthy local runtime.
+after-websocket-lifecycle.json: lifecycle only, no payload bodies/credentials.
+The baseline recovery video includes viewport changes; final clip uses desktop
+throughout to keep the reconnecting indicator and incoming event legible.
+
+These are integration non-regression checks. Both baseline and final builds pass
+these ordinary reload/recovery checks. The recordings do not claim to show the
+exact race failing before or passing after; use the focused regression tests for
+that causal claim.
+
+Procedure (all CLI calls use an explicit isolated --run, or OH_VERIFY_RUN)
+1. control-openhands launch --new --run-id <id> --build auto --print-run
+2. control-openhands doctor
+3. QA_HISTORY_DUMMY_KEY=qa control-openhands llm set --profile default \
+   --model openai/gpt-4o --base-url http://127.0.0.1:9 \
+   --api-key-env QA_HISTORY_DUMMY_KEY --no-validate
+4. control-openhands onboard --skip (analytics off)
+5. browser record start --feature F06.empty-state-suggestions --fps 10
+6. browser click testid=conversation-panel-new-thread-picker
+   browser click testid=launch-no-workspace --expect-url /conversations/
+   browser text testid=chat-suggestions
+   browser click testid=event-group-toggle
+   browser attr testid=event-group-toggle aria-expanded
+   browser screenshot; browser viewport phone; browser screenshot
+   browser record stop --gif
+7. api POST /api/conversations --write --data <idle conversation request>
+   Request: Agent with tools=[] and include_default_tools=[], dummy loopback
+   LLM profile above, owned run workspace, autotitle=false, max_iterations=1.
+   No initial message and no run/start call.
+8. api POST /api/conversations/<id>/events --write --data
+   {"role":"user","content":[{"type":"text","text":"QA persisted history marker — no agent execution requested."}],"run":false}
+9. browser viewport desktop; browser record start --feature F06.reconnect --fps 10
+   browser goto /conversations/<id>; browser wait testid=user-message
+   browser count testid=chat-suggestions; browser reload
+   browser wait testid=user-message; browser screenshot
+   browser viewport phone; browser reload; browser wait testid=user-message
+   browser count testid=chat-suggestions; browser screenshot
+10. service stop agent-server; inspect Reconnecting UI; restart
+11. api POST /api/conversations/<id>/events --write --data
+    {"role":"user","content":[{"type":"text","text":"QA recovery marker — received after server restart."}],"run":false}
+    browser wait-text 'QA recovery marker'; browser screenshot
+    browser viewport desktop; browser screenshot
+    browser text testid=user-message; browser count testid=chat-suggestions
+    browser record stop --gif; conversation status <id>; doctor
+12. browser events --kinds websocket-created,websocket-open,websocket-close
+    (CLI websocket-open means first observed frame, not an exact handshake clock.)
+13. stop --purge-private
+
+Only the owned isolated run was stopped/purged. No model calls or provider
+validation were requested; dummy model endpoint was loopback port 9. No private
+run state, model key, session key, storage state, or unredacted network payloads
+are included in this artifact directory.

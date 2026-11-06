@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { constructBranchUrl, getStatusText } from "#/utils/utils";
+import { cn, constructBranchUrl, getStatusText } from "#/utils/utils";
 import { AgentState } from "#/types/agent-state";
 import { Provider } from "#/types/settings";
 import { I18nKey } from "#/i18n/declaration";
@@ -413,6 +413,18 @@ describe("constructBranchUrl", () => {
           `${prefix}${inQuery}`,
         );
       });
+    },
+  );
+});
+
+describe("compact font-size composition", () => {
+  it.each(["text-2xs", "text-3xs"])(
+    "%s replaces a Typography size while preserving color and explicit leading",
+    (size) => {
+      expect(cn("text-sm text-contrast", size, "leading-4")).toBe(
+        `text-contrast ${size} leading-4`,
+      );
+      expect(cn(size, "text-lg leading-6")).toBe("text-lg leading-6");
     },
   );
 });
