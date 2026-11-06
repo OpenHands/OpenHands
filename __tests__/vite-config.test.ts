@@ -313,7 +313,7 @@ describe("vite library build", () => {
       recipe("automation-setup-repository-menu"),
     );
     expect(repositoryMenu.width.replace(/\s/g, "")).toBe(
-      "min(28rem,100vw-3rem)",
+      "min(40rem,100vw-3rem)",
     );
 
     // Fields consume row-owned rem widths after merging shared form classes.
