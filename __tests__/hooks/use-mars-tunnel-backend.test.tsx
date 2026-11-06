@@ -273,6 +273,43 @@ describe("useMarsTunnelBackend", () => {
     expect(window.marsBridge!.closeTunnel).toHaveBeenCalledWith("sess_abc");
   });
 
+  it("attach() does not wait again for an agent-server the bridge already reports unreachable", async () => {
+    validateLocalBackend.mockRejectedValue(new Error("connection refused"));
+    window.marsBridge!.openTunnel = vi.fn(async ({ sessionId }) => ({
+      ...tunnelStatus(sessionId, 51000),
+      sandbox: "unreachable" as const,
+    }));
+    const { result } = renderHook(useCombined, { wrapper: makeWrapper() });
+
+    await expect(
+      act(() => result.current.tunnel.attach(SESSION)),
+    ).rejects.toThrow(/connection refused/);
+
+    expect(validateLocalBackend).toHaveBeenCalledTimes(1);
+    expect(window.marsBridge!.closeTunnel).toHaveBeenCalledWith("sess_abc");
+  });
+
+  it("attach() says at once that nothing serves the guest port when the bridge already waited", async () => {
+    validateLocalBackend.mockRejectedValue(new Error("socket hang up"));
+    window.marsBridge!.openTunnel = vi.fn(async ({ sessionId }) => ({
+      ...tunnelStatus(sessionId, 51000),
+      sandbox: "unreachable" as const,
+    }));
+    window.marsBridge!.getTunnel = vi.fn(async () => ({
+      ...tunnelStatus("sess_abc", 51000),
+      upstreamFailure: { closeCode: 4002, httpStatus: null, message: "" },
+    }));
+    const { result } = renderHook(useCombined, { wrapper: makeWrapper() });
+
+    await expect(
+      act(() => result.current.tunnel.attach(SESSION)),
+    ).rejects.toMatchObject({
+      name: "MarsAttachError",
+      reason: "not-openhands",
+    });
+    expect(validateLocalBackend).toHaveBeenCalledTimes(1);
+  });
+
   it("detach() closes the tunnel and removes the Backend", async () => {
     const { result } = renderHook(useCombined, { wrapper: makeWrapper() });
     let backend: Backend;

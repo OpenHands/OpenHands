@@ -22,6 +22,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createTunnelRegistry } from "./tunnel-registry.mjs";
 import { ensureSessionAwake } from "./mars-session.mjs";
+import { prepareSandbox } from "./mars-sandbox-prep.mjs";
 import {
   AGENT_SERVER_GUEST_PORT,
   DEFAULT_MARS_API_BASE_URL,
@@ -138,6 +139,7 @@ export function readMarsConfig(
  *   Where the Agent Canvas server keeps tokens (keychain, encrypted file, memory)
  * @param {(url: string) => Promise<void>} [options.openExternal] Opens the OAuth page
  * @param {typeof ensureSessionAwake} [options.ensureAwake] Override for tests
+ * @param {typeof prepareSandbox} [options.prepare] Override for tests
  * @param {Record<string, string | undefined>} [options.env]
  */
 export function createMarsTunnelBridge({
@@ -149,6 +151,7 @@ export function createMarsTunnelBridge({
   secrets = null,
   openExternal = async () => {},
   ensureAwake = ensureSessionAwake,
+  prepare = prepareSandbox,
   env = process.env,
 } = {}) {
   const config = readMarsConfig(env);
@@ -290,6 +293,38 @@ export function createMarsTunnelBridge({
       },
     });
 
+  /**
+   * Sessions whose sandbox is prepared: the fixes persist with the sandbox.
+   * Only success is remembered; an unreachable guest, or one still booting
+   * when a step failed, is tried again next time.
+   */
+  const preparedSessions = new Set();
+  /**
+   * Runs in flight, shared by concurrent connects. Keyed by listener too: a
+   * run probing a listener that has since closed must not answer for the
+   * tunnel that replaced it on another port.
+   */
+  const preparing = new Map();
+
+  function prepareOnce(sessionId, localPort) {
+    if (preparedSessions.has(sessionId)) return Promise.resolve("prepared");
+    const runKey = `${sessionId}@${localPort}`;
+    let run = preparing.get(runKey);
+    if (!run) {
+      run = prepare({
+        baseUrl: buildTunnelHost(localPort),
+        readFailure: () => registry.get(sessionId)?.upstreamFailure,
+      })
+        .then((result) => {
+          if (result === "prepared") preparedSessions.add(sessionId);
+          return result;
+        })
+        .finally(() => preparing.delete(runKey));
+      preparing.set(runKey, run);
+    }
+    return run;
+  }
+
   /** Configs are immutable, so a config's agent never needs re-reading. */
   const agentByConfigId = new Map();
 
@@ -317,8 +352,23 @@ export function createMarsTunnelBridge({
       readyAt.delete(sessionId);
       throw error;
     }
+    // Every caller gets a prepared sandbox, not just the Canvas page, and
+    // learns how that went: `sandbox` is the outcome of prepareSandbox.
+    let sandbox;
+    if (tunnel.status === "connected" && tunnel.localPort !== undefined) {
+      sandbox = await prepareOnce(sessionId, tunnel.localPort);
+      // Preparing can take a minute; answer with the tunnel as it is now,
+      // since it may have been closed or replaced meanwhile.
+      tunnel = registry.get(sessionId) ?? {
+        ...tunnel,
+        status: "error",
+        localPort: undefined,
+        error: "The session was disconnected while its sandbox was prepared.",
+      };
+    }
     return {
       ...tunnel,
+      sandbox,
       transport: "tunnel",
       host:
         tunnel.localPort === undefined
