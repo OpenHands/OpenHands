@@ -23,7 +23,6 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { redactStorage } from "./lib/redact-storage.mjs";
 import { HeldKeys } from "./lib/held-keys.mjs";
-import { installMediaObservation } from "./lib/media-observation.mjs";
 import {
   observeWebSocket,
   isWebSocketObservation,
@@ -162,9 +161,19 @@ await context.addInitScript(() => {
   });
 });
 
-// Read-only media observation. Normal microphone, playback and peer APIs still
-// execute; no responses, constraints, permissions or media are substituted.
-await context.addInitScript(installMediaObservation);
+// Instrumentation, not mocking: record media playback so sound features can
+// be observed (`browser media`); playback itself still happens.
+await context.addInitScript(() => {
+  const original = HTMLMediaElement.prototype.play;
+  window.__ohMediaPlays = [];
+  HTMLMediaElement.prototype.play = function play(...args) {
+    window.__ohMediaPlays.push({
+      src: this.currentSrc || this.src || "",
+      ts: new Date().toISOString(),
+    });
+    return original.apply(this, args);
+  };
+});
 
 let dialogPolicy = "dismiss";
 let networkOffline = false;
@@ -1422,7 +1431,7 @@ const handlers = {
       value: await input.inputValue().catch(() => undefined),
     };
   },
-  async media({ clear, reducedMotion, voice }) {
+  async media({ clear, reducedMotion }) {
     if (reducedMotion !== undefined) {
       if (!["reduce", "no-preference"].includes(reducedMotion))
         throw new Error("media reduced-motion needs reduce | no-preference");
@@ -1435,15 +1444,6 @@ const handlers = {
     }, Boolean(clear));
     return {
       plays,
-      ...(voice
-        ? {
-            voice: await activePage.evaluate(async () =>
-              window.__ohMediaObservation
-                ? window.__ohMediaObservation.snapshot()
-                : { supported: false, reason: "instrumentation-unavailable" },
-            ),
-          }
-        : {}),
       reducedMotion: await activePage.evaluate(() =>
         matchMedia("(prefers-reduced-motion: reduce)").matches
           ? "reduce"

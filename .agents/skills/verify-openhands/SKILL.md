@@ -138,19 +138,6 @@ control-openhands stop                         # stops only this run; evidence s
   automation|agent-server` (backend-down UI), `restart` (same state after a
   backend restart: persistence and reconnection) and `restart --rotate-key`
   (stale session key). `restart` keeps the browser on its page.
-  For a frontend fix, `restart --rebuild --run <owned-run>` stops that run,
-  runs `npm run build:app`, checks that inputs stayed unchanged, stamps the new
-  build and restarts with the same state and keys. Ordinary `restart` reuses
-  the build; SDK-only changes do not need this flag. End active Voice first,
-  then reload and doctor after rebuilding: a loaded tab still contains the old
-  bundle until reload. Old/new identities and failed attempts remain in
-  `run.json`'s `buildHistory` and `evidence/build-history.jsonl`; existing ledger
-  rows are untouched and new rows include `buildId`. Failed/interrupted builds
-  leave the run stopped and require another successful `restart --rebuild`.
-  The preflight refuses other live runs from this checkout found in
-  `$OH_VERIFY_HOME` or the selected run's parent; it cannot discover unrelated
-  servers or other verification homes. Use a separate checkout when sharing
-  would risk replacing another agent's served build.
   `browser network-state offline|online|status` disconnects or reconnects the
   browser context without changing backend state or intercepting requests;
   restore `online` before doctor or teardown.
@@ -158,21 +145,6 @@ control-openhands stop                         # stops only this run; evidence s
   emulation on the active page and returns its real `matchMedia` preference,
   alongside the existing playback observations. Use `no-preference` for normal
   streaming-motion checks; restore the prior preference afterwards.
-  `browser media --voice` adds read-only microphone permission and capture
-  outcomes, audio-track `enabled`/`readyState`, peer connection states and
-  available inbound audio RTP counters (`bytesReceived`, `packetsReceived`,
-  `totalAudioEnergy`, `totalSamplesReceived`), plus output element state even for
-  detached `Audio` objects. Instrumentation starts before page scripts; restart
-  an older owned browser daemon only after ending its active call. Normal native
-  media APIs still run: this grants no permission and supplies no audio or mock
-  responses. IDs identify observations within this document, never devices or
-  provider calls. No SDP, ICE addresses, labels, credentials or transcripts enter
-  the Voice projection. Each kind keeps at most 128 observations and reports
-  dropped counts; `collected: true` carries its last observed state, not proof
-  that a live resource was released. `--clear` still clears only play-call
-  history. Compare samples while audio is active, then require ended microphone
-  tracks, closed peers and cleared output streams after End call. Received RTP
-  counters establish media delivery; they do not establish physical audibility.
   `browser events --kinds websocket-created,websocket-open,websocket-close,websocket-error --last 100`
   observes real subscriptions: redacted socket/page URLs preserve numeric
   `after_seq`, with event timestamps and frame counts. No frame bodies or

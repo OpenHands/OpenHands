@@ -38,7 +38,10 @@ import {
   specMatches,
 } from "./lib/map-sources.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
-import { networkTiming, orderNetworkEntries } from "./lib/network-timing.mjs";
+import {
+  networkTiming,
+  orderNetworkEntries,
+} from "./lib/network-timing.mjs";
 import { resolveTestids } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
@@ -2544,10 +2547,7 @@ test("a fix is verified only by two reproductions and two passes under the same 
     "verified",
   );
   assert.match(
-    vb(
-      [row("xfail"), row("xfail")],
-      [row("xpass"), row("xpass")],
-    ).reasons.join(),
+    vb([row("xfail"), row("xfail")], [row("xpass"), row("xpass")]).reasons.join(),
     /same backend versions/,
   );
   assert.match(
@@ -2962,52 +2962,30 @@ test("network body projection keeps the start request's runtime choice past the 
   );
 });
 
-test("browser media validates options, preserves playback and requests Voice observation explicitly", async () => {
+test("browser media validates motion before dispatch and preserves playback observation", async () => {
   const runDir = mkdtempSync(join(tmpdir(), "cov-media-motion-"));
   mkdirSync(join(runDir, "private"));
   writeFileSync(join(runDir, "run.json"), "{}\n");
   const calls = [];
-  let legacy = false;
   const server = createHttpServer(async (req, res) => {
     let body = "";
     for await (const chunk of req) body += chunk;
     const call = JSON.parse(body);
     calls.push(call);
     res.setHeader("content-type", "application/json");
-    res.end(
-      JSON.stringify({
-        ok: true,
-        plays: [],
-        ...(call.args.voice && !legacy ? { voice: { supported: true } } : {}),
-      }),
-    );
+    res.end(JSON.stringify({ ok: true, plays: [] }));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  writeFileSync(
-    join(runDir, "private", "browser.json"),
-    JSON.stringify({
-      pid: process.pid,
-      port: server.address().port,
-      token: "dummy-control-token",
-    }),
-  );
-  const invoke = (args) =>
-    new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [
-        cli,
-        "browser",
-        "media",
-        ...args,
-        "--run",
-        runDir,
-      ]);
-      let output = "";
-      child.stdout.on("data", (chunk) => {
-        output += chunk;
-      });
-      child.on("error", reject);
-      child.on("close", (code) => resolve({ code, ...JSON.parse(output) }));
-    });
+  writeFileSync(join(runDir, "private", "browser.json"), JSON.stringify({
+    pid: process.pid, port: server.address().port, token: "dummy-control-token",
+  }));
+  const invoke = (args) => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [cli, "browser", "media", ...args, "--run", runDir]);
+    let output = "";
+    child.stdout.on("data", (chunk) => { output += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => resolve({ code, ...JSON.parse(output) }));
+  });
   try {
     for (const mode of ["reduce", "no-preference"]) {
       assert.equal((await invoke(["--reduced-motion", mode])).code, 0);
@@ -3017,30 +2995,10 @@ test("browser media validates options, preserves playback and requests Voice obs
     assert.equal((await invoke(["--clear"])).code, 0);
     assert.deepEqual(calls.at(-1).args, { clear: true });
     assert.equal((await invoke([])).code, 0);
-    const voice = await invoke(["--voice"]);
-    assert.equal(voice.code, 0);
-    assert.equal(voice.voice.supported, true);
-    assert.equal(calls.at(-1).args.voice, true);
-    assert.equal((await invoke(["--voice", "--clear"])).code, 0);
-    assert.deepEqual(calls.at(-1).args, { clear: true, voice: true });
     const before = calls.length;
-    for (const args of [
-      ["--reduced-motion"],
-      ["--reduced-motion", "sometimes"],
-      ["reduce"],
-      ["extra", "--reduced-motion", "reduce"],
-      ["--voice", "false"],
-    ])
+    for (const args of [["--reduced-motion"], ["--reduced-motion", "sometimes"], ["reduce"], ["extra", "--reduced-motion", "reduce"]])
       assert.equal((await invoke(args)).code, 2);
-    assert.equal(
-      calls.length,
-      before,
-      "invalid media input must not mutate the browser",
-    );
-    legacy = true;
-    const unavailable = await invoke(["--voice"]);
-    assert.equal(unavailable.code, 3);
-    assert.match(unavailable.hint, /End the current call/);
+    assert.equal(calls.length, before, "invalid media input must not mutate the browser");
   } finally {
     await new Promise((resolve) => server.close(resolve));
     rmSync(runDir, { recursive: true, force: true });
@@ -3087,10 +3045,7 @@ test("browser network times responses and can list them in completion order", ()
       "/sockets/events",
     ],
   );
-  assert.throws(
-    () => orderNetworkEntries(list, "size"),
-    /request or completion/,
-  );
+  assert.throws(() => orderNetworkEntries(list, "size"), /request or completion/);
   // --last windows completed and pending rows separately: 15 open sockets
   // must not push the two completions out of a --last 15 listing.
   const sockets = Array.from({ length: 15 }, (_, i) => ({ path: `/ws/${i}` }));
