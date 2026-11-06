@@ -18,7 +18,7 @@ export const formControlMotionReduceClassName = "motion-reduce:transition-none";
 
 /** Shell properties that animate on hover/focus; foreground color snaps instantly. */
 export const formControlTransitionPropertiesClassName =
-  "transition-[background-color,border-color,box-shadow,opacity]";
+  "transition-control-shell";
 
 /** Animate shell chrome on hover/focus; foreground color snaps instantly. */
 export const formControlTransitionClassName = cn(
@@ -29,14 +29,14 @@ export const formControlTransitionClassName = cn(
 
 /** HeroUI input wrappers ship `transition-colors`; override so caret/text hover is instant. */
 export const formControlHeroUiWrapperTransitionClassName = cn(
-  "!transition-[background-color,border-color,box-shadow,opacity]",
+  "!transition-control-shell",
   formControlHeroUiTransitionDurationClassName,
   formControlMotionReduceClassName,
 );
 
 /** Transform-only transitions (e.g. combobox carets). */
 export const formControlTransformTransitionClassName = cn(
-  "transition-[transform]",
+  "transition-control-transform",
   formControlTransitionDurationClassName,
   formControlMotionReduceClassName,
 );

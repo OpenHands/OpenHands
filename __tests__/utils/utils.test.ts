@@ -440,3 +440,39 @@ describe("named radius composition", () => {
     },
   );
 });
+
+describe("cn motion recipes", () => {
+  it.each([
+    "transition-control-shell",
+    "transition-control-transform",
+    "transition-context-ring",
+    "transition-panel-width",
+    "transition-sidebar-width",
+  ])("preserves last-writer transition precedence for %s", (recipe) => {
+    expect(
+      cn(
+        "transition-all duration-200 ease-out motion-reduce:transition-none",
+        recipe,
+      ),
+    ).toBe(`duration-200 ease-out motion-reduce:transition-none ${recipe}`);
+    expect(cn(recipe, "transition-none")).toBe("transition-none");
+  });
+
+  it("keeps HeroUI's important transition override separate from normal transitions", () => {
+    expect(
+      cn(
+        "!transition-colors !duration-75 transition-none",
+        "!transition-control-shell",
+      ),
+    ).toBe("!duration-75 transition-none !transition-control-shell");
+  });
+
+  it("resolves the status pulse against other animation utilities", () => {
+    expect(cn("animate-ping", "animate-chat-status-pulse")).toBe(
+      "animate-chat-status-pulse",
+    );
+    expect(cn("animate-chat-status-pulse", "animate-none")).toBe(
+      "animate-none",
+    );
+  });
+});
