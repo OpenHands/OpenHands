@@ -181,7 +181,7 @@ export function RunStatusBadge({
       className={cn(
         "inline-flex items-center rounded-full font-medium",
         compact
-          ? "gap-1 pl-1 pr-1.5 py-0 text-[10px] leading-4"
+          ? "gap-1 pl-1 pr-1.5 py-0 text-3xs leading-4"
           : "gap-1.5 pl-2 pr-2.5 py-1 text-xs",
         config.style,
       )}

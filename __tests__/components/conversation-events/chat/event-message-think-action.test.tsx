@@ -5,7 +5,10 @@ import { EventMessage } from "#/components/conversation-events/chat/event-messag
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import { ActionEvent, SecurityRisk } from "#/types/agent-server/core";
-import { ThinkAction, ExecuteBashAction } from "#/types/agent-server/core/base/action";
+import {
+  ThinkAction,
+  ExecuteBashAction,
+} from "#/types/agent-server/core/base/action";
 import { renderWithProviders } from "test-utils";
 
 // Mock useConfig
@@ -116,9 +119,7 @@ describe("EventMessage - ThinkAction rendering", () => {
     );
 
     // The raw tool call text should NOT be displayed
-    expect(
-      screen.queryByText(/think: \{"thought":/),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/think: \{"thought":/)).not.toBeInTheDocument();
   });
 
   it("should render ThinkAction as a collapsible section", () => {
@@ -166,9 +167,7 @@ describe("EventMessage - ThinkAction rendering", () => {
     expect(
       screen.getByTestId("collapsible-thinking-content"),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("Let me analyze the problem"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Let me analyze the problem")).toBeInTheDocument();
   });
 
   it("should render ThoughtEventMessage for non-ThinkAction events", () => {
@@ -187,12 +186,11 @@ describe("EventMessage - ThinkAction rendering", () => {
     );
 
     // The thought should be displayed for non-think actions
-    expect(
-      screen.getByText("I need to run a command"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("I need to run a command")).toBeInTheDocument();
   });
 
-  it("should render reasoning_content as a collapsible section", () => {
+  it("shows reasoning_content inside the step's own details", async () => {
+    const user = userEvent.setup();
     const bashEvent = createBashActionEvent(
       "bash-reasoning",
       "echo hello",
@@ -210,16 +208,23 @@ describe("EventMessage - ThinkAction rendering", () => {
       />,
     );
 
-    // The collapsible thinking wrapper should exist for reasoning_content
-    expect(screen.getByTestId("collapsible-thinking")).toBeInTheDocument();
-
-    // The reasoning content should be hidden initially
+    // No separate Thinking dropdown; the reasoning waits behind the step.
+    expect(
+      screen.queryByTestId("collapsible-thinking"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByText("I need to think carefully about this step."),
     ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "BUTTON$EXPAND" }));
+
+    expect(screen.getByTestId("step-thinking")).toHaveTextContent(
+      "I need to think carefully about this step.",
+    );
   });
 
-  it("should render thinking_blocks as a collapsible section", () => {
+  it("shows thinking_blocks inside the step's own details", async () => {
+    const user = userEvent.setup();
     const bashEvent = createBashActionEvent(
       "bash-thinking-blocks",
       "echo hello",
@@ -243,7 +248,12 @@ describe("EventMessage - ThinkAction rendering", () => {
       />,
     );
 
-    // The collapsible thinking wrapper should exist for thinking_blocks
-    expect(screen.getByTestId("collapsible-thinking")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("collapsible-thinking"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "BUTTON$EXPAND" }));
+    expect(screen.getByTestId("step-thinking")).toHaveTextContent(
+      "Extended thinking block content here.",
+    );
   });
 });

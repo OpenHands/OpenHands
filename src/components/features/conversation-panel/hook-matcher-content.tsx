@@ -9,7 +9,7 @@ interface HookMatcherContentProps {
 }
 
 const HOOK_PILL_CLASS =
-  "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 border border-border bg-surface text-tertiary-light";
+  "inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-medium leading-4 border border-border bg-surface text-tertiary-light";
 
 export function HookMatcherContent({ matcher }: HookMatcherContentProps) {
   const { t } = useTranslation("openhands");
