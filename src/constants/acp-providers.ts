@@ -469,16 +469,72 @@ export function resolveAcpProviderIcon(
 }
 
 /**
- * The label the agent gave ``modelId`` in ``models``, else the raw ID. Returns
- * ``null`` only when there is no model to show, letting the conversation chip
- * display the provider name instead.
+ * The label the agent gave ``modelId`` in ``models``, else the raw ID. A
+ * ``<model>/<effort>`` id whose model is listed reads ``<label> · <effort>``.
+ * Returns ``null`` only when there is no model to show, letting the
+ * conversation chip display the provider name instead.
  */
 export function labelForAcpModel(
   modelId: string | null | undefined,
   models: readonly ACPModelOption[] = [],
+  formatEffort: (effort: string) => string = (effort) => effort,
 ): string | null {
   if (!modelId) return null;
-  return models.find(({ id }) => id === modelId)?.label ?? modelId;
+  const exact = models.find(({ id }) => id === modelId);
+  if (exact) return exact.label;
+  const slash = modelId.lastIndexOf("/");
+  const base =
+    slash > 0 ? models.find(({ id }) => id === modelId.slice(0, slash)) : null;
+  return base
+    ? `${base.label} · ${formatEffort(modelId.slice(slash + 1))}`
+    : modelId;
+}
+
+/** Reasoning-effort levels ``key``'s agent accepts as a ``<model>/<effort>`` suffix. */
+export function getAcpEffortLevels(
+  key: string | null | undefined,
+): readonly string[] {
+  // Client releases before the effort fields still satisfy this shape.
+  const info: { key: string; effort_levels?: readonly string[] } | null =
+    getClientAcpProvider(key);
+  return info?.effort_levels ?? [];
+}
+
+export function splitAcpModelEffort(
+  key: string | null | undefined,
+  modelId: string | null,
+): { model: string | null; effort: string | null } {
+  if (!modelId) return { model: modelId, effort: null };
+  const slash = modelId.lastIndexOf("/");
+  const effort = modelId.slice(slash + 1);
+  if (slash > 0 && getAcpEffortLevels(key).includes(effort)) {
+    return { model: modelId.slice(0, slash), effort };
+  }
+  return { model: modelId, effort: null };
+}
+
+export function joinAcpModelEffort(
+  model: string,
+  effort: string | null,
+): string {
+  return effort ? `${model}/${effort}` : model;
+}
+
+const ACP_EFFORT_LABEL_KEYS: Record<string, I18nKey> = {
+  low: I18nKey.SCHEMA$LLM$REASONING_EFFORT$CHOICE$LOW,
+  medium: I18nKey.SCHEMA$LLM$REASONING_EFFORT$CHOICE$MEDIUM,
+  high: I18nKey.SCHEMA$LLM$REASONING_EFFORT$CHOICE$HIGH,
+  xhigh: I18nKey.SCHEMA$LLM$REASONING_EFFORT$CHOICE$XHIGH,
+  max: I18nKey.SCHEMA$LLM$REASONING_EFFORT$CHOICE$MAX,
+  ultra: I18nKey.SCHEMA$LLM$REASONING_EFFORT$CHOICE$ULTRA,
+};
+
+export function acpEffortLabel(
+  effort: string,
+  t: (key: I18nKey) => string,
+): string {
+  const key = ACP_EFFORT_LABEL_KEYS[effort];
+  return key ? t(key) : effort;
 }
 
 /** Picker options for the models an ACP server reported. */

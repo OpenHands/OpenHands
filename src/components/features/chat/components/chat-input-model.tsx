@@ -15,6 +15,7 @@ import { ContextMenuListItem } from "#/components/features/context-menu/context-
 import { Divider } from "#/ui/divider";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
+import { acpEffortLabel, joinAcpModelEffort } from "#/constants/acp-providers";
 import { cn } from "#/utils/utils";
 import { getLockedCloudHost } from "#/api/agent-server-config";
 import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
@@ -57,8 +58,12 @@ export function ChatInputModelMenuContent({
   // Locked-to-Cloud blocks the Canvas settings pages this links to (OHE-3457).
   const showSettingsLink = getLockedCloudHost() === null;
 
-  const handleSelectAcpModel = (modelId: string | null) => {
-    if (modelId !== model.selectedModelId) {
+  const selectedAcpModel = model.selectedModelId
+    ? joinAcpModelEffort(model.selectedModelId, model.selectedEffort)
+    : null;
+
+  const handleSelectAcpModel = (acpModel: string | null) => {
+    if (acpModel !== selectedAcpModel) {
       // A home-page ACP model pick (no conversation) is an explicit model
       // choice made before the first message: mark it so the next home launch
       // suppresses "Run on first message" routing for that one conversation.
@@ -68,11 +73,28 @@ export function ChatInputModelMenuContent({
       }
       switchAcpModel.mutate({
         conversationId: model.switchConversationId,
-        model: modelId,
+        model: acpModel,
       });
     }
     onClose();
   };
+
+  const effortOptions = model.selectedModelId
+    ? [
+        ...(model.offersAgentDefaultEffort
+          ? [
+              {
+                effort: null,
+                label: t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT),
+              },
+            ]
+          : []),
+        ...model.effortLevels.map((effort) => ({
+          effort,
+          label: acpEffortLabel(effort, t),
+        })),
+      ]
+    : [];
 
   return (
     <>
@@ -100,7 +122,10 @@ export function ChatInputModelMenuContent({
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
-                  handleSelectAcpModel(option.id);
+                  handleSelectAcpModel(
+                    option.id &&
+                      joinAcpModelEffort(option.id, model.selectedEffort),
+                  );
                 }}
                 className={cn(
                   "flex items-center gap-2",
@@ -124,6 +149,52 @@ export function ChatInputModelMenuContent({
               </ContextMenuListItem>
             );
           })}
+          {model.effortLevels.length > 0 && (
+            <>
+              <li role="presentation" className="px-2 pt-2 pb-0.5">
+                <Typography.Text className="text-2xs font-medium text-text-dim uppercase tracking-wide leading-4">
+                  {t(I18nKey.SCHEMA$LLM$REASONING_EFFORT$LABEL)}
+                </Typography.Text>
+              </li>
+              {effortOptions.map((option) => {
+                const isSelected = option.effort === model.selectedEffort;
+                return (
+                  <ContextMenuListItem
+                    key={option.effort ?? ""}
+                    testId={`chat-input-acp-effort-option-${option.effort ?? "agent-default"}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (model.selectedModelId) {
+                        handleSelectAcpModel(
+                          joinAcpModelEffort(
+                            model.selectedModelId,
+                            option.effort,
+                          ),
+                        );
+                      }
+                    }}
+                    className={cn(
+                      "flex items-center gap-2",
+                      isSelected && "bg-interactive-hover",
+                    )}
+                  >
+                    <span className="flex-1 truncate text-sm leading-5">
+                      {option.label}
+                    </span>
+                    {isSelected && (
+                      <CheckIcon
+                        width={14}
+                        height={14}
+                        className="shrink-0"
+                        aria-hidden
+                      />
+                    )}
+                  </ContextMenuListItem>
+                );
+              })}
+            </>
+          )}
         </>
       ) : model.displayModel ? (
         <li className="text-sm">

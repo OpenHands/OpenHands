@@ -12,10 +12,13 @@ import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useAcpModelDiscovery } from "#/hooks/query/use-acp-model-discovery";
 import { useAcpSessionModels } from "#/hooks/query/use-acp-session-models";
 import {
+  acpEffortLabel,
+  getAcpEffortLevels,
   getAcpPreferredDefaultModel,
   getAcpProvider,
   labelForAcpModel,
   resolveEffectiveAcpModel,
+  splitAcpModelEffort,
   type ACPModelOption,
 } from "#/constants/acp-providers";
 import { I18nKey } from "#/i18n/declaration";
@@ -26,6 +29,12 @@ export interface ChatInputModelState {
   currentModelId: string | null;
   /** The saved choice the picker marks; null is the agent's own default. */
   selectedModelId: string | null;
+  /** Effort suffix of the saved choice; null is the agent's own effort. */
+  selectedEffort: string | null;
+  /** Effort rows the picker offers for the selected model; empty hides them. */
+  effortLevels: readonly string[];
+  /** Whether the picker offers the agent's own effort, which only a new session can return to. */
+  offersAgentDefaultEffort: boolean;
   availableAcpModels: ACPModelOption[];
   /** The picker's Agent default row, or null when it isn't offered. */
   agentDefaultLabel: string | null;
@@ -112,10 +121,13 @@ export function useChatInputModelState(): ChatInputModelState {
     currentModelId = conversation?.llm_model ?? settings?.llm_model ?? null;
   }
 
+  const selected = splitAcpModelEffort(acpServerKey, selectedModelId);
   let displayModel = currentModelId;
   if (isAcpContext) {
     displayModel =
-      labelForAcpModel(currentModelId, liveModels) ??
+      labelForAcpModel(currentModelId, liveModels, (effort) =>
+        acpEffortLabel(effort, t),
+      ) ??
       // The next conversation starts on a default no one has reported yet.
       (isHomeAcp ? t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT) : null);
   }
@@ -142,12 +154,17 @@ export function useChatInputModelState(): ChatInputModelState {
   const switchConversationId = isActiveAcpConversation
     ? (conversationId ?? null)
     : null;
+  const effortLevels =
+    showAcpPicker && selected.model ? getAcpEffortLevels(acpServerKey) : [];
 
   return {
     isAcpContext,
     displayModel,
     currentModelId,
-    selectedModelId,
+    selectedModelId: selected.model,
+    selectedEffort: selected.effort,
+    effortLevels,
+    offersAgentDefaultEffort: !switchConversationId,
     availableAcpModels,
     agentDefaultLabel,
     showAcpPicker,

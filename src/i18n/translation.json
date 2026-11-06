@@ -3725,6 +3725,24 @@
     "ca": "Baix",
     "id": "Rendah"
   },
+  "SCHEMA$LLM$REASONING_EFFORT$CHOICE$MAX": {
+    "en": "Max",
+    "ja": "最大",
+    "zh-CN": "最大",
+    "zh-TW": "最大",
+    "ko-KR": "최대",
+    "no": "Maks",
+    "it": "Massimo",
+    "pt": "Máximo",
+    "es": "Máximo",
+    "ar": "أقصى",
+    "fr": "Maximal",
+    "tr": "Maksimum",
+    "de": "Maximal",
+    "uk": "Максимальний",
+    "ca": "Màxim",
+    "id": "Maksimal"
+  },
   "SCHEMA$LLM$REASONING_EFFORT$CHOICE$MEDIUM": {
     "en": "Medium",
     "ja": "中",
@@ -3760,6 +3778,24 @@
     "uk": "Немає",
     "ca": "Cap",
     "id": "Tidak ada"
+  },
+  "SCHEMA$LLM$REASONING_EFFORT$CHOICE$ULTRA": {
+    "en": "Ultra",
+    "ja": "ウルトラ",
+    "zh-CN": "超高",
+    "zh-TW": "超高",
+    "ko-KR": "울트라",
+    "no": "Ultra",
+    "it": "Ultra",
+    "pt": "Ultra",
+    "es": "Ultra",
+    "ar": "فائق",
+    "fr": "Ultra",
+    "tr": "Ultra",
+    "de": "Ultra",
+    "uk": "Ультра",
+    "ca": "Ultra",
+    "id": "Ultra"
   },
   "SCHEMA$LLM$REASONING_EFFORT$CHOICE$XHIGH": {
     "en": "Extra High",

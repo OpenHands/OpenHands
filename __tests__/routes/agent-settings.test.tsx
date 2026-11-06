@@ -36,6 +36,23 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
   useAcpAuthStatus: (...args: unknown[]) => acpAuthStatusMock(...args),
 }));
 
+// The effort levels the client registry lists for Claude; none unless a test sets them.
+const claudeEffortLevels = vi.hoisted(() => vi.fn((): string[] => []));
+vi.mock("@openhands/typescript-client", async () => {
+  const actual = await vi.importActual<
+    typeof import("@openhands/typescript-client")
+  >("@openhands/typescript-client");
+  return {
+    ...actual,
+    getAcpProvider: (key: string | null | undefined) => {
+      const info = actual.getAcpProvider(key);
+      return info && key === "claude-code"
+        ? { ...info, effort_levels: claudeEffortLevels() }
+        : info;
+    },
+  };
+});
+
 // What the provider's own server reports; empty unless a test sets it.
 const acpModelDiscoveryMock = vi.hoisted(() => vi.fn());
 vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
@@ -133,6 +150,7 @@ const CLAUDE_PROFILE = {
 
 describe("AgentSettingsScreen", () => {
   beforeEach(() => {
+    claudeEffortLevels.mockReturnValue([]);
     vi.restoreAllMocks();
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
     // The form owns the ACP credential form, which reads secrets on mount.
@@ -277,6 +295,71 @@ describe("AgentSettingsScreen", () => {
     expect(control().buildAgentProfileFields()).toMatchObject({
       acp_model: "haiku",
     });
+  });
+
+  it("saves the reasoning effort with the model it applies to", async () => {
+    claudeEffortLevels.mockReturnValue(["low", "high"]);
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      models: CLAUDE_MODELS,
+      source: "live",
+    });
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: { ...CLAUDE_PROFILE, acp_model: "haiku/high" },
+    });
+
+    await screen.findByTestId("agent-command-input");
+    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue("Haiku");
+    expect(
+      screen.getByLabelText("SCHEMA$LLM$REASONING_EFFORT$LABEL"),
+    ).toHaveValue("SCHEMA$LLM$REASONING_EFFORT$CHOICE$HIGH");
+
+    await user.click(
+      screen.getByLabelText("SCHEMA$LLM$REASONING_EFFORT$LABEL"),
+    );
+    await user.click(
+      await screen.findByRole("option", {
+        name: "SCHEMA$LLM$REASONING_EFFORT$CHOICE$LOW",
+      }),
+    );
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_model: "haiku/low",
+    });
+
+    // A model switch keeps the chosen effort.
+    await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
+    await user.click(
+      await screen.findByRole("option", { name: "Default (recommended)" }),
+    );
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_model: "default/low",
+    });
+
+    await user.click(
+      screen.getByLabelText("SCHEMA$LLM$REASONING_EFFORT$LABEL"),
+    );
+    await user.click(
+      await screen.findByRole("option", {
+        name: "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
+      }),
+    );
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_model: "default",
+    });
+  });
+
+  it("offers no effort for the agent's own default model", async () => {
+    claudeEffortLevels.mockReturnValue(["low", "high"]);
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      models: CLAUDE_MODELS,
+      source: "live",
+    });
+    renderAgentSettingsScreen({ agentSettingsOverride: CLAUDE_PROFILE });
+
+    await screen.findByTestId("agent-model-selector");
+    expect(screen.queryByTestId("agent-effort-selector")).toBeNull();
   });
 
   it("offers OpenCode and leaves its default command to the profile resolver", async () => {

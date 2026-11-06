@@ -40,6 +40,23 @@ vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
   useAcpModelDiscovery: () => discoveryMock(),
 }));
 
+// The effort levels the client registry lists for Claude; none unless a test sets them.
+const claudeEffortLevels = vi.hoisted(() => vi.fn((): string[] => []));
+vi.mock("@openhands/typescript-client", async () => {
+  const actual = await vi.importActual<
+    typeof import("@openhands/typescript-client")
+  >("@openhands/typescript-client");
+  return {
+    ...actual,
+    getAcpProvider: (key: string | null | undefined) => {
+      const info = actual.getAcpProvider(key);
+      return info && key === "claude-code"
+        ? { ...info, effort_levels: claudeEffortLevels() }
+        : info;
+    },
+  };
+});
+
 const CLAUDE_MODELS = [
   { id: "opus[1m]", label: "Claude Opus (1M)" },
   { id: "sonnet", label: "Claude Sonnet" },
@@ -59,6 +76,7 @@ describe("ChatInputModel", () => {
     switchAcpModelMutate.mockReset();
     sessionModelsMock.mockReturnValue([]);
     discoveryMock.mockReturnValue({ models: [], defaultModelId: null });
+    claudeEffortLevels.mockReturnValue([]);
   });
 
   it("renders the active conversation's llm_model when present", () => {
@@ -419,6 +437,108 @@ describe("ChatInputModel", () => {
       conversationId: null,
       model: "opus[1m]",
     });
+  });
+
+  it("shows the conversation's effort and keeps it when switching models", () => {
+    claudeEffortLevels.mockReturnValue(["low", "high", "max"]);
+    sessionModelsMock.mockReturnValue(CLAUDE_MODELS);
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "opus[1m]/high",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    const trigger = screen.getByTestId("chat-input-llm-model");
+    expect(trigger).toHaveAttribute(
+      "title",
+      "Claude Opus (1M) · SCHEMA$LLM$REASONING_EFFORT$CHOICE$HIGH",
+    );
+    fireEvent.click(trigger);
+    expect(
+      screen.getByTestId("chat-input-acp-model-option-opus[1m]"),
+    ).toHaveClass("bg-interactive-hover");
+    expect(screen.getByTestId("chat-input-acp-effort-option-high")).toHaveClass(
+      "bg-interactive-hover",
+    );
+    // A live session can't return to the agent's own effort.
+    expect(
+      screen.queryByTestId("chat-input-acp-effort-option-agent-default"),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByTestId("chat-input-acp-model-option-sonnet"));
+    expect(switchAcpModelMutate).toHaveBeenCalledWith({
+      conversationId: "test-conversation-id",
+      model: "sonnet/high",
+    });
+  });
+
+  it("saves an effort pick on the home page and can clear it", () => {
+    claudeEffortLevels.mockReturnValue(["low", "high", "max"]);
+    discoveryMock.mockReturnValue({
+      models: CLAUDE_MODELS,
+      defaultModelId: null,
+    });
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_model: "opus[1m]/max",
+        },
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    fireEvent.click(screen.getByTestId("chat-input-acp-effort-option-low"));
+    expect(switchAcpModelMutate).toHaveBeenLastCalledWith({
+      conversationId: null,
+      model: "opus[1m]/low",
+    });
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    fireEvent.click(
+      screen.getByTestId("chat-input-acp-effort-option-agent-default"),
+    );
+    expect(switchAcpModelMutate).toHaveBeenLastCalledWith({
+      conversationId: null,
+      model: "opus[1m]",
+    });
+  });
+
+  it("offers no effort without a chosen model or registry levels", () => {
+    discoveryMock.mockReturnValue({
+      models: CLAUDE_MODELS,
+      defaultModelId: null,
+    });
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
+      },
+    });
+
+    const { unmount } = renderWithProviders(<ChatInputModel />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    expect(
+      screen.queryByTestId("chat-input-acp-effort-option-high"),
+    ).toBeNull();
+    unmount();
+
+    // Levels exist, but the agent's own default model has no effort to pair with.
+    claudeEffortLevels.mockReturnValue(["high"]);
+    renderWithProviders(<ChatInputModel />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    expect(
+      screen.queryByTestId("chat-input-acp-effort-option-high"),
+    ).toBeNull();
   });
 
   it("does not offer Agent default inside a conversation", () => {
