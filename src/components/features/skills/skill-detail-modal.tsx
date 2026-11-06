@@ -18,6 +18,7 @@ import { isCopyableSkillSource } from "./is-copyable-skill-source";
 import { SkillCardPillRow } from "./skill-card-pill-row";
 import { getSkillChatLaunchMessage } from "./get-skill-chat-launch-message";
 import { useLaunchSkillInChat } from "#/hooks/use-launch-skill-in-chat";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 
 interface SkillDetailModalProps {
   skill: SkillInfo;
@@ -84,8 +85,9 @@ export function SkillDetailModal({
       return;
     }
 
-    await navigator.clipboard.writeText(skill.source);
-    setSourceCopied(true);
+    if (await copyToClipboard(skill.source)) {
+      setSourceCopied(true);
+    }
   };
 
   React.useEffect(() => {

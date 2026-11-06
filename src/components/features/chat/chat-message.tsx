@@ -15,6 +15,7 @@ import {
   chatBubbleMarkdownComponents,
   USER_MESSAGE_LINE_HEIGHT_PX,
 } from "./user-message-body";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 
 export type ChatMessagePendingStatus = "sending" | "error";
 
@@ -67,8 +68,9 @@ export function ChatMessage({
   }, [message]);
 
   const handleCopyToClipboard = async () => {
-    await navigator.clipboard.writeText(message);
-    setIsCopy(true);
+    if (await copyToClipboard(message)) {
+      setIsCopy(true);
+    }
   };
 
   React.useEffect(() => {

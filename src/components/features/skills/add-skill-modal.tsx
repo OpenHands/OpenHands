@@ -12,6 +12,7 @@ import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import CheckmarkIcon from "#/icons/checkmark.svg?react";
 import CopyIcon from "#/icons/copy.svg?react";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 
 interface AddSkillModalProps {
   onClose: () => void;
@@ -49,8 +50,9 @@ function AddSkillExampleBlock() {
   const [copied, setCopied] = React.useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(ADD_SKILL_EXAMPLE_COMMAND);
-    setCopied(true);
+    if (await copyToClipboard(ADD_SKILL_EXAMPLE_COMMAND)) {
+      setCopied(true);
+    }
   };
 
   React.useEffect(() => {
