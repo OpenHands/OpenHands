@@ -25,6 +25,7 @@ import {
 } from "#/components/features/automations/setup/automation-setup-panel";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useEffect, useState } from "react";
+import { AutomationRunStatus } from "#/types/automation";
 import {
   PENDING_AUTOMATION_SETUP_ID,
   clearAutomationFormSession,
@@ -2880,6 +2881,91 @@ describe("AutomationSetupPanel", () => {
       expect(mockNavigate).not.toHaveBeenCalledWith(
         "/conversations/conv-run-1",
       );
+    });
+
+    it("polls and updates in-flight draft test runs to terminal status and stops when terminal", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        mockSavedDraftEcho({
+          validationErrors: null,
+          materializedAutomationId: "mat-auto-1",
+        });
+        vi.mocked(AutomationService.getServerDraft).mockResolvedValue({
+          ...dispatchableDraft,
+          materializedAutomationId: "mat-auto-1",
+        });
+        vi.mocked(AutomationService.dispatchServerDraft).mockResolvedValue({
+          id: "run-1",
+          status: "PENDING" as never,
+          conversation_id: "conv-run-1",
+          bash_command_id: null,
+          error_detail: null,
+          started_at: "2026-01-01T00:00:00.000Z",
+          completed_at: null,
+        });
+
+        vi.mocked(AutomationService.listAutomationRuns).mockResolvedValue({
+          runs: [],
+          total: 0,
+        });
+
+        const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+        renderPanel();
+
+        await saveDraftAndWaitForTest(user);
+        await user.click(screen.getByTestId("automation-setup-test"));
+
+        await waitFor(() =>
+          expect(AutomationService.dispatchServerDraft).toHaveBeenCalledWith(
+            "draft-1",
+          ),
+        );
+
+        expect(
+          screen.getByTestId("automation-setup-draft-runs-page"),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByTestId("automation-setup-draft-run"),
+        ).toBeInTheDocument();
+
+        // Prepare mock for polling update to COMPLETED
+        vi.mocked(AutomationService.listAutomationRuns).mockResolvedValue({
+          runs: [
+            {
+              id: "run-1",
+              status: AutomationRunStatus.COMPLETED,
+              conversation_id: "conv-run-1",
+              bash_command_id: null,
+              error_detail: null,
+              started_at: "2026-01-01T00:00:00.000Z",
+              completed_at: "2026-01-01T00:00:05.000Z",
+            },
+          ],
+          total: 1,
+        });
+
+        vi.mocked(AutomationService.listAutomationRuns).mockClear();
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3000);
+        });
+
+        expect(AutomationService.listAutomationRuns).toHaveBeenCalledWith(
+          "mat-auto-1",
+          { limit: 10, offset: 0 },
+        );
+
+        // Verify that after becoming terminal, polling stops
+        vi.mocked(AutomationService.listAutomationRuns).mockClear();
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3000);
+        });
+
+        expect(AutomationService.listAutomationRuns).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("surfaces validation errors when the draft is not dispatchable", async () => {
