@@ -1,6 +1,7 @@
 import React from "react";
 import { ChevronLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { I18nKey } from "#/i18n/declaration";
 import {
   mobileTopBarIconButtonClassName,
@@ -10,10 +11,16 @@ import { useConversationStore } from "#/stores/conversation-store";
 import { ConversationTabContent } from "../conversation-tabs/conversation-tab-content/conversation-tab-content";
 import { ConversationTabs } from "../conversation-tabs/conversation-tabs";
 import { ConversationPlannerBuildBar } from "../conversation-tabs/conversation-planner-build-bar";
+import { InsiderCatBadge } from "../insider-cat-badge";
 
 export function ConversationMobilePanelPage({
+  conversation,
   onNavigateBack,
 }: {
+  conversation?: Pick<
+    AppConversation,
+    "id" | "tags" | "parent_conversation_id"
+  > | null;
   onNavigateBack: () => void;
 }) {
   const { t } = useTranslation("openhands");
@@ -57,6 +64,13 @@ export function ConversationMobilePanelPage({
             strokeWidth={2}
           />
         </button>
+        {conversation && (
+          <InsiderCatBadge
+            tags={conversation.tags}
+            parentConversationId={conversation.parent_conversation_id}
+            conversationId={conversation.id}
+          />
+        )}
         <div className="flex min-h-0 min-w-0 flex-1 items-center self-stretch">
           <div
             data-testid="tabs-pane-header"

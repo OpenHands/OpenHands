@@ -20,7 +20,14 @@ const mockSkills = vi.hoisted(() => ({
 }));
 
 const mockConversation = vi.hoisted(() => ({
-  data: undefined as { conversation_version?: "V0" | "V1" } | undefined,
+  data: undefined as
+    | {
+        id?: string;
+        conversation_version?: "V0" | "V1";
+        tags?: Record<string, string>;
+        agent_kind?: string;
+      }
+    | undefined,
 }));
 
 vi.mock("#/hooks/query/use-skills", () => ({
@@ -157,6 +164,19 @@ describe("useSlashCommand", () => {
     const commands = result.current.filteredItems.map((i) => i.command);
     expect(commands).not.toContain("/new");
     expect(commands).toEqual(expect.arrayContaining(["/btw", "/code-search"]));
+  });
+
+  it("offers /new and /condense in a local Insider controller", () => {
+    mockConversation.data = {
+      id: "22222222-2222-4222-8222-222222222222",
+      agent_kind: "openhands",
+      tags: { smolpaws: "insider" },
+    };
+    const { result } = renderHook(() => useSlashCommand(makeChatInputRef()));
+
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual(
+      expect.arrayContaining(["/new", "/condense"]),
+    );
   });
 
   it("includes /new in the built-in commands on a cloud backend", () => {

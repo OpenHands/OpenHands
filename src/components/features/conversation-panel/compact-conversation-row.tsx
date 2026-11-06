@@ -12,6 +12,8 @@ import { ConversationStatusDot } from "./conversation-status-dot";
 import { ConversationCardFooter } from "./conversation-card/conversation-card-footer";
 import { I18nKey } from "#/i18n/declaration";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
+import { InsiderCatBadge } from "../conversation/insider-cat-badge";
+import { isInsiderConversation } from "#/utils/insider-cat";
 import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 
 interface CompactConversationRowProps {
@@ -33,6 +35,7 @@ interface CompactConversationRowProps {
   acpServer?: string | null;
   acpModels?: readonly ACPModelOption[] | null;
   tags?: Record<string, string> | null;
+  parentConversationId?: string | null;
   showTags?: boolean;
   /**
    * The row's effective archived state. Leave undefined to infer it from
@@ -66,6 +69,7 @@ export function CompactConversationRow({
   acpServer = null,
   acpModels = null,
   tags = null,
+  parentConversationId,
   showTags = false,
   isArchived,
 }: CompactConversationRowProps) {
@@ -77,6 +81,11 @@ export function CompactConversationRow({
   const preview = (
     <div className="w-65 p-3">
       <div className="flex items-center gap-2 mb-1">
+        <InsiderCatBadge
+          tags={tags}
+          parentConversationId={parentConversationId}
+          compact
+        />
         <ConversationStatusDot
           executionStatus={executionStatus}
           sandboxStatus={sandboxStatus}
@@ -107,6 +116,7 @@ export function CompactConversationRow({
         acpModels={acpModels}
         tags={tags}
         showTags={showTags}
+        parentConversationId={parentConversationId}
         isArchived={effectiveArchived}
       />
     </div>
@@ -134,12 +144,30 @@ export function CompactConversationRow({
           )
         }
       >
-        <ConversationStatusDot
-          executionStatus={executionStatus}
-          sandboxStatus={sandboxStatus}
-          isArchived={effectiveArchived}
-          showTooltip={false}
-        />
+        <span className="relative inline-flex items-center justify-center">
+          <InsiderCatBadge
+            tags={tags}
+            parentConversationId={parentConversationId}
+            compact
+          />
+          <span
+            className={
+              isInsiderConversation({
+                tags,
+                parent_conversation_id: parentConversationId,
+              })
+                ? "absolute -bottom-1 -right-1 rounded-full bg-[var(--oh-surface)] p-0.5"
+                : undefined
+            }
+          >
+            <ConversationStatusDot
+              executionStatus={executionStatus}
+              sandboxStatus={sandboxStatus}
+              isArchived={effectiveArchived}
+              showTooltip={false}
+            />
+          </span>
+        </span>
       </NavigationLink>
     </Tooltip>
   );

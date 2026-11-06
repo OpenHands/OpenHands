@@ -31,43 +31,64 @@ describe("EditConversationTagsModal", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("adds a new tag and confirms with the merged map preserving reserved tags", async () => {
+  it.each<Record<string, string>>([
+    { smolpaws: "insider" },
+    { smolpaws: "insider", insiderrole: "controller" },
+  ])(
+    "adds a tag while preserving reserved and hidden Insider identity tags: %j",
+    async (identityTags) => {
+      const user = userEvent.setup();
+      const onConfirm = vi.fn();
+      renderWithProviders(
+        <EditConversationTagsModal
+          tags={{ origin: "slack", acpserver: "claude-code", ...identityTags }}
+          onConfirm={onConfirm}
+          onCancel={vi.fn()}
+        />,
+      );
+      expect(
+        screen.queryByTestId("edit-tag-row-smolpaws"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("edit-tag-row-insiderrole"),
+      ).not.toBeInTheDocument();
+
+      await user.type(screen.getByTestId("new-tag-key-input"), "owner");
+      await user.type(screen.getByTestId("new-tag-value-input"), "alice");
+      await user.click(screen.getByTestId("add-tag-button"));
+
+      expect(screen.getByTestId("edit-tag-row-owner")).toBeInTheDocument();
+
+      await user.click(screen.getByTestId("confirm-button"));
+
+      expect(onConfirm).toHaveBeenCalledWith({
+        // The internal tag survives the replace-all PATCH untouched.
+        acpserver: "claude-code",
+        origin: "slack",
+        owner: "alice",
+        ...identityTags,
+      });
+    },
+  );
+
+  it("keeps a child task's tags editable and omits removed rows from the confirmed map", async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     renderWithProviders(
       <EditConversationTagsModal
-        tags={{ origin: "slack", acpserver: "claude-code" }}
+        tags={{
+          origin: "slack",
+          owner: "alice",
+          smolpaws: "insider",
+          insiderrole: "controller",
+        }}
+        parentConversationId="parent-conversation"
         onConfirm={onConfirm}
         onCancel={vi.fn()}
       />,
     );
-
-    await user.type(screen.getByTestId("new-tag-key-input"), "owner");
-    await user.type(screen.getByTestId("new-tag-value-input"), "alice");
-    await user.click(screen.getByTestId("add-tag-button"));
-
-    expect(screen.getByTestId("edit-tag-row-owner")).toBeInTheDocument();
-
-    await user.click(screen.getByTestId("confirm-button"));
-
-    expect(onConfirm).toHaveBeenCalledWith({
-      // The internal tag survives the replace-all PATCH untouched.
-      acpserver: "claude-code",
-      origin: "slack",
-      owner: "alice",
-    });
-  });
-
-  it("removes a tag row and omits it from the confirmed map", async () => {
-    const user = userEvent.setup();
-    const onConfirm = vi.fn();
-    renderWithProviders(
-      <EditConversationTagsModal
-        tags={{ origin: "slack", owner: "alice" }}
-        onConfirm={onConfirm}
-        onCancel={vi.fn()}
-      />,
-    );
+    expect(screen.getByTestId("edit-tag-row-smolpaws")).toBeInTheDocument();
+    expect(screen.getByTestId("edit-tag-row-insiderrole")).toBeInTheDocument();
 
     await user.click(screen.getByTestId("remove-tag-owner"));
 
@@ -75,7 +96,11 @@ describe("EditConversationTagsModal", () => {
 
     await user.click(screen.getByTestId("confirm-button"));
 
-    expect(onConfirm).toHaveBeenCalledWith({ origin: "slack" });
+    expect(onConfirm).toHaveBeenCalledWith({
+      origin: "slack",
+      smolpaws: "insider",
+      insiderrole: "controller",
+    });
   });
 
   it("blocks keys that violate the backend rule (lowercase alphanumeric only)", async () => {

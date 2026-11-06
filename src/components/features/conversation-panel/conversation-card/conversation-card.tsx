@@ -71,6 +71,7 @@ interface ConversationCardProps {
   acpServer?: string | null;
   acpModels?: readonly ACPModelOption[] | null;
   tags?: Record<string, string> | null;
+  parentConversationId?: string | null;
   /** Gates the tag-chip row; wired to the panel's "Tags" metadata toggle. */
   showTags?: boolean;
   /**
@@ -117,6 +118,7 @@ export function ConversationCard({
   acpServer = null,
   acpModels = null,
   tags = null,
+  parentConversationId,
   showTags = false,
   isArchived,
   isPinned = false,
@@ -128,7 +130,7 @@ export function ConversationCard({
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
   const { mutateAsync: downloadConversation } = useDownloadConversation();
 
-  const displayTags = getDisplayConversationTags(tags);
+  const displayTags = getDisplayConversationTags(tags, parentConversationId);
   const hasDisplayTags = displayTags.length > 0;
   const showTagChipRow = showTags && hasDisplayTags;
 
@@ -309,6 +311,8 @@ export function ConversationCard({
             executionStatus={executionStatus}
             isStarting={isStarting}
             sandboxStatus={sandboxStatus}
+            tags={tags}
+            parentConversationId={parentConversationId}
             isArchived={effectiveArchived}
           />
           {sandboxStatus === "ERROR" && !effectiveArchived && (
@@ -435,6 +439,7 @@ export function ConversationCard({
           acpModels={acpModels}
           tags={tags}
           showTags={showTagChipRow}
+          parentConversationId={parentConversationId}
           isArchived={effectiveArchived}
         />
       )}

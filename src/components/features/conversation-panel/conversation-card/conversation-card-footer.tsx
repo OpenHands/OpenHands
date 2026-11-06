@@ -62,6 +62,7 @@ interface ConversationCardFooterProps {
    * conversations can surface attribution (e.g. ``origin: slack`` → ``slack``).
    */
   tags?: Record<string, string> | null;
+  parentConversationId?: string | null;
   /**
    * Whether to render the tag-chip row. Wired to the conversation panel's
    * "Tags" toggle.
@@ -89,6 +90,7 @@ export function ConversationCardFooter({
   acpServer = null,
   acpModels = null,
   tags = null,
+  parentConversationId,
   showTags = false,
   isArchived = false,
 }: ConversationCardFooterProps) {
@@ -141,7 +143,9 @@ export function ConversationCardFooter({
   const metadataIndentClass =
     executionStatus !== undefined ? "pl-6.5" : undefined;
 
-  const displayTags = showTags ? getDisplayConversationTags(tags) : [];
+  const displayTags = showTags
+    ? getDisplayConversationTags(tags, parentConversationId)
+    : [];
 
   return (
     <div

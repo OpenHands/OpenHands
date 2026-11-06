@@ -65,6 +65,39 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
 describe("ConversationPanel conversation actions", () => {
   setupConversationPanelTest();
 
+  it("marks top-level Cats without marking tagged children in the regular panel", async () => {
+    vi.mocked(
+      AgentServerConversationService.searchConversations,
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "insider-controller",
+          title: "Saved Cat",
+          tags: { smolpaws: "insider", insiderrole: "controller" },
+        }),
+        createMockConversation({
+          id: "insider-child",
+          title: "Child task",
+          tags: { smolpaws: "insider", insiderrole: "controller" },
+          parent_conversation_id: "insider-controller",
+        }),
+      ],
+      next_page_id: null,
+    });
+    renderConversationPanel();
+    const cards = await screen.findAllByTestId("conversation-card");
+    const controller = cards.find((card) =>
+      within(card).queryByText("Saved Cat"),
+    )!;
+    const child = cards.find((card) => within(card).queryByText("Child task"))!;
+    expect(
+      within(controller).getByTestId("insider-cat-badge"),
+    ).toBeInTheDocument();
+    expect(
+      within(child).queryByTestId("insider-cat-badge"),
+    ).not.toBeInTheDocument();
+  });
+
   it("starts the selected Cloud metadata request on navigation, but not a modified click", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });

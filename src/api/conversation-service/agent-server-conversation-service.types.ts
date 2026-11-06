@@ -208,6 +208,8 @@ export interface AppConversation {
    * patch (a `null` value deletes a key) and rejects server-managed keys.
    */
   tags?: Record<string, string> | null;
+  /** Server-owned relationship; inherited tags do not make a child a controller. */
+  parent_conversation_id?: string | null;
   llm_model: string | null;
   metrics: MetricsSnapshot | null;
   created_at: string;
