@@ -600,6 +600,22 @@ describe("vite library build", () => {
     expect(declarations(recipe("text-2xs"))).toEqual({ "font-size": "11px" });
     expect(declarations(recipe("text-3xs"))).toEqual({ "font-size": "10px" });
 
+    expect(declarations(recipe("metadata-grid-columns"))).toEqual({
+      "grid-template-columns": "auto 1fr",
+    });
+    expect(declarations(recipe("automation-summary-columns"))).toEqual({
+      "grid-template-columns": "auto minmax(0,1fr)",
+    });
+    const runDetails = recipe("sm:run-log-detail-columns");
+    expect(declarations(runDetails)).toEqual({
+      "grid-template-columns": "5rem minmax(0,1fr)",
+    });
+    expect(runDetails.parent).toMatchObject({
+      type: "atrule",
+      name: "media",
+      params: "(width>=40rem)",
+    });
+
     const radiusContracts = {
       "rounded-pill": "100px",
       "rounded-composer": "15px",

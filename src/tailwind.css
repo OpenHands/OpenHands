@@ -1066,3 +1066,16 @@ code .token {
 @utility conversation-options-bleed-width {
   width: calc(100% + 3rem);
 }
+
+/* Fixed content columns shared by metadata and automation summaries. */
+@utility metadata-grid-columns {
+  grid-template-columns: auto 1fr;
+}
+
+@utility automation-summary-columns {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+@utility run-log-detail-columns {
+  grid-template-columns: 5rem minmax(0, 1fr);
+}
