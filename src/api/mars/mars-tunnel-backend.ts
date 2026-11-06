@@ -60,6 +60,23 @@ export interface MarsAuthState {
   canUseOAuth: boolean;
 }
 
+/** A browser sign-in that has started; the bridge holds its PKCE proof. */
+export interface MarsSignInAttempt {
+  attemptId: string;
+  /** DigitalOcean's sign-in page, to open in a new tab. */
+  authorizeUrl: string;
+  /**
+   * False when DigitalOcean's return address will not load on this device
+   * (Canvas runs elsewhere); the user pastes that address back instead.
+   */
+  returnsHere?: boolean;
+}
+
+export type MarsSignInStatus =
+  | { status: "pending" }
+  | { status: "done"; authState: MarsAuthState }
+  | { status: "failed"; message?: string | null };
+
 export interface MarsSession {
   session_id: string;
   name?: string | null;
@@ -172,7 +189,18 @@ interface ListOptions {
 
 export interface MarsBridge {
   getAuthState: () => Promise<MarsAuthState>;
+  /** The desktop app's sign-in: the main process opens the system browser. */
   signInWithOAuth: () => Promise<MarsAuthState>;
+  /** A page's sign-in (web build): start, then wait or paste the return. */
+  beginSignIn?: () => Promise<MarsSignInAttempt>;
+  /** Waits a little; answers "pending" until the sign-in finishes. */
+  awaitSignIn?: (attemptId: string) => Promise<MarsSignInStatus>;
+  /** Finish from the address DigitalOcean sent the browser to. */
+  completeSignIn?: (
+    returned: string,
+    attemptId?: string,
+  ) => Promise<MarsAuthState>;
+  cancelSignIn?: (attemptId: string) => Promise<void>;
   savePat: (payload: {
     token: string;
     label?: string;

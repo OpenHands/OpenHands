@@ -327,6 +327,10 @@ export function ManagedAgentsView({ onBack, onDone }: ManagedAgentsViewProps) {
         error={auth.error}
         onSignInWithOAuth={auth.signInWithOAuth}
         onSaveToken={auth.saveToken}
+        pendingSignIn={auth.pendingSignIn}
+        isCompletingSignIn={auth.isCompletingSignIn}
+        onCompleteSignIn={auth.completeSignIn}
+        onCancelSignIn={auth.cancelSignIn}
         onCancel={
           isAddingConnection
             ? () => {

@@ -1,145 +1,468 @@
 /**
  * DigitalOcean OAuth sign-in for the MARS backend.
  *
- * Uses the **implicit** grant (`response_type=token`), which DigitalOcean
- * documents as the flow for "client-side applications such as mobile or
- * desktop clients where the client secret should not be stored on the user's
- * device". DigitalOcean documents no PKCE support, so the authorization-code
- * grant would require shipping a `client_secret` inside a distributed desktop
- * binary — which is not a secret at all. The tradeoff is that implicit issues
- * no refresh token, so the 30-day expiry is handled by re-authenticating.
+ * Uses the authorization-code grant with PKCE, which DigitalOcean requires of
+ * public clients: a desktop app or a self-hosted Canvas server cannot keep a
+ * client secret. The PKCE proof never leaves this process, so a return
+ * address that leaks (a pasted URL, a log line) is useless on its own. Access
+ * tokens last an hour and come with a refresh token that works exactly once.
+ *
+ * DigitalOcean matches loopback return addresses (127.0.0.1, [::1],
+ * localhost) on any port, so a browser on the Canvas host comes back to the
+ * page's own origin, and the desktop app listens on a port of its choosing.
  */
 
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
-import { randomUUID } from "node:crypto";
-
-import { readRequestBody } from "./http-body.mjs";
 
 const AUTHORIZE_URL = "https://cloud.digitalocean.com/v1/oauth/authorize";
+const TOKEN_URL = "https://cloud.digitalocean.com/v1/oauth/token";
 const REVOKE_URL = "https://cloud.digitalocean.com/v1/oauth/revoke";
 
 /**
- * DigitalOcean matches `redirect_uri` against the value registered with the
- * OAuth application, so the loopback port cannot be OS-assigned — it has to be
- * a fixed, registered port. (rclone pins 53682 for the same reason.)
+ * Permissions required by the agent/session actions Canvas exposes. A grant
+ * issued with fewer scopes needs a new sign-in; refreshing cannot add scopes.
  */
-export const OAUTH_REDIRECT_PORT = 53682;
-export const OAUTH_REDIRECT_URI = `http://127.0.0.1:${OAUTH_REDIRECT_PORT}/callback`;
-
-/** Permissions the edge enforces on `/v2/agents/*` for MARS. */
 export const OAUTH_SCOPES = [
   "agent_harness_session:read",
+  "agent_harness_session:create",
   "agent_harness_session:operate",
+  "agent_harness_session:manage",
 ].join(" ");
 
-const CALLBACK_PATH = "/callback";
-const RELAY_PATH = "/callback-token";
+/** Where a browser comes back to on the Canvas server (scripts/mars-web-bridge.mjs). */
+export const OAUTH_CALLBACK_PATH = "/mars/oauth/callback";
+/** Where the desktop app's one-off loopback listener takes the return. */
+const DESKTOP_CALLBACK_PATH = "/callback";
+
 const SIGN_IN_TIMEOUT_MS = 5 * 60 * 1000;
-/** The relayed fragment is a token plus a few params; anything larger is not one. */
-const RELAY_BODY_LIMIT_BYTES = 16 * 1024;
+/** A started sign-in can be finished for this long, and only once. */
+const ATTEMPT_TTL_MS = 10 * 60 * 1000;
+const TOKEN_TIMEOUT_MS = 15_000;
 
-class InvalidOAuthRelayError extends Error {}
+/** A refusal from DigitalOcean's token endpoint, or a failure to reach it. */
+export class OAuthError extends Error {
+  /**
+   * @param {string} message
+   * @param {{ status?: number | null, code?: string | null, cause?: unknown }} [details]
+   */
+  constructor(message, { status = null, code = null, cause } = {}) {
+    super(message, { cause });
+    this.name = "OAuthError";
+    this.status = status;
+    this.code = code;
+  }
 
-/**
- * Served at the redirect URI.
- *
- * The implicit grant returns the token in the URL *fragment*, and browsers
- * never transmit fragments to the server — so the loopback request that lands
- * here carries no token at all. This page exists purely to read
- * `location.hash` in the browser and POST it back on a second request.
- * Without it the flow appears to hang forever.
- */
-const RELAY_PAGE = `<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>Signing in…</title>
-<style>
-  body { font-family: ui-sans-serif, system-ui, sans-serif; background: #0b0e14;
-         color: #e6e6e6; display: grid; place-items: center; height: 100vh; margin: 0; }
-  .card { text-align: center; max-width: 26rem; padding: 2rem; }
-  h1 { font-size: 1.1rem; font-weight: 600; }
-  p { color: #9aa0aa; font-size: .9rem; line-height: 1.5; }
-</style>
-</head>
-<body>
-  <div class="card">
-    <h1 id="title">Finishing sign-in…</h1>
-    <p id="detail">You can close this tab in a moment.</p>
-  </div>
-  <script>
-    (function () {
-      var fragment = window.location.hash.replace(/^#/, "");
-      fetch(${JSON.stringify(RELAY_PATH)}, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain" },
-        body: fragment,
-      }).then(function () {
-        document.getElementById("title").textContent = "Signed in to DigitalOcean";
-        document.getElementById("detail").textContent = "You can close this tab and return to OpenHands.";
-      }).catch(function () {
-        document.getElementById("title").textContent = "Sign-in could not be completed";
-        document.getElementById("detail").textContent = "Return to OpenHands and try again, or use a personal access token.";
-      });
-    })();
-  </script>
-</body>
-</html>`;
+  /**
+   * The grant is gone (used, revoked or expired): only a new sign-in helps.
+   * DigitalOcean answers a spent refresh token with `invalid_request`, so
+   * any refusal counts, not just `invalid_grant`; only a failure to reach
+   * DigitalOcean (no status) is worth retrying.
+   */
+  get isRevoked() {
+    return this.status === 400 || this.status === 401;
+  }
+}
+
+/** A PKCE pair: the verifier stays here, the challenge goes to DigitalOcean. */
+export function createPkce() {
+  const verifier = randomBytes(32).toString("base64url");
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  return { verifier, challenge };
+}
 
 /**
  * @param {object} options
  * @param {string} options.clientId
+ * @param {string} options.redirectUri
  * @param {string} options.state
- * @param {string} [options.redirectUri]
+ * @param {string} options.codeChallenge
  * @param {string} [options.scope]
  */
-export function buildAuthorizeUrl({ clientId, state, redirectUri, scope }) {
+export function buildAuthorizeUrl({
+  clientId,
+  redirectUri,
+  state,
+  codeChallenge,
+  scope = OAUTH_SCOPES,
+}) {
   const url = new URL(AUTHORIZE_URL);
   url.searchParams.set("client_id", clientId);
-  url.searchParams.set("redirect_uri", redirectUri ?? OAUTH_REDIRECT_URI);
-  url.searchParams.set("response_type", "token");
-  url.searchParams.set("scope", scope ?? OAUTH_SCOPES);
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", scope);
   url.searchParams.set("state", state);
+  url.searchParams.set("code_challenge", codeChallenge);
+  url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("prompt", "select_account");
   return url.toString();
 }
 
 /**
- * Parse the relayed fragment into a grant. Also handles the error form
- * DigitalOcean redirects with when the user declines or is not signed in.
+ * What DigitalOcean sent back, from the full return address, the path and
+ * query the return route receives, or just the query: a code, or the error
+ * it redirects with when the user declines.
  *
- * @param {string | null | undefined} fragment
- * @param {string} expectedState
+ * @param {string | null | undefined} returned
+ * @returns {{ code: string | null, state: string | null, error: string | null }}
  */
-export function parseImplicitGrant(fragment, expectedState) {
-  const params = new URLSearchParams(fragment ?? "");
+export function readCallback(returned) {
+  const text = String(returned ?? "").trim();
+  let params;
+  try {
+    params = new URL(text).searchParams;
+  } catch {
+    const query = text.includes("?") ? text.slice(text.indexOf("?") + 1) : text;
+    params = new URLSearchParams(query.replace(/^#/, ""));
+  }
   const error = params.get("error");
-  const accessToken = params.get("access_token");
-
-  if (!accessToken && !error) {
-    throw new InvalidOAuthRelayError(
-      "DigitalOcean did not return an access token.",
-    );
-  }
-
-  if (params.get("state") !== expectedState) {
-    throw new InvalidOAuthRelayError("Sign-in state did not match.");
-  }
-
-  if (error) {
-    throw new Error(params.get("error_description") || error);
-  }
-
-  const expiresIn = Number.parseInt(params.get("expires_in") ?? "", 10);
   return {
-    accessToken,
-    tokenType: params.get("token_type") ?? "bearer",
-    expiresAt: Number.isFinite(expiresIn)
-      ? new Date(Date.now() + expiresIn * 1000).toISOString()
-      : null,
+    code: params.get("code"),
+    state: params.get("state"),
+    error: error ? params.get("error_description") || error : null,
   };
 }
 
 /**
- * Run the full sign-in: open the system browser, wait for the relayed grant.
+ * The token response as a grant. Its `info` names the account and team, so
+ * a sign-in is labelled without a second call.
+ */
+function toGrant(body) {
+  if (!body?.access_token) {
+    throw new OAuthError("DigitalOcean did not return an access token.");
+  }
+  const expiresIn = Number(body.expires_in);
+  const info = body.info ?? null;
+  return {
+    accessToken: body.access_token,
+    refreshToken: body.refresh_token ?? null,
+    accessExpiresAt:
+      Number.isFinite(expiresIn) && expiresIn > 0
+        ? new Date(Date.now() + expiresIn * 1000).toISOString()
+        : null,
+    account: info
+      ? {
+          uuid: info.team_uuid ?? null,
+          name: info.team_name ?? null,
+          email: info.email ?? null,
+        }
+      : null,
+  };
+}
+
+async function requestToken(params, fetchImpl) {
+  let response;
+  try {
+    response = await fetchImpl(TOKEN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams(params).toString(),
+      signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS),
+    });
+  } catch (error) {
+    throw new OAuthError("Could not reach DigitalOcean to sign in.", {
+      cause: error,
+    });
+  }
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new OAuthError(
+      body?.error_description ||
+        body?.error ||
+        `DigitalOcean refused the sign-in (${response.status}).`,
+      { status: response.status, code: body?.error ?? null },
+    );
+  }
+  return toGrant(body);
+}
+
+/**
+ * Trade the code DigitalOcean sent back, with the PKCE verifier, for tokens.
+ *
+ * @param {object} options
+ * @param {string} options.clientId
+ * @param {string} options.code
+ * @param {string} options.verifier
+ * @param {string} options.redirectUri The same address the sign-in started with
+ * @param {typeof fetch} [options.fetchImpl]
+ */
+export function exchangeCode({
+  clientId,
+  code,
+  verifier,
+  redirectUri,
+  fetchImpl = globalThis.fetch,
+}) {
+  return requestToken(
+    {
+      grant_type: "authorization_code",
+      code,
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code_verifier: verifier,
+    },
+    fetchImpl,
+  );
+}
+
+/**
+ * A new access token, and a new refresh token: the one passed in is spent
+ * whether or not the caller manages to save the result.
+ *
+ * @param {object} options
+ * @param {string} options.clientId
+ * @param {string} options.refreshToken
+ * @param {typeof fetch} [options.fetchImpl]
+ */
+export function refreshGrant({
+  clientId,
+  refreshToken,
+  fetchImpl = globalThis.fetch,
+}) {
+  return requestToken(
+    {
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: clientId,
+    },
+    fetchImpl,
+  );
+}
+
+/**
+ * Sign-ins in progress. Each keeps its PKCE verifier and is found by the
+ * `state` DigitalOcean echoes back. It can be finished once, within ten
+ * minutes; a replayed or late return finds nothing.
+ *
+ * @param {{ ttlMs?: number, now?: () => number }} [options]
+ */
+export function createSignInAttempts({
+  ttlMs = ATTEMPT_TTL_MS,
+  now = Date.now,
+} = {}) {
+  /**
+   * @type {Map<string, { id: string, state: string, verifier: string, clientId: string, redirectUri: string, createdAt: number, status: "pending" | "working" | "done" | "failed", message: string | null, cancelled?: boolean, waiters: Set<() => void> }>}
+   */
+  const attempts = new Map();
+
+  function settle(attempt, status, message = null) {
+    attempt.status = status;
+    attempt.message = message;
+    for (const wake of attempt.waiters) wake();
+    attempt.waiters.clear();
+  }
+
+  function prune() {
+    for (const [id, attempt] of attempts) {
+      if (now() - attempt.createdAt <= ttlMs) continue;
+      // A return claimed just in time is still being finished; it settles,
+      // and is pruned, once its exchange answers.
+      if (attempt.status === "working") continue;
+      if (attempt.status === "pending") {
+        settle(attempt, "failed", "This sign-in expired. Start again.");
+      }
+      attempts.delete(id);
+    }
+  }
+
+  function view(attempt) {
+    if (!attempt) {
+      return {
+        status: "failed",
+        message: "This sign-in is no longer open. Start again.",
+      };
+    }
+    const pending =
+      attempt.status === "pending" || attempt.status === "working";
+    return pending
+      ? { status: "pending" }
+      : { status: attempt.status, message: attempt.message };
+  }
+
+  return {
+    /**
+     * @param {{ clientId: string, redirectUri: string }} options
+     * @returns {{ attemptId: string, authorizeUrl: string }}
+     */
+    begin({ clientId, redirectUri }) {
+      prune();
+      const { verifier, challenge } = createPkce();
+      const attempt = {
+        id: randomUUID(),
+        state: randomBytes(24).toString("base64url"),
+        verifier,
+        clientId,
+        redirectUri,
+        createdAt: now(),
+        status: /** @type {const} */ ("pending"),
+        message: null,
+        waiters: new Set(),
+      };
+      attempts.set(attempt.id, attempt);
+      return {
+        attemptId: attempt.id,
+        authorizeUrl: buildAuthorizeUrl({
+          clientId,
+          redirectUri,
+          state: attempt.state,
+          codeChallenge: challenge,
+        }),
+      };
+    },
+
+    /**
+     * The open attempt a return belongs to, taken so it cannot be used again.
+     * With `attemptId`, the return must also belong to that attempt.
+     *
+     * @param {string | null} state
+     * @param {string} [attemptId]
+     */
+    claim(state, attemptId) {
+      prune();
+      if (!state) return null;
+      for (const attempt of attempts.values()) {
+        if (attempt.state !== state) continue;
+        if (attempt.status !== "pending") return null;
+        if (attemptId && attempt.id !== attemptId) return null;
+        attempt.status = "working";
+        return attempt;
+      }
+      return null;
+    },
+
+    /**
+     * Whether an attempt still waits for its return.
+     *
+     * @param {string} id
+     */
+    isOpen(id) {
+      prune();
+      return attempts.get(id)?.status === "pending";
+    },
+
+    /** @param {string} id */
+    succeed(id) {
+      const attempt = attempts.get(id);
+      if (attempt) settle(attempt, "done");
+    },
+
+    /**
+     * @param {string} id
+     * @param {string} message
+     */
+    fail(id, message) {
+      const attempt = attempts.get(id);
+      if (attempt) settle(attempt, "failed", message);
+    },
+
+    /**
+     * How an attempt stands, waiting up to `timeoutMs` for it to finish.
+     *
+     * @param {string} id
+     * @param {number} [timeoutMs]
+     * @returns {Promise<{ status: "pending" | "done" | "failed", message?: string | null }>}
+     */
+    async wait(id, timeoutMs = 0) {
+      prune();
+      const attempt = attempts.get(id);
+      if (!attempt || view(attempt).status !== "pending" || timeoutMs <= 0) {
+        return view(attempt);
+      }
+      await new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          attempt.waiters.delete(wake);
+          resolve();
+        }, timeoutMs);
+        timer.unref?.();
+        function wake() {
+          clearTimeout(timer);
+          resolve();
+        }
+        attempt.waiters.add(wake);
+      });
+      // This attempt as it settled: expiring and cancelling also remove it.
+      return view(attempt);
+    },
+
+    /**
+     * A return already being finished checks `cancelled` before it commits
+     * anything. A finished sign-in stays finished.
+     *
+     * @param {string} id
+     */
+    cancel(id) {
+      const attempt = attempts.get(id);
+      if (!attempt || attempt.status === "done") return;
+      attempt.cancelled = true;
+      if (attempt.status === "pending" || attempt.status === "working") {
+        settle(attempt, "failed", "Sign-in was cancelled.");
+      }
+      attempts.delete(id);
+    },
+  };
+}
+
+const RETURN_PAGE_STYLE = `
+  body { font-family: ui-sans-serif, system-ui, sans-serif; background: #0b0e14;
+         color: #e6e6e6; display: grid; place-items: center; min-height: 100vh; margin: 0; }
+  .card { text-align: center; max-width: 26rem; padding: 2rem; }
+  h1 { font-size: 1.1rem; font-weight: 600; }
+  p { color: #9aa0aa; font-size: .9rem; line-height: 1.5; }`;
+
+const escapeHtml = (text) =>
+  String(text).replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[character],
+  );
+
+/**
+ * The small page a browser lands on after DigitalOcean. It names the team at
+ * most, and never a token.
+ *
+ * @param {{ ok: boolean, teamName?: string | null, message?: string | null }} result
+ */
+export function renderReturnPage({ ok, teamName = null, message = null }) {
+  const title = ok
+    ? teamName
+      ? `Signed in to DigitalOcean (${teamName})`
+      : "Signed in to DigitalOcean"
+    : "Sign-in could not be completed";
+  const detail = ok
+    ? "You can close this tab and go back to OpenHands."
+    : `${message ?? "Something went wrong."} Go back to OpenHands and try again.`;
+  return `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>${RETURN_PAGE_STYLE}</style>
+</head>
+<body><div class="card"><h1>${escapeHtml(title)}</h1><p>${escapeHtml(detail)}</p></div>
+<script>
+  ${
+    // A spent code leaves the address bar and history, and a tab Canvas
+    // opened may close itself. After a failure the address stays: its code
+    // may be unspent (another Canvas on this port), and it can be pasted.
+    ok
+      ? 'history.replaceState(null, "", location.pathname);\n  setTimeout(function () { window.close(); }, 1500);'
+      : ""
+  }
+</script></body>
+</html>`;
+}
+
+/**
+ * The desktop app's sign-in: open the system browser, take the return on a
+ * one-off loopback listener, and trade the code for tokens.
  *
  * The system browser is used rather than an in-app `BrowserWindow` so the user
  * authorizes in the session they are already signed into and can see the real
@@ -149,11 +472,13 @@ export function parseImplicitGrant(fragment, expectedState) {
  * @param {string | null | undefined} options.clientId
  * @param {(url: string) => Promise<void>} options.openExternal
  * @param {number} [options.timeoutMs]
+ * @param {typeof fetch} [options.fetchImpl]
  */
 export async function signInWithDigitalOcean({
   clientId,
   openExternal,
   timeoutMs = SIGN_IN_TIMEOUT_MS,
+  fetchImpl = globalThis.fetch,
 }) {
   if (!clientId) {
     throw new Error(
@@ -161,57 +486,64 @@ export async function signInWithDigitalOcean({
     );
   }
 
-  const state = randomUUID();
+  const attempts = createSignInAttempts({ ttlMs: timeoutMs });
   const server = createServer();
+  let attemptId = null;
 
-  const grant = new Promise((resolve, reject) => {
-    server.on("request", async (req, res) => {
-      const { pathname } = new URL(req.url, OAUTH_REDIRECT_URI);
-
-      if (req.method === "GET" && pathname === CALLBACK_PATH) {
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(RELAY_PAGE);
+  const returned = new Promise((resolve, reject) => {
+    server.on("request", (req, res) => {
+      const url = new URL(req.url, "http://127.0.0.1");
+      if (req.method !== "GET" || url.pathname !== DESKTOP_CALLBACK_PATH) {
+        res.writeHead(404).end();
         return;
       }
-
-      if (req.method === "POST" && pathname === RELAY_PATH) {
-        let fragment;
-        try {
-          fragment = (
-            await readRequestBody(req, RELAY_BODY_LIMIT_BYTES)
-          ).toString("utf8");
-        } catch {
-          res.writeHead(400).end();
-          return;
-        }
-        try {
-          const parsed = parseImplicitGrant(fragment, state);
-          res.writeHead(204).end();
-          resolve(parsed);
-        } catch (error) {
-          res.writeHead(400).end();
-          if (!(error instanceof InvalidOAuthRelayError)) reject(error);
-        }
+      const { code, state, error } = readCallback(url.search);
+      const attempt = attempts.claim(state, attemptId);
+      if (!attempt) {
+        // Not this sign-in's return (a stale tab, a guess): ignore it.
+        res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(
+          renderReturnPage({
+            ok: false,
+            message: "This sign-in is no longer open.",
+          }),
+        );
         return;
       }
-
-      res.writeHead(404).end();
-    });
-  });
-
-  // One handler for listen and runtime errors; racing it everywhere keeps the
-  // EADDRINUSE explanation from being shadowed by the raw listen error.
-  const failed = new Promise((_, reject) => {
-    server.on("error", (error) => {
-      reject(
-        error.code === "EADDRINUSE"
-          ? new Error(
-              `Port ${OAUTH_REDIRECT_PORT} is already in use, so DigitalOcean cannot redirect back. Close whatever is using it, or sign in with a personal access token instead.`,
-            )
-          : error,
+      if (error || !code) {
+        res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(renderReturnPage({ ok: false, message: error }));
+        reject(new Error(error ?? "DigitalOcean did not return a code."));
+        return;
+      }
+      exchangeCode({
+        clientId,
+        code,
+        verifier: attempt.verifier,
+        redirectUri: attempt.redirectUri,
+        fetchImpl,
+      }).then(
+        (grant) => {
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(
+            renderReturnPage({ ok: true, teamName: grant.account?.name }),
+          );
+          resolve(grant);
+        },
+        (failure) => {
+          res.writeHead(502, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(renderReturnPage({ ok: false, message: failure.message }));
+          reject(failure);
+        },
       );
     });
   });
+
+  // The race below observes it, but a return can land while openExternal is
+  // still resolving; until then its rejection must not count as unhandled.
+  returned.catch(() => {});
+
+  const failed = new Promise((_, reject) => server.on("error", reject));
 
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -223,15 +555,19 @@ export async function signInWithDigitalOcean({
   });
 
   try {
+    // Any free port: DigitalOcean matches loopback addresses on any port.
     await Promise.race([
-      new Promise((resolve) =>
-        server.listen(OAUTH_REDIRECT_PORT, "127.0.0.1", resolve),
-      ),
+      new Promise((resolve) => server.listen(0, "127.0.0.1", resolve)),
       failed,
     ]);
-
-    await openExternal(buildAuthorizeUrl({ clientId, state }));
-    return await Promise.race([grant, failed, timeout]);
+    const { port } = server.address();
+    const begun = attempts.begin({
+      clientId,
+      redirectUri: `http://127.0.0.1:${port}${DESKTOP_CALLBACK_PATH}`,
+    });
+    attemptId = begun.attemptId;
+    await openExternal(begun.authorizeUrl);
+    return await Promise.race([returned, failed, timeout]);
   } finally {
     clearTimeout(timer);
     server.close();
@@ -239,20 +575,29 @@ export async function signInWithDigitalOcean({
 }
 
 /**
- * Invalidate an access token server-side. Best-effort: a failed revoke must
- * not prevent the local credential from being forgotten.
+ * Invalidate an access token at DigitalOcean, which takes only access
+ * tokens here. Best-effort: resolves false when DigitalOcean did not
+ * confirm, and a failed revoke must not stop the local sign-in from being
+ * forgotten.
+ *
+ * @param {string} accessToken
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<boolean>}
  */
-export async function revokeToken(token, fetchImpl = globalThis.fetch) {
+export async function revokeToken(accessToken, fetchImpl = globalThis.fetch) {
   try {
-    await fetchImpl(REVOKE_URL, {
+    const response = await fetchImpl(REVOKE_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: new URLSearchParams({ token }).toString(),
+      body: new URLSearchParams({ token: accessToken }).toString(),
+      signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS),
     });
+    return response.ok;
   } catch {
     // Network failure on sign-out; the local record is still removed.
+    return false;
   }
 }
