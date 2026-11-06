@@ -327,6 +327,7 @@ describe("applyDashboardView", () => {
     trigger: "all",
     createdBy: "all",
     currentUserId: null,
+    tag: null,
     sort: "name",
   } as const;
 
@@ -424,6 +425,27 @@ describe("applyDashboardView", () => {
       me: askingForMe.map((a) => a.id),
       others: askingForOthers.map((a) => a.id),
     }).toEqual({ me: ["mine"], others: ["mine"] });
+  });
+
+  it("keeps only automations carrying the selected tag", () => {
+    // Arrange — one tagged automation, one with other tags, and one from an
+    // automation service that sends no tags at all.
+    const tagged = createAutomation({
+      id: "tagged",
+      tags: ["software-factory", "ci"],
+    });
+    const otherTags = createAutomation({ id: "other", tags: ["ci"] });
+    const untagged = createAutomation({ id: "untagged" });
+
+    // Act
+    const visible = applyDashboardView(
+      [tagged, otherTags, untagged],
+      { ...neutral, tag: "software-factory" },
+      byId,
+    );
+
+    // Assert
+    expect(visible.map((a) => a.id)).toEqual(["tagged"]);
   });
 
   it("orders by lifetime run count under the runs sort", () => {

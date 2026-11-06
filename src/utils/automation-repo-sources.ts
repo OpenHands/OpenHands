@@ -1,6 +1,7 @@
 import type { AutomationRepository } from "#/types/automation";
 import type { Provider } from "#/types/settings";
 import { getGitProviderBaseUrl } from "#/utils/utils";
+import { parseGitRemoteUrl } from "#/utils/parse-git-remote-url";
 
 /** A `repos` entry in a preset create or update request. */
 export type AutomationRepoSource = {
@@ -62,12 +63,17 @@ function hostedBaseUrl(provider: Provider): string | null {
 }
 
 // One provider name covers the hosted service and self-managed instances alike
-// for these, so a connection whose host the server does not report cannot be
-// addressed: the hosted URL would silently point a self-managed repository at
-// the public service. Bitbucket names its self-managed product separately
-// (`bitbucket_data_center`), and OpenHands' Azure DevOps integration serves
-// dev.azure.com only, so a missing host there is the hosted service.
-const HOST_REQUIRED_PROVIDERS: Provider[] = ["gitlab", "forgejo"];
+// for GitLab and Forgejo, so a connection whose host the server does not
+// report cannot be addressed: the hosted URL would silently point a
+// self-managed repository at the public service. Bitbucket Data Center has no
+// hosted service at all. Bitbucket names its self-managed product separately,
+// and OpenHands' Azure DevOps integration serves dev.azure.com only, so a
+// missing host there is the hosted service.
+const HOST_REQUIRED_PROVIDERS: Provider[] = [
+  "gitlab",
+  "forgejo",
+  "bitbucket_data_center",
+];
 
 /**
  * Whether a connected provider's listed repositories can be addressed: GitHub
@@ -109,6 +115,15 @@ export function automationRepositoryAddress(
     if (!organization || !project || !repository) return fullName;
     const path = [organization, project].map(encodeURIComponent).join("/");
     return `${hostedBaseUrl(provider)}/${path}/_git/${encodeURIComponent(repository)}`;
+  }
+  if (provider === "bitbucket_data_center" && configured) {
+    // Data Center clones a repository from /scm/PROJECT/repo.git; a personal
+    // repository's project is `~user`.
+    const [project, ...rest] = fullName.split("/");
+    const repository = rest.join("/");
+    if (!project || !repository) return fullName;
+    const path = [project, repository].map(encodeURIComponent).join("/");
+    return `${configured}/scm/${path}.git`;
   }
   const base = configured ?? hostedBaseUrl(provider);
   if (!base) return fullName;
@@ -189,6 +204,20 @@ export function buildAutomationRepoSources(
     const provider = providerForAddress(url, hosts, cloneProviders);
     return provider ? { url, provider } : { url };
   });
+}
+
+/**
+ * How the automation pages name a saved repository: its `owner/repo` path, and
+ * for Bitbucket Data Center the project and repository without the `/scm/`
+ * clone prefix (or the context path before it).
+ */
+export function automationRepositoryLabel(
+  repository: AutomationRepository,
+): string {
+  const path = parseGitRemoteUrl(repository.url)?.repository ?? repository.url;
+  return repository.provider === "bitbucket_data_center"
+    ? path.replace(/^(?:.*\/)?scm\//, "")
+    : path;
 }
 
 /** Whether the form lists other repositories than the automation clones. */

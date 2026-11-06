@@ -359,7 +359,7 @@ export function ConversationOverviewContextMenu({
       position={isPortaled ? "none" : "bottom"}
       alignment={isPortaled ? "none" : "right"}
       spacing={isPortaled ? "none" : "default"}
-      className={cn("z-[9999] w-fit", isPortaled ? "mt-0" : "mt-2")}
+      className={cn("z-9999 w-fit", isPortaled ? "mt-0" : "mt-2")}
     >
       {CONVERSATION_OVERVIEW_SECTION_GROUPS.map((group, groupIndex) => (
         <React.Fragment key={group.sections.join("-")}>

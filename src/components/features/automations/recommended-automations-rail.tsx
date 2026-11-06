@@ -16,7 +16,7 @@ import { McpLogoBadge } from "#/components/features/mcp-logo-badge";
 import { getMarketplaceEntryById } from "#/utils/mcp-marketplace-utils";
 import {
   getAutomationIcon,
-  getIntegrationIds,
+  getTemplateLogoIds,
 } from "#/utils/automation-catalog";
 import {
   flattenRecommendedRailGroups,
@@ -38,6 +38,10 @@ interface RecommendedAutomationsRailProps {
   installedAutomations: readonly Pick<Automation, "name">[];
   /** Catalog entries the active backend's deployment does not offer. */
   hiddenAutomationIds?: ReadonlySet<string>;
+  /** Entries the instance does not appear to support; listed last. */
+  unlikelyAutomations?: ReadonlyMap<string, readonly string[]>;
+  /** Entries using an integration the instance reports; listed first. */
+  suggestedAutomations?: ReadonlyMap<string, readonly string[]>;
   onSelect: (automation: RecommendedAutomation) => void;
   className?: string;
   dismissible?: boolean;
@@ -50,7 +54,7 @@ const RAIL_ICON_ROW_CLASS_NAME = "flex h-10 items-start";
 function integrationEntries(
   automation: RecommendedAutomation,
 ): MarketplaceEntry[] {
-  return getIntegrationIds(automation).flatMap((id) => {
+  return getTemplateLogoIds(automation).flatMap((id) => {
     const entry = getMarketplaceEntryById(id, MCP_MARKETPLACE);
     return entry ? [entry] : [];
   });
@@ -109,6 +113,8 @@ function RailIntegrationIcons({
 export function RecommendedAutomationsRail({
   installedAutomations,
   hiddenAutomationIds,
+  unlikelyAutomations,
+  suggestedAutomations,
   onSelect,
   className,
   dismissible = false,
@@ -116,7 +122,12 @@ export function RecommendedAutomationsRail({
 }: RecommendedAutomationsRailProps) {
   const { t } = useTranslation("openhands");
   const items = flattenRecommendedRailGroups(
-    getRecommendedRailGroups(installedAutomations, hiddenAutomationIds),
+    getRecommendedRailGroups(
+      installedAutomations,
+      hiddenAutomationIds,
+      unlikelyAutomations,
+      suggestedAutomations,
+    ),
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const { handleMouseDown, handleClickCapture, handleDragStart } =

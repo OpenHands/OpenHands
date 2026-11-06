@@ -49,7 +49,6 @@ export function SecretRequestCard({ request }: { request: SecretRequest }) {
         selectedSecret={null}
         defaultName={request.name}
         keepOpenOnError
-        valueRows={2}
         onSaved={(secret) => void completeSecretRequest(request, secret)}
         onCancel={() => void completeSecretRequest(request, null)}
       />

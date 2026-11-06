@@ -145,8 +145,3 @@ export function createPlanComponents(extraClassName?: string) {
 
 // Default plan components without extra className (for backward compatibility)
 export const planComponents = createPlanComponents();
-
-/**
- * @deprecated Use planComponents instead
- */
-export const planHeadings = planComponents;

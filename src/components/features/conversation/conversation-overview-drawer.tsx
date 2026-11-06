@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import type { CSSProperties, RefObject } from "react";
 import { ResizeHandle } from "#/components/ui/resize-handle";
 import { useResizableDrawerWidth } from "#/hooks/use-resizable-drawer-width";
 import { cn } from "#/utils/utils";
@@ -14,9 +14,7 @@ import {
 } from "./conversation-overview-drawer.constants";
 
 function getOverviewDrawerClass(isOpen: boolean) {
-  return isOpen
-    ? "translate-x-0 opacity-100"
-    : "w-0 translate-x-full opacity-0";
+  return isOpen ? "translate-x-0 opacity-100" : "translate-x-full opacity-0";
 }
 
 interface ConversationOverviewDrawerProps {
@@ -64,24 +62,18 @@ export function ConversationOverviewDrawer({
       <div
         data-testid={CONVERSATION_OVERVIEW_DRAWER_TEST_ID}
         aria-hidden={!isOpen}
+        data-resizing={isDragging || undefined}
         className={cn(
-          "shrink-0 overflow-hidden ease-in-out",
-          isDragging
-            ? "transition-[transform,opacity] duration-300"
-            : "transition-all duration-300",
+          "conversation-overview-drawer shrink-0 overflow-hidden duration-300 ease-in-out",
           getOverviewDrawerClass(isOpen),
         )}
-        style={{
-          width: isOpen ? `${drawerWidth}px` : "0px",
-          transitionProperty: isDragging
-            ? "transform, opacity"
-            : "width, transform, opacity",
-        }}
+        style={
+          {
+            "--conversation-overview-drawer-width": `${drawerWidth}px`,
+          } as CSSProperties
+        }
       >
-        <div
-          className="flex h-full flex-col overflow-hidden border-l border-border bg-base-secondary"
-          style={{ width: `${drawerWidth}px` }}
-        >
+        <div className="w-(--conversation-overview-drawer-width) flex h-full flex-col overflow-hidden border-l border-border bg-base-secondary">
           {isOpen ? (
             <ConversationOverviewDrawerContent className="h-full" />
           ) : null}

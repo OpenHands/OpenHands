@@ -79,6 +79,8 @@ export function useChatInputProfileState(): ChatInputProfileState {
       if (conversation?.selected_workspace) {
         variables.workingDir = conversation.selected_workspace;
         variables.workspaceMode = metadata?.workspace_mode ?? "local_repo";
+      } else if (metadata?.workspace_mode === "docker_container") {
+        variables.workspaceMode = "docker_container";
       }
       if (metadata?.plugins?.length) {
         variables.plugins = metadata.plugins;
