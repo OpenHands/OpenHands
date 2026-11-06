@@ -236,6 +236,7 @@ describe("backend-registry storage", () => {
     expect(readStoredBackends()[0]).toMatchObject({
       id: "default-local",
       apiKey: "fresh-session-key",
+      connectionRevision: 1,
     });
   });
 
@@ -262,12 +263,164 @@ describe("backend-registry storage", () => {
     });
   });
 
-  it("preserves a custom backend API key instead of syncing from env defaults", () => {
+  it("syncs a stale same-origin custom Local API key from the injected launcher key", () => {
+    vi.stubEnv("VITE_SESSION_API_KEY", "fresh-session-key");
+    window.localStorage.setItem(
+      BACKENDS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "legacy",
+          name: "Legacy Local",
+          host: window.location.origin,
+          apiKey: "stored-session-key",
+          kind: "local",
+        },
+      ]),
+    );
+
+    expect(readStoredBackends()[0]).toMatchObject({
+      id: "legacy",
+      apiKey: "fresh-session-key",
+      connectionRevision: 1,
+    });
+    expect(
+      JSON.parse(window.localStorage.getItem(BACKENDS_STORAGE_KEY) ?? "[]")[0],
+    ).toMatchObject({
+      id: "legacy",
+      apiKey: "fresh-session-key",
+    });
+  });
+
+  it("syncs a same-origin custom Local API key when the stored host has a trailing slash", () => {
+    vi.stubEnv("VITE_SESSION_API_KEY", "fresh-session-key");
+    window.localStorage.setItem(
+      BACKENDS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "legacy",
+          name: "Legacy Local",
+          host: `${window.location.origin}/`,
+          apiKey: "stored-session-key",
+          kind: "local",
+        },
+      ]),
+    );
+
+    expect(readStoredBackends()[0]).toMatchObject({
+      id: "legacy",
+      apiKey: "fresh-session-key",
+    });
+  });
+
+  it("bumps connectionRevision when reconciling a rotated launcher key", () => {
+    vi.stubEnv("VITE_SESSION_API_KEY", "fresh-session-key");
+    window.localStorage.setItem(
+      BACKENDS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "legacy",
+          name: "Legacy Local",
+          host: window.location.origin,
+          apiKey: "stored-session-key",
+          kind: "local",
+          connectionRevision: 3,
+        },
+      ]),
+    );
+
+    expect(readStoredBackends()[0]).toMatchObject({
+      apiKey: "fresh-session-key",
+      connectionRevision: 4,
+    });
+  });
+
+  it("syncs every same-origin local backend and leaves other hosts alone", () => {
+    vi.stubEnv("VITE_SESSION_API_KEY", "fresh-session-key");
+    window.localStorage.setItem(
+      BACKENDS_STORAGE_KEY,
+      JSON.stringify([
+        {
+          id: "default-local",
+          name: "Local",
+          host: window.location.origin,
+          apiKey: "stored-session-key",
+          kind: "local",
+        },
+        {
+          id: "legacy",
+          name: "Legacy Local",
+          host: window.location.origin,
+          apiKey: "another-stale-key",
+          kind: "local",
+        },
+        {
+          id: "other-port",
+          name: "Other Port",
+          host: "http://127.0.0.1:9000",
+          apiKey: "other-server-key",
+          kind: "local",
+        },
+        {
+          id: "cloud",
+          name: "Cloud",
+          host: window.location.origin,
+          apiKey: "cloud-bearer",
+          kind: "cloud",
+        },
+      ]),
+    );
+
+    const result = readStoredBackends();
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: "default-local",
+        apiKey: "fresh-session-key",
+      }),
+      expect.objectContaining({
+        id: "legacy",
+        apiKey: "fresh-session-key",
+      }),
+      {
+        id: "other-port",
+        name: "Other Port",
+        host: "http://127.0.0.1:9000",
+        apiKey: "other-server-key",
+        kind: "local",
+      },
+      {
+        id: "cloud",
+        name: "Cloud",
+        host: window.location.origin,
+        apiKey: "cloud-bearer",
+        kind: "cloud",
+      },
+    ]);
+  });
+
+  it("does not sync a custom Local backend on a different loopback port", () => {
+    vi.stubEnv("VITE_BACKEND_BASE_URL", "http://127.0.0.1:8000");
+    vi.stubEnv("VITE_SESSION_API_KEY", "fresh-session-key");
+    const storedBackend: Backend = {
+      id: "custom-local",
+      name: "Other Agent Server",
+      host: "http://127.0.0.1:9000",
+      apiKey: "stored-session-key",
+      kind: "local",
+    };
+    window.localStorage.setItem(
+      BACKENDS_STORAGE_KEY,
+      JSON.stringify([storedBackend]),
+    );
+
+    expect(readStoredBackends()[0]).toEqual(storedBackend);
+  });
+
+  it("preserves a custom backend API key on a different origin", () => {
     vi.stubEnv("VITE_SESSION_API_KEY", "fresh-session-key");
     const storedBackend: Backend = {
       id: "custom-local",
       name: "Custom Local",
-      host: window.location.origin,
+      host: "https://example.com",
       apiKey: "stored-session-key",
       kind: "local",
     };
