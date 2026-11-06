@@ -252,7 +252,7 @@ describe("vite library build", () => {
     // Require the setup rail and editor geometry in the extracted stylesheet;
     // every recipe must remain a scoped utility even inside media conditions.
     expect(declarations(recipe("automation-setup-content"))).toMatchObject({
-      "max-width": "800px",
+      "max-width": "56rem",
     });
     expect(
       declarations(recipe("automation-setup-scroll-gutter")),
@@ -322,7 +322,7 @@ describe("vite library build", () => {
       "--automation-setup-cron-width": "14rem",
       "--automation-setup-datetime-width": "15rem",
       "--automation-setup-time-width": "9.5rem",
-      "--automation-setup-timezone-width": "16rem",
+      "--automation-setup-timezone-width": "12.5rem",
     };
     expect(declarations(scheduleRow)).toMatchObject(scheduleWidths);
     for (const property of Object.keys(scheduleWidths)) {
@@ -464,6 +464,141 @@ describe("vite library build", () => {
     expect(declarations(recipe("backend-chooser-edit-dialog"))).toMatchObject({
       "max-height": "92dvh",
     });
+
+    // Workspace selection keeps its mixed rem/px columns and viewport bounds.
+    const folderColumns = recipe("workspace-folder-columns");
+    expect(declarations(folderColumns)["grid-template-columns"]).toBe(
+      "minmax(0,1fr) 4rem",
+    );
+    const desktopColumns = recipe("md:workspace-folder-columns-desktop");
+    expect(declarations(desktopColumns)["grid-template-columns"]).toBe(
+      "1fr 120px",
+    );
+    expect(desktopColumns.parent).toMatchObject({
+      type: "atrule",
+      name: "media",
+      params: "(width>=48rem)",
+    });
+    expect(declarations(recipe("workspace-section-label"))).toMatchObject({
+      "font-size": "11px",
+    });
+    expect(declarations(recipe("workspace-manager-dialog"))).toMatchObject({
+      "max-height": "70vh",
+    });
+    expect(declarations(recipe("z-9999"))).toMatchObject({
+      "z-index": "9999",
+    });
+    expect(declarations(recipe("home-dropdown-sticky-list"))).toMatchObject({
+      "max-height": "12rem",
+    });
+
+    // Floating surfaces retain their stacking and compiled SVG stroke width.
+    expect(declarations(recipe("z-200"))).toMatchObject({ "z-index": "200" });
+    expect(declarations(recipe("context-menu-icon-stroke"))).toMatchObject({
+      "stroke-width": "1.75px",
+    });
+
+    // Preserve exact menu units and text metrics in the shipped scoped CSS.
+    const menuGeometryContracts = {
+      "tools-menu-offset": {
+        left: "-16px",
+      },
+      "tools-submenu-offset": {
+        top: "-4px",
+      },
+      "tools-git-submenu-offset": {
+        top: "-6px",
+      },
+      "profile-menu-height": {
+        "max-height": "60vh",
+      },
+      "menu-caption-text": {
+        "font-size": "11px",
+      },
+      "z-60": {
+        "z-index": "60",
+      },
+      "new-conversation-menu-height": {
+        "max-height": "40vh",
+      },
+      "menu-detail-text": {
+        "font-size": "10px",
+      },
+      "conversation-card-menu-width": {
+        "max-width": "min(280px,100vw - 16px)",
+      },
+      "-z-1": {
+        "z-index": "calc(1 * -1)",
+      },
+      "conversation-tag-popover-width": {
+        "min-width": "10rem",
+        "max-width": "16rem",
+      },
+      "conversation-tag-popover-columns": {
+        "grid-template-columns": "minmax(0,auto) minmax(0,1fr)",
+      },
+      "conversation-meta-text": {
+        "font-size": "10px",
+      },
+      "skill-pill-popover-width": {
+        "max-width": "20rem",
+      },
+      "conversation-git-actions-width": {
+        "min-width": "8rem",
+      },
+      "automation-actions-menu-width": {
+        "min-width": "10rem",
+      },
+      "dropdown-menu-width": {
+        "max-width": "min(26rem,100vw - 2rem)",
+      },
+      "dropdown-menu-viewport-height": {
+        "max-height": "min(60vh,100dvh - 5rem)",
+      },
+    };
+    for (const [name, expected] of Object.entries(menuGeometryContracts)) {
+      expect(declarations(recipe(name))).toMatchObject(expected);
+    }
+
+    const dialogContracts = {
+      "dialog-viewport-width": {
+        "max-width": "90vw",
+      },
+      "onboarding-viewport-height": {
+        "max-height": "90vh",
+      },
+      "dialog-content-height": {
+        "max-height": "80vh",
+      },
+      "setup-dialog-height": {
+        "max-height": "85vh",
+      },
+      "setup-dialog-width": {
+        width: "92vw",
+      },
+      "automation-import-width": {
+        width: "min(36rem,100vw - 2rem)",
+      },
+      "dialog-scroll-height": {
+        "max-height": "60vh",
+      },
+      "automation-log-min-height": {
+        "min-height": "12rem",
+      },
+      "conversation-dialog-reading-height": {
+        height: "60vh",
+      },
+      "conversation-options-bleed-width": {
+        width: "calc(100% + 3rem)",
+      },
+    };
+    for (const [name, expected] of Object.entries(dialogContracts)) {
+      expect(declarations(recipe(name))).toMatchObject(expected);
+    }
+
+    // Compact type tokens must not introduce a line-height default.
+    expect(declarations(recipe("text-2xs"))).toEqual({ "font-size": "11px" });
+    expect(declarations(recipe("text-3xs"))).toEqual({ "font-size": "10px" });
 
     // `package.json` routes `require` here; stripped CSS imports must not
     // leave it unparseable.

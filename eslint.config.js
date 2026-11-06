@@ -417,7 +417,8 @@ export default [
   // and ToggleSwitch callers can dim the control for disabled/pending states.
   // Carets expose layout and text color; their padding/shape stay internal.
   // Stateful carets own rotation through isOpen; generic icons retain orientation.
-  // Next: finish the color migration before promoting to error; define contracts
+  // Three audited owners below reject raw colors; finish migration before
+  // promoting globally. Define contracts
   // for the remaining UI primitives and audit dynamic styles for no-inline-styles.
   // 0.2.0 also improves render-prop, destructuring, barrel-export, and custom
   // animation recognition. Vue/Svelte support adds no new rule names or parsers
@@ -492,14 +493,27 @@ export default [
     // Keep broad string scanning away from unrelated program tags.
     files: [
       "src/components/features/backends/backend-status-dot.tsx",
-      "src/components/features/conversation-panel/start-task-card/start-task-status-badge.tsx",
-      "src/components/features/conversation-panel/start-task-card/start-task-status-indicator.tsx",
       "src/components/features/markdown/blockquote.tsx",
       "src/components/features/mcp-page/mcp-server-health.tsx",
     ],
     rules: {
       "shadcn/no-raw-colors": [
         "warn",
+        { allow: legacyColorClasses, scanAllStrings: true },
+      ],
+    },
+  },
+  {
+    // These three owners are migrated. Start-task palette findings remain
+    // warning-only above until their separate migration is complete.
+    files: [
+      "src/components/features/backends/backend-status-dot.tsx",
+      "src/components/features/markdown/blockquote.tsx",
+      "src/components/features/mcp-page/mcp-server-health.tsx",
+    ],
+    rules: {
+      "shadcn/no-raw-colors": [
+        "error",
         { allow: legacyColorClasses, scanAllStrings: true },
       ],
     },

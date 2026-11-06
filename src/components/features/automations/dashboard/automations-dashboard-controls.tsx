@@ -145,7 +145,7 @@ export function AutomationsDashboardControls({
         <ListFilter className="h-4 w-4 shrink-0" aria-hidden />
         <span className="whitespace-nowrap">{filtersLabel}</span>
         {activeCount > 0 ? (
-          <span className="rounded-full bg-contrast px-1.5 text-[11px] font-medium text-contrast-foreground">
+          <span className="rounded-full bg-contrast px-1.5 text-2xs font-medium text-contrast-foreground">
             {activeCount}
           </span>
         ) : null}

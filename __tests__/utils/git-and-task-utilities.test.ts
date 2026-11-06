@@ -269,15 +269,22 @@ describe("constructRepositoryUrl", () => {
     );
   });
 
-  it("uses a custom host for Azure DevOps", () => {
-    expect(
-      constructRepositoryUrl(
-        "azure_devops",
-        "org/project/repo",
-        "ado.example.com",
-      ),
-    ).toBe("https://ado.example.com/org/project/_git/repo");
-  });
+  it.each(["org", "https://dev.azure.com/org"])(
+    "keeps Azure DevOps links on dev.azure.com when the connection host is %s",
+    (host) => {
+      // The server stores an Azure DevOps connection's organization in `host`
+      // and always calls dev.azure.com, so the host is not a base URL.
+      expect(
+        constructRepositoryUrl("azure_devops", "org/project/repo", host),
+      ).toBe("https://dev.azure.com/org/project/_git/repo");
+      expect(
+        constructBranchUrl("azure_devops", "org/project/repo", "main", host),
+      ).toBe("https://dev.azure.com/org/project/_git/repo?version=GBmain");
+      expect(
+        constructPullRequestUrl(7, "azure_devops", "org/project/repo", host),
+      ).toBe("https://dev.azure.com/org/project/_git/repo/pullrequest/7");
+    },
+  );
 
   it("keeps the plain path for an Azure DevOps name without three parts", () => {
     expect(constructRepositoryUrl("azure_devops", "org/repo")).toBe(

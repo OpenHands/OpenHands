@@ -65,7 +65,7 @@ describe("useStartAutomationSetup", () => {
     const draft = {
       prompt: "Summarize overnight alerts",
       kind: "prompt" as const,
-      form: { name: "Incident digest" },
+      form: { name: "Incident digest", runAsUserId: "sa-1" },
     };
     mocks.getAutomationFormSession.mockReturnValue(draft);
     mocks.mutate.mockImplementation((_payload, options) => {

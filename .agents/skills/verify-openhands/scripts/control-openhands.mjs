@@ -15,6 +15,7 @@ import {
   readFileSync,
   readdirSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   unlinkSync,
@@ -819,17 +820,12 @@ async function cmdLaunch({ flags }) {
   };
   spawnLauncher(run);
   saveRun(run);
-  try {
-    if (
-      existsSync(join(verifyHome, "current")) ||
-      lstatSync(join(verifyHome, "current"), { throwIfNoEntry: false })
-    ) {
-      unlinkSync(join(verifyHome, "current"));
-    }
-  } catch {
-    // no previous pointer
-  }
-  symlinkSync(dir, join(verifyHome, "current"));
+  // Swap the pointer atomically: concurrent `launch --new` calls each write a
+  // private temporary link and rename it over `current`, so none of them
+  // races another's unlink/symlink pair (EEXIST).
+  const pointerTmp = join(verifyHome, `.current-${process.pid}-${randomBytes(4).toString("hex")}`);
+  symlinkSync(dir, pointerTmp);
+  renameSync(pointerTmp, join(verifyHome, "current"));
 
   // 6. Wait for readiness: authenticated settings, automation health and SPA.
   await waitForStack(run, intFlag(flags.timeout, 600));

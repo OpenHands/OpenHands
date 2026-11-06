@@ -6,10 +6,7 @@ import {
 } from "#/utils/transcription-endpoint-storage";
 
 export type DictationStatus =
-  | "idle"
-  | "starting"
-  | "recording"
-  | "transcribing";
+  "idle" | "starting" | "recording" | "transcribing";
 
 // Web Speech API types are not in lib.dom; this is the subset we use.
 interface SpeechRecognitionLike {
