@@ -150,50 +150,46 @@ export function ChatInputModelMenuContent({
             );
           })}
           {model.effortLevels.length > 0 && (
-            <>
-              <li role="presentation" className="px-2 pt-2 pb-0.5">
-                <Typography.Text className="text-2xs font-medium text-text-dim uppercase tracking-wide leading-4">
-                  {t(I18nKey.SCHEMA$LLM$REASONING_EFFORT$LABEL)}
-                </Typography.Text>
-              </li>
-              {effortOptions.map((option) => {
-                const isSelected = option.effort === model.selectedEffort;
-                return (
-                  <ContextMenuListItem
-                    key={option.effort ?? ""}
-                    testId={`chat-input-acp-effort-option-${option.effort ?? "agent-default"}`}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      if (model.selectedModelId) {
-                        handleSelectAcpModel(
-                          joinAcpModelEffort(
-                            model.selectedModelId,
-                            option.effort,
-                          ),
-                        );
-                      }
-                    }}
-                    className={cn(
-                      "flex items-center gap-2",
-                      isSelected && "bg-interactive-hover",
-                    )}
-                  >
-                    <span className="flex-1 truncate text-sm leading-5">
+            <li role="presentation" className="px-2 pt-2 pb-1">
+              <Typography.Text className="text-2xs font-medium text-text-dim uppercase tracking-wide leading-4">
+                {t(I18nKey.SCHEMA$LLM$REASONING_EFFORT$LABEL)}
+              </Typography.Text>
+              <div
+                role="group"
+                aria-label={t(I18nKey.SCHEMA$LLM$REASONING_EFFORT$LABEL)}
+                className="mt-1 flex flex-wrap gap-1"
+              >
+                {effortOptions.map((option) => {
+                  const isSelected = option.effort === model.selectedEffort;
+                  return (
+                    <button
+                      key={option.effort ?? ""}
+                      type="button"
+                      data-testid={`chat-input-acp-effort-option-${option.effort ?? "agent-default"}`}
+                      aria-pressed={isSelected}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (model.selectedModelId) {
+                          handleSelectAcpModel(
+                            joinAcpModelEffort(
+                              model.selectedModelId,
+                              option.effort,
+                            ),
+                          );
+                        }
+                      }}
+                      className={cn(
+                        "rounded-pill border border-border px-2 text-xs leading-5 text-foreground hover:bg-interactive-hover transition-colors",
+                        isSelected && "bg-interactive-hover",
+                      )}
+                    >
                       {option.label}
-                    </span>
-                    {isSelected && (
-                      <CheckIcon
-                        width={14}
-                        height={14}
-                        className="shrink-0"
-                        aria-hidden
-                      />
-                    )}
-                  </ContextMenuListItem>
-                );
-              })}
-            </>
+                    </button>
+                  );
+                })}
+              </div>
+            </li>
           )}
         </>
       ) : model.displayModel ? (

@@ -462,9 +462,9 @@ describe("ChatInputModel", () => {
     expect(
       screen.getByTestId("chat-input-acp-model-option-opus[1m]"),
     ).toHaveClass("bg-interactive-hover");
-    expect(screen.getByTestId("chat-input-acp-effort-option-high")).toHaveClass(
-      "bg-interactive-hover",
-    );
+    expect(
+      screen.getByTestId("chat-input-acp-effort-option-high"),
+    ).toHaveAttribute("aria-pressed", "true");
     // A live session can't return to the agent's own effort.
     expect(
       screen.queryByTestId("chat-input-acp-effort-option-agent-default"),
