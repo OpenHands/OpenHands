@@ -719,6 +719,37 @@ describe("AutomationsList — docs link", () => {
       screen.queryByTestId("automations-docs-link"),
     ).not.toBeInTheDocument();
   });
+
+  it("keeps the docs link hidden while the automations list is loading", async () => {
+    // Arrange — an empty org would otherwise see the link flash, then vanish.
+    vi.mocked(AutomationService.getAutomations).mockReturnValue(
+      new Promise(() => {}),
+    );
+
+    // Act
+    renderList();
+    await waitFor(() => {
+      expect(AutomationService.getAutomations).toHaveBeenCalled();
+    });
+
+    // Assert
+    expect(
+      screen.queryByTestId("automations-docs-link"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the docs link when the automations backend is unavailable", async () => {
+    vi.mocked(AutomationService.checkHealth).mockResolvedValue({
+      status: "error",
+    });
+    renderList();
+    await screen.findByText(I18nKey.AUTOMATIONS$BACKEND_UNAVAILABLE_TITLE);
+
+    expect(screen.getByTestId("automations-docs-link")).toHaveAttribute(
+      "href",
+      getAutomationsDocsUrl(),
+    );
+  });
 });
 
 describe("AutomationsList — view mode toggle", () => {
