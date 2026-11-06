@@ -13,6 +13,15 @@ import {
 } from "#/hooks/query/query-keys";
 import { notifySuperAdminSetupStep } from "#/components/features/setup-guide/super-admin-setup-step-event";
 
+/** The catalog names a Git provider's MCP server after it, e.g. "github". */
+const GIT_PROVIDER_MCP_SERVER_NAMES = ["github", "gitlab", "bitbucket"];
+
+function isGitProviderMcpServer(name: string): boolean {
+  return GIT_PROVIDER_MCP_SERVER_NAMES.some(
+    (provider) => name === provider || name.startsWith(`${provider}_`),
+  );
+}
+
 // @spec MCP-001 — Sparse mutations preserve sibling servers
 export function useAddMcpServer() {
   const queryClient = useQueryClient();
@@ -39,7 +48,7 @@ export function useAddMcpServer() {
         toCanonicalMcpServer(server),
       );
     },
-    onSuccess: () => {
+    onSuccess: (_result, server) => {
       queryClient.invalidateQueries({
         queryKey: SETTINGS_QUERY_KEYS.personal(),
       });
@@ -49,6 +58,11 @@ export function useAddMcpServer() {
         queryKey: SUPER_ADMIN_SETUP_QUERY_KEYS.all,
       });
       notifySuperAdminSetupStep("add-integration");
+      // A Git provider's server also completes the guide's "Connect Git"
+      // step, which waits for this event in its tour (OHE-3901).
+      if (server.name && isGitProviderMcpServer(server.name)) {
+        notifySuperAdminSetupStep("connect-git");
+      }
     },
   });
 }

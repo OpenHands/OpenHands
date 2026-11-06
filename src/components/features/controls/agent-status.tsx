@@ -185,7 +185,7 @@ export function AgentStatus({
       <div
         title={compactStatus ? t(statusCode) : undefined}
         className={cn(
-          "box-border content-stretch flex flex-row gap-0.75 items-center justify-center overflow-clip px-0.5 py-1 relative rounded-[100px] shrink-0 size-6 transition-all duration-200 active:scale-95 bg-transparent text-muted hover:bg-contrast/10 hover:text-contrast",
+          "box-border content-stretch flex flex-row gap-0.75 items-center justify-center overflow-clip px-0.5 py-1 relative rounded-pill shrink-0 size-6 transition-all duration-200 active:scale-95 bg-transparent text-muted hover:bg-contrast/10 hover:text-contrast",
           isInteractive ? "cursor-pointer" : "cursor-default",
           isLoading && "text-warning",
           !isLoading && shouldShownAgentError && "text-status-error",

@@ -318,7 +318,7 @@ describe("AutomationCard — run phase", () => {
   const localBackend: Backend = {
     id: "local-1",
     name: "Local 1",
-    host: "http://localhost:8000",
+    host: window.location.origin,
     apiKey: "k",
     kind: "local",
   };
