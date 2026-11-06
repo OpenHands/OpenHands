@@ -4,6 +4,7 @@ import { CopyableContentWrapper } from "#/components/shared/buttons/copyable-con
 import { useColorTheme } from "#/hooks/use-color-theme";
 import { getSyntaxHighlighterTheme } from "#/themes/syntax-highlighter-themes";
 import { cn } from "#/utils/utils";
+import { MermaidDiagram } from "./mermaid-diagram";
 import { SyntaxHighlighter } from "./syntax-highlighter";
 
 // See https://github.com/remarkjs/react-markdown?tab=readme-ov-file#use-custom-components-syntax-highlight
@@ -51,7 +52,7 @@ function Code({
     );
   }
 
-  return (
+  const highlighted = (
     <CopyableContentWrapper text={codeString}>
       <SyntaxHighlighter
         className="rounded-lg"
@@ -63,6 +64,12 @@ function Code({
       </SyntaxHighlighter>
     </CopyableContentWrapper>
   );
+
+  if (match[1] === "mermaid") {
+    return <MermaidDiagram source={codeString} fallback={highlighted} />;
+  }
+
+  return highlighted;
 }
 
 export { Code as code };

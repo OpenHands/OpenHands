@@ -26,7 +26,11 @@ export function Probe() {
 `;
 
 describe("Canvas raw color rollout", () => {
-  it("warns on palette classes reached through an adopted dynamic map", async () => {
+  it.each([
+    "src/components/features/backends/backend-status-dot.tsx",
+    "src/components/features/markdown/blockquote.tsx",
+    "src/components/features/mcp-page/mcp-server-health.tsx",
+  ])("rejects raw palette recipes in migrated owner %s", async (filePath) => {
     const [result] = await eslint.lintText(
       `
 const toneClasses = {
@@ -37,7 +41,7 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
   return <div className={toneClasses[tone]} />;
 }
 `,
-      { filePath: "src/components/features/markdown/blockquote.tsx" },
+      { filePath },
     );
 
     expect(
@@ -46,7 +50,7 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
       ),
     ).toEqual([
       expect.objectContaining({
-        severity: 1,
+        severity: 2,
         messageId: expect.stringMatching(/^paletteClass/),
       }),
     ]);

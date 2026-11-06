@@ -19,6 +19,7 @@ import {
 } from "@openhands/extensions/integrations";
 import {
   findInstalledEntryMatch,
+  getInstallableMcpConnectionOption,
   getMarketplaceEntryById,
   isMcpInstallableEntry,
 } from "#/utils/mcp-marketplace-utils";
@@ -30,24 +31,27 @@ import {
 } from "#/manifests/automation-interface";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import {
+  BUILT_IN_INTEGRATION_NAMES,
   getAutomationAvailability,
   getAutomationLaunchPrompt,
   getRequiredIntegrationIds,
+  getTemplateGitProviderIds,
 } from "#/utils/automation-catalog";
 import { isResponderAutomation } from "#/utils/responder-deployment";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useAutomations } from "#/hooks/query/use-automations";
 import { useBuiltInIntegrationConnections } from "#/hooks/query/use-built-in-integration-connections";
+import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 import { useNativeGitIntegrations } from "#/hooks/query/use-native-git-integrations";
 import { cloudIntegrationsUrl } from "#/utils/cloud-integrations-url";
 import {
   BuiltInIntegrationChoiceModal,
   type BuiltInIntegrationState,
 } from "./built-in-integration-choice-modal";
+import { ProviderSetupNoticeModal } from "./provider-setup-notice-modal";
 import { RecommendedAutomationsRail } from "./recommended-automations-rail";
 import { RecommendedAutomationsSection } from "./recommended-automations-section";
 import { ResponderDeploymentModal } from "./responder-deployment-modal";
-import { UnlikelyIntegrationNoticeModal } from "./unlikely-integration-notice-modal";
 import type { TemplateFilters } from "./template-filter-chips";
 
 interface RecommendedAutomationsLauncherProps {
@@ -129,6 +133,10 @@ export function RecommendedAutomationsLauncher({
     integration: MarketplaceEntry;
     state: BuiltInIntegrationState;
   } | null>(null);
+  const [providerNotice, setProviderNotice] = useState<{
+    automation: RecommendedAutomation;
+    entries: MarketplaceEntry[];
+  } | null>(null);
   const [installQueue, setInstallQueue] = useState<MarketplaceEntry[]>([]);
   const completedInstallRef = useRef(false);
   const launchInFlightRef = useRef(false);
@@ -150,23 +158,19 @@ export function RecommendedAutomationsLauncher({
     deploymentMode,
     isLoading: isNativeIntegrationsLoading,
   } = useNativeGitIntegrations();
-  const {
-    hidden: hiddenAutomationIds,
-    unlikely: unlikelyAutomations,
-    suggested: suggestedAutomations,
-  } = useMemo(
-    () => getAutomationAvailability({ deploymentMode, builtInIntegrations }),
-    [deploymentMode, builtInIntegrations],
-  );
-  const [unlikelyNotice, setUnlikelyNotice] = useState<{
-    automation: RecommendedAutomation;
-    missing: readonly string[];
-  } | null>(null);
   const { isSlackConnected, isJiraConnected } =
     useBuiltInIntegrationConnections({
       slackEnabled: isSlackEnabled,
       jiraEnabled: isJiraEnabled,
     });
+  // A self-hosted instance that configures none of a template's git providers
+  // natively may still have one set up through an MCP server or a saved token
+  // secret; the secrets list says which.
+  const isSelfHostedCloud =
+    activeBackend.backend.kind === "cloud" && deploymentMode === "self_hosted";
+  const { data: secrets, isLoading: isSecretsLoading } = useSearchSecrets({
+    enabled: isSelfHostedCloud,
+  });
 
   const installedMcpConfig = useMemo(
     () =>
@@ -175,6 +179,34 @@ export function RecommendedAutomationsLauncher({
           parseMcpConfig(settings?.agent_settings?.mcp_config),
       ).filter((server) => server.enabled !== false),
     [settings?.agent_settings?.mcp_config, settings?.mcp_config],
+  );
+
+  // Integrations the user has set up themselves move the templates that use
+  // them into Suggested.
+  const connectedIntegrations = useMemo(
+    () =>
+      new Set(
+        MCP_MARKETPLACE.filter(
+          (entry) =>
+            findInstalledEntryMatch(entry, installedMcpConfig) ||
+            getNativeIntegration(entry.id)?.isConnected === true,
+        ).map((entry) => entry.id),
+      ),
+    [getNativeIntegration, installedMcpConfig],
+  );
+
+  const {
+    hidden: hiddenAutomationIds,
+    unlikely: unlikelyAutomations,
+    suggested: suggestedAutomations,
+  } = useMemo(
+    () =>
+      getAutomationAvailability({
+        deploymentMode,
+        builtInIntegrations,
+        connectedIntegrations,
+      }),
+    [deploymentMode, builtInIntegrations, connectedIntegrations],
   );
 
   const launchAutomation = useCallback(
@@ -290,6 +322,28 @@ export function RecommendedAutomationsLauncher({
     return getMarketplaceEntryById(entryId, MCP_MARKETPLACE) ?? null;
   };
 
+  // The git providers a template is about that this self-hosted instance has
+  // set up no way: not configured natively, no installed MCP server for them,
+  // and no saved token secret of the kind the MCP install creates.
+  const getUnconfiguredProviderEntries = (
+    automation: RecommendedAutomation,
+  ) => {
+    if (!isSelfHostedCloud) return [];
+    return getTemplateGitProviderIds(automation).flatMap((id) => {
+      if (getNativeIntegration(id)) return [];
+      const entry = getMarketplaceEntryById(id, MCP_MARKETPLACE);
+      if (!entry || findInstalledEntryMatch(entry, installedMcpConfig)) {
+        return [];
+      }
+      const secretName =
+        getInstallableMcpConnectionOption(entry)?.auth.credentialSecretName;
+      if (secretName && secrets.some((secret) => secret.name === secretName)) {
+        return [];
+      }
+      return [entry];
+    });
+  };
+
   const handleSelectAutomation = (automation: RecommendedAutomation) => {
     if (
       launchInFlightRef.current ||
@@ -298,29 +352,11 @@ export function RecommendedAutomationsLauncher({
       installQueue.length > 0 ||
       deploymentChoiceAutomation !== null ||
       builtInChoice !== null ||
-      unlikelyNotice !== null
+      providerNotice !== null
     ) {
       return;
     }
 
-    // The instance does not appear to have an integration this template
-    // needs. Say so once, and let the user continue: the report is a hint.
-    const missing = unlikelyAutomations.get(automation.id);
-    if (missing) {
-      setUnlikelyNotice({ automation, missing });
-      return;
-    }
-
-    selectAutomation(automation);
-  };
-
-  const handleUnlikelyNoticeContinue = () => {
-    const automation = unlikelyNotice?.automation;
-    setUnlikelyNotice(null);
-    if (automation) selectAutomation(automation);
-  };
-
-  const selectAutomation = (automation: RecommendedAutomation) => {
     // GitHub/Slack responders poll continuously; let the user choose where the
     // responder runs before committing to the local setup flow. On a cloud
     // backend the responder already runs in the cloud, so there is no choice.
@@ -347,7 +383,37 @@ export function RecommendedAutomationsLauncher({
       return;
     }
 
+    // The instance has a git provider this template is about set up no way:
+    // say so, and let Continue set up the provider's MCP server, whose token
+    // is saved as the secret the template reads.
+    const unconfiguredEntries = getUnconfiguredProviderEntries(automation);
+    if (unconfiguredEntries.length > 0) {
+      setProviderNotice({ automation, entries: unconfiguredEntries });
+      return;
+    }
+
     proceedWithLocalLaunch(automation);
+  };
+
+  const handleProviderNoticeContinue = () => {
+    const notice = providerNotice;
+    setProviderNotice(null);
+    if (!notice) return;
+
+    const queue = [
+      ...notice.entries.filter(isMcpInstallableEntry),
+      ...getMissingEntries(notice.automation),
+    ].filter(
+      (entry, index, entries) =>
+        entries.findIndex((other) => other.id === entry.id) === index,
+    );
+    if (queue.length === 0) {
+      launchAutomation(notice.automation);
+      return;
+    }
+
+    setPendingAutomation(notice.automation);
+    setInstallQueue(queue);
   };
 
   const handleBuiltInChoiceClose = () => {
@@ -434,8 +500,11 @@ export function RecommendedAutomationsLauncher({
 
   // Which integrations a card still needs depends on what the cloud instance
   // connects natively; a card shown before that is known could be launched
-  // with the wrong install queue.
-  if (isNativeIntegrationsLoading) return null;
+  // with the wrong install queue. On a self-hosted instance the saved secrets
+  // decide the same way whether a git provider counts as set up.
+  if (isNativeIntegrationsLoading || (isSelfHostedCloud && isSecretsLoading)) {
+    return null;
+  }
 
   return (
     <>
@@ -478,12 +547,14 @@ export function RecommendedAutomationsLauncher({
         />
       )}
 
-      {unlikelyNotice && (
-        <UnlikelyIntegrationNoticeModal
-          automationName={unlikelyNotice.automation.name}
-          missing={unlikelyNotice.missing}
-          onContinue={handleUnlikelyNoticeContinue}
-          onCancel={() => setUnlikelyNotice(null)}
+      {providerNotice && (
+        <ProviderSetupNoticeModal
+          automationName={providerNotice.automation.name}
+          providers={providerNotice.entries.map(
+            (entry) => BUILT_IN_INTEGRATION_NAMES[entry.id] ?? entry.name,
+          )}
+          onContinue={handleProviderNoticeContinue}
+          onCancel={() => setProviderNotice(null)}
         />
       )}
 

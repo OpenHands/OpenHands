@@ -65,7 +65,7 @@ export function ModalBackdrop({
       onFocus={focus.onFocus}
       onKeyDown={focus.onKeyDown}
       className={`fixed inset-0 flex items-center justify-center outline-none ${
-        elevated ? "z-[70]" : "z-60"
+        elevated ? "z-70" : "z-60"
       }`}
     >
       <div

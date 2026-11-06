@@ -1,7 +1,9 @@
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { useConversationWorkspace } from "#/hooks/query/use-conversation-workspace";
 import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
+import { ConversationStartupProgress } from "#/components/features/chat/conversation-startup-progress";
 import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
@@ -64,8 +66,20 @@ const CREATING_TOAST_MIN_VISIBLE_MS = 700;
 
 export function HomeChatLauncher() {
   const { t } = useTranslation("openhands");
-  const { backend } = useActiveBackend();
-  const { navigate } = useNavigation();
+  const { backend, orgId } = useActiveBackend();
+  const { navigate, currentPath } = useNavigation();
+  const ownerKey = JSON.stringify([backend.id, orgId, currentPath]);
+  const currentOwner = useRef(ownerKey);
+  currentOwner.current = ownerKey;
+  const launchInFlight = useRef(false);
+  const [pendingLaunchId, setPendingLaunchId] = useState<string | null>(null);
+  const launch = useConversationLaunchStore((state) =>
+    pendingLaunchId ? state.launches[pendingLaunchId] : null,
+  );
+  const activeLaunch =
+    launch?.backendId === backend.id && launch.orgId === (orgId ?? null)
+      ? launch
+      : null;
   const isLocal = backend.kind === "local";
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -158,12 +172,35 @@ export function HomeChatLauncher() {
   const handleSubmit = (message: string) => {
     const trimmed = message.trim();
     const hasAttachments = images.length > 0 || files.length > 0;
-    if ((!trimmed && !hasAttachments) || isCreating) return;
+    if ((!trimmed && !hasAttachments) || isCreating || launchInFlight.current)
+      return;
 
     // Safety net: the input is disabled when there's no usable LLM, but never
     // create a conversation that can't run (it would fail with a cryptic
     // API-key error on the first turn).
     if (llmBlocked) return;
+
+    launchInFlight.current = true;
+    const ownsLaunch = () =>
+      isMountedRef.current && currentOwner.current === ownerKey;
+    const clientLaunchId = !isLocal
+      ? useConversationLaunchStore.getState().begin({
+          backendId: backend.id,
+          orgId: orgId ?? null,
+          message,
+          files: [...images, ...files],
+          attachments: {
+            content: message,
+            images: [...images],
+            files: [...files],
+            imagesMarkedUploadAsFile: [...imagesMarkedUploadAsFile],
+          },
+        })
+      : null;
+    if (clientLaunchId) {
+      setPendingLaunchId(clientLaunchId);
+      clearAllFiles();
+    }
 
     const attachmentSnapshot = {
       images: [...images],
@@ -234,13 +271,15 @@ export function HomeChatLauncher() {
     // once because the error toast takes its place.
     let toastId: string | undefined;
     let toastShownAt = 0;
-    const toastTimer = setTimeout(() => {
-      toastShownAt = Date.now();
-      toastId = toast.loading(
-        t(I18nKey.HOME$CREATING_CONVERSATION),
-        TOAST_OPTIONS,
-      );
-    }, CREATING_TOAST_DELAY_MS);
+    const toastTimer = isLocal
+      ? setTimeout(() => {
+          toastShownAt = Date.now();
+          toastId = toast.loading(
+            t(I18nKey.HOME$CREATING_CONVERSATION),
+            TOAST_OPTIONS,
+          );
+        }, CREATING_TOAST_DELAY_MS)
+      : undefined;
     const dismissCreatingToast = ({ immediately = false } = {}) => {
       clearTimeout(toastTimer);
       if (!toastId) return;
@@ -251,18 +290,23 @@ export function HomeChatLauncher() {
       else setTimeout(() => toast.dismiss(id), remaining);
     };
 
+    if (clientLaunchId) navigate(`/conversations/${clientLaunchId}`);
+
     void (async () => {
       let isCreated = false;
+      let createdTarget: string | null = null;
       try {
         const data = await createConversation(variables);
         isCreated = true;
         dismissCreatingToast();
         try {
-          sessionStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
+          if (sessionStorage.getItem(HOME_PROMPT_DRAFT_KEY) === message)
+            sessionStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
         } catch {
           // sessionStorage not available
         }
         const targetConversationId = data.conversation_id;
+        createdTarget = targetConversationId;
         const isTaskConversation = targetConversationId.startsWith("task-");
 
         if (hasAttachments) {
@@ -278,23 +322,34 @@ export function HomeChatLauncher() {
                 : null);
 
             if (!taskId) {
-              displayErrorToast(null);
-              return;
+              throw new Error(
+                t(I18nKey.CONVERSATION$ERROR_STARTING_CONVERSATION),
+              );
             }
 
             setPendingTaskAttachments(taskId, {
+              backendId: backend.id,
+              orgId: orgId ?? null,
               content: trimmed,
               images: attachmentSnapshot.images,
               files: attachmentSnapshot.files,
               imagesMarkedUploadAsFile: [...imagesMarkedUploadAsFile],
             });
-            clearAllFiles();
+            if (ownsLaunch()) clearAllFiles();
             await enqueueHomeTaskPendingMessage({
               conversationId: targetConversationId,
               text: trimmed,
               images: attachmentSnapshot.images,
               imagesMarkedUploadAsFile,
             });
+            if (clientLaunchId) {
+              openAutomationSetupMode(targetConversationId);
+              useConversationLaunchStore
+                .getState()
+                .update(clientLaunchId, { targetId: targetConversationId });
+              return;
+            }
+            if (!ownsLaunch()) return;
             openAutomationSetupMode(targetConversationId);
             navigate(`/conversations/${targetConversationId}`);
             return;
@@ -308,7 +363,7 @@ export function HomeChatLauncher() {
                 imagesMarkedUploadAsFile,
                 t,
               });
-              clearAllFiles();
+              if (ownsLaunch()) clearAllFiles();
             } catch (error) {
               displayErrorToast(error instanceof Error ? error.message : null);
               return;
@@ -325,6 +380,14 @@ export function HomeChatLauncher() {
           });
         }
 
+        if (clientLaunchId) {
+          openAutomationSetupMode(targetConversationId);
+          useConversationLaunchStore
+            .getState()
+            .update(clientLaunchId, { targetId: targetConversationId });
+          return;
+        }
+        if (!ownsLaunch()) return;
         openAutomationSetupMode(targetConversationId);
         navigate(`/conversations/${targetConversationId}`);
       } catch (error) {
@@ -332,7 +395,23 @@ export function HomeChatLauncher() {
         // Prefer the server's own message; without one, keep the launcher's
         // existing wording (the error's message).
         const fallback = error instanceof Error ? error.message : "";
-        displayErrorToast(getApiErrorMessage(error, fallback) || null);
+        const errorMessage =
+          getApiErrorMessage(error, fallback) ||
+          t(I18nKey.CONVERSATION$ERROR_STARTING_CONVERSATION);
+        if (isCreated && clientLaunchId && createdTarget) {
+          useConversationLaunchStore
+            .getState()
+            .update(clientLaunchId, { targetId: createdTarget });
+          if (ownsLaunch()) displayErrorToast(errorMessage);
+          return;
+        }
+        if (clientLaunchId)
+          useConversationLaunchStore
+            .getState()
+            .update(clientLaunchId, { error: errorMessage });
+        if (!ownsLaunch()) return;
+        if (!isLocal) return;
+        displayErrorToast(errorMessage);
         // The composer cleared itself on submit; hand the prompt back so the
         // user can retry without retyping it. Only when the create itself
         // failed and this composer is still on screen: the request is consumed
@@ -341,6 +420,8 @@ export function HomeChatLauncher() {
         if (!isCreated && isMountedRef.current) {
           restoreMessageToInputIfEmpty(message);
         }
+      } finally {
+        launchInFlight.current = false;
       }
     })();
   };
@@ -354,14 +435,62 @@ export function HomeChatLauncher() {
   return (
     <div
       data-testid="home-chat-launcher"
-      className="flex w-full flex-col items-center pt-[max(4rem,28vh)] pb-10"
+      className={cn(
+        "flex w-full flex-col items-center",
+        activeLaunch ? "h-full min-h-0 py-4" : "pt-[max(4rem,28vh)] pb-10",
+      )}
     >
-      <div className="flex w-full max-w-200 flex-col gap-4 md:px-4">
-        <div className="flex w-full justify-center">
+      <div
+        className={cn(
+          "flex w-full max-w-200 flex-col gap-4 md:px-4",
+          activeLaunch && "min-h-0 flex-1",
+        )}
+      >
+        {activeLaunch && (
+          <div className="custom-scrollbar-always flex min-h-0 flex-1 flex-col overflow-y-auto px-4">
+            <div
+              data-testid="startup-user-message"
+              className="mt-6 w-fit max-w-full self-end whitespace-pre-wrap break-words rounded-xl bg-tertiary px-4 py-2.5 text-sm leading-6"
+            >
+              {activeLaunch.message}
+              {activeLaunch.files.length > 0 && (
+                <ul>
+                  {activeLaunch.files.map((file, index) => (
+                    <li key={`${index}-${file.name}`}>{file.name}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <ConversationStartupProgress
+              key={activeLaunch.id}
+              error={activeLaunch.error}
+              onEdit={() => {
+                useConversationLaunchStore.getState().remove(activeLaunch.id);
+                setPendingLaunchId(null);
+                restoreMessageToInputIfEmpty(activeLaunch.message);
+                if (activeLaunch.attachments) {
+                  const composer = useConversationStore.getState();
+                  composer.addImages(activeLaunch.attachments.images);
+                  composer.addFiles(activeLaunch.attachments.files);
+                  for (const name of activeLaunch.attachments
+                    .imagesMarkedUploadAsFile) {
+                    if (!composer.imagesMarkedUploadAsFile.includes(name))
+                      composer.toggleImageUploadAsFile(name);
+                  }
+                }
+              }}
+            />
+          </div>
+        )}
+        <div
+          className={cn("flex w-full justify-center", activeLaunch && "hidden")}
+        >
           <HomeHeaderTitle />
         </div>
 
-        <div className="flex w-full justify-center">
+        <div
+          className={cn("flex w-full justify-center", activeLaunch && "hidden")}
+        >
           <HomeLauncherModeToggle
             mode={displayedLauncherMode}
             onChange={handleLauncherModeChange}
@@ -372,7 +501,7 @@ export function HomeChatLauncher() {
           <CustomChatInput
             onSubmit={handleSubmitWithModelGuard}
             onFilesPaste={handleUpload}
-            disabled={isCreating || llmBlocked}
+            disabled={isCreating || llmBlocked || !!activeLaunch}
             placeholder={
               isAutomateMode
                 ? t(I18nKey.HOME$AUTOMATE_PROMPT_PLACEHOLDER)
@@ -381,7 +510,7 @@ export function HomeChatLauncher() {
           />
         </div>
 
-        {isolated && (
+        {!activeLaunch && isolated && (
           <p role="status" className="text-xs text-text-secondary">
             {pendingWorkspace
               ? runtimeWorkspaceMessage
@@ -402,6 +531,7 @@ export function HomeChatLauncher() {
           aria-disabled={isAutomateMode}
           className={cn(
             "flex items-center justify-start gap-2",
+            activeLaunch && "hidden",
             isAutomateMode && "pointer-events-none opacity-40",
           )}
         >
@@ -449,7 +579,12 @@ export function HomeChatLauncher() {
           />
         </div>
 
-        <div className="mt-8 flex w-full flex-col gap-8">
+        <div
+          className={cn(
+            "mt-8 flex w-full flex-col gap-8",
+            activeLaunch && "hidden",
+          )}
+        >
           {/* @spec HL-002 — Only Home's rail is dismissible; dismissal unmounts it, inset included */}
           {!isRecommendedAutomationsDismissed && (
             <RecommendedAutomationsLauncher

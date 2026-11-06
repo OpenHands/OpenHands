@@ -102,7 +102,7 @@ export function BuiltInIntegrationChoiceModal({
     >
       <div
         data-testid="built-in-integration-choice-modal"
-        className="relative flex w-[92vw] max-w-xl flex-col rounded-xl border border-border bg-base-secondary"
+        className="relative flex setup-dialog-width max-w-xl flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}

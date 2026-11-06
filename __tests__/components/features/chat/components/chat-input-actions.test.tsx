@@ -30,7 +30,9 @@ const useActiveConversationMock = vi.fn<
 >(() => ({ data: undefined }));
 
 vi.mock("#/components/features/controls/agent-status", () => ({
-  AgentStatus: () => <div data-testid="agent-status-stub" />,
+  AgentStatus: ({ compact }: { compact?: boolean }) => (
+    <div data-testid="agent-status-stub" data-compact={String(!!compact)} />
+  ),
 }));
 
 vi.mock("#/components/features/chat/change-agent-button", () => ({
@@ -554,6 +556,17 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
     expect(
       screen.getByTestId("overflow-model-submenu").parentElement,
     ).not.toHaveClass("visible");
+  });
+
+  it("keeps the agent status control in a narrow conversation row", () => {
+    renderWithProviders(<ChatInputActions disabled={false} />, {
+      navigation: { conversationId: "test-conversation-id" },
+    });
+
+    expect(screen.getByTestId("agent-status-stub")).toHaveAttribute(
+      "data-compact",
+      "true",
+    );
   });
 
   it("opens the Model submenu with the profile list", () => {

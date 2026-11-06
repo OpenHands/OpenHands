@@ -25,7 +25,7 @@ ARG AGENT_SERVER_VERSION
 ARG AUTOMATION_VERSION
 
 # ── Stage 1: Build frontend ──────────────────────────────────────────────────
-FROM node:24-slim AS frontend-build
+FROM node:24.22.1-slim AS frontend-build
 
 WORKDIR /build
 
@@ -49,7 +49,7 @@ RUN npm run build
 
 # ── Stage 1b: Generate shell-sourceable defaults from config/defaults.json ──
 # This avoids needing jq/python at container runtime to parse the JSON.
-FROM node:24-slim AS config-gen
+FROM node:24.22.1-slim AS config-gen
 COPY config/defaults.json /tmp/
 RUN node -e " \
   const c = JSON.parse(require('fs').readFileSync('/tmp/defaults.json','utf-8')); \
