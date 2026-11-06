@@ -30,6 +30,7 @@ import type { Backend } from "#/api/backend-registry/types";
 import { AutomationRunStatus } from "#/types/automation";
 import type { Automation, AutomationRunsResponse } from "#/types/automation";
 import { withPresetSources } from "#/utils/automation-preset-sources";
+import { bytesToBase64 } from "#/utils/base64";
 import { packTarGzip } from "#/utils/tar-gzip";
 import * as ToastHandlers from "#/utils/custom-toast-handlers";
 
@@ -56,9 +57,18 @@ vi.mock("#/api/profiles-service/profiles-service.api", () => ({
 
 // Spy on the success toast; the test tree does not render a toaster.
 const displaySuccessToast = vi.hoisted(() => vi.fn());
+const displayErrorToast = vi.hoisted(() => vi.fn());
 vi.mock("#/utils/custom-toast-handlers", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#/utils/custom-toast-handlers")>()),
   displaySuccessToast,
+  displayErrorToast,
+}));
+
+// Spy on the file download; jsdom has no object URLs to hand a real one.
+const downloadBlob = vi.hoisted(() => vi.fn());
+vi.mock("#/utils/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/utils")>()),
+  downloadBlob,
 }));
 
 // Mock permission hooks so cloud-backend tests don't need a real /me endpoint.
@@ -231,6 +241,8 @@ beforeEach(() => {
   mockServiceAccountsEnabled(false);
   detailMocks.createConversationMutate.mockReset();
   detailMocks.navigate.mockReset();
+  downloadBlob.mockReset();
+  displayErrorToast.mockReset();
   setRegisteredBackends([localBackend, cloudBackend]);
   setActiveSelection({ backendId: localBackend.id });
 });
@@ -910,7 +922,77 @@ describe("AutomationDetail — script automations", () => {
       screen.queryByTestId("automation-prompt-content"),
     ).not.toBeInTheDocument();
   });
+
+  it("exports a script automation with its bundle", async () => {
+    // Arrange
+    const bundle = new Uint8Array(
+      await packTarGzip([{ name: "main.py", content: "print('hi')\n" }]),
+    );
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      prompt: null,
+      entrypoint: "python main.py",
+    });
+    vi.mocked(AutomationService.fetchTarballBytes).mockResolvedValue(bundle);
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByTestId("automation-script-file");
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EXPORT }),
+    );
+
+    // Assert — the file carries the bundle the detail page showed.
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalledTimes(1));
+    const [blob, filename] = downloadBlob.mock.calls[0] as [Blob, string];
+    expect(filename).toBe("test-automation.automation.json");
+    expect(JSON.parse(await readBlobText(blob)).spec).toMatchObject({
+      prompt: null,
+      script: {
+        entrypoint: "python main.py",
+        tarball_base64: bytesToBase64(bundle),
+      },
+    });
+  });
+
+  it("reports the error instead of writing a file when the bundle cannot be fetched", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      prompt: null,
+      entrypoint: "python main.py",
+    });
+    vi.mocked(AutomationService.fetchTarballBytes).mockRejectedValue(
+      new Error("Upload not found"),
+    );
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByTestId("automation-script-entrypoint");
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EXPORT }),
+    );
+
+    // Assert
+    await waitFor(() =>
+      expect(displayErrorToast).toHaveBeenCalledWith("Upload not found"),
+    );
+    expect(downloadBlob).not.toHaveBeenCalled();
+  });
 });
+
+function readBlobText(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result)));
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsText(blob);
+  });
+}
 
 describe("AutomationDetail — keep sandbox alive", () => {
   beforeEach(() => {
