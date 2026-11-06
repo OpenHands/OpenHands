@@ -1,0 +1,107 @@
+{
+  "acme-internal": {
+    "source": "github:acme-corp/extensions",
+    "ref": "main",
+    "resolved_ref": "4e1c9b2d",
+    "entries": [
+      {
+        "kind": "skill",
+        "name": "code-review",
+        "description": "Acme's review checklist: service ownership, error budgets, and the deploy freeze calendar.",
+        "tags": ["review", "acme", "platform"],
+        "runs_code": false
+      },
+      {
+        "kind": "skill",
+        "name": "acme-oncall",
+        "description": "How Acme runs on-call: paging rules, escalation ladder, and the incident template.",
+        "tags": ["operations", "acme"],
+        "runs_code": false
+      },
+      {
+        "kind": "plugin",
+        "name": "acme-deploy",
+        "description": "Deploy to Acme's internal platform. Adds /acme-deploy:ship and a pre-deploy hook that checks the freeze calendar.",
+        "tags": ["deploy", "acme", "hooks"],
+        "version": "2.3.0",
+        "runs_code": true
+      },
+      {
+        "kind": "mcp",
+        "name": "acme-ledger",
+        "description": "Read-only access to Acme's finance ledger over HTTP with the shared OAuth app.",
+        "tags": ["finance", "acme"],
+        "runs_code": false,
+        "transport": "http"
+      },
+      {
+        "kind": "mcp",
+        "name": "acme-vault-cli",
+        "description": "Fetch secrets through the local vault CLI. Runs a command on this machine.",
+        "tags": ["secrets", "acme"],
+        "runs_code": true,
+        "transport": "stdio"
+      },
+      {
+        "kind": "app",
+        "name": "acme-release-board",
+        "description": "Beta Canvas App: the release train board, with freeze windows and sign-offs.",
+        "tags": ["release", "acme", "beta"],
+        "version": "0.4.1",
+        "runs_code": true
+      },
+      {
+        "kind": "automation",
+        "name": "acme-weekly-cve-sweep",
+        "description": "Every Monday, list new CVEs for the services Acme owns and open one ticket per service.",
+        "tags": ["security", "scheduled", "acme"],
+        "runs_code": true,
+        "requires": ["github", "slack"]
+      }
+    ],
+    "errors": [
+      {
+        "entry": "nightly-cve",
+        "kind": "automation",
+        "message": "Invalid manifest: automations/catalog/nightly-cve/manifest.json is missing `requires`."
+      }
+    ]
+  },
+  "superpowers": {
+    "source": "github:obra/superpowers",
+    "ref": "main",
+    "resolved_ref": "a81f03c7",
+    "entries": [
+      {
+        "kind": "plugin",
+        "name": "superpowers",
+        "description": "A workflow plugin: brainstorming, planning, test-driven development and systematic debugging skills, with hooks that keep them in use.",
+        "tags": ["workflow", "tdd", "debugging", "hooks"],
+        "version": "4.0.3",
+        "runs_code": true
+      },
+      {
+        "kind": "skill",
+        "name": "brainstorming",
+        "description": "Turn a vague idea into a design through questions, before any code is written.",
+        "tags": ["workflow", "design"],
+        "runs_code": false
+      },
+      {
+        "kind": "skill",
+        "name": "test-driven-development",
+        "description": "Write the failing test first, then the smallest change that makes it pass.",
+        "tags": ["workflow", "tdd"],
+        "runs_code": false
+      },
+      {
+        "kind": "skill",
+        "name": "systematic-debugging",
+        "description": "Find the root cause before fixing: reproduce, isolate, confirm, then change.",
+        "tags": ["workflow", "debugging"],
+        "runs_code": false
+      }
+    ],
+    "errors": []
+  }
+}

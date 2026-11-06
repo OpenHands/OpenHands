@@ -22,7 +22,11 @@ import { EXTENSIONS_NAV_ITEMS } from "./extensions-navigation";
  */
 const CLOUD_LINKED_EXTENSION_PATH = "/skills";
 /** Backend-installed artifacts are not available on Cloud backends yet. */
-const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/apps"]);
+const CLOUD_HIDDEN_EXTENSION_PATHS = new Set([
+  "/plugins",
+  "/apps",
+  "/marketplaces",
+]);
 
 export function ExtensionsMobileHub() {
   const { t } = useTranslation("openhands");

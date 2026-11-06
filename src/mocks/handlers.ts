@@ -28,6 +28,10 @@ import {
   CANVAS_EXTENSIONS_HANDLERS,
   resetCanvasExtensionsMockData,
 } from "./canvas-extensions-handlers";
+import {
+  MARKETPLACES_HANDLERS,
+  resetMarketplacesMockData,
+} from "./marketplaces-handlers";
 
 export const handlers = [
   ...FILE_SERVICE_HANDLERS,
@@ -43,6 +47,7 @@ export const handlers = [
   ...MCP_HANDLERS,
   ...WORKSPACES_HANDLERS,
   ...CANVAS_EXTENSIONS_HANDLERS,
+  ...MARKETPLACES_HANDLERS,
 ];
 
 export {
@@ -51,6 +56,7 @@ export {
   resetAutomationMockData,
   resetMockWorkspaces,
   resetCanvasExtensionsMockData,
+  resetMarketplacesMockData,
 };
 
 export {

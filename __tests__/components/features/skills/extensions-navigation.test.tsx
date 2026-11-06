@@ -120,6 +120,7 @@ describe("ExtensionsNavigation", () => {
       "Skills",
       "Plugins",
       "Apps",
+      "Marketplaces",
     ]);
   });
 
@@ -252,7 +253,7 @@ describe("ExtensionsNavigation", () => {
         within(nav)
           .getAllByRole("link")
           .map((link) => link.getAttribute("href")),
-      ).toEqual(["/mcp", "/skills", "/plugins", "/apps"]);
+      ).toEqual(["/mcp", "/skills", "/plugins", "/apps", "/marketplaces"]);
       expect(
         within(nav).getByRole("link", { name: "MCP Servers" }),
       ).toHaveAttribute("aria-current", "page");
