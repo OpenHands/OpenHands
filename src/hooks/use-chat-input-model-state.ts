@@ -126,7 +126,11 @@ export function useChatInputModelState(): ChatInputModelState {
   const canPersistHomeAcpModel =
     !isHomeAcp || backend.kind !== "cloud" || canManageOrgProfiles;
   const showAcpPicker =
-    isAcpContext && availableAcpModels.length > 0 && canPersistHomeAcpModel;
+    isAcpContext &&
+    availableAcpModels.length > 0 &&
+    canPersistHomeAcpModel &&
+    (!isActiveAcpConversation ||
+      conversation?.acp_allow_model_switch !== false);
   let agentDefaultLabel: string | null = null;
   if (isHomeAcp && acpProvider && !getAcpPreferredDefaultModel(acpServerKey)) {
     const defaultModelLabel = labelForAcpModel(

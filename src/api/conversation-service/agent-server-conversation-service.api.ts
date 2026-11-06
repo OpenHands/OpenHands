@@ -232,6 +232,10 @@ function normalizeAgent(value: unknown): DirectConversationInfo["agent"] {
     kind: stringOrNull(value.kind),
     acp_server: stringOrNull(value.acp_server),
     acp_model: stringOrNull(value.acp_model),
+    acp_allow_model_switch:
+      typeof value.acp_allow_model_switch === "boolean"
+        ? value.acp_allow_model_switch
+        : null,
     llm,
   };
 }

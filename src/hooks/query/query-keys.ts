@@ -30,6 +30,26 @@ export const ACP_MODEL_DISCOVERY_QUERY_KEYS = {
   all: ["acp-model-discovery"] as const,
 } as const;
 
+export const ACP_PERMISSION_QUERY_KEYS = {
+  pending: (
+    backendId: string,
+    revision: number | undefined,
+    orgId: string | null,
+    conversationId: string | undefined,
+    url: string | null | undefined,
+    authorizationGeneration: string,
+  ) =>
+    [
+      "acp-permissions",
+      backendId,
+      revision,
+      orgId,
+      conversationId,
+      url,
+      authorizationGeneration,
+    ] as const,
+} as const;
+
 export const AGENT_PROFILES_QUERY_KEYS = {
   all: ["agent-profiles"] as const,
   // Nested under `all` so profile mutations invalidate cached details too.
