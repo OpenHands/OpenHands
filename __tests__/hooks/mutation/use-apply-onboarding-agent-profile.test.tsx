@@ -32,6 +32,12 @@ const STORED_DEFAULT = {
   public_skills: ["github"],
 };
 
+function saved(name: string) {
+  return vi
+    .mocked(AgentProfilesService.saveProfile)
+    .mock.calls.some(([savedName]) => savedName === name);
+}
+
 function renderApply() {
   const queryClient = new QueryClient();
   return renderHook(() => useApplyOnboardingAgentProfile(), {
@@ -82,18 +88,18 @@ describe("useApplyOnboardingAgentProfile", () => {
     );
   });
 
-  it("replaces `default` when onboarding picks an ACP agent", async () => {
-    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
-      name: "default",
-      profile: {
-        id: "profile-default",
-        name: "default",
-        revision: 2,
-        agent_kind: "acp",
-        acp_server: "custom",
-        acp_command: "my-acp --flag",
+  it("saves an ACP pick to the provider's own profile, not `default`", async () => {
+    vi.mocked(AgentProfilesService.getProfile).mockImplementation(
+      async (name) => {
+        if (name === "claude-code" && !saved("claude-code")) {
+          throw new HttpError(404, "Not Found");
+        }
+        return {
+          name,
+          profile: { ...STORED_DEFAULT, id: `id-${name}` },
+        } as never;
       },
-    } as never);
+    );
 
     await renderApply()({
       agent_kind: "acp",
@@ -101,11 +107,90 @@ describe("useApplyOnboardingAgentProfile", () => {
       acp_model: null,
     });
 
-    expect(AgentProfilesService.saveProfile).toHaveBeenCalledWith("default", {
+    expect(AgentProfilesService.saveProfile).toHaveBeenCalledTimes(1);
+    expect(AgentProfilesService.saveProfile).toHaveBeenCalledWith(
+      "claude-code",
+      { agent_kind: "acp", acp_server: "claude-code", acp_model: null },
+    );
+    expect(AgentProfilesService.activateProfile).toHaveBeenCalledWith(
+      "id-claude-code",
+    );
+  });
+
+  it("activates the provider's stored profile without rewriting it", async () => {
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      name: "codex",
+      profile: {
+        id: "profile-codex",
+        name: "codex",
+        revision: 3,
+        agent_kind: "acp",
+        acp_server: "codex",
+        acp_model: "gpt-6.1-sol",
+      },
+    } as never);
+
+    await renderApply()({
       agent_kind: "acp",
-      acp_server: "claude-code",
+      acp_server: "codex",
+      acp_model: "gpt-5.6-sol",
+    });
+
+    expect(AgentProfilesService.saveProfile).not.toHaveBeenCalled();
+    expect(AgentProfilesService.activateProfile).toHaveBeenCalledWith(
+      "profile-codex",
+    );
+  });
+
+  it("picks the next free name when another profile holds the provider's", async () => {
+    vi.mocked(AgentProfilesService.getProfile).mockImplementation(
+      async (name) => {
+        if (name === "codex") {
+          return {
+            name,
+            profile: { ...STORED_DEFAULT, id: "user-codex", name },
+          } as never;
+        }
+        if (name === "codex-2" && !saved("codex-2")) {
+          throw new HttpError(404, "Not Found");
+        }
+        return {
+          name,
+          profile: { ...STORED_DEFAULT, id: `id-${name}` },
+        } as never;
+      },
+    );
+
+    await renderApply()({
+      agent_kind: "acp",
+      acp_server: "codex",
       acp_model: null,
     });
+
+    expect(AgentProfilesService.saveProfile).toHaveBeenCalledTimes(1);
+    expect(AgentProfilesService.saveProfile).toHaveBeenCalledWith("codex-2", {
+      agent_kind: "acp",
+      acp_server: "codex",
+      acp_model: null,
+    });
+    expect(AgentProfilesService.activateProfile).toHaveBeenCalledWith(
+      "id-codex-2",
+    );
+  });
+
+  it("writes nothing when the provider's profile can't be read", async () => {
+    vi.mocked(AgentProfilesService.getProfile).mockRejectedValue(
+      new HttpError(500, "Internal Server Error"),
+    );
+
+    await renderApply()({
+      agent_kind: "acp",
+      acp_server: "codex",
+      acp_model: null,
+    });
+
+    expect(AgentProfilesService.saveProfile).not.toHaveBeenCalled();
+    expect(AgentProfilesService.activateProfile).not.toHaveBeenCalled();
   });
 
   it("configures `default` only after the default migration", async () => {
