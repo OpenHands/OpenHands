@@ -332,7 +332,7 @@ describe("useWorkspaceFileContent", () => {
       // runtime's /api/file/download rejects relative paths).
       expect(readCloudConversationFileMock).toHaveBeenCalledWith(
         "conv-1",
-        "/workspace/project/docs/readme.md",
+        "/workspace/docs/readme.md",
       );
       expect(downloadFileMock).not.toHaveBeenCalled();
       expect(fetchMock).not.toHaveBeenCalled();
