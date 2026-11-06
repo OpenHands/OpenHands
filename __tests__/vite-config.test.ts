@@ -600,6 +600,15 @@ describe("vite library build", () => {
     expect(declarations(recipe("text-2xs"))).toEqual({ "font-size": "11px" });
     expect(declarations(recipe("text-3xs"))).toEqual({ "font-size": "10px" });
 
+    for (const [name, size] of Object.entries({
+      "text-4xs": "9px",
+      "text-xs-plus": "13px",
+      "text-sm-plus": "15px",
+      "text-title": "32px",
+    })) {
+      expect(declarations(recipe(name))).toEqual({ "font-size": size });
+    }
+
     expect(declarations(recipe("metadata-grid-columns"))).toEqual({
       "grid-template-columns": "auto 1fr",
     });
