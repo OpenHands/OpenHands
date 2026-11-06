@@ -39,6 +39,10 @@ Public skills are loaded from the `@openhands/extensions` npm package at build t
 Bundled catalog skills use the persisted `enabled_skills` allow-list defaulted from `DEFAULT_ENABLED_SKILL_NAMES`. User and project skills remain enabled unless listed in `disabled_skills`. Keep this logic centralized in `src/utils/skill-enablement.ts`. The Agent Server no longer clones the extensions repository or uses `EXTENSIONS_REF` for public skills.
 
 
+## Onboarding
+
+- `AGENT_CANVAS_SKIP_ONBOARDING=1|true` (or static server `--skip-onboarding`) injects an operator opt-in for pre-configured shared servers. Both first-run gates read `isOnboardingSkippedByOperator()`; it never writes `openhands-onboarded` or changes the sidebar checklist's persisted completion state. The root ignores it in locked-to-Cloud mode, authentication remains required, and `OnboardingHost` keeps `?previewOnboardingStep=0..3` ahead of the skip gate.
+
 ## Workspace files
 
 Local Files discovery preferences belong to `misc_settings.app_preferences.workspace_file_discovery`, keyed by working directory on the active backend. `useWorkspaceFileDiscovery` reads the settings cache and saves sparse workspace patches. Preserve default exclusions and the 2,000-file cap when no configuration exists. Fetch one extra result to distinguish truncation from an exact-size list. Cloud keeps its server-side listing contract without these controls.
