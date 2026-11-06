@@ -1,0 +1,36 @@
+{
+  "viewport": "phone",
+  "seededHistory": true,
+  "liveModel": false,
+  "typing": {
+    "draft": true,
+    "focused": true,
+    "historyLoaded": true
+  },
+  "replyReasoning": {
+    "content": true,
+    "noNestedDisclosure": true
+  },
+  "actionReasoning": {
+    "reasoningInToolGroup": true,
+    "commandDetails": true,
+    "thoughtOnce": true,
+    "thoughtBeforeGroup": true
+  },
+  "retention": {
+    "draft": true,
+    "replyReasoning": true
+  },
+  "errors": {
+    "ok": true,
+    "since": "last clear",
+    "summary": {},
+    "pageErrors": 0,
+    "appErrors": 0,
+    "warnings": 0,
+    "events": []
+  },
+  "artifacts": [
+    "merge-phone.png"
+  ]
+}
