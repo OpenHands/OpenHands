@@ -216,6 +216,14 @@ vi.mock("#/hooks/query/use-agent-profiles", () => ({
           llm_profile_ref: "fast",
           mcp_server_refs: null,
         },
+        {
+          id: "agent-claude",
+          name: "claude",
+          agent_kind: "acp",
+          revision: 1,
+          llm_profile_ref: null,
+          mcp_server_refs: null,
+        },
       ],
       active_agent_profile_id: "agent-default",
     },
@@ -2132,6 +2140,23 @@ describe("AutomationSetupPanel", () => {
         agent_profile_id: "agent-reviewer",
       });
       expect(body).not.toHaveProperty("model");
+    });
+
+    it("shows that an ACP agent profile runs its own model, not an LLM profile", async () => {
+      withCapabilities(["presetAgentProfiles"]);
+      const user = userEvent.setup();
+      renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      const option = screen.getByTestId(
+        "automation-setup-agent-profile-option-agent-claude",
+      );
+      expect(option).toHaveTextContent("CONVERSATION$ACP_AGENT_GENERIC");
+      await user.click(option);
+
+      const modelPill = screen.getByTestId("automation-setup-model");
+      expect(modelPill).toHaveAccessibleName("CONVERSATION$ACP_AGENT_GENERIC");
+      expect(modelPill).toHaveAttribute("aria-disabled", "true");
     });
 
     it("moves an edited preset onto an agent profile", async () => {

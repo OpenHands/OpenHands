@@ -319,7 +319,11 @@ export function SetupAgentProfilePill({
               key={item.id}
               testId={`automation-setup-agent-profile-option-${item.id}`}
               label={item.name}
-              detail={item.llm_profile_ref || activeLlmProfile}
+              detail={
+                item.agent_kind === "acp"
+                  ? t(I18nKey.CONVERSATION$ACP_AGENT_GENERIC)
+                  : item.llm_profile_ref || activeLlmProfile
+              }
               isSelected={item.id === selectedId}
               onSelect={() => {
                 onChange(item.id);
@@ -335,7 +339,8 @@ export function SetupAgentProfilePill({
 
 /**
  * The service refuses an LLM profile next to an agent profile, so while one is
- * chosen the LLM profile pill shows the one it runs on and stays locked.
+ * chosen the LLM profile pill shows what it runs on and stays locked. An ACP
+ * agent runs its own model, not an LLM profile.
  */
 function useModelLockedByAgentProfile(agentProfileId: string) {
   const { t } = useTranslation("openhands");
@@ -344,7 +349,10 @@ function useModelLockedByAgentProfile(agentProfileId: string) {
   if (!selectedId) return undefined;
   const selected = data?.profiles?.find((profile) => profile.id === selectedId);
   return {
-    llmProfile: selected?.llm_profile_ref || null,
+    llmProfile:
+      selected?.agent_kind === "acp"
+        ? t(I18nKey.CONVERSATION$ACP_AGENT_GENERIC)
+        : selected?.llm_profile_ref || null,
     reason: t(I18nKey.AUTOMATION_SETUP$LLM_PROFILE_SET_BY_AGENT, {
       name: selected?.name ?? selectedId,
     }),
