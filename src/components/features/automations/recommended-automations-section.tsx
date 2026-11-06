@@ -151,10 +151,8 @@ function collectIntegrationIds(automations: RecommendedAutomation[]) {
 function automationMatchesQuery(
   automation: RecommendedAutomation,
   integrations: AutomationIntegration[],
-  rawQuery: string,
+  queryTokens: string[],
 ) {
-  const query = rawQuery.trim().toLowerCase();
-  if (!query) return true;
   const haystack = [
     automation.name,
     automation.category,
@@ -166,7 +164,7 @@ function automationMatchesQuery(
   ]
     .join(" ")
     .toLowerCase();
-  return haystack.includes(query);
+  return queryTokens.every((token) => haystack.includes(token));
 }
 
 function buildRecommendedAutomationPills(
@@ -418,6 +416,8 @@ export function RecommendedAutomationsSection({
   scrollableGrid = false,
 }: RecommendedAutomationsSectionProps) {
   const { t } = useTranslation("openhands");
+  const normalizedQuery = query.trim().toLowerCase();
+  const queryTokens = normalizedQuery ? normalizedQuery.split(/\s+/) : [];
 
   // Only the deployment's hide list, the filters and the query narrow the
   // grid. An automation that declares no integration needs nothing connected,
@@ -429,11 +429,12 @@ export function RecommendedAutomationsSection({
   const visibleAutomations = offeredAutomations.filter(
     (automation) =>
       (!filters || automationMatchesFilters(automation, filters)) &&
-      automationMatchesQuery(
-        automation,
-        getIntegrationEntries(automation),
-        query,
-      ),
+      (queryTokens.length === 0 ||
+        automationMatchesQuery(
+          automation,
+          getIntegrationEntries(automation),
+          queryTokens,
+        )),
   );
 
   const filterChips =
