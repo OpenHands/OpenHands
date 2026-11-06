@@ -489,12 +489,20 @@ export default [
     },
   },
   {
+    // These completed owners use named recipes; other geometry stays warning-only.
+    files: [
+      "src/components/features/command-menu/command-menu.tsx",
+      "src/components/features/backends/backend-version.tsx",
+      "src/components/features/settings/settings-nav-header.tsx",
+      "src/components/features/settings/backend-synced-settings-badge.tsx",
+    ],
+    rules: { "shadcn/no-arbitrary-values": "error" },
+  },
+  {
     // Audit literal class recipes that dynamic map/helper lookups hide.
     // Keep broad string scanning away from unrelated program tags.
     files: [
       "src/components/features/backends/backend-status-dot.tsx",
-      "src/components/features/conversation-panel/start-task-card/start-task-status-badge.tsx",
-      "src/components/features/conversation-panel/start-task-card/start-task-status-indicator.tsx",
       "src/components/features/markdown/blockquote.tsx",
       "src/components/features/mcp-page/mcp-server-health.tsx",
     ],

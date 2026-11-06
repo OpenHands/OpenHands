@@ -63,7 +63,16 @@ const FIELD_TYPES = [
   "plugin-sources",
   "tarball-upload",
 ] as const;
-const GIT_PROVIDERS = ["github", "gitlab", "bitbucket"] as const;
+// The providers a repository picker may list from: the hosted services and the
+// Data Center and Azure DevOps integrations. Mirrors the published schema's
+// `provider` enum, as `SetupGitProvider` does.
+const GIT_PROVIDERS = [
+  "github",
+  "gitlab",
+  "bitbucket",
+  "bitbucket_data_center",
+  "azure_devops",
+] as const;
 const TRIGGER_KINDS = ["cron", "event"] as const;
 const CONSTRAINT_FORMATS = ["safeExpressionLiteral"] as const;
 

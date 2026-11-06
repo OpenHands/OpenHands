@@ -1,3 +1,5 @@
+import { conversationHistoryQueryOptions } from "./conversation-history-query-options";
+import { persistedHistoryQueryOptions } from "./persisted-history-query-options";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useRef } from "react";
 import { CONVERSATION_LAUNCH_PREFIX } from "#/stores/conversation-launch-store";
@@ -74,7 +76,7 @@ export const usePrefetchUserConversation = () => {
   const queryClient = useQueryClient();
   const active = useActiveBackend();
   return useCallback(
-    (cid: string) => {
+    async (cid: string) => {
       const current = getActiveBackend();
       if (
         active.backend.kind !== "cloud" ||
@@ -87,9 +89,30 @@ export const usePrefetchUserConversation = () => {
       ) {
         return Promise.resolve();
       }
-      return queryClient.prefetchQuery(
-        userConversationQueryOptions(cid, active),
+      const options = userConversationQueryOptions(cid, active);
+      await queryClient.prefetchQuery(options);
+      const selected = getActiveBackend();
+      if (
+        selected.backend.id !== active.backend.id ||
+        selected.orgId !== active.orgId ||
+        selected.backend.connectionRevision !==
+          active.backend.connectionRevision ||
+        !queryClient.getQueryData(options.queryKey)
+      )
+        return;
+      const conversation = queryClient.getQueryData<AppConversation | null>(
+        options.queryKey,
       );
+      await Promise.all([
+        queryClient.prefetchQuery({
+          ...conversationHistoryQueryOptions(cid, conversation, active),
+          staleTime: 0,
+        }),
+        queryClient.prefetchQuery({
+          ...persistedHistoryQueryOptions(cid, active),
+          staleTime: 0,
+        }),
+      ]);
     },
     [active, queryClient],
   );

@@ -341,6 +341,15 @@ export function ChatInterface({
   const session = sessions.at(-1);
   const isSessionStarting =
     session?.phase === "pending" || session?.phase === "connecting";
+  // An open socket can still be replaying saved messages after a failed REST
+  // preload. Every tab must wait for replay completion before declaring the
+  // chat empty, including tabs without a local session activity group.
+  const sessionHistoryKnown =
+    conversationWebSocket === null ||
+    (!isSessionStarting &&
+      conversationWebSocket.connectionState === "OPEN" &&
+      conversationWebSocket.isHistoryReady &&
+      !conversationWebSocket.isLoadingHistory);
   const hasSendingMessages = pendingMessages.some(
     (message) =>
       message.status === "sending" &&
@@ -667,7 +676,7 @@ export function ChatInterface({
     <WorkspaceFilesForChatProvider>
       <ScrollProvider value={scrollProviderValue}>
         <div className={CHAT_BODY_CLASS_NAME} data-testid="chat-interface">
-          {sessions.length === 0 &&
+          {sessionHistoryKnown &&
             !hasSubstantiveAgentActions &&
             !hasPendingUserMessages &&
             !userEventsExist &&
@@ -677,7 +686,7 @@ export function ChatInterface({
             totalEvents === 0 &&
             !isArchivedConversation &&
             // With no usable LLM the suggestions can't be acted on (the input is
-            // disabled). They're also a `pointer-events-auto` overlay that would
+            // disabled). Their chips would also
             // sit over the LlmNotConfiguredBanner below and swallow clicks on its
             // setup button — so hide them and let the banner be the lone CTA.
             !llmBlocked &&

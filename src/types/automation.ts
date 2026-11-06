@@ -42,6 +42,16 @@ export interface AutomationRepository {
 
 export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
 
+/**
+ * `POST /v1/{id}/run-as` body: hand the automation to a service account of
+ * the org, or back to the caller (managers only).
+ */
+export type ChangeRunAsRequest =
+  { to: "service"; service_account_id: string } | { to: "self" };
+
+/** What kind of identity an automation runs as. */
+export type AutomationRunAsKind = "user" | "service";
+
 export interface Automation {
   id: string;
   name: string;
@@ -72,12 +82,26 @@ export interface Automation {
   /** UTC timestamp the automation was last disabled. */
   disabled_at?: string | null;
   /**
-   * UUID of the user who created this automation. The backend returns it in
-   * `AutomationResponse.user_id`; the frontend uses it to implement the
-   * "creator escape hatch" — a member (view-only) may still edit their own
-   * automations even without `manage_automations`.
+   * UUID of the identity the automation runs as: a person, or a service
+   * account (see `run_as_kind`). Usually the creator for a person, but not
+   * after a manager changes it to run as themselves (`created_by_user_id`
+   * keeps the creator). The frontend uses it for the "creator escape hatch":
+   * a member (view-only) may still edit automations that run as them without
+   * `manage_automations`.
    */
   user_id?: string;
+  /**
+   * What `user_id` identifies: a person (`user`) or a service account
+   * (`service`). Absent on an automation service older than run-as; treat it
+   * as `user`.
+   */
+  run_as_kind?: AutomationRunAsKind;
+  /**
+   * UUID of the person who created the automation. It differs from `user_id`
+   * when the automation runs as a service account. Absent on an automation
+   * service older than run-as.
+   */
+  created_by_user_id?: string;
   /**
    * Single repository in the import/export file's shape. The automation
    * service does not return it; read `repositories` for what an automation
@@ -88,6 +112,11 @@ export interface Automation {
   agent_profile_id?: string | null;
   /** LLM/model profile name used when no agent profile is selected. */
   model?: string | null;
+  /**
+   * Author-written Markdown explaining what the automation does. A
+   * ```mermaid block in it renders as a diagram on the detail page.
+   */
+  description?: string | null;
   /**
    * Maximum run time in seconds. `null`/omitted uses the server default
    * (600s, 10 min); the deployment reports the maximum it accepts.
@@ -194,11 +223,7 @@ export enum AutomationRunStatus {
 }
 
 export type AutomationTaskOutcomeStatus =
-  | "success"
-  | "partial_success"
-  | "blocked"
-  | "failed"
-  | "unknown";
+  "success" | "partial_success" | "blocked" | "failed" | "unknown";
 
 export interface AutomationFinishToolResponse {
   status?: AutomationTaskOutcomeStatus | string;

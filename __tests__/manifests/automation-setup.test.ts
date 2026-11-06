@@ -317,6 +317,36 @@ describe("buildCreatePayload", () => {
     });
   });
 
+  it.each([
+    { cloneProviders: ["gitlab"], repos: undefined },
+    {
+      cloneProviders: ["github", "gitlab"],
+      repos: [{ url: "octo/widgets", provider: "github" }],
+    },
+  ])(
+    "sends repos only when the deployment's runs clone the picker's provider ($cloneProviders)",
+    ({ cloneProviders, repos }) => {
+      // Arrange — a service rejects a provider its runs cannot clone, as one
+      // whose SDK predates Bitbucket Data Center does.
+      const entry = createSetupEntry();
+      const values = { repository: "octo/widgets", widgetName: "gadget" };
+
+      // Act
+      const payload = buildCreatePayload(
+        entry,
+        values,
+        undefined,
+        null,
+        null,
+        cloneProviders,
+      );
+
+      // Assert — the prompt still names the repository either way.
+      expect(payload?.repos).toEqual(repos);
+      expect(payload?.prompt).toBe("Report on gadget in octo/widgets.");
+    },
+  );
+
   it("sends the payload unchanged for an entry without a version", () => {
     // Arrange
     const entry = createSetupEntry();
@@ -349,6 +379,23 @@ describe("buildPreflightBody", () => {
       expect(envelope).toEqual(body);
     },
   );
+
+  it("checks the draft without repos the deployment's runs cannot clone", () => {
+    // Arrange
+    const entry = createSetupEntry();
+
+    // Act
+    const envelope = buildPreflightBody(
+      entry,
+      { repository: "octo/widgets", widgetName: "gadget" },
+      null,
+      null,
+      ["gitlab"],
+    );
+
+    // Assert
+    expect(envelope?.draft).not.toHaveProperty("repos");
+  });
 });
 
 describe("buildAssistedMessage", () => {
