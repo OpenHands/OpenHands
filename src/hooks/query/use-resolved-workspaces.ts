@@ -3,7 +3,11 @@ import { useQueries } from "@tanstack/react-query";
 import { isAgentServerVersionError } from "@openhands/typescript-client/clients";
 
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
-import { searchAllSubdirectories } from "#/hooks/query/use-search-subdirs";
+import {
+  searchAllSubdirectories,
+  searchSubdirsQueryKey,
+} from "#/hooks/query/use-search-subdirs";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { LocalWorkspace, LocalWorkspaceParent } from "#/types/workspace";
 
 interface UseResolvedWorkspacesResult {
@@ -50,6 +54,7 @@ const IMPLICIT_WORKSPACE_PARENTS: LocalWorkspaceParent[] = [
  * same path so that user-selected names/ids are preserved.
  */
 export function useResolvedWorkspaces(): UseResolvedWorkspacesResult {
+  const active = useActiveBackend();
   const {
     data,
     isLoading: isLoadingList,
@@ -78,7 +83,11 @@ export function useResolvedWorkspaces(): UseResolvedWorkspacesResult {
     queries: workspacesUnsupported
       ? []
       : workspaceParents.map((parent) => ({
-          queryKey: ["file", "search_subdirs", parent.path],
+          queryKey: searchSubdirsQueryKey(
+            parent.path,
+            active.backend.id,
+            active.orgId,
+          ),
           queryFn: () => searchAllSubdirectories(parent.path),
           retry: false,
           meta: { disableToast: true },
