@@ -24,7 +24,7 @@ top right installs an entry and switches an installed one on and off.
 
 | Screenshot | What it shows |
 | --- | --- |
-| v2-01-default | The default marketplace: 190 entries from the bundled `@openhands/extensions` 0.41.0, tabs with counts, facets, MCP cards with their logos |
+| v2-01-default | The default marketplace: 167 entries from the bundled `@openhands/extensions` 0.41.0, tabs with counts, facets, the 56 MCP servers of the MCP page with their logos and transports |
 | v2-02-automation-tab | Automation templates tab (26) with manifest icons and `Needs:` pills |
 | v2-03-installed-update | Status facet "Installed" after installing github; Refresh moved the commit and the tracked install shows "Update available" |
 | v2-04-acme-untrusted | Picker switched to acme-internal: read error listed, Remove marketplace shown, "Runs code" entries blocked until trusted, "Also in openhands-extensions" on the duplicate skill |

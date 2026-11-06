@@ -5,6 +5,10 @@ import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 import { APPS_CATALOG } from "@openhands/extensions/apps";
 import openhandsMarketplace from "@openhands/extensions/marketplaces/openhands-extensions.json";
 import knownSources from "#/fixtures/marketplaces/known-sources.json";
+import {
+  getDefaultMcpTransport,
+  getMcpMarketplaceCatalog,
+} from "#/utils/mcp-marketplace-utils";
 import type {
   AddMarketplaceRequest,
   CatalogEntry,
@@ -94,25 +98,34 @@ function defaultMarketplaceEntries(): SeedEntry[] {
     runs_code: false,
   }));
 
-  // The published catalog only lists remote (shttp/sse) servers; a server
-  // started as a local command would run code, like acme-vault-cli does.
-  const mcp: SeedEntry[] = INTEGRATION_CATALOG.map((integration) => ({
-    kind: "mcp",
-    name: integration.id,
-    title: integration.name,
-    description: integration.description,
-    tags: [...(integration.categories ?? []), ...(integration.keywords ?? [])]
-      .map((tag) => tag.toLowerCase())
-      .slice(0, 5),
-    runs_code: false,
-    transport: "http",
-    icon: {
-      logo_url: integration.logoUrl ?? null,
-      bg: integration.iconBg ?? null,
-      color: integration.iconColor ?? null,
-      slug: null,
+  // The same servers, in the same order, as the MCP page's library: only the
+  // integrations that can be installed as an MCP server, each with the
+  // transport that install would use. A stdio server runs a local command.
+  const mcp: SeedEntry[] = getMcpMarketplaceCatalog(INTEGRATION_CATALOG).map(
+    (integration) => {
+      const stdio = getDefaultMcpTransport(integration)?.kind === "stdio";
+      return {
+        kind: "mcp",
+        name: integration.id,
+        title: integration.name,
+        description: integration.description,
+        tags: [
+          ...(integration.categories ?? []),
+          ...(integration.keywords ?? []),
+        ]
+          .map((tag) => tag.toLowerCase())
+          .slice(0, 5),
+        runs_code: stdio,
+        transport: stdio ? "stdio" : "http",
+        icon: {
+          logo_url: integration.logoUrl ?? null,
+          bg: integration.iconBg ?? null,
+          color: integration.iconColor ?? null,
+          slug: null,
+        },
+      };
     },
-  }));
+  );
 
   const apps: SeedEntry[] = APPS_CATALOG.map((app) => ({
     kind: "app",
