@@ -519,6 +519,19 @@ export default [
     },
   },
   {
+    // These four owners are migrated and reject arbitrary class values.
+    // The rest of the repository retains warning severity during migration.
+    files: [
+      "src/components/features/command-menu/command-menu.tsx",
+      "src/components/features/backends/backend-version.tsx",
+      "src/components/features/settings/settings-nav-header.tsx",
+      "src/components/features/settings/backend-synced-settings-badge.tsx",
+    ],
+    rules: {
+      "shadcn/no-arbitrary-values": "error",
+    },
+  },
+  {
     // Primitive implementations own appearance and variant helpers. Token and
     // unknown-class checks still apply to their definitions.
     files: ["src/ui/**/*.{ts,tsx}"],
