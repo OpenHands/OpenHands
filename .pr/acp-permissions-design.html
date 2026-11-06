@@ -1,0 +1,710 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ACP decisions in Canvas stay explicit and scoped</title><style>
+:root{--fg:#1a1a1a;--muted:#5a5a5a;--subtle:#8a8a82;--bg:#fdfdfb;--card:#fff;--elevated:#f7f6f1;--accent:#2b4eaa;--accent-soft:#e6ecfa;--rule:#e2e2dc;--code-bg:#f3f1ec;--warn:#b25b0e;--mono:ui-monospace,Consolas,monospace;--sans:Segoe UI,Arial,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 var(--sans)}.wrap{display:grid;grid-template-columns:220px minmax(0,1fr);gap:34px;max-width:1240px;margin:auto;padding:30px 24px 90px}nav{position:sticky;top:24px;align-self:start;font-size:12px}nav a{color:var(--fg);text-decoration:none}nav li{margin:6px 0;overflow-wrap:anywhere}nav ol{padding-left:18px}h1{font-size:32px;line-height:1.15;margin:8px 0 16px}h2{font-size:22px;margin:34px 0 12px}h3{font-size:17px;margin:14px 0}.eyebrow{font-size:11px;letter-spacing:.12em;color:var(--accent);text-transform:uppercase}.sub,.muted{color:var(--muted)}header{border-bottom:1px solid var(--rule);padding-bottom:20px}.callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:12px 15px}.warn{border-color:var(--warn);background:#fbf1e6}.ba{display:grid;grid-template-columns:1fr 1fr;gap:14px}figure{margin:14px 0}svg{width:100%;height:auto;background:var(--card);border:1px solid var(--rule);border-radius:5px}figcaption{font-size:12px;color:var(--muted);margin:7px 0}code,pre{font-family:var(--mono);font-size:12px}code{background:var(--code-bg);padding:2px 4px}pre{overflow:auto;background:var(--code-bg);padding:14px;white-space:pre;border-radius:4px}.src{font-family:var(--mono);font-size:11px;color:var(--accent);overflow-wrap:anywhere}.card{border-top:1px solid var(--rule);padding-top:12px;margin-top:26px}details{border:1px solid var(--rule);padding:8px 12px;margin:12px 0}summary{cursor:pointer;font-size:13px;color:var(--muted)}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top}th{background:var(--code-bg)}.badge{color:var(--warn);font-size:11px}.existing{fill:var(--code-bg);stroke:var(--subtle);stroke-dasharray:5 3}.new{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2}.edge{stroke:var(--warn);stroke-width:2;stroke-dasharray:5 3}.node{font:600 12px var(--mono);fill:var(--fg)}.detail{font:11px var(--sans);fill:var(--muted)}@media(max-width:800px){.wrap,.ba{grid-template-columns:1fr}nav{position:static}}
+</style></head><body><div class="wrap"><nav><strong>Source changes</strong><ol><li><a href="#file-0">__tests__/components/features/chat/acp-permission-panel.test.tsx</a></li><li><a href="#file-1">__tests__/hooks/use-chat-input-model-state.test.tsx</a></li><li><a href="#file-2">config/defaults.json</a></li><li><a href="#file-3">src/api/acp-service/acp-permissions.api.ts</a></li><li><a href="#file-4">src/api/agent-server-adapter.ts</a></li><li><a href="#file-5">src/api/conversation-service/agent-server-conversation-service.api.ts</a></li><li><a href="#file-6">src/api/conversation-service/agent-server-conversation-service.types.ts</a></li><li><a href="#file-7">src/components/features/chat/acp-permission-panel.tsx</a></li><li><a href="#file-8">src/components/features/chat/chat-interface.tsx</a></li><li><a href="#file-9">src/hooks/query/query-keys.ts</a></li><li><a href="#file-10">src/hooks/query/use-acp-permissions.ts</a></li><li><a href="#file-11">src/hooks/use-chat-input-model-state.ts</a></li><li><a href="#file-12">src/i18n/translation.json</a></li></ol></nav><main><header><div class="eyebrow">Agent-generated draft review aid · OpenHands/OpenHands</div><h1>ACP decisions in Canvas stay explicit and scoped</h1><p class="sub">The conversation shows offered choices, keeps authorization in transport, and discards pending state when its conversation/backend/runtime scope changes.</p><p><a class="src" href="https://github.com/OpenHands/OpenHands/pull/19449">Draft PR</a> · <a class="src" href="https://github.com/team-majaniemi/majaniemi-autoforge/blob/448caaf42ed8d366eaece9b5f41e67f143cb54dd/docs/VALIDATION.md">Validation and limitations</a></p></header>
+<p class="callout">★ This is a source proposal. Maintainer/API acceptance, human-only PR text, published server/client integration and current-main native/browser/Cloud evidence remain separate gates. The verified local factory retains its audited installed build.</p>
+<section><h2>1. The API is additive; controlled behavior is explicit</h2>
+<figure><svg viewBox="0 0 900 260" role="img" aria-labelledby="overview-title"><title id="overview-title">Permission control before and after</title><desc>Dashed grey is existing behavior or a marked conceptual absence. Blue nodes and orange edges carry the opt-in decision path. Linked nodes name exact code locations.</desc><text class="detail" x="18" y="26">Before: no dedicated ACP decision panel</text><rect class="existing" x="18" y="42" width="202" height="64" rx="6"/><text class="node" x="119" y="69" text-anchor="middle">ACP conversation</text><text class="detail" style="font-size:9px" x="119" y="90" text-anchor="middle">concept / unchanged participant</text><path class="edge" d="M220 74 h18 l-5 -4 m5 4 l-5 4"/><rect class="existing" x="238" y="42" width="202" height="64" rx="6"/><text class="node" x="339" y="69" text-anchor="middle">no permission panel</text><text class="detail" style="font-size:9px" x="339" y="90" text-anchor="middle">concept / unchanged participant</text><path class="edge" d="M440 74 h18 l-5 -4 m5 4 l-5 4"/><rect class="existing" x="458" y="42" width="202" height="64" rx="6"/><text class="node" x="559" y="69" text-anchor="middle">SDK auto answer</text><text class="detail" style="font-size:9px" x="559" y="90" text-anchor="middle">concept / unchanged participant</text><text class="detail" x="18" y="152">After: pending data reaches explicit user controls</text><a href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/api/acp-service/acp-permissions.api.ts#L15"><rect class="new" x="18" y="168" width="202" height="64" rx="6"/><text class="node" x="119" y="195" text-anchor="middle">AcpPermissionsService</text><text class="detail" style="font-size:9px" x="119" y="216" text-anchor="middle">acp-permissions.api.ts:15</text></a><path class="edge" d="M220 200 h18 l-5 -4 m5 4 l-5 4"/><a href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/hooks/query/use-acp-permissions.ts#L10"><rect class="new" x="238" y="168" width="202" height="64" rx="6"/><text class="node" x="339" y="195" text-anchor="middle">useAcpPermissions</text><text class="detail" style="font-size:9px" x="339" y="216" text-anchor="middle">use-acp-permissions.ts:10</text></a><path class="edge" d="M440 200 h18 l-5 -4 m5 4 l-5 4"/><a href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/components/features/chat/acp-permission-panel.tsx#L7"><rect class="new" x="458" y="168" width="202" height="64" rx="6"/><text class="node" x="559" y="195" text-anchor="middle">AcpPermissionPanel</text><text class="detail" style="font-size:9px" x="559" y="216" text-anchor="middle">acp-permission-panel.tsx:7</text></a><path class="edge" d="M660 200 h18 l-5 -4 m5 4 l-5 4"/><a href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/api/acp-service/acp-permissions.api.ts#L15"><rect class="new" x="678" y="168" width="202" height="64" rx="6"/><text class="node" x="779" y="195" text-anchor="middle">explicit decision RPC</text><text class="detail" style="font-size:9px" x="779" y="216" text-anchor="middle">acp-permissions.api.ts:15</text></a></svg><figcaption>The new path waits for an explicit host/user decision. Linked nodes are code; unlinked runtime/absence nodes are concepts. The legacy default remains unchanged.</figcaption></figure>
+<div class="ba"><div><h3>Before</h3><pre>No ACP offered-option panel
+No scoped pending-decision cache</pre></div><div><h3>After</h3><pre>useAcpPermissions(conversation)
+  → scoped pending list
+AcpPermissionPanel
+  → offered option ID or null
+  → typed server client</pre></div></div>
+<p>Backend/server API ownership remains in the SDK. The provisional 1.60.2 floor is not a release assignment; matching accepted server/client publication, canonical contract and lock integration are required before merge readiness.</p>
+<p>API/flow source: <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/api/acp-service/acp-permissions.api.ts#L15">src/api/acp-service/acp-permissions.api.ts:15</a></p>
+<p>API/flow source: <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/components/features/chat/acp-permission-panel.tsx#L7">src/components/features/chat/acp-permission-panel.tsx:7</a></p>
+<p>API/flow source: <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/hooks/query/use-acp-permissions.ts#L10">src/hooks/query/use-acp-permissions.ts:10</a></p>
+<p>API/flow source: <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/hooks/use-chat-input-model-state.ts#L38">src/hooks/use-chat-input-model-state.ts:38</a></p>
+</section><section><h2>2. Validation has an explicit boundary</h2><table><tr><th>Scope</th><th>Observed result</th><th>Limit</th></tr>
+<tr><td>Focused Canvas</td><td>176 tests in 6 files passed</td><td>Component/adapter source scope</td></tr>
+<tr><td>Builds</td><td>Typecheck, app/library and translation checks passed</td><td>Candidate client overlay; committed lock unchanged</td></tr>
+<tr><td>Full lint</td><td>0 errors / 241 warnings</td><td>Linux snapshot/setup/lint 1518.910s; Windows timeout retained</td></tr>
+<tr><td>Browser/Cloud</td><td>Current-main acceptance not claimed</td><td>Running-Canvas media and cross-backend flows still required</td></tr>
+</table><p><a class="src" href="https://github.com/team-majaniemi/majaniemi-autoforge/blob/448caaf42ed8d366eaece9b5f41e67f143cb54dd/docs/VALIDATION.md">Commands, timings, retained failures and proof scope</a></p></section><section><h2>3. Follow the code by responsibility</h2>
+<article class="card" id="file-0"><span class="badge">added · config/type/transport/test propagation</span><h3>__tests__/components/features/chat/acp-permission-panel.test.tsx</h3><details><summary>Source manifest</summary><p><a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/__tests__/components/features/chat/acp-permission-panel.test.tsx#L1">__tests__/components/features/chat/acp-permission-panel.test.tsx:1</a></p><p>New file/symbol: no before implementation.</p></details>
+<table><tr><th>Before</th><th>After / role</th></tr><tr><td>Not present</td><td>Propagate the explicit permission/scope API or exercise its regression contract; see the exact diff. <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/__tests__/components/features/chat/acp-permission-panel.test.tsx#L1">__tests__/components/features/chat/acp-permission-panel.test.tsx:1</a></td></tr></table>
+<details><summary>Exact source diff</summary><pre>diff --git a/__tests__/components/features/chat/acp-permission-panel.test.tsx b/__tests__/components/features/chat/acp-permission-panel.test.tsx
+new file mode 100644
+index 0000000..6f6717e
+--- /dev/null
++++ b/__tests__/components/features/chat/acp-permission-panel.test.tsx
+@@ -0,0 +1,201 @@
++import React from &quot;react&quot;;
++import { QueryClient, QueryClientProvider } from &quot;@tanstack/react-query&quot;;
++import { render, screen, waitFor, fireEvent } from &quot;@testing-library/react&quot;;
++import { beforeEach, describe, expect, it, vi } from &quot;vitest&quot;;
++import { AcpPermissionPanel } from &quot;#/components/features/chat/acp-permission-panel&quot;;
++import type { AppConversation } from &quot;#/api/conversation-service/agent-server-conversation-service.types&quot;;
++
++const mocks = vi.hoisted(() =&gt; ({
++  list: vi.fn(),
++  decide: vi.fn(),
++  client: vi.fn(),
++  backend: { id: &quot;local&quot;, kind: &quot;local&quot;, connectionRevision: 1 },
++  orgId: null as string | null,
++}));
++vi.mock(&quot;@openhands/typescript-client/clients&quot;, () =&gt; ({
++  ConversationClient: class {
++    constructor(options: unknown) {
++      mocks.client(options);
++    }
++    listACPPermissions = mocks.list;
++    respondToACPPermission = mocks.decide;
++  },
++}));
++vi.mock(&quot;#/contexts/active-backend-context&quot;, () =&gt; ({
++  useActiveBackend: () =&gt; ({ backend: mocks.backend, orgId: mocks.orgId }),
++}));
++vi.mock(&quot;#/api/agent-server-client-options&quot;, () =&gt; ({
++  getAgentServerClientOptions: (target: unknown) =&gt; target,
++}));
++vi.mock(&quot;react-i18next&quot;, () =&gt; ({
++  useTranslation: () =&gt; ({ t: (key: string) =&gt; key }),
++}));
++
++const conversation = {
++  id: &quot;conversation-a&quot;,
++  agent_kind: &quot;acp&quot;,
++  sandbox_status: &quot;RUNNING&quot;,
++  conversation_url: &quot;https://runtime-a/api/conversations/conversation-a&quot;,
++  session_api_key: &quot;fixture-key&quot;,
++} as AppConversation;
++const request = () =&gt; ({
++  request_id: &quot;request-a&quot;,
++  title: &quot;&lt;script&gt;operation&lt;/script&gt;&quot;,
++  details: &#x27;{&quot;command&quot;:&quot;review me&quot;}&#x27;,
++  details_truncated: false,
++  expires_at: new Date(Date.now() + 60000).toISOString(),
++  options: [
++    { id: &quot;allow&quot;, name: &quot;Allow once&quot;, kind: &quot;allow_once&quot; },
++    { id: &quot;reject&quot;, name: &quot;Reject once&quot;, kind: &quot;reject_once&quot; },
++  ],
++});
++function setup(value = conversation) {
++  const queryClient = new QueryClient({
++    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
++  });
++  const wrap = (current: AppConversation) =&gt; (
++    &lt;QueryClientProvider client={queryClient}&gt;
++      &lt;AcpPermissionPanel conversation={current} /&gt;
++    &lt;/QueryClientProvider&gt;
++  );
++  return { ...render(wrap(value)), queryClient, wrap };
++}
++beforeEach(() =&gt; {
++  vi.clearAllMocks();
++  mocks.backend = { id: &quot;local&quot;, kind: &quot;local&quot;, connectionRevision: 1 };
++  mocks.list.mockResolvedValue({ items: [request()] });
++  mocks.decide.mockResolvedValue({ success: true });
++});
++
++describe(&quot;ACP permission panel&quot;, () =&gt; {
++  it(&quot;waits for an explicit offered choice and sends the rejecting second option&quot;, async () =&gt; {
++    const { queryClient } = setup();
++    const reject = await screen.findByRole(&quot;button&quot;, { name: &quot;Reject once&quot; });
++    expect(screen.getByText(&quot;&lt;script&gt;operation&lt;/script&gt;&quot;)).toBeInTheDocument();
++    expect(screen.getByText(&#x27;{&quot;command&quot;:&quot;review me&quot;}&#x27;)).toBeInTheDocument();
++    expect(mocks.decide).not.toHaveBeenCalled();
++    fireEvent.click(reject);
++    await waitFor(() =&gt;
++      expect(mocks.decide).toHaveBeenCalledWith(&quot;conversation-a&quot;, &quot;request-a&quot;, {
++        option_id: &quot;reject&quot;,
++      }),
++    );
++    expect(mocks.client).toHaveBeenCalledWith(
++      expect.objectContaining({
++        conversationUrl: conversation.conversation_url,
++        sessionApiKey: &quot;fixture-key&quot;,
++      }),
++    );
++    expect(
++      JSON.stringify(
++        queryClient
++          .getQueryCache()
++          .getAll()
++          .map((query) =&gt; query.queryKey),
++      ),
++    ).not.toContain(&quot;fixture-key&quot;);
++  });
++  it(&quot;disables incomplete approvals and expired decisions&quot;, async () =&gt; {
++    mocks.list.mockResolvedValue({
++      items: [{ ...request(), details_truncated: true }],
++    });
++    const { rerender, wrap } = setup();
++    expect(
++      await screen.findByRole(&quot;button&quot;, { name: &quot;Allow once&quot; }),
++    ).toBeDisabled();
++    expect(screen.getByRole(&quot;button&quot;, { name: &quot;Reject once&quot; })).toBeEnabled();
++    mocks.list.mockResolvedValue({
++      items: [{ ...request(), expires_at: &quot;2000-01-01T00:00:00Z&quot; }],
++    });
++    rerender(wrap({ ...conversation, id: &quot;expired&quot; }));
++    await waitFor(() =&gt;
++      expect(
++        screen.getByRole(&quot;button&quot;, { name: &quot;Reject once&quot; }),
++      ).toBeDisabled(),
++    );
++    expect(mocks.decide).not.toHaveBeenCalled();
++  });
++  it(&quot;shows failures and refreshes stale requests without granting them&quot;, async () =&gt; {
++    mocks.decide.mockRejectedValue(new Error(&quot;stale request&quot;));
++    setup();
++    fireEvent.click(await screen.findByRole(&quot;button&quot;, { name: &quot;Allow once&quot; }));
++    expect(await screen.findByRole(&quot;alert&quot;)).toHaveTextContent(&quot;ERROR$GENERIC&quot;);
++    mocks.list.mockResolvedValue({ items: [] });
++    fireEvent.click(screen.getByRole(&quot;button&quot;, { name: &quot;BUTTON$REFRESH&quot; }));
++    await waitFor(() =&gt;
++      expect(
++        screen.queryByRole(&quot;button&quot;, { name: &quot;Allow once&quot; }),
++      ).not.toBeInTheDocument(),
++    );
++    expect(mocks.decide).toHaveBeenCalledTimes(1);
++  });
++  it(&quot;does not expose previous requests after conversation, backend or cloud readiness changes&quot;, async () =&gt; {
++    const { rerender, wrap } = setup();
++    await screen.findByRole(&quot;button&quot;, { name: &quot;Allow once&quot; });
++    mocks.list.mockResolvedValue({ items: [] });
++    rerender(wrap({ ...conversation, session_api_key: &quot;rotated-fixture-key&quot; }));
++    await waitFor(() =&gt;
++      expect(mocks.client).toHaveBeenCalledWith(
++        expect.objectContaining({ sessionApiKey: &quot;rotated-fixture-key&quot; }),
++      ),
++    );
++    expect(
++      screen.queryByRole(&quot;button&quot;, { name: &quot;Allow once&quot; }),
++    ).not.toBeInTheDocument();
++    mocks.backend = { id: &quot;cloud&quot;, kind: &quot;cloud&quot;, connectionRevision: 2 };
++    mocks.list.mockResolvedValue({ items: [] });
++    rerender(
++      wrap({
++        ...conversation,
++        id: &quot;other&quot;,
++        conversation_url: &quot;https://runtime-b/api/conversations/other&quot;,
++        session_api_key: &quot;other-fixture-key&quot;,
++      }),
++    );
++    await waitFor(() =&gt; expect(mocks.list).toHaveBeenCalledWith(&quot;other&quot;));
++    expect(
++      screen.queryByRole(&quot;button&quot;, { name: &quot;Allow once&quot; }),
++    ).not.toBeInTheDocument();
++    const calls = mocks.list.mock.calls.length;
++    rerender(wrap({ ...conversation, sandbox_status: &quot;PAUSED&quot; }));
++    expect(screen.queryByRole(&quot;region&quot;)).not.toBeInTheDocument();
++    expect(mocks.list).toHaveBeenCalledTimes(calls);
++    expect(mocks.decide).not.toHaveBeenCalled();
++  });
++
++  it(&quot;recovers a failed fetch and sends explicit cancellation only once&quot;, async () =&gt; {
++    mocks.list.mockRejectedValue(new Error(&quot;offline&quot;));
++    let complete!: (value: unknown) =&gt; void;
++    mocks.decide.mockImplementation(
++      () =&gt;
++        new Promise((resolve) =&gt; {
++          complete = resolve;
++        }),
++    );
++    setup();
++    await screen.findByRole(&quot;alert&quot;);
++    expect(
++      screen.queryByRole(&quot;button&quot;, { name: &quot;Allow once&quot; }),
++    ).not.toBeInTheDocument();
++    mocks.list.mockResolvedValue({ items: [request()] });
++    fireEvent.click(screen.getByRole(&quot;button&quot;, { name: &quot;BUTTON$REFRESH&quot; }));
++    fireEvent.click(
++      await screen.findByRole(&quot;button&quot;, { name: &quot;BUTTON$CANCEL&quot; }),
++    );
++    await waitFor(() =&gt;
++      expect(mocks.decide).toHaveBeenCalledWith(&quot;conversation-a&quot;, &quot;request-a&quot;, {
++        option_id: null,
++      }),
++    );
++    expect(screen.getByRole(&quot;button&quot;, { name: &quot;Allow once&quot; })).toBeDisabled();
++    fireEvent.click(screen.getByRole(&quot;button&quot;, { name: &quot;BUTTON$CANCEL&quot; }));
++    expect(mocks.decide).toHaveBeenCalledTimes(1);
++    mocks.list.mockResolvedValue({ items: [] });
++    complete({ success: true });
++    await waitFor(() =&gt;
++      expect(
++        screen.queryByRole(&quot;button&quot;, { name: &quot;Allow once&quot; }),
++      ).not.toBeInTheDocument(),
++    );
++  });
++});</pre></details></article>
+<article class="card" id="file-1"><span class="badge">changed · config/type/transport/test propagation</span><h3>__tests__/hooks/use-chat-input-model-state.test.tsx</h3><details><summary>Source manifest</summary><p><a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/__tests__/hooks/use-chat-input-model-state.test.tsx#L1">__tests__/hooks/use-chat-input-model-state.test.tsx:1</a></p><p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2f58406e3fbf0840cbdc9d049157c7e2a046c7f5/__tests__/hooks/use-chat-input-model-state.test.tsx#L1">Before: __tests__/hooks/use-chat-input-model-state.test.tsx:1</a></p></details>
+<table><tr><th>Before</th><th>After / role</th></tr><tr><td>Existing configuration/transport/test surface</td><td>Propagate the explicit permission/scope API or exercise its regression contract; see the exact diff. <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/__tests__/hooks/use-chat-input-model-state.test.tsx#L1">__tests__/hooks/use-chat-input-model-state.test.tsx:1</a></td></tr></table>
+<details><summary>Exact source diff</summary><pre>diff --git a/__tests__/hooks/use-chat-input-model-state.test.tsx b/__tests__/hooks/use-chat-input-model-state.test.tsx
+index de58105..4c07279 100644
+--- a/__tests__/hooks/use-chat-input-model-state.test.tsx
++++ b/__tests__/hooks/use-chat-input-model-state.test.tsx
+@@ -104,8 +104,30 @@ describe(&quot;useChatInputModelState&quot;, () =&gt; {
+       (conversation) =&gt; conversation?.acp_available_models ?? [],
+     );
+   });
+&#32;
++  it(&quot;keeps the actual model label but hides choices when the host fixes a chat&#x27;s model&quot;, () =&gt; {
++    useAcpModelContextMock.mockReturnValue(
++      acpContext({ isActiveAcpConversation: true, isAcpContext: true }),
++    );
++    useActiveConversationMock.mockReturnValue({
++      data: {
++        agent_kind: &quot;acp&quot;,
++        acp_server: &quot;codex&quot;,
++        llm_model: &quot;gpt-6.1-sol&quot;,
++        acp_allow_model_switch: false,
++        acp_available_models: [
++          { id: &quot;gpt-6.1-sol&quot;, label: &quot;GPT-6.1 Sol&quot; },
++          { id: &quot;another&quot;, label: &quot;Another&quot; },
++        ],
++      },
++    });
++    const { result } = renderHook(() =&gt; useChatInputModelState());
++    expect(result.current.currentModelId).toBe(&quot;gpt-6.1-sol&quot;);
++    expect(result.current.displayModel).toBe(&quot;GPT-6.1 Sol&quot;);
++    expect(result.current.showAcpPicker).toBe(false);
++  });
++
+   it(&quot;active ACP: lists the models the conversation&#x27;s session reported&quot;, () =&gt; {
+     const live = [
+       { id: &quot;default&quot;, label: &quot;Default (recommended)&quot; },
+       { id: &quot;claude-fable-5[1m]&quot;, label: &quot;Fable 5 (1M)&quot; },</pre></details></article>
+<article class="card" id="file-2"><span class="badge">changed · config/type/transport/test propagation</span><h3>config/defaults.json</h3><details><summary>Source manifest</summary><p><a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/config/defaults.json#L1">config/defaults.json:1</a></p><p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2f58406e3fbf0840cbdc9d049157c7e2a046c7f5/config/defaults.json#L1">Before: config/defaults.json:1</a></p></details>
+<table><tr><th>Before</th><th>After / role</th></tr><tr><td>Existing configuration/transport/test surface</td><td>Propagate the explicit permission/scope API or exercise its regression contract; see the exact diff. <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/config/defaults.json#L1">config/defaults.json:1</a></td></tr></table>
+<details><summary>Exact source diff</summary><pre>diff --git a/config/defaults.json b/config/defaults.json
+index b2f4b60..5300a88 100644
+--- a/config/defaults.json
++++ b/config/defaults.json
+@@ -1,13 +1,13 @@
+ {
+   &quot;_comment&quot;: &quot;Single source of truth for version pins, ports, paths, and defaults shared across the npm and Docker install paths. Read by scripts/dev-safe.mjs, scripts/dev-with-automation.mjs, docker/entrypoint.sh (via generated defaults.env), and .github/workflows/docker.yml.&quot;,
+   &quot;versions&quot;: {
+-    &quot;agentServer&quot;: &quot;1.60.1&quot;,
++    &quot;agentServer&quot;: &quot;1.60.2&quot;,
+     &quot;agentCanvas&quot;: &quot;1.37.0&quot;,
+     &quot;automation&quot;: &quot;1.30.1&quot;
+   },
+   &quot;compatibility&quot;: {
+-    &quot;minimumAgentServer&quot;: &quot;1.59.0&quot;
++    &quot;minimumAgentServer&quot;: &quot;1.60.2&quot;
+   },
+   &quot;python&quot;: {
+     &quot;_comment&quot;: &quot;Interpreter request the npm and desktop launchers pass to uvx as --python for agent-server and automation. Without it uvx downloads the newest CPython when it finds no suitable interpreter, which breaks every autumn until the SDK&#x27;s compiled dependencies (lmnr-claude-code-proxy, fastuuid) publish wheels for the new release (OpenHands/OpenHands#18654). Raise the upper bound once they do. UV_PYTHON in the environment replaces it.&quot;,
+     &quot;uvxRequest&quot;: &quot;&gt;=3.12,&lt;3.15&quot;</pre></details></article>
+<article class="card" id="file-3"><span class="badge">added · behavior</span><h3>One service selects the admitted transport</h3><details><summary>Source manifest</summary><p><a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/api/acp-service/acp-permissions.api.ts#L15">src/api/acp-service/acp-permissions.api.ts:15</a></p><p>New file/symbol: no before implementation.</p></details>
+<p>The service routes list/decision calls through the active backend and runtime credentials; it does not answer permissions automatically. <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/api/acp-service/acp-permissions.api.ts#L15">src/api/acp-service/acp-permissions.api.ts:15</a></p>
+<div class="ba"><figure><svg viewBox="0 0 400 150" role="img" aria-labelledby="flow-3-b"><title id="flow-3-b">New symbol: no before — No dedicated typed permission service</title><desc>No dedicated typed permission service</desc><rect class="existing" x="18" y="26" width="364" height="72" rx="6"/><text class="node" x="200" y="53" text-anchor="middle">New symbol: no before</text><text class="detail" x="200" y="74" text-anchor="middle">No dedicated typed permission service</text><text class="detail" style="font-size:9px" x="200" y="91" text-anchor="middle">concept / no prior source</text></svg><figcaption>Before: No dedicated typed permission service</figcaption></figure><figure><svg viewBox="0 0 400 150" role="img" aria-labelledby="flow-3-a"><title id="flow-3-a">AcpPermissionsService — Select admitted transport; send offered ID</title><desc>Select admitted transport; send offered ID</desc><a href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/api/acp-service/acp-permissions.api.ts#L15"><rect class="new" x="18" y="26" width="364" height="72" rx="6"/><text class="node" x="200" y="53" text-anchor="middle">AcpPermissionsService</text><text class="detail" x="200" y="74" text-anchor="middle">Select admitted transport; send offered ID</text><text class="detail" style="font-size:9px" x="200" y="91" text-anchor="middle">acp-permissions.api.ts:15</text></a><path class="edge" d="M200 108 L200 130"/></svg><figcaption>After: Select admitted transport; send offered ID</figcaption></figure></div>
+<details><summary>Exact source diff</summary><pre>diff --git a/src/api/acp-service/acp-permissions.api.ts b/src/api/acp-service/acp-permissions.api.ts
+new file mode 100644
+index 0000000..550a221
+--- /dev/null
++++ b/src/api/acp-service/acp-permissions.api.ts
+@@ -0,0 +1,23 @@
++import { ConversationClient } from &quot;@openhands/typescript-client/clients&quot;;
++import type { ACPPermissionDecision } from &quot;@openhands/typescript-client&quot;;
++import { getAgentServerClientOptions } from &quot;../agent-server-client-options&quot;;
++
++export interface AcpPermissionTarget {
++  id: string;
++  conversationUrl?: string | null;
++  sessionApiKey?: string | null;
++}
++
++function client(target: AcpPermissionTarget) {
++  return new ConversationClient(getAgentServerClientOptions(target));
++}
++
++export const AcpPermissionsService = {
++  list: (target: AcpPermissionTarget) =&gt;
++    client(target).listACPPermissions(target.id),
++  decide: (
++    target: AcpPermissionTarget,
++    requestId: string,
++    decision: ACPPermissionDecision,
++  ) =&gt; client(target).respondToACPPermission(target.id, requestId, decision),
++};</pre></details></article>
+<article class="card" id="file-4"><span class="badge">changed · config/type/transport/test propagation</span><h3>src/api/agent-server-adapter.ts</h3><details><summary>Source manifest</summary><p><a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/api/agent-server-adapter.ts#L1">src/api/agent-server-adapter.ts:1</a></p><p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2f58406e3fbf0840cbdc9d049157c7e2a046c7f5/src/api/agent-server-adapter.ts#L1">Before: src/api/agent-server-adapter.ts:1</a></p></details>
+<table><tr><th>Before</th><th>After / role</th></tr><tr><td>Existing configuration/transport/test surface</td><td>Propagate the explicit permission/scope API or exercise its regression contract; see the exact diff. <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/api/agent-server-adapter.ts#L1">src/api/agent-server-adapter.ts:1</a></td></tr></table>
+<details><summary>Exact source diff</summary><pre>diff --git a/src/api/agent-server-adapter.ts b/src/api/agent-server-adapter.ts
+index 0efef69..d17a539 100644
+--- a/src/api/agent-server-adapter.ts
++++ b/src/api/agent-server-adapter.ts
+@@ -128,8 +128,9 @@ export interface DirectConversationInfo {
+      * ``&quot;Agent&quot;`` for direct litellm. Read by {@link toAppConversation}.
+      */
+     kind?: string | null;
+     acp_model?: string | null;
++    acp_allow_model_switch?: boolean | null;
+     /**
+      * ACP CLI identity (``claude-code`` / ``codex`` / ``gemini-cli``) from the
+      * SDK&#x27;s ``ACPAgent.acp_server`` (#3692). Preferred fallback when the
+      * ``acpserver`` tag is absent — e.g. a profile launch doesn&#x27;t stamp the tag
+@@ -447,8 +448,11 @@ export function toAppConversation(
+     trigger: null,
+     pr_number: [],
+     agent_kind: isAcp ? &quot;acp&quot; : &quot;openhands&quot;,
+     acp_server: acpServer,
++    acp_allow_model_switch: isAcp
++      ? (info.agent?.acp_allow_model_switch ?? null)
++      : null,
+     acp_available_models: isAcp
+       ? toAcpModelOptions(info.available_models)
+       : null,
+     tags: info.tags ?? null,</pre></details></article>
+<article class="card" id="file-5"><span class="badge">changed · config/type/transport/test propagation</span><h3>src/api/conversation-service/agent-server-conversation-service.api.ts</h3><details><summary>Source manifest</summary><p><a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/api/conversation-service/agent-server-conversation-service.api.ts#L1">src/api/conversation-service/agent-server-conversation-service.api.ts:1</a></p><p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2f58406e3fbf0840cbdc9d049157c7e2a046c7f5/src/api/conversation-service/agent-server-conversation-service.api.ts#L1">Before: src/api/conversation-service/agent-server-conversation-service.api.ts:1</a></p></details>
+<table><tr><th>Before</th><th>After / role</th></tr><tr><td>Existing configuration/transport/test surface</td><td>Propagate the explicit permission/scope API or exercise its regression contract; see the exact diff. <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/api/conversation-service/agent-server-conversation-service.api.ts#L1">src/api/conversation-service/agent-server-conversation-service.api.ts:1</a></td></tr></table>
+<details><summary>Exact source diff</summary><pre>diff --git a/src/api/conversation-service/agent-server-conversation-service.api.ts b/src/api/conversation-service/agent-server-conversation-service.api.ts
+index e949e74..b1bc495 100644
+--- a/src/api/conversation-service/agent-server-conversation-service.api.ts
++++ b/src/api/conversation-service/agent-server-conversation-service.api.ts
+@@ -231,8 +231,12 @@ function normalizeAgent(value: unknown): DirectConversationInfo[&quot;agent&quot;] {
+   return {
+     kind: stringOrNull(value.kind),
+     acp_server: stringOrNull(value.acp_server),
+     acp_model: stringOrNull(value.acp_model),
++    acp_allow_model_switch:
++      typeof value.acp_allow_model_switch === &quot;boolean&quot;
++        ? value.acp_allow_model_switch
++        : null,
+     llm,
+   };
+ }</pre></details></article>
+<article class="card" id="file-6"><span class="badge">changed · config/type/transport/test propagation</span><h3>src/api/conversation-service/agent-server-conversation-service.types.ts</h3><details><summary>Source manifest</summary><p><a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/api/conversation-service/agent-server-conversation-service.types.ts#L1">src/api/conversation-service/agent-server-conversation-service.types.ts:1</a></p><p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2f58406e3fbf0840cbdc9d049157c7e2a046c7f5/src/api/conversation-service/agent-server-conversation-service.types.ts#L1">Before: src/api/conversation-service/agent-server-conversation-service.types.ts:1</a></p></details>
+<table><tr><th>Before</th><th>After / role</th></tr><tr><td>Existing configuration/transport/test surface</td><td>Propagate the explicit permission/scope API or exercise its regression contract; see the exact diff. <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/api/conversation-service/agent-server-conversation-service.types.ts#L1">src/api/conversation-service/agent-server-conversation-service.types.ts:1</a></td></tr></table>
+<details><summary>Exact source diff</summary><pre>diff --git a/src/api/conversation-service/agent-server-conversation-service.types.ts b/src/api/conversation-service/agent-server-conversation-service.types.ts
+index 51a2ebc..f52f034 100644
+--- a/src/api/conversation-service/agent-server-conversation-service.types.ts
++++ b/src/api/conversation-service/agent-server-conversation-service.types.ts
+@@ -187,8 +187,10 @@ export interface AppConversation {
+    * Models the conversation&#x27;s ACP session offers, as its server reported them.
+    * Empty before the session starts and on servers that don&#x27;t report models.
+    */
+   acp_available_models?: ACPModelOption[] | null;
++  /** Explicit host policy; false keeps an existing chat&#x27;s model fixed. */
++  acp_allow_model_switch?: boolean | null;
+   /**
+    * Server-side key-value tags from the agent-server&#x27;s
+    * ``ConversationInfo.tags`` (settable at creation and via
+    * ``PATCH /api/conversations/{id}``). Automations and API clients use these</pre></details></article>
+<article class="card" id="file-7"><span class="badge">added · behavior</span><h3>Only explicit offered-option actions decide</h3><details><summary>Source manifest</summary><p><a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/components/features/chat/acp-permission-panel.tsx#L7">src/components/features/chat/acp-permission-panel.tsx:7</a></p><p>New file/symbol: no before implementation.</p></details>
+<p>The panel renders bounded pending details, offered option buttons and Cancel. Expiry, errors and truncated details block unsafe approval. <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/components/features/chat/acp-permission-panel.tsx#L7">src/components/features/chat/acp-permission-panel.tsx:7</a></p>
+<div class="ba"><figure><svg viewBox="0 0 400 150" role="img" aria-labelledby="flow-7-b"><title id="flow-7-b">New symbol: no before — No offered-option permission panel</title><desc>No offered-option permission panel</desc><rect class="existing" x="18" y="26" width="364" height="72" rx="6"/><text class="node" x="200" y="53" text-anchor="middle">New symbol: no before</text><text class="detail" x="200" y="74" text-anchor="middle">No offered-option permission panel</text><text class="detail" style="font-size:9px" x="200" y="91" text-anchor="middle">concept / no prior source</text></svg><figcaption>Before: No offered-option permission panel</figcaption></figure><figure><svg viewBox="0 0 400 150" role="img" aria-labelledby="flow-7-a"><title id="flow-7-a">AcpPermissionPanel — Explicit option/cancel; expiry and error guards</title><desc>Explicit option/cancel; expiry and error guards</desc><a href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/components/features/chat/acp-permission-panel.tsx#L7"><rect class="new" x="18" y="26" width="364" height="72" rx="6"/><text class="node" x="200" y="53" text-anchor="middle">AcpPermissionPanel</text><text class="detail" x="200" y="74" text-anchor="middle">Explicit option/cancel; expiry and error guards</text><text class="detail" style="font-size:9px" x="200" y="91" text-anchor="middle">acp-permission-panel.tsx:7</text></a><path class="edge" d="M200 108 L200 130"/></svg><figcaption>After: Explicit option/cancel; expiry and error guards</figcaption></figure></div>
+<details><summary>Exact source diff</summary><pre>diff --git a/src/components/features/chat/acp-permission-panel.tsx b/src/components/features/chat/acp-permission-panel.tsx
+new file mode 100644
+index 0000000..3967388
+--- /dev/null
++++ b/src/components/features/chat/acp-permission-panel.tsx
+@@ -0,0 +1,94 @@
++import { useEffect, useState } from &quot;react&quot;;
++import { useTranslation } from &quot;react-i18next&quot;;
++import type { AppConversation } from &quot;#/api/conversation-service/agent-server-conversation-service.types&quot;;
++import { I18nKey } from &quot;#/i18n/declaration&quot;;
++import { useAcpPermissions } from &quot;#/hooks/query/use-acp-permissions&quot;;
++
++export function AcpPermissionPanel({
++  conversation,
++}: {
++  conversation: AppConversation | null | undefined;
++}) {
++  const { t } = useTranslation();
++  const { pending, decision, scope, enabled } = useAcpPermissions(conversation);
++  const [now, setNow] = useState(Date.now);
++  useEffect(() =&gt; {
++    if (!enabled) return undefined;
++    const timer = setInterval(() =&gt; setNow(Date.now()), 250);
++    return () =&gt; clearInterval(timer);
++  }, [enabled]);
++  if (!enabled) return null;
++  const error =
++    pending.isError ||
++    (decision.isError &amp;&amp; decision.variables?.requestScope === scope);
++  return (
++    &lt;section
++      aria-label={t(I18nKey.ACP_PERMISSION_REQUIRED)}
++      className=&quot;flex flex-col gap-2&quot;
++    &gt;
++      {error &amp;&amp; (
++        &lt;div role=&quot;alert&quot;&gt;
++          {t(I18nKey.ERROR$GENERIC)}{&quot; &quot;}
++          &lt;button
++            type=&quot;button&quot;
++            onClick={() =&gt; {
++              decision.reset();
++              void pending.refetch();
++            }}
++          &gt;
++            {t(I18nKey.BUTTON$REFRESH)}
++          &lt;/button&gt;
++        &lt;/div&gt;
++      )}
++      {pending.data?.items.map((request) =&gt; {
++        const expires = Date.parse(request.expires_at);
++        const expired = !Number.isFinite(expires) || expires &lt;= now;
++        const busy =
++          decision.isPending &amp;&amp; decision.variables?.requestScope === scope;
++        const decide = (optionId: string | null) =&gt;
++          decision.mutate({
++            requestId: request.request_id,
++            optionId,
++            requestScope: scope,
++          });
++        return (
++          &lt;article key={request.request_id} className=&quot;rounded border p-3&quot;&gt;
++            &lt;h2&gt;{t(I18nKey.ACP_PERMISSION_REQUIRED)}&lt;/h2&gt;
++            &lt;p&gt;{request.title}&lt;/p&gt;
++            &lt;pre className=&quot;max-h-64 overflow-auto whitespace-pre-wrap break-words&quot;&gt;
++              {request.details}
++            &lt;/pre&gt;
++            {request.details_truncated &amp;&amp; (
++              &lt;p role=&quot;alert&quot;&gt;{t(I18nKey.ACP_PERMISSION_INCOMPLETE)}&lt;/p&gt;
++            )}
++            &lt;div className=&quot;flex flex-wrap gap-2&quot;&gt;
++              {request.options.map((option) =&gt; (
++                &lt;button
++                  key={option.id}
++                  type=&quot;button&quot;
++                  disabled={
++                    busy ||
++                    expired ||
++                    pending.isError ||
++                    (request.details_truncated &amp;&amp;
++                      option.kind.startsWith(&quot;allow&quot;))
++                  }
++                  onClick={() =&gt; decide(option.id)}
++                &gt;
++                  {option.name}
++                &lt;/button&gt;
++              ))}
++              &lt;button
++                type=&quot;button&quot;
++                disabled={busy || expired}
++                onClick={() =&gt; decide(null)}
++              &gt;
++                {t(I18nKey.BUTTON$CANCEL)}
++              &lt;/button&gt;
++            &lt;/div&gt;
++          &lt;/article&gt;
++        );
++      })}
++    &lt;/section&gt;
++  );
++}</pre></details></article>
+<article class="card" id="file-8"><span class="badge">changed · config/type/transport/test propagation</span><h3>src/components/features/chat/chat-interface.tsx</h3><details><summary>Source manifest</summary><p><a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/components/features/chat/chat-interface.tsx#L1">src/components/features/chat/chat-interface.tsx:1</a></p><p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2f58406e3fbf0840cbdc9d049157c7e2a046c7f5/src/components/features/chat/chat-interface.tsx#L1">Before: src/components/features/chat/chat-interface.tsx:1</a></p></details>
+<table><tr><th>Before</th><th>After / role</th></tr><tr><td>Existing configuration/transport/test surface</td><td>Propagate the explicit permission/scope API or exercise its regression contract; see the exact diff. <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/components/features/chat/chat-interface.tsx#L1">src/components/features/chat/chat-interface.tsx:1</a></td></tr></table>
+<details><summary>Exact source diff</summary><pre>diff --git a/src/components/features/chat/chat-interface.tsx b/src/components/features/chat/chat-interface.tsx
+index db9d9db..200534e 100644
+--- a/src/components/features/chat/chat-interface.tsx
++++ b/src/components/features/chat/chat-interface.tsx
+@@ -16,8 +16,9 @@ import { isAcpAuthErrorCode } from &quot;#/utils/acp-error-codes&quot;;
+ import { getLockedCloudHost } from &quot;#/api/agent-server-config&quot;;
+ import { convertImageToBase64 } from &quot;#/utils/convert-image-to-base-64&quot;;
+ import { createChatMessage } from &quot;#/services/chat-service&quot;;
+ import { BtwMessages } from &quot;./btw-messages&quot;;
++import { AcpPermissionPanel } from &quot;./acp-permission-panel&quot;;
+ import { GoalStatusBanner } from &quot;./goal-status-banner&quot;;
+ import { ModelMessages } from &quot;./model-messages&quot;;
+ import { useModelStore } from &quot;#/stores/model-store&quot;;
+ import { useGoalStore } from &quot;#/stores/goal-store&quot;;
+@@ -769,8 +770,11 @@ export function ChatInterface({
+             &lt;GoalStatusBanner conversationId={conversationId} /&gt;
+           &lt;/div&gt;
+&#32;
+           &lt;div className={CHAT_COMPOSER_CLASS_NAME}&gt;
++            {!isArchivedConversation &amp;&amp; (
++              &lt;AcpPermissionPanel conversation={activeConversation} /&gt;
++            )}
+             &lt;SkillInstallRestartBanner conversationId={conversationId} /&gt;
+             &lt;BtwMessages conversationId={conversationId} /&gt;
+             {recoveryAgentState === AgentState.RUNNING &amp;&amp;
+               !errorMessage &amp;&amp;</pre></details></article>
+<article class="card" id="file-9"><span class="badge">changed · config/type/transport/test propagation</span><h3>src/hooks/query/query-keys.ts</h3><details><summary>Source manifest</summary><p><a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/hooks/query/query-keys.ts#L6">src/hooks/query/query-keys.ts:6</a></p><p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2f58406e3fbf0840cbdc9d049157c7e2a046c7f5/src/hooks/query/query-keys.ts#L1">Before: src/hooks/query/query-keys.ts:1</a></p></details>
+<table><tr><th>Before</th><th>After / role</th></tr><tr><td>Existing configuration/transport/test surface</td><td>Propagate the explicit permission/scope API or exercise its regression contract; see the exact diff. <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/hooks/query/query-keys.ts#L6">src/hooks/query/query-keys.ts:6</a></td></tr></table>
+<details><summary>Exact source diff</summary><pre>diff --git a/src/hooks/query/query-keys.ts b/src/hooks/query/query-keys.ts
+index f0f1638..280e354 100644
+--- a/src/hooks/query/query-keys.ts
++++ b/src/hooks/query/query-keys.ts
+@@ -29,8 +29,28 @@ export const META_PROFILES_QUERY_KEYS = {
+ export const ACP_MODEL_DISCOVERY_QUERY_KEYS = {
+   all: [&quot;acp-model-discovery&quot;] as const,
+ } as const;
+&#32;
++export const ACP_PERMISSION_QUERY_KEYS = {
++  pending: (
++    backendId: string,
++    revision: number | undefined,
++    orgId: string | null,
++    conversationId: string | undefined,
++    url: string | null | undefined,
++    authorizationGeneration: string,
++  ) =&gt;
++    [
++      &quot;acp-permissions&quot;,
++      backendId,
++      revision,
++      orgId,
++      conversationId,
++      url,
++      authorizationGeneration,
++    ] as const,
++} as const;
++
+ export const AGENT_PROFILES_QUERY_KEYS = {
+   all: [&quot;agent-profiles&quot;] as const,
+   // Nested under `all` so profile mutations invalidate cached details too.
+   detail: (backendId: string, orgId: string | null | undefined, name: string) =&gt;</pre></details></article>
+<article class="card" id="file-10"><span class="badge">added · behavior</span><h3>A stale conversation cannot decide a new request</h3><details><summary>Source manifest</summary><p><a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/hooks/query/use-acp-permissions.ts#L10">src/hooks/query/use-acp-permissions.ts:10</a></p><p>New file/symbol: no before implementation.</p></details>
+<p>Pending/decision state follows backend revision, organization, conversation, runtime URL and an opaque authorization generation. Key values stay in the transport closure. <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/hooks/query/use-acp-permissions.ts#L10">src/hooks/query/use-acp-permissions.ts:10</a></p>
+<div class="ba"><figure><svg viewBox="0 0 400 150" role="img" aria-labelledby="flow-10-b"><title id="flow-10-b">New symbol: no before — No scoped pending-permission query</title><desc>No scoped pending-permission query</desc><rect class="existing" x="18" y="26" width="364" height="72" rx="6"/><text class="node" x="200" y="53" text-anchor="middle">New symbol: no before</text><text class="detail" x="200" y="74" text-anchor="middle">No scoped pending-permission query</text><text class="detail" style="font-size:9px" x="200" y="91" text-anchor="middle">concept / no prior source</text></svg><figcaption>Before: No scoped pending-permission query</figcaption></figure><figure><svg viewBox="0 0 400 150" role="img" aria-labelledby="flow-10-a"><title id="flow-10-a">useAcpPermissions — Backend/org/conversation/runtime/auth generation</title><desc>Backend/org/conversation/runtime/auth generation</desc><a href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/hooks/query/use-acp-permissions.ts#L10"><rect class="new" x="18" y="26" width="364" height="72" rx="6"/><text class="node" x="200" y="53" text-anchor="middle">useAcpPermissions</text><text class="detail" x="200" y="74" text-anchor="middle">Backend/org/conversation/runtime/auth generation</text><text class="detail" style="font-size:9px" x="200" y="91" text-anchor="middle">use-acp-permissions.ts:10</text></a><path class="edge" d="M200 108 L200 130"/></svg><figcaption>After: Backend/org/conversation/runtime/auth generation</figcaption></figure></div>
+<details><summary>Exact source diff</summary><pre>diff --git a/src/hooks/query/use-acp-permissions.ts b/src/hooks/query/use-acp-permissions.ts
+new file mode 100644
+index 0000000..5408c3a
+--- /dev/null
++++ b/src/hooks/query/use-acp-permissions.ts
+@@ -0,0 +1,76 @@
++import { useMutation, useQuery, useQueryClient } from &quot;@tanstack/react-query&quot;;
++import { useMemo } from &quot;react&quot;;
++import type { AppConversation } from &quot;#/api/conversation-service/agent-server-conversation-service.types&quot;;
++import { AcpPermissionsService } from &quot;#/api/acp-service/acp-permissions.api&quot;;
++import { useActiveBackend } from &quot;#/contexts/active-backend-context&quot;;
++import { ACP_PERMISSION_QUERY_KEYS } from &quot;./query-keys&quot;;
++
++const PERMISSION_POLL_MS = 1000;
++
++export function useAcpPermissions(
++  conversation: AppConversation | null | undefined,
++) {
++  const { backend, orgId } = useActiveBackend();
++  const queryClient = useQueryClient();
++  const authorization = useMemo(
++    () =&gt; ({
++      key: conversation?.session_api_key,
++      generation: crypto.randomUUID(),
++    }),
++    [conversation?.session_api_key],
++  );
++  const queryKey = ACP_PERMISSION_QUERY_KEYS.pending(
++    backend.id,
++    backend.connectionRevision,
++    orgId,
++    conversation?.id,
++    conversation?.conversation_url,
++    authorization.generation,
++  );
++  const scope = JSON.stringify(queryKey);
++  const enabled =
++    !!conversation?.id &amp;&amp;
++    conversation.agent_kind === &quot;acp&quot; &amp;&amp;
++    (backend.kind !== &quot;cloud&quot; ||
++      (!!conversation.conversation_url &amp;&amp;
++        !!conversation.session_api_key &amp;&amp;
++        conversation.sandbox_status === &quot;RUNNING&quot;));
++  const target = {
++    id: conversation?.id ?? &quot;&quot;,
++    conversationUrl: conversation?.conversation_url,
++    sessionApiKey: authorization.key,
++  };
++  // Credentials stay in the transport closure. Opaque authorization generation,
++  // backend revision and runtime URL isolate every replacement without caching keys.
++  // eslint-disable-next-line @tanstack/query/exhaustive-deps
++  const pending = useQuery({
++    queryKey,
++    queryFn: () =&gt; AcpPermissionsService.list(target),
++    enabled,
++    retry: false,
++    refetchInterval: PERMISSION_POLL_MS,
++    refetchIntervalInBackground: false,
++    staleTime: 0,
++    gcTime: 0,
++  });
++  const decision = useMutation({
++    mutationFn: ({
++      requestId,
++      optionId,
++      requestScope,
++    }: {
++      requestId: string;
++      optionId: string | null;
++      requestScope: string;
++    }) =&gt; {
++      if (!enabled || requestScope !== scope)
++        throw new Error(&quot;Permission conversation changed&quot;);
++      return AcpPermissionsService.decide(target, requestId, {
++        option_id: optionId,
++      });
++    },
++    retry: false,
++    onSettled: () =&gt; queryClient.invalidateQueries({ queryKey, exact: true }),
++  });
++  return { pending, decision, scope, enabled };
++}</pre></details></article>
+<article class="card" id="file-11"><span class="badge">changed · behavior</span><h3>The picker respects an admitted bound model</h3><details><summary>Source manifest</summary><p><a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/hooks/use-chat-input-model-state.ts#L38">src/hooks/use-chat-input-model-state.ts:38</a></p><p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2f58406e3fbf0840cbdc9d049157c7e2a046c7f5/src/hooks/use-chat-input-model-state.ts#L38">Before: src/hooks/use-chat-input-model-state.ts:38</a></p></details>
+<p>Model state observes the server-provided ACP model restriction rather than displaying a switch the admitted conversation cannot accept. <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/hooks/use-chat-input-model-state.ts#L38">src/hooks/use-chat-input-model-state.ts:38</a></p>
+<div class="ba"><figure><svg viewBox="0 0 400 150" role="img" aria-labelledby="flow-11-b"><title id="flow-11-b">useChatInputModelState — No admitted-model restriction metadata</title><desc>No admitted-model restriction metadata</desc><a href="https://github.com/OpenHands/OpenHands/blob/2f58406e3fbf0840cbdc9d049157c7e2a046c7f5/src/hooks/use-chat-input-model-state.ts#L38"><rect class="existing" x="18" y="26" width="364" height="72" rx="6"/><text class="node" x="200" y="53" text-anchor="middle">useChatInputModelState</text><text class="detail" x="200" y="74" text-anchor="middle">No admitted-model restriction metadata</text><text class="detail" style="font-size:9px" x="200" y="91" text-anchor="middle">use-chat-input-model-state.ts:38</text></a></svg><figcaption>Before: No admitted-model restriction metadata</figcaption></figure><figure><svg viewBox="0 0 400 150" role="img" aria-labelledby="flow-11-a"><title id="flow-11-a">useChatInputModelState — Respect the bound model and switch restriction</title><desc>Respect the bound model and switch restriction</desc><a href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/hooks/use-chat-input-model-state.ts#L38"><rect class="new" x="18" y="26" width="364" height="72" rx="6"/><text class="node" x="200" y="53" text-anchor="middle">useChatInputModelState</text><text class="detail" x="200" y="74" text-anchor="middle">Respect the bound model and switch restriction</text><text class="detail" style="font-size:9px" x="200" y="91" text-anchor="middle">use-chat-input-model-state.ts:38</text></a><path class="edge" d="M200 108 L200 130"/></svg><figcaption>After: Respect the bound model and switch restriction</figcaption></figure></div>
+<details><summary>Exact source diff</summary><pre>diff --git a/src/hooks/use-chat-input-model-state.ts b/src/hooks/use-chat-input-model-state.ts
+index d42b8de..a00b00e 100644
+--- a/src/hooks/use-chat-input-model-state.ts
++++ b/src/hooks/use-chat-input-model-state.ts
+@@ -125,9 +125,13 @@ export function useChatInputModelState(): ChatInputModelState {
+   // Conversation-scoped switches (blank or started) stay member-allowed.
+   const canPersistHomeAcpModel =
+     !isHomeAcp || backend.kind !== &quot;cloud&quot; || canManageOrgProfiles;
+   const showAcpPicker =
+-    isAcpContext &amp;&amp; availableAcpModels.length &gt; 0 &amp;&amp; canPersistHomeAcpModel;
++    isAcpContext &amp;&amp;
++    availableAcpModels.length &gt; 0 &amp;&amp;
++    canPersistHomeAcpModel &amp;&amp;
++    (!isActiveAcpConversation ||
++      conversation?.acp_allow_model_switch !== false);
+   let agentDefaultLabel: string | null = null;
+   if (isHomeAcp &amp;&amp; acpProvider &amp;&amp; !getAcpPreferredDefaultModel(acpServerKey)) {
+     const defaultModelLabel = labelForAcpModel(
+       discovered.defaultModelId,</pre></details></article>
+<article class="card" id="file-12"><span class="badge">changed · config/type/transport/test propagation</span><h3>src/i18n/translation.json</h3><details><summary>Source manifest</summary><p><a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/i18n/translation.json#L1">src/i18n/translation.json:1</a></p><p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2f58406e3fbf0840cbdc9d049157c7e2a046c7f5/src/i18n/translation.json#L1">Before: src/i18n/translation.json:1</a></p></details>
+<table><tr><th>Before</th><th>After / role</th></tr><tr><td>Existing configuration/transport/test surface</td><td>Propagate the explicit permission/scope API or exercise its regression contract; see the exact diff. <a class="src" href="https://github.com/VingGit/openhands-canvas/blob/f5fa8b380fea949355ba54b76b769113bedb7813/src/i18n/translation.json#L1">src/i18n/translation.json:1</a></td></tr></table>
+<details><summary>Exact source diff</summary><pre>diff --git a/src/i18n/translation.json b/src/i18n/translation.json
+index b9e3b9c..6f53c5f 100644
+--- a/src/i18n/translation.json
++++ b/src/i18n/translation.json
+@@ -42567,6 +42567,42 @@
+     &quot;de&quot;: &quot;Erstellt von&quot;,
+     &quot;uk&quot;: &quot;Створено&quot;,
+     &quot;ca&quot;: &quot;Creada per&quot;,
+     &quot;id&quot;: &quot;Dibuat oleh&quot;
++  },
++  &quot;ACP_PERMISSION_REQUIRED&quot;: {
++    &quot;en&quot;: &quot;Permission required&quot;,
++    &quot;ja&quot;: &quot;許可が必要です&quot;,
++    &quot;zh-CN&quot;: &quot;需要授权&quot;,
++    &quot;zh-TW&quot;: &quot;需要授權&quot;,
++    &quot;ko-KR&quot;: &quot;권한이 필요합니다&quot;,
++    &quot;no&quot;: &quot;Tillatelse kreves&quot;,
++    &quot;it&quot;: &quot;Autorizzazione richiesta&quot;,
++    &quot;pt&quot;: &quot;Permissão necessária&quot;,
++    &quot;es&quot;: &quot;Se requiere permiso&quot;,
++    &quot;ar&quot;: &quot;الإذن مطلوب&quot;,
++    &quot;fr&quot;: &quot;Autorisation requise&quot;,
++    &quot;tr&quot;: &quot;İzin gerekli&quot;,
++    &quot;de&quot;: &quot;Berechtigung erforderlich&quot;,
++    &quot;uk&quot;: &quot;Потрібен дозвіл&quot;,
++    &quot;ca&quot;: &quot;Cal permís&quot;,
++    &quot;id&quot;: &quot;Izin diperlukan&quot;
++  },
++  &quot;ACP_PERMISSION_INCOMPLETE&quot;: {
++    &quot;en&quot;: &quot;Request details are incomplete. Approval is disabled.&quot;,
++    &quot;ja&quot;: &quot;リクエストの詳細が不完全なため、承認できません。&quot;,
++    &quot;zh-CN&quot;: &quot;请求详情不完整，无法批准。&quot;,
++    &quot;zh-TW&quot;: &quot;請求詳細資料不完整，無法批准。&quot;,
++    &quot;ko-KR&quot;: &quot;요청 세부 정보가 불완전하여 승인할 수 없습니다.&quot;,
++    &quot;no&quot;: &quot;Forespørselen er ufullstendig. Godkjenning er deaktivert.&quot;,
++    &quot;it&quot;: &quot;I dettagli della richiesta sono incompleti. Approvazione disabilitata.&quot;,
++    &quot;pt&quot;: &quot;Os detalhes da solicitação estão incompletos. A aprovação está desativada.&quot;,
++    &quot;es&quot;: &quot;Los detalles de la solicitud están incompletos. La aprobación está desactivada.&quot;,
++    &quot;ar&quot;: &quot;تفاصيل الطلب غير مكتملة. الموافقة معطلة.&quot;,
++    &quot;fr&quot;: &quot;Les détails de la demande sont incomplets. L’approbation est désactivée.&quot;,
++    &quot;tr&quot;: &quot;İstek ayrıntıları eksik. Onay devre dışı.&quot;,
++    &quot;de&quot;: &quot;Die Anfragedetails sind unvollständig. Eine Genehmigung ist deaktiviert.&quot;,
++    &quot;uk&quot;: &quot;Деталі запиту неповні. Схвалення вимкнено.&quot;,
++    &quot;ca&quot;: &quot;Els detalls de la sol·licitud són incomplets. L’aprovació està desactivada.&quot;,
++    &quot;id&quot;: &quot;Detail permintaan tidak lengkap. Persetujuan dinonaktifkan.&quot;
+   }
+ }</pre></details></article>
+</section><section><h2>4. Review and release decisions remain visible</h2><p>Do not read this page as a release, a full current-main browser/Cloud result, a completed issue-5480 implementation, or permission to change a human-only PR field. The legacy by-position automatic answer is preserved; this proposal supplies an explicit callback/broker path. The PR description contains current dependencies and missing evidence.</p><p>Source head: <code>f5fa8b380fea949355ba54b76b769113bedb7813</code>; merge base: <code>2f58406e3fbf0840cbdc9d049157c7e2a046c7f5</code>. Source content is unchanged by this review artifact. Links pin exact public revisions; the page has no external scripts, fonts or images.</p></section></main></div></body></html>
