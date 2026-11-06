@@ -272,8 +272,9 @@ describe("ActivityLogItem — timestamp fallback", () => {
     const { container } = renderItem(run);
 
     // Assert: the row reflects the current clock, not 1970.
-    expect(container.textContent).toContain("2026");
-    expect(container.textContent).not.toContain("1970");
+    const time = container.querySelector("time");
+    expect(time?.getAttribute("datetime")).toMatch(/^2026-05-27/);
+    expect(time?.getAttribute("title")).toContain("2026");
   });
 
   it("renders the backend-provided started_at unchanged when it is a valid timestamp", () => {
@@ -287,8 +288,9 @@ describe("ActivityLogItem — timestamp fallback", () => {
     const { container } = renderItem(run);
 
     // Assert
-    expect(container.textContent).toContain("2027");
-    expect(container.textContent).not.toContain("2030");
+    const time = container.querySelector("time");
+    expect(time?.getAttribute("datetime")).toBe("2027-03-15T09:00:00Z");
+    expect(time?.getAttribute("title")).toContain("2027");
   });
 });
 
@@ -565,7 +567,7 @@ describe("ActivityLogItem — script runs (a command but no conversation)", () =
     __resetActiveStoreForTests();
   });
 
-  it("explains that the run executed a script and points at the logs once it has finished", () => {
+  it("leaves the no-conversation explanation to the runs section for a script run", () => {
     // Arrange: a script automation run — the bash command ran, no agent did.
     const run = makeRun({
       status: AutomationRunStatus.COMPLETED,
@@ -577,13 +579,13 @@ describe("ActivityLogItem — script runs (a command but no conversation)", () =
     // Act
     renderItem(run);
 
-    // Assert
-    expect(
-      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_RUN_NO_CONVERSATION),
-    ).toBeInTheDocument();
+    // Assert: the section says it once; the row keeps only the logs button.
     expect(
       screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: LOGS_BUTTON_NAME }),
+    ).toBeInTheDocument();
   });
 
   it("hands the run's sandbox id to the logs modal", () => {

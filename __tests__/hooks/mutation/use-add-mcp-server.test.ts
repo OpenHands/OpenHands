@@ -165,6 +165,29 @@ describe("useAddMcpServer", () => {
     window.removeEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
   });
 
+  it("also tells the setup guide that Git is connected for a Git provider's server", async () => {
+    vi.spyOn(SettingsService, "createMcpServer").mockResolvedValue(true);
+    const onSetupStep = vi.fn();
+    window.addEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
+    const { result } = renderHook(() => useAddMcpServer(), {
+      wrapper: createWrapper(),
+    });
+
+    await result.current.mutateAsync({
+      id: "",
+      type: "shttp",
+      name: "github",
+      url: "https://api.githubcopilot.com/mcp/",
+    });
+
+    expect(
+      onSetupStep.mock.calls.map(
+        ([event]) => (event as CustomEvent<{ id: string }>).detail.id,
+      ),
+    ).toEqual(["add-integration", "connect-git"]);
+    window.removeEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
+  });
+
   it("fails instead of reporting a successful install before settings load", async () => {
     useSettingsMock.mockReturnValue({ data: undefined });
     const createSpy = vi.spyOn(SettingsService, "createMcpServer");

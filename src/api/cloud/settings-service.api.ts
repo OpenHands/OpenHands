@@ -236,6 +236,8 @@ export interface CloudIntegrationsConfig {
   providersConfigured: Provider[];
   /** Whether the built-in Jira Cloud integration is enabled. */
   isJiraEnabled: boolean;
+  /** Whether the built-in Jira Data Center integration is enabled. */
+  isJiraDcEnabled: boolean;
   /** Whether the built-in Linear integration is enabled. */
   isLinearEnabled: boolean;
   /** Whether the built-in Slack integration is enabled. */
@@ -245,6 +247,16 @@ export interface CloudIntegrationsConfig {
    * for an OpenHands Enterprise install, or null when it reports neither.
    */
   deploymentMode: string | null;
+  /**
+   * Whether the instance's Settings > MCP page also lists organization MCP
+   * servers (`feature_flags.enable_org_mcp_servers`).
+   */
+  isOrgMcpServersEnabled: boolean;
+  /**
+   * Whether the instance enables service accounts, and with them automations
+   * that run as a service account.
+   */
+  isServiceAccountsEnabled: boolean;
 }
 
 export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsConfig> {
@@ -254,8 +266,11 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
     slack_enabled?: boolean;
     feature_flags?: {
       enable_jira?: boolean;
+      enable_jira_dc?: boolean;
       enable_linear?: boolean;
       deployment_mode?: string;
+      enable_org_mcp_servers?: boolean;
+      enable_service_accounts?: boolean;
     };
   }>({
     backend,
@@ -265,9 +280,14 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
   return {
     providersConfigured: config.providers_configured ?? [],
     isJiraEnabled: config.feature_flags?.enable_jira === true,
+    isJiraDcEnabled: config.feature_flags?.enable_jira_dc === true,
     isLinearEnabled: config.feature_flags?.enable_linear === true,
     isSlackEnabled: config.slack_enabled === true,
     deploymentMode: config.feature_flags?.deployment_mode ?? null,
+    isOrgMcpServersEnabled:
+      config.feature_flags?.enable_org_mcp_servers === true,
+    isServiceAccountsEnabled:
+      config.feature_flags?.enable_service_accounts === true,
   };
 }
 

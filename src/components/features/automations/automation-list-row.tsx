@@ -5,10 +5,7 @@ import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
 import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { KebabMenu } from "./kebab-menu";
-import {
-  useAutomationPermissions,
-  useIsAutomationOwner,
-} from "#/hooks/use-automation-permissions";
+import { useAutomationAccess } from "#/hooks/use-automation-access";
 import { useNavigation } from "#/context/navigation-context";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import PlayIcon from "#/icons/play.svg?react";
@@ -33,7 +30,6 @@ import {
   formatTriggerSourceLabel,
   getLastRunTimestamp,
   getTriggerEventLabel,
-  getTriggerScheduleLabel,
   getTriggerSource,
 } from "#/components/features/home/featured-automations/automation-run-health";
 import type { AutomationInsightsProps } from "./automation-card";
@@ -41,6 +37,7 @@ import { toLatestRunState } from "./to-latest-run-state";
 import { AutomationTagPill } from "./automation-tag-pill";
 import { resolveAutomationImpactStatement } from "#/utils/automation-catalog";
 import { isDraftAutomation } from "#/utils/automation-state";
+import { describeSchedule } from "#/utils/automation-trigger-description";
 
 interface AutomationListRowProps {
   automation: Automation;
@@ -65,14 +62,8 @@ export function AutomationListRow({
 }: AutomationListRowProps) {
   const { navigate } = useNavigation();
   const { t, i18n } = useTranslation("openhands");
-  const { canManage: hasManagePermission } = useAutomationPermissions();
-  const isOwner = useIsAutomationOwner(automation);
-  // Write actions on a specific automation: manage OR creator (escape hatch).
-  const canManage = hasManagePermission || isOwner;
+  const { canManage, canEdit, canToggle } = useAutomationAccess(automation);
   const isDraft = isDraftAutomation(automation);
-  // Non-creators may turn an automation off but not back on. Draft test
-  // artifacts are finalized through the draft setup flow, not this toggle.
-  const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
 
   const handleView = () => {
     navigate?.(`/automations/${automation.id}`);
@@ -82,6 +73,7 @@ export function AutomationListRow({
     automation,
     t,
     canManage,
+    canEdit,
     canToggle,
     onRunNow,
     isRunPending,
@@ -95,7 +87,11 @@ export function AutomationListRow({
   const isEventTrigger = automation.trigger.type === "event";
   const TriggerIcon = isEventTrigger ? Zap : ClockIcon;
   const triggerEventLabel = getTriggerEventLabel(automation);
-  const triggerScheduleLabel = getTriggerScheduleLabel(automation);
+  const triggerScheduleLabel = describeSchedule(
+    automation.trigger,
+    t,
+    i18n.language,
+  );
   const triggerSource = getTriggerSource(automation);
   const hasTriggerMeta = Boolean(
     triggerEventLabel || triggerScheduleLabel || triggerSource,

@@ -15,6 +15,7 @@ import type {
   AutomationTrigger,
   AutomationsResponse,
   AutomationRunsResponse,
+  ChangeRunAsRequest,
 } from "#/types/automation";
 import type {
   GitSyncCheckResponse,
@@ -71,7 +72,7 @@ export interface CustomWebhookCreateRequest {
   webhook_secret?: string;
 }
 
-export interface CustomWebhookCreateResponse {
+export interface CustomWebhook {
   id: string;
   org_id: string;
   name: string;
@@ -83,6 +84,14 @@ export interface CustomWebhookCreateResponse {
   enabled: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface CustomWebhookListResponse {
+  webhooks: CustomWebhook[];
+  total: number;
+}
+
+export interface CustomWebhookCreateResponse extends CustomWebhook {
   webhook_secret?: string | null;
 }
 
@@ -607,6 +616,31 @@ class AutomationService {
     return data;
   }
 
+  /**
+   * Move an automation to a service account of the org, or back to the caller.
+   * The service leaves it turned off. Backend: POST /api/automation/v1/{id}/run-as
+   */
+  static async changeRunAs(
+    id: string,
+    body: ChangeRunAsRequest,
+  ): Promise<Automation> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}/run-as`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Automation>({
+        backend: active,
+        method: "POST",
+        path,
+        body,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<Automation>(path, body);
+    return data;
+  }
+
   static async deleteAutomation(id: string): Promise<void> {
     const active = getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}`;
@@ -755,11 +789,32 @@ class AutomationService {
     return data;
   }
 
+  static async listCustomWebhooks(options: {
+    limit: number;
+    offset: number;
+  }): Promise<CustomWebhookListResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("webhooks") || "/v1/webhooks"}`;
+    if (active.kind === "cloud") {
+      return callCloudProxy<CustomWebhookListResponse>({
+        backend: active,
+        method: "GET",
+        path: `${path}?limit=${options.limit}&offset=${options.offset}`,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+    const { data } = await localAutomationAxios.get<CustomWebhookListResponse>(
+      path,
+      { params: options },
+    );
+    return data;
+  }
+
   static async createCustomWebhook(
     body: CustomWebhookCreateRequest,
   ): Promise<CustomWebhookCreateResponse> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}/v1/webhooks`;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("webhooks") || "/v1/webhooks"}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<CustomWebhookCreateResponse>({

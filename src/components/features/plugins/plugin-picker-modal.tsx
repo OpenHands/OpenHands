@@ -31,7 +31,7 @@ export function PluginPickerModal({
       <div
         data-testid="plugin-picker-modal"
         className={cn(
-          "relative flex max-h-[80vh] flex-col gap-4 rounded-xl border border-border bg-base-secondary p-6",
+          "relative flex dialog-content-height flex-col gap-4 rounded-xl border border-border bg-base-secondary p-6",
           modalWidthClassName("lg"),
           MODAL_MAX_WIDTH_VIEWPORT,
         )}

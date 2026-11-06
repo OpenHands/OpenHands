@@ -11,9 +11,8 @@
  * the hook picks up the PAUSED → RUNNING transition within ~3 s regardless of
  * whether conversation_url is present.
  *
- * It also fast-polls while the title is still unset and the agent is actively
- * executing, so the header title (which lands asynchronously) refreshes within
- * ~3 s instead of on the slow 30 s tick.
+ * New conversations also fast-poll their metadata for up to one minute while
+ * their asynchronous title is missing, including after the first response.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook } from "@testing-library/react";
@@ -167,12 +166,13 @@ describe("useActiveConversation — refetchInterval callback", () => {
 
   // ── fast-poll until the title is set ───────────────────────────────────────
 
-  it("returns 3000 when title is unset and the agent is actively executing", () => {
+  it("returns 3000 when a new conversation has no title yet", () => {
     const intervalFn = renderAndCaptureIntervalFn();
 
     const result = intervalFn(
       makeQuery({
         title: null,
+        created_at: new Date().toISOString(),
         execution_status: ExecutionStatus.RUNNING,
         conversation_url:
           "https://sandbox.example.com/api/conversations/conv-1",
@@ -183,12 +183,13 @@ describe("useActiveConversation — refetchInterval callback", () => {
     expect(result).toBe(3000);
   });
 
-  it("returns 3000 when title is an empty string and the agent is actively executing", () => {
+  it("returns 3000 when a new conversation has an empty title", () => {
     const intervalFn = renderAndCaptureIntervalFn();
 
     const result = intervalFn(
       makeQuery({
         title: "",
+        created_at: new Date().toISOString(),
         execution_status: ExecutionStatus.IDLE,
         conversation_url:
           "https://sandbox.example.com/api/conversations/conv-1",
