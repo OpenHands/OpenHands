@@ -2,6 +2,7 @@ import {
   AppWindow,
   Brain,
   Container,
+  FlaskConical,
   Route as RouteIcon,
   Shield,
 } from "lucide-react";
@@ -74,6 +75,13 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/app",
     text: "SETTINGS$NAV_APPLICATION",
     subtitle: "SETTINGS$PAGE_APPLICATION_SUBLINE",
+  },
+  {
+    // User-facing feature flags, listed by the agent server.
+    icon: <FlaskConical className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/features",
+    text: "SETTINGS$NAV_FEATURES",
+    subtitle: "SETTINGS$PAGE_FEATURES_SUBLINE",
   },
   {
     icon: <KeyIcon width={16} height={16} />,

@@ -7,6 +7,7 @@ import {
   Keyboard,
   KeyRound,
   ListTodo,
+  FlaskConical,
   PanelsTopLeft,
   Route,
   Search,
@@ -43,6 +44,7 @@ export const COMMAND_MENU_ROUTE = {
   verificationSettings: "/settings/verification",
   runtimeSettings: "/settings/runtime",
   appSettings: "/settings/app",
+  featuresSettings: "/settings/features",
   secretsSettings: "/settings/secrets",
 } as const;
 
@@ -61,6 +63,7 @@ export type CommandMenuItemId =
   | "verification-settings"
   | "runtime-settings"
   | "app-settings"
+  | "features-settings"
   | "secrets-settings"
   | "toggle-sidebar";
 
@@ -243,6 +246,15 @@ export const createCommandMenuItems = ({
       keywordsKey: I18nKey.COMMAND_MENU$APP_SETTINGS_KEYWORDS,
       icon: <PanelsTopLeft size={ICON_SIZE} />,
       to: COMMAND_MENU_ROUTE.appSettings,
+    },
+    {
+      id: "features-settings",
+      group: "settings",
+      titleKey: I18nKey.SETTINGS$NAV_FEATURES,
+      descriptionKey: I18nKey.SETTINGS$PAGE_FEATURES_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$FEATURES_SETTINGS_KEYWORDS,
+      icon: <FlaskConical size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.featuresSettings,
     },
     {
       id: "secrets-settings",

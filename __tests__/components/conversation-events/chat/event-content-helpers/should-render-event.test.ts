@@ -287,3 +287,32 @@ describe("shouldRenderEvent - /goal loop re-prompts", () => {
     expect(shouldRenderEvent(makeUserMessage(text))).toBe(false);
   });
 });
+
+describe("shouldRenderEvent - reactions", () => {
+  it("hides the react / unreact tool calls, which show as chips instead", () => {
+    const react = createOtherActionEvent("react-1");
+    const reactAction = {
+      ...react,
+      action: { kind: "ReactAction", emoji: "eyes", message_id: null },
+    } as unknown as OpenHandsEvent;
+    const unreactAction = {
+      ...react,
+      action: { kind: "UnreactAction", emoji: "eyes", message_id: null },
+    } as unknown as OpenHandsEvent;
+    const observation = {
+      ...createPlanningObservationEvent("react-obs-1"),
+      observation: {
+        kind: "ReactionObservation",
+        content: [{ type: "text", text: "Reacted :eyes:" }],
+        is_error: false,
+        target_event_id: "msg-1",
+        emoji: "eyes",
+        removed: false,
+      },
+    } as unknown as OpenHandsEvent;
+
+    expect(shouldRenderEvent(reactAction)).toBe(false);
+    expect(shouldRenderEvent(unreactAction)).toBe(false);
+    expect(shouldRenderEvent(observation)).toBe(false);
+  });
+});

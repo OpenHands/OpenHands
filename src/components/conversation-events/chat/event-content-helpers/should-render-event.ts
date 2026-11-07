@@ -107,6 +107,12 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
       return false;
     }
 
+    // A reaction shows as a chip on its message (MessageReactions), so the
+    // react / unreact tool call itself stays out of the chat.
+    if ((["ReactAction", "UnreactAction"] as string[]).includes(actionType)) {
+      return false;
+    }
+
     // The model switch tool reuses the same inline model message UI as
     // `/model <profile>` once the observation arrives.
     if (actionType === "SwitchLLMAction") {
@@ -124,6 +130,10 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
     // Same treatment for the router-driven classifier switch — its success
     // path produces the same inline "Switched to" message via the
     // model-store seam, so it must not render as a raw observation card.
+    if ((event.observation.kind as string) === "ReactionObservation") {
+      return false;
+    }
+
     if (
       (event.observation.kind === "SwitchLLMObservation" ||
         event.observation.kind === "ClassifyAndSwitchLLMObservation") &&
