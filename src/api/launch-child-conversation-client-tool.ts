@@ -97,6 +97,26 @@ export const LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL: ClientToolSpec = {
         description:
           "target='local' only. 'worktree' (default) gives the child its own git worktree and branch; 'shared' runs it in this conversation's exact directory.",
       },
+      wait_for_response: {
+        type: "boolean",
+        description:
+          "Wait until the child conversation finishes and return its finish message. When false or omitted, returns immediately without waiting.",
+      },
+      timeout_seconds: {
+        type: "number",
+        description:
+          "Maximum seconds to wait for the child conversation to finish. Applicable only when wait_for_response=true. Must be a positive number.",
+      },
+      delete_on_finish: {
+        type: "boolean",
+        description:
+          "target='local' only. Delete the child conversation after its finish message has been captured. Applicable only when wait_for_response=true.",
+      },
+      delete_on_timeout: {
+        type: "boolean",
+        description:
+          "target='local' only. Stop and delete the child conversation if waiting times out. If false, the child is left running. Applicable only when wait_for_response=true.",
+      },
     },
     required: ["target", "task"],
   },

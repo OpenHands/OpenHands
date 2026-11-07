@@ -352,6 +352,10 @@ export interface LaunchChildConversationAction extends ActionBase<
   repository?: string | null;
   branch?: string | null;
   isolation?: string | null;
+  wait_for_response?: boolean | null;
+  timeout_seconds?: number | null;
+  delete_on_finish?: boolean | null;
+  delete_on_timeout?: boolean | null;
 }
 
 /**
