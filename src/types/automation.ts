@@ -233,10 +233,11 @@ export interface AutomationsResponse {
 }
 
 /**
- * Mirrors the list endpoint's `created_by` query param: the caller's
- * automations (`me`) or the rest of the org's (`others`).
+ * Mirrors the list endpoint's `run_as` query param: automations that run as
+ * the caller (`me`), as another person (`others`), or as a service account
+ * (`service`).
  */
-export type AutomationCreatedByFilter = "me" | "others";
+export type AutomationRunAsFilter = "me" | "others" | "service";
 
 /** Mirrors `RunStatus` in the automation service's OpenAPI schema. */
 export enum AutomationRunStatus {
