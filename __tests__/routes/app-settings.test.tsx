@@ -29,6 +29,14 @@ vi.mock("#/contexts/active-backend-context", () => ({
   }),
 }));
 
+class MockNotification {
+  static permission: NotificationPermission = "default";
+
+  static requestPermission = vi.fn<() => Promise<NotificationPermission>>();
+}
+
+vi.stubGlobal("Notification", MockNotification);
+
 function buildSettings(overrides: Partial<Settings> = {}): Settings {
   return {
     ...MOCK_DEFAULT_USER_SETTINGS,
@@ -80,6 +88,8 @@ describe("AppSettingsScreen", () => {
     vi.restoreAllMocks();
     activeBackendState.id = "local";
     activeBackendState.kind = "local";
+    MockNotification.permission = "default";
+    MockNotification.requestPermission.mockReset();
   });
 
   afterEach(() => {
@@ -164,6 +174,13 @@ describe("AppSettingsScreen", () => {
     );
 
     expect(analyticsSwitch).toBeInTheDocument();
+    expect(
+      screen.getByTestId("enable-desktop-notifications-switch"),
+    ).not.toBeChecked();
+    expect(
+      screen.getByText("SETTINGS$DESKTOP_NOTIFICATIONS_DESCRIPTION"),
+    ).toBeInTheDocument();
+    expect(MockNotification.requestPermission).not.toHaveBeenCalled();
     expect(screen.getByTestId("git-user-name-input")).toHaveValue("octocat");
     expect(screen.getByTestId("git-user-email-input")).toHaveValue(
       "octocat@example.com",
@@ -239,6 +256,35 @@ describe("AppSettingsScreen", () => {
     });
   });
 
+  it("hides desktop notifications and does not submit them for cloud backends", async () => {
+    activeBackendState.kind = "cloud";
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ enable_desktop_notifications: true }),
+    );
+
+    renderAppSettingsScreen();
+
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByTestId("enable-sound-notifications-switch"),
+    );
+    expect(
+      screen.queryByTestId("enable-desktop-notifications-switch"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          enable_desktop_notifications: expect.anything(),
+        }),
+      );
+    });
+  });
+
   it("saves updated git author details in OSS mode", async () => {
     const saveSettingsSpy = vi
       .spyOn(SettingsService, "saveSettings")
@@ -306,6 +352,68 @@ describe("AppSettingsScreen", () => {
         }),
       );
     });
+  });
+
+  it("requests permission only when desktop notifications are enabled", async () => {
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ enable_desktop_notifications: false }),
+    );
+    MockNotification.requestPermission.mockImplementation(async () => {
+      MockNotification.permission = "granted";
+      return "granted";
+    });
+
+    renderAppSettingsScreen();
+
+    const user = userEvent.setup();
+    const desktopNotificationsSwitch = await screen.findByTestId(
+      "enable-desktop-notifications-switch",
+    );
+    expect(MockNotification.requestPermission).not.toHaveBeenCalled();
+
+    await user.click(desktopNotificationsSwitch);
+
+    await waitFor(() => {
+      expect(MockNotification.requestPermission).toHaveBeenCalledTimes(1);
+      expect(desktopNotificationsSwitch).toBeChecked();
+    });
+
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ enable_desktop_notifications: true }),
+      );
+    });
+  });
+
+  it("leaves the toggle off and disabled when notification permission is denied", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ enable_desktop_notifications: false }),
+    );
+    MockNotification.requestPermission.mockImplementation(async () => {
+      MockNotification.permission = "denied";
+      return "denied";
+    });
+
+    renderAppSettingsScreen();
+
+    const user = userEvent.setup();
+    const desktopNotificationsSwitch = await screen.findByTestId(
+      "enable-desktop-notifications-switch",
+    );
+    await user.click(desktopNotificationsSwitch);
+
+    await waitFor(() => {
+      expect(desktopNotificationsSwitch).not.toBeChecked();
+      expect(desktopNotificationsSwitch).toBeDisabled();
+    });
+    expect(
+      screen.getByText("SETTINGS$DESKTOP_NOTIFICATIONS_UNAVAILABLE"),
+    ).toBeInTheDocument();
   });
 
   it("shows the active backend's values after switching back to a backend with cached settings", async () => {

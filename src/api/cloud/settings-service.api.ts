@@ -154,7 +154,7 @@ export async function saveCloudSettings(diff: {
   agent_settings_diff?: Record<string, SettingsValue>;
   conversation_settings_diff?: Record<string, SettingsValue>;
   /**
-   * App-level user preferences (language, sound notifications, disabled
+   * App-level user preferences (language, notifications, disabled
    * skills, …). The cloud `POST /api/v1/settings` consumes these as flat
    * top-level fields, so this helper iterates the object and assigns each
    * key onto the request body.
