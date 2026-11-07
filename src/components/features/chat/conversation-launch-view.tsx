@@ -16,6 +16,10 @@ import { useNavigation } from "#/context/navigation-context";
 import { useConversationStore } from "#/stores/conversation-store";
 import { I18nKey } from "#/i18n/declaration";
 import { ConversationStartupProgress } from "./conversation-startup-progress";
+import {
+  initializeAutomationFormSession,
+  PENDING_AUTOMATION_SETUP_ID,
+} from "#/api/automation-form-session";
 
 export function ConversationLaunchView({ launchId }: { launchId: string }) {
   const { t } = useTranslation("openhands");
@@ -65,6 +69,15 @@ export function ConversationLaunchView({ launchId }: { launchId: string }) {
                       onEdit={() => {
                         const composer = useConversationStore.getState();
                         composer.setMessageToSend(launch.message, "home");
+                        if (launch.automationSetupDraft) {
+                          initializeAutomationFormSession(
+                            PENDING_AUTOMATION_SETUP_ID,
+                            launch.automationSetupDraft,
+                          );
+                          editing.current = true;
+                          navigate("/automations/setup");
+                          return;
+                        }
                         if (launch.attachments) {
                           composer.addImages(
                             launch.attachments.images.filter(

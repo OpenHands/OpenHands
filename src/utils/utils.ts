@@ -12,7 +12,10 @@ import {
 
 const mergeTailwindClasses = extendTailwindMerge({
   extend: {
-    theme: { radius: ["pill", "composer", "file-action", "facet-control"] },
+    theme: {
+      radius: ["pill", "composer", "file-action", "facet-control"],
+      text: ["4xs", "xs-plus", "sm-plus", "title"],
+    },
     classGroups: {
       transition: [
         "transition-control-shell",

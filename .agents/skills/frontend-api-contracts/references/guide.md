@@ -6,6 +6,8 @@
   - `agent-server-conversation-service`, `event-service`, `agent-server-git-service`, and `skills-service` route local Agent Server access through `@openhands/typescript-client` rather than direct HTTP calls.
 - Current Cloud behavior is implemented explicitly through the backend registry, Cloud service layer, and device authorization flow.
 
+- Automation help starts must send the selected automation ID and current form snapshot in model context (`buildAutomationSetupContext`): the system suffix for OpenHands profiles, or the initial message for ACP profiles, including unsaved edits. Conversation tags identify the editor to Canvas but do not provide model context. Start an in-memory conversation launch before awaiting creation; use promise handlers that survive the setup route unmounting. Preserve the draft for failed-start editing, and let the launch view follow the result so completion never redirects a user who navigated elsewhere.
+
 
 ## Additional Notes
 

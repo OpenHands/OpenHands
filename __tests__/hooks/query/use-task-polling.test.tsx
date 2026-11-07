@@ -21,6 +21,12 @@ import {
 } from "#/utils/conversation-local-storage";
 import { resetPendingTaskMessageLinkState } from "#/utils/pending-task-message-link";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
+import {
+  clearAutomationFormSession,
+  getAutomationFormSession,
+  initializeAutomationFormSession,
+} from "#/api/automation-form-session";
+import { consumeAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 
 vi.mock(
   "#/api/conversation-service/agent-server-conversation-service.api",
@@ -77,6 +83,8 @@ describe("useTaskPolling", () => {
     vi.clearAllMocks();
     localStorage.clear();
     sessionStorage.clear();
+    clearAutomationFormSession("task-123");
+    clearAutomationFormSession("conversation-1");
     resetPendingTaskMessageLinkState();
     useOptimisticUserMessageStore.getState().clearPendingMessages();
     usePendingTaskAttachmentsStore.setState({ byTaskId: {} });
@@ -264,6 +272,26 @@ describe("useTaskPolling", () => {
       expect(pending[0].conversationId).toBe("conversation-1");
       expect(pending[0].text).toBe("hello from home");
     });
+  });
+
+  it("carries an automation edit through sandbox provisioning to the real conversation", async () => {
+    const draft = {
+      kind: "prompt" as const,
+      prompt: "Review PRs",
+      editingAutomationId: "reviewer-123",
+      form: { name: "Unsaved reviewer name" },
+    };
+    initializeAutomationFormSession("task-123", draft);
+    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue(
+      readyTask,
+    );
+
+    renderHook(() => useTaskPollingController(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledOnce());
+    expect(getAutomationFormSession("conversation-1")).toMatchObject(draft);
+    expect(consumeAutomationSetupHandoff("conversation-1")).toBe(true);
+    expect(getAutomationFormSession("task-123")).toBeNull();
   });
 
   it("marks the sidebar conversation list stale once the task is ready", async () => {

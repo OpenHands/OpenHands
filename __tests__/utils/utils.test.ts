@@ -476,3 +476,17 @@ describe("cn motion recipes", () => {
     );
   });
 });
+
+describe("extended type-scale composition", () => {
+  it.each(["4xs", "xs-plus", "sm-plus", "title"])(
+    "lets callers override the %s size while preserving color and later leading",
+    (name) => {
+      const size = `text-${name}`;
+      expect(cn("text-red-500 text-xs", size)).toBe(`text-red-500 ${size}`);
+      expect(cn(size, "text-lg text-blue-500")).toBe("text-lg text-blue-500");
+      expect(cn(size, "text-blue-500 leading-7")).toBe(
+        `${size} text-blue-500 leading-7`,
+      );
+    },
+  );
+});

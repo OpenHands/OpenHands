@@ -236,6 +236,14 @@ describe("vite library build", () => {
       expect(matches, `Single scoped recipe: ${name}`).toHaveLength(1);
       return matches[0];
     };
+    // Message wrapping must retain the legacy word-break behavior; the standard
+    // overflow utility controls the independent min-content wrapping contract.
+    expect(declarations(recipe("message-word-break"))).toEqual({
+      "word-break": "break-word",
+    });
+    expect(declarations(recipe("wrap-anywhere"))).toEqual({
+      "overflow-wrap": "anywhere",
+    });
     // Scoped to the Canvas root so it never restyles the host page.
     expect(css).toContain("[data-agent-server-ui] .flex{display:flex}");
     expect(css).not.toMatch(/(^|[{},])\.flex\{/);
@@ -634,6 +642,31 @@ describe("vite library build", () => {
     // Compact type tokens must not introduce a line-height default.
     expect(declarations(recipe("text-2xs"))).toEqual({ "font-size": "11px" });
     expect(declarations(recipe("text-3xs"))).toEqual({ "font-size": "10px" });
+
+    for (const [name, size] of Object.entries({
+      "text-4xs": "9px",
+      "text-xs-plus": "13px",
+      "text-sm-plus": "15px",
+      "text-title": "32px",
+    })) {
+      expect(declarations(recipe(name))).toEqual({ "font-size": size });
+    }
+
+    expect(declarations(recipe("metadata-grid-columns"))).toEqual({
+      "grid-template-columns": "auto 1fr",
+    });
+    expect(declarations(recipe("automation-summary-columns"))).toEqual({
+      "grid-template-columns": "auto minmax(0,1fr)",
+    });
+    const runDetails = recipe("sm:run-log-detail-columns");
+    expect(declarations(runDetails)).toEqual({
+      "grid-template-columns": "5rem minmax(0,1fr)",
+    });
+    expect(runDetails.parent).toMatchObject({
+      type: "atrule",
+      name: "media",
+      params: "(width>=40rem)",
+    });
 
     const radiusContracts = {
       "rounded-pill": "100px",
