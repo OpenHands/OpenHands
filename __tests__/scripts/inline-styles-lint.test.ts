@@ -25,19 +25,27 @@ const cases = [
 const probe = `export function Probe({ width, forwardedStyle }) { return <>\n${cases.map(({ jsx }) => jsx).join("\n")}\n</>; }`;
 
 describe("Canvas inline-style warning policy", () => {
-  it("warns about inline styling while accepting dynamic variables and semantic tokens", async () => {
-    const [result] = await eslint.lintText(probe, {
-      filePath: "src/routes/inline-style-probe.tsx",
-    });
-    expect(result.fatalErrorCount).toBe(0);
-    const findings = result.messages.filter(
-      ({ ruleId }) => ruleId === "shadcn/no-inline-styles",
-    );
-    expect(new Set(findings.map(({ line }) => line - 2))).toEqual(
-      new Set(cases.flatMap(({ warning }, index) => (warning ? [index] : []))),
-    );
-    expect(findings.every(({ severity }) => severity === 1)).toBe(true);
-  });
+  it.each([
+    "src/routes/inline-style-probe.tsx",
+    "src/ui/inline-style-probe.tsx",
+  ])(
+    "warns about inline styling in unadopted owner %s while accepting dynamic variables and semantic tokens",
+    async (filePath) => {
+      const [result] = await eslint.lintText(probe, {
+        filePath,
+      });
+      expect(result.fatalErrorCount).toBe(0);
+      const findings = result.messages.filter(
+        ({ ruleId }) => ruleId === "shadcn/no-inline-styles",
+      );
+      expect(new Set(findings.map(({ line }) => line - 2))).toEqual(
+        new Set(
+          cases.flatMap(({ warning }, index) => (warning ? [index] : [])),
+        ),
+      );
+      expect(findings.every(({ severity }) => severity === 1)).toBe(true);
+    },
+  );
 
   it("preserves the embedding root's caller-owned style API", async () => {
     const [result] = await eslint.lintText(probe, {
@@ -50,4 +58,29 @@ describe("Canvas inline-style warning policy", () => {
       ),
     ).toEqual([]);
   });
+});
+
+describe("Canvas inline-style error adoption", () => {
+  it.each([
+    "src/ui/divider.tsx",
+    "src/ui/toggle-switch.tsx",
+    "src/ui/combobox-caret.tsx",
+    "src/components/features/backends/backend-status-dot.tsx",
+  ])(
+    "rejects inline styling in migrated appearance owner %s while retaining variables",
+    async (filePath) => {
+      const [result] = await eslint.lintText(probe, { filePath });
+      expect(result.fatalErrorCount).toBe(0);
+      const findings = result.messages.filter(
+        ({ ruleId }) => ruleId === "shadcn/no-inline-styles",
+      );
+      expect(
+        findings.map(({ line, severity }) => ({ index: line - 2, severity })),
+      ).toEqual(
+        cases.flatMap(({ warning }, index) =>
+          warning ? [{ index, severity: 2 }] : [],
+        ),
+      );
+    },
+  );
 });

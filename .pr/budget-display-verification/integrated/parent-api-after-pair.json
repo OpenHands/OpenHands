@@ -1,0 +1,26 @@
+{
+  "parent": {
+    "id": "c3078282-b795-46aa-ad52-da6c193130ad",
+    "cap": 0.05,
+    "status": "finished",
+    "cost": 0.0030587879999999994,
+    "legacy_caps": {
+      "default": null,
+      "condenser": null
+    },
+    "sub_conversation_ids": [
+      "04c8eb23-01ef-499c-89a4-58add50baf08"
+    ]
+  },
+  "child": {
+    "id": "04c8eb23-01ef-499c-89a4-58add50baf08",
+    "cap": null,
+    "status": "finished",
+    "cost": 0.000953496,
+    "legacy_caps": {
+      "default": null,
+      "planning_condenser": null
+    },
+    "sub_conversation_ids": []
+  }
+}

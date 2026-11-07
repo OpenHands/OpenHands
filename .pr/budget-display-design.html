@@ -1,0 +1,2347 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Display the existing conversation budget · OpenHands #18533</title>
+    <style>
+      :root {
+        --fg: #182326;
+        --muted: #53636b;
+        --subtle: #7b878b;
+        --bg: #fafaf7;
+        --card: #fff;
+        --rule: #dce2e0;
+        --accent: #25566b;
+        --accent-soft: #edf5f7;
+        --warn: #a85716;
+        --warn-soft: #fff5e9;
+        --code-bg: #f1f3ef;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 16px/1.6 var(--sans);
+      }
+      .wrap {
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 36px;
+        max-width: 1260px;
+        margin: auto;
+        padding: 36px 28px 80px;
+      }
+      nav {
+        position: sticky;
+        top: 24px;
+        align-self: start;
+        font-size: 13px;
+      }
+      nav ol {
+        padding-left: 18px;
+      }
+      nav li {
+        margin: 10px 0;
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 3px;
+      }
+      nav a {
+        text-decoration: none;
+      }
+      .eyebrow {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        color: var(--accent);
+        text-transform: uppercase;
+      }
+      h1 {
+        font-size: 35px;
+        line-height: 1.18;
+        letter-spacing: -0.02em;
+        margin: 9px 0 18px;
+      }
+      h2 {
+        font-size: 23px;
+        line-height: 1.3;
+        margin: 38px 0 12px;
+      }
+      h3 {
+        font-size: 16px;
+        margin: 16px 0 6px;
+      }
+      header {
+        border-bottom: 1px solid var(--rule);
+        padding-bottom: 16px;
+      }
+      p {
+        margin: 10px 0;
+      }
+      .sub,
+      .meta,
+      figcaption {
+        color: var(--muted);
+      }
+      .meta {
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+      .callout {
+        background: var(--accent-soft);
+        border-left: 3px solid var(--accent);
+        padding: 12px 15px;
+        margin: 18px 0;
+      }
+      .warning {
+        background: var(--warn-soft);
+        border-color: var(--warn);
+      }
+      code {
+        font-family: var(--mono);
+        font-size: 0.86em;
+        background: var(--code-bg);
+        padding: 2px 4px;
+        border-radius: 3px;
+      }
+      pre {
+        font: 12px/1.55 var(--mono);
+        overflow: auto;
+        background: var(--code-bg);
+        padding: 14px;
+        margin: 0;
+        border-top: 1px solid var(--rule);
+      }
+      pre code {
+        font-size: inherit;
+        background: none;
+        padding: 0;
+      }
+      .src {
+        font-family: var(--mono);
+        font-size: 11px;
+        overflow-wrap: anywhere;
+      }
+      details {
+        border: 1px solid var(--rule);
+        border-radius: 5px;
+        margin: 13px 0;
+        background: var(--card);
+      }
+      summary {
+        cursor: pointer;
+        padding: 9px 12px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      details ul {
+        padding: 0 14px 10px 30px;
+        margin: 0;
+        font-size: 12px;
+      }
+      .count {
+        white-space: nowrap;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      figure {
+        margin: 20px 0;
+      }
+      svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        background: var(--card);
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+      }
+      figcaption {
+        font-size: 12px;
+        margin-top: 8px;
+        line-height: 1.5;
+      }
+      svg .old {
+        fill: var(--code-bg);
+        stroke: var(--subtle);
+        stroke-width: 1.3;
+        stroke-dasharray: 5 3;
+      }
+      svg .new {
+        fill: var(--accent-soft);
+        stroke: var(--accent);
+        stroke-width: 1.7;
+      }
+      svg .node-title {
+        font: 600 12px var(--sans);
+        fill: var(--fg);
+      }
+      svg .node-detail {
+        font: 10px var(--mono);
+        fill: var(--muted);
+      }
+      svg .column {
+        font: 700 12px var(--sans);
+        fill: var(--accent);
+      }
+      svg .edge {
+        fill: none;
+        stroke: var(--muted);
+        stroke-width: 1.4;
+        stroke-dasharray: 5 3;
+      }
+      svg .delta {
+        fill: none;
+        stroke: var(--warn);
+        stroke-width: 1.8;
+        stroke-dasharray: 5 3;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        margin: 12px 0;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 9px;
+        border-bottom: 1px solid var(--rule);
+      }
+      th {
+        background: var(--code-bg);
+      }
+      .pair {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .pair pre {
+        border: 1px solid var(--rule);
+        border-radius: 5px;
+      }
+      .badge {
+        font-size: 11px;
+        font-weight: 600;
+        background: var(--code-bg);
+        padding: 4px 7px;
+        border-radius: 4px;
+      }
+      footer {
+        border-top: 1px solid var(--rule);
+        margin-top: 30px;
+        padding-top: 16px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      @media (max-width: 800px) {
+        .wrap {
+          display: block;
+          padding: 24px 16px;
+        }
+        nav {
+          position: static;
+          margin-bottom: 25px;
+        }
+        nav ol {
+          display: flex;
+          gap: 16px;
+          flex-wrap: wrap;
+          list-style: none;
+          padding: 0;
+        }
+        nav li {
+          margin: 0;
+        }
+        .pair {
+          grid-template-columns: 1fr;
+        }
+        h1 {
+          font-size: 29px;
+        }
+      }
+      @media print {
+        nav {
+          display: none;
+        }
+        .wrap {
+          display: block;
+          padding: 0;
+        }
+        details {
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <nav aria-label="Document sections">
+        <div class="eyebrow">Review map</div>
+        <ol>
+          <li><a href="#contract">Keep the existing cap</a></li>
+          <li><a href="#ownership">Match the cost to its conversation</a></li>
+          <li><a href="#display">Show overshoot truthfully</a></li>
+          <li><a href="#checks">Evidence and boundaries</a></li>
+        </ol>
+        <p class="meta">
+          Integration: 16 files<br />+378 / −219<br />Original color change: +1
+          / −1
+        </p>
+        <p class="meta">
+          Temporary PR artifact<br />No external assets or scripts
+        </p>
+      </nav>
+      <main>
+        <header>
+          <div class="eyebrow">OpenHands #18533 · implementation design</div>
+          <h1>Display the existing conversation budget</h1>
+          <p class="sub">
+            Carry the SDK’s <code>max_budget_per_run</code> through the existing
+            runtime query and pair it with the conversation’s accumulated cost.
+            Keep the existing cost aggregation and UI; add source ownership to
+            the shared live snapshot so planner costs cannot be shown against a
+            parent’s cap.
+          </p>
+          <p>
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/query/use-conversation-metrics.ts#L36"
+              >src/hooks/query/use-conversation-metrics.ts:36</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/use-live-conversation-metrics.ts#L32"
+              >src/hooks/use-live-conversation-metrics.ts:32</a
+            >
+          </p>
+          <div class="callout">
+            ★ One cap, one existing accounting path. The SDK already checks
+            accumulated cost across tracked LLMs after each step; a step can
+            overshoot. This Canvas change displays that result.
+            <a
+              class="src"
+              href="https://github.com/enyst/agent-sdk/blob/209136794c3ece0755af95cc14340a8aaf4bbeca/openhands-sdk/openhands/sdk/conversation/impl/local_conversation.py#L742"
+              >SDK budget check:742</a
+            >
+          </div>
+          <p class="meta">
+            Before integration:
+            <code>50ae78643fb497b028bdddf6adfd0dea366b5b49</code><br />After
+            integration: <code>90350be6e173d1a28fbd74038fb3a2ca8c650017</code
+            ><br />Color before-state merge base (original PR vs upstream/main):
+            <code>8238b7af825b8639191b9d7b4c6b080d4a93f388</code>
+          </p>
+        </header>
+        <section id="contract">
+          <h2>1. Keep the cap on the conversation contract</h2>
+          <details class="sources">
+            <summary>Source files and change counts</summary>
+            <ul>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/api/agent-server-adapter.ts#L1"
+                  >src/api/agent-server-adapter.ts:1</a
+                >
+                <span class="count">✏️ +1 / −0</span>
+              </li>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/api/conversation-service/agent-server-conversation-service.api.ts#L1"
+                  >src/api/conversation-service/agent-server-conversation-service.api.ts:1</a
+                >
+                <span class="count">✏️ +2 / −0</span>
+              </li>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/api/conversation-service/agent-server-conversation-service.types.ts#L1"
+                  >src/api/conversation-service/agent-server-conversation-service.types.ts:1</a
+                >
+                <span class="count">✏️ +1 / −0</span>
+              </li>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/query/use-conversation-metrics.ts#L1"
+                  >src/hooks/query/use-conversation-metrics.ts:1</a
+                >
+                <span class="count">✏️ +7 / −2</span>
+              </li>
+            </ul>
+          </details>
+          <p>
+            The Agent Server response supplies
+            <code>max_budget_per_run</code> independently of per-LLM metrics.
+            The Canvas normalizer previously dropped it; the query now retains
+            it alongside its existing combined metrics. No second request or
+            accounting abstraction is added.
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/api/conversation-service/agent-server-conversation-service.api.ts#L319"
+              >src/api/conversation-service/agent-server-conversation-service.api.ts:319</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/query/use-conversation-metrics.ts#L29"
+              >src/hooks/query/use-conversation-metrics.ts:29</a
+            >
+          </p>
+          <div class="pair">
+            <div>
+              <h3>Before: UI contract omits the cap</h3>
+              <pre><code>RuntimeConversationInfo {
+  stats: RuntimeConversationStats;
+}
+useConversationMetrics() → { data }</code></pre>
+              <p>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/50ae78643fb497b028bdddf6adfd0dea366b5b49/src/api/conversation-service/agent-server-conversation-service.types.ts#L304"
+                  >src/api/conversation-service/agent-server-conversation-service.types.ts:304</a
+                >
+                ·
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/50ae78643fb497b028bdddf6adfd0dea366b5b49/src/hooks/query/use-conversation-metrics.ts#L11"
+                  >src/hooks/query/use-conversation-metrics.ts:11</a
+                >
+              </p>
+            </div>
+            <div>
+              <h3>After: optional field, separate output</h3>
+              <pre><code>RuntimeConversationInfo {
+  max_budget_per_run?: number | null;
+  stats: RuntimeConversationStats;
+}
+useConversationMetrics() → { data, maxBudget }</code></pre>
+              <p>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/api/conversation-service/agent-server-conversation-service.types.ts#L304"
+                  >src/api/conversation-service/agent-server-conversation-service.types.ts:304</a
+                >
+                ·
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/query/use-conversation-metrics.ts#L11"
+                  >src/hooks/query/use-conversation-metrics.ts:11</a
+                >
+              </p>
+            </div>
+          </div>
+          <figure>
+            <svg
+              viewBox="0 0 900 420"
+              role="img"
+              aria-labelledby="flow-title flow-desc"
+            >
+              <title id="flow-title">
+                Budget data before and after integration
+              </title>
+              <desc id="flow-desc">
+                Previously runtime normalization discarded the cap and the UI
+                read per-LLM max_budget_per_task. Now the existing runtime query
+                carries max_budget_per_run separately from cost into the same
+                display.
+              </desc>
+              <defs>
+                <marker
+                  id="arrow"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="7"
+                  markerHeight="7"
+                  orient="auto"
+                >
+                  <path d="M0,0 L10,5 L0,10 Z" fill="var(--muted)" />
+                </marker>
+                <marker
+                  id="arrow-delta"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="7"
+                  markerHeight="7"
+                  orient="auto"
+                >
+                  <path d="M0,0 L10,5 L0,10 Z" fill="var(--warn)" />
+                </marker>
+                <linearGradient id="subject" x1="0" x2="0" y1="0" y2="1">
+                  <stop stop-color="var(--accent)" stop-opacity=".08" />
+                  <stop
+                    offset="1"
+                    stop-color="var(--accent)"
+                    stop-opacity=".01"
+                  />
+                </linearGradient>
+              </defs>
+              <rect
+                x="465"
+                y="50"
+                width="420"
+                height="352"
+                fill="url(#subject)"
+                rx="10"
+              />
+              <text class="column" x="25" y="28">
+                BEFORE · original PR 50ae786
+              </text>
+              <text class="column" x="480" y="28">
+                AFTER · integration 90350be
+              </text>
+              <a
+                href="https://github.com/enyst/playground/blob/50ae78643fb497b028bdddf6adfd0dea366b5b49/src/api/conversation-service/agent-server-conversation-service.api.ts#L319"
+              >
+                <g>
+                  <rect
+                    class="old"
+                    x="25"
+                    y="62"
+                    width="390"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="39" y="85">
+                    requireDirectConversationInfo()
+                  </text>
+                  <text class="node-detail" x="39" y="106">
+                    Cap discarded · service.api.ts:319
+                  </text>
+                </g>
+              </a>
+              <a
+                href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/api/conversation-service/agent-server-conversation-service.api.ts#L329"
+              >
+                <g>
+                  <rect
+                    class="new"
+                    x="480"
+                    y="62"
+                    width="390"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="494" y="85">
+                    requireDirectConversationInfo()
+                  </text>
+                  <text class="node-detail" x="494" y="106">
+                    Keep optional cap · service.api.ts:329
+                  </text>
+                </g>
+              </a>
+              <path class="edge" d="M220,124 V145" marker-end="url(#arrow)" />
+              <path
+                class="delta"
+                d="M675,124 V145"
+                marker-end="url(#arrow-delta)"
+              />
+              <a
+                href="https://github.com/enyst/playground/blob/50ae78643fb497b028bdddf6adfd0dea366b5b49/src/hooks/query/use-conversation-metrics.ts#L36"
+              >
+                <g>
+                  <rect
+                    class="old"
+                    x="25"
+                    y="148"
+                    width="390"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="39" y="171">
+                    useConversationMetrics()
+                  </text>
+                  <text class="node-detail" x="39" y="192">
+                    Only MetricsSnapshot · query hook:36
+                  </text>
+                </g>
+              </a>
+              <a
+                href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/query/use-conversation-metrics.ts#L36"
+              >
+                <g>
+                  <rect
+                    class="new"
+                    x="480"
+                    y="148"
+                    width="390"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="494" y="171">
+                    useConversationMetrics()
+                  </text>
+                  <text class="node-detail" x="494" y="192">
+                    metrics + maxBudget · query hook:36
+                  </text>
+                </g>
+              </a>
+              <path class="edge" d="M220,210 V231" marker-end="url(#arrow)" />
+              <path
+                class="delta"
+                d="M675,210 V231"
+                marker-end="url(#arrow-delta)"
+              />
+              <a
+                href="https://github.com/enyst/playground/blob/50ae78643fb497b028bdddf6adfd0dea366b5b49/src/hooks/use-live-conversation-metrics.ts#L48"
+              >
+                <g>
+                  <rect
+                    class="old"
+                    x="25"
+                    y="234"
+                    width="390"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="39" y="257">
+                    useLiveConversationMetrics()
+                  </text>
+                  <text class="node-detail" x="39" y="278">
+                    Legacy max_budget_per_task · live hook:48
+                  </text>
+                </g>
+              </a>
+              <a
+                href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/use-live-conversation-metrics.ts#L32"
+              >
+                <g>
+                  <rect
+                    class="new"
+                    x="480"
+                    y="234"
+                    width="390"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="494" y="257">
+                    useLiveConversationMetrics()
+                  </text>
+                  <text class="node-detail" x="494" y="278">
+                    Matching cost + runtime cap · live hook:32
+                  </text>
+                </g>
+              </a>
+              <path class="edge" d="M220,296 V317" marker-end="url(#arrow)" />
+              <path
+                class="delta"
+                d="M675,296 V317"
+                marker-end="url(#arrow-delta)"
+              />
+              <a
+                href="https://github.com/enyst/playground/blob/50ae78643fb497b028bdddf6adfd0dea366b5b49/src/components/features/conversation-panel/budget-display.tsx#L9"
+              >
+                <g>
+                  <rect
+                    class="old"
+                    x="25"
+                    y="320"
+                    width="390"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="39" y="343">BudgetDisplay()</text>
+                  <text class="node-detail" x="39" y="364">
+                    maxBudgetPerTask prop · display:9
+                  </text>
+                </g>
+              </a>
+              <a
+                href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/components/features/conversation-panel/budget-display.tsx#L9"
+              >
+                <g>
+                  <rect
+                    class="new"
+                    x="480"
+                    y="320"
+                    width="390"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="494" y="343">
+                    BudgetDisplay()
+                  </text>
+                  <text class="node-detail" x="494" y="364">
+                    Neutral maxBudget prop · display:9
+                  </text>
+                </g>
+              </a>
+            </svg>
+            <figcaption>
+              Figure 1. The existing runtime request carries one additional
+              field. Cost still uses the existing combined metrics; the cap
+              stays separate. Click any node for its source.
+            </figcaption>
+          </figure>
+          <p>
+            <strong>Compatibility:</strong> an absent field normalizes to
+            <code>null</code>, and a missing cap hides the meter while cost
+            remains visible. Displaying a configured cap needs the server
+            contract from SDK
+            <a href="https://github.com/OpenHands/software-agent-sdk/pull/6218"
+              >#6218</a
+            >. This patch leaves the released client dependency pin unchanged.
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/api/conversation-service/agent-server-conversation-service.api.ts#L106"
+              >src/api/conversation-service/agent-server-conversation-service.api.ts:106</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/api/conversation-service/agent-server-conversation-service.api.ts#L329"
+              >src/api/conversation-service/agent-server-conversation-service.api.ts:329</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/components/features/conversation-panel/budget-display.tsx#L10"
+              >src/components/features/conversation-panel/budget-display.tsx:10</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/components/features/conversation/metrics-modal/cost-section.tsx#L19"
+              >src/components/features/conversation/metrics-modal/cost-section.tsx:19</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/package.json#L27"
+              >package.json:27</a
+            >
+          </p>
+          <details>
+            <summary>Read the actual diff</summary>
+            <pre><code>diff --git a/src/api/agent-server-adapter.ts b/src/api/agent-server-adapter.ts
+index 8f3fbbb936..2e320a301e 100644
+--- a/src/api/agent-server-adapter.ts
++++ b/src/api/agent-server-adapter.ts
+@@ -85,6 +85,7 @@ export interface DirectConversationInfo {
+   created_at: string;
+   updated_at: string;
+   execution_status?: string | null;
++  max_budget_per_run?: number | null;
+   /** Cloud-only sandbox lifecycle state. Omitted / null for local agent-server conversations. */
+   sandbox_status?: string | null;
+   /** Availability of the runtime that backs a local conversation. */
+diff --git a/src/api/conversation-service/agent-server-conversation-service.api.ts b/src/api/conversation-service/agent-server-conversation-service.api.ts
+index dda3398f35..6e4b11bedc 100644
+--- a/src/api/conversation-service/agent-server-conversation-service.api.ts
++++ b/src/api/conversation-service/agent-server-conversation-service.api.ts
+@@ -326,6 +326,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
+     created_at: readTimestamp(item, &quot;created_at&quot;, &quot;createdAt&quot;),
+     updated_at: readTimestamp(item, &quot;updated_at&quot;, &quot;updatedAt&quot;),
+     execution_status: stringOrNull(item.execution_status),
++    max_budget_per_run: numberOrNull(item.max_budget_per_run),
+     sandbox_status: stringOrNull(item.sandbox_status),
+     runtime_info: normalizeRuntimeInfo(item.runtime_info),
+     metrics: normalizeMetrics(item.metrics),
+@@ -972,6 +973,7 @@ class AgentServerConversationService {
+       created_at: data.created_at,
+       updated_at: data.updated_at,
+       status: toRuntimeStatus(data.execution_status),
++      max_budget_per_run: data.max_budget_per_run,
+       stats: data.stats ?? { usage_to_metrics: {} },
+       available_models: toAcpModelOptions(data.available_models),
+     };
+diff --git a/src/api/conversation-service/agent-server-conversation-service.types.ts b/src/api/conversation-service/agent-server-conversation-service.types.ts
+index a555cfb5e7..459296f6b8 100644
+--- a/src/api/conversation-service/agent-server-conversation-service.types.ts
++++ b/src/api/conversation-service/agent-server-conversation-service.types.ts
+@@ -303,6 +303,7 @@ export interface ResponseLatency {
+&#32;
+ export interface RuntimeConversationInfo {
+   id: string;
++  max_budget_per_run?: number | null;
+   title: string | null;
+   metrics: MetricsSnapshot | null;
+   created_at: string;
+diff --git a/src/hooks/query/use-conversation-metrics.ts b/src/hooks/query/use-conversation-metrics.ts
+index 0b3850addf..717d97b40f 100644
+--- a/src/hooks/query/use-conversation-metrics.ts
++++ b/src/hooks/query/use-conversation-metrics.ts
+@@ -11,6 +11,7 @@ export const useConversationMetrics = (
+   enabled: boolean = true,
+ ): {
+   data: MetricsSnapshot | undefined;
++  maxBudget: number | null;
+   isLoading: boolean;
+   error: unknown;
+ } =&gt; {
+@@ -33,7 +34,10 @@ export const useConversationMetrics = (
+           conversationUrl,
+           sessionApiKey,
+         );
+-      return getCombinedMetrics(conversationInfo);
++      return {
++        metrics: getCombinedMetrics(conversationInfo),
++        maxBudget: conversationInfo.max_budget_per_run ?? null,
++      };
+     },
+     // conversation_url is only set for cloud conversations; local ones are
+     // served by the ConversationClient fallback in getRuntimeConversation.
+@@ -49,7 +53,8 @@ export const useConversationMetrics = (
+   });
+&#32;
+   return {
+-    data: query.data,
++    data: query.data?.metrics,
++    maxBudget: query.data?.maxBudget ?? null,
+     isLoading: query.isLoading,
+     error: query.error,
+   };
+</code></pre>
+          </details>
+        </section>
+        <section id="ownership">
+          <h2>2. Match live cost to the active conversation</h2>
+          <details class="sources">
+            <summary>Source files and change counts</summary>
+            <ul>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/contexts/conversation-websocket-context.tsx#L1"
+                  >src/contexts/conversation-websocket-context.tsx:1</a
+                >
+                <span class="count">✏️ +19 / −10</span>
+              </li>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/stores/metrics-store.ts#L1"
+                  >src/stores/metrics-store.ts:1</a
+                >
+                <span class="count">✏️ +6 / −3</span>
+              </li>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/use-live-conversation-metrics.ts#L1"
+                  >src/hooks/use-live-conversation-metrics.ts:1</a
+                >
+                <span class="count">✏️ +24 / −26</span>
+              </li>
+            </ul>
+          </details>
+          <p>
+            Main and planning sockets both update the same metrics store. Each
+            write now carries its source ID atomically; reset clears the ID too.
+            The budget hook accepts live cost and usage only when that ID
+            matches the active conversation.
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/contexts/conversation-websocket-context.tsx#L314"
+              >src/contexts/conversation-websocket-context.tsx:314</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/stores/metrics-store.ts#L27"
+              >src/stores/metrics-store.ts:27</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/use-live-conversation-metrics.ts#L32"
+              >src/hooks/use-live-conversation-metrics.ts:32</a
+            >
+          </p>
+          <figure>
+            <svg
+              viewBox="0 0 900 345"
+              role="img"
+              aria-labelledby="scope-title scope-desc"
+            >
+              <title id="scope-title">
+                Planning snapshot ownership before and after
+              </title>
+              <desc id="scope-desc">
+                Both main and planning sockets write the same metrics snapshot.
+                Previously the snapshot had no source ID. Now each write records
+                its source and the budget hook accepts only the active
+                conversation's snapshot.
+              </desc>
+              <text class="column" x="25" y="28">
+                BEFORE · latest socket wins
+              </text>
+              <text class="column" x="480" y="28">
+                AFTER · source ID travels with cost
+              </text>
+              <a
+                href="https://github.com/enyst/playground/blob/50ae78643fb497b028bdddf6adfd0dea366b5b49/src/contexts/conversation-websocket-context.tsx#L757"
+              >
+                <g>
+                  <rect
+                    class="old"
+                    x="25"
+                    y="52"
+                    width="190"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="39" y="75">
+                    handleMainMessage
+                  </text>
+                  <text class="node-detail" x="39" y="96">provider:757</text>
+                </g>
+              </a>
+              <a
+                href="https://github.com/enyst/playground/blob/50ae78643fb497b028bdddf6adfd0dea366b5b49/src/contexts/conversation-websocket-context.tsx#L1055"
+              >
+                <g>
+                  <rect
+                    class="old"
+                    x="235"
+                    y="52"
+                    width="190"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="249" y="75">
+                    handlePlanningMessage
+                  </text>
+                  <text class="node-detail" x="249" y="96">provider:1055</text>
+                </g>
+              </a>
+              <a
+                href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/contexts/conversation-websocket-context.tsx#L762"
+              >
+                <g>
+                  <rect
+                    class="new"
+                    x="480"
+                    y="52"
+                    width="190"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="494" y="75">
+                    handleMainMessage
+                  </text>
+                  <text class="node-detail" x="494" y="96">
+                    conversationId · :762
+                  </text>
+                </g>
+              </a>
+              <a
+                href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/contexts/conversation-websocket-context.tsx#L1063"
+              >
+                <g>
+                  <rect
+                    class="new"
+                    x="690"
+                    y="52"
+                    width="190"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="704" y="75">
+                    handlePlanningMessage
+                  </text>
+                  <text class="node-detail" x="704" y="96">
+                    planner ID · :1063
+                  </text>
+                </g>
+              </a>
+              <path
+                class="edge"
+                d="M120,114 V135 H225 M330,114 V135 H225 V149"
+                marker-end="url(#arrow)"
+              />
+              <path
+                class="delta"
+                d="M575,114 V135 H680 M785,114 V135 H680 V149"
+                marker-end="url(#arrow-delta)"
+              />
+              <a
+                href="https://github.com/enyst/playground/blob/50ae78643fb497b028bdddf6adfd0dea366b5b49/src/stores/metrics-store.ts#L29"
+              >
+                <g>
+                  <rect
+                    class="old"
+                    x="25"
+                    y="152"
+                    width="400"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="39" y="175">
+                    MetricsStore.setMetrics(metrics)
+                  </text>
+                  <text class="node-detail" x="39" y="196">
+                    Cost / usage only · metrics-store.ts:29
+                  </text>
+                </g>
+              </a>
+              <a
+                href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/stores/metrics-store.ts#L31"
+              >
+                <g>
+                  <rect
+                    class="new"
+                    x="480"
+                    y="152"
+                    width="400"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="494" y="175">
+                    MetricsStore.setMetrics(metrics, sourceId)
+                  </text>
+                  <text class="node-detail" x="494" y="196">
+                    Atomic snapshot + source ID · metrics-store.ts:31
+                  </text>
+                </g>
+              </a>
+              <path class="edge" d="M225,214 V239" marker-end="url(#arrow)" />
+              <path
+                class="delta"
+                d="M680,214 V239"
+                marker-end="url(#arrow-delta)"
+              />
+              <a
+                href="https://github.com/enyst/playground/blob/50ae78643fb497b028bdddf6adfd0dea366b5b49/src/hooks/use-live-conversation-metrics.ts#L45"
+              >
+                <g>
+                  <rect
+                    class="old"
+                    x="25"
+                    y="242"
+                    width="400"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="39" y="265">
+                    useLiveConversationMetrics()
+                  </text>
+                  <text class="node-detail" x="39" y="286">
+                    Any live snapshot preferred · live hook:45
+                  </text>
+                </g>
+              </a>
+              <a
+                href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/use-live-conversation-metrics.ts#L34"
+              >
+                <g>
+                  <rect
+                    class="new"
+                    x="480"
+                    y="242"
+                    width="400"
+                    height="62"
+                    rx="7"
+                  />
+                  <text class="node-title" x="494" y="265">
+                    useLiveConversationMetrics()
+                  </text>
+                  <text class="node-detail" x="494" y="286">
+                    Source must match active ID · live hook:34
+                  </text>
+                </g>
+              </a>
+            </svg>
+            <figcaption>
+              Figure 2. Ownership metadata fixes the mismatch without adding a
+              per-conversation store. A planning snapshot remains available to
+              existing context-window consumers.
+            </figcaption>
+          </figure>
+          <div class="callout warning">
+            ⚠ When the latest snapshot belongs to a planner, the parent uses its
+            existing REST snapshot. With an active, successful query, it may
+            wait for the next 30-second poll and can briefly show an older
+            parent cost. The next parent WebSocket update is live again. Hidden
+            views pause polling; request failures can delay refresh further.
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/query/use-conversation-metrics.ts#L46"
+              >src/hooks/query/use-conversation-metrics.ts:46</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/use-live-conversation-metrics.ts#L43"
+              >src/hooks/use-live-conversation-metrics.ts:43</a
+            >
+          </div>
+          <p>
+            The existing context-window hook still reads the shared usage
+            snapshot. This change scopes the budget view without changing that
+            planning behavior or introducing a per-conversation map.
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/use-context-window-usage.ts#L31"
+              >src/hooks/use-context-window-usage.ts:31</a
+            >
+          </p>
+          <details>
+            <summary>Read the actual diff</summary>
+            <pre><code>diff --git a/src/contexts/conversation-websocket-context.tsx b/src/contexts/conversation-websocket-context.tsx
+index 10684ca680..e33d7b95e8 100644
+--- a/src/contexts/conversation-websocket-context.tsx
++++ b/src/contexts/conversation-websocket-context.tsx
+@@ -312,7 +312,10 @@ export function ConversationWebSocketProvider({
+&#32;
+   // Helper function to update metrics from stats event
+   const updateMetricsFromStats = useCallback(
+-    (event: ConversationStateUpdateEventStats) =&gt; {
++    (
++      event: ConversationStateUpdateEventStats,
++      sourceConversationId: string,
++    ) =&gt; {
+       const usageToMetrics = event.value.usage_to_metrics;
+       if (!usageToMetrics) {
+         return;
+@@ -363,11 +366,14 @@ export function ConversationWebSocketProvider({
+         { cost: 0, maxBudgetPerTask: null, usage: null },
+       );
+&#32;
+-      useMetricsStore.getState().setMetrics({
+-        cost: combined.cost,
+-        max_budget_per_task: combined.maxBudgetPerTask,
+-        usage: combined.usage,
+-      });
++      useMetricsStore.getState().setMetrics(
++        {
++          cost: combined.cost,
++          max_budget_per_task: combined.maxBudgetPerTask,
++          usage: combined.usage,
++        },
++        sourceConversationId,
++      );
+     },
+     [],
+   );
+@@ -753,8 +759,8 @@ export function ConversationWebSocketProvider({
+             ) {
+               setExecutionStatus(conversationId, event.value);
+             }
+-            if (isStatsConversationStateUpdateEvent(event)) {
+-              updateMetricsFromStats(event);
++            if (isStatsConversationStateUpdateEvent(event) &amp;&amp; conversationId) {
++              updateMetricsFromStats(event, conversationId);
+             }
+             // Mirror goal status into the store. Intentionally duplicated across
+             // the main and planning WebSocket handlers (like the execution_status
+@@ -1051,8 +1057,11 @@ export function ConversationWebSocketProvider({
+             ) {
+               setExecutionStatus(planningConversationId, event.value);
+             }
+-            if (isStatsConversationStateUpdateEvent(event)) {
+-              updateMetricsFromStats(event);
++            if (
++              isStatsConversationStateUpdateEvent(event) &amp;&amp;
++              planningConversationId
++            ) {
++              updateMetricsFromStats(event, planningConversationId);
+             }
+             // Mirror goal status into the store. Intentionally duplicated across
+             // the main and planning WebSocket handlers (like the execution_status
+diff --git a/src/hooks/use-live-conversation-metrics.ts b/src/hooks/use-live-conversation-metrics.ts
+index 399c46f410..a0941366a2 100644
+--- a/src/hooks/use-live-conversation-metrics.ts
++++ b/src/hooks/use-live-conversation-metrics.ts
+@@ -4,35 +4,25 @@ import { useActiveConversation } from &quot;#/hooks/query/use-active-conversation&quot;;
+ import { useConversationMetrics } from &quot;#/hooks/query/use-conversation-metrics&quot;;
+&#32;
+ /**
+- * Combined cost/token metrics for the active conversation.
+- *
+- * Prefers the live WebSocket metrics store, which updates in real time as
+- * agent events stream in, and falls back to the REST snapshot
+- * (`GET /api/conversations/{id}` stats, combined across all usage ids and
+- * refreshed on a 30s interval by {@link useConversationMetrics}) before the
+- * first stats arrive. The store is reset on conversation switch (see
+- * `ConversationWebSocketProvider`), so its contents always belong to the
+- * active conversation — preferring it cannot leak a previous
+- * conversation&#x27;s figures, and preferring REST would lag the display up to
+- * a poll interval behind what the user just watched happen.
+- *
+- * Pass `enabled: false` to pause the REST polling while the consumer is
+- * hidden (e.g. a closed modal).
++ * Cost/token metrics and budget for the active conversation.
++ * Prefers matching live WebSocket metrics, falling back to the REST snapshot
++ * when no stats have arrived or the latest stats belong to a planning child.
++ * Pass `enabled: false` to pause REST polling while the consumer is hidden.
+  */
+ export function useLiveConversationMetrics(
+   enabled: boolean = true,
+-): MetricsState {
++): Pick&lt;MetricsState, &quot;cost&quot; | &quot;usage&quot;&gt; &amp; { maxBudget: number | null } {
+   // Per-field selectors rather than a bare `useMetricsStore()`: subscribing to
+   // the whole store re-runs this hook on any store write, including the action
+   // identity, and matches how `useContextWindowUsage` reads the same store.
+-  const storeCost = useMetricsStore((state) =&gt; state.cost);
+-  const storeMaxBudgetPerTask = useMetricsStore(
+-    (state) =&gt; state.max_budget_per_task,
++  const sourceConversationId = useMetricsStore(
++    (state) =&gt; state.sourceConversationId,
+   );
++  const storeCost = useMetricsStore((state) =&gt; state.cost);
+   const storeUsage = useMetricsStore((state) =&gt; state.usage);
+   const { data: conversation } = useActiveConversation();
+&#32;
+-  const { data: conversationMetrics } = useConversationMetrics(
++  const { data: conversationMetrics, maxBudget } = useConversationMetrics(
+     conversation?.id,
+     conversation?.conversation_url,
+     conversation?.session_api_key,
+@@ -40,12 +30,13 @@ export function useLiveConversationMetrics(
+   );
+&#32;
+   return useMemo(() =&gt; {
+-    // Live store first: real-time and (post-reset) always the active
+-    // conversation&#x27;s data. Any non-null field counts as data.
+-    if (storeCost !== null || storeUsage !== null) {
++    if (
++      sourceConversationId === conversation?.id &amp;&amp;
++      (storeCost !== null || storeUsage !== null)
++    ) {
+       return {
+         cost: storeCost,
+-        max_budget_per_task: storeMaxBudgetPerTask,
++        maxBudget,
+         usage: storeUsage,
+       };
+     }
+@@ -53,7 +44,7 @@ export function useLiveConversationMetrics(
+     if (conversationMetrics) {
+       return {
+         cost: conversationMetrics.accumulated_cost,
+-        max_budget_per_task: conversationMetrics.max_budget_per_task,
++        maxBudget,
+         usage: conversationMetrics.accumulated_token_usage
+           ? {
+               prompt_tokens:
+@@ -78,8 +69,15 @@ export function useLiveConversationMetrics(
+&#32;
+     return {
+       cost: null,
+-      max_budget_per_task: null,
++      maxBudget,
+       usage: null,
+     };
+-  }, [conversationMetrics, storeCost, storeMaxBudgetPerTask, storeUsage]);
++  }, [
++    conversation?.id,
++    conversationMetrics,
++    maxBudget,
++    sourceConversationId,
++    storeCost,
++    storeUsage,
++  ]);
+ }
+diff --git a/src/stores/metrics-store.ts b/src/stores/metrics-store.ts
+index 30e2c46212..2865dc5f8c 100644
+--- a/src/stores/metrics-store.ts
++++ b/src/stores/metrics-store.ts
+@@ -14,7 +14,8 @@ export interface MetricsState {
+ }
+&#32;
+ export interface MetricsStore extends MetricsState {
+-  setMetrics: (metrics: MetricsState) =&gt; void;
++  sourceConversationId: string | null;
++  setMetrics: (metrics: MetricsState, sourceConversationId: string) =&gt; void;
+   resetMetrics: () =&gt; void;
+ }
+&#32;
+@@ -26,8 +27,10 @@ const EMPTY_METRICS: MetricsState = {
+&#32;
+ const useMetricsStore = create&lt;MetricsStore&gt;((set) =&gt; ({
+   ...EMPTY_METRICS,
+-  setMetrics: (metrics) =&gt; set(metrics),
+-  resetMetrics: () =&gt; set(EMPTY_METRICS),
++  sourceConversationId: null,
++  setMetrics: (metrics, sourceConversationId) =&gt;
++    set({ ...metrics, sourceConversationId }),
++  resetMetrics: () =&gt; set({ ...EMPTY_METRICS, sourceConversationId: null }),
+ }));
+&#32;
+ // Dev-only console handle for inspecting the live WS metrics while
+</code></pre>
+          </details>
+        </section>
+        <section id="display">
+          <h2>3. Show actual spend, including overshoot</h2>
+          <details class="sources">
+            <summary>Source files and change counts</summary>
+            <ul>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/components/features/conversation-panel/budget-display.tsx#L1"
+                  >src/components/features/conversation-panel/budget-display.tsx:1</a
+                >
+                <span class="count">✏️ +5 / −9</span>
+              </li>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/components/features/conversation/metrics-modal/cost-section.tsx#L1"
+                  >src/components/features/conversation/metrics-modal/cost-section.tsx:1</a
+                >
+                <span class="count">✏️ +3 / −3</span>
+              </li>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/components/features/conversation/usage-panel/usage-panel.tsx#L1"
+                  >src/components/features/conversation/usage-panel/usage-panel.tsx:1</a
+                >
+                <span class="count">✏️ +1 / −4</span>
+              </li>
+            </ul>
+          </details>
+          <p>
+            The cap flows through neutral <code>maxBudget</code> props. With
+            spend <code>$6.25</code> and a <code>$5.00</code> cap, the text
+            shows <strong>$6.2500 / $5.0000 (125.00% used)</strong>; only the
+            bar width is clamped to 100%. This is expected post-step enforcement
+            behavior, not an estimate or a reserved amount.
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/components/features/conversation-panel/budget-usage-text.tsx#L15"
+              >src/components/features/conversation-panel/budget-usage-text.tsx:15</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/components/features/conversation-panel/budget-progress-bar.tsx#L24"
+              >src/components/features/conversation-panel/budget-progress-bar.tsx:24</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/agent-sdk/blob/209136794c3ece0755af95cc14340a8aaf4bbeca/openhands-agent-server/openhands/agent_server/models.py#L173"
+              >SDK contract:173</a
+            >
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Mechanical wiring</th>
+                <th>Before → after</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Display and cost section props</td>
+                <td><code>maxBudgetPerTask</code> → <code>maxBudget</code></td>
+                <td>
+                  <a
+                    class="src"
+                    href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/components/features/conversation-panel/budget-display.tsx#L4"
+                    >src/components/features/conversation-panel/budget-display.tsx:4</a
+                  >
+                  ·
+                  <a
+                    class="src"
+                    href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/components/features/conversation/metrics-modal/cost-section.tsx#L5"
+                    >src/components/features/conversation/metrics-modal/cost-section.tsx:5</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>Usage panel</td>
+                <td>Legacy metrics cap → query cap</td>
+                <td>
+                  <a
+                    class="src"
+                    href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/components/features/conversation/usage-panel/usage-panel.tsx#L77"
+                    >src/components/features/conversation/usage-panel/usage-panel.tsx:77</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>Original PR’s fill colors</td>
+                <td>
+                  <code>bg-blue-500</code> / <code>bg-red-500</code> →
+                  <code>bg-foreground</code> / <code>bg-status-error</code>
+                </td>
+                <td>
+                  <a
+                    class="src"
+                    href="https://github.com/OpenHands/OpenHands/blob/8238b7af825b8639191b9d7b4c6b080d4a93f388/src/components/features/conversation-panel/budget-progress-bar.tsx#L20"
+                    >before:20</a
+                  >
+                  ·
+                  <a
+                    class="src"
+                    href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/components/features/conversation-panel/budget-progress-bar.tsx#L20"
+                    >after:20</a
+                  >
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            The original color patch keeps the same threshold: status-error
+            applies above 80%. The overshoot arithmetic and width clamp were
+            already present; this integration supplies the real cap and adds
+            behavioral coverage.
+            <a
+              class="src"
+              href="https://github.com/OpenHands/OpenHands/blob/8238b7af825b8639191b9d7b4c6b080d4a93f388/src/components/features/conversation-panel/budget-progress-bar.tsx#L12"
+              >before arithmetic:12</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/components/features/conversation-panel/budget-progress-bar.tsx#L12"
+              >after arithmetic:12</a
+            >
+          </p>
+          <details>
+            <summary>Read the actual diff</summary>
+            <pre><code>diff --git a/src/components/features/conversation-panel/budget-display.tsx b/src/components/features/conversation-panel/budget-display.tsx
+index 8c5311ddaf..3061fe717a 100644
+--- a/src/components/features/conversation-panel/budget-display.tsx
++++ b/src/components/features/conversation-panel/budget-display.tsx
+@@ -3,22 +3,18 @@ import { BudgetUsageText } from &quot;./budget-usage-text&quot;;
+&#32;
+ interface BudgetDisplayProps {
+   cost: number | null;
+-  maxBudgetPerTask: number | null;
++  maxBudget: number | null;
+ }
+&#32;
+-export function BudgetDisplay({ cost, maxBudgetPerTask }: BudgetDisplayProps) {
+-  // Only render the cap/progress UI when a real per-conversation budget cap
+-  // exists. There is currently no way for a user to set max_budget_per_task,
+-  // so showing a &quot;No budget limit&quot; line is misleading — omit it entirely
+-  // and let the surrounding cost/usage rows speak for themselves.
+-  if (cost === null || maxBudgetPerTask === null || maxBudgetPerTask &lt;= 0) {
++export function BudgetDisplay({ cost, maxBudget }: BudgetDisplayProps) {
++  if (cost === null || maxBudget === null || maxBudget &lt;= 0) {
+     return null;
+   }
+&#32;
+   return (
+     &lt;div&gt;
+-      &lt;BudgetProgressBar currentCost={cost} maxBudget={maxBudgetPerTask} /&gt;
+-      &lt;BudgetUsageText currentCost={cost} maxBudget={maxBudgetPerTask} /&gt;
++      &lt;BudgetProgressBar currentCost={cost} maxBudget={maxBudget} /&gt;
++      &lt;BudgetUsageText currentCost={cost} maxBudget={maxBudget} /&gt;
+     &lt;/div&gt;
+   );
+ }
+diff --git a/src/components/features/conversation/metrics-modal/cost-section.tsx b/src/components/features/conversation/metrics-modal/cost-section.tsx
+index f0b2f13775..291584da8d 100644
+--- a/src/components/features/conversation/metrics-modal/cost-section.tsx
++++ b/src/components/features/conversation/metrics-modal/cost-section.tsx
+@@ -4,10 +4,10 @@ import { I18nKey } from &quot;#/i18n/declaration&quot;;
+&#32;
+ interface CostSectionProps {
+   cost: number | null;
+-  maxBudgetPerTask: number | null;
++  maxBudget: number | null;
+ }
+&#32;
+-export function CostSection({ cost, maxBudgetPerTask }: CostSectionProps) {
++export function CostSection({ cost, maxBudget }: CostSectionProps) {
+   const { t } = useTranslation(&quot;openhands&quot;);
+&#32;
+   if (cost === null) {
+@@ -16,7 +16,7 @@ export function CostSection({ cost, maxBudgetPerTask }: CostSectionProps) {
+&#32;
+   return (
+     &lt;&gt;
+-      &lt;BudgetDisplay cost={cost} maxBudgetPerTask={maxBudgetPerTask} /&gt;
++      &lt;BudgetDisplay cost={cost} maxBudget={maxBudget} /&gt;
+       &lt;div className=&quot;flex justify-between items-center border-t border-border-subtle pt-2&quot;&gt;
+         &lt;span className=&quot;font-semibold&quot;&gt;
+           {t(I18nKey.CONVERSATION$TOTAL_COST)}
+diff --git a/src/components/features/conversation/usage-panel/usage-panel.tsx b/src/components/features/conversation/usage-panel/usage-panel.tsx
+index d88a198d24..88669f792d 100644
+--- a/src/components/features/conversation/usage-panel/usage-panel.tsx
++++ b/src/components/features/conversation/usage-panel/usage-panel.tsx
+@@ -74,10 +74,7 @@ export function UsagePanel() {
+             &lt;/span&gt;
+           )}
+           {usage !== null &amp;&amp; &lt;UsageSection usage={usage} /&gt;}
+-          &lt;CostSection
+-            cost={metrics.cost}
+-            maxBudgetPerTask={metrics.max_budget_per_task}
+-          /&gt;
++          &lt;CostSection cost={metrics.cost} maxBudget={metrics.maxBudget} /&gt;
+         &lt;/div&gt;
+       &lt;/div&gt;
+&#32;
+</code></pre>
+          </details>
+          <details>
+            <summary>Read the actual diff</summary>
+            <pre><code>diff --git a/src/components/features/conversation-panel/budget-progress-bar.tsx b/src/components/features/conversation-panel/budget-progress-bar.tsx
+index 80e7343ee0..c95c716afa 100644
+--- a/src/components/features/conversation-panel/budget-progress-bar.tsx
++++ b/src/components/features/conversation-panel/budget-progress-bar.tsx
+@@ -17,7 +17,7 @@ export function BudgetProgressBar({
+       &lt;div
+         className={cn(
+           &quot;absolute inset-y-0 left-0 rounded-full transition-all duration-300&quot;,
+-          isNearLimit ? &quot;bg-red-500&quot; : &quot;bg-blue-500&quot;,
++          isNearLimit ? &quot;bg-status-error&quot; : &quot;bg-foreground&quot;,
+         )}
+         // runtime usage-percentage width
+         style={{
+</code></pre>
+          </details>
+        </section>
+        <section id="checks">
+          <h2>4. Behavioral evidence and scope</h2>
+          <details class="sources">
+            <summary>Source files and change counts</summary>
+            <ul>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/__tests__/api/agent-server-conversation-service.test.ts#L1"
+                  >__tests__/api/agent-server-conversation-service.test.ts:1</a
+                >
+                <span class="count">✏️ +8 / −1</span>
+              </li>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/__tests__/components/features/conversation-panel/budget-display.test.tsx#L1"
+                  >__tests__/components/features/conversation-panel/budget-display.test.tsx:1</a
+                >
+                <span class="count">✏️ +40 / −36</span>
+              </li>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/__tests__/contexts/conversation-websocket-provider.behavior.test.tsx#L1"
+                  >__tests__/contexts/conversation-websocket-provider.behavior.test.tsx:1</a
+                >
+                <span class="count">✏️ +75 / −2</span>
+              </li>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/__tests__/hooks/use-live-conversation-metrics.test.ts#L1"
+                  >__tests__/hooks/use-live-conversation-metrics.test.ts:1</a
+                >
+                <span class="count">✏️ +128 / −80</span>
+              </li>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/use-await-context-compaction.test.ts#L1"
+                  >src/hooks/use-await-context-compaction.test.ts:1</a
+                >
+                <span class="count">✏️ +42 / −33</span>
+              </li>
+              <li>
+                <a
+                  class="src"
+                  href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/use-compact-context-action.test.tsx#L1"
+                  >src/hooks/use-compact-context-action.test.tsx:1</a
+                >
+                <span class="count">✏️ +16 / −10</span>
+              </li>
+            </ul>
+          </details>
+          <table>
+            <thead>
+              <tr>
+                <th>Behavior exercised</th>
+                <th>Evidence</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  Runtime normalization preserves numeric caps and supports
+                  missing fields, locally and with Cloud runtime coordinates.
+                </td>
+                <td>
+                  <a
+                    class="src"
+                    href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/__tests__/api/agent-server-conversation-service.test.ts#L1989"
+                    >__tests__/api/agent-server-conversation-service.test.ts:1989</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  Live cost keeps the separate cap; switching to an uncapped
+                  conversation drops the previous cap.
+                </td>
+                <td>
+                  <a
+                    class="src"
+                    href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/__tests__/hooks/use-live-conversation-metrics.test.ts#L105"
+                    >__tests__/hooks/use-live-conversation-metrics.test.ts:105</a
+                  >
+                  ·
+                  <a
+                    class="src"
+                    href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/__tests__/hooks/use-live-conversation-metrics.test.ts#L168"
+                    >__tests__/hooks/use-live-conversation-metrics.test.ts:168</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  Planner <code>99</code> is never paired with parent cap
+                  <code>5</code>; parent REST <code>2/5</code> and later live
+                  <code>6/5</code> are shown.
+                </td>
+                <td>
+                  <a
+                    class="src"
+                    href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/__tests__/contexts/conversation-websocket-provider.behavior.test.tsx#L1993"
+                    >__tests__/contexts/conversation-websocket-provider.behavior.test.tsx:1993</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  125% text is preserved while the progress width is 100%.
+                </td>
+                <td>
+                  <a
+                    class="src"
+                    href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/__tests__/components/features/conversation-panel/budget-display.test.tsx#L42"
+                    >__tests__/components/features/conversation-panel/budget-display.test.tsx:42</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  Existing compaction fixtures supply their source IDs; behavior
+                  stays covered.
+                </td>
+                <td>
+                  <a
+                    class="src"
+                    href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/use-await-context-compaction.test.ts#L36"
+                    >src/hooks/use-await-context-compaction.test.ts:36</a
+                  >
+                  ·
+                  <a
+                    class="src"
+                    href="https://github.com/enyst/playground/blob/90350be6e173d1a28fbd74038fb3a2ca8c650017/src/hooks/use-compact-context-action.test.tsx#L60"
+                    >src/hooks/use-compact-context-action.test.tsx:60</a
+                  >
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            <span class="badge">Static checks passed</span> Focused tests,
+            provider and context regressions, TypeScript, application/library
+            builds, changed-file lint and formatting. Exact commands and results
+            are in
+            <a href="budget-static-checks.txt">budget-static-checks.txt</a>.
+            Live verification is documented in the
+            <a href="budget-display-verification/integrated/README.md"
+              >integrated report</a
+            >; the
+            <a href="budget-display-verification/baseline/README.md"
+              >original-PR baseline</a
+            >
+            is separate.
+          </p>
+          <details>
+            <summary>Read the actual diff</summary>
+            <pre><code>diff --git a/__tests__/api/agent-server-conversation-service.test.ts b/__tests__/api/agent-server-conversation-service.test.ts
+index 5440453461..6b16bb9ecb 100644
+--- a/__tests__/api/agent-server-conversation-service.test.ts
++++ b/__tests__/api/agent-server-conversation-service.test.ts
+@@ -2001,6 +2001,7 @@ describe(&quot;AgentServerConversationService&quot;, () =&gt; {
+         title: &quot;Conversation conv-&quot;,
+         status: &quot;idle&quot;,
+         stats: { usage_to_metrics: {} },
++        max_budget_per_run: null,
+       });
+     });
+&#32;
+@@ -2010,6 +2011,7 @@ describe(&quot;AgentServerConversationService&quot;, () =&gt; {
+         makeDirectConversation({
+           title: &quot;Running conversation&quot;,
+           execution_status: &quot;running&quot;,
++          max_budget_per_run: 5,
+           metrics: {
+             accumulated_cost: 2,
+             max_budget_per_task: 10,
+@@ -2036,6 +2038,7 @@ describe(&quot;AgentServerConversationService&quot;, () =&gt; {
+       expect(result).toMatchObject({
+         title: &quot;Running conversation&quot;,
+         status: &quot;running&quot;,
++        max_budget_per_run: 5,
+         metrics: {
+           accumulated_cost: 2,
+           max_budget_per_task: 10,
+@@ -2074,7 +2077,10 @@ describe(&quot;AgentServerConversationService&quot;, () =&gt; {
+       // ConversationClient is constructed against those runtime coordinates
+       // rather than routed through the cloud proxy.
+       mockGetConversation.mockResolvedValue(
+-        makeDirectConversation({ execution_status: &quot;paused&quot; }),
++        makeDirectConversation({
++          execution_status: &quot;paused&quot;,
++          max_budget_per_run: 3,
++        }),
+       );
+&#32;
+       const result =
+@@ -2085,6 +2091,7 @@ describe(&quot;AgentServerConversationService&quot;, () =&gt; {
+         );
+&#32;
+       expect(result.status).toBe(&quot;paused&quot;);
++      expect(result.max_budget_per_run).toBe(3);
+       expect(mockGetConversation).toHaveBeenCalledWith(&quot;conv-cloud&quot;);
+       expect(ConversationClient).toHaveBeenLastCalledWith({
+         conversationId: &quot;conv-cloud&quot;,
+diff --git a/__tests__/components/features/conversation-panel/budget-display.test.tsx b/__tests__/components/features/conversation-panel/budget-display.test.tsx
+index 487adfdfa9..db47925c59 100644
+--- a/__tests__/components/features/conversation-panel/budget-display.test.tsx
++++ b/__tests__/components/features/conversation-panel/budget-display.test.tsx
+@@ -1,51 +1,55 @@
+ import React from &quot;react&quot;;
+-import { describe, expect, it } from &quot;vitest&quot;;
++import { beforeAll, describe, expect, it, vi } from &quot;vitest&quot;;
+ import { screen } from &quot;@testing-library/react&quot;;
++import { createInstance } from &quot;i18next&quot;;
++import { I18nextProvider } from &quot;react-i18next&quot;;
+ import { renderWithProviders } from &quot;test-utils&quot;;
+ import { BudgetDisplay } from &quot;#/components/features/conversation-panel/budget-display&quot;;
++import { translationResources } from &quot;#/i18n/resources&quot;;
+&#32;
+-describe(&quot;BudgetDisplay&quot;, () =&gt; {
+-  it(&quot;renders nothing when cost is null&quot;, () =&gt; {
+-    const { container } = renderWithProviders(
+-      &lt;BudgetDisplay cost={null} maxBudgetPerTask={5} /&gt;,
+-    );
+-    expect(container).toBeEmptyDOMElement();
+-  });
++vi.unmock(&quot;react-i18next&quot;);
+&#32;
+-  it(&quot;renders nothing when maxBudgetPerTask is null (no budget cap)&quot;, () =&gt; {
+-    // Per OHE-3110: there is no way for a user to set max_budget_per_task, so
+-    // the &quot;No budget limit&quot; line must be omitted rather than shown.
+-    const { container } = renderWithProviders(
+-      &lt;BudgetDisplay cost={1.23} maxBudgetPerTask={null} /&gt;,
+-    );
+-    expect(container).toBeEmptyDOMElement();
++const i18n = createInstance();
++
++beforeAll(async () =&gt; {
++  await i18n.init({
++    lng: &quot;en&quot;,
++    resources: { en: { openhands: translationResources.en } },
++    ns: [&quot;openhands&quot;],
++    defaultNS: &quot;openhands&quot;,
++    interpolation: { escapeValue: false },
+   });
++});
++
++function renderBudget(cost: number | null, maxBudget: number | null) {
++  return renderWithProviders(
++    &lt;I18nextProvider i18n={i18n}&gt;
++      &lt;BudgetDisplay cost={cost} maxBudget={maxBudget} /&gt;
++    &lt;/I18nextProvider&gt;,
++  );
++}
+&#32;
+-  it(&quot;renders nothing when maxBudgetPerTask is zero&quot;, () =&gt; {
+-    const { container } = renderWithProviders(
+-      &lt;BudgetDisplay cost={1.23} maxBudgetPerTask={0} /&gt;,
+-    );
++describe(&quot;BudgetDisplay&quot;, () =&gt; {
++  it(&quot;renders nothing when cost is unavailable&quot;, () =&gt; {
++    const { container } = renderBudget(null, 5);
+     expect(container).toBeEmptyDOMElement();
+   });
+&#32;
+-  it(&quot;renders nothing when maxBudgetPerTask is negative&quot;, () =&gt; {
+-    const { container } = renderWithProviders(
+-      &lt;BudgetDisplay cost={1.23} maxBudgetPerTask={-1} /&gt;,
+-    );
++  it.each([null, 0, -1])(&quot;renders nothing for cap %s&quot;, (cap) =&gt; {
++    const { container } = renderBudget(1.23, cap);
+     expect(container).toBeEmptyDOMElement();
+   });
+&#32;
+-  it(&quot;renders the progress bar and usage text when a real cap exists&quot;, () =&gt; {
+-    const { container } = renderWithProviders(
+-      &lt;BudgetDisplay cost={1.23} maxBudgetPerTask={5} /&gt;,
+-    );
+-    // Cap-present branch renders two child rows: BudgetProgressBar (whose
+-    // fill div carries the transition-all class) and BudgetUsageText (the
+-    // usage key renders untranslated in tests). Asserting on both proves we
+-    // did not take the cap-absent (null) branch.
+-    expect(container.querySelector(&quot;.transition-all&quot;)).toBeInTheDocument();
+-    expect(
+-      screen.getByText(&quot;CONVERSATION$BUDGET_USAGE_FORMAT&quot;),
+-    ).toBeInTheDocument();
+-  });
++  it.each([
++    [1.23, &quot;$1.2300 / $5.0000 (24.60% used)&quot;, &quot;24.6%&quot;],
++    [6.25, &quot;$6.2500 / $5.0000 (125.00% used)&quot;, &quot;100%&quot;],
++  ] as const)(
++    &quot;shows actual spend %s and bounds only the meter width&quot;,
++    (cost, text, width) =&gt; {
++      const { container } = renderBudget(cost, 5);
++
++      expect(screen.getByText(text)).toBeInTheDocument();
++      expect(container.querySelector(&quot;[style]&quot;)).toHaveStyle({ width });
++    },
++  );
+ });
+diff --git a/__tests__/contexts/conversation-websocket-provider.behavior.test.tsx b/__tests__/contexts/conversation-websocket-provider.behavior.test.tsx
+index ae252ff32d..081078dda6 100644
+--- a/__tests__/contexts/conversation-websocket-provider.behavior.test.tsx
++++ b/__tests__/contexts/conversation-websocket-provider.behavior.test.tsx
+@@ -8,6 +8,10 @@ import {
+ } from &quot;#/contexts/conversation-websocket-context&quot;;
+ import type { WebSocketHookOptions } from &quot;#/hooks/use-websocket&quot;;
+ import type { AppConversation } from &quot;#/api/conversation-service/agent-server-conversation-service.types&quot;;
++import AgentServerConversationService from &quot;#/api/conversation-service/agent-server-conversation-service.api&quot;;
++import { ExecutionStatus } from &quot;#/types/agent-server/core/base/common&quot;;
++import { NavigationProvider } from &quot;#/context/navigation-context&quot;;
++import { useLiveConversationMetrics } from &quot;#/hooks/use-live-conversation-metrics&quot;;
+ import type { MessageEvent as AgentMessageEvent } from &quot;#/types/agent-server/core/events/message-event&quot;;
+ import type { OpenHandsEvent } from &quot;#/types/agent-server/core&quot;;
+ import { useEventStore } from &quot;#/stores/use-event-store&quot;;
+@@ -152,7 +156,10 @@ type ProviderProps = Omit&lt;
+   &quot;children&quot;
+ &gt;;
+&#32;
+-function renderProvider(overrides: Partial&lt;ProviderProps&gt; = {}) {
++function renderProvider(
++  overrides: Partial&lt;ProviderProps&gt; = {},
++  children: React.ReactNode = &lt;ContextProbe /&gt;,
++) {
+   const queryClient = new QueryClient({
+     defaultOptions: { queries: { retry: false } },
+   });
+@@ -165,7 +172,7 @@ function renderProvider(overrides: Partial&lt;ProviderProps&gt; = {}) {
+   const view = render(
+     &lt;QueryClientProvider client={queryClient}&gt;
+       &lt;ConversationWebSocketProvider {...props}&gt;
+-        &lt;ContextProbe /&gt;
++        {children}
+       &lt;/ConversationWebSocketProvider&gt;
+     &lt;/QueryClientProvider&gt;,
+   );
+@@ -1983,6 +1990,72 @@ describe(&quot;Conversation websocket behavior&quot;, () =&gt; {
+     });
+   });
+&#32;
++  it(&quot;keeps planning spend separate from the parent budget while parent updates stay live&quot;, async () =&gt; {
++    const parent = makeSubConversation({
++      id: &quot;conv-main&quot;,
++      conversation_url: &quot;http://localhost:8000/api/conversations/conv-main&quot;,
++    });
++    const stats = (cost: number) =&gt; ({
++      usage_to_metrics: {
++        agent: {
++          model_name: &quot;test-model&quot;,
++          accumulated_cost: cost,
++          max_budget_per_task: null,
++          accumulated_token_usage: null,
++          costs: [],
++          response_latencies: [],
++          token_usages: [],
++        },
++      },
++    });
++    vi.spyOn(
++      AgentServerConversationService,
++      &quot;batchGetAppConversations&quot;,
++    ).mockResolvedValue([parent]);
++    vi.spyOn(
++      AgentServerConversationService,
++      &quot;getRuntimeConversation&quot;,
++    ).mockResolvedValue({
++      ...parent,
++      status: ExecutionStatus.IDLE,
++      max_budget_per_run: 5,
++      stats: stats(2),
++      available_models: [],
++    });
++
++    function BudgetProbe() {
++      const { cost, maxBudget } = useLiveConversationMetrics();
++      return &lt;output&gt;{`${cost}/${maxBudget}`}&lt;/output&gt;;
++    }
++
++    renderProvider(
++      {
++        subConversations: [makeSubConversation()],
++        subConversationIds: [&quot;conv-planning&quot;],
++      },
++      &lt;NavigationProvider
++        value={{
++          conversationId: parent.id,
++          currentPath: `/conversations/${parent.id}`,
++          isNavigating: false,
++          navigate: vi.fn(),
++        }}
++      &gt;
++        &lt;BudgetProbe /&gt;
++      &lt;/NavigationProvider&gt;,
++    );
++    await screen.findByText(&quot;2/5&quot;);
++
++    dispatchMain(makeStateEvent(&quot;parent-cost&quot;, &quot;stats&quot;, stats(3)));
++    expect(screen.getByText(&quot;3/5&quot;)).toBeInTheDocument();
++
++    dispatchPlanning(makeStateEvent(&quot;planning-cost&quot;, &quot;stats&quot;, stats(99)));
++    expect(screen.getByText(&quot;2/5&quot;)).toBeInTheDocument();
++
++    dispatchMain(makeStateEvent(&quot;parent-overshoot&quot;, &quot;stats&quot;, stats(6)));
++    expect(screen.getByText(&quot;6/5&quot;)).toBeInTheDocument();
++  });
++
+   it(&quot;routes planning-agent events to the shared conversation experience&quot;, () =&gt; {
+     const consumeMatchingPendingMessage = vi.spyOn(
+       useOptimisticUserMessageStore.getState(),
+diff --git a/__tests__/hooks/use-live-conversation-metrics.test.ts b/__tests__/hooks/use-live-conversation-metrics.test.ts
+index 6a5dd2ead5..6f7359ec39 100644
+--- a/__tests__/hooks/use-live-conversation-metrics.test.ts
++++ b/__tests__/hooks/use-live-conversation-metrics.test.ts
+@@ -1,23 +1,22 @@
+-import { renderHook } from &quot;@testing-library/react&quot;;
+-import { describe, it, expect, vi, beforeEach } from &quot;vitest&quot;;
++import React from &quot;react&quot;;
++import { act, renderHook, waitFor } from &quot;@testing-library/react&quot;;
++import { QueryClient, QueryClientProvider } from &quot;@tanstack/react-query&quot;;
++import { describe, it, expect, vi, beforeEach, afterEach } from &quot;vitest&quot;;
+ import useMetricsStore, { type MetricsState } from &quot;#/stores/metrics-store&quot;;
++import AgentServerConversationService from &quot;#/api/conversation-service/agent-server-conversation-service.api&quot;;
+ import type {
+-  MetricsSnapshot,
++  RuntimeMetrics,
++  RuntimeConversationInfo,
+   TokenUsage,
+ } from &quot;#/api/conversation-service/agent-server-conversation-service.types&quot;;
++import { ExecutionStatus } from &quot;#/types/agent-server/core/base/common&quot;;
+&#32;
+ const useActiveConversationMock = vi.fn();
+-const useConversationMetricsMock = vi.fn();
+&#32;
+ vi.mock(&quot;#/hooks/query/use-active-conversation&quot;, () =&gt; ({
+   useActiveConversation: () =&gt; useActiveConversationMock(),
+ }));
+&#32;
+-vi.mock(&quot;#/hooks/query/use-conversation-metrics&quot;, () =&gt; ({
+-  useConversationMetrics: (...args: unknown[]) =&gt;
+-    useConversationMetricsMock(...args),
+-}));
+-
+ import { useLiveConversationMetrics } from &quot;#/hooks/use-live-conversation-metrics&quot;;
+&#32;
+ const CONVERSATION = {
+@@ -39,13 +38,32 @@ const restUsage = (overrides: Record&lt;string, number | null&gt; = {}): TokenUsage =&gt;
+     ...overrides,
+   }) as unknown as TokenUsage;
+&#32;
+-const snapshot = (
+-  overrides: Partial&lt;MetricsSnapshot&gt; = {},
+-): MetricsSnapshot =&gt; ({
+-  accumulated_cost: 1.23,
+-  max_budget_per_task: 5,
+-  accumulated_token_usage: restUsage(),
+-  ...overrides,
++const runtimeInfo = (
++  metrics: Partial&lt;RuntimeMetrics&gt; = {},
++  maxBudget: number | null = 5,
++): RuntimeConversationInfo =&gt; ({
++  id: CONVERSATION.id,
++  title: &quot;Budget conversation&quot;,
++  created_at: &quot;2026-10-26T00:00:00Z&quot;,
++  updated_at: &quot;2026-10-26T00:00:00Z&quot;,
++  status: ExecutionStatus.IDLE,
++  available_models: [],
++  metrics: null,
++  max_budget_per_run: maxBudget,
++  stats: {
++    usage_to_metrics: {
++      agent: {
++        model_name: &quot;test-model&quot;,
++        accumulated_cost: 1.23,
++        max_budget_per_task: 10,
++        accumulated_token_usage: restUsage(),
++        costs: [],
++        response_latencies: [],
++        token_usages: [],
++        ...metrics,
++      },
++    },
++  },
+ });
+&#32;
+ const storeMetrics: MetricsState = {
+@@ -61,99 +79,129 @@ const storeMetrics: MetricsState = {
+   },
+ };
+&#32;
++function makeWrapper() {
++  const client = new QueryClient({
++    defaultOptions: { queries: { retry: false, gcTime: 0 } },
++  });
++  return ({ children }: { children: React.ReactNode }) =&gt;
++    React.createElement(QueryClientProvider, { client }, children);
++}
++
+ describe(&quot;useLiveConversationMetrics&quot;, () =&gt; {
+   beforeEach(() =&gt; {
+     vi.clearAllMocks();
+-    useMetricsStore.setState({
+-      cost: null,
+-      max_budget_per_task: null,
+-      usage: null,
+-    });
++    useMetricsStore.getState().resetMetrics();
+     useActiveConversationMock.mockReturnValue({ data: CONVERSATION });
+-    useConversationMetricsMock.mockReturnValue({ data: undefined });
++    vi.spyOn(
++      AgentServerConversationService,
++      &quot;getRuntimeConversation&quot;,
++    ).mockResolvedValue(runtimeInfo());
+   });
+&#32;
+-  it(&quot;prefers the live store over the REST snapshot&quot;, () =&gt; {
+-    useMetricsStore.setState(storeMetrics);
+-    useConversationMetricsMock.mockReturnValue({ data: snapshot() });
++  afterEach(() =&gt; {
++    vi.restoreAllMocks();
++  });
+&#32;
+-    const { result } = renderHook(() =&gt; useLiveConversationMetrics());
++  it(&quot;retains the conversation cap when live cost replaces the REST snapshot&quot;, async () =&gt; {
++    const { result } = renderHook(() =&gt; useLiveConversationMetrics(), {
++      wrapper: makeWrapper(),
++    });
++    await waitFor(() =&gt; expect(result.current.cost).toBe(1.23));
++    expect(result.current.maxBudget).toBe(5);
+&#32;
+-    expect(result.current).toEqual(storeMetrics);
++    act(() =&gt;
++      useMetricsStore.getState().setMetrics(storeMetrics, CONVERSATION.id),
++    );
++
++    expect(result.current).toEqual({
++      cost: 9.99,
++      maxBudget: 5,
++      usage: storeMetrics.usage,
++    });
+   });
+&#32;
+-  it(&quot;coerces null token fields from the wire to zero&quot;, () =&gt; {
+-    useConversationMetricsMock.mockReturnValue({
+-      data: snapshot({
++  it(&quot;coerces null token fields from the wire to zero&quot;, async () =&gt; {
++    vi.mocked(
++      AgentServerConversationService.getRuntimeConversation,
++    ).mockResolvedValue(
++      runtimeInfo({
+         accumulated_token_usage: restUsage({
+           completion_tokens: null,
+           context_window: null,
+           per_turn_token: null,
+         }),
+       }),
++    );
++    const { result } = renderHook(() =&gt; useLiveConversationMetrics(), {
++      wrapper: makeWrapper(),
+     });
+&#32;
+-    const { result } = renderHook(() =&gt; useLiveConversationMetrics());
+-
+-    expect(result.current.usage).toEqual({
+-      prompt_tokens: 10,
+-      completion_tokens: 0,
+-      cache_read_tokens: 1,
+-      cache_write_tokens: 2,
+-      context_window: 0,
+-      per_turn_token: 0,
+-    });
++    await waitFor(() =&gt;
++      expect(result.current.usage).toEqual({
++        prompt_tokens: 10,
++        completion_tokens: 0,
++        cache_read_tokens: 1,
++        cache_write_tokens: 2,
++        context_window: 0,
++        per_turn_token: 0,
++      }),
++    );
+   });
+&#32;
+-  it(&quot;maps a missing accumulated_token_usage to null usage&quot;, () =&gt; {
+-    useConversationMetricsMock.mockReturnValue({
+-      data: snapshot({ accumulated_token_usage: null }),
++  it(&quot;maps missing token usage to null usage&quot;, async () =&gt; {
++    vi.mocked(
++      AgentServerConversationService.getRuntimeConversation,
++    ).mockResolvedValue(runtimeInfo({ accumulated_token_usage: null }));
++    const { result } = renderHook(() =&gt; useLiveConversationMetrics(), {
++      wrapper: makeWrapper(),
+     });
+&#32;
+-    const { result } = renderHook(() =&gt; useLiveConversationMetrics());
+-
+-    expect(result.current).toEqual({
+-      cost: 1.23,
+-      max_budget_per_task: 5,
+-      usage: null,
+-    });
++    await waitFor(() =&gt;
++      expect(result.current).toEqual({
++        cost: 1.23,
++        maxBudget: 5,
++        usage: null,
++      }),
++    );
+   });
+&#32;
+-  it(&quot;falls back to the REST snapshot while the store is empty&quot;, () =&gt; {
+-    useConversationMetricsMock.mockReturnValue({ data: snapshot() });
+-
+-    const { result } = renderHook(() =&gt; useLiveConversationMetrics());
+-
+-    expect(result.current).toEqual({
+-      cost: 1.23,
+-      max_budget_per_task: 5,
+-      usage: {
+-        prompt_tokens: 10,
+-        completion_tokens: 20,
+-        cache_read_tokens: 1,
+-        cache_write_tokens: 2,
+-        context_window: 128_000,
+-        per_turn_token: 500,
++  it(&quot;drops the previous cap when switching to an unbounded conversation&quot;, async () =&gt; {
++    vi.mocked(
++      AgentServerConversationService.getRuntimeConversation,
++    ).mockImplementation(async (id) =&gt;
++      id === CONVERSATION.id
++        ? runtimeInfo()
++        : runtimeInfo({ accumulated_cost: 2 }, null),
++    );
++    const { result, rerender } = renderHook(
++      () =&gt; useLiveConversationMetrics(),
++      {
++        wrapper: makeWrapper(),
+       },
++    );
++    await waitFor(() =&gt; expect(result.current.maxBudget).toBe(5));
++
++    useActiveConversationMock.mockReturnValue({
++      data: { ...CONVERSATION, id: &quot;conv-2&quot;, conversation_url: null },
+     });
++    rerender();
++
++    expect(result.current.maxBudget).toBeNull();
++    await waitFor(() =&gt; expect(result.current.cost).toBe(2));
++    expect(result.current.maxBudget).toBeNull();
+   });
+&#32;
+-  it(&quot;threads the enabled flag through to the polling query&quot;, () =&gt; {
+-    renderHook(() =&gt; useLiveConversationMetrics(false));
+-    expect(useConversationMetricsMock).toHaveBeenCalledWith(
+-      &quot;conv-1&quot;,
+-      CONVERSATION.conversation_url,
+-      &quot;sess-key&quot;,
+-      false,
++  it(&quot;pauses the runtime query until enabled&quot;, async () =&gt; {
++    const { result, rerender } = renderHook(
++      ({ enabled }) =&gt; useLiveConversationMetrics(enabled),
++      { wrapper: makeWrapper(), initialProps: { enabled: false } },
+     );
++    expect(
++      AgentServerConversationService.getRuntimeConversation,
++    ).not.toHaveBeenCalled();
+&#32;
+-    useConversationMetricsMock.mockClear();
+-    renderHook(() =&gt; useLiveConversationMetrics());
+-    expect(useConversationMetricsMock).toHaveBeenCalledWith(
+-      &quot;conv-1&quot;,
+-      CONVERSATION.conversation_url,
+-      &quot;sess-key&quot;,
+-      true,
+-    );
++    rerender({ enabled: true });
++
++    await waitFor(() =&gt; expect(result.current.cost).toBe(1.23));
+   });
+ });
+diff --git a/src/hooks/use-await-context-compaction.test.ts b/src/hooks/use-await-context-compaction.test.ts
+index 6ed550a3fe..16259c638b 100644
+--- a/src/hooks/use-await-context-compaction.test.ts
++++ b/src/hooks/use-await-context-compaction.test.ts
+@@ -36,18 +36,21 @@ describe(&quot;useAwaitContextCompaction&quot;, () =&gt; {
+   beforeEach(() =&gt; {
+     vi.useFakeTimers();
+     useEventStore.getState().clearEvents();
+-    useMetricsStore.getState().setMetrics({
+-      cost: null,
+-      max_budget_per_task: null,
+-      usage: {
+-        prompt_tokens: 0,
+-        completion_tokens: 0,
+-        cache_read_tokens: 0,
+-        cache_write_tokens: 0,
+-        context_window: 100_000,
+-        per_turn_token: 10_000,
++    useMetricsStore.getState().setMetrics(
++      {
++        cost: null,
++        max_budget_per_task: null,
++        usage: {
++          prompt_tokens: 0,
++          completion_tokens: 0,
++          cache_read_tokens: 0,
++          cache_write_tokens: 0,
++          context_window: 100_000,
++          per_turn_token: 10_000,
++        },
+       },
+-    });
++      &quot;c1&quot;,
++    );
+   });
+&#32;
+   afterEach(() =&gt; {
+@@ -67,18 +70,21 @@ describe(&quot;useAwaitContextCompaction&quot;, () =&gt; {
+&#32;
+     act(() =&gt; {
+       useEventStore.getState().addEvent(condensationEvent(&quot;cond-1&quot;));
+-      useMetricsStore.getState().setMetrics({
+-        cost: null,
+-        max_budget_per_task: null,
+-        usage: {
+-          prompt_tokens: 0,
+-          completion_tokens: 0,
+-          cache_read_tokens: 0,
+-          cache_write_tokens: 0,
+-          context_window: 100_000,
+-          per_turn_token: 4_000,
++      useMetricsStore.getState().setMetrics(
++        {
++          cost: null,
++          max_budget_per_task: null,
++          usage: {
++            prompt_tokens: 0,
++            completion_tokens: 0,
++            cache_read_tokens: 0,
++            cache_write_tokens: 0,
++            context_window: 100_000,
++            per_turn_token: 4_000,
++          },
+         },
+-      });
++        &quot;c1&quot;,
++      );
+     });
+&#32;
+     expect(onComplete).toHaveBeenCalledWith({
+@@ -145,18 +151,21 @@ describe(&quot;useAwaitContextCompaction&quot;, () =&gt; {
+     const baseline = new Set(useEventStore.getState().eventIds);
+     act(() =&gt; {
+       useEventStore.getState().addEvent(condensationEvent(&quot;cond-early&quot;));
+-      useMetricsStore.getState().setMetrics({
+-        cost: null,
+-        max_budget_per_task: null,
+-        usage: {
+-          prompt_tokens: 0,
+-          completion_tokens: 0,
+-          cache_read_tokens: 0,
+-          cache_write_tokens: 0,
+-          context_window: 100_000,
+-          per_turn_token: 4_000,
++      useMetricsStore.getState().setMetrics(
++        {
++          cost: null,
++          max_budget_per_task: null,
++          usage: {
++            prompt_tokens: 0,
++            completion_tokens: 0,
++            cache_read_tokens: 0,
++            cache_write_tokens: 0,
++            context_window: 100_000,
++            per_turn_token: 4_000,
++          },
+         },
+-      });
++        &quot;c1&quot;,
++      );
+     });
+&#32;
+     const onComplete = vi.fn();
+diff --git a/src/hooks/use-compact-context-action.test.tsx b/src/hooks/use-compact-context-action.test.tsx
+index e0605a613c..69cfb08f6c 100644
+--- a/src/hooks/use-compact-context-action.test.tsx
++++ b/src/hooks/use-compact-context-action.test.tsx
+@@ -60,11 +60,14 @@ describe(&quot;useCompactContextAction (integration)&quot;, () =&gt; {
+   beforeEach(() =&gt; {
+     vi.useFakeTimers();
+     useEventStore.getState().clearEvents();
+-    useMetricsStore.getState().setMetrics({
+-      cost: null,
+-      max_budget_per_task: null,
+-      usage: usage(50_000),
+-    });
++    useMetricsStore.getState().setMetrics(
++      {
++        cost: null,
++        max_budget_per_task: null,
++        usage: usage(50_000),
++      },
++      &quot;c1&quot;,
++    );
+     mutateMock.mockImplementation((_vars, opts) =&gt; opts.onSuccess());
+     successToast.mockClear();
+     errorToast.mockClear();
+@@ -87,11 +90,14 @@ describe(&quot;useCompactContextAction (integration)&quot;, () =&gt; {
+&#32;
+     act(() =&gt; {
+       useEventStore.getState().addEvent(condensationEvent(&quot;cond-x&quot;));
+-      useMetricsStore.getState().setMetrics({
+-        cost: null,
+-        max_budget_per_task: null,
+-        usage: usage(20_000),
+-      });
++      useMetricsStore.getState().setMetrics(
++        {
++          cost: null,
++          max_budget_per_task: null,
++          usage: usage(20_000),
++        },
++        &quot;c1&quot;,
++      );
+     });
+&#32;
+     expect(successToast).toHaveBeenCalledWith(
+</code></pre>
+          </details>
+        </section>
+        <footer>
+          Scope: original color change plus integration commit 90350be. No new
+          budget configuration control, dependency upgrade, accounting owner, or
+          enforcement behavior is introduced in Canvas. Source links are pinned
+          to the revisions above. This temporary artifact is intended for PR
+          review.
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>

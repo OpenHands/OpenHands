@@ -74,7 +74,7 @@ if (typeof requestAnimationFrame === "undefined") {
 // properties on `globalThis` and removes them during per-file teardown with
 // `keys.forEach((key) => delete global[key])`. If an in-flight intercepted
 // XHR (e.g. PostHog analytics, or any request that escaped to the real
-// network under `onUnhandledRequest: "bypass"` and is still waiting on a
+// network under `onUnhandledFrame: "bypass"` and is still waiting on a
 // socket) settles after teardown, its callback evaluates `ProgressEvent`
 // against a torn-down global and throws
 // `ReferenceError: ProgressEvent is not defined` (or the
@@ -182,14 +182,6 @@ vi.mock("react-i18next", async (importOriginal) => ({
   }),
 }));
 
-vi.mock("#/hooks/use-is-on-tos-page", () => ({
-  useIsOnTosPage: () => false,
-}));
-
-vi.mock("#/hooks/use-is-on-intermediate-page", () => ({
-  useIsOnIntermediatePage: () => false,
-}));
-
 // Mock useRevalidator from react-router to allow direct store manipulation in tests
 vi.mock("react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router")>()),
@@ -203,7 +195,7 @@ vi.mock("zustand");
 
 // Mock requests during tests
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: "bypass" });
+  server.listen({ onUnhandledFrame: "bypass" });
   vi.stubGlobal("ResizeObserver", MockResizeObserver);
 });
 

@@ -59,12 +59,33 @@ const solarized: ITheme = {
   brightWhite: "#002b36",
 };
 
+const paper: ITheme = {
+  black: "#29241f",
+  red: "#9b4428",
+  green: "#52644b",
+  yellow: "#79601f",
+  blue: "#3f5f7c",
+  magenta: "#70456a",
+  cyan: "#346458",
+  white: "#6b6258",
+  brightBlack: "#6b6258",
+  brightRed: "#84371f",
+  brightGreen: "#43563c",
+  brightYellow: "#6b5219",
+  brightBlue: "#304f6d",
+  brightMagenta: "#60365a",
+  brightCyan: "#28564a",
+  brightWhite: "#29241f",
+  selectionBackground: "rgba(155, 68, 40, 0.18)",
+};
+
 const palettes: Record<ColorThemeKey, ITheme> = {
   "openhands-deepsea": dark,
   "openhands-neutral": dark,
   "openhands-neo": dark,
   "light-plus": light,
   "solarized-light": solarized,
+  paper,
 };
 
 export function getTerminalTheme(
@@ -77,8 +98,9 @@ export function getTerminalTheme(
     foreground,
     cursor: foreground,
     selectionBackground:
-      COLOR_THEMES[key].appearance === "light"
+      palettes[key].selectionBackground ??
+      (COLOR_THEMES[key].appearance === "light"
         ? "rgba(0, 80, 160, 0.2)"
-        : "rgba(255, 255, 255, 0.25)",
+        : "rgba(255, 255, 255, 0.25)"),
   };
 }

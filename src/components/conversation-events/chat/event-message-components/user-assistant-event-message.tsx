@@ -22,12 +22,14 @@ import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 interface UserAssistantEventMessageProps {
   event: MessageEvent;
+  suppressReasoning?: boolean;
   isLastMessage: boolean;
   isFromPlanningAgent: boolean;
 }
 
 function UserAssistantEventMessageComponent({
   event,
+  suppressReasoning = false,
   isFromPlanningAgent,
 }: UserAssistantEventMessageProps) {
   const { t } = useTranslation("openhands");
@@ -123,7 +125,9 @@ function UserAssistantEventMessageComponent({
 
   return (
     <>
-      {reasoning && <CollapsibleThinking content={reasoning} />}
+      {!suppressReasoning && reasoning && (
+        <CollapsibleThinking content={reasoning} />
+      )}
       <ChatMessage
         type={event.source}
         message={message}

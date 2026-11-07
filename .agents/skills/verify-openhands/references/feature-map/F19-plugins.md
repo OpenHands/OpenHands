@@ -91,7 +91,51 @@ Preconditions:
 
 - **Unicode parameter round-trip (`F19.launch-unicode`).** Open `/launch?plugins=W3sic291cmNlIjogImh0dHBzOi8vZ2l0aHViLmNvbS9leGFtcGxlL3BsdWdpbiIsICJwYXJhbWV0ZXJzIjogeyJ0YXNrIjogIuaVtOeQhuWPkeW4g%2BivtOaYjiDwn5qAIn19XQ%3D%3D` (UTF-8 base64 of `[{"source":"https://github.com/example/plugin","parameters":{"task":"整理发布说明 🚀"}}]`). Run `browser value 'testid=plugin-0-param-task'`, screenshot and reload/read again. Expected: exactly `整理发布说明 🚀`. Known failure, reproduced 2026-10-12 ([#16735](https://github.com/OpenHands/OpenHands/issues/16735)): both reads contain Latin-1 mojibake. Leave without trust or Start. This tests the live launch decoder; the source-side URL builder's exception is a separate branch.
 
-- **Cached source rejects an unknown ref (`F19.add-plugin`).** Arrange a run-owned local Git plugin with `.plugin/plugin.json` name `qa-pin-plugin`, a valid skill, tag `v1` at version 1.0.0 and a later main commit at version 2.0.0. Add its `file://` source with Ref `v1` through the real form and uninstall it, leaving the Git cache warm. Add the same source with Ref `qa-does-not-exist`; inspect the modal, toast and installed version, then repeat after uninstalling. Expected: missing-ref error and no installation. Known failure, reproduced twice 2026-10-12 ([OpenHands/software-agent-sdk#5645](https://github.com/OpenHands/software-agent-sdk/issues/5645)): the modal closes with `Plugin installed.` and cached version 1.0.0 is installed. No external Git host or account is required.
+- **Cached source rejects an unknown ref (`F19.add-plugin`).** Install a run-owned local Git plugin `qa-pin-plugin` (tag `v1` at 1.0.0, `main` at 2.0.0) with Ref `v1`, then uninstall it, leaving its Git cache warm. Adding the same `file://` source with Ref `qa-does-not-exist` fails with the toast `Failed to fetch plugin source. Check that the source is valid.`; the Add modal stays open with the typed Ref and nothing is installed. No external Git host or account is needed.
+  ```sh
+  control-openhands browser viewport desktop
+  control-openhands api DELETE /api/plugins/installed/qa-pin-plugin --write >/dev/null 2>&1 || true
+  SRC="$(python3 - <<'PY'
+  import json, os, pathlib, subprocess, tempfile
+  base = pathlib.Path(os.environ["OH_VERIFY_RUN"]) / "workspace"
+  base.mkdir(exist_ok=True)
+  repo = pathlib.Path(tempfile.mkdtemp(prefix="qa-pin-plugin-", dir=base))
+  def git(*args):
+      subprocess.run(["git", "-C", str(repo), "-c", "user.name=QA", "-c", "user.email=qa@example.invalid", *args], check=True, capture_output=True)
+  (repo / ".plugin").mkdir()
+  (repo / "skills/qa-pin").mkdir(parents=True)
+  (repo / "skills/qa-pin/SKILL.md").write_text("---\nname: qa-pin\ndescription: QA pin fixture skill.\n---\nReply QA_PIN.\n")
+  def manifest(version):
+      (repo / ".plugin/plugin.json").write_text(json.dumps({"name":"qa-pin-plugin", "version":version, "description":"QA pin fixture"}))
+  git("init", "-q", "-b", "main")
+  manifest("1.0.0"); git("add", "."); git("commit", "-qm", "v1"); git("tag", "v1")
+  manifest("2.0.0"); git("commit", "-qam", "v2")
+  print("file://" + str(repo))
+  PY
+  )"
+  trap 'control-openhands api DELETE /api/plugins/installed/qa-pin-plugin --write >/dev/null 2>&1 || true; rm -rf "${SRC#file://}"' EXIT
+  control-openhands browser goto /plugins
+  control-openhands browser click 'testid=plugins-add-plugin-button'
+  control-openhands browser fill 'testid=add-plugin-source-input' "$SRC"
+  control-openhands browser fill 'testid=add-plugin-ref-input' v1
+  control-openhands browser click 'testid=add-plugin-submit'
+  control-openhands browser wait 'testid=add-plugin-modal' --state hidden --timeout 120000
+  control-openhands assert --field value --equals 1.0.0 -- api GET /api/plugins/installed/qa-pin-plugin --pick version
+  control-openhands browser click 'testid=plugin-card-qa-pin-plugin'
+  control-openhands browser click 'testid=plugin-detail-uninstall-qa-pin-plugin'
+  control-openhands browser wait 'testid=plugin-detail-modal' --state hidden --timeout 30000
+  control-openhands browser toasts --clear
+  control-openhands browser click 'testid=plugins-add-plugin-button'
+  control-openhands browser fill 'testid=add-plugin-source-input' "$SRC"
+  control-openhands browser fill 'testid=add-plugin-ref-input' qa-does-not-exist
+  control-openhands browser click 'testid=add-plugin-submit'
+  control-openhands browser eval 'new Promise(r=>{const t0=Date.now();const f=()=>{const b=document.querySelector("[data-testid=add-plugin-submit]");if(!b||!/Installing/.test(b.textContent)||Date.now()-t0>60000)r(true);else setTimeout(f,250)};f()})'
+  control-openhands browser eval 'new Promise(r=>setTimeout(r,1000))'
+  control-openhands browser toasts --history
+  control-openhands browser screenshot --feature F19.add-plugin --name cached-unknown-ref
+  control-openhands assert --field count --equals 1 -- browser count 'testid=add-plugin-modal'
+  control-openhands assert --field value --equals qa-does-not-exist -- browser value 'testid=add-plugin-ref-input'
+  ```
 
 - **Update retains a requested pin (`F19.refresh`).** Using that own Git fixture, install Ref `v1` and privately read only its public `requested_ref` metadata in `private/plugins/installed/.installed.json`; it is `v1`. Click the card's Update and wait for the completed `Plugin updated.` toast before reading again. Expected: retain `v1`. Known failure, reproduced 2026-10-12 ([OpenHands/software-agent-sdk#4363](https://github.com/OpenHands/software-agent-sdk/issues/4363)): the stored requested ref becomes null. The visible version remained 1.0.0 in this cache, so this diagnostic proves loss of the requested pin, not a default-HEAD version jump. Earlier completed updates also had null; keep that limit explicit and uninstall the fixture.
 

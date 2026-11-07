@@ -67,6 +67,7 @@ const MONACO_THEME_NAMES: Record<ColorThemeKey, string> = {
   "openhands-neo": "openhands-diff-dark",
   "light-plus": "openhands-diff-light-plus",
   "solarized-light": "openhands-diff-solarized-light",
+  paper: "openhands-diff-paper",
 };
 
 const beforeMount = (monaco: Monaco) => {
@@ -131,6 +132,37 @@ const beforeMount = (monaco: Monaco) => {
       "diffEditor.border": "#D7D0BC",
       "editorUnnecessaryCode.border": "#00000000",
       "editorUnnecessaryCode.opacity": "rgba(88, 110, 117, 0.5)",
+    },
+  });
+
+  monaco.editor.defineTheme("openhands-diff-paper", {
+    base: "vs",
+    inherit: true,
+    rules: [
+      { token: "", foreground: "29241F" },
+      { token: "comment", foreground: "6B6258" },
+      { token: "keyword", foreground: "9B4428" },
+      { token: "string", foreground: "52644B" },
+      { token: "number", foreground: "70456A" },
+      { token: "type", foreground: "346458" },
+      { token: "delimiter", foreground: "29241F" },
+    ],
+    colors: {
+      "editor.background": "#FAF7F1",
+      "editor.foreground": "#29241F",
+      "editorLineNumber.foreground": "#6B6258",
+      "editorLineNumber.activeForeground": "#29241F",
+      "editor.selectionBackground": "#9B44282E",
+      "editor.inactiveSelectionBackground": "#9B44281A",
+      "editor.lineHighlightBackground": "#F4EFE6",
+      "editorGutter.background": "#FAF7F1",
+      "diffEditor.insertedTextBackground": "#52644B26",
+      "diffEditor.removedTextBackground": "#9B442826",
+      "diffEditor.insertedLineBackground": "#E8EDDF",
+      "diffEditor.removedLineBackground": "#F3E4DA",
+      "diffEditor.border": "#CFC6B8",
+      "editorUnnecessaryCode.border": "#00000000",
+      "editorUnnecessaryCode.opacity": "rgba(41, 36, 31, 0.45)",
     },
   });
 };

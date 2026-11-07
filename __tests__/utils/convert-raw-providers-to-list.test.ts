@@ -28,4 +28,17 @@ describe("convertRawProvidersToList", () => {
     expect(convertRawProvidersToList(example3)).toEqual(["gitlab"]);
     expect(convertRawProvidersToList(example4)).toEqual(["azure_devops"]);
   });
+
+  it("drops entries that are not git providers", () => {
+    // Arrange: a cloud backend can report a login-only provider next to a git one
+    const raw = Object.fromEntries(
+      ["github", "enterprise_sso"].map((provider) => [provider, null]),
+    );
+
+    // Act
+    const providers = convertRawProvidersToList(raw);
+
+    // Assert
+    expect(providers).toEqual(["github"]);
+  });
 });

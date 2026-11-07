@@ -30,12 +30,7 @@ import type {
 } from "./types";
 
 export type AutomationHealth =
-  | "healthy"
-  | "failing"
-  | "running"
-  | "disabled"
-  | "never-run"
-  | "unknown";
+  "healthy" | "failing" | "running" | "disabled" | "never-run" | "unknown";
 
 export interface AutomationRunSummary {
   /** Lifetime run count, from the response — not the sample's length. */
@@ -232,6 +227,8 @@ export interface DashboardViewState {
   trigger: DashboardTriggerValue;
   createdBy: DashboardCreatedByValue;
   currentUserId: string | null;
+  /** The selected tag, or null for automations with any tags or none. */
+  tag: string | null;
   sort: DashboardSortValue;
 }
 
@@ -266,6 +263,9 @@ export function applyDashboardView(
         view.createdBy !== "all" &&
         !CREATED_BY_PREDICATES[view.createdBy](automation, view.currentUserId)
       ) {
+        return false;
+      }
+      if (view.tag !== null && !automation.tags?.includes(view.tag)) {
         return false;
       }
       return true;

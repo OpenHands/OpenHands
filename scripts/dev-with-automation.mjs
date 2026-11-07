@@ -40,12 +40,28 @@
  *   as OPENHANDS_AUTOMATION_API_KEY, making it available to agents in conversations.
  *   Both the agent-server and automation backend use the same key value
  *   and the same `X-Session-API-Key` header for authentication.
- *   AUTOMATION_KV_SECRET is derived from the session key if not set explicitly,
- *   enabling the KV store out of the box for local development.
+ *   AUTOMATION_KV_SECRET, if not set explicitly, is pinned in
+ *   <state dir>/automation-kv-secret.txt the first time, seeded with the
+ *   session key, so rotating the session key later does not change it.
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, existsSync, readFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import {
+  closeSync,
+  constants as fsConstants,
+  existsSync,
+  fchmodSync,
+  fstatSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve, dirname, isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { homedir } from "node:os";
@@ -64,6 +80,7 @@ import {
   buildRuntimeServicesInfo,
   buildUvxPythonArgs,
   formatMissingUvxGuidance,
+  resolveFrontendPort,
   validateFrontendDependencies,
   validateLocalAgentServerPath,
 } from "./dev-safe.mjs";
@@ -187,6 +204,7 @@ function parseArgs() {
     frontendOnly: false,
     backendOnly: false,
     host: null,
+    allowLanSessionKey: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -226,6 +244,9 @@ function parseArgs() {
       case "--backend-only":
         config.backendOnly = true;
         break;
+      case "--allow-lan-session-key":
+        config.allowLanSessionKey = true;
+        break;
       case "-H":
       case "--host":
         config.host = args[++i];
@@ -263,6 +284,7 @@ OPTIONS:
   --dynamic                   Force Vite dev server when a wrapper defaults static
   --frontend-only             Start only the frontend behind ingress
   --backend-only              Start only agent-server + automation behind ingress
+  --allow-lan-session-key      Inject the session key on a non-loopback bind (opt-in)
   -v, --verbose               Set backend log level to DEBUG (default: WARNING)
   -h, --help                  Show this help
 
@@ -286,8 +308,10 @@ SECRETS:
   The session API key is automatically seeded into agent-server secrets
   as OPENHANDS_AUTOMATION_API_KEY, making it available to agents in conversations.
   Both backends (agent-server and automation) share the same key value.
-  AUTOMATION_KV_SECRET defaults to the session key so the KV store works
-  out of the box; override with an explicit value for stronger isolation.
+  AUTOMATION_KV_SECRET encrypts automation KV state. Unless set explicitly,
+  it is pinned in <state dir>/automation-kv-secret.txt on first launch (seeded
+  with the session key) and kept from then on, so rotating the session key does
+  not change it. Deleting that file makes existing KV state unreadable.
 
 ACCESS POINTS:
   Main UI:      http://localhost:PORT/
@@ -457,16 +481,14 @@ async function buildConfig(args, env = process.env) {
     parseInt(env.OH_CANVAS_SAFE_AUTOMATION_PORT, 10) || DEFAULT_AUTOMATION_PORT;
   const preferredVitePort = parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
 
-  // Fail fast if any preferred port for a service in this mode is already in use.
+  // Fail fast if any preferred port for a service in this mode is already in
+  // use, so a second agent-canvas instance is detected (#16904).
   const requiredPorts = [{ name: "ingress", port: preferredIngressPort }];
   if (launchAgentServer) {
     requiredPorts.push({ name: "agent-server", port: preferredBackendPort });
   }
   if (launchAutomation) {
     requiredPorts.push({ name: "automation", port: preferredAutomationPort });
-  }
-  if (launchFrontend) {
-    requiredPorts.push({ name: "frontend", port: preferredVitePort });
   }
 
   logStep("ports", "Checking ports...");
@@ -507,14 +529,37 @@ async function buildConfig(args, env = process.env) {
     flag: args.host,
     env:
       env.OH_BIND_HOST ||
-      (env.OH_CONVERSATION_RUNTIME === "docker" ? "0.0.0.0" : undefined),
+      (env.OH_CONVERSATION_RUNTIME === "docker" ||
+      env.OH_CONVERSATION_RUNTIME_SELECTABLE === "1"
+        ? "0.0.0.0"
+        : undefined),
   });
-  if (!isLoopbackBind(bindHost) && !isPublic) {
+  if (!isLoopbackBind(bindHost) && !isPublic && !args.allowLanSessionKey) {
     logService(
       "auth",
       `Bind host ${bindHost} is not loopback — session key will not be injected into HTML`,
       c.yellow,
     );
+  }
+
+  // The frontend is internal (browsers reach it through the ingress), so a
+  // taken preferred port falls back to a free one instead of failing (#17546).
+  let vitePort = preferredVitePort;
+  if (launchFrontend) {
+    vitePort = await resolveFrontendPort(preferredVitePort, {
+      bindHost,
+      reservedPorts: [
+        ...requiredPorts.map(({ port }) => port),
+        ...(launchAgentServer ? [vscodePort] : []),
+      ],
+    });
+    if (vitePort !== preferredVitePort) {
+      logService(
+        "ports",
+        `Frontend port ${preferredVitePort} is taken — using ${vitePort}`,
+        c.yellow,
+      );
+    }
   }
 
   return {
@@ -524,7 +569,7 @@ async function buildConfig(args, env = process.env) {
     // Service ports (internal)
     agentServerPort: preferredBackendPort,
     autoBackendPort: preferredAutomationPort,
-    vitePort: preferredVitePort,
+    vitePort,
     vscodePort,
     // Prefix the editor is served under on the ingress origin. Carried on the
     // config so the route table and the agent-server env are built from one
@@ -553,6 +598,7 @@ async function buildConfig(args, env = process.env) {
 
     // Public mode — the session key should NOT be baked into the frontend
     isPublic,
+    allowLanSessionKey: Boolean(args.allowLanSessionKey),
 
     frontendOnly,
     backendOnly,
@@ -731,12 +777,15 @@ function spawnService(name, command, args, options = {}) {
     emitServiceLog(name, `failed to start: ${error.message}`, "error");
   });
 
-  proc.on("exit", (code, _signal) => {
+  proc.on("exit", (code, signal) => {
     if (code !== 0 && code !== null && !shuttingDown) {
       logService(name, `Exited with code ${code}`, c.red);
       emitServiceLog(name, `exited with code ${code}`, "error");
     }
     processes.delete(name);
+    if (code !== 0 && !shuttingDown) {
+      options.onUnexpectedExit?.(code ?? `signal ${signal}`);
+    }
   });
 
   processes.set(name, proc);
@@ -953,6 +1002,155 @@ function buildAutomationTelemetryEnv(env = process.env) {
   };
 }
 
+// AUTOMATION_KV_SECRET encrypts the automation backend's KV state (and is its
+// fallback key for stored git-sync credentials), so it must not change under
+// existing data. Launchers used to pass the session API key on every start,
+// so rotating that key silently changed the encryption key too (#18299). The
+// first launch without this file pins the session key it runs with -- the
+// value earlier versions used -- and later launches keep it.
+// docker/entrypoint.sh pins to the same file.
+const AUTOMATION_KV_SECRET_FILE = "automation-kv-secret.txt";
+
+// The pin follows one contract in both launchers (docker/entrypoint.sh has
+// the shell version): it must be a regular file, not a symbolic link; an
+// existing pin is made private (0600) before it is used; it is created
+// without replacing anything, so concurrent first launches all end up with
+// the one value that won; a blank pin is replaced by one launcher holding
+// automation-kv-secret.txt.lock, while the others wait for its value; and any
+// failure stops the launch.
+function readPinnedKvSecret(filePath) {
+  let stat;
+  try {
+    stat = lstatSync(filePath);
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+  if (stat.isSymbolicLink()) {
+    throw new Error(`${filePath} is a symbolic link; refusing to use it`);
+  }
+  // Opening a FIFO would block until something writes to it, so reject
+  // anything that is not a regular file before opening it.
+  if (!stat.isFile()) {
+    throw new Error(`${filePath} is not a regular file`);
+  }
+  // O_NOFOLLOW and O_NONBLOCK close the gap between the lstat above and the
+  // open, where the platform has them (not on Windows): a path swapped for a
+  // symbolic link fails to open, and one swapped for a FIFO does not block.
+  const fd = openSync(
+    filePath,
+    fsConstants.O_RDONLY |
+      (fsConstants.O_NOFOLLOW ?? 0) |
+      (fsConstants.O_NONBLOCK ?? 0),
+  );
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) {
+      throw new Error(`${filePath} is not a regular file`);
+    }
+    if (process.platform !== "win32" && opened.mode & 0o077) {
+      fchmodSync(fd, 0o600);
+    }
+    // Read the same way as docker/entrypoint.sh: trailing line breaks are not
+    // part of the key, and a blank file counts as not pinned yet.
+    return readFileSync(fd, "utf8").replace(/[\r\n]+$/, "");
+  } finally {
+    closeSync(fd);
+  }
+}
+
+// Writes the key to a private temporary file, then links it into place. A
+// link never replaces an existing file, so only one concurrent launcher wins,
+// and the others read a pin that is already complete. Returns false if
+// another launcher pinned first.
+function createPinnedKvSecret(filePath, key) {
+  const tmpPath = `${filePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+  writeFileSync(tmpPath, `${key}\n`, { mode: 0o600, flag: "wx" });
+  try {
+    linkSync(tmpPath, filePath);
+    return true;
+  } catch (error) {
+    if (error?.code === "EEXIST") return false;
+    throw error;
+  } finally {
+    rmSync(tmpPath, { force: true });
+  }
+}
+
+// Renames a fully written private file over a blank pin, so the pin never
+// goes missing for launchers that are waiting on it. Only the holder of the
+// pin lock calls this.
+function replaceBlankPinnedKvSecret(filePath, key) {
+  const tmpPath = `${filePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+  writeFileSync(tmpPath, `${key}\n`, { mode: 0o600, flag: "wx" });
+  try {
+    renameSync(tmpPath, filePath);
+  } catch (error) {
+    rmSync(tmpPath, { force: true });
+    throw error;
+  }
+}
+
+function tryLockKvSecretPin(lockPath) {
+  try {
+    mkdirSync(lockPath);
+    return true;
+  } catch (error) {
+    if (error?.code === "EEXIST") return false;
+    throw error;
+  }
+}
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function resolveAutomationKvSecret(config, env = process.env) {
+  if (env.AUTOMATION_KV_SECRET) return env.AUTOMATION_KV_SECRET;
+
+  const filePath = join(config.stateDir, AUTOMATION_KV_SECRET_FILE);
+  const lockPath = `${filePath}.lock`;
+  mkdirSync(config.stateDir, { recursive: true });
+  const pinned = (key) => {
+    logService(
+      "automation",
+      `Pinned AUTOMATION_KV_SECRET in ${filePath}`,
+      c.dim,
+    );
+    return key;
+  };
+  // An unreadable pin throws instead of falling back to the session key, which
+  // could encrypt new state with the wrong key. The attempts allow about 5
+  // seconds of waiting on a concurrent launcher that is replacing a blank pin.
+  let locked = false;
+  try {
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const current = readPinnedKvSecret(filePath);
+      if (current?.trim()) return current;
+      if (current === null) {
+        if (createPinnedKvSecret(filePath, config.sessionApiKey)) {
+          return pinned(config.sessionApiKey);
+        }
+        continue;
+      }
+      // A blank pin counts as not pinned yet. One launcher takes the lock and
+      // reads the pin again under it; the others wait for the new value.
+      if (!locked) {
+        locked = tryLockKvSecretPin(lockPath);
+        if (!locked) sleepSync(100);
+        continue;
+      }
+      replaceBlankPinnedKvSecret(filePath, config.sessionApiKey);
+      return pinned(config.sessionApiKey);
+    }
+  } finally {
+    if (locked) rmSync(lockPath, { recursive: true, force: true });
+  }
+  throw new Error(
+    `Could not pin AUTOMATION_KV_SECRET in ${filePath} (if no other launch is running, remove ${lockPath})`,
+  );
+}
+
 function startAgentServer(config) {
   logService(
     "agent-server",
@@ -1038,6 +1236,19 @@ export function buildAutomationLogArgs(config, env = process.env) {
   ];
 }
 
+/**
+ * Browser origins the automation backend accepts: the ingress, and the
+ * frontend's own port so it can still be browsed directly.
+ *
+ * @param {{ingressPort: number, vitePort: number}} config
+ * @returns {string}
+ */
+export function buildAutomationCorsOrigins(config) {
+  return [config.ingressPort, config.vitePort]
+    .flatMap((port) => [`http://localhost:${port}`, `http://127.0.0.1:${port}`])
+    .join(",");
+}
+
 function startAutomationBackend(config) {
   logService(
     "automation",
@@ -1121,16 +1332,13 @@ function startAutomationBackend(config) {
         ...buildAutomationTelemetryEnv(),
         // KV store secret — required for automations to use the built-in
         // key-value store for state persistence between runs. Used for JWT
-        // signing and value encryption.
-        // Priority:
-        //   1. AUTOMATION_KV_SECRET explicitly set in the user's env
-        //   2. sessionApiKey — convenient zero-config default for local dev
-        AUTOMATION_KV_SECRET:
-          process.env.AUTOMATION_KV_SECRET || config.sessionApiKey,
+        // signing and value encryption. Resolved in main() before any service
+        // starts; see resolveAutomationKvSecret.
+        AUTOMATION_KV_SECRET: config.automationKvSecret,
         // CORS: allow localhost origins for dev, unless explicitly overridden.
         AUTOMATION_CORS_ORIGINS:
           process.env.AUTOMATION_CORS_ORIGINS ||
-          `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:3001,http://127.0.0.1:3001`,
+          buildAutomationCorsOrigins(config),
         FILE_STORE: "local",
         LOCAL_STORAGE_PATH: join(config.stateDir, "storage"),
         OPENHANDS_SUPPRESS_BANNER: "1",
@@ -1207,6 +1415,44 @@ async function watchAutomationStartup(config, proc, timeoutMs, onFailure) {
   onFailure(new Error(message));
 }
 
+/**
+ * Keep a front-door service (the ingress or the static frontend) running.
+ * When it exits on its own, nothing else answers on the UI port, so start it
+ * again; the ingress has crashed natively on Windows (#19255) while the rest
+ * of the stack kept running. After `maxRestarts` the stack is stopped and
+ * `onFailure` gets the error, like an automation startup failure.
+ * `start(options)` must pass `options` on to `spawnService`.
+ */
+export function superviseService(
+  name,
+  start,
+  { onFailure, maxRestarts = 3, restartDelayMs = 1000 },
+) {
+  let restarts = 0;
+  const launch = () =>
+    start({
+      onUnexpectedExit: async (reason) => {
+        if (restarts < maxRestarts) {
+          restarts += 1;
+          logService(
+            name,
+            `Restarting (${restarts}/${maxRestarts})...`,
+            c.yellow,
+          );
+          setTimeout(launch, restartDelayMs);
+          return;
+        }
+        const message =
+          `The ${name} exited ${maxRestarts + 1} times (last: ${reason}). ` +
+          `Its [${name}] log lines show why.`;
+        logError(message);
+        await stopServices();
+        onFailure(new Error(message));
+      },
+    });
+  launch();
+}
+
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 process.on("SIGHUP", shutdown);
@@ -1236,7 +1482,7 @@ export function buildMarsWebEnv(role, config) {
     : { MARS_WEB: "0" };
 }
 
-function startIngress(config) {
+function startIngress(config, { onUnexpectedExit } = {}) {
   logService("ingress", `Starting on port ${config.ingressPort}...`, c.yellow);
 
   const ingressScript = join(projectRoot, "scripts", "ingress.mjs");
@@ -1264,6 +1510,7 @@ function startIngress(config) {
       cwd: projectRoot,
       color: c.yellow,
       env: buildMarsWebEnv("ingress", config),
+      onUnexpectedExit,
     },
   );
 }
@@ -1337,6 +1584,7 @@ function buildViteFrontendEnv(config) {
   // and shows the API-key entry screen.
   const policy = applySessionKeyPolicy({
     host: config.bindHost,
+    allowLanSessionKey: config.allowLanSessionKey,
     sessionApiKey:
       config.launchAgentServer && !config.isPublic
         ? config.sessionApiKey
@@ -1599,11 +1847,12 @@ async function main(options = {}) {
     // download / install progress to the user. `level` is one of
     // "stdout" | "stderr" | "info" | "warn" | "error".
     onServiceLog,
-    // Called with an Error when the automation backend exits before it
-    // becomes healthy, after every service has been stopped. That can happen
-    // after `main()` has returned. Defaults to exiting the process with
-    // code 1; embedded launchers (Electron) pass their own handler.
-    onAutomationStartupFailure = () => process.exit(1),
+    // Called with an Error after every service has been stopped because the
+    // stack cannot keep running: the automation backend exited before it
+    // became healthy, or the ingress/static server kept exiting. That can
+    // happen after `main()` has returned. Defaults to exiting the process
+    // with code 1; embedded launchers (Electron) pass their own handler.
+    onStackFailure = () => process.exit(1),
   } = options;
 
   // Install the listener early so log lines emitted before the first
@@ -1700,6 +1949,11 @@ async function main(options = {}) {
   if (typeof extraPrereqs === "function") {
     extraPrereqs(config);
   }
+  // Before any service starts, so a problem with the pinned secret stops the
+  // launch instead of leaving the agent-server running without automation.
+  if (config.launchAutomation) {
+    config.automationKvSecret = resolveAutomationKvSecret(config);
+  }
 
   if (
     config.launchFrontend &&
@@ -1762,7 +2016,11 @@ async function main(options = {}) {
   // 4. Start frontend server (Vite dev server OR static server)
   if (config.launchFrontend) {
     if (useStaticMode) {
-      startStaticFrontend(config, staticDir);
+      superviseService(
+        "static",
+        (hooks) => startStaticFrontend(config, staticDir, hooks),
+        { onFailure: onStackFailure },
+      );
     } else {
       startVite(config);
     }
@@ -1772,7 +2030,9 @@ async function main(options = {}) {
   await delay(2000);
 
   // 6. Start ingress proxy (routes traffic only to running services)
-  startIngress(config);
+  superviseService("ingress", (hooks) => startIngress(config, hooks), {
+    onFailure: onStackFailure,
+  });
 
   // Wait for ingress to start
   await delay(1000);
@@ -1786,7 +2046,7 @@ async function main(options = {}) {
       config,
       automationProc,
       agentServerReadyTimeoutMs,
-      onAutomationStartupFailure,
+      onStackFailure,
     );
   }
 
@@ -1796,7 +2056,7 @@ async function main(options = {}) {
   return { config, agentServerReady };
 }
 
-function startStaticFrontend(config, staticDir) {
+function startStaticFrontend(config, staticDir, { onUnexpectedExit } = {}) {
   logService("static", `Starting on port ${config.vitePort}...`, c.magenta);
   logService("static", `Serving from: ${staticDir}`, c.dim);
 
@@ -1810,6 +2070,7 @@ function startStaticFrontend(config, staticDir) {
   const staticServerScript = join(projectRoot, "scripts", "static-server.mjs");
   const keyPolicy = applySessionKeyPolicy({
     host: config.bindHost,
+    allowLanSessionKey: config.allowLanSessionKey,
     sessionApiKey:
       config.launchAgentServer && !config.isPublic ? config.sessionApiKey : null,
     authRequired: Boolean(config.launchAgentServer && config.isPublic),
@@ -1827,6 +2088,10 @@ function startStaticFrontend(config, staticDir) {
       ...bindHostArgs(config.bindHost),
       ...(process.env.VITE_BASE_PATH
         ? ["--base-path", process.env.VITE_BASE_PATH]
+        : []),
+      // Explicit LAN opt-in: let static-server keep the key on a non-loopback bind.
+      ...(keyPolicy.sessionApiKey && config.allowLanSessionKey
+        ? ["--allow-lan-session-key"]
         : []),
       // Off-loopback binds and public mode show the API key entry screen.
       ...(keyPolicy.authRequired ? ["--auth-required"] : []),
@@ -1854,6 +2119,7 @@ function startStaticFrontend(config, staticDir) {
         ...buildMarsWebEnv("static", config),
         SESSION_API_KEY: keyPolicy.sessionApiKey || "",
       },
+      onUnexpectedExit,
     },
   );
 }
@@ -1868,6 +2134,7 @@ export {
   buildAutomationTelemetryEnv,
   buildConfig,
   buildRouteArgs,
+  resolveAutomationKvSecret,
   buildViteBackendEnv,
   buildViteFrontendEnv,
   getAgentServerBaseUrl,
@@ -1903,7 +2170,7 @@ const isMainModule =
 if (isMainModule) {
   main().catch((err) => {
     logError(`Fatal error: ${err.message}`);
-    if (err.stack) {
+    if (err.stack && err.code !== "EADDRINUSE") {
       console.error(c.dim + err.stack + c.reset);
       fileLog("error", err.stack);
     }

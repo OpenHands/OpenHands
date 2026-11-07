@@ -67,7 +67,38 @@ Preconditions:
   ```
 - **Escape cancels delete (`F14.delete-escape`).** Run `control-openhands browser goto /settings/secrets`, `control-openhands browser click 'testid=secret-item >> has-text=QA_RENAMED_SECRET >> testid=delete-secret-button'`, `control-openhands browser press Escape`, then `control-openhands browser count 'testid=confirmation-modal'` (`0`) and `browser count 'testid=secret-item >> has-text=QA_RENAMED_SECRET'` (`1`). Clean up: delete `QA_RENAMED_SECRET` and then `QA_REQ_SECRET` (from `F14.agent-request`), each with `delete-secret-button` → `testid=confirmation-modal >> testid=confirm-button`, `browser reload`; `api GET /api/settings/secrets` lists only `OPENHANDS_AUTOMATION_API_KEY`.
 
-- **Cipher mismatch refuses mutation (`F14.create`, `F14.edit`, `F14.delete`).** This is an external-state fixture, not a credential test. Arrange two own dummy secrets and a dummy loopback LLM key; privately back up the run-owned `encryption-key`, `settings.json` and `secrets.json`. Replace only the own cipher file with a newly generated value (never display it), restart and doctor. After bootstrap, restore the old encrypted store bytes under the replacement cipher to isolate the UI write. Add a new dummy secret through the real Secrets form, and inspect only boolean preservation metadata / availability of the old dummy value privately. Independently restore the encrypted settings baseline and change Sound Notifications through Application → Save. Expected: reject writes when existing encrypted state cannot decrypt, preserving it. Known failure, reproduced 2026-10-12 ([OpenHands/software-agent-sdk#5622](https://github.com/OpenHands/software-agent-sdk/issues/5622)): the secret create succeeds and rewrites an old entry while its dummy value is unavailable (getter 404, name still listed); two unrelated settings saves persist the old LLM key as null. Repeat with a fresh replacement cipher. Immediately restore the original cipher and both stores in `finally`, restart and doctor; original state must be readable again. This drives secret creation and settings Save, not every edit/delete permutation. Keep all cipher bytes, values and raw store snapshots private.
+- **Cipher mismatch refuses mutation (`F14.create`, settings Save).** An external-state fixture, not a credential test: the recipe privately backs up the run-owned `encryption-key`, `settings.json`, `secrets.json`, `profiles/` and `provider-connections/`, replaces only the cipher, restarts and puts the old encrypted store bytes back. Add secret is refused with `500: Secrets file is corrupted or encrypted with a different key: restore that key as OH_SECRET_KEY or add it to OH_PREVIOUS_SECRET_KEYS` and `secrets.json` stays byte-identical; Application → Sound Notifications → Save toasts `Settings file is corrupted or encrypted with a different key: …` and `settings.json` is unchanged. The exit trap restores the original cipher and stores and restarts; doctor then passes. Keep cipher bytes and store snapshots private.
+  ```sh
+  control-openhands browser viewport desktop
+  PRIV="$OH_VERIFY_RUN/private"; BK="$PRIV/qa-cipher-backup"
+  QA_REQ="$(mktemp)"; printf '{"name":"QA_CIPHER_OLD","value":"qa-dummy-old","description":"QA cipher fixture"}' > "$QA_REQ"
+  control-openhands api PUT /api/settings/secrets --write --data "@$QA_REQ"
+  rm -rf "$BK"; mkdir -m 700 "$BK"
+  cp -a "$PRIV/encryption-key" "$PRIV/settings.json" "$PRIV/secrets.json" "$PRIV/profiles" "$PRIV/provider-connections" "$BK/"
+  trap 'for f in encryption-key settings.json secrets.json; do cp -a "$BK/$f" "$PRIV/$f"; done; rm -rf "$PRIV/profiles" "$PRIV/provider-connections"; cp -a "$BK/profiles" "$BK/provider-connections" "$PRIV/"; control-openhands restart --timeout 240 >/dev/null; control-openhands api DELETE /api/settings/secrets/QA_CIPHER_OLD --write >/dev/null 2>&1 || true; rm -rf "$BK" "$QA_REQ"' EXIT
+  python3 -c 'import secrets,sys; open(sys.argv[1],"w").write(secrets.token_hex(32))' "$PRIV/encryption-key"
+  control-openhands restart --timeout 240
+  cp -a "$BK/secrets.json" "$BK/settings.json" "$PRIV/"
+  SECRETS_SHA="$(sha256sum < "$PRIV/secrets.json")"; SETTINGS_SHA="$(sha256sum < "$PRIV/settings.json")"
+  control-openhands browser goto /settings/secrets
+  control-openhands browser toasts --clear
+  control-openhands browser click 'testid=add-secret-button'
+  control-openhands browser fill 'testid=add-secret-form >> testid=name-input' QA_CIPHER_NEW
+  control-openhands browser fill 'testid=add-secret-form >> testid=value-input' qa-dummy-new
+  control-openhands browser click 'testid=add-secret-form >> testid=submit-button'
+  control-openhands browser eval 'new Promise(r=>setTimeout(r,3000))'
+  control-openhands browser toasts --history
+  control-openhands browser screenshot --feature F14.create --name cipher-mismatch
+  SECRETS_KEPT="$([ "$(sha256sum < "$PRIV/secrets.json")" = "$SECRETS_SHA" ] && echo true || echo false)"
+  control-openhands browser count 'testid=add-secret-form'
+  control-openhands assert --field value --equals true -- browser eval "$SECRETS_KEPT"
+  control-openhands browser goto /settings/app
+  control-openhands browser click 'testid=app-settings-screen >> text=Sound Notifications'
+  control-openhands browser click 'testid=submit-button'
+  control-openhands browser eval 'new Promise(r=>setTimeout(r,3000))'
+  control-openhands browser toasts --history
+  test "$(sha256sum < "$PRIV/settings.json")" = "$SETTINGS_SHA"
+  ```
 
 ## Gotchas
 
