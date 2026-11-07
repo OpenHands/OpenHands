@@ -242,6 +242,14 @@ describe("vite library build", () => {
       expect(matches, `Single scoped recipe: ${name}`).toHaveLength(1);
       return matches[0];
     };
+    // Keep code padding relative to its own font size in embedded roots.
+    expect(declarations(recipe("px-code-inline-x"))).toEqual({
+      "padding-inline": ".4em",
+    });
+    expect(declarations(recipe("py-code-inline-y"))).toEqual({
+      "padding-block": ".2em",
+    });
+    expect(declarations(recipe("p-code-block"))).toEqual({ padding: "1em" });
     // Message wrapping must retain the legacy word-break behavior; the standard
     // overflow utility controls the independent min-content wrapping contract.
     expect(declarations(recipe("message-word-break"))).toEqual({
