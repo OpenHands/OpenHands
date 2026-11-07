@@ -48,6 +48,8 @@ import { TelemetryConsentBanner } from "#/components/features/analytics/telemetr
 import { buildAgentCanvasPath } from "#/utils/base-path";
 import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
 import { NavigationProvider } from "#/context/navigation-context";
+import { DEVICE_PAIRING_PATH } from "#/api/mars/mars-device-pairing";
+import { UnencryptedConnectionWarning } from "#/components/features/backends/unencrypted-connection-warning";
 import {
   applyColorTheme,
   COLOR_THEME_BOOTSTRAP_SCRIPT,
@@ -106,6 +108,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <body data-agent-server-ui="" className="m-0">
         <AgentServerUIRoot contentClassName="min-h-screen">
           <ColorThemeApplier />
+          <UnencryptedConnectionWarning />
           {children}
           <Toaster toastOptions={TOAST_OPTIONS} />
           <div id="modal-portal-exit" />
@@ -232,6 +235,12 @@ export const meta: MetaFunction = () => [
 ];
 
 export default function App() {
+  const { pathname } = useLocation();
+  if (pathname === DEVICE_PAIRING_PATH) return <Outlet />;
+  return <CanvasApp />;
+}
+
+function CanvasApp() {
   // Flag-based gate: in public mode (VITE_AUTH_REQUIRED=true) with no
   // session key yet, show the auth screen immediately — no network
   // round-trip needed.

@@ -11,7 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
 import App, { links } from "#/root";
 import { server } from "#/mocks/node";
-import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import {
+  __resetActiveStoreForTests,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 import { LOCKED_CLOUD_BACKEND_ID } from "#/api/backend-registry/default-backend";
 import { __resetHealthStoreForTests } from "#/api/backend-registry/health-store";
 import {
@@ -87,6 +90,10 @@ const RouterStub = createRoutesStub([
     path: "/",
     children: [
       {
+        Component: () => <div data-testid="pair-device-page">pair device</div>,
+        path: "/pair",
+      },
+      {
         Component: () => <div data-testid="app-outlet">app outlet</div>,
         path: "/",
       },
@@ -150,6 +157,18 @@ function mockLockedCookieDeployment() {
 }
 
 describe("App root agent-server availability guard", () => {
+  it("allows the pairing landing page before local backend authentication or onboarding", async () => {
+    vi.stubEnv("VITE_AUTH_REQUIRED", "true");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    setRegisteredBackends([]);
+    renderApp(["/pair"]);
+    expect(await screen.findByTestId("pair-device-page")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("first-run-onboarding-screen"),
+    ).not.toBeInTheDocument();
+  });
   beforeEach(() => {
     window.localStorage.clear();
     __resetHealthStoreForTests();

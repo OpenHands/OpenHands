@@ -45,6 +45,7 @@ export default [
     // Unknown URLs (including /settings/<x>) render inside the app shell.
     route("*", "routes/not-found.tsx"),
   ]),
+  route("pair", "routes/pair-device.tsx"),
   route(
     "shared/conversations/:conversationId",
     "routes/shared-conversation.tsx",

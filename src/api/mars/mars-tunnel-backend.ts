@@ -58,6 +58,8 @@ export interface MarsAuthState {
   storage?: MarsStorage;
   /** False when this build has no registered OAuth client; PAT still works. */
   canUseOAuth: boolean;
+  /** A web bridge with a configured host key can admit another browser. */
+  canPairDevices?: boolean;
 }
 
 /** A browser sign-in that has started; the bridge holds its PKCE proof. */

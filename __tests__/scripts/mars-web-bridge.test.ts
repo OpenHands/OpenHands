@@ -347,6 +347,131 @@ describe("RPC_METHODS", () => {
   });
 });
 
+describe("device pairing", () => {
+  const key = "canvas-owner-key";
+  let mars: ReturnType<typeof createMarsWebBridge>;
+  let web: Awaited<ReturnType<typeof startWebServer>>;
+  let now = 1_000;
+  const post = (path: string, body = {}, authenticated = false) =>
+    fetch(`${web.origin}/mars/pairing/${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(authenticated ? { "X-Session-API-Key": key } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+
+  beforeEach(async () => {
+    now = 1_000;
+    mars = createMarsWebBridge({
+      bridge: fakeBridge("http://127.0.0.1:1") as never,
+      key,
+      env: {},
+      now: () => now,
+    });
+    web = await startWebServer(mars);
+  });
+
+  afterEach(async () => {
+    await mars.dispose();
+    web.close();
+  });
+
+  it("admits a second browser once, with the same authority and a restart-stable cookie", async () => {
+    expect((await post("create")).status).toBe(401);
+    const invitation = await (await post("create", {}, true)).json();
+    expect(invitation.expiresAt).toBe(now + 5 * 60_000);
+    const admitted = await post("redeem", { secret: invitation.secret });
+    expect(admitted.status).toBe(200);
+    expect(admitted.headers.get("cache-control")).toBe("no-store");
+    expect(await admitted.json()).toEqual({ sessionApiKey: key });
+    const cookie = admitted.headers.get("set-cookie")!.split(";")[0];
+    expect((await post("redeem", { secret: invitation.secret })).status).toBe(
+      401,
+    );
+
+    await mars.dispose();
+    web.close();
+    mars = createMarsWebBridge({
+      bridge: fakeBridge("http://127.0.0.1:1") as never,
+      key,
+      env: {},
+    });
+    web = await startWebServer(mars);
+    expect(
+      (
+        await rpc(web.origin, "getAuthState", [], {
+          headers: { Cookie: cookie },
+        })
+      ).status,
+    ).toBe(200);
+  });
+
+  it("rejects guessing, expired, cancelled and replaced links without consuming the valid link", async () => {
+    const first = await (await post("create", {}, true)).json();
+    expect((await post("redeem", { secret: "wrong" })).status).toBe(401);
+    const second = await (await post("create", {}, true)).json();
+    expect((await post("redeem", { secret: first.secret })).status).toBe(401);
+    now = second.expiresAt;
+    expect((await post("redeem", { secret: second.secret })).status).toBe(401);
+    const third = await (await post("create", {}, true)).json();
+    expect((await post("cancel", { secret: third.secret })).status).toBe(401);
+    expect((await post("cancel", { secret: third.secret }, true)).status).toBe(
+      200,
+    );
+    expect((await post("redeem", { secret: third.secret })).status).toBe(401);
+  });
+
+  it("allows only one concurrent redemption and refuses cross-origin redemption", async () => {
+    const invitation = await (await post("create", {}, true)).json();
+    expect(
+      (
+        await fetch(`${web.origin}/mars/pairing/redeem`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Origin: "https://untrusted.example",
+          },
+          body: JSON.stringify({ secret: invitation.secret }),
+        })
+      ).status,
+    ).toBe(403);
+    const responses = await Promise.all([
+      post("redeem", { secret: invitation.secret }),
+      post("redeem", { secret: invitation.secret }),
+    ]);
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      200, 401,
+    ]);
+    expect(
+      (
+        await fetch(`${web.origin}/mars/pairing/create`, {
+          headers: { "X-Session-API-Key": key },
+        })
+      ).status,
+    ).toBe(405);
+  });
+
+  it("cancels invitations on sign-out and refuses pairing without a configured key", async () => {
+    const invitation = await (await post("create", {}, true)).json();
+    await rpc(web.origin, "signOut", [], {
+      headers: { "X-Session-API-Key": key },
+    });
+    expect((await post("redeem", { secret: invitation.secret })).status).toBe(
+      401,
+    );
+    await mars.dispose();
+    web.close();
+    mars = createMarsWebBridge({
+      bridge: fakeBridge("http://127.0.0.1:1") as never,
+      env: {},
+    });
+    web = await startWebServer(mars);
+    expect((await post("create")).status).toBe(409);
+  });
+});
+
 describe("createMarsWebBridge", () => {
   let upstream: Awaited<ReturnType<typeof startFakeAgentServer>>;
   let bridge: ReturnType<typeof fakeBridge>;

@@ -7,6 +7,7 @@ import type {
 import { I18nKey } from "#/i18n/declaration";
 import { connectionLabel } from "./managed-agents-labels";
 import { SignInStorageNote } from "./sign-in-storage-note";
+import { DevicePairingButton } from "./device-pairing";
 
 interface AccountBarProps {
   authState: MarsAuthState | undefined;
@@ -76,6 +77,7 @@ export function AccountBar({
         {t(I18nKey.BACKEND$DIGITALOCEAN_SIGN_OUT)}
       </button>
       <SignInStorageNote authState={authState} className="w-full" />
+      {authState?.canPairDevices ? <DevicePairingButton /> : null}
     </div>
   );
 }

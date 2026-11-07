@@ -70,6 +70,8 @@ import { createProxyHandlers, rewriteJsonResponse } from "./proxy-utils.mjs";
 export const MARS_WEB_PREFIX = "/mars";
 const HEALTH_PATH = `${MARS_WEB_PREFIX}/health`;
 const RPC_PREFIX = `${MARS_WEB_PREFIX}/rpc/`;
+const PAIRING_PREFIX = `${MARS_WEB_PREFIX}/pairing/`;
+const PAIRING_TTL_MS = 5 * 60_000;
 const SESSIONS_PREFIX = `${MARS_WEB_PREFIX}/sessions/`;
 
 const RPC_BODY_LIMIT_BYTES = 64 * 1024;
@@ -499,6 +501,7 @@ function toUpstreamRequest(req, path) {
  * @param {string | null} [options.key] Session key every request must present; null = open (loopback dev only — see mountMarsWebBridge)
  * @param {string | null} [options.stateDir] Canvas state directory; null keeps credentials in memory
  * @param {number} [options.authTimeoutMs] How long a socket may take to send the key
+ * @param {() => number} [options.now] Clock for invitation expiry
  * @param {(message: string, error?: unknown) => void} [options.log]
  */
 export function createMarsWebBridge({
@@ -508,6 +511,7 @@ export function createMarsWebBridge({
   key = null,
   stateDir = null,
   authTimeoutMs = FIRST_MESSAGE_AUTH_TIMEOUT_MS,
+  now = Date.now,
   log = (message, error) => console.warn(`[mars-web] ${message}`, error ?? ""),
 } = {}) {
   const dir = stateDir ? path.join(stateDir, STATE_SUBDIR) : null;
@@ -568,6 +572,69 @@ export function createMarsWebBridge({
     return `${AUTH_COOKIE}=${cookieToken}; HttpOnly; SameSite=Strict; Path=${MARS_WEB_PREFIX}`;
   }
 
+  // At most one invitation per host process. Replacing, cancelling, signing
+  // out, or restarting invalidates it. The session key is never in the link.
+  let invitation = null;
+  async function handlePairing(req, res, action) {
+    if (action !== "redeem" && authorize(req) === "deny") {
+      writeJson(res, 401, { error: { message: "session key required" } });
+      return;
+    }
+    if (req.method !== "POST") {
+      writeJson(res, 405, { error: { message: "use POST" } });
+      return;
+    }
+    if (!key) {
+      writeJson(res, 409, {
+        error: { message: "pairing requires a configured session key" },
+      });
+      return;
+    }
+    let body;
+    try {
+      if (!req.headers["content-type"]?.startsWith("application/json")) {
+        throw new Error("use application/json");
+      }
+      body = await readJsonBody(req, 2048);
+    } catch {
+      writeJson(res, 400, { error: { message: "invalid pairing request" } });
+      return;
+    }
+    if (action === "create") {
+      invitation = {
+        secret: randomBytes(32).toString("hex"),
+        expiresAt: now() + PAIRING_TTL_MS,
+      };
+      writeJson(res, 200, invitation);
+      return;
+    }
+    const matches =
+      typeof body?.secret === "string" &&
+      invitation &&
+      safeEqual(body.secret, invitation.secret);
+    if (action === "cancel") {
+      if (matches) invitation = null;
+      writeJson(res, 200, {});
+      return;
+    }
+    if (action !== "redeem") {
+      writeJson(res, 404, { error: { message: "not found" } });
+      return;
+    }
+    if (!matches || now() >= invitation.expiresAt) {
+      writeJson(res, 401, {
+        error: { message: "pairing link is invalid, expired, or already used" },
+      });
+      return;
+    }
+    // Consume synchronously before returning any authority, even when two
+    // browsers redeem concurrently. Only the bearer of the one-time secret
+    // receives the existing host key; this is full Canvas access.
+    invitation = null;
+    res.setHeader("Set-Cookie", cookieHeader());
+    writeJson(res, 200, { sessionApiKey: key });
+  }
+
   if (env.MARS_TOKEN) {
     bridge
       .savePat({ token: env.MARS_TOKEN, label: "MARS_TOKEN" })
@@ -579,6 +646,13 @@ export function createMarsWebBridge({
    * first; every other RPC_METHODS entry is `bridge[method](...args)`.
    */
   const overrides = {
+    getAuthState() {
+      return { ...bridge.getAuthState(), canPairDevices: Boolean(key) };
+    },
+    async signOut(req, ...args) {
+      invitation = null;
+      return bridge.signOut(...args);
+    },
     beginSignIn(req) {
       const { redirectUri, returnsHere } = returnAddress(req);
       return { ...bridge.beginSignIn({ redirectUri }), returnsHere };
@@ -818,6 +892,10 @@ export function createMarsWebBridge({
         void handleOAuthReturn(req, res);
         return true;
       }
+      if (pathOnly.startsWith(PAIRING_PREFIX)) {
+        void handlePairing(req, res, pathOnly.slice(PAIRING_PREFIX.length));
+        return true;
+      }
       const auth = authorize(req);
       if (auth === "deny") {
         writeJson(res, 401, { error: { message: "session key required" } });
@@ -882,6 +960,7 @@ export function createMarsWebBridge({
     },
 
     async dispose() {
+      invitation = null;
       for (const socket of sockets) {
         if (socket instanceof WebSocket) socket.terminate();
         else socket.destroy();

@@ -30,6 +30,7 @@ import {
 import { ManagedAgentsSignIn } from "./managed-agents-sign-in";
 import { SessionStatusDot } from "./session-status-dot";
 import { SignInStorageNote } from "./sign-in-storage-note";
+import { DevicePairingButton } from "./device-pairing";
 import {
   getConnectStage,
   useSessionActivityLabel,
@@ -437,6 +438,7 @@ export function DigitalOceanConnectPanel({
           {t(I18nKey.BACKEND$DIGITALOCEAN_SIGN_OUT)}
         </button>
         <SignInStorageNote authState={authState} className="w-full pl-4.5" />
+        {authState?.canPairDevices ? <DevicePairingButton /> : null}
       </div>
     </div>
   );

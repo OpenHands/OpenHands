@@ -12,6 +12,7 @@ import {
   DEFAULT_AGENT_SERVER_ANALYTICS,
 } from "./components/providers";
 import { installMarsWebBridge } from "./api/mars/mars-web-bridge";
+import { captureDevicePairingSecret } from "./api/mars/mars-device-pairing";
 import { waitForI18n } from "./i18n";
 import { shouldStartMockWorker } from "./mocks/should-start-mock-worker";
 import { withBasePathSlash } from "./utils/base-path-url";
@@ -24,6 +25,7 @@ if (slashedUrl) {
 }
 
 async function prepareApp() {
+  captureDevicePairingSecret();
   // DigitalOcean Managed Agents in the browser: present only when the server
   // this page came from hosts the MARS bridge (scripts/mars-web-bridge.mjs).
   // Must settle before render — the UI reads `window.marsBridge` synchronously.
