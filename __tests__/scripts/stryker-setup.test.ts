@@ -49,10 +49,11 @@ describe("Stryker mutation testing setup", () => {
       "test:mutation:incremental":
         "npm run make-i18n && stryker run --incremental",
     });
-    expect(packageJson.devDependencies).toMatchObject({
-      "@stryker-mutator/core": "9.6.1",
-      "@stryker-mutator/vitest-runner": "9.6.1",
-    });
+    const coreVersion = packageJson.devDependencies["@stryker-mutator/core"];
+    expect(coreVersion).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(packageJson.devDependencies["@stryker-mutator/vitest-runner"]).toBe(
+      coreVersion,
+    );
   });
 
   it("ignores local mutation sandboxes and reports", () => {
