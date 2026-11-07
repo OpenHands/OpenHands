@@ -28,6 +28,7 @@ describe("AutomationsDashboardControls — creator filter declaration", () => {
         trigger="all"
         createdBy="me"
         canFilterByCreator
+        canFilterByServiceAccount={false}
         tag={null}
         tagOptions={[]}
         sort={spec.sort.default}
@@ -84,6 +85,7 @@ describe("AutomationsDashboardControls — tag filter", () => {
         trigger="all"
         createdBy="all"
         canFilterByCreator={false}
+        canFilterByServiceAccount={false}
         tag={props.tag ?? null}
         tagOptions={props.tagOptions ?? ["software-factory", "ci"]}
         sort={spec.sort.default}
