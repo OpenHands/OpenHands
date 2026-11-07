@@ -199,7 +199,11 @@ describe("issue #1534 — streamed intermediate message duplication", () => {
       <Messages messages={uiEvents} allEvents={durableOf(steps)} />,
     );
 
-    expect(screen.getAllByTestId("collapsible-thinking")).toHaveLength(1);
+    fireEvent.click(screen.getAllByTestId("event-group-toggle")[0]);
+    fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
+    expect(screen.getAllByTestId("collapsible-thinking-content")).toHaveLength(
+      1,
+    );
     expect(countOccurrences(container.textContent ?? "", THOUGHT)).toBe(1);
   });
 
@@ -248,10 +252,10 @@ describe("issue #1534 — streamed intermediate message duplication", () => {
       <Messages messages={uiEvents} allEvents={durableOf(steps)} />,
     );
 
-    fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
-    expect(
-      screen.getByTestId("collapsible-thinking-content").textContent ?? "",
-    ).toContain("Considering the request before acting.");
+    fireEvent.click(screen.getByTestId("event-group-toggle"));
+    expect(screen.getByTestId("thinking-content")).toHaveTextContent(
+      "Considering the request before acting.",
+    );
   });
 });
 
@@ -286,11 +290,9 @@ describe("reasoning on a finished message", () => {
       <Messages messages={uiEvents} allEvents={durableOf(steps)} />,
     );
 
-    expect(screen.getAllByTestId("collapsible-thinking")).toHaveLength(1);
-    fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
-    expect(
-      screen.getByTestId("collapsible-thinking-content"),
-    ).toHaveTextContent(REASONING);
+    fireEvent.click(screen.getByTestId("event-group-toggle"));
+    expect(screen.getAllByTestId("thinking-content")).toHaveLength(1);
+    expect(screen.getByTestId("thinking-content")).toHaveTextContent(REASONING);
   });
 });
 
@@ -320,8 +322,7 @@ describe("duplicate Thinking blocks", () => {
       <Messages messages={uiEvents} allEvents={durableOf(steps)} />,
     );
 
-    expect(screen.getAllByTestId("collapsible-thinking")).toHaveLength(1);
-
+    fireEvent.click(screen.getByTestId("event-group-toggle"));
     fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
     expect(
       screen.getByTestId("collapsible-thinking-content"),
@@ -340,10 +341,8 @@ describe("duplicate Thinking blocks", () => {
       <Messages messages={uiEvents} allEvents={durableOf(steps)} />,
     );
 
-    expect(screen.getAllByTestId("collapsible-thinking")).toHaveLength(1);
-    fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
-    expect(
-      screen.getByTestId("collapsible-thinking-content"),
-    ).toHaveTextContent(REASONING);
+    fireEvent.click(screen.getByTestId("event-group-toggle"));
+    expect(screen.getAllByTestId("thinking-content")).toHaveLength(1);
+    expect(screen.getByTestId("thinking-content")).toHaveTextContent(REASONING);
   });
 });

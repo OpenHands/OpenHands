@@ -87,7 +87,21 @@ const AUTH_COOKIE = "mars_web_auth";
  * the Agent Server itself takes it. Nothing reaches the session before that.
  */
 const FIRST_MESSAGE_AUTH_TIMEOUT_MS = 10_000;
-const CLOSE_POLICY = 1008;
+/**
+ * Anyone who can reach the server can open such a socket before the key is
+ * checked, so bound what one may send until it logs in (the login frame, and
+ * anything a client sends right behind it in the same burst) and how many
+ * may wait to log in at once.
+ */
+export const FIRST_MESSAGE_AUTH_MAX_BYTES = 64 * 1024;
+export const FIRST_MESSAGE_AUTH_MAX_PENDING = 32;
+/**
+ * Unsent bytes a slow reader may leave before the relay pauses its sender;
+ * the sender resumes once that falls to a quarter.
+ */
+const RELAY_HIGH_WATER_BYTES = 1024 * 1024;
+/** What the Agent Server closes a socket with when its key is wrong. */
+const CLOSE_AUTH_FAILED = 4001;
 const CLOSE_UNREACHABLE = 1011;
 /** Close codes a peer may not send itself; relayed as their nearest cousin. */
 const RESERVED_CLOSE_CODES = new Map([
@@ -141,6 +155,10 @@ const CANVAS_ONLY_HEADERS = ["cookie", AUTH_HEADER, "origin", "referer"];
  * `MARS_WEB_KEY` wins so a deployment can decouple it from the agent-server
  * key; otherwise the server's own `--session-api-key` is reused, which is
  * what the renderer already holds.
+ *
+ * @param {object} [options]
+ * @param {Record<string, string | undefined>} [options.env]
+ * @param {string | null} [options.sessionApiKey]
  */
 export function resolveMarsWebKey({
   env = process.env,
@@ -160,7 +178,14 @@ export function resolveMarsWebKey({
 export function resolveMarsStateDir(env = process.env) {
   const configured =
     env.MARS_STATE_DIR?.trim() || env.OH_CANVAS_SAFE_STATE_DIR?.trim();
-  return configured || path.join(homedir(), ".openhands", "agent-canvas");
+  if (configured) return configured;
+  try {
+    return path.join(homedir(), ".openhands", "agent-canvas");
+  } catch {
+    // No home folder (HOME unset and no passwd entry, as with `docker run
+    // --user <uid>`): sign-ins stay in memory rather than Canvas not starting.
+    return null;
+  }
 }
 
 /**
@@ -173,21 +198,19 @@ export function deriveAuthCookieValue(key) {
 }
 
 /**
- * Mount the bridge for a server, or return null when it must not be. On by
- * default; off when:
+ * The web integration is experimental: mount only with `MARS_WEB=1`.
+ * This readiness flag is separate from authentication. An opted-in bridge
+ * still refuses a non-loopback bind without a key. Launchers set `MARS_WEB=0`
+ * on static children and under Electron so only the web ingress hosts it.
+ * Off is silent unless the env suggests someone meant it on
+ * (`marsWebOffWarning`).
  *
- * - `MARS_WEB=0`. The explicit opt-out, for a server that fronts nothing a
- *   browser reaches directly (dev-with-automation's static child behind the
- *   ingress) or runs under Electron, where the preload already provides the
- *   bridge and a second one would only hold its own sign-in state.
- * - No key on a non-loopback bind: the routes would be open to the LAN with
- *   the DO token behind them.
- *
- * The refusal is a warning only when someone asked for the bridge (the old
- * `MARS_WEB=1` opt-in, or `MARS_TOKEN` set); a Docker public-mode instance
- * that never uses DigitalOcean gets a debug line, not a warning on every
- * start. `MARS_WEB_KEY` is not a signal here: with it set there is a key and
- * this branch is never reached.
+ * @param {object} [options]
+ * @param {Record<string, string | undefined>} [options.env]
+ * @param {string} [options.host]
+ * @param {string | null} [options.sessionApiKey]
+ * @param {(message: string) => void} [options.log]
+ * @param {(message: string) => void} [options.debug]
  */
 export function mountMarsWebBridge({
   env = process.env,
@@ -196,11 +219,14 @@ export function mountMarsWebBridge({
   log = (message) => console.warn(`[mars-web] ${message}`),
   debug = (message) => console.debug(`[mars-web] ${message}`),
 } = {}) {
-  if (isMarsWebDisabled(env, log)) return null;
+  if (env.MARS_WEB !== "1") {
+    const warning = marsWebOffWarning(env);
+    if (warning) log(warning);
+    return null;
+  }
   const key = resolveMarsWebKey({ env, sessionApiKey });
   if (!key && !isLoopbackBind(host)) {
-    const optedIn = env.MARS_WEB === "1" || Boolean(env.MARS_TOKEN?.trim());
-    (optedIn ? log : debug)(
+    log(
       `no key and bind host ${host} is not loopback; not mounting /mars/* (set MARS_WEB_KEY or --session-api-key).`,
     );
     return null;
@@ -214,27 +240,23 @@ export function mountMarsWebBridge({
   });
 }
 
-const MARS_WEB_OFF = new Set(["0", "false", "off", "no"]);
-const MARS_WEB_ON = new Set(["", "1", "true", "on", "yes"]);
-
 /**
- * `MARS_WEB=0` (also `false`, `off`, `no`) turns the bridge off for a server
- * that must not host it. The old `MARS_WEB=1` opt-in and its synonyms mean
- * on, which is the default anyway. Anything else is a typo in the off switch:
- * say so once, and stay on, since on is what no value means.
+ * Why the bridge stays off, for an operator who seems to have wanted it on;
+ * null otherwise, so a server nobody pointed at DigitalOcean starts quietly.
+ * Any value but `1` or `0` (launchers set `0` on purpose) gets a line, since
+ * it may be a mistyped opt-in (`true`, `"1 "`, a quoted `"1"` from
+ * `docker run --env-file`), and so does `MARS_TOKEN` with no `MARS_WEB`.
  */
-export function isMarsWebDisabled(
-  env = process.env,
-  log = (message) => console.warn(`[mars-web] ${message}`),
-) {
-  const value = (env.MARS_WEB ?? "").trim().toLowerCase();
-  if (MARS_WEB_OFF.has(value)) return true;
-  if (!MARS_WEB_ON.has(value)) {
-    log(
-      `MARS_WEB=${JSON.stringify(env.MARS_WEB)} is not recognised (use 0/false/off/no to turn the bridge off); leaving it on.`,
-    );
+function marsWebOffWarning(env) {
+  const value = env.MARS_WEB ?? "";
+  if (value.trim() === "0") return null;
+  if (value) {
+    return `MARS_WEB=${JSON.stringify(value)} is not "1"; not mounting /mars/* (set MARS_WEB=1).`;
   }
-  return false;
+  if (env.MARS_TOKEN?.trim()) {
+    return `MARS_TOKEN is set but MARS_WEB is not "1"; not mounting /mars/* (set MARS_WEB=1).`;
+  }
+  return null;
 }
 
 function safeEqual(a, b) {
@@ -256,6 +278,46 @@ function isAuthFrame(text, key) {
     typeof message.session_api_key === "string" &&
     safeEqual(message.session_api_key, key)
   );
+}
+
+/** Whether a request brought the key header or a bridge cookie, right or not. */
+function presentsCredentials(req) {
+  return (
+    req.headers[AUTH_HEADER] !== undefined ||
+    readCookie(req, AUTH_COOKIE) !== null
+  );
+}
+
+/**
+ * Forward `from`'s frames to `to`. Frames that arrive while `to` is still
+ * connecting wait in order, and `from` is paused while `to` has more than
+ * RELAY_HIGH_WATER_BYTES unsent, so a slow reader cannot make this process
+ * buffer without bound.
+ */
+function relayFrames(from, to) {
+  const early = [];
+  const forward = (data, isBinary) => {
+    to.send(data, { binary: isBinary }, () => {
+      if (from.isPaused && to.bufferedAmount < RELAY_HIGH_WATER_BYTES / 4) {
+        from.resume();
+      }
+    });
+    if (to.bufferedAmount > RELAY_HIGH_WATER_BYTES) from.pause();
+  };
+  from.on("message", (data, isBinary) => {
+    if (to.readyState === WebSocket.CONNECTING) {
+      early.push([data, isBinary]);
+      from.pause();
+    } else if (to.readyState === WebSocket.OPEN) {
+      forward(data, isBinary);
+    }
+  });
+  to.once("open", () => {
+    for (const [data, isBinary] of early.splice(0)) forward(data, isBinary);
+    if (from.isPaused && to.bufferedAmount < RELAY_HIGH_WATER_BYTES) {
+      from.resume();
+    }
+  });
 }
 
 function readCookie(req, name) {
@@ -404,6 +466,9 @@ class BadSessionPath extends Error {}
 
 function parseSessionPath(url) {
   if (!url.startsWith(SESSIONS_PREFIX)) return null;
+  // Browsers never send a fragment, and the relay's own client refuses to
+  // dial one, so it is a 400 here rather than an error later.
+  if (url.includes("#")) throw new BadSessionPath("fragment in session path");
   const rest = url.slice(SESSIONS_PREFIX.length);
   const slash = rest.indexOf("/");
   const queryStart = rest.search(/[?#]/);
@@ -697,6 +762,8 @@ export function createMarsWebBridge({
 
   /** Accepts upgrades that log in by their first message. */
   const firstMessageAuth = new WebSocketServer({ noServer: true });
+  /** Sockets taken but not yet logged in. */
+  let pendingLogins = 0;
 
   /**
    * Take the upgrade, wait for the key as the first message, and only then
@@ -704,19 +771,45 @@ export function createMarsWebBridge({
    * guest agent-server takes no key.
    */
   function acceptFirstMessageAuth(req, socket, head, session) {
+    if (pendingLogins >= FIRST_MESSAGE_AUTH_MAX_PENDING) {
+      socket.end("HTTP/1.1 503 Service Unavailable\r\n\r\n");
+      return;
+    }
+    pendingLogins += 1;
+    // ws buffers a whole frame before handing it over, so the bytes are
+    // counted off the raw socket rather than left to its payload limit.
+    let received = head.length;
+    const countBytes = (chunk) => {
+      received += chunk.length;
+      if (received > FIRST_MESSAGE_AUTH_MAX_BYTES) socket.destroy();
+    };
+    let waiting = true;
+    const loggedInOrGone = () => {
+      if (!waiting) return;
+      waiting = false;
+      pendingLogins -= 1;
+      socket.off("data", countBytes);
+    };
+    socket.on("data", countBytes);
+    socket.once("close", loggedInOrGone);
     track(socket);
     firstMessageAuth.handleUpgrade(req, socket, head, (client) => {
       client.on("error", () => {});
       const timer = setTimeout(
-        () => client.close(CLOSE_POLICY, "session key required"),
+        () => client.close(CLOSE_AUTH_FAILED, "Authentication failed"),
         authTimeoutMs,
       );
       client.once("message", (data, isBinary) => {
         clearTimeout(timer);
+        // A key that arrives after the window closed is too late. A refused
+        // socket keeps its place and byte limit until it is gone: the peer
+        // may take its time answering the close.
+        if (client.readyState !== WebSocket.OPEN) return;
         if (isBinary || !isAuthFrame(data.toString("utf8"), key)) {
-          client.close(CLOSE_POLICY, "session key required");
+          client.close(CLOSE_AUTH_FAILED, "Authentication failed");
           return;
         }
+        loggedInOrGone();
         relayWebSocket(client, session);
       });
       client.once("close", () => clearTimeout(timer));
@@ -726,30 +819,32 @@ export function createMarsWebBridge({
   function relayWebSocket(client, { sessionId, path }) {
     const target = upstreamFor(sessionId);
     if (!target) {
-      client.close(CLOSE_UNREACHABLE, `session ${sessionId} is not connected`);
+      // Fixed text: a close reason over 123 bytes makes ws throw, and a long
+      // session id in the path would otherwise take the whole server down.
+      client.close(CLOSE_UNREACHABLE, "session is not connected");
       return;
     }
-    const upstream = new WebSocket(`${target.replace(/^http/, "ws")}${path}`);
+    let upstream;
+    try {
+      // The guest's pings are passed to the agent and its pongs back, so a
+      // dead agent connection is noticed instead of answered for here.
+      upstream = new WebSocket(`${target.replace(/^http/, "ws")}${path}`, {
+        autoPong: false,
+      });
+    } catch {
+      // ws refuses some URLs synchronously; that must not escape the handler.
+      client.close(CLOSE_UNREACHABLE, "session is not reachable");
+      return;
+    }
     track(upstream);
     upstream.on("error", () => {});
-    /** What the client sent while the session was still being dialed. */
-    const queued = [];
-    client.on("message", (data, isBinary) => {
-      if (upstream.readyState === WebSocket.OPEN) {
-        upstream.send(data, { binary: isBinary });
-      } else {
-        queued.push([data, isBinary]);
-      }
+    relayFrames(client, upstream);
+    relayFrames(upstream, client);
+    upstream.on("ping", (data) => {
+      if (client.readyState === WebSocket.OPEN) client.ping(data);
     });
-    upstream.on("open", () => {
-      for (const [data, isBinary] of queued.splice(0)) {
-        upstream.send(data, { binary: isBinary });
-      }
-    });
-    upstream.on("message", (data, isBinary) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(data, { binary: isBinary });
-      }
+    client.on("pong", (data) => {
+      if (upstream.readyState === WebSocket.OPEN) upstream.pong(data);
     });
     upstream.on("close", (code, reason) => {
       if (client.readyState === WebSocket.OPEN) {
@@ -852,8 +947,15 @@ export function createMarsWebBridge({
         );
         return true;
       }
-      if (allowed) proxyWebSocket(req, socket, head, session);
-      else acceptFirstMessageAuth(req, socket, head, session);
+      if (allowed) {
+        proxyWebSocket(req, socket, head, session);
+      } else if (presentsCredentials(req)) {
+        // A wrong key or a stale cookie (the key was rotated) is refused at
+        // once, as before; only a bare upgrade may log in by first message.
+        socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");
+      } else {
+        acceptFirstMessageAuth(req, socket, head, session);
+      }
       return true;
     },
 

@@ -19,6 +19,12 @@ export interface AutomationTrigger {
   on?: string | string[];
   /** JMESPath filter expression evaluated against the raw webhook payload. */
   filter?: string;
+  /**
+   * Where a matching event goes (event triggers only): `"dispatch_run"`
+   * (default) starts a new run, `"continue_conversation"` resumes the
+   * conversation an earlier event started.
+   */
+  destination?: string;
 }
 
 /**
@@ -30,9 +36,21 @@ export interface AutomationRepository {
   url: string;
   /** Branch, tag or commit to check out; absent uses the default branch. */
   ref?: string;
+  /** Git provider that authenticates the clone; required for the shorthand. */
+  provider?: string;
 }
 
 export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
+
+/**
+ * `POST /v1/{id}/run-as` body: hand the automation to a service account of
+ * the org, or back to the caller (managers only).
+ */
+export type ChangeRunAsRequest =
+  { to: "service"; service_account_id: string } | { to: "self" };
+
+/** What kind of identity an automation runs as. */
+export type AutomationRunAsKind = "user" | "service";
 
 export interface Automation {
   id: string;
@@ -64,12 +82,26 @@ export interface Automation {
   /** UTC timestamp the automation was last disabled. */
   disabled_at?: string | null;
   /**
-   * UUID of the user who created this automation. The backend returns it in
-   * `AutomationResponse.user_id`; the frontend uses it to implement the
-   * "creator escape hatch" — a member (view-only) may still edit their own
-   * automations even without `manage_automations`.
+   * UUID of the identity the automation runs as: a person, or a service
+   * account (see `run_as_kind`). Usually the creator for a person, but not
+   * after a manager changes it to run as themselves (`created_by_user_id`
+   * keeps the creator). The frontend uses it for the "creator escape hatch":
+   * a member (view-only) may still edit automations that run as them without
+   * `manage_automations`.
    */
   user_id?: string;
+  /**
+   * What `user_id` identifies: a person (`user`) or a service account
+   * (`service`). Absent on an automation service older than run-as; treat it
+   * as `user`.
+   */
+  run_as_kind?: AutomationRunAsKind;
+  /**
+   * UUID of the person who created the automation. It differs from `user_id`
+   * when the automation runs as a service account. Absent on an automation
+   * service older than run-as.
+   */
+  created_by_user_id?: string;
   /**
    * Single repository in the import/export file's shape. The automation
    * service does not return it; read `repositories` for what an automation
@@ -81,10 +113,22 @@ export interface Automation {
   /** LLM/model profile name used when no agent profile is selected. */
   model?: string | null;
   /**
+   * Author-written Markdown explaining what the automation does. A
+   * ```mermaid block in it renders as a diagram on the detail page.
+   */
+  description?: string | null;
+  /**
    * Maximum run time in seconds. `null`/omitted uses the server default
    * (600s, 10 min); the deployment reports the maximum it accepts.
    */
   timeout?: number | null;
+  /**
+   * Leave the run's sandbox for runtime TTL cleanup instead of deleting it
+   * when the run finishes. The service forces it on for
+   * `continue_conversation` triggers. Absent from an automation service that
+   * does not expose it.
+   */
+  keep_alive?: boolean | null;
 
   created_at: string;
   updated_at: string;
@@ -123,6 +167,30 @@ export interface Automation {
    * `#/utils/automation-preset-sources`.
    */
   preset_metadata?: Record<string, unknown> | null;
+  /**
+   * Labels the creator groups automations by, normalized by the automation
+   * service. Absent from an automation service older than tag support.
+   */
+  tags?: string[];
+}
+
+/** One of the org's tags and how many live automations carry it. */
+export interface AutomationTagCount {
+  tag: string;
+  count: number;
+}
+
+/**
+ * The bundle an export file carries for an automation that runs a script
+ * instead of a prompt, so an import can upload it again.
+ */
+export interface AutomationScriptBundle {
+  /** Shell command the service runs in the unpacked bundle's root. */
+  entrypoint: string;
+  /** Optional setup script path inside the bundle. */
+  setup_script_path?: string;
+  /** The bundle exactly as the service stores it (a gzipped tar), base64-encoded. */
+  tarball_base64: string;
 }
 
 export type AutomationSpec = Omit<
@@ -137,7 +205,10 @@ export type AutomationSpec = Omit<
   | "disabled_reason"
   | "disabled_detail"
   | "disabled_at"
->;
+> & {
+  /** Present for a script automation, whose `prompt` is null. */
+  script?: AutomationScriptBundle;
+};
 
 /** The envelope constants come from the interface manifest's import/export spec. */
 export interface AutomationExportFile {
@@ -168,11 +239,7 @@ export enum AutomationRunStatus {
 }
 
 export type AutomationTaskOutcomeStatus =
-  | "success"
-  | "partial_success"
-  | "blocked"
-  | "failed"
-  | "unknown";
+  "success" | "partial_success" | "blocked" | "failed" | "unknown";
 
 export interface AutomationFinishToolResponse {
   status?: AutomationTaskOutcomeStatus | string;
@@ -230,20 +297,12 @@ export interface AutomationRun {
    */
   cost?: number | null;
   /**
-   * Machine-readable code for the run's current or last-known phase (e.g.
-   * "sandbox_provisioning"). `null` means nothing has reported one; absent
-   * entirely against an automation service that predates phase reporting.
-   * Code and label are one value, always written together.
+   * User-facing live phase from automation ≥1.9.0. Free-form text the
+   * service already sanitised for the dashboard — not a translation key.
+   * `null` means nothing has been reported; absent entirely against a
+   * service older than phase reporting.
    */
-  phase_code?: string | null;
-  /**
-   * Author-supplied description of the phase (at most 200 characters, no
-   * control or separator characters, emoji and non-Latin text allowed).
-   * Data, not translatable interface copy.
-   */
-  phase_label?: string | null;
-  /** UTC datetime the phase was last written. Same nullability as `phase_code`. */
-  phase_updated_at?: string | null;
+  current_phase?: string | null;
   started_at: string;
   completed_at: string | null;
 }
@@ -282,8 +341,7 @@ export interface AutomationRunExportRow {
    */
   cost: number | null;
   /**
-   * The raw `phase_code`, like `status`, falling back to `phase_label` for a
-   * phase reported without a code. Null only when the run has no phase.
+   * The run's `current_phase` as stored. Null only when the run has no phase.
    */
   phase: string | null;
 }

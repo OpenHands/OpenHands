@@ -25,7 +25,7 @@ ARG AGENT_SERVER_VERSION
 ARG AUTOMATION_VERSION
 
 # ── Stage 1: Build frontend ──────────────────────────────────────────────────
-FROM node:24-slim AS frontend-build
+FROM node:24.22.1-slim AS frontend-build
 
 WORKDIR /build
 
@@ -49,7 +49,7 @@ RUN npm run build
 
 # ── Stage 1b: Generate shell-sourceable defaults from config/defaults.json ──
 # This avoids needing jq/python at container runtime to parse the JSON.
-FROM node:24-slim AS config-gen
+FROM node:24.22.1-slim AS config-gen
 COPY config/defaults.json /tmp/
 RUN node -e " \
   const c = JSON.parse(require('fs').readFileSync('/tmp/defaults.json','utf-8')); \
@@ -122,9 +122,11 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
 
 # Install automation server and the tool models its SDK clients deserialize.
 # Match openhands-tools to the SDK already provided by the agent-server image,
-# just as the local Canvas launcher does.
-RUN uv pip install --system "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" 2>/dev/null \
-    || pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}"
+# just as the local Canvas launcher does. Pin openhands-agent-server too: it
+# arrives via openhands-workspace, and left unpinned the resolver downgraded it
+# to dodge an openai conflict (#17531).
+RUN uv pip install --system "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}" 2>/dev/null \
+    || pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}"
 
 RUN if [ -n "${AGENT_SERVER_SDK_GIT_REF}" ]; then \
       BASE_GIT_URL="git+https://github.com/OpenHands/software-agent-sdk@${AGENT_SERVER_SDK_GIT_REF}" && \
@@ -149,17 +151,22 @@ COPY scripts/mars-tunnel-bridge.mjs /opt/agent-canvas/mars-tunnel-bridge.mjs
 COPY scripts/mars-api.mjs /opt/agent-canvas/mars-api.mjs
 COPY scripts/mars-credentials.mjs /opt/agent-canvas/mars-credentials.mjs
 COPY scripts/mars-secret-store.mjs /opt/agent-canvas/mars-secret-store.mjs
+COPY scripts/mars-lock-file.mjs /opt/agent-canvas/mars-lock-file.mjs
 COPY scripts/mars-oauth.mjs /opt/agent-canvas/mars-oauth.mjs
 COPY scripts/mars-session.mjs /opt/agent-canvas/mars-session.mjs
 COPY scripts/mars-sandbox-prep.mjs /opt/agent-canvas/mars-sandbox-prep.mjs
 COPY scripts/tunnel-client.mjs /opt/agent-canvas/tunnel-client.mjs
 COPY scripts/tunnel-registry.mjs /opt/agent-canvas/tunnel-registry.mjs
 COPY --from=frontend-build /build/node_modules/ws /opt/agent-canvas/node_modules/ws
+COPY --from=frontend-build /build/node_modules/@openhands/typescript-client /opt/agent-canvas/node_modules/@openhands/typescript-client
 COPY --from=frontend-build /build/node_modules/httpxy /opt/agent-canvas/node_modules/httpxy
 COPY --from=frontend-build /build/node_modules/sirv /opt/agent-canvas/node_modules/sirv
 COPY --from=frontend-build /build/node_modules/@polka /opt/agent-canvas/node_modules/@polka
 COPY --from=frontend-build /build/node_modules/mrmime /opt/agent-canvas/node_modules/mrmime
 COPY --from=frontend-build /build/node_modules/totalist /opt/agent-canvas/node_modules/totalist
+# The agent-server reads public skills from the package the frontend bundles
+# (EXTENSIONS_PATH in entrypoint.sh) instead of cloning the extensions repo.
+COPY --from=frontend-build /build/node_modules/@openhands/extensions /opt/agent-canvas/node_modules/@openhands/extensions
 
 # Copy the runtime-services-info builder (entrypoint.sh runs it as a CLI to
 # emit the agent's <RUNTIME_SERVICES> block; same builder the dev stack uses).

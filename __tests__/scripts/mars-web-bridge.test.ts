@@ -7,7 +7,7 @@ import {
 } from "node:http";
 import { mkdtempSync } from "node:fs";
 import net from "node:net";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   afterAll,
@@ -29,12 +29,19 @@ import { server as mswServer } from "#/mocks/node";
 
 import { createMarsTunnelBridge } from "../../scripts/mars-tunnel-bridge.mjs";
 import {
+  FIRST_MESSAGE_AUTH_MAX_BYTES,
+  FIRST_MESSAGE_AUTH_MAX_PENDING,
   RPC_METHODS,
   createMarsWebBridge,
-  isMarsWebDisabled,
   mountMarsWebBridge,
   rewriteAgentServerUrls,
 } from "../../scripts/mars-web-bridge.mjs";
+
+// Lets a test take the home folder away; every other call is the real one.
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  return { ...actual, homedir: vi.fn(actual.homedir) };
+});
 
 const SESSION_ID = "sess_a";
 
@@ -42,7 +49,7 @@ const SESSION_ID = "sess_a";
 // connects, which MSW's interceptor never signals for a request it bypasses.
 // Everything here talks to real loopback servers, so take MSW out of the way.
 beforeAll(() => mswServer.close());
-afterAll(() => mswServer.listen({ onUnhandledRequest: "bypass" }));
+afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
 
 function listen(server: Server): Promise<string> {
   return new Promise((resolve) => {
@@ -132,8 +139,78 @@ async function startFakeAgentServer() {
     },
     openSockets: () =>
       [...wss.clients].filter((c) => c.readyState === WebSocket.OPEN).length,
+    /** Pings every client; resolves once each has ponged back. */
+    ping: (data: string) =>
+      Promise.all(
+        [...wss.clients].map(
+          (c) =>
+            new Promise<void>((resolve) => {
+              c.once("pong", () => resolve());
+              c.ping(data);
+            }),
+        ),
+      ),
     close: () => closeServer(server),
   };
+}
+
+/**
+ * Opens a WebSocket upgrade by hand, for what `ws` refuses to send (a
+ * fragment in the path, a frame after the close). Resolves with the status
+ * line and the raw socket.
+ */
+function rawUpgrade(
+  origin: string,
+  path: string,
+): Promise<{ status: string; socket: net.Socket }> {
+  const { port } = new URL(origin);
+  return new Promise((resolve, reject) => {
+    const socket = net.connect(Number(port), "127.0.0.1", () => {
+      socket.write(
+        `GET ${path} HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\n` +
+          "Upgrade: websocket\r\nConnection: Upgrade\r\n" +
+          "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+          "Sec-WebSocket-Version: 13\r\n\r\n",
+      );
+    });
+    socket.once("error", reject);
+    socket.once("data", (data) =>
+      resolve({ status: data.toString("latin1").split("\r\n")[0], socket }),
+    );
+  });
+}
+
+/** A masked client text frame. */
+function clientTextFrame(text: string): Buffer {
+  const payload = Buffer.from(text);
+  const mask = Buffer.from([1, 2, 3, 4]);
+  const masked = payload.map((byte, i) => byte ^ mask[i % 4]);
+  let header: Buffer;
+  if (payload.length < 126) {
+    header = Buffer.from([0x81, 0x80 | payload.length]);
+  } else if (payload.length <= 0xffff) {
+    header = Buffer.from([0x81, 0x80 | 126, 0, 0]);
+    header.writeUInt16BE(payload.length, 2);
+  } else {
+    header = Buffer.alloc(10);
+    header[0] = 0x81;
+    header[1] = 0x80 | 127;
+    header.writeBigUInt64BE(BigInt(payload.length), 2);
+  }
+  return Buffer.concat([header, mask, Buffer.from(masked)]);
+}
+
+/** The status an upgrade was refused with, or 101 if it went through. */
+function upgradeStatus(url: string, headers: Record<string, string> = {}) {
+  return new Promise<number>((resolve) => {
+    const ws = new WebSocket(url, { headers });
+    ws.on("error", () => {});
+    ws.on("unexpected-response", (_req, res) => resolve(res.statusCode ?? 0));
+    ws.on("open", () => {
+      resolve(101);
+      ws.close();
+    });
+  });
 }
 
 /**
@@ -912,13 +989,162 @@ describe("createMarsWebBridge with a session key", () => {
     stream.stop();
   });
 
+  it("closes a keyed socket to an unknown, very long session id without crashing", async () => {
+    const longId = `sess_${"x".repeat(200)}`;
+    const ws = new WebSocket(
+      `${web.origin.replace("http", "ws")}/mars/sessions/${longId}/sockets/session/c1`,
+    );
+    const closed = new Promise<number>((resolve) =>
+      ws.on("close", (code) => resolve(code)),
+    );
+    await new Promise<void>((resolve, reject) => {
+      ws.on("open", () => resolve());
+      ws.on("error", reject);
+    });
+
+    ws.send(JSON.stringify({ type: "auth", session_api_key: KEY }));
+
+    expect(await closed).toBe(1011);
+    // The server is still alive afterwards.
+    expect((await fetch(`${web.origin}/mars/health`)).status).toBe(200);
+  });
+
   it("closes a socket whose first message is not the key, without touching the session", async () => {
     const { ws, closed } = await openBare();
 
     ws.send(JSON.stringify({ type: "auth", session_api_key: "wrong" }));
 
-    expect(await closed).toBe(1008);
+    expect(await closed).toBe(4001);
     expect(upstream.seen.ws).toHaveLength(0);
+  });
+
+  it.each<{ what: string; headers: Record<string, string> }>([
+    { what: "a wrong key", headers: { "X-Session-API-Key": "wrong" } },
+    { what: "a stale cookie", headers: { Cookie: "mars_web_auth=stale" } },
+  ])(
+    "refuses $what on the socket upgrade at once, without a login window",
+    async ({ headers }) => {
+      await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }], {
+        headers: { "X-Session-API-Key": KEY },
+      });
+      const url = `${web.origin.replace("http", "ws")}/mars/sessions/${SESSION_ID}/mars-upstream/socket`;
+
+      expect(await upgradeStatus(url, headers)).toBe(401);
+      expect(upstream.seen.ws).toHaveLength(0);
+    },
+  );
+
+  it("drops a socket that sends more than a login's worth before logging in", async () => {
+    const { ws, closed } = await openBare();
+
+    ws.send("x".repeat(FIRST_MESSAGE_AUTH_MAX_BYTES + 1));
+
+    expect(await closed).toBe(1006);
+    expect(upstream.seen.ws).toHaveLength(0);
+    expect((await fetch(`${web.origin}/mars/health`)).status).toBe(200);
+  });
+
+  it("refuses more sockets waiting to log in than it allows, and frees a place when one goes", async () => {
+    await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }], {
+      headers: { "X-Session-API-Key": KEY },
+    });
+    const url = `${web.origin.replace("http", "ws")}/mars/sessions/${SESSION_ID}/mars-upstream/socket`;
+    const waiting = await Promise.all(
+      Array.from(
+        { length: FIRST_MESSAGE_AUTH_MAX_PENDING },
+        () =>
+          new Promise<WebSocket>((resolve, reject) => {
+            const ws = new WebSocket(url);
+            ws.on("open", () => resolve(ws));
+            ws.on("error", reject);
+          }),
+      ),
+    );
+
+    expect(await upgradeStatus(url)).toBe(503);
+
+    waiting[0].close();
+    await vi.waitFor(async () => expect(await upgradeStatus(url)).toBe(101));
+    waiting.forEach((ws) => ws.terminate());
+  });
+
+  /** A raw socket refused for a wrong key, which never answers the close. */
+  async function refusedSocket() {
+    const { status, socket } = await rawUpgrade(
+      web.origin,
+      `/mars/sessions/${SESSION_ID}/mars-upstream/socket`,
+    );
+    expect(status).toBe("HTTP/1.1 101 Switching Protocols");
+    socket.on("error", () => {});
+    const refused = new Promise((resolve) => {
+      socket.once("data", resolve);
+    });
+    socket.write(
+      clientTextFrame(
+        JSON.stringify({ type: "auth", session_api_key: "wrong" }),
+      ),
+    );
+    // The server's close frame.
+    await refused;
+    return socket;
+  }
+
+  it("keeps a refused socket's place until it is gone, however long its close takes", async () => {
+    await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }], {
+      headers: { "X-Session-API-Key": KEY },
+    });
+    const url = `${web.origin.replace("http", "ws")}/mars/sessions/${SESSION_ID}/mars-upstream/socket`;
+    const refused: net.Socket[] = [];
+    for (let i = 0; i < FIRST_MESSAGE_AUTH_MAX_PENDING; i += 1) {
+      refused.push(await refusedSocket());
+    }
+
+    expect(await upgradeStatus(url)).toBe(503);
+
+    refused.forEach((socket) => socket.destroy());
+    await vi.waitFor(async () => expect(await upgradeStatus(url)).toBe(101));
+  });
+
+  it("drops a refused socket that keeps sending, before it piles up data", async () => {
+    await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }], {
+      headers: { "X-Session-API-Key": KEY },
+    });
+    const socket = await refusedSocket();
+    const closed = new Promise((resolve) => {
+      socket.once("close", resolve);
+    });
+
+    socket.write(clientTextFrame("x".repeat(FIRST_MESSAGE_AUTH_MAX_BYTES + 1)));
+
+    await closed;
+    expect(upstream.seen.ws).toHaveLength(0);
+    expect((await fetch(`${web.origin}/mars/health`)).status).toBe(200);
+  });
+
+  it("answers 400 to a socket path with a fragment, and stays up", async () => {
+    const { status, socket } = await rawUpgrade(
+      web.origin,
+      `/mars/sessions/${SESSION_ID}/sockets/events/c1#x`,
+    );
+    socket.destroy();
+
+    expect(status).toBe("HTTP/1.1 400 Bad Request");
+    expect((await fetch(`${web.origin}/mars/health`)).status).toBe(200);
+  });
+
+  it("passes the session's pings to the agent and the agent's pongs back", async () => {
+    const { ws } = await openBare();
+    ws.send(JSON.stringify({ type: "auth", session_api_key: KEY }));
+    await vi.waitFor(() => expect(upstream.openSockets()).toBe(1));
+    const pinged = new Promise<string>((resolve) =>
+      ws.once("ping", (data) => resolve(data.toString())),
+    );
+
+    // Resolves only once the agent's own pong has reached the session.
+    await upstream.ping("are-you-there");
+
+    expect(await pinged).toBe("are-you-there");
+    ws.close();
   });
 });
 
@@ -945,8 +1171,45 @@ describe("createMarsWebBridge first-message login window", () => {
       ws.on("close", (closeCode) => resolve(closeCode)),
     );
 
-    expect(code).toBe(1008);
+    expect(code).toBe(4001);
     expect(upstream.seen.ws).toHaveLength(0);
+    await marsWeb.dispose();
+    web.close();
+    upstream.close();
+  });
+
+  it("ignores a key that arrives after the window has closed", async () => {
+    const upstream = await startFakeAgentServer();
+    const marsWeb = createMarsWebBridge({
+      bridge: fakeBridge(upstream.origin) as never,
+      env: {},
+      key: "k",
+      authTimeoutMs: 20,
+      log: () => {},
+    });
+    const web = await startWebServer(marsWeb);
+    await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }], {
+      headers: { "X-Session-API-Key": "k" },
+    });
+    const { status, socket } = await rawUpgrade(
+      web.origin,
+      `/mars/sessions/${SESSION_ID}/x`,
+    );
+    expect(status).toBe("HTTP/1.1 101 Switching Protocols");
+
+    // The server has sent its close by now; a raw client can still write.
+    await new Promise((resolve) => {
+      setTimeout(resolve, 100);
+    });
+    socket.write(
+      clientTextFrame(JSON.stringify({ type: "auth", session_api_key: "k" })),
+    );
+    await new Promise((resolve) => {
+      setTimeout(resolve, 100);
+    });
+
+    expect(upstream.seen.ws).toHaveLength(0);
+    socket.destroy();
     await marsWeb.dispose();
     web.close();
     upstream.close();
@@ -957,11 +1220,55 @@ describe("mountMarsWebBridge", () => {
   // A mounted bridge reads its state directory; keep it off the developer's.
   const STATE = { MARS_STATE_DIR: mkdtempSync(join(tmpdir(), "mars-mount-")) };
 
-  it("mounts by default on a loopback bind, even without a key", async () => {
+  // Launchers set MARS_WEB=0 on servers that inherit MARS_TOKEN, so an
+  // explicit 0 stays quiet even then.
+  it.each([
+    {},
+    { MARS_WEB_KEY: "k" },
+    { MARS_WEB: "" },
+    { MARS_WEB: "0", MARS_TOKEN: "dop_v1_test" },
+  ])("stays off quietly without MARS_WEB=1: %j", (env) => {
+    const log = vi.fn();
+    const mounted = mountMarsWebBridge({
+      env,
+      host: "127.0.0.1",
+      sessionApiKey: "stack-key",
+      log,
+      debug: log,
+    });
+    expect(mounted).toBeNull();
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ MARS_WEB: "true" }, /MARS_WEB="true" is not "1"/],
+    [{ MARS_WEB: "1 " }, /MARS_WEB="1 " is not "1"/],
+    [{ MARS_WEB: '"1"' }, /MARS_WEB="\\"1\\"" is not "1"/],
+    [
+      { MARS_TOKEN: "dop_v1_test" },
+      /MARS_TOKEN is set but MARS_WEB is not "1"/,
+    ],
+  ])("stays off but warns when it looks meant to be on: %j", (env, message) => {
     const warnings: string[] = [];
     const debugs: string[] = [];
     const mounted = mountMarsWebBridge({
-      env: { ...STATE },
+      env,
+      host: "127.0.0.1",
+      sessionApiKey: "stack-key",
+      log: (m) => warnings.push(m),
+      debug: (m) => debugs.push(m),
+    });
+    expect(mounted).toBeNull();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(message);
+    expect(debugs).toEqual([]);
+  });
+
+  it("mounts with MARS_WEB=1 on a loopback bind, even without a key", async () => {
+    const warnings: string[] = [];
+    const debugs: string[] = [];
+    const mounted = mountMarsWebBridge({
+      env: { ...STATE, MARS_WEB: "1" },
       host: "127.0.0.1",
       log: (m) => warnings.push(m),
       debug: (m) => debugs.push(m),
@@ -972,89 +1279,47 @@ describe("mountMarsWebBridge", () => {
     await mounted!.dispose();
   });
 
-  it("is off with MARS_WEB=0 and its synonyms, silently", () => {
-    for (const value of ["0", "false", "off", "no", "OFF", " 0 "]) {
-      const logs: string[] = [];
-      expect(
-        mountMarsWebBridge({
-          env: { MARS_WEB: value, MARS_WEB_KEY: "k" },
-          host: "127.0.0.1",
-          log: (m) => logs.push(m),
-          debug: (m) => logs.push(m),
-        }),
-      ).toBeNull();
-      expect(logs).toEqual([]);
-    }
-  });
-
-  it("stays on for the old MARS_WEB=1 opt-in, and warns once about a typo", async () => {
-    for (const value of ["1", "true", "on", "yes"]) {
-      const logs: string[] = [];
-      expect(isMarsWebDisabled({ MARS_WEB: value }, (m) => logs.push(m))).toBe(
-        false,
-      );
-      expect(logs).toEqual([]);
-    }
-    const logs: string[] = [];
-    expect(isMarsWebDisabled({ MARS_WEB: "nope" }, (m) => logs.push(m))).toBe(
-      false,
-    );
-    expect(logs[0]).toMatch(/not recognised/);
-    const mounted = mountMarsWebBridge({
-      env: { ...STATE, MARS_WEB: "nope" },
-      host: "127.0.0.1",
-      log: () => {},
-      debug: () => {},
+  it("still starts without a home folder, keeping sign-ins off disk", async () => {
+    // HOME unset and no passwd entry, as with `docker run --user <uid>`.
+    const realHomedir = vi.mocked(homedir).getMockImplementation()!;
+    vi.mocked(homedir).mockImplementation(() => {
+      throw new Error("uv_os_homedir returned ENOENT");
     });
-    expect(mounted).not.toBeNull();
-    await mounted!.dispose();
-  });
+    try {
+      const mounted = mountMarsWebBridge({
+        env: { MARS_WEB: "1" },
+        host: "127.0.0.1",
+        log: () => {},
+        debug: () => {},
+      });
 
-  it("only warns about an unmountable LAN bind when someone opted in", () => {
-    const warnings: string[] = [];
-    const debugs: string[] = [];
-    // Nobody asked for DigitalOcean: a Docker public-mode instance must not
-    // see a warning on every start.
-    expect(
-      mountMarsWebBridge({
-        env: {},
-        host: "::",
-        log: (m) => warnings.push(m),
-        debug: (m) => debugs.push(m),
-      }),
-    ).toBeNull();
-    expect(warnings).toEqual([]);
-    expect(debugs[0]).toMatch(/not loopback/);
-    // MARS_TOKEN, or the old MARS_WEB=1 opt-in, says they meant to use it, so
-    // the refusal is worth a warning.
-    for (const env of [{ MARS_TOKEN: "dop_v1_x" }, { MARS_WEB: "1" }]) {
-      const warned: string[] = [];
-      expect(
-        mountMarsWebBridge({
-          env,
-          host: "::",
-          log: (m) => warned.push(m),
-          debug: () => {},
-        }),
-      ).toBeNull();
-      expect(warned[0]).toMatch(/not loopback/);
+      expect(mounted).not.toBeNull();
+      expect(mounted!.bridge.getAuthState().storage.kind).not.toBe("file");
+      await mounted!.dispose();
+    } finally {
+      vi.mocked(homedir).mockImplementation(realHomedir);
     }
   });
 
   it("refuses a non-loopback bind without a key, and mounts with one", async () => {
-    const logs: string[] = [];
+    // A warning, not a debug line: the operator opted in and DigitalOcean
+    // will be missing.
+    const warnings: string[] = [];
+    const debugs: string[] = [];
     expect(
       mountMarsWebBridge({
-        env: {},
+        env: { MARS_WEB: "1" },
         host: "0.0.0.0",
-        log: (m) => logs.push(m),
-        debug: (m) => logs.push(m),
+        log: (m) => warnings.push(m),
+        debug: (m) => debugs.push(m),
       }),
     ).toBeNull();
-    expect(logs[0]).toMatch(/not loopback/);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/not loopback/);
+    expect(debugs).toEqual([]);
 
     const mounted = mountMarsWebBridge({
-      env: { ...STATE, MARS_WEB_KEY: "k" },
+      env: { ...STATE, MARS_WEB: "1", MARS_WEB_KEY: "k" },
       host: "0.0.0.0",
       log: () => {},
     });

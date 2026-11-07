@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
 import {
   ENSURE_SECRET_KEY_SCRIPT,
@@ -10,25 +10,33 @@ import {
 const BASE = "http://127.0.0.1:51000";
 const FAST = { intervalMs: 1, restartGraceMs: 1, budgetMs: 1000 };
 
-/** A guest agent-server answering by route; `null` makes a request fail. */
+let fetchSpy: MockInstance<typeof fetch> | undefined;
+afterEach(() => fetchSpy?.mockRestore());
+
+/**
+ * A guest agent-server answering by route, under the typed clients;
+ * `null` makes a request fail.
+ */
 function fakeGuest(routes: Record<string, unknown>) {
   const calls: { method: string; path: string; body?: unknown }[] = [];
-  const fetchImpl = vi.fn(async (url: string, init: RequestInit = {}) => {
-    const method = init.method ?? "GET";
-    const path = new URL(url).pathname;
-    calls.push({
-      method,
-      path,
-      body: init.body ? JSON.parse(String(init.body)) : undefined,
+  fetchSpy = vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(async (input, init = {}) => {
+      const method = init.method ?? "GET";
+      const path = new URL(String(input)).pathname;
+      calls.push({
+        method,
+        path,
+        body: init.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      const reply = routes[`${method} ${path}`];
+      if (reply === null || reply === undefined) {
+        throw new TypeError("fetch failed");
+      }
+      if (typeof reply === "number") return new Response("", { status: reply });
+      return Response.json(reply);
     });
-    const reply = routes[`${method} ${path}`];
-    if (reply === null || reply === undefined) {
-      throw new TypeError("fetch failed");
-    }
-    if (typeof reply === "number") return new Response("", { status: reply });
-    return Response.json(reply);
-  });
-  return { fetchImpl: fetchImpl as unknown as typeof fetch, calls };
+  return { calls };
 }
 
 describe("prepareSandbox", () => {
@@ -43,7 +51,6 @@ describe("prepareSandbox", () => {
     const result = await prepareSandbox({
       baseUrl: BASE,
       readFailure: () => null,
-      fetchImpl: guest.fetchImpl,
       timing: FAST,
     });
 
@@ -75,7 +82,6 @@ describe("prepareSandbox", () => {
     await prepareSandbox({
       baseUrl: BASE,
       readFailure: () => null,
-      fetchImpl: guest.fetchImpl,
       timing: FAST,
     });
 
@@ -94,7 +100,6 @@ describe("prepareSandbox", () => {
     const result = await prepareSandbox({
       baseUrl: BASE,
       readFailure: () => null,
-      fetchImpl: guest.fetchImpl,
       timing: FAST,
       log: () => {},
     });
@@ -108,11 +113,26 @@ describe("prepareSandbox", () => {
     const result = await prepareSandbox({
       baseUrl: BASE,
       readFailure: () => ({ closeCode: null, httpStatus: 403 }),
-      fetchImpl: guest.fetchImpl,
       timing: { ...FAST, budgetMs: 60_000 },
     });
 
     expect(result).toBe("unreachable");
     expect(guest.calls).toHaveLength(1);
   });
+
+  it.each([401, 403])(
+    "stops waiting as soon as the guest itself answers %i",
+    async (status) => {
+      const guest = fakeGuest({ "GET /server_info": status });
+
+      const result = await prepareSandbox({
+        baseUrl: BASE,
+        readFailure: () => null,
+        timing: { ...FAST, budgetMs: 60_000 },
+      });
+
+      expect(result).toBe("unreachable");
+      expect(guest.calls).toHaveLength(1);
+    },
+  );
 });

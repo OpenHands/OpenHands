@@ -169,6 +169,15 @@ export function createMarsTunnelBridge({
   /** One refresh per connection at a time: a refresh token works only once. */
   const refreshing = new Map();
 
+  /** Whether a grant's access token is close enough to expiry to renew. */
+  function refreshDue(grant) {
+    if (!grant?.refreshToken || !grant.accessExpiresAt) return false;
+    const expiresAt = Date.parse(grant.accessExpiresAt);
+    return (
+      !Number.isNaN(expiresAt) && expiresAt - Date.now() <= REFRESH_EARLY_MS
+    );
+  }
+
   /**
    * A connection's bearer token, refreshed first when it is about to expire.
    * A grant DigitalOcean no longer honours is forgotten, so the UI asks for
@@ -181,44 +190,84 @@ export function createMarsTunnelBridge({
     if (!id) return null;
     const grant = store.getGrant(id);
     if (!grant) return null;
-    const expiresAt = grant.accessExpiresAt
-      ? Date.parse(grant.accessExpiresAt)
-      : Number.NaN;
-    if (
-      !grant.refreshToken ||
-      Number.isNaN(expiresAt) ||
-      expiresAt - Date.now() > REFRESH_EARLY_MS
-    ) {
-      return grant.token;
-    }
+    if (!refreshDue(grant)) return grant.token;
     let pending = refreshing.get(id);
     if (!pending) {
-      pending = refresh(id, grant).finally(() => refreshing.delete(id));
+      pending = refresh(id).finally(() => refreshing.delete(id));
       refreshing.set(id, pending);
     }
     return pending;
   }
 
-  async function refresh(id, grant) {
-    try {
-      const next = await refreshGrant({
-        clientId: grant.clientId ?? config.oauthClientId,
-        refreshToken: grant.refreshToken,
-      });
-      store.updateGrant(id, {
-        token: next.accessToken,
-        refreshToken: next.refreshToken,
-        accessExpiresAt: next.accessExpiresAt,
-        clientId: grant.clientId ?? config.oauthClientId,
-      });
-      return next.accessToken;
-    } catch (error) {
-      if (error?.isRevoked) {
-        store.updateGrant(id, null);
+  /**
+   * Renew a connection's grant. Every Canvas process sharing the store takes
+   * the same lock and re-reads the grant under it, so a refresh token is
+   * spent once. A grant replaced meanwhile, by a new sign-in for the team,
+   * is never overwritten or forgotten by this late answer.
+   */
+  function refresh(id) {
+    return store.withGrantLock(id, async () => {
+      const current = store.readGrant(id);
+      if (!current) return null;
+      if (!refreshDue(current)) return current.token;
+      const clientId = current.clientId ?? config.oauthClientId;
+      // The store writes only while it still holds the grant renewed here.
+      const replacing = { replacing: current.refreshToken };
+      let next;
+      try {
+        next = await refreshGrant({
+          clientId,
+          refreshToken: current.refreshToken,
+        });
+      } catch (error) {
+        if (!error?.isRevoked) throw error;
+        if (!store.updateGrant(id, null, replacing)) {
+          return store.getGrant(id)?.token ?? null;
+        }
         return null;
       }
-      throw error;
+      const renewed = store.updateGrant(
+        id,
+        {
+          token: next.accessToken,
+          // DigitalOcean always sends a new one; without it, a null here
+          // would never be refreshed again.
+          refreshToken: next.refreshToken ?? current.refreshToken,
+          accessExpiresAt: next.accessExpiresAt,
+          clientId,
+        },
+        replacing,
+      );
+      if (!renewed) {
+        // The newer grant stays; the one renewed here is ended.
+        void revokeToken(next.accessToken);
+        return store.getGrant(id)?.token ?? null;
+      }
+      return next.accessToken;
+    });
+  }
+
+  /**
+   * End an OAuth grant nothing here holds any more. DigitalOcean revokes
+   * access tokens only, so an expired one is refreshed first, as on
+   * sign-out. A refresh refused meanwhile leaves nothing to end.
+   *
+   * @param {import("./mars-credentials.mjs").Grant} grant
+   */
+  async function endGrant(grant) {
+    let token = grant.token;
+    if (refreshDue(grant)) {
+      try {
+        const next = await refreshGrant({
+          clientId: grant.clientId ?? config.oauthClientId,
+          refreshToken: grant.refreshToken,
+        });
+        token = next.accessToken;
+      } catch {
+        return;
+      }
     }
+    await revokeToken(token);
   }
 
   const client = api ?? clientFor(() => tokenFor(store.getActive()?.id));
@@ -245,23 +294,33 @@ export function createMarsTunnelBridge({
     });
 
   /**
-   * Sandbox preparation per session, run once per process: the fixes it
-   * makes persist with the sandbox, and concurrent connects share one run.
+   * Sessions whose sandbox is prepared: the fixes persist with the sandbox.
+   * Only success is remembered; an unreachable guest, or one still booting
+   * when a step failed, is tried again next time.
    */
-  const prepared = new Map();
+  const preparedSessions = new Set();
+  /**
+   * Runs in flight, shared by concurrent connects. Keyed by listener too: a
+   * run probing a listener that has since closed must not answer for the
+   * tunnel that replaced it on another port.
+   */
+  const preparing = new Map();
 
   function prepareOnce(sessionId, localPort) {
-    let run = prepared.get(sessionId);
+    if (preparedSessions.has(sessionId)) return Promise.resolve("prepared");
+    const runKey = `${sessionId}@${localPort}`;
+    let run = preparing.get(runKey);
     if (!run) {
       run = prepare({
         baseUrl: buildTunnelHost(localPort),
         readFailure: () => registry.get(sessionId)?.upstreamFailure,
-      }).then((result) => {
-        // An unreachable guest may answer next time; try again then.
-        if (result === "unreachable") prepared.delete(sessionId);
-        return result;
-      });
-      prepared.set(sessionId, run);
+      })
+        .then((result) => {
+          if (result === "prepared") preparedSessions.add(sessionId);
+          return result;
+        })
+        .finally(() => preparing.delete(runKey));
+      preparing.set(runKey, run);
     }
     return run;
   }
@@ -293,12 +352,23 @@ export function createMarsTunnelBridge({
       readyAt.delete(sessionId);
       throw error;
     }
-    // Every caller gets a prepared sandbox, not just the Canvas page.
+    // Every caller gets a prepared sandbox, not just the Canvas page, and
+    // learns how that went: `sandbox` is the outcome of prepareSandbox.
+    let sandbox;
     if (tunnel.status === "connected" && tunnel.localPort !== undefined) {
-      await prepareOnce(sessionId, tunnel.localPort);
+      sandbox = await prepareOnce(sessionId, tunnel.localPort);
+      // Preparing can take a minute; answer with the tunnel as it is now,
+      // since it may have been closed or replaced meanwhile.
+      tunnel = registry.get(sessionId) ?? {
+        ...tunnel,
+        status: "error",
+        localPort: undefined,
+        error: "The session was disconnected while its sandbox was prepared.",
+      };
     }
     return {
       ...tunnel,
+      sandbox,
       transport: "tunnel",
       host:
         tunnel.localPort === undefined
@@ -352,23 +422,48 @@ export function createMarsTunnelBridge({
    * connection keeps it (see `setTeam`). A token that may not read the
    * account keeps its label instead.
    */
-  async function saveVerified(connection, account = null) {
+  async function saveVerified(
+    connection,
+    account = null,
+    isCancelled = () => false,
+  ) {
     const previousId = store.getActive()?.id ?? null;
     const saved = store.save(connection);
+    // Ask about this token, not whichever connection is active when
+    // DigitalOcean answers: another tab or agent may switch teams meanwhile.
+    const pinned = api ?? clientFor(() => connection.token);
+    let team;
     try {
-      await client.verifyAccess();
+      await pinned.verifyAccess();
+      team = account ?? (await pinned.getAccount?.().catch(() => null));
+      // The last point a cancelled sign-in can still be undone.
+      if (isCancelled()) {
+        throw new MarsApiError("Sign-in was cancelled.", { status: 409 });
+      }
     } catch (error) {
+      const stillActive = store.getActive()?.id === saved.id;
       if (!saved.reused) store.remove(saved.id);
-      if (previousId) store.setActive(previousId);
+      if (previousId && stillActive) store.setActive(previousId);
       throw error;
     }
-    const team = account ?? (await client.getAccount?.().catch(() => null));
-    if (team) store.setTeam(saved.id, team);
+    // The credential is kept from here on, so naming its team must not
+    // fail the sign-in; a team already held then just keeps both entries.
+    if (team) {
+      try {
+        store.setTeam(saved.id, team, {
+          onReplacedGrant: (replaced) => void endGrant(replaced),
+        });
+      } catch (error) {
+        console.warn(
+          `[mars] Could not record the DigitalOcean team: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
     return authState();
   }
 
   /** @param {Awaited<ReturnType<typeof exchangeCode>>} grant */
-  function saveOAuthGrant(grant, clientId) {
+  function saveOAuthGrant(grant, clientId, isCancelled) {
     return saveVerified(
       {
         kind: CREDENTIAL_KIND_OAUTH,
@@ -380,6 +475,7 @@ export function createMarsTunnelBridge({
         teamName: grant.account?.name ?? null,
       },
       grant.account,
+      isCancelled,
     );
   }
 
@@ -402,7 +498,13 @@ export function createMarsTunnelBridge({
     async signInWithOAuth() {
       const clientId = requireOAuthClient();
       const grant = await signInWithDigitalOcean({ clientId, openExternal });
-      return saveOAuthGrant(grant, clientId);
+      try {
+        return await saveOAuthGrant(grant, clientId);
+      } catch (failure) {
+        // Nothing keeps a grant that failed to save: end it.
+        void revokeToken(grant.accessToken);
+        throw failure;
+      }
     },
 
     /**
@@ -445,28 +547,47 @@ export function createMarsTunnelBridge({
      */
     async completeSignIn(returned, attemptId) {
       const { code, state, error } = readCallback(returned);
-      const attempt = attempts.claim(state, attemptId);
-      if (!attempt) {
-        throw new MarsApiError("This sign-in is no longer open. Start again.", {
+      // Checked before the attempt is taken, so the right address can
+      // still follow a wrong one.
+      if (!code && !error) {
+        throw new MarsApiError("That address has no sign-in code in it.", {
           status: 400,
         });
       }
+      const attempt = attempts.claim(state, attemptId);
+      if (!attempt) {
+        throw new MarsApiError(
+          attemptId && attempts.isOpen(attemptId)
+            ? "That address isn't from this sign-in. Paste the address DigitalOcean opened after you approved."
+            : "This sign-in is no longer open. Start again.",
+          { status: 400 },
+        );
+      }
+      // Cancel stays possible until the grant is committed.
+      const cancelled = () => attempt.cancelled === true;
+      let grant = null;
       try {
-        if (error || !code) {
-          throw new MarsApiError(error ?? "DigitalOcean sent no code back.", {
-            status: 400,
-          });
-        }
-        const grant = await exchangeCode({
+        if (error) throw new MarsApiError(error, { status: 400 });
+        grant = await exchangeCode({
           clientId: attempt.clientId,
           code,
           verifier: attempt.verifier,
           redirectUri: attempt.redirectUri,
         });
-        const signedIn = await saveOAuthGrant(grant, attempt.clientId);
+        if (cancelled()) {
+          throw new MarsApiError("Sign-in was cancelled.", { status: 409 });
+        }
+        const signedIn = await saveOAuthGrant(
+          grant,
+          attempt.clientId,
+          cancelled,
+        );
         attempts.succeed(attempt.id);
         return signedIn;
       } catch (failure) {
+        // Nothing keeps a grant whose sign-in failed or was cancelled after
+        // the exchange (a team without Managed Agents, say): end it.
+        if (grant) void revokeToken(grant.accessToken);
         attempts.fail(
           attempt.id,
           failure instanceof Error ? failure.message : String(failure),
@@ -510,10 +631,14 @@ export function createMarsTunnelBridge({
       readyAt.clear();
       const kind = store.list().find((c) => c.id === target)?.kind;
       if (kind === CREDENTIAL_KIND_OAUTH) {
-        // Revoking the refresh token ends the grant, not just this hour's token.
-        const grant = store.getGrant(target);
-        const token = grant?.refreshToken ?? grant?.token;
-        if (token) await revokeToken(token);
+        // DigitalOcean revokes access tokens only, so revoke a current one:
+        // an hour-old token is refreshed first rather than left unrevoked.
+        const token = await tokenFor(target).catch(() => null);
+        if (token && !(await revokeToken(token))) {
+          console.warn(
+            "[mars] DigitalOcean did not confirm the sign-out; the sign-in is removed here anyway.",
+          );
+        }
       }
       store.remove(target);
       return authState();

@@ -1,5 +1,21 @@
 # Device pairing verification
 
+## Stack refresh validation
+
+The pairing change is reapplied to the current third-stack head `45fb8ef22505cc76d6ce5c35f3bb4761e7f41077`, preserving its newer OAuth, credential storage, WebSocket limits, and explicit `MARS_WEB=1` opt-in. This supersedes the Windows-only validation below for the refreshed code. Linux, Node 24.22.1; npm 11.12.1 was used for the lock update with `--min-release-age=7`. Registry metadata dates qrcode.react 4.2.0 to 2024-12-11; the lock update adds only that existing pairing dependency.
+
+Pairing now uses the stack's authoritative `getMarsBridgeHeaders()` policy. A regression through the real create-invitation HTTP request demonstrates that the active host key wins over an earlier stale key for the same origin: the old pairing helper fails, and the refreshed implementation passes. The pairing route follows the existing app layout and stays a top-level route, preserving the verification driver's existing route-discovery behavior without editing the driver.
+
+- Six focused suites: 157 passed (`device-pairing`, API/web-server bridge, tunnel bridge, Managed Agents view, and direct-call guard).
+- Root suite: 23 passed, 4 failed; an unmodified worktree at the stack head has 22 passed and the same four Cloud-auth failures. The additional unauthenticated pairing route test passes.
+- Typecheck, full source Prettier check, relevant-file ESLint, translation completeness, and `git diff --check` pass. Relevant ESLint reports two existing arbitrary-class warnings in the pairing dialog.
+- Production app and library builds pass with `RAYON_NUM_THREADS=2 NODE_OPTIONS=--max-old-space-size=2048`. Earlier unrestricted/native-parallel builds were killed with exit 137. Whole-source ESLint was also killed with exit 137, so no complete `npm run lint` pass is claimed for this refresh.
+- Read-only verification-map selection: route discovery now passes; the remaining coverage test still reports the new `/pair` route as unmapped. No verify-* specification, fixture, or driver has been changed.
+
+No full repository test run, real DigitalOcean account, live model, cross-device QR scan, or new visual capture was performed for this refresh. The PR remains draft pending independent verification-map maintenance, human testing notes, current CI review, and live visual evidence. The existing `HUMAN:` PR section is untouched.
+
+## Historical validation before the stack refresh
+
 Base: OpenHands/OpenHands PR #18707, d6203bb0b39aa0e2c63901ab73c01482736e12a8.
 Environment: Windows, Node 24.14.1, npm 11.11.0. No DigitalOcean account, OAuth approval, paid model, or DigitalOcean session was used.
 

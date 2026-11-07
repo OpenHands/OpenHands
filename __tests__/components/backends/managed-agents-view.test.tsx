@@ -131,6 +131,57 @@ afterEach(() => {
 });
 
 describe("ManagedAgentsView", () => {
+  it("offers sign-in when an agent-list request discovers a revoked OAuth grant", async () => {
+    const connection = { ...CONNECTION, kind: "oauth" as const };
+    const bridge = fakeBridge({
+      ...SIGNED_IN,
+      canUseOAuth: true,
+      connections: [connection],
+      active: connection,
+    });
+    vi.mocked(bridge.listAgentConfigs).mockImplementation(async () => {
+      const expired = { ...connection, isExpired: true };
+      vi.mocked(bridge.getAuthState).mockResolvedValue({
+        ...SIGNED_IN,
+        canUseOAuth: true,
+        connections: [expired],
+        active: expired,
+      });
+      throw new Error("Sign in to DigitalOcean first.");
+    });
+    window.marsBridge = bridge;
+
+    renderView();
+
+    expect(
+      await screen.findByTestId("managed-agents-oauth"),
+    ).toBeInTheDocument();
+  });
+
+  it.each(["still-valid", "unavailable"] as const)(
+    "keeps the original list failure when the auth recheck is %s",
+    async (authRecheck) => {
+      const bridge = fakeBridge({ ...SIGNED_IN, canUseOAuth: true });
+      vi.mocked(bridge.listAgentConfigs).mockImplementation(async () => {
+        if (authRecheck === "unavailable") {
+          vi.mocked(bridge.getAuthState).mockRejectedValue(
+            new Error("Auth state could not be loaded."),
+          );
+        }
+        throw new Error("DigitalOcean is temporarily unreachable.");
+      });
+      window.marsBridge = bridge;
+
+      renderView();
+
+      await waitFor(() => expect(bridge.getAuthState).toHaveBeenCalledTimes(2));
+      expect(
+        await screen.findByText("DigitalOcean is temporarily unreachable."),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("managed-agents-oauth")).toBeNull();
+    },
+  );
+
   it("asks a signed-out user for a token and shows their agents once it is accepted", async () => {
     const bridge = fakeBridge(SIGNED_OUT);
     window.marsBridge = bridge;
@@ -552,6 +603,59 @@ describe("ManagedAgentsView", () => {
       );
       expect(screen.queryByTestId("managed-agents-auth-error")).toBeNull();
       expect(screen.getByTestId("managed-agents-oauth")).toBeEnabled();
+    });
+
+    it("stays on Add connection after a sign-in started there is cancelled", async () => {
+      const { bridge } = oauthBridge();
+      vi.mocked(bridge.getAuthState).mockResolvedValue({
+        ...SIGNED_IN,
+        canUseOAuth: true,
+      });
+      window.marsBridge = bridge;
+      vi.spyOn(window, "open").mockReturnValue(null);
+      renderView();
+      await userEvent.click(
+        await screen.findByTestId("managed-agents-add-connection"),
+      );
+      await userEvent.click(screen.getByTestId("managed-agents-oauth"));
+      await screen.findByTestId("managed-agents-pending-sign-in");
+
+      await userEvent.click(screen.getByTestId("managed-agents-sign-in-abort"));
+
+      await waitFor(() =>
+        expect(
+          screen.queryByTestId("managed-agents-pending-sign-in"),
+        ).toBeNull(),
+      );
+      expect(screen.getByTestId("managed-agents-sign-in")).toBeInTheDocument();
+      expect(
+        screen.getByTestId("managed-agents-sign-in-cancel"),
+      ).toBeInTheDocument();
+    });
+
+    it("takes a token while a browser sign-in waits, and drops that sign-in", async () => {
+      const { bridge } = oauthBridge();
+      window.marsBridge = bridge;
+      vi.spyOn(window, "open").mockReturnValue(null);
+      renderView();
+      await userEvent.click(await screen.findByTestId("managed-agents-oauth"));
+      await screen.findByTestId("managed-agents-pending-sign-in");
+      await userEvent.click(screen.getByTestId("managed-agents-use-token"));
+      await userEvent.type(
+        screen.getByTestId("managed-agents-token"),
+        `dop_v1_${"a".repeat(64)}`,
+      );
+
+      vi.mocked(bridge.getAuthState).mockResolvedValue(SIGNED_IN);
+      await userEvent.click(screen.getByTestId("managed-agents-token-submit"));
+
+      expect(bridge.cancelSignIn).toHaveBeenCalledWith("a1");
+      expect(bridge.savePat).toHaveBeenCalledWith({
+        token: `dop_v1_${"a".repeat(64)}`,
+      });
+      expect(
+        await screen.findByTestId("managed-agents-session-sess_ready"),
+      ).toBeInTheDocument();
     });
   });
 });

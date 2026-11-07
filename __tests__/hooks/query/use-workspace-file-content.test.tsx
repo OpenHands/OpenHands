@@ -370,6 +370,27 @@ describe("useWorkspaceFileContent", () => {
       );
     });
 
+    it("reads a file outside the workspace by its absolute path", async () => {
+      // Arrange: the agent wrote the report to /tmp; no workspace root
+      // strips that prefix, so the Files tab selected path stays absolute.
+      readCloudConversationFileMock.mockResolvedValue("# Report");
+
+      // Act
+      const { result } = renderHook(
+        () => useWorkspaceFileContent("/tmp/report.md"),
+        { wrapper: makeWrapper() },
+      );
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // Assert: the path is sent as-is instead of re-rooted under the
+      // workspace, so View shows the file the agent actually wrote.
+      expect(readCloudConversationFileMock).toHaveBeenCalledWith(
+        "conv-1",
+        "/tmp/report.md",
+      );
+      expect(result.current.data?.text).toBe("# Report");
+    });
+
     it("renders images via base64 data URI from the cloud file endpoint", async () => {
       // The cloud endpoint returns text; use an SVG (text-based image) since
       // binary bytes can't round-trip faithfully through the string API.

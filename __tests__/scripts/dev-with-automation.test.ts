@@ -12,6 +12,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -19,10 +20,13 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { describe, expect, it, afterEach } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { server as mswServer } from "#/mocks/node";
 import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
+  buildAutomationCorsOrigins,
+  buildAutomationLogArgs,
   buildAutomationTelemetryEnv,
   buildAutomationRuntimeServicesInfo,
   buildConfig,
@@ -33,8 +37,10 @@ import {
   getFrontendBackend,
   getLocalServiceRoutes,
   getRejectPrefixes,
+  resolveAutomationKvSecret,
   setServiceLogListener,
   spawnService,
+  superviseService,
   validateLocalAutomationPath,
   DEFAULT_AUTOMATION_REPO,
   DEFAULT_AUTOMATION_PACKAGE,
@@ -43,10 +49,15 @@ import {
 } from "../../scripts/dev-with-automation.mjs";
 import {
   buildAgentServerEnv,
+  buildBackendLogEnv,
   buildSafeDevConfig,
   resetPersistedSessionApiKeyCache,
+  uvicornLogLevel,
 } from "../../scripts/dev-safe.mjs";
 import { createRouter } from "../../scripts/proxy-utils.mjs";
+
+beforeAll(() => mswServer.close());
+afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -107,6 +118,25 @@ describe("buildAutomationCommand", () => {
     expect(cmd.args).toContain("uvicorn");
     expect(cmd.args).toContain("openhands.automation.app:app");
     expect(cmd.source).toBe(`PyPI (${DEFAULT_AUTOMATION_VERSION}, default)`);
+  });
+
+  it("requests the shared Python range for uvx in every source mode", () => {
+    // See buildUvxPythonArgs in dev-safe.mjs and #18654.
+    const variants = [
+      {},
+      { OH_AUTOMATION_VERSION: "1.0.0" },
+      { OH_AUTOMATION_GIT_REF: "main" },
+    ];
+    for (const env of variants) {
+      const { command, args } = buildAutomationCommand(env);
+      expect(command).toBe("uvx");
+      expect(args.slice(0, 2)).toEqual(["--python", ">=3.12,<3.15"]);
+    }
+  });
+
+  it("leaves the interpreter choice to uv when UV_PYTHON is set", () => {
+    const { args } = buildAutomationCommand({ UV_PYTHON: "3.13" });
+    expect(args).not.toContain("--python");
   });
 
   it("uses custom git ref from OH_AUTOMATION_GIT_REF", () => {
@@ -290,6 +320,59 @@ describe("buildAutomationTelemetryEnv", () => {
 
   it("does not default automation telemetry when do-not-track is enabled", () => {
     expect(buildAutomationTelemetryEnv({ VITE_DO_NOT_TRACK: "1" })).toEqual({});
+  });
+});
+
+describe("resolveAutomationKvSecret", () => {
+  let stateDir = "";
+
+  afterEach(() => {
+    if (stateDir) rmSync(stateDir, { recursive: true, force: true });
+  });
+
+  function freshStateDir(): string {
+    stateDir = mkdtempSync(path.join(tmpdir(), "kv-secret-"));
+    return stateDir;
+  }
+
+  it("keeps the first session key as the KV secret after the session key rotates", () => {
+    const dir = freshStateDir();
+
+    const first = resolveAutomationKvSecret(
+      { stateDir: dir, sessionApiKey: "session-key-a" },
+      {},
+    );
+    const afterRotation = resolveAutomationKvSecret(
+      { stateDir: dir, sessionApiKey: "session-key-b" },
+      {},
+    );
+
+    expect(first).toBe("session-key-a");
+    expect(afterRotation).toBe("session-key-a");
+  });
+
+  it("prefers an explicit AUTOMATION_KV_SECRET without pinning anything", () => {
+    const dir = freshStateDir();
+
+    const secret = resolveAutomationKvSecret(
+      { stateDir: dir, sessionApiKey: "session-key-a" },
+      { AUTOMATION_KV_SECRET: "explicit-secret" },
+    );
+
+    expect(secret).toBe("explicit-secret");
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  it("stops instead of falling back to the session key when the pin is unreadable", () => {
+    const dir = freshStateDir();
+    mkdirSync(path.join(dir, "automation-kv-secret.txt"));
+
+    expect(() =>
+      resolveAutomationKvSecret(
+        { stateDir: dir, sessionApiKey: "session-key-a" },
+        {},
+      ),
+    ).toThrow(/not a regular file/);
   });
 });
 
@@ -511,6 +594,104 @@ describe("buildConfig", () => {
     ).rejects.toThrow(new RegExp(`ingress.*port ${busyPort}`, "i"));
   });
 
+  it("serves the frontend on a free port when the preferred one is taken", async () => {
+    const server = net.createServer();
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        servers.push(server);
+        resolve((server.address() as net.AddressInfo).port);
+      });
+      server.on("error", reject);
+    });
+
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_VITE_PORT: String(busyPort) }),
+    );
+
+    expect(config.vitePort).not.toBe(busyPort);
+    // Every consumer follows the resolved port.
+    expect(getFrontendBackend(config)).toBe(
+      `http://localhost:${config.vitePort}`,
+    );
+    expect(buildViteFrontendEnv(config).VITE_FRONTEND_PORT).toBe(
+      String(config.vitePort),
+    );
+    const info = buildAutomationRuntimeServicesInfo(
+      config,
+      {},
+    ) as RuntimeServicesInfo;
+    expect(info.services.frontend.url_from_agent).toBe(
+      `http://localhost:${config.vitePort}`,
+    );
+    expect(buildAutomationCorsOrigins(config)).toBe(
+      `http://localhost:19902,http://127.0.0.1:19902,` +
+        `http://localhost:${config.vitePort},http://127.0.0.1:${config.vitePort}`,
+    );
+  });
+
+  // Only the frontend falls back: the other services keep failing hard so a
+  // second agent-canvas instance is still detected (#16904).
+  it.each([
+    ["agent-server", "OH_CANVAS_SAFE_BACKEND_PORT"],
+    ["automation", "OH_CANVAS_SAFE_AUTOMATION_PORT"],
+  ])("still throws when the %s port is busy", async (service, envKey) => {
+    const server = net.createServer();
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        servers.push(server);
+        resolve((server.address() as net.AddressInfo).port);
+      });
+      server.on("error", reject);
+    });
+
+    await expect(
+      buildConfig({}, envWithIsolatedKeyPath({ [envKey]: String(busyPort) })),
+    ).rejects.toThrow(new RegExp(`${service}.*port ${busyPort}`, "i"));
+  });
+
+  it.each([
+    ["ingress", "19902"],
+    ["agent-server", "19900"],
+    ["automation", "19901"],
+    ["vscode", "20900"],
+  ])("keeps the frontend off the %s port", async (_service, servicePort) => {
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_VITE_PORT: servicePort }),
+    );
+
+    expect(config.vitePort).not.toBe(Number(servicePort));
+    expect(
+      new Set([
+        config.ingressPort,
+        config.agentServerPort,
+        config.autoBackendPort,
+        config.vscodePort,
+        config.vitePort,
+      ]).size,
+    ).toBe(5);
+  });
+
+  it("leaves the frontend port alone when no frontend is launched", async () => {
+    const server = net.createServer();
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        servers.push(server);
+        resolve((server.address() as net.AddressInfo).port);
+      });
+      server.on("error", reject);
+    });
+
+    const config = await buildConfig(
+      { backendOnly: true },
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_VITE_PORT: String(busyPort) }),
+    );
+
+    expect(config.launchFrontend).toBe(false);
+    expect(config.vitePort).toBe(busyPort);
+  });
+
   it("allocates valid ports for all services", async () => {
     const config = await buildConfig({}, envWithIsolatedKeyPath());
 
@@ -728,6 +909,26 @@ describe("stack mode routing", () => {
     expect(viteEnv.VITE_BIND_HOST).toBe("0.0.0.0");
     expect(viteEnv).not.toHaveProperty("VITE_SESSION_API_KEY");
     expect(viteEnv.VITE_AUTH_REQUIRED).toBe("true");
+  });
+
+  it("honors the explicit LAN session-key opt-in for Vite", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0", allowLanSessionKey: true },
+      envWithIsolatedKeyPath(),
+    );
+    const env = buildViteFrontendEnv(config);
+    expect(env.VITE_SESSION_API_KEY).toBe(config.sessionApiKey);
+    expect(env.VITE_AUTH_REQUIRED).toBeUndefined();
+  });
+
+  it("keeps public mode key-free even with the LAN opt-in", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0", public: true, allowLanSessionKey: true },
+      envWithIsolatedKeyPath({ LOCAL_BACKEND_API_KEY: "public-test-key" }),
+    );
+    const env = buildViteFrontendEnv(config);
+    expect(env.VITE_SESSION_API_KEY).toBeUndefined();
+    expect(env.VITE_AUTH_REQUIRED).toBe("true");
   });
 
   it("makes the key-free ingress reachable to Docker conversations", async () => {
@@ -1038,6 +1239,70 @@ describe("setServiceLogListener", () => {
     const [code] = await once(proc, "exit");
     expect(code).toBe(0);
   });
+});
+
+describe("superviseService", () => {
+  const exitWith = (code: number) => ["-e", `process.exit(${code})`];
+  const stayUp = ["-e", "setInterval(() => {}, 1_000)"];
+
+  it("restarts a service that exits on its own", async () => {
+    // Arrange: the first run crashes, the replacement stays up.
+    const procs: ReturnType<typeof spawnService>[] = [];
+    const onFailure = vi.fn();
+
+    // Act
+    superviseService(
+      "supervise-restart-test",
+      (hooks: object) => {
+        const args = procs.length === 0 ? exitWith(7) : stayUp;
+        const proc = spawnService(
+          "supervise-restart-test",
+          process.execPath,
+          args,
+          hooks,
+        );
+        procs.push(proc);
+        return proc;
+      },
+      { onFailure, restartDelayMs: 0 },
+    );
+
+    // Assert
+    await vi.waitFor(() => expect(procs).toHaveLength(2));
+    await delay(200);
+    expect(procs).toHaveLength(2);
+    expect(procs[1].exitCode).toBeNull();
+    expect(onFailure).not.toHaveBeenCalled();
+    procs[1].kill();
+  });
+
+  it("stops the stack and reports once the service keeps exiting", async () => {
+    // Arrange
+    let starts = 0;
+    const failure = new Promise<Error>((resolve) => {
+      // Act
+      superviseService(
+        "supervise-give-up-test",
+        (hooks: object) => {
+          starts += 1;
+          return spawnService(
+            "supervise-give-up-test",
+            process.execPath,
+            exitWith(3),
+            hooks,
+          );
+        },
+        { onFailure: resolve, maxRestarts: 2, restartDelayMs: 0 },
+      );
+    });
+
+    // Assert
+    const error = await failure;
+    expect(starts).toBe(3);
+    expect(error.message).toContain(
+      "The supervise-give-up-test exited 3 times (last: 3)",
+    );
+  }, 15_000);
 });
 
 describe("dev-with-automation CLI", () => {
@@ -1473,6 +1738,199 @@ describe("dev-with-automation CLI", () => {
     expect(exitResult.timedOut).toBe(false);
     expect(exitResult.code).toBe(1);
     expect(output).toContain("uvx");
+  });
+});
+
+describe("backend logging defaults", () => {
+  // Minimal SafeDevConfig for buildAgentServerEnv; only the fields it reads
+  // matter, but it accesses them directly rather than via optional chaining.
+  const baseConfig = () => ({
+    cwd: process.cwd(),
+    backendPort: 18000,
+    vscodePort: 18001,
+    vscodeBasePath: "/vscode",
+    stateDir: "/tmp/state",
+    tmuxTmpDir: "/tmp/tmux",
+    conversationsPath: "/tmp/conversations",
+    workspacesPath: "/tmp/workspaces",
+    bashEventsDir: "/tmp/bash-events",
+    backendBaseUrl: "http://127.0.0.1:18000",
+    backendHost: "127.0.0.1",
+    workingDir: process.cwd(),
+    secretKey: "secret",
+    sessionApiKey: "session",
+    canvasToolsDir: "/tmp/tools",
+    extensionsDir: null,
+  });
+
+  it("quiets the automation service by default", () => {
+    const env = buildBackendLogEnv({ automation: true, env: {} });
+
+    expect(env.LOG_LEVEL).toBe("WARNING");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("WARNING");
+  });
+
+  it("leaves AUTOMATION_LOG_LEVEL unset for the agent-server", () => {
+    // The agent-server does not read AUTOMATION_LOG_LEVEL; setting it there
+    // would suggest it has an effect it does not.
+    const env = buildBackendLogEnv({ env: {} });
+
+    expect(env.LOG_LEVEL).toBe("WARNING");
+    expect(env).not.toHaveProperty("AUTOMATION_LOG_LEVEL");
+  });
+
+  it("honors an explicit LOG_LEVEL from the caller's environment", () => {
+    const env = buildBackendLogEnv({
+      automation: true,
+      env: { LOG_LEVEL: "INFO" },
+    });
+
+    expect(env.LOG_LEVEL).toBe("INFO");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("INFO");
+  });
+
+  it("lets AUTOMATION_LOG_LEVEL diverge from LOG_LEVEL", () => {
+    const env = buildBackendLogEnv({
+      automation: true,
+      env: { LOG_LEVEL: "ERROR", AUTOMATION_LOG_LEVEL: "DEBUG" },
+    });
+
+    expect(env.LOG_LEVEL).toBe("ERROR");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("DEBUG");
+  });
+
+  it("raises both services to DEBUG under --verbose, overriding the environment", () => {
+    const env = buildBackendLogEnv({
+      verbose: true,
+      automation: true,
+      env: { LOG_LEVEL: "ERROR" },
+    });
+
+    expect(env.LOG_LEVEL).toBe("DEBUG");
+    expect(env.AUTOMATION_LOG_LEVEL).toBe("DEBUG");
+  });
+
+  it("passes the same level to uvicorn as to the automation service", () => {
+    const args = buildAutomationLogArgs({ autoBackendPort: 18001 }, {});
+
+    expect(args).toEqual([
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "18001",
+      "--log-level",
+      "warning",
+    ]);
+  });
+
+  it("passes debug to uvicorn under --verbose", () => {
+    const args = buildAutomationLogArgs(
+      { autoBackendPort: 18001, verbose: true },
+      {},
+    );
+
+    expect(args.at(-1)).toBe("debug");
+  });
+
+  // Uvicorn validates --log-level with a click.Choice and exits 2 on anything
+  // outside its set, which takes the whole dev stack down. The app accepts
+  // more than Uvicorn does, so an explicit override must be narrowed rather
+  // than forwarded verbatim.
+  describe("narrows the Uvicorn --log-level to a value Uvicorn accepts", () => {
+    const UVICORN_ACCEPTS = [
+      "critical",
+      "error",
+      "warning",
+      "info",
+      "debug",
+      "trace",
+    ];
+
+    it("keeps every level Uvicorn already accepts", () => {
+      for (const level of UVICORN_ACCEPTS) {
+        expect(uvicornLogLevel(level)).toBe(level);
+        expect(uvicornLogLevel(level.toUpperCase())).toBe(level);
+      }
+    });
+
+    it("maps the Python aliases Uvicorn rejects", () => {
+      expect(uvicornLogLevel("WARN")).toBe("warning");
+      expect(uvicornLogLevel("warn")).toBe("warning");
+      expect(uvicornLogLevel("FATAL")).toBe("critical");
+      expect(uvicornLogLevel("fatal")).toBe("critical");
+    });
+
+    it("maps numeric levels onto the nearest Uvicorn name", () => {
+      expect(uvicornLogLevel("50")).toBe("critical");
+      expect(uvicornLogLevel("40")).toBe("error");
+      expect(uvicornLogLevel("30")).toBe("warning");
+      expect(uvicornLogLevel("20")).toBe("info");
+      expect(uvicornLogLevel("10")).toBe("debug");
+      expect(uvicornLogLevel("5")).toBe("trace");
+    });
+
+    it("falls back to Uvicorn's own default for unrepresentable values", () => {
+      // `NOTSET` means "inherit", not "most verbose", and Uvicorn has no
+      // equivalent; the pre-PR launchers passed no --log-level at all, which
+      // left Uvicorn at `info`.
+      expect(uvicornLogLevel("NOTSET")).toBe("info");
+      expect(uvicornLogLevel("0")).toBe("info");
+      expect(uvicornLogLevel("")).toBe("info");
+      expect(uvicornLogLevel(undefined)).toBe("info");
+      expect(uvicornLogLevel("verbose")).toBe("info");
+    });
+
+    it("never returns a value outside Uvicorn's accepted set", () => {
+      const inputs = [
+        "WARN",
+        "FATAL",
+        "NOTSET",
+        "30",
+        "0",
+        "",
+        "bogus",
+        "999999999999999999999",
+        "  30  ",
+        "warning",
+      ];
+      for (const input of inputs) {
+        expect(UVICORN_ACCEPTS).toContain(uvicornLogLevel(input));
+      }
+    });
+
+    it("narrows an explicit LOG_LEVEL alias in the built args", () => {
+      // The regression: `LOG_LEVEL=WARN npm run dev` aborted Uvicorn.
+      const args = buildAutomationLogArgs(
+        { autoBackendPort: 18001 },
+        { LOG_LEVEL: "WARN" },
+      );
+
+      expect(args.at(-1)).toBe("warning");
+    });
+
+    it("leaves the app's LOG_LEVEL env untouched for an alias", () => {
+      // The app reads LOG_LEVEL through Python's logging module, which does
+      // accept WARN — only the Uvicorn argument is narrowed.
+      const env = buildBackendLogEnv({
+        automation: true,
+        env: { LOG_LEVEL: "WARN" },
+      });
+
+      expect(env.LOG_LEVEL).toBe("WARN");
+      expect(env.AUTOMATION_LOG_LEVEL).toBe("WARN");
+    });
+  });
+
+  it("gives the agent-server the quiet default without an opt-out needed", () => {
+    const env = buildAgentServerEnv(baseConfig(), { env: {} });
+
+    expect(env.LOG_LEVEL).toBe("WARNING");
+  });
+
+  it("raises the agent-server to DEBUG under --verbose", () => {
+    const env = buildAgentServerEnv(baseConfig(), { env: {}, verbose: true });
+
+    expect(env.LOG_LEVEL).toBe("DEBUG");
   });
 });
 

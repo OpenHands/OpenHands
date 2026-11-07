@@ -36,7 +36,7 @@ function InlineCodeChip({ children }: { children?: React.ReactNode }) {
     <code
       className={cn(
         "mx-0.5 inline-block rounded-sm border border-border-subtle",
-        "bg-surface-raised px-1.5 py-0.5 align-baseline font-mono text-[11px] text-contrast",
+        "bg-surface-raised px-1.5 py-0.5 align-baseline font-mono text-2xs text-contrast",
       )}
     >
       {children}
@@ -121,7 +121,7 @@ export function AddSkillModal({ onClose }: AddSkillModalProps) {
     >
       <div
         data-testid="add-skill-modal"
-        className="relative flex w-130 max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-border bg-base-secondary"
+        className="relative flex w-130 extension-dialog-viewport flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton onClose={onClose} testId="add-skill-modal-close" />
         <header className="flex-shrink-0 px-6 pb-4 pt-6">

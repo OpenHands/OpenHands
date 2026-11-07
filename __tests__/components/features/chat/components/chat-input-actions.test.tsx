@@ -30,7 +30,9 @@ const useActiveConversationMock = vi.fn<
 >(() => ({ data: undefined }));
 
 vi.mock("#/components/features/controls/agent-status", () => ({
-  AgentStatus: () => <div data-testid="agent-status-stub" />,
+  AgentStatus: ({ compact }: { compact?: boolean }) => (
+    <div data-testid="agent-status-stub" data-compact={String(!!compact)} />
+  ),
 }));
 
 vi.mock("#/components/features/chat/change-agent-button", () => ({
@@ -42,6 +44,9 @@ vi.mock(
   () => ({
     ChatInputProfileMenuContent: () => (
       <div data-testid="agent-profile-menu-stub" />
+    ),
+    ChatInputAgentProfilePicker: () => (
+      <div data-testid="agent-profile-pill-stub" />
     ),
   }),
 );
@@ -339,6 +344,31 @@ describe("ChatInputActions — Switch agent profile gate (OSS-5735)", () => {
     ).toBeInTheDocument();
   });
 
+  it("names the agent profile on the home page", async () => {
+    renderWithProviders(<ChatInputActions disabled={false} />, {
+      navigation: { conversationId: null },
+    });
+
+    expect(
+      await screen.findByTestId("agent-profile-pill-stub"),
+    ).toBeInTheDocument();
+  });
+
+  it("still mounts the agent profile pill when no profile is active", async () => {
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [{ id: "p1", name: "default", agent_kind: "openhands" }],
+      active_agent_profile_id: null,
+    });
+
+    renderWithProviders(<ChatInputActions disabled={false} />, {
+      navigation: { conversationId: null },
+    });
+
+    expect(
+      await screen.findByTestId("agent-profile-pill-stub"),
+    ).toBeInTheDocument();
+  });
+
   it("offers Switch agent profile in a blank (unstarted) conversation", async () => {
     useActiveConversationMock.mockReturnValue({
       data: { conversation_id: "conv-blank", llm_model: null },
@@ -371,6 +401,9 @@ describe("ChatInputActions — Switch agent profile gate (OSS-5735)", () => {
     expect(await screen.findByTestId("tools-context-menu")).toBeInTheDocument();
     expect(
       screen.queryByTestId("switch-agent-profile-button"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-profile-pill-stub"),
     ).not.toBeInTheDocument();
   });
 
@@ -523,6 +556,17 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
     expect(
       screen.getByTestId("overflow-model-submenu").parentElement,
     ).not.toHaveClass("visible");
+  });
+
+  it("keeps the agent status control in a narrow conversation row", () => {
+    renderWithProviders(<ChatInputActions disabled={false} />, {
+      navigation: { conversationId: "test-conversation-id" },
+    });
+
+    expect(screen.getByTestId("agent-status-stub")).toHaveAttribute(
+      "data-compact",
+      "true",
+    );
   });
 
   it("opens the Model submenu with the profile list", () => {

@@ -42,11 +42,28 @@ afterEach(() => {
 
 describe("device pairing", () => {
   it("creates once in StrictMode, keeps the secret in the fragment, and revokes on close", async () => {
+    setRegisteredBackends([
+      {
+        id: "stale-host",
+        name: "Old host key",
+        kind: "local",
+        host: window.location.origin,
+        apiKey: "stale-host-key",
+      },
+      {
+        id: "current-host",
+        name: "Current host key",
+        kind: "local",
+        host: window.location.origin,
+        apiKey: "current-host-key",
+      },
+    ]);
+    setActiveSelection({ backendId: "current-host" });
     const created = vi.fn();
     const cancelled = vi.fn();
     server.use(
-      http.post("*/mars/pairing/create", () => {
-        created();
+      http.post("*/mars/pairing/create", ({ request }) => {
+        created(request.headers.get("X-Session-API-Key"));
         return HttpResponse.json({
           secret: "one-time-proof",
           expiresAt: Date.now() + 300_000,
@@ -74,7 +91,7 @@ describe("device pairing", () => {
     expect(link.pathname).toBe("/pair");
     expect(link.search).toBe("");
     expect(link.hash).toContain("one-time-proof");
-    expect(created).toHaveBeenCalledTimes(1);
+    expect(created).toHaveBeenCalledExactlyOnceWith("current-host-key");
 
     await user.clear(
       screen.getByRole("textbox", { name: "BACKEND$PAIR_DEVICE_ADDRESS" }),

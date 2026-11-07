@@ -7,6 +7,17 @@ import { SUPER_ADMIN_SETUP_STEP_EVENT } from "#/components/features/setup-guide/
 import { useAddMcpServer } from "#/hooks/mutation/use-add-mcp-server";
 import { SUPER_ADMIN_SETUP_QUERY_KEYS } from "#/hooks/query/query-keys";
 
+const syncMocks = vi.hoisted(() => ({
+  updateDefaultAgentProfile: vi.fn(),
+  updateEveryAgentProfile: vi.fn(),
+}));
+vi.mock("#/hooks/mutation/sync-agent-profiles", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/hooks/mutation/sync-agent-profiles")
+  >()),
+  ...syncMocks,
+}));
+
 const useSettingsMock = vi.fn();
 vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: () => useSettingsMock(),
@@ -35,6 +46,24 @@ describe("useAddMcpServer", () => {
         },
       },
     });
+  });
+
+  it("leaves agent profiles alone: default loads every switched-on server", async () => {
+    vi.clearAllMocks();
+    vi.spyOn(SettingsService, "createMcpServer").mockResolvedValue(true);
+    const { result } = renderHook(() => useAddMcpServer(), {
+      wrapper: createWrapper(),
+    });
+
+    await result.current.mutateAsync({
+      id: "",
+      type: "shttp",
+      name: "docs",
+      url: "https://docs.example/mcp",
+    });
+
+    expect(syncMocks.updateDefaultAgentProfile).not.toHaveBeenCalled();
+    expect(syncMocks.updateEveryAgentProfile).not.toHaveBeenCalled();
   });
 
   it("adds only one named entry and leaves siblings out of the mutation", async () => {
@@ -133,6 +162,29 @@ describe("useAddMcpServer", () => {
     expect((onSetupStep.mock.calls[0][0] as CustomEvent).detail).toEqual({
       id: "add-integration",
     });
+    window.removeEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
+  });
+
+  it("also tells the setup guide that Git is connected for a Git provider's server", async () => {
+    vi.spyOn(SettingsService, "createMcpServer").mockResolvedValue(true);
+    const onSetupStep = vi.fn();
+    window.addEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
+    const { result } = renderHook(() => useAddMcpServer(), {
+      wrapper: createWrapper(),
+    });
+
+    await result.current.mutateAsync({
+      id: "",
+      type: "shttp",
+      name: "github",
+      url: "https://api.githubcopilot.com/mcp/",
+    });
+
+    expect(
+      onSetupStep.mock.calls.map(
+        ([event]) => (event as CustomEvent<{ id: string }>).detail.id,
+      ),
+    ).toEqual(["add-integration", "connect-git"]);
     window.removeEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
   });
 

@@ -42,7 +42,7 @@ export function PluginDetailModal({
       <div
         data-testid="plugin-detail-modal"
         data-plugin-name={plugin.name}
-        className="relative flex w-160 max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-border bg-base-secondary"
+        className="relative flex w-160 extension-dialog-viewport flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}

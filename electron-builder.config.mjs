@@ -30,8 +30,9 @@
  *   The fix is the `afterPack` hook below: after electron-builder has
  *   finished copying files, we rm -rf the bundled Resources/app/node_modules/
  *   directory, then copy back the dependency closure of RUNTIME_PACKAGES
- *   (~200 KB). The build wastes a few seconds copying files we immediately
- *   delete, but the final artifact is correctly tiny (~10 MB vs ~600 MB).
+ *   (~6 MB, nearly all @openhands/extensions). The build wastes a few seconds
+ *   copying files we immediately delete, but the final artifact stays small
+ *   (~16 MB vs ~600 MB).
  *
  * Packaged app layout (Resources/app/ = electron/ contents):
  *   main.mjs        ← Electron entry point
@@ -79,13 +80,24 @@ const isUniversal = ELECTRON_ARCH === "universal";
 //   scripts/tunnel-client.mjs  → ws       (imported directly by main.mjs,
 //                                          not spawned — the MARS
 //                                          port-forward tunnel client)
+//   scripts/dev-safe.mjs       → @openhands/extensions (read from disk by
+//                                          the agent-server as EXTENSIONS_PATH)
+//   scripts/mars-sandbox-prep.mjs → @openhands/typescript-client
+//                                          (imported through the MARS bridge
+//                                          main.mjs loads)
 // Their dependency closure is copied back into Resources/app/node_modules
 // after the strip below. If a spawned script (or main.mjs itself) gains a
 // new bare import, add the package here — a missing one crashes that
 // service in the installed app with ERR_MODULE_NOT_FOUND (invisible under
 // Finder, where stdout goes to /dev/null) and the splash times out waiting
 // for port 8000.
-const RUNTIME_PACKAGES = ["sirv", "httpxy", "ws"];
+const RUNTIME_PACKAGES = [
+  "sirv",
+  "httpxy",
+  "ws",
+  "@openhands/extensions",
+  "@openhands/typescript-client",
+];
 
 const repoRoot = dirname(fileURLToPath(import.meta.url));
 
@@ -141,7 +153,15 @@ async function stripBundledNodeModules(context) {
       sizeMb = Math.round(getDirSizeBytes(nm) / (1024 * 1024));
     } catch {}
 
-    await rm(nm, { recursive: true, force: true });
+    // On Windows a file another process still holds (a virus scan of the
+    // freshly copied tree) fails rmdir with ENOTEMPTY or EBUSY; Node retries
+    // those only when asked to.
+    await rm(nm, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 200,
+    });
 
     const rel = relative(process.cwd(), nm);
     const human = sizeMb != null ? ` (~${sizeMb} MB)` : "";
@@ -432,9 +452,7 @@ const config = {
     target: [
       {
         target: "dmg",
-        arch: [
-          ELECTRON_ARCH ?? (process.arch === "arm64" ? "arm64" : "x64"),
-        ],
+        arch: [ELECTRON_ARCH ?? (process.arch === "arm64" ? "arm64" : "x64")],
       },
     ],
     // Universal merge whitelist: the per-arch uv/node runtime binaries are

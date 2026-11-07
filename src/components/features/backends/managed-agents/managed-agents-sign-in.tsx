@@ -148,11 +148,14 @@ export function ManagedAgentsSignIn({
   const [token, setToken] = React.useState("");
   const [isTokenOpen, setIsTokenOpen] = React.useState(false);
   const isBusy = isSigningIn || isSavingToken;
+  // A browser sign-in that waits on DigitalOcean can be dropped for a token;
+  // the desktop app's cannot.
+  const isTokenBusy = isSavingToken || (isSigningIn && !pendingSignIn);
   const showTokenForm = !canUseOAuth || isTokenOpen;
 
   const submitToken = (event: React.FormEvent) => {
     event.preventDefault();
-    if (token.trim() && !isBusy) onSaveToken(token);
+    if (token.trim() && !isTokenBusy) onSaveToken(token);
   };
 
   return (
@@ -256,7 +259,7 @@ export function ManagedAgentsSignIn({
           <BrandButton
             type="submit"
             variant={canUseOAuth ? "secondary" : "primary"}
-            isDisabled={!token.trim() || isBusy}
+            isDisabled={!token.trim() || isTokenBusy}
             testId="managed-agents-token-submit"
             className="w-full"
             startContent={

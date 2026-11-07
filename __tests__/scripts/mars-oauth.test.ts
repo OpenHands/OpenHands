@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { createHash } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { server as mswServer } from "#/mocks/node";
 
 import {
   OAuthError,
@@ -11,8 +12,12 @@ import {
   readCallback,
   refreshGrant,
   renderReturnPage,
+  revokeToken,
   signInWithDigitalOcean,
 } from "../../scripts/mars-oauth.mjs";
+
+beforeAll(() => mswServer.close());
+afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
 
 const REDIRECT = "http://127.0.0.1:3000/mars/oauth/callback";
 
@@ -62,6 +67,16 @@ describe("buildAuthorizeUrl and createPkce", () => {
     );
     expect(url.searchParams.get("redirect_uri")).toBe(REDIRECT);
     expect(url.searchParams.get("state")).toBe("state-1");
+    // These permissions come from DigitalOcean's Harness Runtime API contract:
+    // read lists, create provisions, operate resumes/connects, manage deletes.
+    expect(new Set(url.searchParams.get("scope")?.split(" "))).toEqual(
+      new Set([
+        "agent_harness_session:read",
+        "agent_harness_session:create",
+        "agent_harness_session:operate",
+        "agent_harness_session:manage",
+      ]),
+    );
     expect(url.toString()).not.toContain(verifier);
   });
 });
@@ -76,6 +91,14 @@ describe("readCallback", () => {
     expect(readCallback("?code=c2&state=s2")).toMatchObject({
       code: "c2",
       state: "s2",
+    });
+  });
+
+  it("reads the path and query the return route receives", () => {
+    expect(readCallback("/mars/oauth/callback?code=c3&state=s3")).toEqual({
+      code: "c3",
+      state: "s3",
+      error: null,
     });
   });
 
@@ -131,6 +154,48 @@ describe("exchangeCode and refreshGrant", () => {
     await expect(refused).rejects.toBeInstanceOf(OAuthError);
     await expect(refused).rejects.toMatchObject({ isRevoked: true });
     expect(endpoint.requests[0].get("grant_type")).toBe("refresh_token");
+  });
+
+  it("treats DigitalOcean's answer to a reused refresh token as signed out, and a lost connection as not", async () => {
+    // What cloud.digitalocean.com returned for a spent refresh token (20 Oct).
+    const reused = fakeTokenEndpoint({
+      status: 400,
+      body: { error: "invalid_request" },
+    });
+    const offline = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    }) as unknown as typeof fetch;
+
+    await expect(
+      refreshGrant({
+        clientId: "c",
+        refreshToken: "spent",
+        fetchImpl: reused.fetchImpl,
+      }),
+    ).rejects.toMatchObject({ isRevoked: true });
+    await expect(
+      refreshGrant({ clientId: "c", refreshToken: "r", fetchImpl: offline }),
+    ).rejects.toMatchObject({ isRevoked: false });
+  });
+});
+
+describe("revokeToken", () => {
+  it("revokes an access token and says whether DigitalOcean confirmed it", async () => {
+    const calls: RequestInit[] = [];
+    const answer = (status: number) =>
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls.push(init);
+        return new Response("{}", { status });
+      }) as unknown as typeof fetch;
+
+    expect(await revokeToken("access-1", answer(200))).toBe(true);
+    expect(await revokeToken("access-1", answer(401))).toBe(false);
+    expect(calls[0].headers).toMatchObject({
+      Authorization: "Bearer access-1",
+    });
+    expect(new URLSearchParams(String(calls[0].body)).get("token")).toBe(
+      "access-1",
+    );
   });
 });
 
@@ -194,6 +259,43 @@ describe("createSignInAttempts", () => {
       attempts.claim(new URL(authorizeUrl).searchParams.get("state")),
     ).toBeNull();
   });
+
+  it("finishes a return claimed just before its sign-in expired", async () => {
+    let now = 0;
+    const attempts = createSignInAttempts({ ttlMs: 1000, now: () => now });
+    const { attemptId, authorizeUrl } = attempts.begin({
+      clientId: "c",
+      redirectUri: REDIRECT,
+    });
+    now = 990;
+    attempts.claim(new URL(authorizeUrl).searchParams.get("state"));
+    const waiting = attempts.wait(attemptId, 10_000);
+
+    // The exchange is still out when the ten minutes pass.
+    now = 2000;
+    attempts.begin({ clientId: "c", redirectUri: REDIRECT });
+    attempts.succeed(attemptId);
+
+    await expect(waiting).resolves.toEqual({ status: "done", message: null });
+  });
+
+  it("tells a waiting page its sign-in expired", async () => {
+    let now = 0;
+    const attempts = createSignInAttempts({ ttlMs: 1000, now: () => now });
+    const { attemptId } = attempts.begin({
+      clientId: "c",
+      redirectUri: REDIRECT,
+    });
+    const waiting = attempts.wait(attemptId, 10_000);
+
+    now = 2000;
+    attempts.begin({ clientId: "c", redirectUri: REDIRECT });
+
+    await expect(waiting).resolves.toEqual({
+      status: "failed",
+      message: "This sign-in expired. Start again.",
+    });
+  });
 });
 
 describe("renderReturnPage", () => {
@@ -204,27 +306,28 @@ describe("renderReturnPage", () => {
     expect(page).not.toContain("<b>Team</b>");
   });
 
-  it("takes the spent code out of the address bar, whatever the outcome", () => {
-    for (const ok of [true, false]) {
+  it("takes the spent code out of the address bar after a sign-in, and leaves a failed one's to paste", () => {
+    const runPage = (ok: boolean) => {
       // The page's own script, run against a browser at the return address.
       const script = /<script>([\s\S]*?)<\/script>/.exec(
         renderReturnPage({ ok }),
       )![1];
       const history = { replaceState: vi.fn() };
       const location = { pathname: new URL(REDIRECT).pathname };
-
       new Function("history", "location", "setTimeout", script)(
         history,
         location,
         vi.fn(),
       );
+      return history.replaceState;
+    };
 
-      expect(history.replaceState).toHaveBeenCalledWith(
-        null,
-        "",
-        "/mars/oauth/callback",
-      );
-    }
+    expect(runPage(true)).toHaveBeenCalledWith(
+      null,
+      "",
+      "/mars/oauth/callback",
+    );
+    expect(runPage(false)).not.toHaveBeenCalled();
   });
 });
 
@@ -260,6 +363,29 @@ describe("signInWithDigitalOcean (desktop)", () => {
     expect(endpoint.requests).toHaveLength(1);
     expect(endpoint.requests[0].get("code")).toBe("code-1");
     expect(endpoint.requests[0].get("redirect_uri")).toBe(redirect.toString());
+  });
+
+  it("ignores a declined return for another sign-in, and stops on its own", async () => {
+    let forgedStatus: number | undefined;
+    const signingIn = signInWithDigitalOcean({
+      clientId: "client-1",
+      fetchImpl: fakeTokenEndpoint().fetchImpl,
+      openExternal: async (authorizeUrl) => {
+        const url = new URL(authorizeUrl);
+        const redirect = url.searchParams.get("redirect_uri");
+        const state = url.searchParams.get("state");
+        // A page that can reach the listener but doesn't know the state.
+        forgedStatus = (
+          await fetch(`${redirect}?error=access_denied&state=guessed`)
+        ).status;
+        await fetch(
+          `${redirect}?error=access_denied&error_description=The+user+denied+access&state=${state}`,
+        );
+      },
+    });
+
+    await expect(signingIn).rejects.toThrow("The user denied access");
+    expect(forgedStatus).toBe(400);
   });
 
   it("explains that sign-in is not set up when no client is configured", async () => {

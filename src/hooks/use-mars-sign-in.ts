@@ -117,7 +117,10 @@ export function useMarsSignIn({
       }
     },
     onMutate,
-    onSuccess,
+    // A cancelled sign-in changed nothing; the form it was started from stays.
+    onSuccess: (result) => {
+      if (result) onSuccess();
+    },
     onError,
   });
   const pastedReturn = useMutation({
@@ -173,7 +176,11 @@ export function useMarsSignIn({
     pendingSignIn: pending,
     completeSignIn: (returned: string) => pastedReturn.mutate(returned),
     cancelSignIn,
-    saveToken: (token: string) => pat.mutate(token),
+    saveToken: (token: string) => {
+      // A token instead: the browser sign-in still waiting is dropped.
+      if (attemptRef.current) cancelSignIn();
+      pat.mutate(token);
+    },
     switchConnection: (id: string) => switchConnection.mutate(id),
     signOut: () => signOut.mutate(),
     isSigningIn: oauth.isPending,

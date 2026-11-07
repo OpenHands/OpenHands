@@ -175,6 +175,12 @@ export interface MarsTunnelStatus {
   localPort: number | undefined;
   error: string | undefined;
   upstreamFailure?: MarsUpstreamFailure | null;
+  /**
+   * How preparing the sandbox went, when the bridge prepares it on connect
+   * (scripts/mars-sandbox-prep.mjs). `unreachable` means the bridge already
+   * waited out the guest agent-server, so the renderer need not wait again.
+   */
+  sandbox?: "prepared" | "unreachable" | "failed";
 }
 
 export interface OpenMarsTunnelParams {
@@ -295,11 +301,7 @@ const TERMINAL_SESSION_STATUSES = new Set([
 ]);
 
 export type MarsSessionPhase =
-  | "ready"
-  | "paused"
-  | "starting"
-  | "ended"
-  | "failed";
+  "ready" | "paused" | "starting" | "ended" | "failed";
 
 /**
  * Collapse `SESSION_STATUS_*` into the few states the UI treats differently.
@@ -414,7 +416,8 @@ export async function waitForMarsAgentServer(
   {
     sessionId,
     budgetMs = AGENT_SERVER_WAIT_MS,
-  }: { sessionId?: string; budgetMs?: number } = {},
+    portClosedGraceMs = GUEST_PORT_CLOSED_GRACE_MS,
+  }: { sessionId?: string; budgetMs?: number; portClosedGraceMs?: number } = {},
 ): Promise<string | null> {
   const startedAt = Date.now();
   const deadline = startedAt + budgetMs;
@@ -435,7 +438,7 @@ export async function waitForMarsAgentServer(
       const now = Date.now();
       if (failure?.closeCode === CLOSE_GUEST_DIAL_FAILED) {
         guestPortClosedSince ??= now;
-        if (now - guestPortClosedSince >= GUEST_PORT_CLOSED_GRACE_MS) {
+        if (now - guestPortClosedSince >= portClosedGraceMs) {
           throw new MarsAttachError("not-openhands", failure.message);
         }
       } else {

@@ -19,10 +19,15 @@ const AUTHORIZE_URL = "https://cloud.digitalocean.com/v1/oauth/authorize";
 const TOKEN_URL = "https://cloud.digitalocean.com/v1/oauth/token";
 const REVOKE_URL = "https://cloud.digitalocean.com/v1/oauth/revoke";
 
-/** Permissions the edge enforces on `/v2/agents/*` for MARS. */
+/**
+ * Permissions required by the agent/session actions Canvas exposes. A grant
+ * issued with fewer scopes needs a new sign-in; refreshing cannot add scopes.
+ */
 export const OAUTH_SCOPES = [
   "agent_harness_session:read",
+  "agent_harness_session:create",
   "agent_harness_session:operate",
+  "agent_harness_session:manage",
 ].join(" ");
 
 /** Where a browser comes back to on the Canvas server (scripts/mars-web-bridge.mjs). */
@@ -48,9 +53,14 @@ export class OAuthError extends Error {
     this.code = code;
   }
 
-  /** The grant is gone (used, revoked or expired): only a new sign-in helps. */
+  /**
+   * The grant is gone (used, revoked or expired): only a new sign-in helps.
+   * DigitalOcean answers a spent refresh token with `invalid_request`, so
+   * any refusal counts, not just `invalid_grant`; only a failure to reach
+   * DigitalOcean (no status) is worth retrying.
+   */
   get isRevoked() {
-    return this.code === "invalid_grant";
+    return this.status === 400 || this.status === 401;
   }
 }
 
@@ -89,9 +99,9 @@ export function buildAuthorizeUrl({
 }
 
 /**
- * What DigitalOcean sent back, from the full return address or just its
- * query string: a code, or the error it redirects with when the user
- * declines.
+ * What DigitalOcean sent back, from the full return address, the path and
+ * query the return route receives, or just the query: a code, or the error
+ * it redirects with when the user declines.
  *
  * @param {string | null | undefined} returned
  * @returns {{ code: string | null, state: string | null, error: string | null }}
@@ -102,7 +112,8 @@ export function readCallback(returned) {
   try {
     params = new URL(text).searchParams;
   } catch {
-    params = new URLSearchParams(text.replace(/^[?#]/, ""));
+    const query = text.includes("?") ? text.slice(text.indexOf("?") + 1) : text;
+    params = new URLSearchParams(query.replace(/^#/, ""));
   }
   const error = params.get("error");
   return {
@@ -233,7 +244,7 @@ export function createSignInAttempts({
   now = Date.now,
 } = {}) {
   /**
-   * @type {Map<string, { id: string, state: string, verifier: string, clientId: string, redirectUri: string, createdAt: number, status: "pending" | "working" | "done" | "failed", message: string | null, waiters: Set<() => void> }>}
+   * @type {Map<string, { id: string, state: string, verifier: string, clientId: string, redirectUri: string, createdAt: number, status: "pending" | "working" | "done" | "failed", message: string | null, cancelled?: boolean, waiters: Set<() => void> }>}
    */
   const attempts = new Map();
 
@@ -247,6 +258,9 @@ export function createSignInAttempts({
   function prune() {
     for (const [id, attempt] of attempts) {
       if (now() - attempt.createdAt <= ttlMs) continue;
+      // A return claimed just in time is still being finished; it settles,
+      // and is pruned, once its exchange answers.
+      if (attempt.status === "working") continue;
       if (attempt.status === "pending") {
         settle(attempt, "failed", "This sign-in expired. Start again.");
       }
@@ -319,6 +333,16 @@ export function createSignInAttempts({
       return null;
     },
 
+    /**
+     * Whether an attempt still waits for its return.
+     *
+     * @param {string} id
+     */
+    isOpen(id) {
+      prune();
+      return attempts.get(id)?.status === "pending";
+    },
+
     /** @param {string} id */
     succeed(id) {
       const attempt = attempts.get(id);
@@ -359,14 +383,21 @@ export function createSignInAttempts({
         }
         attempt.waiters.add(wake);
       });
-      return view(attempts.get(id));
+      // This attempt as it settled: expiring and cancelling also remove it.
+      return view(attempt);
     },
 
-    /** @param {string} id */
+    /**
+     * A return already being finished checks `cancelled` before it commits
+     * anything. A finished sign-in stays finished.
+     *
+     * @param {string} id
+     */
     cancel(id) {
       const attempt = attempts.get(id);
-      if (!attempt) return;
-      if (attempt.status === "pending") {
+      if (!attempt || attempt.status === "done") return;
+      attempt.cancelled = true;
+      if (attempt.status === "pending" || attempt.status === "working") {
         settle(attempt, "failed", "Sign-in was cancelled.");
       }
       attempts.delete(id);
@@ -417,11 +448,13 @@ export function renderReturnPage({ ok, teamName = null, message = null }) {
 </head>
 <body><div class="card"><h1>${escapeHtml(title)}</h1><p>${escapeHtml(detail)}</p></div>
 <script>
-  // The code is spent either way; it leaves the address bar and history.
-  history.replaceState(null, "", location.pathname);
   ${
-    // A tab Canvas opened may close itself; any other stays with its message.
-    ok ? "setTimeout(function () { window.close(); }, 1500);" : ""
+    // A spent code leaves the address bar and history, and a tab Canvas
+    // opened may close itself. After a failure the address stays: its code
+    // may be unspent (another Canvas on this port), and it can be pasted.
+    ok
+      ? 'history.replaceState(null, "", location.pathname);\n  setTimeout(function () { window.close(); }, 1500);'
+      : ""
   }
 </script></body>
 </html>`;
@@ -506,6 +539,10 @@ export async function signInWithDigitalOcean({
     });
   });
 
+  // The race below observes it, but a return can land while openExternal is
+  // still resolving; until then its rejection must not count as unhandled.
+  returned.catch(() => {});
+
   const failed = new Promise((_, reject) => server.on("error", reject));
 
   let timer;
@@ -538,21 +575,29 @@ export async function signInWithDigitalOcean({
 }
 
 /**
- * Invalidate a token server-side. Best-effort: a failed revoke must not
- * prevent the local credential from being forgotten.
+ * Invalidate an access token at DigitalOcean, which takes only access
+ * tokens here. Best-effort: resolves false when DigitalOcean did not
+ * confirm, and a failed revoke must not stop the local sign-in from being
+ * forgotten.
+ *
+ * @param {string} accessToken
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<boolean>}
  */
-export async function revokeToken(token, fetchImpl = globalThis.fetch) {
+export async function revokeToken(accessToken, fetchImpl = globalThis.fetch) {
   try {
-    await fetchImpl(REVOKE_URL, {
+    const response = await fetchImpl(REVOKE_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: new URLSearchParams({ token }).toString(),
+      body: new URLSearchParams({ token: accessToken }).toString(),
       signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS),
     });
+    return response.ok;
   } catch {
     // Network failure on sign-out; the local record is still removed.
+    return false;
   }
 }

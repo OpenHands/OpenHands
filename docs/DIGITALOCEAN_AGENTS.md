@@ -7,8 +7,12 @@ on the team that is active in Canvas.
 
 ## The key
 
-- An agent in a local Canvas conversation already has it, as
-  `$OPENHANDS_AUTOMATION_API_KEY`.
+- An agent in a conversation on Canvas's Local backend (the Agent Server
+  that Canvas starts on this machine or in its Docker container) already
+  has it, as `$OPENHANDS_AUTOMATION_API_KEY`. The launcher sets that for
+  Automations; it is the same key. (A Docker deployment that sets
+  `MARS_WEB_KEY` makes `/mars/*` want that key instead.) Nothing in the
+  agent's prompt mentions DigitalOcean, so point it at this page.
 - On the machine that runs Canvas, it is in
   `~/.openhands/agent-canvas/api-key.txt` (Docker: `$STATE_DIR/api-key.txt`,
   or whatever `LOCAL_BACKEND_API_KEY` is set to).
@@ -23,6 +27,11 @@ The agent must be able to reach Canvas. By default Canvas listens on
 DigitalOcean session, in the cloud or in CI cannot reach it; it should use its
 own DigitalOcean token with DigitalOcean directly
 (`doctl agents port-forward`).
+
+These calls are served by the browser build of Canvas (the `npx` launcher
+or Docker), and only when it is started with `MARS_WEB=1`: the DigitalOcean
+integration is still experimental, so it is off by default. The desktop app
+keeps its DigitalOcean bridge inside the app and doesn't serve them yet.
 
 ## The calls
 
@@ -47,7 +56,11 @@ rpc pauseSession '["<session id>"]'       # when done
 `openTunnel` answers with a `host` such as
 `$B/mars/sessions/<session id>`. That is the session's Agent Server: use its
 REST API under that prefix with the same `X-Session-API-Key` header. Canvas
-prepares the sandbox before `openTunnel` answers, so it is ready to use.
+prepares the sandbox before `openTunnel` answers and says how that went in
+`sandbox`: `prepared` means it is ready to use; `unreachable` means its Agent
+Server never answered (`upstreamFailure` may say why); `failed` means a
+preparation step failed, so the terminal and encrypted settings may not work
+until the next `openTunnel` tries again.
 
 ## With the OpenHands SDK
 
@@ -75,5 +88,8 @@ in that session's Agent Server settings.
 `/mars/sessions/<id>/sockets/...` accepts the key in any of three ways: the
 `X-Session-API-Key` header, the Canvas cookie, or (what the SDK and the
 TypeScript client do) a first message `{"type":"auth","session_api_key":"..."}`
-sent within 10 seconds. Canvas does not connect to the session until the key
-checks out.
+sent within 10 seconds. A wrong header or a stale cookie is refused with 401
+at once; only a socket that brings neither may log in by its first message.
+Canvas does not connect to the session until the key checks out; a wrong or
+missing first-message key closes the socket with 4001, as the Agent Server
+does. The guest's pings reach the agent, so a dead connection is noticed.

@@ -637,6 +637,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
       50,
       0,
       "me",
+      undefined,
     );
   });
 
@@ -780,6 +781,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
         50,
         0,
         "me",
+        undefined,
       ),
     );
     expect(screen.getByTestId("automations-empty")).toBeInTheDocument();
@@ -895,6 +897,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
     expect(AutomationService.getAutomations).toHaveBeenLastCalledWith(
       50,
       0,
+      undefined,
       undefined,
     );
   });

@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { FileText, MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
@@ -13,7 +20,7 @@ import { ResizeHandle } from "../../../ui/resize-handle";
 import { useResizablePanels } from "#/hooks/use-resizable-panels";
 import { useConversationStore } from "#/stores/conversation-store";
 import { AUTOMATION_SETUP_SHOW_AGENT_EVENT } from "#/components/features/automations/setup/automation-setup-agent-request";
-import { AutomationSetupPanel } from "#/components/features/automations/setup/automation-setup-panel";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { consumeAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 import type { AutomationSetupDraft } from "#/api/automation-setup-types";
 import { useConversationId } from "#/hooks/use-conversation-id";
@@ -27,6 +34,12 @@ import { useConversationOverviewDrawerOptional } from "../conversation-overview-
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { hasAutomationSetupModeTag } from "#/utils/automation-draft-tags";
+
+const AutomationSetupPanel = lazy(() =>
+  import("#/components/features/automations/setup/automation-setup-panel").then(
+    (module) => ({ default: module.AutomationSetupPanel }),
+  ),
+);
 
 const BLANK_AUTOMATION_SETUP_DRAFT: AutomationSetupDraft = {
   prompt: "",
@@ -58,12 +71,12 @@ function AutomationSetupDockedComposer({
   onTarget: (element: HTMLDivElement | null) => void;
 }) {
   return (
-    <div className="custom-scrollbar-always pointer-events-none absolute inset-0 z-20 overflow-y-scroll px-5 [scrollbar-gutter:stable] [&::-webkit-scrollbar-thumb]:bg-transparent">
-      <div className="relative mx-auto h-full w-full min-w-0 max-w-[800px]">
+    <div className="automation-setup-scroll-gutter custom-scrollbar-always pointer-events-none absolute inset-0 z-20 overflow-y-scroll px-5 [&::-webkit-scrollbar-thumb]:bg-transparent">
+      <div className="automation-setup-content relative mx-auto h-full w-full min-w-0">
         <div
           ref={onTarget}
           data-testid="automation-setup-docked-composer"
-          className="pointer-events-auto absolute inset-x-0 bottom-5 overflow-visible rounded-[15px] shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+          className="automation-setup-composer-dock pointer-events-auto absolute inset-x-0 bottom-5 overflow-visible"
         />
       </div>
     </div>
@@ -76,7 +89,7 @@ function getDesktopTabPanelClass(isRightPanelShown: boolean) {
     : "w-0 translate-x-full opacity-0";
 }
 
-export function ConversationMain() {
+export function ConversationMain({ children }: { children?: ReactNode } = {}) {
   const { t } = useTranslation("openhands");
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
@@ -84,6 +97,23 @@ export function ConversationMain() {
   const isSidebarRailHidden = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
   const { isRightPanelShown, setHasRightPanelToggled, setIsRightPanelShown } =
     useConversationStore();
+  const [openedTabConversationId, setOpenedTabConversationId] = useState<
+    string | null
+  >(null);
+  const shouldMountTabs =
+    !children &&
+    (isRightPanelShown || openedTabConversationId === conversationId);
+
+  // Keep an opened panel mounted when collapsed, but defer it in the next chat.
+  useEffect(() => {
+    setOpenedTabConversationId((previous) =>
+      !isMobile && isRightPanelShown
+        ? conversationId
+        : previous === conversationId
+          ? previous
+          : null,
+    );
+  }, [conversationId, isMobile, isRightPanelShown]);
   // Derived per conversation during render: holding it in state reset by an
   // effect let the first render after a conversation switch reuse the previous
   // conversation's handoff, mounting the setup panel (which tags the
@@ -163,7 +193,7 @@ export function ConversationMain() {
         <header
           data-testid="automation-setup-topbar"
           className={cn(
-            "flex shrink-0 border-b border-[var(--oh-border)] bg-canvas-base",
+            "flex shrink-0 border-b border-border bg-canvas-base",
             isMobile
               ? "flex-col"
               : "h-10 min-h-10 items-center justify-between gap-2 px-3",
@@ -173,6 +203,7 @@ export function ConversationMain() {
             className={cn(
               "flex min-w-0 items-center gap-2",
               isMobile && "h-10 justify-between px-3",
+              isSidebarRailHidden && "h-12",
             )}
           >
             <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -188,7 +219,7 @@ export function ConversationMain() {
               <div
                 role="group"
                 aria-label={`${t(I18nKey.AUTOMATION_SETUP$VIEW_FORM)} / ${t(I18nKey.AUTOMATION_SETUP$VIEW_CONVERSATION)}`}
-                className="flex shrink-0 overflow-hidden rounded-lg border border-[var(--oh-border)]"
+                className="flex shrink-0 overflow-hidden rounded-lg border border-border"
               >
                 {MOBILE_AUTOMATION_VIEW_OPTIONS.map(
                   ({ view, labelKey, Icon }) => {
@@ -206,7 +237,7 @@ export function ConversationMain() {
                           "inline-flex size-7 items-center justify-center",
                           mobileAutomationView === view
                             ? "bg-tertiary text-content"
-                            : "text-[var(--oh-muted)]",
+                            : "text-muted",
                         )}
                       >
                         <Icon className="size-4" aria-hidden />
@@ -307,17 +338,18 @@ export function ConversationMain() {
               data-testid="chat-pane-header"
               className={cn(
                 "flex h-10 min-h-10 shrink-0 items-center",
-                isSidebarRailHidden && "gap-2 pl-2.5",
+                isSidebarRailHidden && "h-12 min-h-12 gap-2 pl-2.5",
               )}
             >
               {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1" inert={!!children}>
                 <ConversationNameWithStatus />
               </div>
             </div>
           ) : null}
           <div className="flex-1 min-h-0 flex flex-col">
             <ChatInterfaceWrapper
+              pendingContent={children}
               isRightPanelShown={!isMobile && isRightPanelShown}
               showGitControlBar={!isAutomationSetupMode}
               showEmptyStateSuggestions={!isAutomationSetupMode}
@@ -353,14 +385,16 @@ export function ConversationMain() {
             data-testid="automation-setup-mobile-form"
             className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
           >
-            <AutomationSetupPanel
-              draft={automationSetupDraft}
-              conversationId={conversationId}
-              conversationTags={conversation?.tags}
-              toolbarPortal={automationToolbarElement}
-              showInlineHeader={false}
-              reserveComposerSpace
-            />
+            <Suspense fallback={<LoadingSpinner size="small" />}>
+              <AutomationSetupPanel
+                draft={automationSetupDraft}
+                conversationId={conversationId}
+                conversationTags={conversation?.tags}
+                toolbarPortal={automationToolbarElement}
+                showInlineHeader={false}
+                reserveComposerSpace
+              />
+            </Suspense>
             <AutomationSetupDockedComposer onTarget={setComposerDockTarget} />
           </div>
         ) : null}
@@ -391,15 +425,17 @@ export function ConversationMain() {
                 )}
               >
                 {automationSetupDraft ? (
-                  <AutomationSetupPanel
-                    draft={automationSetupDraft}
-                    conversationId={conversationId}
-                    conversationTags={conversation?.tags}
-                    toolbarPortal={automationToolbarElement}
-                    showInlineHeader={false}
-                    reserveComposerSpace={showDockedComposer}
-                  />
-                ) : (
+                  <Suspense fallback={<LoadingSpinner size="small" />}>
+                    <AutomationSetupPanel
+                      draft={automationSetupDraft}
+                      conversationId={conversationId}
+                      conversationTags={conversation?.tags}
+                      toolbarPortal={automationToolbarElement}
+                      showInlineHeader={false}
+                      reserveComposerSpace={showDockedComposer}
+                    />
+                  </Suspense>
+                ) : shouldMountTabs ? (
                   <>
                     <div
                       data-testid="tabs-pane-header"
@@ -411,7 +447,7 @@ export function ConversationMain() {
                       <ConversationTabContent />
                     </div>
                   </>
-                )}
+                ) : null}
                 {showDockedComposer ? (
                   // The setup form scrolls in a padded column with a stable
                   // scrollbar gutter. This overlay has to be a scroll container
@@ -425,10 +461,12 @@ export function ConversationMain() {
             </div>
           </div>
         )}
-        <ConversationOverviewDrawer
-          isMobile={isMobile}
-          resizeContainerRef={containerRef}
-        />
+        {!children && (
+          <ConversationOverviewDrawer
+            isMobile={isMobile}
+            resizeContainerRef={containerRef}
+          />
+        )}
       </div>
     </div>
   );

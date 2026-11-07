@@ -1,5 +1,4 @@
-import { getAgentServerHeaders } from "#/api/agent-server-config";
-import { getRegisteredBackends } from "#/api/backend-registry/active-store";
+import { getMarsBridgeHeaders } from "./mars-web-bridge";
 import { buildAgentCanvasPath } from "#/utils/base-path";
 
 export const DEVICE_PAIRING_PATH = "/pair";
@@ -35,16 +34,7 @@ export interface DevicePairingInvitation {
 
 /** Host access belongs to this origin, never to the selected DO guest or Cloud. */
 export function getCanvasHostHeaders(): Record<string, string> {
-  const baked = getAgentServerHeaders();
-  if (Object.keys(baked).length > 0) return baked;
-  const host = typeof window === "undefined" ? null : window.location.origin;
-  const backend = getRegisteredBackends().find(
-    (item) =>
-      item.kind === "local" &&
-      !item.marsSessionId &&
-      item.host.replace(/\/+$/, "") === host,
-  );
-  return backend?.apiKey ? { "X-Session-API-Key": backend.apiKey } : {};
+  return getMarsBridgeHeaders();
 }
 
 export function isUnencryptedNetworkUrl(value: string): boolean {
