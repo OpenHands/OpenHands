@@ -2,7 +2,10 @@ import React from "react";
 import { ModalBody } from "../modal-body";
 import { ModalButton } from "../../buttons/modal-button";
 import { cn } from "#/utils/utils";
-import { modalTitleClassName } from "#/utils/modal-classes";
+import {
+  modalDescriptionClassName,
+  modalTitleClassName,
+} from "#/utils/modal-classes";
 
 interface ButtonConfig {
   text: string;
@@ -27,14 +30,18 @@ export function BaseModalTitle({ title, id, className }: BaseModalTitleProps) {
 interface BaseModalDescriptionProps {
   description?: React.ReactNode;
   children?: React.ReactNode;
+  className?: string;
 }
 
 export function BaseModalDescription({
   description,
   children,
+  className,
 }: BaseModalDescriptionProps) {
   return (
-    <span className="text-sm text-modal-muted">{children || description}</span>
+    <span className={cn(modalDescriptionClassName, className)}>
+      {children || description}
+    </span>
   );
 }
 
