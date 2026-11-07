@@ -265,7 +265,7 @@ export function ChatInputActions({
   // conditions ChatInputModelMenuContent / ChatInputLlmProfileMenuContent use.
   const hasModelMenuRows =
     pickerKind === "model"
-      ? modelState.showAcpPicker || Boolean(modelState.displayModel)
+      ? modelState.hasModelRows
       : (llmProfileState.canSwitchProfile &&
           llmProfileState.profiles.length > 0) ||
         (!llmProfileState.canSwitchProfile &&
