@@ -422,6 +422,41 @@ describe("vite library build", () => {
 
     // Connection chooser disclosures retain exact fractional tracks and their
     // motion override after extraction and library selector scoping.
+    const transitionProperties = {
+      "transition-control-shell":
+        "background-color,border-color,box-shadow,opacity",
+      "!transition-control-shell":
+        "background-color,border-color,box-shadow,opacity",
+      "transition-control-transform": "transform",
+      "transition-context-ring": "stroke-dashoffset,stroke",
+      "transition-panel-width": "width",
+      "transition-sidebar-width": "width,min-width",
+    };
+    for (const [name, properties] of Object.entries(transitionProperties)) {
+      const motion = recipe(name);
+      expect(declarations(motion)).toEqual({
+        "transition-property": properties,
+        "transition-timing-function":
+          "var(--tw-ease,var(--default-transition-timing-function))",
+        "transition-duration":
+          "var(--tw-duration,var(--default-transition-duration))",
+      });
+      motion.walkDecls((declaration) => {
+        expect(Boolean(declaration.important)).toBe(name.startsWith("!"));
+      });
+    }
+    expect(declarations(recipe("animate-chat-status-pulse"))).toEqual({
+      animation: "1.2s ease-in-out infinite pulse",
+    });
+    const pulseFrames: Record<string, Record<string, string>> = {};
+    stylesheet.walkAtRules("keyframes", (frames) => {
+      if (frames.params === "pulse")
+        frames.walkRules((frame) => {
+          pulseFrames[frame.selector] = declarations(frame);
+        });
+    });
+    expect(pulseFrames).toEqual({ "50%": { opacity: ".5" } });
+
     const disclosure = recipe("backend-chooser-disclosure");
     expect(declarations(disclosure)).toMatchObject({
       "transition-property": "grid-template-rows",

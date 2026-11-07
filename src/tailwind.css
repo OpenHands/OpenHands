@@ -101,6 +101,7 @@
   --color-cool-grey-925: var(--cool-grey-925);
   --color-cool-grey-950: var(--cool-grey-950);
   --color-cool-grey-975: var(--cool-grey-975);
+  --animate-chat-status-pulse: pulse 1.2s ease-in-out infinite;
 }
 
 :root {
@@ -917,6 +918,51 @@ code .token {
 @utility command-menu-trigger-hint {
   font-size: 10px;
   @apply tracking-[0.12em];
+}
+
+@utility transition-control-shell {
+  transition-property: background-color, border-color, box-shadow, opacity;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-control-transform {
+  transition-property: transform;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-context-ring {
+  transition-property: stroke-dashoffset, stroke;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-panel-width {
+  transition-property: width;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-sidebar-width {
+  transition-property: width, min-width;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
 }
 
 /* Both chooser disclosures keep their mounted content on the same grid rail. */
