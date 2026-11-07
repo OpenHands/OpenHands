@@ -45,7 +45,7 @@ export function MarketplaceSection({
       {visibleEntries.length === 0 ? (
         <div
           data-testid="mcp-marketplace-empty"
-          className="rounded-xl border border-dashed border-[var(--oh-border)] p-6 text-center"
+          className="rounded-xl border border-dashed border-border p-6 text-center"
         >
           <p className="text-xs text-tertiary-light">
             {t(I18nKey.MCP$SEARCH_EMPTY)}

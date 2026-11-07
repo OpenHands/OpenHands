@@ -6,6 +6,7 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import type { GitSyncStatus } from "#/types/git-sync";
+import { bytesToBase64 } from "#/utils/base64";
 import AutomationService from "./automation-service.api";
 
 const {
@@ -185,6 +186,16 @@ describe("AutomationService.syncTelemetryConsent", () => {
     );
   });
 
+  it("keeps a pending local revocation when consent sync fails", async () => {
+    localAxios.post.mockRejectedValueOnce(new Error("automation unavailable"));
+
+    await expect(
+      AutomationService.syncTelemetryConsent("denied"),
+    ).rejects.toThrow("automation unavailable");
+
+    expect(clearPendingLocalTelemetryRevocation).not.toHaveBeenCalled();
+  });
+
   it("skips cloud backends because cloud consent is handled by auth", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
@@ -356,6 +367,56 @@ describe("AutomationService.createAutomation", () => {
       expect.any(Object),
     );
   });
+
+  it("uploads the bundle and creates a script automation disabled in one request", async () => {
+    const bundle = new Uint8Array([0x1f, 0x8b, 8, 0, 1, 2, 3]);
+    const scriptSpec: AutomationSpec = {
+      name: "Socials monitor",
+      prompt: null,
+      trigger: { type: "cron", schedule: "0,30 9-17 * * 1-5", timezone: "UTC" },
+      enabled: false,
+      model: "fast",
+      timeout: 900,
+      script: {
+        entrypoint: "python3 main.py",
+        setup_script_path: "setup.sh",
+        tarball_base64: bytesToBase64(bundle),
+      },
+    };
+    localAxios.post.mockResolvedValueOnce({
+      data: { tarball_path: "oh-internal://uploads/socials-monitor" },
+    });
+
+    const created = await AutomationService.createAutomation(scriptSpec);
+
+    expect(localAxios.post).toHaveBeenNthCalledWith(
+      1,
+      "/api/automation/v1/uploads?name=Socials%20monitor",
+      bundle,
+      { headers: { "Content-Type": "application/gzip" } },
+    );
+    expect(localAxios.post).toHaveBeenNthCalledWith(
+      2,
+      "/api/automation/v1",
+      {
+        name: "Socials monitor",
+        trigger: {
+          type: "cron",
+          schedule: "0,30 9-17 * * 1-5",
+          timezone: "UTC",
+        },
+        enabled: false,
+        tarball_path: "oh-internal://uploads/socials-monitor",
+        entrypoint: "python3 main.py",
+        setup_script_path: "setup.sh",
+        model: "fast",
+        timeout: 900,
+      },
+      expect.objectContaining({ baseURL: localBackend.host }),
+    );
+    expect(localAxios.patch).not.toHaveBeenCalled();
+    expect(created).toEqual(createdAutomation);
+  });
 });
 
 const gitSyncStatus: GitSyncStatus = {
@@ -410,6 +471,9 @@ describe("AutomationService git sync", () => {
         backend: cloudBackend,
         method: "GET",
         path: "/api/automation/v1/git-sync/status",
+        headers: expect.objectContaining({
+          "X-OpenHands-Client": "agent_canvas",
+        }),
       }),
     );
   });
@@ -440,6 +504,32 @@ describe("AutomationService git sync", () => {
         method: "PUT",
         path: "/api/automation/v1/git-sync/config",
         body: { token: null },
+        headers: expect.objectContaining({
+          "X-OpenHands-Client": "agent_canvas",
+        }),
+      }),
+    );
+  });
+
+  it("checks a candidate configuration through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    const check = { ok: true, branch_exists: true, detail: null };
+    callCloudProxy.mockResolvedValueOnce(check);
+
+    await expect(
+      AutomationService.checkGitSyncConfig({ branch: "develop" }),
+    ).resolves.toEqual(check);
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "POST",
+        path: "/api/automation/v1/git-sync/check",
+        body: { branch: "develop" },
+        headers: expect.objectContaining({
+          "X-OpenHands-Client": "agent_canvas",
+        }),
       }),
     );
   });

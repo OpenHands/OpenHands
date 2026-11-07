@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AutomationListRow } from "#/components/features/automations/automation-list-row";
 import {
   AutomationRunStatus,
@@ -8,6 +8,7 @@ import {
   type AutomationRun,
 } from "#/types/automation";
 import type { InterfaceListInsights } from "#/manifests/types";
+import { I18nKey } from "#/i18n/declaration";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -20,9 +21,41 @@ vi.mock("#/context/navigation-context", () => ({
   useNavigation: () => ({ navigate: vi.fn(), currentPath: "/" }),
 }));
 
-vi.mock("#/hooks/use-has-permission", () => ({
-  useHasPermission: () => true,
+const permissionMocks = vi.hoisted(() => ({ canManage: true, isOwner: true }));
+vi.mock("#/hooks/use-automation-permissions", () => ({
+  useAutomationPermissions: () => ({
+    canView: true,
+    canManage: permissionMocks.canManage,
+    isLoading: false,
+  }),
+  useIsAutomationOwner: () => permissionMocks.isOwner,
 }));
+
+afterEach(() => {
+  permissionMocks.canManage = true;
+  permissionMocks.isOwner = true;
+});
+
+// The pinned package predates the `impact` field, so an entry carrying one is
+// appended to the real catalog.
+vi.mock("@openhands/extensions/automations", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@openhands/extensions/automations")>();
+  return {
+    ...actual,
+    AUTOMATION_CATALOG: [
+      ...actual.AUTOMATION_CATALOG,
+      {
+        id: "widget-checker",
+        impact: {
+          basis: "completed-runs",
+          one: "1 widget check completed",
+          other: "{{count}} widget checks completed",
+        },
+      },
+    ] as typeof actual.AUTOMATION_CATALOG,
+  };
+});
 
 const automation: Automation = {
   id: "automation-1",
@@ -95,6 +128,71 @@ describe("AutomationListRow", () => {
     );
   });
 
+  it("keeps tags in their own box that gives way before the name", () => {
+    render(
+      <AutomationListRow
+        automation={{
+          ...automation,
+          tags: ["nightly-checks", "qa-alpha", "pending-in-input"],
+        }}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    // jsdom has no layout, so pin the classes that give the tags only the room
+    // the name leaves and clip them, instead of squeezing the name or
+    // overflowing the row.
+    const tags = screen.getByTestId("automation-list-row-tags-automation-1");
+    expect(tags).toHaveClass("min-w-0", "flex-1", "overflow-hidden");
+    const pills = screen.getAllByTestId("automation-tag");
+    expect(pills).toHaveLength(3);
+    pills.forEach((pill) => {
+      expect(tags).toContainElement(pill);
+    });
+    expect(screen.getByTitle("nightly-checks")).toHaveTextContent(
+      "nightly-checks",
+    );
+    expect(tags).not.toContainElement(screen.getByText("GitHub PR Reviewer"));
+  });
+
+  it("renders no tag box for an automation without tags", () => {
+    render(
+      <AutomationListRow
+        automation={{ ...automation, tags: [] }}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("automation-list-row-tags-automation-1"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("marks draft automations separately from inactive rows", () => {
+    render(
+      <AutomationListRow
+        automation={{ ...automation, enabled: false, state: "DRAFT" }}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("active-status-badge-draft")).toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$DRAFT,
+    );
+    expect(
+      screen.queryByTestId("active-status-badge-inactive"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows last-run status, relative time, and a sparkline when insights are present", () => {
     const latestRun = createRun({
       started_at: new Date(Date.now() - 10 * 60_000).toISOString(),
@@ -113,6 +211,7 @@ describe("AutomationListRow", () => {
           state: {
             summary: {
               total: 4,
+              completedTotal: 4,
               latestRun,
               recentRuns: [latestRun],
               recentSuccessRate: 1,
@@ -134,6 +233,48 @@ describe("AutomationListRow", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows the value statement in the meta line", () => {
+    // Arrange — provenance joining back to a catalog entry with an impact
+    // declaration, and a summary carrying the lifetime completed count.
+    const latestRun = createRun();
+
+    // Act
+    render(
+      <AutomationListRow
+        automation={{
+          ...automation,
+          preset_metadata: {
+            template: { id: "widget-checker", version: "1.0.0", config: {} },
+          },
+        }}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+        insights={{
+          spec: insightsSpec satisfies InterfaceListInsights,
+          state: {
+            summary: {
+              total: 5,
+              completedTotal: 4,
+              latestRun,
+              recentRuns: [latestRun],
+              recentSuccessRate: 1,
+              averageDurationMs: 120_000,
+            },
+            isLoading: false,
+            isError: false,
+          },
+        }}
+      />,
+    );
+
+    // Assert
+    expect(
+      screen.getByTestId("automation-impact-automation-1"),
+    ).toHaveTextContent("4 widget checks completed");
+  });
+
   it("opens the actions menu without triggering row navigation handlers", async () => {
     const user = userEvent.setup();
 
@@ -153,4 +294,38 @@ describe("AutomationListRow", () => {
 
     expect(screen.getByText("COMMON$VIEW")).toBeInTheDocument();
   });
+
+  it.each([
+    { caller: "an admin or owner", canManage: true, offered: true },
+    { caller: "a member", canManage: false, offered: false },
+  ])(
+    "offers Turn on for another user's automation to $caller: $offered",
+    async ({ canManage, offered }) => {
+      // Arrange — a disabled automation the caller did not create.
+      permissionMocks.canManage = canManage;
+      permissionMocks.isOwner = false;
+      const user = userEvent.setup();
+      render(
+        <AutomationListRow
+          automation={{ ...automation, enabled: false }}
+          onToggle={vi.fn()}
+          onRunNow={vi.fn()}
+          onExport={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn()}
+        />,
+      );
+
+      // Act
+      await user.click(
+        screen.getByRole("button", { name: "AUTOMATIONS$ACTIONS_MENU" }),
+      );
+
+      // Assert
+      for (const label of ["AUTOMATIONS$TURN_ON", "AUTOMATIONS$EDIT"]) {
+        if (offered) expect(screen.getByText(label)).toBeInTheDocument();
+        else expect(screen.queryByText(label)).not.toBeInTheDocument();
+      }
+    },
+  );
 });

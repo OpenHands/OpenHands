@@ -19,36 +19,206 @@ export interface AutomationTrigger {
   on?: string | string[];
   /** JMESPath filter expression evaluated against the raw webhook payload. */
   filter?: string;
+  /**
+   * Where a matching event goes (event triggers only): `"dispatch_run"`
+   * (default) starts a new run, `"continue_conversation"` resumes the
+   * conversation an earlier event started.
+   */
+  destination?: string;
 }
 
+/**
+ * A repository an automation clones before it runs, as the preset API stores
+ * it in `preset_metadata.repos[]` (the SDK's `RepoSource`).
+ */
+export interface AutomationRepository {
+  /** Full git URL, or the `owner/repo` shorthand. */
+  url: string;
+  /** Branch, tag or commit to check out; absent uses the default branch. */
+  ref?: string;
+  /** Git provider that authenticates the clone; required for the shorthand. */
+  provider?: string;
+}
+
+export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
+
+/**
+ * `POST /v1/{id}/run-as` body: hand the automation to a service account of
+ * the org, or back to the caller (managers only).
+ */
+export type ChangeRunAsRequest =
+  { to: "service"; service_account_id: string } | { to: "self" };
+
+/** What kind of identity an automation runs as. */
+export type AutomationRunAsKind = "user" | "service";
+
+export interface AutomationPluginSpec {
+  plugin: { source: string; ref?: string; repo_path?: string };
+  config: Record<string, unknown>;
+}
+
+export type AutomationUpdate = Partial<Automation> & {
+  config?: Record<string, unknown>;
+};
+
 export interface Automation {
+  plugin_spec?: AutomationPluginSpec | null;
   id: string;
   name: string;
   trigger: AutomationTrigger;
   enabled: boolean;
+  /** Backend automation lifecycle state. Prefer this over deprecated `enabled` when present. */
+  state?: AutomationState | string | null;
+  /**
+   * Human-readable reason the automation was last disabled (the latest
+   * disablement event overwrites this). Mirrors the automation service's
+   * `AutomationResponse.disabled_reason`. `null`/absent for enabled automations
+   * or an automation service older than the release that started recording it.
+   */
+  disabled_reason?: string | null;
+  /**
+   * Structured disablement metadata from the automation service
+   * (`AutomationResponse.disabled_detail`): `{reason, source, run_id, ...}`
+   * plus rule-specific fields (threshold, consecutive counts, status_detail).
+   * Used to tell user-initiated ("manual") disables from automatic ones
+   * (consecutive failures, permanent config faults).
+   */
+  disabled_detail?: {
+    reason?: string;
+    source?: string;
+    run_id?: string | null;
+    [key: string]: unknown;
+  } | null;
+  /** UTC timestamp the automation was last disabled. */
+  disabled_at?: string | null;
+  /**
+   * UUID of the identity the automation runs as: a person, or a service
+   * account (see `run_as_kind`). Usually the creator for a person, but not
+   * after a manager changes it to run as themselves (`created_by_user_id`
+   * keeps the creator). The frontend uses it for the "creator escape hatch":
+   * a member (view-only) may still edit automations that run as them without
+   * `manage_automations`.
+   */
+  user_id?: string;
+  /**
+   * What `user_id` identifies: a person (`user`) or a service account
+   * (`service`). Absent on an automation service older than run-as; treat it
+   * as `user`.
+   */
+  run_as_kind?: AutomationRunAsKind;
+  /**
+   * UUID of the person who created the automation. It differs from `user_id`
+   * when the automation runs as a service account. Absent on an automation
+   * service older than run-as.
+   */
+  created_by_user_id?: string;
+  /**
+   * Single repository in the import/export file's shape. The automation
+   * service does not return it; read `repositories` for what an automation
+   * clones.
+   */
   repository?: string;
-  /** LLM/model profile name used for automation runs. */
+  /** Saved agent profile controlling model, tools, and selected secrets. */
+  agent_profile_id?: string | null;
+  /** LLM/model profile name used when no agent profile is selected. */
   model?: string | null;
+  /**
+   * Author-written Markdown explaining what the automation does. A
+   * ```mermaid block in it renders as a diagram on the detail page.
+   */
+  description?: string | null;
   /**
    * Maximum run time in seconds. `null`/omitted uses the server default
    * (600s, 10 min); the deployment reports the maximum it accepts.
    */
   timeout?: number | null;
+  /**
+   * Leave the run's sandbox for runtime TTL cleanup instead of deleting it
+   * when the run finishes. The service forces it on for
+   * `continue_conversation` triggers. Absent from an automation service that
+   * does not expose it.
+   */
+  keep_alive?: boolean | null;
 
   created_at: string;
   updated_at: string;
   prompt: string | null;
+  /**
+   * Shell command the automation service runs in the unpacked bundle's root
+   * (e.g. `python main.py`). Mirrors `AutomationResponse.entrypoint`; the
+   * detail page uses it to point out which bundle file is the script.
+   */
+  entrypoint?: string;
+  /** Service-owned upload identifier/path for custom automation bundles. */
+  tarball_path?: string | null;
+  /** Optional setup script path inside the custom automation bundle. */
+  setup_script_path?: string | null;
   branch?: string;
+  /**
+   * Every repository the automation clones. The service layer derives it on
+   * read from `preset_metadata.repos` (or the top-level `repository`/`branch`
+   * when there is no metadata); the service has no top-level field for it.
+   */
+  repositories?: AutomationRepository[];
+  /**
+   * Plugin sources (e.g. `github:owner/repo`). The service layer fills it on
+   * read from `preset_metadata.plugins[].source`; a record without that
+   * metadata keeps its own list.
+   */
   plugins?: string[];
   notification?: string;
   timezone?: string;
   last_triggered_at?: string | null;
+  /**
+   * Service-owned preset state, returned verbatim. The GUI reads the
+   * `template` provenance block inside it ({id, version, config}, written at
+   * setup time) only through the guarded helper in
+   * `#/utils/automation-catalog`, and `repos`/`plugins` only through
+   * `#/utils/automation-preset-sources`.
+   */
+  preset_metadata?: Record<string, unknown> | null;
+  /**
+   * Labels the creator groups automations by, normalized by the automation
+   * service. Absent from an automation service older than tag support.
+   */
+  tags?: string[];
+}
+
+/** One of the org's tags and how many live automations carry it. */
+export interface AutomationTagCount {
+  tag: string;
+  count: number;
+}
+
+/**
+ * The bundle an export file carries for an automation that runs a script
+ * instead of a prompt, so an import can upload it again.
+ */
+export interface AutomationScriptBundle {
+  /** Shell command the service runs in the unpacked bundle's root. */
+  entrypoint: string;
+  /** Optional setup script path inside the bundle. */
+  setup_script_path?: string;
+  /** The bundle exactly as the service stores it (a gzipped tar), base64-encoded. */
+  tarball_base64: string;
 }
 
 export type AutomationSpec = Omit<
   Automation,
-  "id" | "created_at" | "updated_at" | "last_triggered_at"
->;
+  | "id"
+  | "created_at"
+  | "updated_at"
+  | "last_triggered_at"
+  | "preset_metadata"
+  | "repositories"
+  | "entrypoint"
+  | "disabled_reason"
+  | "disabled_detail"
+  | "disabled_at"
+> & {
+  /** Present for a script automation, whose `prompt` is null. */
+  script?: AutomationScriptBundle;
+};
 
 /** The envelope constants come from the interface manifest's import/export spec. */
 export interface AutomationExportFile {
@@ -62,6 +232,12 @@ export interface AutomationsResponse {
   total: number;
 }
 
+/**
+ * Mirrors the list endpoint's `created_by` query param: the caller's
+ * automations (`me`) or the rest of the org's (`others`).
+ */
+export type AutomationCreatedByFilter = "me" | "others";
+
 /** Mirrors `RunStatus` in the automation service's OpenAPI schema. */
 export enum AutomationRunStatus {
   PENDING = "PENDING",
@@ -70,6 +246,33 @@ export enum AutomationRunStatus {
   FAILED = "FAILED",
   CANCELLED = "CANCELLED",
   SKIPPED = "SKIPPED",
+}
+
+export type AutomationTaskOutcomeStatus =
+  "success" | "partial_success" | "blocked" | "failed" | "unknown";
+
+export interface AutomationFinishToolResponse {
+  status?: AutomationTaskOutcomeStatus | string;
+  outcome_summary?: string;
+  [key: string]: unknown;
+}
+
+export interface AutomationRunMetadata {
+  finish_tool_response?: AutomationFinishToolResponse | string | null;
+  [key: string]: unknown;
+}
+
+export interface AutomationRunStatusDetail {
+  phase?: string;
+  kind?: string;
+  detail?: string;
+  formatted_detail?: string;
+  transient?: boolean;
+  source?: string;
+  operation?: string;
+  code?: string;
+  status_code?: number;
+  [key: string]: unknown;
 }
 
 export interface AutomationRun {
@@ -84,7 +287,17 @@ export interface AutomationRun {
    * dispatched (e.g. sandbox provisioning errors).
    */
   bash_command_id: string | null;
+  /**
+   * ID of the cloud sandbox that hosted the run. Script (deterministic)
+   * automations never create a conversation, so on cloud backends this is
+   * the only handle to the agent-server holding their logs. Null when the
+   * run failed before a sandbox was provisioned; absent entirely against an
+   * automation service that predates the field.
+   */
+  sandbox_id?: string | null;
   error_detail: string | null;
+  status_detail?: AutomationRunStatusDetail | null;
+  run_metadata?: AutomationRunMetadata | null;
   /**
    * Accumulated LLM cost of the run in USD, reported by the SDK in the
    * completion callback. `null` means unknown — the run predates cost
@@ -93,6 +306,13 @@ export interface AutomationRun {
    * that added the field, hence optional.
    */
   cost?: number | null;
+  /**
+   * User-facing live phase from automation ≥1.9.0. Free-form text the
+   * service already sanitised for the dashboard — not a translation key.
+   * `null` means nothing has been reported; absent entirely against a
+   * service older than phase reporting.
+   */
+  current_phase?: string | null;
   started_at: string;
   completed_at: string | null;
 }
@@ -100,6 +320,13 @@ export interface AutomationRun {
 export interface AutomationRunsResponse {
   runs: AutomationRun[];
   total: number;
+  /**
+   * Lifetime run counts by status, unaffected by pagination. Sparse — a
+   * status with no runs has no key, so when the field is present a missing
+   * key means zero. Absent entirely when the automation service is older
+   * than the release that added it.
+   */
+  status_counts?: Partial<Record<AutomationRunStatus, number>>;
 }
 
 export type ActivityLogExportFormat = "json" | "csv";
@@ -123,4 +350,8 @@ export interface AutomationRunExportRow {
    * missing field to null so every exported record has the same shape.
    */
   cost: number | null;
+  /**
+   * The run's `current_phase` as stored. Null only when the run has no phase.
+   */
+  phase: string | null;
 }

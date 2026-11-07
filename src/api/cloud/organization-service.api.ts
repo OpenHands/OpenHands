@@ -5,7 +5,10 @@ import { callCloudProxy } from "./proxy";
 import type {
   CloudApiKeyMetadata,
   CloudOrganization,
+  CloudOrganizationMember,
   CloudOrganizationsResponse,
+  CloudServiceAccount,
+  CloudServiceAccountPage,
 } from "./types";
 
 interface OrganizationsResult {
@@ -123,4 +126,51 @@ export async function getCloudOrganizationMe(
     // back to a role check; a present array is the server's source of truth.
     permissions: Array.isArray(data?.permissions) ? data.permissions : null,
   };
+}
+
+/**
+ * Fetch `GET /api/organizations/{orgId}/members/{userId}`: one member of
+ * `orgId` by user id. Any org member may read it (same permission as the
+ * members list). The upstream responds 404 when `userId` is not (or no
+ * longer) a member of the org, and older app-servers that predate the route
+ * 404 as well, so callers should treat a failure as "identity unresolved".
+ */
+export async function getCloudOrganizationMember(
+  orgId: string,
+  userId: string,
+  backend?: Backend,
+): Promise<CloudOrganizationMember> {
+  const target = resolveBackend(backend);
+  return callCloudProxy<CloudOrganizationMember>({
+    backend: target,
+    method: "GET",
+    path: `/api/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`,
+  });
+}
+
+/**
+ * Fetch every service account of `orgId` (`GET /api/organizations/{orgId}/
+ * service-accounts`), following `next_page_id`. Needs
+ * `manage_service_accounts` (org owners and admins); others get a 403.
+ */
+export async function listCloudServiceAccounts(
+  orgId: string,
+  backend?: Backend,
+): Promise<CloudServiceAccount[]> {
+  const target = resolveBackend(backend);
+  const accounts: CloudServiceAccount[] = [];
+  let pageId: string | null | undefined;
+  do {
+    const query = new URLSearchParams({ limit: "100" });
+    if (pageId) query.set("page_id", pageId);
+
+    const page = await callCloudProxy<CloudServiceAccountPage>({
+      backend: target,
+      method: "GET",
+      path: `/api/organizations/${encodeURIComponent(orgId)}/service-accounts?${query}`,
+    });
+    accounts.push(...(page?.items ?? []));
+    pageId = page?.next_page_id;
+  } while (pageId);
+  return accounts;
 }

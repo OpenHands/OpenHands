@@ -42,7 +42,7 @@ export function InstalledServersSection({
       return (
         <div
           data-testid="mcp-installed-empty-search"
-          className="rounded-xl border border-[var(--oh-border)] p-6 text-center"
+          className="rounded-xl border border-border p-6 text-center"
         >
           <p className="text-xs text-tertiary-light">
             {t(I18nKey.MCP$SEARCH_EMPTY)}
@@ -55,7 +55,7 @@ export function InstalledServersSection({
         data-testid="mcp-installed-empty"
         className={extensionModuleEmptyStateClassName}
       >
-        <p className="text-sm text-white">
+        <p className="text-sm text-contrast">
           {t(I18nKey.MCP$INSTALLED_EMPTY_TITLE)}
         </p>
         <p className="text-xs text-tertiary-light mt-1">

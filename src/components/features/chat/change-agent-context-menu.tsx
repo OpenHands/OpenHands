@@ -46,14 +46,12 @@ export function ChangeAgentContextMenu({
       testId="change-agent-context-menu"
       position="top"
       alignment="left"
-      className="min-h-fit mb-2 min-w-[195px] max-w-[195px]"
+      className="min-h-fit mb-2 min-w-48.75 max-w-48.75"
     >
       <ContextMenuListItem
         testId="code-option"
         onClick={handleCodeClick}
-        className={cn(
-          activeMode === "code" && "bg-[var(--oh-interactive-hover)]",
-        )}
+        className={cn(activeMode === "code" && "bg-interactive-hover")}
       >
         <ContextMenuIconTextWithDescription
           icon={CodeTagIcon}
@@ -65,9 +63,7 @@ export function ChangeAgentContextMenu({
       <ContextMenuListItem
         testId="plan-option"
         onClick={handlePlanClick}
-        className={cn(
-          activeMode === "plan" && "bg-[var(--oh-interactive-hover)]",
-        )}
+        className={cn(activeMode === "plan" && "bg-interactive-hover")}
       >
         <ContextMenuIconTextWithDescription
           icon={LessonPlanIcon}

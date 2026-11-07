@@ -77,6 +77,7 @@ const MOCK_LLM_PYTHON = process.env.MOCK_LLM_PYTHON ?? "python3";
 process.env.MOCK_LLM_BACKEND_URL = `http://localhost:${INGRESS_PORT}`;
 process.env.MOCK_LLM_PORT = MOCK_LLM_PORT;
 process.env.MOCK_LLM_PUBLIC_MODE_URL = `http://localhost:${PUBLIC_MODE_PORT}`;
+process.env.MOCK_LLM_DOCKER_MODE = "true";
 process.env.VITE_SESSION_API_KEY = sessionApiKey;
 
 // MOCK_LLM_AGENT_URL — the URL the agent-server inside Docker uses to
@@ -150,10 +151,7 @@ export default defineConfig({
   globalTimeout: process.env.CI ? ciGlobalTimeoutMs : 0, // 20 min hard cap in CI
   reporter: [
     ["line"],
-    [
-      "json",
-      { outputFile: "test-results-mock-llm-docker/results.json" },
-    ],
+    ["json", { outputFile: "test-results-mock-llm-docker/results.json" }],
     [
       "html",
       {

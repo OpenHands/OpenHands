@@ -28,7 +28,7 @@ export function PluginPickerCard({
       <div className="min-w-0 flex-1">
         <h3
           data-testid={`plugin-picker-name-${plugin.name}`}
-          className="truncate text-sm font-semibold text-white"
+          className="truncate text-sm font-semibold text-contrast"
         >
           {plugin.name}
         </h3>

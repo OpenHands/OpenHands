@@ -5,10 +5,20 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { HttpError } from "@openhands/typescript-client";
+import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 
 import { I18nKey } from "#/i18n/declaration";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
+import {
+  getCloudOrganizationMember,
+  listCloudServiceAccounts,
+} from "#/api/cloud/organization-service.api";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import {
+  fetchCloudIntegrationsConfig,
+  type CloudIntegrationsConfig,
+} from "#/api/cloud/settings-service.api";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -19,6 +29,10 @@ import AutomationDetail from "#/routes/automation-detail";
 import type { Backend } from "#/api/backend-registry/types";
 import { AutomationRunStatus } from "#/types/automation";
 import type { Automation, AutomationRunsResponse } from "#/types/automation";
+import { withPresetSources } from "#/utils/automation-preset-sources";
+import { bytesToBase64 } from "#/utils/base64";
+import { packTarGzip } from "#/utils/tar-gzip";
+import * as ToastHandlers from "#/utils/custom-toast-handlers";
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
@@ -27,8 +41,108 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     toggleAutomation: vi.fn(),
     deleteAutomation: vi.fn(),
     dispatchAutomation: vi.fn(),
+    updateAutomation: vi.fn(),
+    fetchTarballBytes: vi.fn(),
     checkHealth: vi.fn(),
+    getCapabilities: vi.fn(),
+    changeRunAs: vi.fn(),
   },
+}));
+
+vi.mock("#/api/profiles-service/profiles-service.api", () => ({
+  default: {
+    listProfiles: vi.fn(),
+  },
+}));
+
+// Spy on the success toast; the test tree does not render a toaster.
+const displaySuccessToast = vi.hoisted(() => vi.fn());
+const displayErrorToast = vi.hoisted(() => vi.fn());
+vi.mock("#/utils/custom-toast-handlers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/custom-toast-handlers")>()),
+  displaySuccessToast,
+  displayErrorToast,
+}));
+
+// Spy on the file download; jsdom has no object URLs to hand a real one.
+const downloadBlob = vi.hoisted(() => vi.fn());
+vi.mock("#/utils/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/utils")>()),
+  downloadBlob,
+}));
+
+// Mock permission hooks so cloud-backend tests don't need a real /me endpoint.
+const permissionMocks = vi.hoisted(() => ({ isOwner: true, canManage: true }));
+vi.mock("#/hooks/use-automation-permissions", () => ({
+  useAutomationPermissions: () => ({
+    canView: true,
+    canManage: permissionMocks.canManage,
+    userId: "admin-user",
+    isLoading: false,
+  }),
+  useIsAutomationOwner: () => permissionMocks.isOwner,
+}));
+
+// Mock only the member lookup the "Automation Runs As" field depends on; the
+// rest of the cloud organization service keeps its real implementation.
+vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/api/cloud/organization-service.api")
+  >()),
+  getCloudOrganizationMember: vi.fn(),
+  listCloudServiceAccounts: vi.fn(),
+}));
+
+// Mock only the web-client config read, which gates the service account run-as
+// UI on the instance's `enable_service_accounts` flag.
+vi.mock("#/api/cloud/settings-service.api", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/api/cloud/settings-service.api")
+  >()),
+  fetchCloudIntegrationsConfig: vi.fn(),
+}));
+
+function mockServiceAccountsEnabled(isServiceAccountsEnabled: boolean) {
+  const config: CloudIntegrationsConfig = {
+    providersConfigured: [],
+    isJiraEnabled: false,
+    isJiraDcEnabled: false,
+    isLinearEnabled: false,
+    isSlackEnabled: false,
+    deploymentMode: null,
+    isOrgMcpServersEnabled: false,
+    isServiceAccountsEnabled,
+  };
+  vi.mocked(fetchCloudIntegrationsConfig).mockResolvedValue(config);
+}
+
+const detailMocks = vi.hoisted(() => ({
+  createConversationMutate: vi.fn(),
+  navigate: vi.fn(),
+}));
+
+const mermaidMock = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  parse: vi.fn().mockResolvedValue({ diagramType: "flowchart" }),
+  render: vi
+    .fn()
+    .mockResolvedValue({ svg: '<svg data-testid="flow-diagram-svg"></svg>' }),
+}));
+vi.mock("mermaid", () => ({ default: mermaidMock }));
+
+vi.mock("#/hooks/mutation/use-create-conversation", () => ({
+  useCreateConversation: () => ({
+    mutate: detailMocks.createConversationMutate,
+  }),
+}));
+
+vi.mock("#/context/navigation-context", () => ({
+  useNavigation: () => ({
+    currentPath: "/automations/auto-1",
+    conversationId: null,
+    isNavigating: false,
+    navigate: detailMocks.navigate,
+  }),
 }));
 
 const localBackend: Backend = {
@@ -81,7 +195,23 @@ function renderDetail() {
   );
 }
 
+let errorToast: ReturnType<typeof vi.spyOn>;
+
 beforeEach(() => {
+  errorToast = vi
+    .spyOn(ToastHandlers, "displayErrorToast")
+    .mockImplementation(() => "toast-id");
+  permissionMocks.isOwner = true;
+  permissionMocks.canManage = true;
+  vi.mocked(AutomationService.getCapabilities).mockReset();
+  vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+    ready: true,
+    triggerKinds: [],
+    eventSources: [],
+    eventTypes: [],
+    triggers: {},
+    features: [],
+  });
   window.localStorage.clear();
   __resetActiveStoreForTests();
   vi.mocked(AutomationService.checkHealth).mockReset();
@@ -97,21 +227,34 @@ beforeEach(() => {
     completed_at: null,
   });
 
+  vi.mocked(AutomationService.deleteAutomation).mockReset();
   vi.mocked(AutomationService.getAutomation).mockReset();
   vi.mocked(AutomationService.getAutomation).mockResolvedValue(automation);
   vi.mocked(AutomationService.getAutomationRuns).mockReset();
   vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue(emptyRuns);
+  vi.mocked(ProfilesService.listProfiles).mockReset();
+  vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+    profiles: [],
+    active_profile: null,
+  });
+  vi.mocked(fetchCloudIntegrationsConfig).mockReset();
+  mockServiceAccountsEnabled(false);
+  detailMocks.createConversationMutate.mockReset();
+  detailMocks.navigate.mockReset();
+  downloadBlob.mockReset();
+  displayErrorToast.mockReset();
   setRegisteredBackends([localBackend, cloudBackend]);
   setActiveSelection({ backendId: localBackend.id });
 });
 
 afterEach(() => {
+  errorToast.mockRestore();
   window.localStorage.clear();
   __resetActiveStoreForTests();
 });
 
-describe("AutomationDetail — Edit is local-only", () => {
-  it("shows Edit in the kebab menu when the active backend is local", async () => {
+describe("AutomationDetail — Edit in the header", () => {
+  it("shows Edit beside Run now instead of inside the actions menu", async () => {
     // Arrange — default beforeEach selects the local backend.
     const user = userEvent.setup();
     renderDetail();
@@ -123,13 +266,13 @@ describe("AutomationDetail — Edit is local-only", () => {
     // in tests because `t` is mocked to return the key itself.
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
 
-    // Assert — Edit entry is present alongside the other actions.
+    // Assert — one Edit control, and it is the header button.
     expect(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
-    ).toBeInTheDocument();
+      screen.getAllByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    ).toEqual([screen.getByTestId("automation-detail-edit")]);
   });
 
-  it("hides Edit in the kebab menu when the active backend is cloud", async () => {
+  it("opens the setup page from the header when the active backend is cloud", async () => {
     // Arrange — switch to the cloud backend BEFORE rendering so the
     // detail page mounts under cloud (the backend-change guard would
     // otherwise stop the fetch).
@@ -141,16 +284,122 @@ describe("AutomationDetail — Edit is local-only", () => {
     });
 
     // Act
-    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(await screen.findByTestId("automation-detail-edit"));
 
-    // Assert — Edit must not appear on cloud; Delete still does, proving
-    // we opened the menu and didn't merely fail to render.
+    // Assert — Edit opens the setup form without starting or seeding an agent
+    // conversation. The permission model (mocked to canManage above) decides
+    // whether the action exists, not the backend kind.
+    expect(detailMocks.createConversationMutate).not.toHaveBeenCalled();
+    expect(detailMocks.navigate).toHaveBeenCalledWith(
+      "/automations/setup?automationId=auto-1",
+    );
+  });
+});
+
+describe("AutomationDetail — another user's automation", () => {
+  const disabledAutomation: Automation = {
+    ...automation,
+    enabled: false,
+    tags: ["qa"],
+  };
+
+  async function renderAndOpenMenu() {
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(
+      disabledAutomation,
+    );
+    setActiveSelection({ backendId: cloudBackend.id });
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+  }
+
+  it("lets an admin or owner edit, tag, turn on and delete it", async () => {
+    // Arrange — manage permission, but not the creator.
+    permissionMocks.canManage = true;
+    permissionMocks.isOwner = false;
+
+    // Act
+    await renderAndOpenMenu();
+
+    // Assert
     expect(
-      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+      screen.getByRole("switch", { name: I18nKey.AUTOMATIONS$TURN_ON }),
     ).toBeInTheDocument();
+    for (const name of [
+      I18nKey.AUTOMATIONS$EDIT,
+      I18nKey.AUTOMATIONS$TURN_ON,
+      I18nKey.AUTOMATIONS$DELETE,
+    ]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+    expect(screen.getByTestId("automation-tags-edit")).toBeInTheDocument();
+  });
+
+  it("offers a member no write actions", async () => {
+    // Arrange — view only, and not the creator.
+    permissionMocks.canManage = false;
+    permissionMocks.isOwner = false;
+
+    // Act
+    await renderAndOpenMenu();
+
+    // Assert
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    for (const name of [
+      I18nKey.AUTOMATIONS$EDIT,
+      I18nKey.AUTOMATIONS$TURN_ON,
+      I18nKey.AUTOMATIONS$DELETE,
+    ]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+    expect(
+      screen.queryByTestId("automation-tags-edit"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lets a member who created it turn it back on", async () => {
+    // Arrange — view only, but the creator (escape hatch).
+    permissionMocks.canManage = false;
+    permissionMocks.isOwner = true;
+
+    // Act
+    await renderAndOpenMenu();
+
+    // Assert
+    expect(
+      screen.getByRole("switch", { name: I18nKey.AUTOMATIONS$TURN_ON }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("AutomationDetail — delete confirmation", () => {
+  it("opens as a named modal dialog with focus inside, and Escape cancels without deleting", async () => {
+    // Arrange — open the confirmation from the header kebab.
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: I18nKey.AUTOMATIONS$DELETE_CONFIRM_TITLE,
+    });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+
+    // Act
+    await user.keyboard("{Escape}");
+
+    // Assert — same behavior as on the dashboard: closed, nothing deleted.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(AutomationService.deleteAutomation).not.toHaveBeenCalled();
   });
 });
 
@@ -237,5 +486,748 @@ describe("AutomationDetail — backend-change guard", () => {
     // Assert — the off-state gate prevents the dispatch API from firing.
     expect(runNow).toBeDisabled();
     expect(AutomationService.dispatchAutomation).not.toHaveBeenCalled();
+  });
+});
+
+describe("AutomationDetail — description", () => {
+  const templateEntry = AUTOMATION_CATALOG.find(
+    (entry) => entry.id === "github-pr-reviewer",
+  )!;
+  // The whole route renders before the section does, which can exceed the
+  // default 1 s wait when the suite runs alongside others.
+  const LOAD = { timeout: 5000 };
+  const fromTemplate: Automation = {
+    ...automation,
+    description: null,
+    preset_metadata: {
+      template: { id: templateEntry.id, version: "1.0.0", config: {} },
+    },
+  };
+
+  it("shows the template's description when the automation has none", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(fromTemplate);
+
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(
+      await screen.findByTestId("automation-description-content", {}, LOAD),
+    ).toHaveTextContent(templateEntry.description);
+  });
+
+  it("prefers the automation's own description over its template's", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...fromTemplate,
+      description: "Written for this automation.",
+    });
+
+    // Act
+    renderDetail();
+
+    // Assert
+    const content = await screen.findByTestId(
+      "automation-description-content",
+      {},
+      LOAD,
+    );
+    expect(content).toHaveTextContent("Written for this automation.");
+    expect(content).not.toHaveTextContent(templateEntry.description);
+  });
+
+  it("draws how it runs when there is no description or template", async () => {
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(
+      await screen.findByText(I18nKey.AUTOMATIONS$DETAIL$HOW_IT_RUNS, {}, LOAD),
+    ).toBeInTheDocument();
+    // Earlier tests may have drawn this automation already; rendered SVGs
+    // are cached, so assert what is shown rather than the Mermaid call.
+    expect(
+      await screen.findByTestId("mermaid-diagram", {}, LOAD),
+    ).toContainElement(screen.getByTestId("flow-diagram-svg"));
+  });
+});
+
+describe("AutomationDetail — repositories and plugins", () => {
+  it("shows the repositories and plugins a preset response stores in preset_metadata", async () => {
+    // Arrange — the automation service returns repos and plugins only inside
+    // preset_metadata; the service layer maps them onto the automation.
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(
+      withPresetSources({
+        ...automation,
+        repository: undefined,
+        preset_metadata: {
+          preset_type: "plugin",
+          repos: [
+            { url: "https://github.com/qa-example/qa-repo", ref: "main" },
+          ],
+          plugins: [{ source: "github:qa-example/qa-plugin" }],
+        },
+      }),
+    );
+
+    // Act
+    renderDetail();
+
+    // Assert
+    const [repository] = await screen.findAllByTestId("automation-repository");
+    expect(repository).toHaveTextContent("qa-example/qa-repomain");
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$PLUGINS),
+    ).toBeInTheDocument();
+    expect(screen.getByText("github:qa-example/qa-plugin")).toBeInTheDocument();
+  });
+});
+
+describe("AutomationDetail — Automation Runs As", () => {
+  const creatorId = "3f1c2a54-0b8e-4c1d-9a7e-5d2f6b8c9e01";
+  const orgId = "0b93b5f2-5396-49f2-8d98-61f906184270";
+  const cloudAutomation: Automation = { ...automation, user_id: creatorId };
+
+  beforeEach(() => {
+    vi.mocked(getCloudOrganizationMember).mockReset();
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(
+      cloudAutomation,
+    );
+  });
+
+  it("shows the creator's email on a cloud backend", async () => {
+    // Arrange — the creator resolves to an org member with an email.
+    setActiveSelection({ backendId: cloudBackend.id, orgId });
+    vi.mocked(getCloudOrganizationMember).mockResolvedValue({
+      org_id: orgId,
+      user_id: creatorId,
+      email: "jdoe@acme.com",
+    });
+
+    // Act
+    renderDetail();
+
+    // Assert — the field is labelled and shows the resolved email.
+    expect(await screen.findByText("jdoe@acme.com")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS),
+    ).toBeInTheDocument();
+    expect(getCloudOrganizationMember).toHaveBeenCalledWith(
+      orgId,
+      creatorId,
+      expect.objectContaining({ id: cloudBackend.id }),
+    );
+  });
+
+  it("falls back to the raw user id when the member lookup fails", async () => {
+    // Arrange — e.g. the creator left the org, or an older app-server
+    // without the member-by-id route: the lookup 404s.
+    setActiveSelection({ backendId: cloudBackend.id, orgId });
+    vi.mocked(getCloudOrganizationMember).mockRejectedValue(
+      new HttpError(404, "Not Found", { detail: "Member not found" }),
+    );
+
+    // Act
+    renderDetail();
+
+    // Assert — the field still identifies the run identity by id.
+    expect(await screen.findByText(creatorId)).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS),
+    ).toBeInTheDocument();
+  });
+
+  it("does not show the field or look up the member on a local backend", async () => {
+    // Arrange — default beforeEach selects the local backend.
+    renderDetail();
+    await waitFor(() => {
+      expect(AutomationService.getAutomation).toHaveBeenCalledTimes(1);
+    });
+
+    // Act — wait for the page to render its configuration.
+    expect(await screen.findByText("daily-profile")).toBeInTheDocument();
+
+    // Assert — no identity field and no cloud call for local automations.
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS),
+    ).not.toBeInTheDocument();
+    expect(getCloudOrganizationMember).not.toHaveBeenCalled();
+  });
+});
+
+describe("AutomationDetail — runs as a service account", () => {
+  const orgId = "0b93b5f2-5396-49f2-8d98-61f906184270";
+  const saId = "5a1d2f60-1c1b-4b43-8a5f-0f8e8e2f7c11";
+  const creatorId = "7c0a3f1e-5d2b-4e8a-9b6c-1f2e3d4c5b6a";
+  const serviceAutomation: Automation = {
+    ...automation,
+    user_id: saId,
+    run_as_kind: "service",
+    created_by_user_id: creatorId,
+  };
+
+  beforeEach(() => {
+    permissionMocks.isOwner = false;
+    setActiveSelection({ backendId: cloudBackend.id, orgId });
+    vi.mocked(getCloudOrganizationMember).mockReset();
+    vi.mocked(listCloudServiceAccounts).mockReset();
+    vi.mocked(listCloudServiceAccounts).mockResolvedValue([
+      { id: saId, org_id: orgId, name: "ci-bot", is_disabled: false },
+      { id: "sa-2", org_id: orgId, name: "deploy-bot", is_disabled: false },
+    ]);
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      triggerKinds: [],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+      features: ["serviceAccountRunAs"],
+    });
+    mockServiceAccountsEnabled(true);
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(
+      serviceAutomation,
+    );
+  });
+
+  it("shows the service account under Runs As and the person under Created By", async () => {
+    // Arrange — the creator is an org member; the service account is not.
+    vi.mocked(getCloudOrganizationMember).mockResolvedValue({
+      org_id: orgId,
+      user_id: creatorId,
+      email: "jdoe@acme.com",
+    });
+
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(await screen.findByText("ci-bot")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("service-account-badge")).toBeInTheDocument();
+    expect(await screen.findByText("jdoe@acme.com")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$CREATED_BY),
+    ).toBeInTheDocument();
+    expect(getCloudOrganizationMember).toHaveBeenCalledWith(
+      orgId,
+      creatorId,
+      expect.anything(),
+    );
+    expect(getCloudOrganizationMember).not.toHaveBeenCalledWith(
+      orgId,
+      saId,
+      expect.anything(),
+    );
+  });
+
+  it("falls back to the raw id when the service account list is unavailable", async () => {
+    // Arrange — e.g. the list needs a permission the caller lacks.
+    vi.mocked(listCloudServiceAccounts).mockRejectedValue(
+      new HttpError(403, "Forbidden", { detail: "Forbidden" }),
+    );
+
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(await screen.findByText(saId)).toBeInTheDocument();
+    expect(screen.getByTestId("service-account-badge")).toBeInTheDocument();
+  });
+
+  it("lets a manager edit the tags of a automation that runs as a service account", async () => {
+    // Arrange — the manager is not the creator; it runs as the service account. A
+    // service with tag support sends `tags`.
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...serviceAutomation,
+      tags: [],
+    });
+
+    // Act
+    renderDetail();
+    await screen.findByTestId("service-account-badge");
+
+    // Assert — tags follow the same edit rule as the rest of the page.
+    expect(screen.getByTestId("automation-tags-edit")).toBeInTheDocument();
+  });
+
+  it("does not let a manager edit the tags of a draft that runs as a service account", async () => {
+    // Arrange — drafts are finished through the setup flow.
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...serviceAutomation,
+      tags: [],
+      state: "DRAFT",
+    });
+
+    // Act
+    renderDetail();
+    await screen.findByTestId("service-account-badge");
+
+    // Assert
+    expect(
+      screen.queryByTestId("automation-tags-edit"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lets an admin edit the tags of another member's automation", async () => {
+    // Arrange — runs as a person, and the caller is a manager but not the creator.
+    permissionMocks.isOwner = false;
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      user_id: "another-member",
+      run_as_kind: "user",
+      // A saved tag, so the read-only tags render and the button can be absent.
+      tags: ["nightly"],
+    });
+
+    // Act
+    renderDetail();
+    await screen.findByTestId("automation-tags");
+
+    // Assert
+    expect(screen.getByTestId("automation-tags-edit")).toBeInTheDocument();
+  });
+
+  it("shows a member the generic label and never the service account id", async () => {
+    // Arrange — a member cannot read the service account list.
+    permissionMocks.canManage = false;
+    const { container } = renderDetail();
+
+    // Act
+    await screen.findByTestId("service-account-badge");
+
+    // Assert
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(I18nKey.AUTOMATIONS$SERVICE_ACCOUNT_LABEL).length,
+    ).toBeGreaterThan(0);
+    expect(container.innerHTML).not.toContain(saId);
+    expect(listCloudServiceAccounts).not.toHaveBeenCalled();
+  });
+
+  it("hides Change Runs As and skips the list when service accounts are disabled", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    mockServiceAccountsEnabled(false);
+    renderDetail();
+    await screen.findByText(automation.name);
+
+    // Act
+    await waitFor(() =>
+      expect(fetchCloudIntegrationsConfig).toHaveBeenCalled(),
+    );
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+    // Assert
+    expect(listCloudServiceAccounts).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("changes the automation to run as the chosen service account", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    vi.mocked(AutomationService.changeRunAs).mockResolvedValue({
+      ...automation,
+      enabled: false,
+    });
+    renderDetail();
+    await screen.findByText(automation.name);
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
+    );
+    await user.selectOptions(
+      screen.getByTestId("change-run-as-target"),
+      "sa-2",
+    );
+    await user.click(screen.getByTestId("change-run-as-confirm"));
+
+    // Assert — the API is called and the detail query is refetched.
+    await waitFor(() => {
+      expect(AutomationService.changeRunAs).toHaveBeenCalledWith("auto-1", {
+        to: "service",
+        service_account_id: "sa-2",
+      });
+    });
+    await waitFor(() => {
+      expect(AutomationService.getAutomation).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("shows the service's reason and keeps the modal open when the run-as change fails", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    vi.mocked(AutomationService.changeRunAs).mockRejectedValue(
+      new HttpError(409, "Conflict", {
+        detail: "The automation has a pending or running run",
+      }),
+    );
+    renderDetail();
+    await screen.findByText("ci-bot");
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
+    );
+    await user.click(screen.getByTestId("change-run-as-confirm"));
+
+    // Assert
+    await waitFor(() => {
+      expect(errorToast).toHaveBeenCalledWith(
+        "The automation has a pending or running run",
+      );
+    });
+    expect(screen.getByTestId("change-run-as-confirm")).toBeEnabled();
+  });
+
+  it("does not offer Change Runs As without the capability", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      triggerKinds: [],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+      features: [],
+    });
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByText(automation.name);
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+    // Assert
+    expect(
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer Change Runs As on a local backend", async () => {
+    // Arrange — default selection is the local backend.
+    setActiveSelection({ backendId: localBackend.id });
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByText(automation.name);
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+    // Assert
+    expect(
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("AutomationDetail — disabled reason banner", () => {
+  it("surfaces the latest disablement reason on an inactive automation", async () => {
+    // Arrange — an automation paused automatically for a permanent config fault.
+    const reason =
+      "Paused automatically: auth — Invalid API key. This failed the last 3 runs and needs a configuration fix.";
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      enabled: false,
+      disabled_reason: reason,
+      disabled_detail: {
+        reason: "consecutive_permanent_failures",
+        source: "consecutive_permanent_failures",
+      },
+      disabled_at: "2026-09-14T10:00:00Z",
+    });
+
+    // Act
+    renderDetail();
+    await waitFor(() => {
+      expect(AutomationService.getAutomation).toHaveBeenCalledTimes(1);
+    });
+
+    // Assert — the banner renders the backend's human-readable reason.
+    expect(
+      await screen.findByTestId("automation-disabled-reason-banner"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-disabled-reason-text"),
+    ).toHaveTextContent(reason);
+  });
+
+  it("does not render the banner for an enabled automation", async () => {
+    // Arrange — default beforeEach returns the enabled automation fixture.
+    renderDetail();
+    await waitFor(() => {
+      expect(AutomationService.getAutomation).toHaveBeenCalledTimes(1);
+    });
+    await screen.findByText(automation.name);
+
+    // Assert
+    expect(
+      screen.queryByTestId("automation-disabled-reason-banner"),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("AutomationDetail — script automations", () => {
+  it("shows the bundle's script in place of the prompt for an automation without a prompt", async () => {
+    // Arrange
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      prompt: null,
+      entrypoint: "python main.py",
+    });
+    vi.mocked(AutomationService.fetchTarballBytes).mockResolvedValue(
+      new Uint8Array(
+        await packTarGzip([{ name: "main.py", content: "print('hi')\n" }]),
+      ),
+    );
+
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(
+      await screen.findByTestId("automation-script-file"),
+    ).toHaveTextContent("main.py");
+    expect(
+      screen.queryByTestId("automation-prompt-content"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("exports a script automation with its bundle", async () => {
+    // Arrange
+    const bundle = new Uint8Array(
+      await packTarGzip([{ name: "main.py", content: "print('hi')\n" }]),
+    );
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      prompt: null,
+      entrypoint: "python main.py",
+    });
+    vi.mocked(AutomationService.fetchTarballBytes).mockResolvedValue(bundle);
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByTestId("automation-script-file");
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EXPORT }),
+    );
+
+    // Assert — the file carries the bundle the detail page showed.
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalledTimes(1));
+    const [blob, filename] = downloadBlob.mock.calls[0] as [Blob, string];
+    expect(filename).toBe("test-automation.automation.json");
+    expect(JSON.parse(await readBlobText(blob)).spec).toMatchObject({
+      prompt: null,
+      script: {
+        entrypoint: "python main.py",
+        tarball_base64: bytesToBase64(bundle),
+      },
+    });
+  });
+
+  it("reports the error instead of writing a file when the bundle cannot be fetched", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      prompt: null,
+      entrypoint: "python main.py",
+    });
+    vi.mocked(AutomationService.fetchTarballBytes).mockRejectedValue(
+      new Error("Upload not found"),
+    );
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByTestId("automation-script-entrypoint");
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EXPORT }),
+    );
+
+    // Assert
+    await waitFor(() =>
+      expect(displayErrorToast).toHaveBeenCalledWith("Upload not found"),
+    );
+    expect(downloadBlob).not.toHaveBeenCalled();
+  });
+});
+
+function readBlobText(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result)));
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsText(blob);
+  });
+}
+
+describe("AutomationDetail — keep sandbox alive", () => {
+  beforeEach(() => {
+    setActiveSelection({ backendId: cloudBackend.id });
+  });
+
+  it.each([
+    {
+      saved: false,
+      label: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+      next: true,
+      toast: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE_ON_SUCCESS,
+    },
+    {
+      saved: true,
+      label: I18nKey.AUTOMATIONS$STOP_KEEPING_SANDBOX_ALIVE,
+      next: false,
+      toast: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE_OFF_SUCCESS,
+    },
+  ])(
+    "saves keep_alive $next from the actions menu and confirms with a toast",
+    async ({ saved, label, next, toast }) => {
+      // Arrange
+      vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+        ...automation,
+        keep_alive: saved,
+      });
+      vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+        ...automation,
+        keep_alive: next,
+      });
+      displaySuccessToast.mockClear();
+      const user = userEvent.setup();
+      renderDetail();
+      await user.click(
+        await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+      );
+
+      // Act
+      await user.click(screen.getByRole("button", { name: label }));
+
+      // Assert
+      expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+        automation.id,
+        { keep_alive: next },
+      );
+      await waitFor(() =>
+        expect(displaySuccessToast).toHaveBeenCalledWith(toast),
+      );
+    },
+  );
+
+  it.each([
+    {
+      reason: "a local backend",
+      backendId: localBackend.id,
+      overrides: { keep_alive: false },
+    },
+    { reason: "a draft", overrides: { state: "DRAFT", keep_alive: false } },
+    {
+      reason: "a continue_conversation trigger",
+      overrides: {
+        keep_alive: true,
+        trigger: {
+          type: "event" as const,
+          source: "github",
+          on: "issue_comment.created",
+          destination: "continue_conversation" as const,
+        },
+      },
+    },
+    { reason: "a service without the field", overrides: {} },
+  ])(
+    "leaves the item out of the menu for $reason",
+    async ({ backendId, overrides }) => {
+      // Arrange
+      if (backendId) setActiveSelection({ backendId });
+      vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+        ...automation,
+        ...overrides,
+      });
+      const user = userEvent.setup();
+      renderDetail();
+
+      // Act
+      await user.click(
+        await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+      );
+
+      // Assert
+      expect(
+        screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+        }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$STOP_KEEPING_SANDBOX_ALIVE,
+        }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("offers the item to a manager who did not create a user-owned automation", async () => {
+    // Arrange — managers may edit an automation that runs as another person.
+    permissionMocks.isOwner = false;
+    permissionMocks.canManage = true;
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      user_id: "another-member",
+      run_as_kind: "user",
+      keep_alive: false,
+    });
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Act
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+
+    // Assert
+    expect(
+      screen.getByRole("button", {
+        name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers the item to a manager of an automation that runs as a service account", async () => {
+    // Arrange — managers may edit an automation that runs as a service account.
+    permissionMocks.isOwner = false;
+    permissionMocks.canManage = true;
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      user_id: "service-account-id",
+      run_as_kind: "service",
+      keep_alive: false,
+    });
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Act
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+
+    // Assert
+    expect(
+      screen.getByRole("button", {
+        name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
+      }),
+    ).toBeInTheDocument();
   });
 });

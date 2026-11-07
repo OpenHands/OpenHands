@@ -8,7 +8,7 @@ export function BrandBadge({
   return (
     <span
       className={cn(
-        "text-sm leading-4 text-black font-semibold tracking-tighter bg-primary p-1 rounded-full",
+        "text-sm leading-4 text-[var(--oh-accent-foreground)] font-semibold tracking-tighter bg-primary p-1 rounded-full",
         className,
       )}
       {...rest}

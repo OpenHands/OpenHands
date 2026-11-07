@@ -2,7 +2,10 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { ExtensionsNavigation } from "#/components/features/skills/extensions-navigation";
+import {
+  ExtensionsNavigation,
+  ExtensionsCompactNavigation,
+} from "#/components/features/skills/extensions-navigation";
 import { AddSkillModal } from "#/components/features/skills/add-skill-modal";
 import { SkillCard } from "#/components/features/skills/skill-card";
 import { SkillDetailModal } from "#/components/features/skills/skill-detail-modal";
@@ -21,18 +24,19 @@ import {
   type SkillFilterState,
 } from "#/components/features/skills/skill-filter";
 import { SkillsToolbar } from "#/components/features/skills/skills-toolbar";
-import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSettings } from "#/hooks/query/use-settings";
+import { useSkillCatalog } from "#/hooks/query/use-skill-catalog";
 import { useSkills } from "#/hooks/query/use-skills";
+import { useSkillEnablement } from "#/hooks/use-skill-enablement";
 import { I18nKey } from "#/i18n/declaration";
 import type { SkillInfo } from "#/types/settings";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { getSkillKey } from "#/utils/skill-key";
 import {
   extensionModuleCardGridClassName,
   extensionModuleCardGridContainerClassName,
   extensionModuleEmptyStateClassName,
 } from "#/utils/extension-module-card-classes";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { settingsLikeMainScrollClassName } from "#/utils/settings-like-page-layout-classes";
 import { cn } from "#/utils/utils";
 
@@ -41,9 +45,16 @@ const SEARCH_URL_SYNC_DELAY_MS = 300;
 function SkillsSettingsScreen() {
   const { t } = useTranslation("openhands");
 
-  const { mutate: saveSettings } = useSaveSettings();
+  const { backend } = useActiveBackend();
+  const isCloud = backend.kind === "cloud";
   const { data: settings, isLoading: settingsLoading } = useSettings();
-  const { data: skills, isLoading: skillsLoading } = useSkills();
+  // Locally the page lists what agent profiles can select; Cloud lists its own skills.
+  const catalog = useSkillCatalog();
+  const cloudSkills = useSkills(undefined, { enabled: isCloud });
+  const { data: skills, isLoading: skillsLoading } = isCloud
+    ? cloudSkills
+    : catalog;
+  const { isEnabled, setEnabled, isUnavailable } = useSkillEnablement();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [queryInput, setQueryInput] = React.useState(
@@ -52,9 +63,6 @@ function SkillsSettingsScreen() {
   // The last `q` this component put in the URL, which is what lets the sync effect below tell a history navigation apart from the lagging echo of its own debounced write.
   const lastWrittenQuery = React.useRef(queryInput);
 
-  const [disabledSet, setDisabledSet] = React.useState<Set<string>>(new Set());
-  const [hasHydratedInitialSettings, setHasHydratedInitialSettings] =
-    React.useState(false);
   const [selectedSkill, setSelectedSkill] = React.useState<SkillInfo | null>(
     null,
   );
@@ -70,37 +78,16 @@ function SkillsSettingsScreen() {
   );
 
   const groups = React.useMemo(
-    () => buildSkillFacetGroups(allSkills, disabledSet, filter),
-    [allSkills, disabledSet, filter],
+    () => buildSkillFacetGroups(allSkills, isEnabled, filter),
+    [allSkills, isEnabled, filter],
   );
 
   const visibleSkills = React.useMemo(
-    () => applySkillFilters(allSkills, disabledSet, filter),
-    [allSkills, disabledSet, filter],
+    () => applySkillFilters(allSkills, isEnabled, filter),
+    [allSkills, isEnabled, filter],
   );
 
   const activeFilterCount = countActiveFilters(filter);
-
-  // Sync local state with server settings when data first arrives
-  React.useEffect(() => {
-    if (settingsLoading || !settings) return;
-    setDisabledSet(new Set(settings.disabled_skills ?? []));
-    setHasHydratedInitialSettings(true);
-  }, [settingsLoading, settings?.disabled_skills]);
-
-  // Auto-save skill toggles once initial settings are loaded.
-  React.useEffect(() => {
-    if (!hasHydratedInitialSettings) return;
-    saveSettings(
-      { disabled_skills: Array.from(disabledSet) },
-      {
-        onError: (error) => {
-          const errorMessage = retrieveAxiosErrorMessage(error);
-          displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
-        },
-      },
-    );
-  }, [disabledSet, hasHydratedInitialSettings, saveSettings, t]);
 
   // Back and forward move `q` under a route that stays mounted, so the input has to take the URL's value back or it would keep showing — and debounce back — a query the user has already navigated away from.
   React.useEffect(() => {
@@ -150,29 +137,18 @@ function SkillsSettingsScreen() {
   const handleClearFacets = () =>
     handleFilterChange(clearSkillFilterFacets(filter));
 
-  const handleToggle = (skillName: string, enabled: boolean) => {
-    setDisabledSet((prev) => {
-      const next = new Set(prev);
-      if (enabled) {
-        next.delete(skillName);
-      } else {
-        next.add(skillName);
-      }
-      return next;
-    });
-  };
-
   return (
     <div
       data-testid="skills-settings-screen"
-      className="flex h-full gap-4 md:gap-6 md:pl-8 lg:gap-10 lg:pl-10"
+      className="flex h-full gap-4 lg:gap-10 lg:pl-10"
     >
       <ExtensionsNavigation />
       <main className={cn(settingsLikeMainScrollClassName, "h-full")}>
         <div
           data-testid="skills-page"
-          className="mx-auto flex w-full min-w-0 max-w-[1100px] flex-col gap-6"
+          className="mx-auto flex w-full min-w-0 max-w-275 flex-col gap-6"
         >
+          <ExtensionsCompactNavigation />
           <div className="flex min-w-0 items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <h2 className="text-xl font-semibold leading-6 text-foreground">
@@ -184,6 +160,21 @@ function SkillsSettingsScreen() {
               >
                 {t(I18nKey.SETTINGS$SKILLS_PAGE_DESCRIPTION)}
               </div>
+              {isCloud ? (
+                <div
+                  data-testid="skills-new-conversation-notice"
+                  className="max-w-2xl text-xs text-tertiary-alt"
+                >
+                  {t(I18nKey.SETTINGS$SKILLS_NEW_CONVERSATION_NOTICE)}
+                </div>
+              ) : (
+                <div
+                  data-testid="skills-default-list-notice"
+                  className="max-w-2xl text-xs text-tertiary-alt"
+                >
+                  {t(I18nKey.SETTINGS$SKILLS_DEFAULT_LIST_NOTICE)}
+                </div>
+              )}
             </div>
             <BrandButton
               type="button"
@@ -233,7 +224,7 @@ function SkillsSettingsScreen() {
                 <SkillFacetRail
                   groups={groups}
                   onToggle={handleToggleFacet}
-                  className="hidden w-[240px] shrink-0 self-start md:flex"
+                  className="hidden w-60 shrink-0 self-start md:flex"
                 />
 
                 <section className="flex min-w-0 flex-1 flex-col gap-3">
@@ -248,7 +239,7 @@ function SkillsSettingsScreen() {
                         type="button"
                         data-testid="skills-clear-filters"
                         onClick={handleClearFacets}
-                        className="cursor-pointer underline hover:text-white"
+                        className="cursor-pointer underline hover:text-contrast"
                       >
                         {t(I18nKey.SETTINGS$SKILLS_CLEAR_FILTERS)}
                       </button>
@@ -271,13 +262,14 @@ function SkillsSettingsScreen() {
                       <div className={extensionModuleCardGridClassName}>
                         {visibleSkills.map((skill) => (
                           <SkillCard
-                            key={skill.name}
+                            key={getSkillKey(skill)}
                             skill={skill}
-                            enabled={!disabledSet.has(skill.name)}
+                            enabled={isEnabled(skill)}
                             onOpen={() => setSelectedSkill(skill)}
                             onToggle={(enabled) =>
-                              handleToggle(skill.name, enabled)
+                              setEnabled(skill.name, enabled)
                             }
+                            isToggleDisabled={isUnavailable}
                           />
                         ))}
                       </div>
@@ -302,9 +294,10 @@ function SkillsSettingsScreen() {
         {selectedSkill && (
           <SkillDetailModal
             skill={selectedSkill}
-            enabled={!disabledSet.has(selectedSkill.name)}
-            onToggle={(enabled) => handleToggle(selectedSkill.name, enabled)}
+            enabled={isEnabled(selectedSkill)}
+            onToggle={(enabled) => setEnabled(selectedSkill.name, enabled)}
             onClose={() => setSelectedSkill(null)}
+            isToggleDisabled={isUnavailable}
           />
         )}
 

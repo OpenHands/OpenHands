@@ -20,7 +20,6 @@ import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 import { validateInterfaceManifest } from "./interface-validation";
 import { AUTOMATION_INTERFACE_CANDIDATE } from "./manifest-sources";
 import type {
-  AutomationAttributeName,
   InterfaceDashboardFilter,
   InterfaceDashboardSort,
   InterfaceEndpointName,
@@ -40,6 +39,7 @@ const MOUNTED_ROUTES = {
   setup: "/automations/new/:automationId",
   detail: "/automations/:automationId",
   templates: "/automations/templates",
+  events: "/automations/events",
 } satisfies InterfaceRoutes;
 
 /**
@@ -125,6 +125,21 @@ export function automationTemplatesPath(): string {
   return MOUNTED_ROUTES.templates;
 }
 
+export function automationEventsPath(): string {
+  return MOUNTED_ROUTES.events;
+}
+
+/**
+ * Whether `path` (a location pathname) is inside the automation surface: the
+ * list route itself or anything nested under it (detail, setup, templates,
+ * git-sync). Prefix-safe: "/automations-foo" does not match.
+ */
+export function isAutomationsRoute(path: string): boolean {
+  return (
+    path === MOUNTED_ROUTES.list || path.startsWith(`${MOUNTED_ROUTES.list}/`)
+  );
+}
+
 /**
  * A declared endpoint path. Empty for one the manifest may omit - the two a
  * bundle needs were added after the block shipped - so a caller that needs one
@@ -167,39 +182,6 @@ export function getInterfaceCopy(): InterfaceCopy {
   };
 }
 
-export interface AttributeSpec {
-  present: boolean;
-  label: string;
-  /** Null when the manifest states no help text for the attribute. */
-  help: string | null;
-  required: boolean;
-  min: number | null;
-  max: number | null;
-}
-
-/** An attribute the manifest does not declare is not offered at all. */
-const ABSENT_ATTRIBUTE: AttributeSpec = {
-  present: false,
-  label: "",
-  help: null,
-  required: false,
-  min: null,
-  max: null,
-};
-
-export function getAttributeSpec(name: AutomationAttributeName): AttributeSpec {
-  const attribute = requireInterface().attributes[name];
-  if (!attribute) return ABSENT_ATTRIBUTE;
-  return {
-    present: true,
-    label: attribute.label,
-    help: attribute.help ?? null,
-    required: attribute.required,
-    min: attribute.constraints?.min ?? null,
-    max: attribute.constraints?.max ?? null,
-  };
-}
-
 export function getImportExportSpec(): InterfaceImportExport {
   return requireInterface().importExport;
 }
@@ -236,7 +218,9 @@ export function getSubPagesSpec(): SubPageNavSpec[] | null {
     to:
       item.page === "templates"
         ? automationTemplatesPath()
-        : automationListPath(),
+        : item.page === "events"
+          ? automationEventsPath()
+          : automationListPath(),
     label: item.label,
     icon: item.icon,
   }));
@@ -270,4 +254,10 @@ export function getDashboardSpec(): DashboardSpec | null {
 /** The templates page identity, or null when the manifest does not declare it. */
 export function getTemplatesPageSpec(): InterfaceTemplatesPage | null {
   return ADMITTED?.pages.templates ?? null;
+}
+
+export function getEventsPageSpec(): NonNullable<
+  InterfaceManifest["pages"]["events"]
+> | null {
+  return ADMITTED?.pages.events ?? null;
 }

@@ -156,27 +156,130 @@ async function listAutomationRuns(
   return resp.json();
 }
 
+interface AutomationRunRecord {
+  id: string;
+  status: string;
+  conversation_id: string | null;
+  error_detail?: string | null;
+}
+
+/** Statuses a run never leaves (see RunStatus in openhands-automation). */
+const TERMINAL_RUN_STATUSES = new Set([
+  "COMPLETED",
+  "FAILED",
+  "CANCELLED",
+  "SKIPPED",
+]);
+
 /**
  * Poll until a run reaches the expected status or times out.
+ *
+ * Fails fast, quoting the backend's `error_detail`, once every run has ended
+ * in some other terminal status — polling on would only surface a timeout
+ * and hide why the run actually stopped.
  */
 async function waitForRunStatus(
   request: import("@playwright/test").APIRequestContext,
   automationId: string,
   expectedStatus: string,
   timeoutMs = 30_000,
-) {
+): Promise<AutomationRunRecord> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const data = await listAutomationRuns(request, automationId);
-    const runs = data.runs ?? data.items ?? [];
-    const match = runs.find(
-      (r: { status: string }) => r.status === expectedStatus,
-    );
+    const runs: AutomationRunRecord[] = data.runs ?? data.items ?? [];
+    const match = runs.find((r) => r.status === expectedStatus);
     if (match) return match;
+    if (
+      runs.length > 0 &&
+      runs.every((r) => TERMINAL_RUN_STATUSES.has(r.status))
+    ) {
+      const summary = runs
+        .map(
+          (r) =>
+            `${r.id}=${r.status}${r.error_detail ? ` (${r.error_detail})` : ""}`,
+        )
+        .join(", ");
+      throw new Error(
+        `No run reached "${expectedStatus}"; every run already ended: ${summary}`,
+      );
+    }
     await new Promise((r) => setTimeout(r, 1_000));
   }
   throw new Error(
     `No run with status "${expectedStatus}" after ${timeoutMs}ms`,
+  );
+}
+
+/**
+ * Find a terminally FAILED run for the automation. The agent-server can
+ * intermittently reject the sandbox's completion message (transient 500 on
+ * POST /events), which flips the run straight to FAILED — so report it
+ * instead of endlessly polling for COMPLETED.
+ */
+async function findFailedRun(
+  request: import("@playwright/test").APIRequestContext,
+  automationId: string,
+) {
+  const data = await listAutomationRuns(request, automationId);
+  const runs = data.runs ?? data.items ?? [];
+  return runs.find((r: { status: string }) => r.status === "FAILED");
+}
+
+/** Dispatch a run for the automation via the real automation backend. */
+async function dispatchAutomation(
+  request: import("@playwright/test").APIRequestContext,
+  automationId: string,
+) {
+  const resp = await request.post(
+    `${AUTOMATION_API_BASE}/${encodeURIComponent(automationId)}/dispatch`,
+    {
+      headers: {
+        "X-Session-API-Key": SESSION_API_KEY,
+      },
+    },
+  );
+  if (!resp.ok()) {
+    throw new Error(
+      `POST automation dispatch returned ${resp.status()} for ${automationId}`,
+    );
+  }
+  return resp;
+}
+
+/**
+ * Poll for COMPLETED, but re-dispatch once when a run terminally FAILED —
+ * the completion-message race documented at findFailedRun() is upstream
+ * flakiness, not a lifecycle regression, and one re-dispatch removes it.
+ */
+async function waitForRunCompleted(
+  request: import("@playwright/test").APIRequestContext,
+  automationId: string,
+  timeoutMs = 30_000,
+) {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await waitForRunStatus(
+        request,
+        automationId,
+        "COMPLETED",
+        timeoutMs,
+      );
+    } catch (error) {
+      lastError = error as Error;
+      try {
+        if (!(await findFailedRun(request, automationId))) break;
+      } catch {
+        // Fixture closed mid-flight (e.g. test-level timeout) — surface the
+        // original timeout instead of an apiRequestContext teardown error.
+        break;
+      }
+      await dispatchAutomation(request, automationId);
+    }
+  }
+  throw (
+    lastError ?? new Error(`Automation ${automationId} never reached COMPLETED`)
   );
 }
 
@@ -211,7 +314,11 @@ async function deleteAutomationsByName(
   }
 }
 
-test.describe.configure({ mode: "serial" });
+// Retry the serial lifecycle once — the automation backend, agent-server,
+// and completion callback each have transient failure modes that a single
+// extra attempt absorbs; deleteAutomationsByName() in step 1 clears any
+// fixed-name leftovers between attempts.
+test.describe.configure({ mode: "serial", retries: 1 });
 
 test.describe("mock-LLM automation lifecycle", () => {
   const conversationIds = new Set<string>();
@@ -291,12 +398,19 @@ test.describe("mock-LLM automation lifecycle", () => {
     const authHeader = `-H 'X-Session-API-Key: ${SESSION_API_KEY}'`;
 
     const createCmd = [
+      // Remove any leftover result file first: on a retry the file would
+      // otherwise still hold a previous attempt's response and the dispatch
+      // command would silently reuse its (stale) automation id.
+      `rm -f /tmp/auto_result.json`,
       // --retry: the automation backend can still be settling right after
       // startup in the uvx/bin dev paths; transient connect/reset/5xx
       // failures should not abort the create (observed flake → assert then
       // sees 0 automations).
-      `curl --fail-with-body -sS -X POST '${AUTOMATION_API_BASE}/preset/prompt'`,
-      `--retry 3 --retry-connrefused --retry-delay 1`,
+      `&& curl --fail-with-body -sS -X POST '${AUTOMATION_API_BASE}/preset/prompt'`,
+      // --retry-all-errors: retry any transient failure (conn refused or
+      // HTTP 5xx), not just connection errors — a failed create leaves the
+      // name-based list poll below with nothing to find.
+      `--retry 4 --retry-all-errors --retry-delay 1`,
       `-H 'Content-Type: application/json'`,
       authHeader,
       `-d '${JSON.stringify({
@@ -331,14 +445,21 @@ test.describe("mock-LLM automation lifecycle", () => {
     // If the padding ever becomes misaligned (e.g. the agent-server stops
     // making this call or starts making two), step 2's
     // waitForNonUserMessageText(AUTOMATION_REPLY_TOKEN) will time out
-    // quickly, making the failure obvious. See AGENTS.md → "Padding
-    // response for internal LLM call" for more context.
+    // quickly, making the failure obvious. See the "Padding response for
+    // internal LLM call" section in the E2E testing skill reference.
     //
-    // After the main conversation finishes (responses 0-3), the dispatched
+    // After the main conversation finishes (responses 0-3),the dispatched
     // automation run spawns a NEW conversation on the same agent-server.
-    // That conversation also calls the mock LLM. We append extra text
-    // responses (4-6) so the run's conversation can finish normally, the
-    // script fires its completion callback, and the run reaches COMPLETED.
+
+    // That conversation also calls the mock LLM. Recent openhands-automation
+    // versions (>= 1.10.0, PR openhands/automation#405) require
+    // preset automation conversations to call the `finish` tool before the
+    // run reaches COMPLETED — so we script one blank internal call followed
+    // by the required finish-tool turn (and one trailing blank safety) below.
+    // If this ever drifts again, step 2's run-status timeout will surface it,
+    // and the mock server log shows "Mock LLM exhausted after N calls"
+    // pinpointing the exact count.
+
     await registerTrajectory(request, "automation-lifecycle", [
       // ── Main conversation (responses 0-3) ──
       { text: "" }, // 0: consumed by skill-activation LLM call (see above)
@@ -360,11 +481,37 @@ test.describe("mock-LLM automation lifecycle", () => {
 
       // ── Automation run's conversation (responses 4+) ──
       // The run starts a fresh conversation with the automation prompt.
-      // Provide enough responses for any internal LLM calls + the agent's
-      // turn so the conversation finishes and the completion callback fires.
+      // Script one internal padding call +the required `finish` tool turn,
+      // followed by a final text reply (+ one trailing safety blank** so the
+      // run reaches COMPLETED.
       { text: "" }, // 4: possible internal/condenser call
-      { text: "Done. Hello world echoed successfully." }, // 5: agent reply
-      { text: "" }, // 6: safety buffer for any follow-up internal call
+      {
+        // 5: openhands-automation >= 1.10.0 (openhands/automation#405)
+        // requires preset automation conversations to finish via the
+        // `finish` tool — a hook waits for `finish_tool_used` before the
+        // run reaches COMPLETED. Blank turns alone would just loop and exhaust
+        // the trajectory, so script the required finish-tool turn explicitly.
+
+        tool_call: {
+          // The agent-server registers the finish tool under its lowercase
+          // title (`finish`). The action schema requires `message`, while the
+          // attached response schema (TaskOutcome) validates the
+          // `status` + `outcome_summary` pair (that's the field alias, not
+          // `summary`); both layers must be satisfied in the same call.
+          name: "finish",
+          arguments: {
+            message: "Hello world echoed successfully.",
+            status: "success",
+            outcome_summary: "Hello world echoed successfully.",
+          },
+        },
+      },
+      // 6: after the finish tool executes, the agent still needs one more
+      // non-empty LLM turn to end the conversation — a blank here would
+      // make the harness nag ("no function call") and loop on the exhausted
+      // trajectory, so reply with the final text.
+      { text: "Done. Hello world echoed successfully." },
+      { text: "" }, // 7: safety buffer for any follow-up internal call after finish
     ]);
 
     // Activate it so the mock LLM uses this trajectory for the next conversation
@@ -456,13 +603,9 @@ test.describe("mock-LLM automation lifecycle", () => {
 
       // Wait for the run to reach COMPLETED. The trajectory includes extra
       // responses (indices 4-6) for the automation run's spawned conversation
-      // so it can finish and fire the completion callback.
-      const run = await waitForRunStatus(
-        request,
-        automation.id,
-        "COMPLETED",
-        90_000,
-      );
+      // so it can finish and fire the completion callback. waitForRunCompleted
+      // re-dispatches once if the callback race flips the run to FAILED.
+      const run = await waitForRunCompleted(request, automation.id, 90_000);
       expect(run.conversation_id).toBeTruthy();
       // Store the conversation ID for the click-through verification in step 3
       runConversationId = run.conversation_id;

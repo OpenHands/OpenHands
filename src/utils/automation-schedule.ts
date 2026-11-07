@@ -64,46 +64,10 @@ export function parseCronSchedule(
   return { kind: "custom", raw, hour, minute };
 }
 
-export function buildCronSchedule(input: PresetSchedule): string {
-  const { kind, hour, minute, weekday } = input;
-  switch (kind) {
-    case "daily":
-      return `${minute} ${hour} * * *`;
-    case "weekdays":
-      return `${minute} ${hour} * * 1-5`;
-    case "weekly":
-      return `${minute} ${hour} * * ${weekday ?? 1}`;
-    default: {
-      const _exhaustive: never = kind;
-      return _exhaustive;
-    }
-  }
-}
-
 export function formatTimeOfDay(hour: number, minute: number): string {
   const hh = String(hour).padStart(2, "0");
   const mm = String(minute).padStart(2, "0");
   return `${hh}:${mm}`;
-}
-
-export function parseTimeOfDay(
-  value: string,
-): { hour: number; minute: number } | null {
-  const match = value.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  if (
-    Number.isNaN(hour) ||
-    Number.isNaN(minute) ||
-    hour < 0 ||
-    hour > 23 ||
-    minute < 0 ||
-    minute > 59
-  ) {
-    return null;
-  }
-  return { hour, minute };
 }
 
 export function formatEventOn(on: string | string[] | undefined): string {

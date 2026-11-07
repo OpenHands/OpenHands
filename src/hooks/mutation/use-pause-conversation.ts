@@ -1,8 +1,15 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { pauseConversation } from "./conversation-mutation-utils";
+import { ExecutionStatus } from "#/types/agent-server/core";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { suppressNextCloudAutoResume } from "#/api/cloud/cloud-sandbox-resume-suppression";
+import {
+  pauseConversation,
+  patchConversationInCache,
+} from "./conversation-mutation-utils";
 
 export const usePauseConversation = () => {
   const queryClient = useQueryClient();
+  const { backend } = useActiveBackend();
 
   return useMutation({
     mutationFn: (variables: { conversationId: string }) =>
@@ -23,6 +30,15 @@ export const usePauseConversation = () => {
           context.previousConversations,
         );
       }
+    },
+    onSuccess: (_, variables) => {
+      if (backend.kind !== "cloud") return;
+
+      suppressNextCloudAutoResume(variables.conversationId);
+      patchConversationInCache(queryClient, variables.conversationId, {
+        execution_status: ExecutionStatus.PAUSED,
+        conversation_url: null,
+      });
     },
     onSettled: (_, __, variables) => {
       // Invalidate the specific conversation query to trigger automatic refetch

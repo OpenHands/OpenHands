@@ -30,6 +30,35 @@ describe("SecretForm in edit mode", () => {
     vi.restoreAllMocks();
   });
 
+  it("reveals and hides only the entered replacement without submitting", async () => {
+    const user = userEvent.setup();
+    const { updateSecret } = await renderEditForm();
+    const input = screen.getByTestId("value-input");
+
+    await user.type(input, "dummy-replacement");
+    expect(input).toHaveAttribute("type", "password");
+    await user.click(
+      screen.getByRole("button", { name: "SECRETS$SHOW_VALUE" }),
+    );
+    expect(input).toHaveAttribute("type", "text");
+    expect(input).toHaveValue("dummy-replacement");
+    expect(updateSecret).not.toHaveBeenCalled();
+
+    await user.click(
+      screen.getByRole("button", { name: "SECRETS$HIDE_VALUE" }),
+    );
+    expect(input).toHaveAttribute("type", "password");
+    await user.click(screen.getByTestId("submit-button"));
+    await waitFor(() =>
+      expect(updateSecret).toHaveBeenCalledWith(
+        "API_KEY",
+        "API_KEY",
+        "Demo secret",
+        "dummy-replacement",
+      ),
+    );
+  });
+
   it("offers a blank value field labelled for preserving the existing value", async () => {
     // Arrange & Act
     await renderEditForm();
@@ -45,7 +74,11 @@ describe("SecretForm in edit mode", () => {
     // Arrange
     const { updateSecret } = await renderEditForm();
 
-    // Act
+    // Act — submit is dirty-gated, so change description while leaving value blank
+    await userEvent.type(
+      screen.getByTestId("description-input"),
+      " (unchanged value)",
+    );
     await userEvent.click(screen.getByTestId("submit-button"));
 
     // Assert
@@ -53,7 +86,7 @@ describe("SecretForm in edit mode", () => {
       expect(updateSecret).toHaveBeenCalledWith(
         "API_KEY",
         "API_KEY",
-        "Demo secret",
+        "Demo secret (unchanged value)",
         undefined,
       ),
     );

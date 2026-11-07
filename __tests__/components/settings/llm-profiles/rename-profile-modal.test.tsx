@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HttpError } from "@openhands/typescript-client";
 import { RenameProfileModal } from "#/components/features/settings/llm-profiles/rename-profile-modal";
 import { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
@@ -231,6 +232,39 @@ describe("RenameProfileModal", () => {
     // Modal should stay open after error (onClose not called)
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByTestId("rename-profile-modal")).toBeInTheDocument();
+  });
+
+  it("shows the server's `detail` instead of the raw HttpError text when the new name already exists (#17937)", async () => {
+    // Arrange — the agent-server refuses a duplicate name with a FastAPI 409,
+    // which the shared TypeScript client throws as an HttpError.
+    const user = userEvent.setup();
+    const { displayErrorToast } = await import(
+      "#/utils/custom-toast-handlers"
+    );
+    vi.mocked(ProfilesService.renameProfile).mockRejectedValue(
+      new HttpError(
+        409,
+        "Conflict",
+        { detail: "Profile 'taken-name' already exists" },
+        `HTTP request failed (409 Conflict): {"detail":"Profile 'taken-name' already exists"}`,
+      ),
+    );
+    const onClose = vi.fn();
+    renderModal(mockProfile, onClose);
+
+    // Act
+    const input = screen.getByTestId("rename-profile-input");
+    await user.clear(input);
+    await user.type(input, "taken-name");
+    await user.click(screen.getByTestId("rename-profile-submit"));
+
+    // Assert
+    await waitFor(() => {
+      expect(displayErrorToast).toHaveBeenCalledWith(
+        "Profile 'taken-name' already exists",
+      );
+    });
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("submits form when Enter key is pressed with valid name", async () => {

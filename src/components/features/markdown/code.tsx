@@ -1,21 +1,29 @@
 import React from "react";
 import { ExtraProps } from "react-markdown";
-import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { CopyableContentWrapper } from "#/components/shared/buttons/copyable-content-wrapper";
+import { useColorTheme } from "#/hooks/use-color-theme";
+import { getSyntaxHighlighterTheme } from "#/themes/syntax-highlighter-themes";
 import { cn } from "#/utils/utils";
+import { MermaidDiagram } from "./mermaid-diagram";
 import { SyntaxHighlighter } from "./syntax-highlighter";
 
 // See https://github.com/remarkjs/react-markdown?tab=readme-ov-file#use-custom-components-syntax-highlight
 
 /**
  * Component to render code blocks in markdown.
+ *
+ * Named `Code` rather than lowercase like its sibling markdown components
+ * because it calls a hook (`useColorTheme`), and `react-hooks/rules-of-hooks`
+ * only treats capitalized functions as components. It is exported as `code`
+ * so the `components` map in markdown-renderer reads like the others.
  */
-export function code({
+function Code({
   children,
   className,
 }: React.ClassAttributes<HTMLElement> &
   React.HTMLAttributes<HTMLElement> &
   ExtraProps) {
+  const colorTheme = useColorTheme();
   const match = /language-(\w+)/.exec(className || ""); // get the language
   const codeString = String(children).replace(/\n$/, "");
 
@@ -44,11 +52,11 @@ export function code({
     );
   }
 
-  return (
+  const highlighted = (
     <CopyableContentWrapper text={codeString}>
       <SyntaxHighlighter
         className="rounded-lg"
-        style={vscDarkPlus}
+        style={getSyntaxHighlighterTheme(colorTheme)}
         language={match?.[1]}
         PreTag="div"
       >
@@ -56,4 +64,12 @@ export function code({
       </SyntaxHighlighter>
     </CopyableContentWrapper>
   );
+
+  if (match[1] === "mermaid") {
+    return <MermaidDiagram source={codeString} fallback={highlighted} />;
+  }
+
+  return highlighted;
 }
+
+export { Code as code };

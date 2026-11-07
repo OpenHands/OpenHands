@@ -87,7 +87,7 @@ export function ApiKeyModalBase({
         aria-modal="true"
         aria-labelledby="modal-title"
         className={cn(
-          "bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-[var(--oh-border)]",
+          "bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border",
           modalWidthClassName(width),
           MODAL_MAX_WIDTH_VIEWPORT,
         )}

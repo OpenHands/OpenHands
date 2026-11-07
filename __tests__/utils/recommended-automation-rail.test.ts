@@ -48,7 +48,8 @@ describe("recommended automation rail", () => {
       { name: "GitHub Code Review Agent" },
     ]);
 
-    expect(groups.proven.map((entry) => entry.id)).toEqual([
+    expect(groups.suggested.map((entry) => entry.id)).toEqual([
+      "custom-automation",
       "github-issue-to-pr",
       "slack-channel-monitor",
       "github-agents-md-maintainer",
@@ -56,12 +57,42 @@ describe("recommended automation rail", () => {
     ]);
   });
 
+  it("moves a proven automation the instance does not appear to support to the end of the rail", () => {
+    // Arrange
+    const unlikely = new Map([[prReviewer.id, ["github"]]]);
+
+    // Act
+    const groups = getRecommendedRailGroups([], undefined, unlikely);
+
+    // Assert
+    expect(groups.suggested).not.toContain(prReviewer);
+    expect(groups.conversation.at(-1)).toBe(prReviewer);
+  });
+
+  it("leads with the automations that use an integration the instance reports", () => {
+    // Arrange
+    const suggested = new Map([["gitlab-issue-to-mr", ["gitlab"]]]);
+
+    // Act
+    const groups = getRecommendedRailGroups(
+      [],
+      undefined,
+      undefined,
+      suggested,
+    );
+
+    // Assert
+    expect(groups.suggested[0].id).toBe("gitlab-issue-to-mr");
+    expect(groups.suggested.map((entry) => entry.id)).toContain("news-digest");
+  });
+
   it("appends other useful automations that open in a new conversation", () => {
     const groups = getRecommendedRailGroups([]);
     const conversationIds = groups.conversation.map((entry) => entry.id);
 
-    expect(groups.proven.map((entry) => entry.id)).toEqual([
+    expect(groups.suggested.map((entry) => entry.id)).toEqual([
       "github-pr-reviewer",
+      "custom-automation",
       "github-issue-to-pr",
       "slack-channel-monitor",
       "github-agents-md-maintainer",
@@ -70,14 +101,21 @@ describe("recommended automation rail", () => {
     expect(conversationIds).toEqual([
       "slack-standup-digest",
       "linear-triage-assistant",
+      "linear-issue-to-github-pr",
+      "linear-issue-to-gitlab-mr",
+      "linear-issue-to-bitbucket-pr",
       "jira-issue-to-pr",
+      "jira-issue-to-gitlab-mr",
       "research-brief-writer",
+      "jira-issue-to-bitbucket-pr",
     ]);
     expect(conversationIds).not.toContain("upstream-fork-sync");
     expect(conversationIds).not.toContain("incident-retrospective-drafter");
     // Beta as of extensions 0.18.0, and set up by a host form rather than a
     // conversation, so it is in neither group.
     expect(conversationIds).not.toContain("github-repo-monitor");
+    // Same for `qa-changes` (extensions 0.19.0): host form, so neither group.
+    expect(conversationIds).not.toContain("qa-changes");
     expect(isConversationLaunchAutomation(slackStandup)).toBe(true);
     expect(isConversationLaunchAutomation(upstreamFork)).toBe(false);
     expect(SETUP_REGISTRY.findById(upstreamFork.id)).not.toBeNull();
@@ -87,6 +125,7 @@ describe("recommended automation rail", () => {
     const groups = getRecommendedRailGroups([
       { name: "GitHub Code Review Agent" },
       { name: "GitHub Issue to PR Agent" },
+      { name: "Custom automation" },
       { name: "Slack channel monitor" },
       { name: "AGENTS.md Maintainer" },
       { name: "Daily news digest" },
@@ -94,6 +133,11 @@ describe("recommended automation rail", () => {
       { name: "Linear issue triage assistant" },
       { name: "Jira issue to GitHub PR" },
       { name: "Research brief writer" },
+      { name: "Linear issue to GitHub PR" },
+      { name: "Linear issue to GitLab MR" },
+      { name: "Linear issue to Bitbucket PR" },
+      { name: "Jira issue to GitLab MR" },
+      { name: "Jira issue to Bitbucket PR" },
     ]);
 
     expect(flattenRecommendedRailGroups(groups)).toEqual([]);

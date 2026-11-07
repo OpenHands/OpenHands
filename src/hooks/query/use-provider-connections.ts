@@ -9,19 +9,24 @@ import {
 export { PROVIDER_CONNECTIONS_QUERY_KEYS };
 
 /**
- * Provider connections live only on the local agent-server. On cloud backends
- * the query stays disabled and returns no data, so the connections UI hides
- * itself rather than firing a request that would 404.
+ * Provider connections are available on the local agent-server
+ * (`/api/llm/provider-connections`) and on cloud when an org is bound
+ * (`/api/organizations/{orgId}/provider-connections`). The query is disabled
+ * only for a cloud backend without an org (legacy API keys), where the
+ * org-scoped route cannot be addressed — there it returns no data so the
+ * connections UI hides itself rather than firing an unaddressable request.
  */
 export function useProviderConnections() {
-  const { backend } = useActiveBackend();
+  const { backend, orgId } = useActiveBackend();
   const isLocal = backend.kind === "local";
+  const isCloudWithOrg = backend.kind === "cloud" && !!orgId;
+  const enabled = isLocal || isCloudWithOrg;
 
   return useQuery({
-    queryKey: [...PROVIDER_CONNECTIONS_QUERY_KEYS.all, backend.id],
+    queryKey: [...PROVIDER_CONNECTIONS_QUERY_KEYS.all, backend.id, orgId],
     queryFn: ProviderConnectionsService.list,
     ...CONFIG_CACHE_OPTIONS,
-    enabled: isLocal,
+    enabled,
     meta: { disableToast: true },
   });
 }

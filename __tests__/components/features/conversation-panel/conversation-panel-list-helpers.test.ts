@@ -2,19 +2,26 @@ import { describe, expect, it } from "vitest";
 import {
   applyAutomationConversationFilter,
   applyGroupFolderOrder,
+  applyTagConversationFilter,
   collectAutomationNameFacets,
+  collectTagFacets,
+  formatTagFacetLabel,
   getGroupConversationPreview,
   getGroupDiscoveryConversationIds,
   groupConversations,
   GROUP_CONVERSATIONS_PREVIEW_LIMIT,
   isAutomationConversation,
+  isOlderConversationCutoff,
   parseConversationTimeMs,
+  partitionByCutoff,
+  OLDER_CONVERSATION_CUTOFF_MS,
   moveGroupFolderOrder,
   resolvePinnedConversations,
   sortConversationsByField,
   UNNAMED_AUTOMATION_FACET,
 } from "#/components/features/conversation-panel/conversation-panel-list-helpers";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core";
 
 const base: Omit<AppConversation, "id" | "title" | "workspace"> = {
@@ -292,17 +299,18 @@ describe("conversation-panel-list-helpers", () => {
     ]);
 
     expect([
+      ...getGroupDiscoveryConversationIds(items, pageByConversationId, "local"),
+    ]).toEqual(["none-1", "alpha-1"]);
+
+    expect([
       ...getGroupDiscoveryConversationIds(
         items,
         pageByConversationId,
         "local",
+        {
+          forceIncludeConversationId: "none-2",
+        },
       ),
-    ]).toEqual(["none-1", "alpha-1"]);
-
-    expect([
-      ...getGroupDiscoveryConversationIds(items, pageByConversationId, "local", {
-        forceIncludeConversationId: "none-2",
-      }),
     ]).toEqual(["none-1", "alpha-1", "none-2"]);
 
     const grouped = groupConversations(items, "local", "updated", {
@@ -713,5 +721,216 @@ describe("conversation-panel-list-helpers", () => {
       knownWorkspaces,
     );
     expect(groups).toHaveLength(0);
+  });
+
+  it("collects distinct user-facing key=value tag facets, sorted A–Z, excluding reserved keys", () => {
+    const conversations: AppConversation[] = [
+      {
+        ...base,
+        id: "t1",
+        title: "t1",
+        tags: {
+          origin: "slack",
+          owner: "alice",
+          // Reserved/internal keys must not surface as facets — including
+          // the automation provenance family, which the automation filter
+          // owns exclusively.
+          acpserver: "claude-code",
+          title: "internal title stamp",
+          automationname: "Nightly Audit",
+          automationtrigger: "cron",
+          automationsetup: "draft",
+        },
+      },
+      {
+        ...base,
+        id: "t2",
+        title: "t2",
+        // Duplicate facet (origin=slack again) collapses into one entry.
+        tags: { origin: "slack", project: "fracture" },
+      },
+      // No user tags at all: contributes nothing (no unnamed bucket).
+      { ...base, id: "t3", title: "t3" },
+      { ...base, id: "t4", title: "t4", tags: null },
+    ];
+    expect(collectTagFacets(conversations)).toEqual([
+      "automationsetup=draft",
+      "origin=slack",
+      "owner=alice",
+      "project=fracture",
+    ]);
+  });
+
+  it("formats bare-tag facets (empty value) and setup facets readably", () => {
+    const t = (key: I18nKey) =>
+      key === I18nKey.AUTOMATIONS$DETAIL$DRAFT ? "Draft" : "Automation setup";
+    expect(formatTagFacetLabel("work=")).toBe("work");
+    expect(formatTagFacetLabel("project=fracture")).toBe("project=fracture");
+    expect(formatTagFacetLabel("automationsetup=draft", t)).toBe(
+      "Automation setup: Draft",
+    );
+  });
+
+  const tagFilterFixtures: AppConversation[] = [
+    { ...base, id: "untagged", title: "untagged" },
+    {
+      ...base,
+      id: "slack",
+      title: "slack",
+      tags: { origin: "slack" },
+    },
+    {
+      ...base,
+      id: "alice",
+      title: "alice",
+      tags: { owner: "alice" },
+    },
+    {
+      ...base,
+      id: "both",
+      title: "both",
+      tags: { origin: "slack", owner: "alice" },
+    },
+  ];
+  const tagFilterFacets = ["origin=slack", "owner=alice"];
+
+  it("applies the tag filter with union semantics: any selected facet matches", () => {
+    expect(
+      applyTagConversationFilter(
+        tagFilterFixtures,
+        ["origin=slack", "owner=alice"],
+        tagFilterFacets,
+      ).map((c) => c.id),
+    ).toEqual(["slack", "alice", "both"]);
+
+    expect(
+      applyTagConversationFilter(
+        tagFilterFixtures,
+        ["origin=slack"],
+        tagFilterFacets,
+      ).map((c) => c.id),
+    ).toEqual(["slack", "both"]);
+  });
+
+  it("leaves the list unfiltered for empty or stale tag selections", () => {
+    // An empty selection is "no tag filter", and a selection that no longer
+    // intersects the available facets (tags edited away, selections persisted
+    // from another backend) self-heals the same way instead of yielding an
+    // unfillable empty list — mirroring the automation filter.
+    expect(
+      applyTagConversationFilter(tagFilterFixtures, [], tagFilterFacets).map(
+        (c) => c.id,
+      ),
+    ).toEqual(["untagged", "slack", "alice", "both"]);
+
+    expect(
+      applyTagConversationFilter(
+        tagFilterFixtures,
+        ["origin=irc"],
+        tagFilterFacets,
+      ).map((c) => c.id),
+    ).toEqual(["untagged", "slack", "alice", "both"]);
+  });
+
+  it("recovers a legacy local_repo conversation by matching working_dir to a known workspace (#17386)", () => {
+    // No selected_workspace (localStorage was cleared / another browser), but
+    // the runtime working_dir equals a registered workspace folder.
+    const legacy: AppConversation = {
+      ...base,
+      id: "legacy-local-repo",
+      title: "legacy",
+      selected_workspace: null,
+      workspace: { working_dir: "/Users/jane/projects/openhands/" },
+    };
+    // A worktree conversation's working_dir is unique and matches nothing, so
+    // it stays under "No workspace" until its server tag regroups it.
+    const worktree: AppConversation = {
+      ...base,
+      id: "legacy-worktree",
+      title: "worktree",
+      selected_workspace: null,
+      workspace: { working_dir: "/Users/jane/projects/openhands/wt-abc" },
+    };
+
+    const groups = groupConversations(
+      [legacy, worktree],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      [
+        {
+          id: "ws1",
+          name: "openhands",
+          path: "/Users/jane/projects/openhands",
+        },
+      ],
+    );
+
+    const byId = new Map(groups.map((g) => [g.id, g]));
+    expect(byId.get("ws:/Users/jane/projects/openhands")?.label).toBe(
+      "openhands",
+    );
+    expect(
+      byId
+        .get("ws:/Users/jane/projects/openhands")
+        ?.conversations.map((c) => c.id),
+    ).toEqual(["legacy-local-repo"]);
+    expect(
+      byId.get("__none_workspace")?.conversations.map((c) => c.id),
+    ).toEqual(["legacy-worktree"]);
+  });
+});
+
+describe("partitionByCutoff", () => {
+  const now = Date.parse("2026-08-25T12:00:00.000Z");
+
+  it("puts conversations older than the cutoff in the older bucket", () => {
+    const items = [
+      { updated_at: "2026-08-25T11:30:00.000Z" },
+      { updated_at: "2026-08-25T10:00:00.000Z" },
+    ];
+
+    const { recent, older } = partitionByCutoff(
+      items,
+      OLDER_CONVERSATION_CUTOFF_MS["1h"],
+      now,
+    );
+
+    expect(recent.map((item) => item.updated_at)).toEqual([
+      "2026-08-25T11:30:00.000Z",
+    ]);
+    expect(older.map((item) => item.updated_at)).toEqual([
+      "2026-08-25T10:00:00.000Z",
+    ]);
+  });
+
+  it("keeps a 2-hour-old conversation recent when the cutoff is 1 day", () => {
+    const items = [{ updated_at: "2026-08-25T10:00:00.000Z" }];
+
+    const { recent, older } = partitionByCutoff(
+      items,
+      OLDER_CONVERSATION_CUTOFF_MS["1d"],
+      now,
+    );
+
+    expect(recent).toHaveLength(1);
+    expect(older).toHaveLength(0);
+  });
+
+  it("leaves missing timestamps in recent so they are not hidden", () => {
+    const { recent, older } = partitionByCutoff(
+      [{ updated_at: "" }],
+      OLDER_CONVERSATION_CUTOFF_MS["1h"],
+      now,
+    );
+
+    expect(recent).toHaveLength(1);
+    expect(older).toHaveLength(0);
+  });
+
+  it("accepts only the known cutoff ids", () => {
+    expect(isOlderConversationCutoff("1h")).toBe(true);
+    expect(isOlderConversationCutoff("1d")).toBe(true);
+    expect(isOlderConversationCutoff("2h")).toBe(false);
   });
 });

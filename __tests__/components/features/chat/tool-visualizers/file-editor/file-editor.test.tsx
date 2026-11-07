@@ -1,6 +1,7 @@
-import { beforeEach, describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { fileEditorVisualizer } from "#/components/features/chat/tool-visualizers/file-editor/file-editor";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useFilesTabStore } from "#/stores/files-tab-store";
@@ -10,19 +11,14 @@ import {
   fileEditorObservation,
 } from "../test-utils";
 
-vi.mock("#/hooks/query/use-active-conversation", () => ({
-  useActiveConversation: () => ({
-    data: {
-      id: "test-conversation-id",
-      workspace: { working_dir: "/workspace" },
-    },
-  }),
-}));
-
 const Body = fileEditorVisualizer.Body;
 
 describe("fileEditorVisualizer", () => {
   beforeEach(() => {
+    ConversationService.setCurrentConversation({
+      id: "test-conversation-id",
+      workspace: { working_dir: "/workspace" },
+    } as never);
     useConversationStore.setState({
       hasRightPanelToggled: false,
       selectedTab: "terminal",
@@ -30,6 +26,7 @@ describe("fileEditorVisualizer", () => {
     useFilesTabStore.setState({
       selectedPath: null,
       selectedConversationId: null,
+      openPaths: [],
     });
   });
 

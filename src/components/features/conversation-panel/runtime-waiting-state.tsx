@@ -26,7 +26,7 @@ export function RuntimeWaitingState({
       )}
     >
       <LoadingSpinner size="small" />
-      <Typography.Text className="text-sm text-[var(--oh-muted)]">
+      <Typography.Text className="text-sm text-muted">
         {t(messageKey)}
       </Typography.Text>
     </div>

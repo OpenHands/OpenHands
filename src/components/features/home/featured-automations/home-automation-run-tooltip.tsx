@@ -4,7 +4,15 @@ import { useTranslation } from "react-i18next";
 import type { LatestAutomationRunState } from "#/hooks/query/use-latest-automation-runs";
 import { I18nKey } from "#/i18n/declaration";
 import ClockIcon from "#/icons/clock.svg?react";
-import { AutomationRunStatus, type Automation } from "#/types/automation";
+import {
+  resolveRunPhaseText,
+  shouldShowRunPhase,
+} from "#/components/features/automations/detail/run-phase";
+import type { Automation, AutomationRun } from "#/types/automation";
+import {
+  getAutomationRunBadgeLabelKey,
+  getAutomationRunDisplay,
+} from "#/utils/automation-run-display";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { AutomationHealthIndicator } from "./automation-health-indicator";
 import {
@@ -13,11 +21,20 @@ import {
   getRunHealthLabelKey,
   getTriggerSummary,
 } from "./automation-run-health";
+import {
+  getDisablementReasonDisplay,
+  hasDisablementReason,
+} from "#/utils/automation-disabled-reason";
 
 export function getRunStatusLabelKey(
   runState: LatestAutomationRunState,
 ): I18nKey {
   if (runState.isError) return I18nKey.FEATURED_AUTOMATIONS$STATUS_UNAVAILABLE;
+  if (runState.latestRun) {
+    return getAutomationRunBadgeLabelKey(
+      getAutomationRunDisplay(runState.latestRun).badgeStatus,
+    );
+  }
   return getRunHealthLabelKey(deriveRunHealth(runState));
 }
 
@@ -30,11 +47,29 @@ function PreviewRow({
 }) {
   return (
     <div className="flex items-start gap-2 text-xs">
-      <span className="w-20 shrink-0 text-[var(--oh-muted)]">{label}</span>
-      <span className="min-w-0 flex-1 break-words text-[var(--oh-foreground)]">
+      <span className="w-20 shrink-0 text-muted">{label}</span>
+      <span className="min-w-0 flex-1 break-words text-foreground">
         {children}
       </span>
     </div>
+  );
+}
+
+/**
+ * The run's phase. The row that opens this hovercard has to clip a long
+ * phase; here there is room to wrap, so this is where the whole thing is
+ * readable. What the phase says comes from the same helper the row uses.
+ */
+function PhaseRow({ run }: { run: AutomationRun | null }) {
+  const { t } = useTranslation("openhands");
+  const text = resolveRunPhaseText(run?.current_phase);
+
+  if (!run || !shouldShowRunPhase(run.status) || !text) return null;
+
+  return (
+    <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$PHASE)}>
+      <span data-testid="run-phase-row">{text}</span>
+    </PreviewRow>
   );
 }
 
@@ -54,10 +89,14 @@ export function HomeAutomationRunTooltip({
   const timestamp = latestRun ? getLastRunTimestamp(latestRun) : null;
   const TriggerIcon = automation.trigger.type === "event" ? Zap : ClockIcon;
   const health = deriveRunHealth(runState);
+  const display = latestRun ? getAutomationRunDisplay(latestRun) : null;
+  const disabledReason = hasDisablementReason(automation)
+    ? getDisablementReasonDisplay(automation, t)
+    : null;
 
   return (
-    <div className="flex w-[280px] flex-col gap-3 p-3">
-      <span className="break-words text-sm font-medium text-white">
+    <div className="flex w-70 flex-col gap-3 p-3">
+      <span className="break-words text-sm font-medium text-contrast">
         {automation.name}
       </span>
 
@@ -79,17 +118,31 @@ export function HomeAutomationRunTooltip({
           </span>
         </PreviewRow>
 
+        {disabledReason ? (
+          <PreviewRow
+            label={t(I18nKey.AUTOMATIONS$DETAIL$DISABLED_REASON_HEADING)}
+          >
+            <span
+              data-testid="automation-tooltip-disabled-reason"
+              className="line-clamp-3 text-text-secondary"
+            >
+              {disabledReason.text}
+            </span>
+          </PreviewRow>
+        ) : null}
+
+        <PhaseRow run={latestRun} />
+
         {timestamp ? (
           <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$LAST_RUN)}>
             {formatRelativeTime(timestamp, i18n.language, t)}
           </PreviewRow>
         ) : null}
 
-        {latestRun?.status === AutomationRunStatus.FAILED &&
-        latestRun.error_detail ? (
-          <PreviewRow label={t(I18nKey.STATUS$ERROR)}>
-            <span className="line-clamp-3 text-[var(--oh-status-error)]">
-              {latestRun.error_detail}
+        {display?.summary ? (
+          <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$TASK_LABEL)}>
+            <span className="line-clamp-3 text-text-secondary">
+              {display.summary}
             </span>
           </PreviewRow>
         ) : null}

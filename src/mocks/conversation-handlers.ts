@@ -1,4 +1,5 @@
 import { http, delay, HttpResponse, passthrough } from "msw";
+import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import type { DirectConversationInfo } from "#/api/agent-server-adapter";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import {
@@ -47,6 +48,9 @@ const conversations: MockConversation[] = [
     created_at: new Date(now).toISOString(),
     updated_at: new Date(now).toISOString(),
     execution_status: "waiting_for_confirmation",
+    // User-authored tags so the layouts menu's Tag Filters section and the
+    // card chips have something to show in mock mode.
+    tags: { project: "vault", work: "" },
   },
   {
     id: "2",
@@ -227,6 +231,7 @@ function createConversationResponse(
     metrics: conversation.metrics ?? null,
     agent: conversation.agent ?? null,
     workspace: conversation.workspace ?? null,
+    tags: conversation.tags ?? null,
   };
 }
 
@@ -295,11 +300,17 @@ export const CONVERSATION_HANDLERS = [
       const conversation = CONVERSATIONS.get(conversationId);
 
       if (conversation) {
-        const body = (await request.json()) as { title?: string } | null;
-        if (body?.title) {
+        const body = (await request.json()) as {
+          title?: string;
+          tags?: Record<string, string>;
+        } | null;
+        // PATCH replaces the complete tags map (agent-server semantics);
+        // title-only and tags-only patches both persist.
+        if (body?.title || body?.tags) {
           CONVERSATIONS.set(conversationId, {
             ...conversation,
-            title: body.title,
+            ...(body.title ? { title: body.title } : {}),
+            ...(body.tags ? { tags: body.tags } : {}),
             updated_at: new Date().toISOString(),
           });
           return HttpResponse.json(null, { status: 200 });
@@ -470,6 +481,20 @@ export const CONVERSATION_HANDLERS = [
   http.get("*/api/vscode/url", async () => HttpResponse.json({ url: null })),
 
   http.post("*/api/skills", async () => HttpResponse.json({ skills: [] })),
+
+  http.get("*/api/skills/catalog", async () =>
+    HttpResponse.json({
+      skills: SKILLS_CATALOG.map((entry) => ({
+        name: entry.name,
+        type: "knowledge",
+        content: entry.content,
+        triggers: entry.triggers ?? [],
+        source: null,
+        description: entry.description,
+        origin: "public",
+      })),
+    }),
+  ),
 
   http.post(
     "/api/v1/conversations/:conversationId/pending-messages",

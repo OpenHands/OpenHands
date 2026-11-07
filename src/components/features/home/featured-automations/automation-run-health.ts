@@ -5,29 +5,32 @@ import {
   type Automation,
   type AutomationRun,
 } from "#/types/automation";
+import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { formatEventOn } from "#/utils/automation-schedule";
 
 export type AutomationRunHealth =
-  | "success"
-  | "failed"
-  | "in_progress"
-  | "none"
-  | "unknown";
+  "success" | "failed" | "warning" | "in_progress" | "none" | "unknown";
 
 export function deriveRunHealth(
   state: LatestAutomationRunState,
 ): AutomationRunHealth {
   if (state.isLoading || state.isError) return "unknown";
   if (!state.latestRun) return "none";
-  switch (state.latestRun.status) {
+  const display = getAutomationRunDisplay(state.latestRun);
+  switch (display.badgeStatus) {
     case AutomationRunStatus.COMPLETED:
+    case "success":
       return "success";
     case AutomationRunStatus.FAILED:
+    case "failed":
       return "failed";
+    case "blocked":
+    case "partial_success":
+    case "unknown":
+      return "warning";
     case AutomationRunStatus.PENDING:
     case AutomationRunStatus.RUNNING:
       return "in_progress";
-    // CANCELLED, SKIPPED, and any status the backend adds after this enum.
     default:
       return "unknown";
   }
@@ -39,6 +42,8 @@ export function getRunHealthLabelKey(health: AutomationRunHealth): I18nKey {
       return I18nKey.FEATURED_AUTOMATIONS$LAST_RUN_SUCCEEDED;
     case "failed":
       return I18nKey.FEATURED_AUTOMATIONS$LAST_RUN_FAILED;
+    case "warning":
+      return I18nKey.AUTOMATIONS$DETAIL$NEEDS_REVIEW;
     case "in_progress":
       return I18nKey.FEATURED_AUTOMATIONS$RUN_IN_PROGRESS;
     case "none":
@@ -55,6 +60,9 @@ const TRIGGER_SOURCE_LABELS: Record<string, string> = {
   slack: "Slack",
   linear: "Linear",
   jira: "Jira",
+  jira_dc: "Jira Data Center",
+  bitbucket_data_center: "Bitbucket Data Center",
+  azure_devops: "Azure DevOps",
 };
 
 export function formatTriggerSourceLabel(source: string): string {
@@ -105,8 +113,8 @@ const ERROR_DETAIL_INLINE_MAX = 48;
  * Short preview for the pinned-card status row. Prefer the first sentence,
  * then hard-truncate so the row stays single-line.
  */
-export function shortenAutomationErrorDetail(detail: string): string {
-  const trimmed = detail.trim().replace(/\s+/g, " ");
+export function shortenAutomationRunSummary(summary: string): string {
+  const trimmed = summary.trim().replace(/\s+/g, " ");
   if (!trimmed) return trimmed;
   const firstSentence = trimmed.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? trimmed;
   if (firstSentence.length <= ERROR_DETAIL_INLINE_MAX) return firstSentence;
@@ -114,11 +122,11 @@ export function shortenAutomationErrorDetail(detail: string): string {
 }
 
 /** True when the inline preview is shortened and the full message belongs in a hovercard. */
-export function shouldShowAutomationErrorHovercard(
-  detail: string,
-  shortDetail: string = shortenAutomationErrorDetail(detail),
+export function shouldShowAutomationRunSummaryHovercard(
+  summary: string,
+  shortSummary: string = shortenAutomationRunSummary(summary),
 ): boolean {
-  return detail.trim().replace(/\s+/g, " ") !== shortDetail;
+  return summary.trim().replace(/\s+/g, " ") !== shortSummary;
 }
 
 /**

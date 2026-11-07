@@ -7,12 +7,16 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 const trackDownloadTrajectoryButtonClickedMock = vi.fn();
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
-    trackDownloadTrajectoryButtonClicked: trackDownloadTrajectoryButtonClickedMock,
+    trackDownloadTrajectoryButtonClicked:
+      trackDownloadTrajectoryButtonClickedMock,
   }),
 }));
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, options?: { error?: string }) =>
+      options?.error ? `${key}: ${options.error}` : key,
+  }),
 }));
 
 vi.mock("#/utils/utils", () => ({
@@ -24,6 +28,8 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
 }));
 
 import { useDownloadConversation } from "#/hooks/use-download-conversation";
+import { createAgentServerQueryClient } from "#/query-client-config";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -92,5 +98,35 @@ describe("useDownloadConversation - tracking", () => {
     await result.current.mutateAsync("conv-123").catch(() => {});
 
     expect(trackDownloadTrajectoryButtonClickedMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("useDownloadConversation - failure", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows exactly one toast naming the download failure and its cause", async () => {
+    vi.spyOn(
+      AgentServerConversationService,
+      "downloadConversation",
+    ).mockRejectedValue(new Error("connect ECONNREFUSED 127.0.0.1:18831"));
+    // The app's real client, so the global MutationCache toast is in play.
+    const queryClient = createAgentServerQueryClient();
+    const { result } = renderHook(() => useDownloadConversation(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          children,
+        ),
+    });
+
+    await expect(result.current.mutateAsync("conv-123")).rejects.toThrow();
+
+    expect(displayErrorToast).toHaveBeenCalledTimes(1);
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      "CONVERSATION$DOWNLOAD_ERROR: connect ECONNREFUSED 127.0.0.1:18831",
+    );
   });
 });

@@ -4,10 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 
 import { ActivityLogItem } from "#/components/features/automations/detail/activity-log-item";
-import {
-  AutomationRunStatus,
-  type AutomationRun,
-} from "#/types/automation";
+import { AutomationRunStatus, type AutomationRun } from "#/types/automation";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -25,27 +22,30 @@ const LOGS_BUTTON_NAME = (name: string) =>
 // The modal is wired to react-query + the conversation lookup. The
 // ActivityLogItem tests focus on the trigger button; we mock the modal so
 // they don't need to bring up the entire query stack.
-vi.mock(
-  "#/components/features/automations/detail/run-logs-modal",
-  () => ({
-    RunLogsModal: ({
-      isOpen,
-      onClose,
-      bashCommandId,
-    }: {
-      isOpen: boolean;
-      onClose: () => void;
-      bashCommandId: string | null;
-    }) =>
-      isOpen ? (
-        <div data-testid="logs-modal" data-bash-command-id={bashCommandId}>
-          <button type="button" onClick={onClose}>
-            close
-          </button>
-        </div>
-      ) : null,
-  }),
-);
+vi.mock("#/components/features/automations/detail/run-logs-modal", () => ({
+  RunLogsModal: ({
+    isOpen,
+    onClose,
+    bashCommandId,
+    sandboxId,
+  }: {
+    isOpen: boolean;
+    onClose: () => void;
+    bashCommandId: string | null;
+    sandboxId?: string | null;
+  }) =>
+    isOpen ? (
+      <div
+        data-testid="logs-modal"
+        data-bash-command-id={bashCommandId}
+        data-sandbox-id={sandboxId ?? ""}
+      >
+        <button type="button" onClick={onClose}>
+          close
+        </button>
+      </div>
+    ) : null,
+}));
 
 const localBackend: Backend = {
   id: "local-1",
@@ -186,6 +186,64 @@ describe("ActivityLogItem — Conversation not created label", () => {
   });
 });
 
+describe("ActivityLogItem — task outcome display", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("shows a blocked task badge and task summary for a completed run", () => {
+    const run = makeRun({
+      status: AutomationRunStatus.COMPLETED,
+      error_detail: "HUBSPOT_API_KEY was unavailable.",
+      run_metadata: {
+        finish_tool_response: {
+          status: "blocked",
+          outcome_summary:
+            "Attempted HubSpot CRM contact search but HUBSPOT_API_KEY was unavailable.",
+        },
+      },
+    });
+
+    renderItem(run);
+
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$BLOCKED),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Attempted HubSpot CRM contact search but HUBSPOT_API_KEY was unavailable.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$SUCCESSFUL),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("HUBSPOT_API_KEY was unavailable."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows failed lifecycle errors as neutral row summaries", () => {
+    const run = makeRun({
+      status: AutomationRunStatus.FAILED,
+      error_detail: "The run stopped before the task finished.",
+    });
+
+    renderItem(run);
+
+    const summary = screen.getByText(
+      "The run stopped before the task finished.",
+    );
+    expect(summary).toBeInTheDocument();
+    expect(summary.className).not.toContain("oh-status-error");
+  });
+});
+
 describe("ActivityLogItem — timestamp fallback", () => {
   beforeEach(() => {
     __resetActiveStoreForTests();
@@ -214,8 +272,9 @@ describe("ActivityLogItem — timestamp fallback", () => {
     const { container } = renderItem(run);
 
     // Assert: the row reflects the current clock, not 1970.
-    expect(container.textContent).toContain("2026");
-    expect(container.textContent).not.toContain("1970");
+    const time = container.querySelector("time");
+    expect(time?.getAttribute("datetime")).toMatch(/^2026-05-27/);
+    expect(time?.getAttribute("title")).toContain("2026");
   });
 
   it("renders the backend-provided started_at unchanged when it is a valid timestamp", () => {
@@ -229,8 +288,9 @@ describe("ActivityLogItem — timestamp fallback", () => {
     const { container } = renderItem(run);
 
     // Assert
-    expect(container.textContent).toContain("2027");
-    expect(container.textContent).not.toContain("2030");
+    const time = container.querySelector("time");
+    expect(time?.getAttribute("datetime")).toBe("2027-03-15T09:00:00Z");
+    expect(time?.getAttribute("title")).toContain("2027");
   });
 });
 
@@ -286,5 +346,264 @@ describe("ActivityLogItem — run cost", () => {
     expect(
       screen.queryByText((content) => content.startsWith("$")),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("ActivityLogItem — run phase", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("shows the current_phase as the place of failure for a FAILED run", () => {
+    const run = makeRun({
+      status: AutomationRunStatus.FAILED,
+      conversation_id: null,
+      bash_command_id: null,
+      current_phase: "Installing dependencies",
+    });
+
+    renderItem(run);
+
+    expect(screen.getByTestId("run-phase")).toHaveTextContent(
+      "Installing dependencies",
+    );
+  });
+
+  it("does not display the phase for a COMPLETED run, even though it was saved", () => {
+    const run = makeRun({
+      status: AutomationRunStatus.COMPLETED,
+      current_phase: "Agent is working on the task",
+    });
+
+    renderItem(run);
+
+    expect(run.current_phase).toBe("Agent is working on the task");
+    expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+  });
+});
+
+describe("ActivityLogItem — run phase absent entirely", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+    vi.restoreAllMocks();
+  });
+
+  it("renders a RUNNING row unchanged, without console errors, when the automation service omits phase fields entirely", () => {
+    // Arrange: an older automation service response — no current_phase key
+    // at all (not even null).
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const run = makeRun({
+      status: AutomationRunStatus.RUNNING,
+      completed_at: null,
+    });
+    delete (run as Partial<AutomationRun>).current_phase;
+
+    // Act
+    expect(() => renderItem(run)).not.toThrow();
+
+    // Assert: renders as before — status badge present, no phase node, no
+    // console noise from the missing fields.
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNNING),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("ActivityLogItem — run phase updates without reload", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("reflects a new current_phase from a prop update (as a poll refetch would produce), with no remount needed", () => {
+    // Arrange
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const buildTree = (run: AutomationRun) => (
+      <QueryClientProvider client={queryClient}>
+        <ActiveBackendProvider>
+          <MemoryRouter>
+            <ActivityLogItem run={run} />
+          </MemoryRouter>
+        </ActiveBackendProvider>
+      </QueryClientProvider>
+    );
+    const runningRun = makeRun({
+      status: AutomationRunStatus.RUNNING,
+      completed_at: null,
+      current_phase: "Preparing environment",
+    });
+    const { rerender } = render(buildTree(runningRun));
+    expect(screen.getByTestId("run-phase")).toHaveTextContent(
+      "Preparing environment",
+    );
+
+    // Act: same run id, new phase — what the 3s poll in
+    // useAutomationRuns would hand down as a new `run` prop.
+    rerender(
+      buildTree({
+        ...runningRun,
+        current_phase: "Agent is working on the task",
+      }),
+    );
+
+    // Assert: the new phase is shown, the old one is gone — no reload.
+    expect(screen.getByTestId("run-phase")).toHaveTextContent(
+      "Agent is working on the task",
+    );
+    expect(screen.queryByText("Preparing environment")).not.toBeInTheDocument();
+  });
+});
+
+describe("ActivityLogItem — run phase (badge still shown)", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("shows only the existing status badge (not merely 'no phase') for an active run whose phase is blank", () => {
+    // Arrange
+    const run = makeRun({
+      status: AutomationRunStatus.RUNNING,
+      completed_at: null,
+      current_phase: "",
+    });
+
+    // Act
+    renderItem(run);
+
+    // Assert: no phase node, but the status badge is still on the row —
+    // the requirement is "only the existing status badge", not "nothing".
+    expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNNING),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the status badge beside a reported current_phase", () => {
+    const run = makeRun({
+      status: AutomationRunStatus.RUNNING,
+      completed_at: null,
+      current_phase: "Checking out the branch",
+    });
+
+    renderItem(run);
+
+    expect(screen.getByTestId("run-phase")).toHaveTextContent(
+      "Checking out the branch",
+    );
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNNING),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("ActivityLogItem — run phase hidden for CANCELLED/SKIPPED", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it.each([
+    [AutomationRunStatus.CANCELLED, I18nKey.AUTOMATIONS$DETAIL$CANCELLED],
+    [AutomationRunStatus.SKIPPED, I18nKey.AUTOMATIONS$DETAIL$SKIPPED],
+  ])(
+    "does not show the phase for a %s run, even with a current_phase on record",
+    (status, badgeKey) => {
+      const run = makeRun({
+        status,
+        current_phase: "Agent is working on the task",
+        completed_at: "2026-01-01T10:02:00Z",
+      });
+
+      renderItem(run);
+
+      expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+      expect(screen.getByText(badgeKey)).toBeInTheDocument();
+    },
+  );
+});
+
+describe("ActivityLogItem — script runs (a command but no conversation)", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("leaves the no-conversation explanation to the runs section for a script run", () => {
+    // Arrange: a script automation run — the bash command ran, no agent did.
+    const run = makeRun({
+      status: AutomationRunStatus.COMPLETED,
+      conversation_id: null,
+      bash_command_id: "cmd-1",
+      sandbox_id: "sb-1",
+    });
+
+    // Act
+    renderItem(run);
+
+    // Assert: the section says it once; the row keeps only the logs button.
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: LOGS_BUTTON_NAME }),
+    ).toBeInTheDocument();
+  });
+
+  it("hands the run's sandbox id to the logs modal", () => {
+    // Arrange
+    const run = makeRun({
+      conversation_id: null,
+      bash_command_id: "cmd-1",
+      sandbox_id: "sb-1",
+    });
+    renderItem(run);
+
+    // Act
+    fireEvent.click(screen.getByRole("button", { name: LOGS_BUTTON_NAME }));
+
+    // Assert
+    expect(screen.getByTestId("logs-modal")).toHaveAttribute(
+      "data-sandbox-id",
+      "sb-1",
+    );
   });
 });

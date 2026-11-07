@@ -55,14 +55,13 @@ export const useUnifiedPauseConversation = () => {
       }
       toast.success(t(I18nKey.TOAST$CONVERSATION_STOPPED), TOAST_OPTIONS);
 
-      // Update both execution_status and sandbox_status together so that
-      // WebSocketProviderWrapper's sandbox_status === "PAUSED" gate fires
-      // immediately when the user reopens this conversation — preventing a
-      // WebSocket connection attempt against the now-paused sandbox host
-      // before the next useActiveConversation poll returns.
+      // Drop the runtime URL immediately so this mounted route cannot reconnect
+      // to the sandbox being paused. Leave sandbox_status server-authored: the
+      // conversation route uses PAUSED as the signal to auto-resume when a user
+      // later reopens an already-paused cloud conversation.
       patchConversationInCache(queryClient, variables.conversationId, {
         execution_status: ExecutionStatus.PAUSED,
-        sandbox_status: "PAUSED",
+        conversation_url: null,
       });
 
       if (currentConversationId === variables.conversationId) {

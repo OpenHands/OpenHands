@@ -7,7 +7,12 @@
  * this stays neutral about what any particular capability means.
  */
 
-import type { DeploymentCapabilities, SetupEntry } from "./types";
+import type {
+  DeploymentCapabilities,
+  SetupActionKind,
+  SetupEntry,
+  SetupTriggerKind,
+} from "./types";
 
 /**
  * "unknown" is a real outcome, not an error: a deployment that cannot be asked
@@ -33,6 +38,35 @@ function findUnreported(
   return required.filter((entry) => !reported.includes(entry));
 }
 
+function actionSupportsCapabilities(
+  features: readonly string[],
+  reported: DeploymentCapabilities,
+): boolean {
+  return findUnreported(reported.features ?? [], features).length === 0;
+}
+
+export function supportedActionKinds(
+  entry: SetupEntry,
+  reported: DeploymentCapabilities,
+): SetupActionKind[] {
+  const actions = entry.setup.actions ?? {};
+  return (Object.keys(actions) as SetupActionKind[]).filter((kind) =>
+    actionSupportsCapabilities(actions[kind]?.features ?? [], reported),
+  );
+}
+
+export function supportedTriggerKinds(
+  entry: SetupEntry,
+  reported: DeploymentCapabilities,
+): SetupTriggerKind[] {
+  const triggers = Object.keys(
+    entry.setup.form.triggers ?? {},
+  ) as SetupTriggerKind[];
+  return triggers.filter((kind) =>
+    (reported.triggerKinds ?? []).includes(kind),
+  );
+}
+
 export function assessCapabilityRequirements(
   entry: SetupEntry,
   reported: DeploymentCapabilities,
@@ -41,12 +75,34 @@ export function assessCapabilityRequirements(
   // that requires nothing of it.
   if (!reported.ready) return { supported: false, unmet: [] };
 
+  const unmetFeatures = findUnreported(
+    reported.features ?? [],
+    entry.requires.features ?? [],
+  );
+  const triggerKinds = Object.keys(entry.setup.form.triggers ?? {});
+  const supportsAnyTrigger =
+    triggerKinds.length === 0 ||
+    triggerKinds.some((kind) => (reported.triggerKinds ?? []).includes(kind));
+
+  const actions = entry.setup.actions ?? {};
+  const actionFeatureSets = Object.values(actions).map(
+    (action) => action?.features ?? [],
+  );
+  const supportsAnyAction =
+    actionFeatureSets.length === 0 ||
+    actionFeatureSets.some((features) =>
+      actionSupportsCapabilities(features, reported),
+    );
+  const unmetActionFeatures = supportsAnyAction
+    ? []
+    : Array.from(new Set(actionFeatureSets.flat())).filter(
+        (feature) => !(reported.features ?? []).includes(feature),
+      );
+
   const unmet = [
-    ...findUnreported(reported.features ?? [], entry.requires.features ?? []),
-    ...findUnreported(
-      reported.triggerKinds ?? [],
-      Object.keys(entry.setup.form.triggers ?? {}),
-    ),
+    ...unmetFeatures,
+    ...unmetActionFeatures,
+    ...(supportsAnyTrigger ? [] : triggerKinds),
   ];
 
   return { supported: unmet.length === 0, unmet };

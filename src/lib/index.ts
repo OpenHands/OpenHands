@@ -7,6 +7,7 @@ export * from "../components/terminal";
 export {
   AgentServerUIProviders,
   AgentServerUIRoot,
+  CloudOrganizationBoundary,
   DEFAULT_AGENT_SERVER_ANALYTICS,
   type AgentServerUIAnalyticsConfig,
   type AgentServerUIPostHogAnalyticsConfig,
@@ -39,6 +40,23 @@ export {
   type AgentServerUIStyleOverrides,
   type AgentServerUITheme,
 } from "../styles/agent-server-ui-style-scope";
+export {
+  CANVAS_EXTENSION_HOST_API_VERSION,
+  CANVAS_EXTENSION_MANIFEST_SCHEMA_VERSION,
+  type CanvasExtensionAgentServerRequest,
+  type CanvasExtensionAppBackendViewHost,
+  type CanvasExtensionAppBackendViewMountOptions,
+  type CanvasExtensionContributions,
+  type CanvasExtensionDispose,
+  type CanvasExtensionHost,
+  type CanvasExtensionManifest,
+  type CanvasExtensionModule,
+  type CanvasExtensionPageContribution,
+  type CanvasExtensionPageMount,
+  type CanvasExtensionPageMountContext,
+  type InstallCanvasExtensionRequest,
+  type InstalledCanvasExtensionInfo,
+} from "../types/canvas-extension";
 
 // Telemetry exports
 export { useTelemetry, type UseTelemetryReturn } from "../hooks/use-telemetry";

@@ -11,7 +11,6 @@ import {
   AGENT_PROFILES_RETRY_OPTIONS,
   SETTINGS_QUERY_KEYS,
 } from "#/hooks/query/query-keys";
-import { agentProfileDetailQueryKey } from "#/hooks/query/use-active-acp-profile-detail";
 import { invalidateConversationQueries } from "./conversation-mutation-utils";
 
 interface SwitchAcpModelVars {
@@ -22,7 +21,8 @@ interface SwitchAcpModelVars {
    * is persisted as the default the next conversation launches with.
    */
   conversationId: string | null;
-  model: string;
+  /** Null saves no model, so the next conversation starts on the agent's own default. */
+  model: string | null;
 }
 
 /**
@@ -37,8 +37,8 @@ interface SwitchAcpModelVars {
  * (``agent_profile_id`` and ``agent_settings`` are mutually exclusive launch
  * sources), so writing ``agent_settings.acp_model`` would not affect them.
  * Only when the profile list resolves with no active ACP profile does the
- * write fall back to the ``agent_settings_diff`` the legacy launch path
- * reads. A failed profile discovery propagates instead of downgrading
+ * write fall back to the ``agent_settings_diff`` a Cloud launch without a
+ * profile reads. A failed profile discovery propagates instead of downgrading
  * (#16523): an active-profile launch ignores agent_settings, so persisting
  * the pick there would silently drop it.
  *
@@ -52,10 +52,12 @@ export const useSwitchAcpModel = () => {
   return useMutation({
     mutationFn: async ({ conversationId, model }: SwitchAcpModelVars) => {
       if (conversationId) {
-        await AgentServerConversationService.switchAcpModel(
-          conversationId,
-          model,
-        );
+        if (model) {
+          await AgentServerConversationService.switchAcpModel(
+            conversationId,
+            model,
+          );
+        }
         return;
       }
 
@@ -82,7 +84,7 @@ export const useSwitchAcpModel = () => {
         // Merge over the stored profile so a model-only pick can't wipe the
         // fields this surface doesn't model (command, session mode, …).
         const detail = await queryClient.ensureQueryData({
-          queryKey: agentProfileDetailQueryKey(
+          queryKey: AGENT_PROFILES_QUERY_KEYS.detail(
             backend.id,
             orgId,
             activeProfile.name,
@@ -100,8 +102,8 @@ export const useSwitchAcpModel = () => {
         return;
       }
 
-      // No active ACP profile: persist as the agent-settings default the
-      // legacy launch path reads. The backend deep-merges
+      // No active ACP profile: persist as the agent-settings default a Cloud
+      // launch without a profile reads. The backend deep-merges
       // ``agent_settings_diff`` into the existing ``agent_settings`` dict, so
       // a scalar ``acp_model`` diff updates only the model and preserves the
       // selected provider + command.

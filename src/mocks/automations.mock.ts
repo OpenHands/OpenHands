@@ -4,7 +4,7 @@ import type { AutomationsResponse } from "#/types/automation";
  * Mock automations data matching the AutomationResponse schema from the backend.
  *
  * Backend schema fields: id, user_id, org_id, name, trigger (JSONB),
- * tarball_path, setup_script_path, entrypoint, timeout, enabled,
+ * tarball_path, setup_script_path, entrypoint, timeout, keep_alive, enabled,
  * last_triggered_at, created_at, updated_at.
  *
  * The frontend Automation type only uses a subset of these fields.
@@ -20,6 +20,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
     {
       id: "a1000000-0000-0000-0000-000000000001",
       name: "PR Triage Digest",
+      tags: ["software-factory"],
       trigger: {
         type: "cron",
         schedule: "0 9 * * 1-5",
@@ -29,6 +30,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
       repository: "acme/frontend-app",
       model: "triage-fast",
       timeout: 600,
+      keep_alive: false,
       created_at: daysAgo(90),
       updated_at: now,
       prompt:
@@ -42,6 +44,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
     {
       id: "a1000000-0000-0000-0000-000000000002",
       name: "Nightly Security Pass",
+      tags: [],
       trigger: {
         type: "cron",
         schedule: "30 1 * * *",
@@ -64,6 +67,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
     {
       id: "a1000000-0000-0000-0000-000000000003",
       name: "Docs Sync on Push",
+      tags: [],
       trigger: {
         type: "cron",
         schedule: "*/5 * * * *",
@@ -85,6 +89,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
     {
       id: "a1000000-0000-0000-0000-000000000004",
       name: "Release Readiness Review",
+      tags: [],
       trigger: {
         type: "cron",
         schedule: "0 11 * * 5",
@@ -106,6 +111,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
     {
       id: "a1000000-0000-0000-0000-000000000005",
       name: "Incident Webhook Summary",
+      tags: [],
       trigger: {
         type: "cron",
         schedule: "0 */2 * * *",
@@ -127,6 +133,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
     {
       id: "a1000000-0000-0000-0000-000000000006",
       name: "PR Review on Open",
+      tags: ["software-factory", "code-review"],
       trigger: {
         type: "event",
         source: "github",
@@ -137,6 +144,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
       repository: "acme/frontend-app",
       model: "review-fast",
       timeout: 1800,
+      keep_alive: true,
       created_at: daysAgo(15),
       updated_at: now,
       prompt:
@@ -145,10 +153,16 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
       plugins: ["GitHub"],
       notification: "GitHub PR comment",
       last_triggered_at: daysAgo(0),
+      // Template provenance, as the setup flow stores it. The other mock
+      // automations stay without one to exercise the no-statement path.
+      preset_metadata: {
+        template: { id: "github-pr-reviewer", version: "1.0.0", config: {} },
+      },
     },
     {
       id: "a1000000-0000-0000-0000-000000000007",
       name: "Release Notes Generator",
+      tags: [],
       trigger: {
         type: "event",
         source: "github",

@@ -215,6 +215,15 @@ export function createInterfaceManifestWithSubPages(): InterfaceManifest {
               { value: "event", label: "Evented" },
             ],
           },
+          {
+            id: "created_by",
+            label: "Filter widgets by maker",
+            options: [
+              { value: "all", label: "Any maker" },
+              { value: "me", label: "My widgets" },
+              { value: "others", label: "Teammates' widgets" },
+            ],
+          },
         ],
         sort: {
           label: "Order widgets",

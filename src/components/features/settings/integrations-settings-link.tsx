@@ -3,6 +3,7 @@ import { ExternalLink, Puzzle } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { isNoBackend } from "#/api/backend-registry/active-store";
+import { cloudIntegrationsUrl } from "#/utils/cloud-integrations-url";
 import { cn } from "#/utils/utils";
 import {
   SIDEBAR_ICON_SLOT_CLASS,
@@ -12,17 +13,18 @@ import {
 } from "#/components/features/sidebar/sidebar-layout";
 
 /**
- * Renders only for cloud backends — local backends have no equivalent
- * hosted integrations settings page.
+ * Renders only for cloud backends — local backends have no equivalent hosted
+ * integrations settings page. In locked-to-Cloud deployments this sits beside
+ * "All Cloud Settings" as a direct shortcut to the Cloud integrations page.
  */
 export function IntegrationsSettingsLink() {
   const { t } = useTranslation("openhands");
   const { active } = useActiveBackendContext();
-  const { backend } = active;
+  const { backend, orgId } = active;
 
   if (isNoBackend(backend) || backend.kind !== "cloud") return null;
 
-  const integrationsUrl = `${backend.host.replace(/\/+$/, "")}/settings/integrations`;
+  const integrationsUrl = cloudIntegrationsUrl(backend, orgId);
 
   return (
     <a
@@ -41,10 +43,7 @@ export function IntegrationsSettingsLink() {
       <span className={cn(sidebarNavLabelClassName(false), "flex-1")}>
         {t(I18nKey.SETTINGS$INTEGRATIONS_SETTINGS_LINK)}
       </span>
-      <ExternalLink
-        className="size-4 shrink-0 text-[var(--oh-muted)]"
-        aria-hidden
-      />
+      <ExternalLink className="size-4 shrink-0 text-muted" aria-hidden />
     </a>
   );
 }

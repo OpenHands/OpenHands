@@ -61,7 +61,7 @@ export function PluginCard({
         <div className="min-w-0 flex-1">
           <h3
             data-testid={`plugin-name-${plugin.name}`}
-            className="truncate text-sm font-semibold text-white"
+            className="truncate text-sm font-semibold text-contrast"
           >
             {plugin.name}
           </h3>
@@ -82,6 +82,8 @@ export function PluginCard({
             isSelected={plugin.enabled}
             isDisabled={isDisabled || isBusy}
             onToggle={onToggle}
+            enableLabelKey={I18nKey.SETTINGS$PLUGINS_ENABLE_PLUGIN}
+            disableLabelKey={I18nKey.SETTINGS$PLUGINS_DISABLE_PLUGIN}
             disableTooltipKey={I18nKey.COMMON$DISABLE}
           />
         ) : plugin.isLocal ? (

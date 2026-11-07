@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, type ReactNode, type CSSProperties } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ChatInterface } from "../../chat/chat-interface";
 import { ConversationOverviewPanel } from "../conversation-overview-panel";
@@ -12,13 +12,27 @@ import {
 
 interface ChatInterfaceWrapperProps {
   isRightPanelShown: boolean;
+  pendingContent?: ReactNode;
+  showGitControlBar?: boolean;
+  showEmptyStateSuggestions?: boolean;
+  composerDockTarget?: HTMLElement | null;
+  onDockedComposerSubmit?: () => void;
+  minimalComposer?: boolean;
+  composerPlaceholder?: string;
 }
 
 const THREAD_CLASSNAME =
-  "w-full min-w-0 max-w-[800px] h-full flex flex-col min-h-0";
+  "w-full min-w-0 max-w-200 h-full flex flex-col min-h-0";
 
 export function ChatInterfaceWrapper({
   isRightPanelShown: _isRightPanelShown,
+  showGitControlBar = true,
+  showEmptyStateSuggestions = true,
+  composerDockTarget = null,
+  onDockedComposerSubmit,
+  minimalComposer = false,
+  composerPlaceholder,
+  pendingContent,
 }: ChatInterfaceWrapperProps) {
   const isMobile = useBreakpoint();
   const reduceMotion = useReducedMotion();
@@ -41,7 +55,16 @@ export function ChatInterfaceWrapper({
     >
       <div className="flex min-h-0 min-w-0 flex-1 justify-center overflow-hidden">
         <div className={THREAD_CLASSNAME}>
-          <ChatInterface />
+          {pendingContent ?? (
+            <ChatInterface
+              showGitControlBar={showGitControlBar}
+              showEmptyStateSuggestions={showEmptyStateSuggestions}
+              composerDockTarget={composerDockTarget}
+              onDockedComposerSubmit={onDockedComposerSubmit}
+              minimalComposer={minimalComposer}
+              composerPlaceholder={composerPlaceholder}
+            />
+          )}
         </div>
       </div>
       <AnimatePresence>
@@ -61,10 +84,14 @@ export function ChatInterfaceWrapper({
             className="flex shrink-0 flex-col items-start overflow-hidden pt-4 pl-3 pr-4"
           >
             <div
-              className="w-full shrink-0"
-              style={{ width: CONVERSATION_OVERVIEW_COLUMN_WIDTH_PX }}
+              className="w-(--conversation-overview-column-width) shrink-0"
+              style={
+                {
+                  "--conversation-overview-column-width": `${CONVERSATION_OVERVIEW_COLUMN_WIDTH_PX}px`,
+                } as CSSProperties
+              }
             >
-              <ConversationOverviewPanel />
+              {!pendingContent && <ConversationOverviewPanel />}
             </div>
           </motion.div>
         ) : null}
