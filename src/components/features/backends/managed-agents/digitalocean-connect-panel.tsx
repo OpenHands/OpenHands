@@ -39,7 +39,7 @@ import {
 const PANEL_CLASS =
   "flex backend-chooser-cloud-panel w-full flex-col rounded-xl border border-border";
 const ICON_BUTTON_CLASS =
-  "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted hover:bg-interactive-hover hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted hover:bg-interactive-hover hover:text-contrast focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-40";
 
 type Launcher = ReturnType<typeof useLaunchMarsSession>;
 
@@ -65,7 +65,7 @@ function SessionChildRow({ session, launcher, onOpen }: SessionChildRowProps) {
         className="flex w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-surface-raised focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-60"
       >
         <SessionStatusDot phase={phase} className="size-1.5" />
-        <span className="min-w-0 flex-1 truncate text-xs text-white">
+        <span className="min-w-0 flex-1 truncate text-xs text-contrast">
           {name}
         </span>
         <span className="shrink-0 truncate text-xs tabular-nums text-muted">
@@ -160,7 +160,7 @@ function AgentRow({
         >
           <span
             aria-hidden
-            className="relative flex size-8 shrink-0 items-center justify-center rounded-md bg-surface-raised text-sm font-medium text-white"
+            className="relative flex size-8 shrink-0 items-center justify-center rounded-md bg-surface-raised text-sm font-medium text-contrast"
           >
             {name.charAt(0).toUpperCase()}
             {latest ? (
@@ -171,7 +171,7 @@ function AgentRow({
             ) : null}
           </span>
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-sm text-white">{name}</span>
+            <span className="truncate text-sm text-contrast">{name}</span>
             <span className="truncate text-xs tabular-nums text-muted">
               {meta}
             </span>
@@ -319,7 +319,7 @@ export function DigitalOceanConnectPanel({
   return (
     <div data-testid="digitalocean-connect-panel" className={PANEL_CLASS}>
       <div className="flex items-center gap-2 px-4 pb-2 pt-3">
-        <h3 className="min-w-0 flex-1 truncate text-sm font-medium text-white">
+        <h3 className="min-w-0 flex-1 truncate text-sm font-medium text-contrast">
           {t(I18nKey.DO_AGENTS$AGENTS_HEADING)}
         </h3>
         <button
@@ -331,8 +331,8 @@ export function DigitalOceanConnectPanel({
           aria-expanded={isNewAgentOpen}
           data-testid="digitalocean-new-agent"
           className={cn(
-            "inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted hover:bg-interactive-hover hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-40",
-            isNewAgentOpen && "bg-interactive-hover text-white",
+            "inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted hover:bg-interactive-hover hover:text-contrast focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-40",
+            isNewAgentOpen && "bg-interactive-hover text-contrast",
           )}
         >
           <Plus className="size-4" aria-hidden />
@@ -428,7 +428,7 @@ export function DigitalOceanConnectPanel({
           onClick={signIn.signOut}
           disabled={signIn.isSigningOut}
           data-testid="digitalocean-sign-out"
-          className="shrink-0 cursor-pointer text-muted hover:text-white disabled:cursor-not-allowed"
+          className="shrink-0 cursor-pointer text-muted hover:text-contrast disabled:cursor-not-allowed"
         >
           {t(I18nKey.BACKEND$DIGITALOCEAN_SIGN_OUT)}
         </button>

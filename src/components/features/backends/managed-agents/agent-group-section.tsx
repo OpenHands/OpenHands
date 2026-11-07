@@ -48,7 +48,7 @@ export function AgentGroupSection({
     >
       <header className="flex items-center gap-3 border-b border-border px-3 py-2">
         <div className="flex min-w-0 flex-1 items-baseline gap-2">
-          <h4 className="truncate text-sm font-medium text-white">
+          <h4 className="truncate text-sm font-medium text-contrast">
             {agentLabel(config)}
           </h4>
           <span className="shrink-0 text-xs text-muted">
