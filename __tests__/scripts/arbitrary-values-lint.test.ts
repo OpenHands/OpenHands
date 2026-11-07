@@ -22,6 +22,10 @@ const severities = async (source: string, filePath: string) => {
 
 describe("Canvas arbitrary-value guard adoption", () => {
   it.each([
+    "src/components/shared/modals/modal-backdrop.tsx",
+    "src/components/features/backends/environment-switch-overlay.tsx",
+    "src/components/features/chat/components/context-window-meter.tsx",
+    "src/components/features/conversation-panel/conversation-panel-wrapper.tsx",
     "src/components/features/command-menu/command-menu.tsx",
     "src/components/features/backends/backend-version.tsx",
     "src/components/features/settings/settings-nav-header.tsx",
