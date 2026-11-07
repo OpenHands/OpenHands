@@ -14,6 +14,7 @@ import type {
   ProviderPage,
 } from "#/api/config-service/config-service.types";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { isProfileNameValid } from "#/utils/derive-profile-name";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -116,13 +117,17 @@ function makeConnection(
 }
 
 const OPENAI_CONNECTION = makeConnection();
+const existingProfile = (name: string, model: string | null = null) => ({
+  name,
+  model,
+});
 
 describe("AddModelsModal", () => {
   let queryClient: QueryClient;
 
   const renderModal = (
     connection: ProviderConnection | null = OPENAI_CONNECTION,
-    existingNames: string[] = [],
+    existingProfiles: Array<{ name: string; model: string | null }> = [],
     onClose = vi.fn(),
   ) => {
     // When a connection is given, preselect it (the "..." entry point). When
@@ -131,32 +136,29 @@ describe("AddModelsModal", () => {
     // combobox prompt.
     const connections = connection ? [connection] : [];
     const initialConnectionId = connection?.id ?? null;
-    const view = render(
+    let currentExistingProfiles = existingProfiles;
+    const renderContent = (isOpen: boolean) => (
       <QueryClientProvider client={queryClient}>
         <AddModelsModal
-          isOpen
+          isOpen={isOpen}
           connections={connections}
           initialConnectionId={initialConnectionId}
-          existingNames={existingNames}
+          existingProfiles={currentExistingProfiles}
           onClose={onClose}
         />
-      </QueryClientProvider>,
+      </QueryClientProvider>
     );
+    const view = render(renderContent(true));
     // The manager renders the modal unconditionally and drives it with
     // `isOpen`, so the component never unmounts between openings.
-    const setOpen = (isOpen: boolean) =>
-      view.rerender(
-        <QueryClientProvider client={queryClient}>
-          <AddModelsModal
-            isOpen={isOpen}
-            connections={connections}
-            initialConnectionId={initialConnectionId}
-            existingNames={existingNames}
-            onClose={onClose}
-          />
-        </QueryClientProvider>,
-      );
-    return { ...view, setOpen };
+    const setOpen = (isOpen: boolean) => view.rerender(renderContent(isOpen));
+    const setExistingProfiles = (
+      nextProfiles: Array<{ name: string; model: string | null }>,
+    ) => {
+      currentExistingProfiles = nextProfiles;
+      view.rerender(renderContent(true));
+    };
+    return { ...view, setOpen, setExistingProfiles };
   };
 
   const showUnverified = async () => {
@@ -252,8 +254,8 @@ describe("AddModelsModal", () => {
     );
   });
 
-  it("hides models whose name matches an existing profile", async () => {
-    renderModal(OPENAI_CONNECTION, ["gpt-4o-mini"]);
+  it("hides a same-named model when the existing profile has no model identity", async () => {
+    renderModal(OPENAI_CONNECTION, [existingProfile("gpt-4o-mini")]);
     // The non-hidden model renders first; await it so the query has settled.
     await screen.findByTestId("add-models-row-openai/gpt-4o");
     // The already-added model is not rendered at all — no row, no checkbox,
@@ -266,6 +268,109 @@ describe("AddModelsModal", () => {
     expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
       "Add 2 profiles",
     );
+  });
+
+  it("keeps the unconfigured model when an existing profile uses a colliding name", async () => {
+    vi.mocked(ConfigService.searchModels).mockResolvedValue({
+      items: [
+        model("azure", "eu/gpt-5.1", true),
+        model("azure", "global/gpt-5.1", true),
+      ],
+      next_page_id: null,
+    });
+    vi.mocked(ConfigService.searchProviders).mockResolvedValue({
+      items: [{ name: "azure", verified: true }],
+      next_page_id: null,
+    });
+
+    renderModal(
+      makeConnection({
+        id: "conn-azure",
+        display_name: "Shared Azure",
+        provider: "azure",
+      }),
+      [existingProfile("gpt-5.1", "azure/global/gpt-5.1")],
+    );
+
+    expect(
+      await screen.findByTestId("add-models-row-azure/eu/gpt-5.1"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("add-models-row-azure/global/gpt-5.1"),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+    await waitFor(() =>
+      expect(ProfilesService.saveProfile).toHaveBeenCalledWith("gpt-5.1-2", {
+        llm: {
+          model: "azure/eu/gpt-5.1",
+          provider_connection_id: "conn-azure",
+        },
+        include_secrets: false,
+      }),
+    );
+  });
+
+  it("keeps saved row state and names when the catalog refreshes", async () => {
+    vi.mocked(ConfigService.searchModels).mockResolvedValue({
+      items: [model("azure", "eu/gpt-5.1", true)],
+      next_page_id: null,
+    });
+    vi.mocked(ConfigService.searchProviders).mockResolvedValue({
+      items: [{ name: "azure", verified: true }],
+      next_page_id: null,
+    });
+    const connection = makeConnection({
+      id: "conn-azure",
+      display_name: "Shared Azure",
+      provider: "azure",
+    });
+
+    const { setExistingProfiles } = renderModal(connection);
+    await screen.findByTestId("add-models-row-azure/eu/gpt-5.1");
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+    await screen.findByText("Saved");
+    expect(ProfilesService.saveProfile).toHaveBeenCalledWith(
+      "gpt-5.1",
+      expect.objectContaining({
+        llm: expect.objectContaining({ model: "azure/eu/gpt-5.1" }),
+      }),
+    );
+
+    vi.mocked(ConfigService.searchModels).mockResolvedValue({
+      items: [
+        model("azure", "eu/gpt-5.1", true),
+        model("azure", "global/gpt-5.1", true),
+      ],
+      next_page_id: null,
+    });
+    setExistingProfiles([existingProfile("gpt-5.1", "azure/eu/gpt-5.1")]);
+    await queryClient.invalidateQueries({
+      queryKey: ["config", "models", "azure"],
+    });
+
+    expect(
+      await screen.findByTestId("add-models-row-azure/global/gpt-5.1"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Saved")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("add-models-check-azure/global/gpt-5.1"),
+    ).not.toBeChecked();
+
+    await userEvent.click(
+      screen.getByTestId("add-models-check-azure/global/gpt-5.1"),
+    );
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+    await waitFor(() =>
+      expect(ProfilesService.saveProfile).toHaveBeenNthCalledWith(
+        2,
+        "gpt-5.1-2",
+        expect.objectContaining({
+          llm: expect.objectContaining({ model: "azure/global/gpt-5.1" }),
+        }),
+      ),
+    );
+    expect(screen.getAllByText("Saved")).toHaveLength(2);
   });
 
   it("dedupes a model the catalog lists twice (verified + raw)", async () => {
@@ -289,6 +394,56 @@ describe("AddModelsModal", () => {
     expect(
       screen.queryByTestId("add-models-conflict-openai/gpt-4o"),
     ).not.toBeInTheDocument();
+  });
+
+  it("gives distinct catalog models unique valid profile names before saving", async () => {
+    const longName = "x".repeat(64);
+    const onClose = vi.fn();
+    vi.mocked(ConfigService.searchModels).mockResolvedValue({
+      items: [
+        model("azure", "eu/gpt-5.1", true),
+        model("azure", "global/gpt-5.1", true),
+        model("azure", "region/gpt-5.1-2", true),
+        model("azure", `region/${longName}`, true),
+        model("azure", `global/${longName}`, true),
+      ],
+      next_page_id: null,
+    });
+    vi.mocked(ConfigService.searchProviders).mockResolvedValue({
+      items: [{ name: "azure", verified: true }],
+      next_page_id: null,
+    });
+
+    renderModal(
+      makeConnection({
+        id: "conn-azure",
+        display_name: "Shared Azure",
+        provider: "azure",
+      }),
+      [existingProfile("gpt-5.1-3", "other/catalog/model")],
+      onClose,
+    );
+    await screen.findByTestId("add-models-row-azure/eu/gpt-5.1");
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+
+    const savedCalls = vi
+      .mocked(ProfilesService.saveProfile)
+      .mock.calls.map(([name, request]) => [request.llm.model, name] as const);
+    const modelToName = new Map(savedCalls);
+    const names = savedCalls.map(([, name]) => name);
+
+    expect(savedCalls).toHaveLength(5);
+    expect(modelToName.get("azure/eu/gpt-5.1")).toBe("gpt-5.1");
+    expect(modelToName.get("azure/global/gpt-5.1")).toBe("gpt-5.1-4");
+    expect(modelToName.get("azure/region/gpt-5.1-2")).toBe("gpt-5.1-2");
+    expect(modelToName.get(`azure/region/${longName}`)).toBe(longName);
+    expect(new Set(names).size).toBe(names.length);
+    expect(names).not.toContain("gpt-5.1-3");
+    expect(
+      names.every((name) => isProfileNameValid(name, { isRequired: true })),
+    ).toBe(true);
   });
 
   it("selects nothing until the user chooses (chooser mode)", async () => {
@@ -380,7 +535,7 @@ describe("AddModelsModal", () => {
           isOpen
           connections={[OPENAI_CONNECTION]}
           initialConnectionId={null}
-          existingNames={[]}
+          existingProfiles={[]}
           onClose={onClose}
         />
       </QueryClientProvider>,
@@ -416,7 +571,7 @@ describe("AddModelsModal", () => {
           isOpen
           connections={[OPENAI_CONNECTION]}
           initialConnectionId={null}
-          existingNames={[]}
+          existingProfiles={[]}
           onClose={onClose}
         />
       </QueryClientProvider>,
