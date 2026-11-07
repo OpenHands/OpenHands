@@ -47,6 +47,7 @@ import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-e
 import { ErrorMessageBanner } from "./error-message-banner";
 import { ConnectionRecoveryNotice } from "./connection-recovery-notice";
 import { SkillInstallRestartBanner } from "./skill-install-restart-banner";
+import { ResolvedConversationBanner } from "./resolved-conversation-banner";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { Messages } from "#/components/conversation-events/chat/messages";
@@ -64,6 +65,12 @@ import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { setConversationState } from "#/utils/conversation-local-storage";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { applyConversationTagFlagsToCache } from "#/hooks/mutation/use-update-conversation-tag-flags";
+import {
+  RESOLVED_CONVERSATION_TAG_KEY,
+  getConversationResolution,
+} from "#/utils/conversation-tag-flags";
+import { useQueryClient } from "@tanstack/react-query";
 import { I18nKey } from "#/i18n/declaration";
 import { hasConversationStarted } from "./components/resolve-picker-kind";
 import { ComposerDockedProvider } from "#/context/composer-docked-context";
@@ -166,6 +173,7 @@ export function ChatInterface({
   // and show an explanatory banner. For local backends sandbox_status is
   // always null, so this is effectively a no-op for non-cloud use.
   const { data: activeConversation } = useActiveConversation();
+  const queryClient = useQueryClient();
   const sandboxStatus = activeConversation?.sandbox_status ?? null;
   const isArchivedConversation = useIsArchivedConversation();
 
@@ -524,6 +532,13 @@ export function ChatInterface({
       await send(
         createChatMessage(prompt, imageUrls, uploadedFiles, timestamp),
       );
+      // The Agent Server clears `resolved` when a user message arrives; hide
+      // the resolved banner now instead of waiting for the next poll.
+      if (getConversationResolution(activeConversation?.tags)) {
+        applyConversationTagFlagsToCache(queryClient, conversationId!, {
+          [RESOLVED_CONVERSATION_TAG_KEY]: false,
+        });
+      }
       const errors = useErrorMessageStore.getState();
       if (errors.errorCode === STARTUP_UPLOAD_ERROR_CODE)
         errors.removeErrorMessage();
@@ -806,6 +821,8 @@ export function ChatInterface({
             {llmBlocked && !isArchivedConversation && (
               <LlmNotConfiguredBanner />
             )}
+
+            {!isArchivedConversation && <ResolvedConversationBanner />}
 
             {isArchivedConversation ? (
               // Archived / sandbox-error: show a read-only notice in place of
