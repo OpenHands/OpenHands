@@ -1,0 +1,17 @@
+{
+  "run": "/var/folders/15/pyrd6jhs3tnd259qd39xsplm0000gn/T/openhands-verify/budget-display-baseline",
+  "browser": {
+    "stopped": true,
+    "pid": 13138
+  },
+  "launcherStopped": true,
+  "ports": {
+    "ingress": "closed",
+    "agentServer": "closed",
+    "automation": "closed",
+    "frontend": "closed",
+    "vscode": "closed"
+  },
+  "evidenceFiles": 4,
+  "ok": true
+}

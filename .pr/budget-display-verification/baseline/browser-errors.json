@@ -1,0 +1,64 @@
+{
+  "ok": true,
+  "since": "last clear",
+  "summary": {
+    "app:http-error": 3,
+    "app:console.error": 3
+  },
+  "pageErrors": 0,
+  "appErrors": 6,
+  "warnings": 0,
+  "events": [
+    {
+      "ts": "2026-10-26T06:28:55.527Z",
+      "kind": "http-error",
+      "page": "http://127.0.0.1:18800/conversations/1080f548-589e-43c5-a281-195da537ee06",
+      "appOrigin": true,
+      "url": "http://127.0.0.1:18800/api/llm/balance",
+      "method": "GET",
+      "status": 404
+    },
+    {
+      "ts": "2026-10-26T06:28:55.528Z",
+      "kind": "console.error",
+      "page": "http://127.0.0.1:18800/conversations/1080f548-589e-43c5-a281-195da537ee06",
+      "appOrigin": true,
+      "message": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:18800/api/llm/balance"
+    },
+    {
+      "ts": "2026-10-26T06:29:17.401Z",
+      "kind": "http-error",
+      "page": "http://127.0.0.1:18800/conversations/1080f548-589e-43c5-a281-195da537ee06/panel",
+      "appOrigin": true,
+      "url": "http://127.0.0.1:18800/api/llm/balance",
+      "method": "GET",
+      "status": 404
+    },
+    {
+      "ts": "2026-10-26T06:29:17.401Z",
+      "kind": "console.error",
+      "page": "http://127.0.0.1:18800/conversations/1080f548-589e-43c5-a281-195da537ee06/panel",
+      "appOrigin": true,
+      "message": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:18800/api/llm/balance"
+    },
+    {
+      "ts": "2026-10-26T06:30:28.943Z",
+      "kind": "http-error",
+      "page": "http://127.0.0.1:18800/conversations/4b64e7cc-a0d4-4eaa-8821-b0e6e23eb955",
+      "appOrigin": true,
+      "url": "http://127.0.0.1:18800/api/llm/balance",
+      "method": "GET",
+      "status": 404
+    },
+    {
+      "ts": "2026-10-26T06:30:28.943Z",
+      "kind": "console.error",
+      "page": "http://127.0.0.1:18800/conversations/4b64e7cc-a0d4-4eaa-8821-b0e6e23eb955",
+      "appOrigin": true,
+      "message": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:18800/api/llm/balance"
+    }
+  ]
+}
