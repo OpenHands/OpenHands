@@ -162,6 +162,25 @@ await context.addInitScript(() => {
   });
 });
 
+// Runs start in the Paper theme, so screenshots share one look. Seeded once per
+// browser profile: a check that clears or changes the theme keeps that choice
+// across reloads. CONTROL_OPENHANDS_THEME picks another theme; "default" keeps
+// the app's own default.
+const seedTheme = process.env.CONTROL_OPENHANDS_THEME ?? "paper";
+if (seedTheme && seedTheme !== "default") {
+  await context.addInitScript((theme) => {
+    try {
+      const marker = "openhands-verify-theme-seeded";
+      if (window.localStorage.getItem(marker)) return;
+      window.localStorage.setItem(marker, "1");
+      if (!window.localStorage.getItem("openhands-color-theme"))
+        window.localStorage.setItem("openhands-color-theme", theme);
+    } catch {
+      // Opaque origins (about:blank, data:) have no localStorage.
+    }
+  }, seedTheme);
+}
+
 // Read-only media observation. Normal microphone, playback and peer APIs still
 // execute; no responses, constraints, permissions or media are substituted.
 await context.addInitScript(installMediaObservation);
