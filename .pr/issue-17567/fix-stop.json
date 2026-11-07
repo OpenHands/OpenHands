@@ -1,0 +1,17 @@
+{
+  "run": "/private/tmp/odie-17567-live/fix",
+  "browser": {
+    "stopped": true,
+    "pid": 32091
+  },
+  "launcherStopped": true,
+  "ports": {
+    "ingress": "closed",
+    "agentServer": "closed",
+    "automation": "closed",
+    "frontend": "closed",
+    "vscode": "closed"
+  },
+  "evidenceFiles": 21,
+  "ok": true
+}
