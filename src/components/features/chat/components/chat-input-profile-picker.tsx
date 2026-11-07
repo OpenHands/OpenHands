@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useChatInputProfileState } from "#/hooks/use-chat-input-profile-state";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import RobotIcon from "#/icons/u-robot.svg?react";
 import { ContextMenu } from "#/ui/context-menu";
 import { ComboboxCaretInline } from "#/ui/combobox-caret";
@@ -151,6 +152,9 @@ export function ChatInputAgentProfilePicker() {
     () => setIsOpen(false),
     triggerRef,
   );
+  // Escape closes the popover and returns focus to the pill, matching every
+  // other composer menu (#18808); the click-outside ref alone left it open.
+  useCloseOnEscape(isOpen, () => setIsOpen(false), triggerRef);
 
   // No profiles yet: stay out of the way, like the LLM picker. With profiles
   // but nothing selected, the pill still renders so the user can pick one.
