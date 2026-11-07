@@ -749,6 +749,18 @@ code .token {
     0px 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
 
+/* Fixed SVG illustration coordinates stay in pixels in embedded roots. */
+@utility file-drop-image {
+  top: -40px;
+  left: -10px;
+  rotate: -27deg;
+}
+
+@utility file-drop-arrow {
+  top: -16px;
+  left: -20px;
+}
+
 @utility message-word-break {
   word-break: break-word;
 }

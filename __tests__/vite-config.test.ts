@@ -250,6 +250,16 @@ describe("vite library build", () => {
       "padding-block": ".2em",
     });
     expect(declarations(recipe("p-code-block"))).toEqual({ padding: "1em" });
+    // The drop illustration uses fixed SVG pixel coordinates even in embeds.
+    expect(declarations(recipe("file-drop-image"))).toEqual({
+      top: "-40px",
+      left: "-10px",
+      rotate: "-27deg",
+    });
+    expect(declarations(recipe("file-drop-arrow"))).toEqual({
+      top: "-16px",
+      left: "-20px",
+    });
     // Message wrapping must retain the legacy word-break behavior; the standard
     // overflow utility controls the independent min-content wrapping contract.
     expect(declarations(recipe("message-word-break"))).toEqual({
