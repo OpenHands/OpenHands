@@ -2159,11 +2159,13 @@ async function cmdConversation({ positional, flags }) {
       value: prompt,
     });
     await browserCall(run, "click", { selector: "testid=submit-button" });
+    // Some launches (the automation setup page) show a temporary
+    // /conversations/launch-<id> page first; wait for the real id.
     const { url } = await browserCall(run, "wait-url", {
-      pattern: "/conversations/[^/?#]+",
+      pattern: "/conversations/(?!launch-)[^/?#]+",
       timeout: 60_000,
     });
-    const conversationId = /\/conversations\/([^/?#]+)/.exec(url)[1];
+    const conversationId = /\/conversations\/((?!launch-)[^/?#]+)/.exec(url)[1];
     const result = {
       ok: true,
       id: conversationId,

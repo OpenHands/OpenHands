@@ -1,9 +1,12 @@
 ## Arbitrary-value guard adoption
 
-`shadcn/no-arbitrary-values` warns globally. Eight migrated owners reject new
+`shadcn/no-arbitrary-values` warns globally. Fourteen migrated owners reject new
 arbitrary classes: command-menu, backend-version, settings-nav-header,
 backend-synced-settings-badge, modal-backdrop, environment-switch-overlay,
-context-window-meter and conversation-panel-wrapper. Their exact paths are in `eslint.config.js`,
+context-window-meter and conversation-panel-wrapper. Completed message/motion
+owners also reject new arbitrary values: custom-toast-handlers,
+form-control-classes, chat-status-indicator, context-window-ring,
+user-message-body and conversation-main. Their exact paths are in `eslint.config.js`,
 with executable probes in `__tests__/scripts/arbitrary-values-lint.test.ts`.
 Other components, routes and primitive implementations retain warnings during
 migration. Keep legitimate measured/portal geometry with its owner; do not
@@ -70,12 +73,20 @@ Use `isOpen` for rotation on `ComboboxCaretButton` and `ComboboxCaretInline`.
 Primitive implementations remain exempt from no-restyle. The existing narrow
 static-class exceptions do not imply that opaque values are checked by no-restyle.
 
+## Markdown code spacing
+
+Inline code and workspace-path chips share `px-code-inline-x` / `py-code-inline-y`; plain code blocks use `p-code-block`. Their theme spacing entries retain em units so padding follows the element font. Register these spacing names in `cn()` so general and directional caller overrides keep normal precedence. The scoped library CSS and class-composition tests cover this contract.
+
 ## Message wrapping recipes
 
 `message-word-break` retains `word-break: break-word` for chat bodies, corrective
 nudges and toast content. Toasts also use Tailwind's `wrap-anywhere` for their
 independent overflow-wrap behavior. Do not replace the former with `break-words`: it
 sets a different CSS property. Toast-library container styles remain library-owned.
+
+## File-drop illustration geometry
+
+The file-drop illustration uses `file-drop-image` and `file-drop-arrow` utilities for fixed SVG pixel offsets and rotation. Preserve pixel units in embedded roots; the shipped scoped library CSS contract covers these coordinates.
 
 ## No Magic Strings
 

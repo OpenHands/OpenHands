@@ -16,6 +16,11 @@
   --radius-file-action: 7px;
   --radius-facet-control: 3px;
 
+  /* Markdown code padding follows the code's own font size, not the root. */
+  --spacing-code-inline-x: 0.4em;
+  --spacing-code-inline-y: 0.2em;
+  --spacing-code-block: 1em;
+
   /* Compact metadata retains its original pixel sizes and inherited leading. */
   --text-2xs: 11px;
   --text-3xs: 10px;
@@ -743,6 +748,18 @@ code .token {
   box-shadow:
     0px 4px 6px -4px rgba(0, 0, 0, 0.1),
     0px 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+/* Fixed SVG illustration coordinates stay in pixels in embedded roots. */
+@utility file-drop-image {
+  top: -40px;
+  left: -10px;
+  rotate: -27deg;
+}
+
+@utility file-drop-arrow {
+  top: -16px;
+  left: -20px;
 }
 
 @utility message-word-break {
