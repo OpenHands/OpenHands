@@ -242,6 +242,14 @@ describe("vite library build", () => {
       expect(matches, `Single scoped recipe: ${name}`).toHaveLength(1);
       return matches[0];
     };
+    // A named gradient stop retains the existing ancestor override/fallback.
+    const scrollFade = recipe("from-scroll-fade");
+    expect(declarations(scrollFade)["--tw-gradient-from"]).toBe(
+      "var(--oh-scroll-fade-from,var(--oh-color-base))",
+    );
+    expect(declarations(recipe("scroll-fade-surface"))).toEqual({
+      "--oh-scroll-fade-from": "var(--oh-surface)",
+    });
     // Message wrapping must retain the legacy word-break behavior; the standard
     // overflow utility controls the independent min-content wrapping contract.
     expect(declarations(recipe("message-word-break"))).toEqual({

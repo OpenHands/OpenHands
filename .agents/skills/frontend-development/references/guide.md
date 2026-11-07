@@ -23,6 +23,10 @@ Keep this adoption scoped: scanning every string can mistake program tags for
 color utilities. Review newly included findings before extending the file list;
 the shared exact legacy-token exceptions remain unchanged.
 
+## Horizontal scroll fades
+
+`from-scroll-fade` resolves the existing `--oh-scroll-fade-from` ancestor override with `--oh-color-base` as fallback. The `scroll-fade-surface` utility sets that override to `--oh-surface` for Markdown artifact cards. Keep left/right edge visibility, direction, animation and scroll handling with their current owners; do not replace this override with a fixed palette color.
+
 ## Inline-style rollout
 
 `shadcn/no-inline-styles` warns globally, including UI primitive implementations.
