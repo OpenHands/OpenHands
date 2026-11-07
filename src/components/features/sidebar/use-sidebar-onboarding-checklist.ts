@@ -114,29 +114,25 @@ export function useSidebarOnboardingChecklist() {
     settings?.agent_settings?.mcp_config,
   ]);
 
-  // Locked-to-Cloud blocks the Canvas LLM and Agent settings pages these two
-  // items link to, and "customize-agent" only completes by visiting one
-  // (OHE-3457).
-  const isLockedToCloud = getLockedCloudHost() !== null;
-
   const items = useMemo(
     (): SidebarOnboardingChecklistItemState[] =>
-      SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS.filter(
-        (id) =>
-          !isLockedToCloud ||
-          (id !== "configure-llm" && id !== "customize-agent"),
-      ).map((id) => ({
+      SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS.map((id) => ({
         id,
         isComplete: completionById[id],
       })),
-    [completionById, isLockedToCloud],
+    [completionById],
   );
 
   const completedCount = items.filter((item) => item.isComplete).length;
   const isAllComplete = completedCount === items.length;
 
+  // A canvas locked to a Cloud host (SaaS / self-hosted OHE) never shows the
+  // checklist: the main app owns setup there (OHE-3457, OHE-3683).
+  const isLockedToCloud = getLockedCloudHost() !== null;
+
   // The Super Admin setup guide replaces this checklist while it is shown.
   const isVisible =
+    !isLockedToCloud &&
     onboardingCompleted &&
     !isDismissed &&
     !isAllComplete &&

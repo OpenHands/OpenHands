@@ -170,9 +170,16 @@ export function useWorkspaceFileContent(relativePath: string | null) {
   // then force a leading slash since `getGitPath`'s default is relative.
   const gitPath = getGitPath(selectedRepository, workingDir);
   const workspaceRoot = gitPath.startsWith("/") ? gitPath : `/${gitPath}`;
-  const absoluteFilePath = relativePath
-    ? `${workspaceRoot}/${relativePath}`
-    : null;
+  // A path that is still absolute here lives outside every known workspace
+  // root (`toFilesTabPath` strips the root otherwise), e.g. a report the
+  // agent wrote to `/tmp`. Send it as-is: prefixing the workspace root would
+  // ask for `{root}//tmp/...`, which the runtime 404s into "".
+  let absoluteFilePath: string | null = null;
+  if (relativePath) {
+    absoluteFilePath = relativePath.startsWith("/")
+      ? relativePath
+      : `${workspaceRoot}/${relativePath}`;
+  }
 
   return useQuery<WorkspaceFileContent>({
     queryKey: [

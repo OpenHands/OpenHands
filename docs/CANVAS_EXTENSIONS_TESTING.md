@@ -89,6 +89,3 @@ contract lands. That test must additionally verify:
 - persistence across Agent Server and browser restarts;
 - session-authenticated bundle delivery;
 - isolation when switching between active backends.
-
-The backend contract and acceptance criteria are documented in
-[`specs/canvas-extensions.md`](../specs/canvas-extensions.md).

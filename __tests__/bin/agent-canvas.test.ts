@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import net from "node:net";
 import {
   chmodSync,
   copyFileSync,
@@ -43,7 +44,64 @@ describe("agent-canvas CLI", () => {
     expect(stdout).toContain("USAGE:");
     expect(stdout).toContain("--frontend-only");
     expect(stdout).toContain("--backend-only");
+    expect(stdout).toContain("--allow-lan-session-key");
     expect(stdout).toContain("--help");
+  });
+
+  it("reports a busy ingress port once without a stack trace", async () => {
+    const occupied = net.createServer();
+    await new Promise<void>((resolve) =>
+      occupied.listen(0, "127.0.0.1", resolve),
+    );
+    const port = (occupied.address() as net.AddressInfo).port;
+    const state = mkdtempSync(resolve(tmpdir(), "canvas-busy-port-"));
+    try {
+      // The occupied port prevents any service from starting. Stub only uvx
+      // discovery so this CLI diagnostic test also runs without Python tools.
+      if (process.platform === "win32") {
+        writeFileSync(resolve(state, "uvx.cmd"), "@exit /b 0\r\n");
+      } else {
+        writeFileSync(resolve(state, "uvx"), "#!/bin/sh\nexit 0\n", {
+          mode: 0o700,
+        });
+      }
+      const child = spawn(
+        process.execPath,
+        ["bin/agent-canvas.mjs", "--backend-only", "--port", String(port)],
+        {
+          cwd: repoRoot,
+          env: {
+            ...process.env,
+            PATH: `${state}${delimiter}${process.env.PATH ?? ""}`,
+            HOME: state,
+            USERPROFILE: state,
+            OH_CANVAS_SAFE_STATE_DIR: state,
+            OH_AGENT_SERVER_LOCAL_PATH: "",
+            OH_AUTOMATION_LOCAL_PATH: "",
+          },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      let output = "";
+      child.stdout.on("data", (chunk) => {
+        output += chunk.toString();
+      });
+      child.stderr.on("data", (chunk) => {
+        output += chunk.toString();
+      });
+      const [code] = await once(child, "exit");
+      expect(code).toBe(1);
+      expect(
+        output.match(/Cannot start: the following ports are already in use/g),
+        output,
+      ).toHaveLength(1);
+      expect(output).not.toMatch(/\n\s+at /);
+      expect(output).toContain("--port <other>");
+      expect(output).toContain("PORT=<other>");
+    } finally {
+      await new Promise<void>((resolve) => occupied.close(() => resolve()));
+      rmSync(state, { recursive: true, force: true });
+    }
   });
 
   it("does not require build/ in --backend-only mode", async () => {

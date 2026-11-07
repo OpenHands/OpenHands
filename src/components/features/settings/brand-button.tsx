@@ -62,9 +62,10 @@ export const BrandButton = forwardRef<
           "border border-border bg-base-secondary text-contrast hover:bg-surface-raised",
         variant === "tertiary" &&
           "bg-interactive-hover text-contrast hover:opacity-80",
-        variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
+        variant === "danger" &&
+          "bg-feedback-error text-contrast-foreground hover:bg-feedback-error/90",
         variant === "ghost-danger" &&
-          "h-auto min-h-0 bg-transparent px-0 text-red-600 underline hover:text-red-700 hover:no-underline font-normal",
+          "h-auto min-h-0 bg-transparent px-0 text-feedback-error underline hover:no-underline font-normal",
         startContent && "flex items-center justify-center gap-2",
         className,
       )}

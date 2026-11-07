@@ -37,7 +37,7 @@ async function findSavedSecret(
  * Execute a `request_secret` tool call. A secret the user already saved (for
  * example in Settings after this conversation started) is attached straight
  * away, as every saved secret is at conversation start; otherwise the request
- * is queued for the modal, which reports through {@link completeSecretRequest}.
+ * is queued for its chat card, which reports through {@link completeSecretRequest}.
  */
 export async function handleRequestSecretAction(
   action: RequestSecretAction,
@@ -96,7 +96,7 @@ async function resolveResult(
 
 /**
  * Hand the outcome of a secret request back to the agent. It never carries the
- * value. Each request is reported once, whichever of the modal and the
+ * value. Each request is reported once, whichever of the card and the
  * already-saved shortcut finishes first.
  *
  * Never rejects: the user has already answered, so a failure to report is

@@ -32,6 +32,7 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 import {
   deriveProfileNameFromModel,
   isProfileNameValid,
@@ -405,9 +406,9 @@ export function LlmSettingsLocalView() {
         },
       });
 
-      // Conversation start uses agent_settings.llm, not the profile row
-      // directly. Re-applying an active profile keeps those settings in sync
-      // after editing or recreating a profile with the active profile name.
+      // Activation copies the profile into agent_settings.llm, which the
+      // planner falls back to. Re-applying an active profile keeps that copy
+      // in sync after editing or recreating a profile with its name.
       if (shouldReapplyActiveProfile) {
         await activateProfile.mutateAsync(trimmedName);
       }
@@ -420,7 +421,7 @@ export function LlmSettingsLocalView() {
       handleBackToList();
     } catch (error) {
       console.error("Failed to save profile:", error);
-      displayErrorToast(t(I18nKey.ERROR$GENERIC));
+      displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
     } finally {
       setIsValidating(false);
       setIsSaving(false);

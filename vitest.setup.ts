@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { server } from "#/mocks/node";
@@ -7,6 +10,10 @@ import "@testing-library/jest-dom/vitest";
 // The beforeEach below restores the same default after tests call
 // `vi.unstubAllEnvs()`.
 vi.stubEnv("VITE_SESSION_API_KEY", "test-session-key");
+// Servers started by tests host the DigitalOcean bridge, which reads saved
+// sign-ins from the Canvas state directory: never the developer's own.
+const MARS_STATE_DIR = mkdtempSync(join(tmpdir(), "mars-state-"));
+vi.stubEnv("MARS_STATE_DIR", MARS_STATE_DIR);
 
 if (typeof HTMLCanvasElement !== "undefined") {
   HTMLCanvasElement.prototype.getContext = vi.fn();
@@ -67,7 +74,7 @@ if (typeof requestAnimationFrame === "undefined") {
 // properties on `globalThis` and removes them during per-file teardown with
 // `keys.forEach((key) => delete global[key])`. If an in-flight intercepted
 // XHR (e.g. PostHog analytics, or any request that escaped to the real
-// network under `onUnhandledRequest: "bypass"` and is still waiting on a
+// network under `onUnhandledFrame: "bypass"` and is still waiting on a
 // socket) settles after teardown, its callback evaluates `ProgressEvent`
 // against a torn-down global and throws
 // `ReferenceError: ProgressEvent is not defined` (or the
@@ -175,14 +182,6 @@ vi.mock("react-i18next", async (importOriginal) => ({
   }),
 }));
 
-vi.mock("#/hooks/use-is-on-tos-page", () => ({
-  useIsOnTosPage: () => false,
-}));
-
-vi.mock("#/hooks/use-is-on-intermediate-page", () => ({
-  useIsOnIntermediatePage: () => false,
-}));
-
 // Mock useRevalidator from react-router to allow direct store manipulation in tests
 vi.mock("react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router")>()),
@@ -196,12 +195,13 @@ vi.mock("zustand");
 
 // Mock requests during tests
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: "bypass" });
+  server.listen({ onUnhandledFrame: "bypass" });
   vi.stubGlobal("ResizeObserver", MockResizeObserver);
 });
 
 beforeEach(() => {
   vi.stubEnv("VITE_SESSION_API_KEY", "test-session-key");
+  vi.stubEnv("MARS_STATE_DIR", MARS_STATE_DIR);
 });
 
 afterEach(async () => {

@@ -1,3 +1,4 @@
+import { useCallback, useRef } from "react";
 import { CustomChatInput } from "./custom-chat-input";
 import { useBtwInterceptor } from "#/hooks/chat/use-btw-interceptor";
 import { useGoalInterceptor } from "#/hooks/chat/use-goal-interceptor";
@@ -13,6 +14,7 @@ import { useAgentState } from "#/hooks/use-agent-state";
 import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
 import { partitionImagesForUpload } from "#/components/features/chat/utils/chat-input.utils";
 import { isTaskPolling } from "#/utils/utils";
+import { setConversationState } from "#/utils/conversation-local-storage";
 
 interface InteractiveChatBoxProps {
   onSubmit: (message: string, images: File[], files: File[]) => void;
@@ -52,7 +54,10 @@ export function InteractiveChatBox({
 
   const { handleUpload } = useChatAttachmentUpload();
 
+  // Set when a submission reaches the agent rather than a slash-command handler.
+  const sentToAgentRef = useRef(false);
   const handleAfterGoal = useBtwInterceptor(conversationId, (message) => {
+    sentToAgentRef.current = true;
     const { imagesToEmbed, imagesAsFiles } = partitionImagesForUpload(
       images,
       imagesMarkedUploadAsFile,
@@ -69,7 +74,23 @@ export function InteractiveChatBox({
     conversationId,
     handleAfterPlanMode,
   );
-  const handleSubmit = useModelInterceptor(conversationId, handleAfterModel);
+  const handleInterceptedSubmit = useModelInterceptor(
+    conversationId,
+    handleAfterModel,
+  );
+  const handleSubmit = useCallback(
+    (message: string) => {
+      sentToAgentRef.current = false;
+      handleInterceptedSubmit(message);
+      // A sent message's saved draft is cleared when the agent echoes it back.
+      // A command handled here (such as /model) is never echoed, so clear its
+      // draft now, or the cleared composer would restore it on return.
+      if (!sentToAgentRef.current && persistDraft && routeConversationId) {
+        setConversationState(routeConversationId, { draftMessage: null });
+      }
+    },
+    [handleInterceptedSubmit, persistDraft, routeConversationId],
+  );
 
   const handleSuggestionsClick = (suggestion: string) => {
     handleSubmit(suggestion);
