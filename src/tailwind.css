@@ -19,6 +19,10 @@
   /* Compact metadata retains its original pixel sizes and inherited leading. */
   --text-2xs: 11px;
   --text-3xs: 10px;
+  --text-4xs: 9px;
+  --text-xs-plus: 13px;
+  --text-sm-plus: 15px;
+  --text-title: 32px;
 
   --color-primary: var(--oh-color-primary);
   --color-logo: var(--oh-color-logo);
@@ -97,6 +101,7 @@
   --color-cool-grey-925: var(--cool-grey-925);
   --color-cool-grey-950: var(--cool-grey-950);
   --color-cool-grey-975: var(--cool-grey-975);
+  --animate-chat-status-pulse: pulse 1.2s ease-in-out infinite;
 }
 
 :root {
@@ -131,6 +136,8 @@
   --oh-overlay: var(--cool-grey-925);
   --oh-overlay-foreground: var(--cool-grey-100);
   --oh-modal-title-foreground: #ffffff;
+  --oh-modal-description-foreground: #a3a3a3;
+  --oh-font-heading: inherit;
   --oh-muted: var(--cool-grey-400);
   --oh-text-secondary: var(--cool-grey-300); /* readable secondary text */
   --oh-text-tertiary: var(--cool-grey-200); /* tertiary, slightly dimmer */
@@ -302,6 +309,13 @@ button.extension-module-card-interactive {
 
 .heading {
   @apply text-[28px] leading-8 -tracking-[0.02em] font-bold text-content-2;
+}
+
+/* Display type is optional; dense controls, messages and code retain their fonts. */
+h1,
+h2,
+.heading {
+  font-family: var(--oh-font-heading);
 }
 
 /* Custom Chat Input */
@@ -730,6 +744,10 @@ code .token {
     0px 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
 
+@utility message-word-break {
+  word-break: break-word;
+}
+
 /* Window drag handle for the macOS desktop app's hidden title bar. */
 @utility app-region-drag {
   -webkit-app-region: drag;
@@ -902,6 +920,51 @@ code .token {
   @apply tracking-[0.12em];
 }
 
+@utility transition-control-shell {
+  transition-property: background-color, border-color, box-shadow, opacity;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-control-transform {
+  transition-property: transform;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-context-ring {
+  transition-property: stroke-dashoffset, stroke;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-panel-width {
+  transition-property: width;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-sidebar-width {
+  transition-property: width, min-width;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
 /* Both chooser disclosures keep their mounted content on the same grid rail. */
 @utility backend-chooser-disclosure {
   @apply transition-[grid-template-rows];
@@ -1065,4 +1128,17 @@ code .token {
 
 @utility conversation-options-bleed-width {
   width: calc(100% + 3rem);
+}
+
+/* Fixed content columns shared by metadata and automation summaries. */
+@utility metadata-grid-columns {
+  grid-template-columns: auto 1fr;
+}
+
+@utility automation-summary-columns {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+@utility run-log-detail-columns {
+  grid-template-columns: 5rem minmax(0, 1fr);
 }

@@ -1,3 +1,4 @@
+import type { AutomationUpdate } from "#/types/automation";
 import axios from "axios";
 import {
   clearPendingLocalTelemetryRevocation,
@@ -667,7 +668,7 @@ class AutomationService {
 
   static async updateAutomation(
     id: string,
-    body: Partial<Automation>,
+    body: AutomationUpdate,
   ): Promise<Automation> {
     const active = getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}`;

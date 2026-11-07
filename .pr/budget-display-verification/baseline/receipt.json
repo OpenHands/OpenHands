@@ -1,0 +1,29 @@
+{
+  "canvas_sha": "50ae78643fb497b028bdddf6adfd0dea366b5b49",
+  "sdk_sha": "209136794c3ece0755af95cc14340a8aaf4bbeca",
+  "attempts": [
+    {
+      "id": "1080f548-589e-43c5-a281-195da537ee06",
+      "cap": 0.05,
+      "status": "finished",
+      "cost": 0.0025149599999999997,
+      "model": "deepseek/deepseek-flash",
+      "legacy_caps": {
+        "default": null,
+        "condenser": null
+      }
+    },
+    {
+      "id": "4b64e7cc-a0d4-4eaa-8821-b0e6e23eb955",
+      "cap": 0.05,
+      "status": "finished",
+      "cost": 0.0024873599999999997,
+      "model": "deepseek/deepseek-flash",
+      "legacy_caps": {
+        "default": null,
+        "condenser": null
+      }
+    }
+  ],
+  "second_usage_text": "Context Window\n2% used (98% left)\n17,051 / 1,000,000\nCompact context\nToken Usage\nInput\n17,044\nCache Hit\n8,960\nCache Write\n0\nOutput\n7\nTotal\n17,051\nTotal Cost\n$0.0025"
+}

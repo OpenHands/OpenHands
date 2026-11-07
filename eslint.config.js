@@ -491,10 +491,20 @@ export default [
   {
     // These completed owners use named recipes; other geometry stays warning-only.
     files: [
+      "src/components/shared/modals/modal-backdrop.tsx",
+      "src/components/features/backends/environment-switch-overlay.tsx",
+      "src/components/features/chat/components/context-window-meter.tsx",
+      "src/components/features/conversation-panel/conversation-panel-wrapper.tsx",
       "src/components/features/command-menu/command-menu.tsx",
       "src/components/features/backends/backend-version.tsx",
       "src/components/features/settings/settings-nav-header.tsx",
       "src/components/features/settings/backend-synced-settings-badge.tsx",
+      "src/utils/custom-toast-handlers.tsx",
+      "src/utils/form-control-classes.ts",
+      "src/components/features/chat/chat-status-indicator.tsx",
+      "src/components/features/chat/components/context-window-ring.tsx",
+      "src/components/features/chat/user-message-body.tsx",
+      "src/components/features/conversation/conversation-main/conversation-main.tsx",
     ],
     rules: { "shadcn/no-arbitrary-values": "error" },
   },
@@ -536,6 +546,17 @@ export default [
       "shadcn/no-restyle": "off",
       "shadcn/require-static-classes": "off",
     },
+  },
+  {
+    // Appearance owners already use class recipes and semantic variables.
+    // Keep the rest warning-only until each owner's dynamic styles are audited.
+    files: [
+      "src/ui/divider.tsx",
+      "src/ui/toggle-switch.tsx",
+      "src/ui/combobox-caret.tsx",
+      "src/components/features/backends/backend-status-dot.tsx",
+    ],
+    rules: { "shadcn/no-inline-styles": "error" },
   },
   {
     // Public embedding API: this owner must forward arbitrary caller styles.

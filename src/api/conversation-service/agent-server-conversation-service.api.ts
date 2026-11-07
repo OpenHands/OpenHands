@@ -356,6 +356,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     created_at: readTimestamp(item, "created_at", "createdAt"),
     updated_at: readTimestamp(item, "updated_at", "updatedAt"),
     execution_status: stringOrNull(item.execution_status),
+    max_budget_per_run: numberOrNull(item.max_budget_per_run),
     sandbox_status: stringOrNull(item.sandbox_status),
     runtime_info: normalizeRuntimeInfo(item.runtime_info),
     metrics: normalizeMetrics(item.metrics),
@@ -463,6 +464,7 @@ export interface CreateConversationOptions {
   initialUserMsg?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
   /** The automation service's capabilities, for the setup assistant's form tool. */
   automationSetupCapabilities?: DeploymentCapabilities | null;
   conversationInstructions?: string;
@@ -559,6 +561,7 @@ class AgentServerConversationService {
       initialUserMsg,
       automationSetup,
       automationSetupTags,
+      automationSetupContext,
       automationSetupCapabilities,
       conversationInstructions,
       plugins,
@@ -597,7 +600,17 @@ class AgentServerConversationService {
         initial_message: initialUserMsg
           ? {
               role: "user",
-              content: [{ type: "text", text: initialUserMsg }],
+              content: [
+                {
+                  type: "text",
+                  text:
+                    automationSetup &&
+                    agentProfileKind === "acp" &&
+                    automationSetupContext
+                      ? `${initialUserMsg}\n\n${automationSetupContext}`
+                      : initialUserMsg,
+                },
+              ],
             }
           : null,
         title: conversationInstructions ?? null,
@@ -630,7 +643,12 @@ class AgentServerConversationService {
                   automationSetupCapabilities,
                 ),
               ],
-              system_message_suffix: AUTOMATION_SETUP_SYSTEM_SUFFIX,
+              system_message_suffix: [
+                AUTOMATION_SETUP_SYSTEM_SUFFIX,
+                automationSetupContext,
+              ]
+                .filter(Boolean)
+                .join("\n\n"),
             }
           : {}),
       };
@@ -675,6 +693,7 @@ class AgentServerConversationService {
       query: initialUserMsg,
       automationSetup,
       automationSetupTags,
+      automationSetupContext,
       automationSetupCapabilities,
       conversationInstructions,
       plugins,
@@ -1092,6 +1111,7 @@ class AgentServerConversationService {
       created_at: data.created_at,
       updated_at: data.updated_at,
       status: toRuntimeStatus(data.execution_status),
+      max_budget_per_run: data.max_budget_per_run,
       stats: data.stats ?? { usage_to_metrics: {} },
       available_models: toAcpModelOptions(data.available_models),
     };

@@ -27,7 +27,7 @@ export function ChatSuggestions({ onSuggestionsClick }: ChatSuggestionsProps) {
           {/* The overlay spans the chat body; only its content takes clicks, so
             a session group above it stays usable. */}
           <div className="flex flex-col items-center p-4 rounded-xl w-full">
-            <span className="pb-6 text-[32px] font-medium leading-5 text-contrast">
+            <span className="pb-6 text-title font-medium leading-5 text-contrast">
               {t(I18nKey.LANDING$TITLE)}
             </span>
           </div>

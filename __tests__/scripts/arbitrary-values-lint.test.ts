@@ -22,12 +22,25 @@ const severities = async (source: string, filePath: string) => {
 
 describe("Canvas arbitrary-value guard adoption", () => {
   it.each([
+    "src/components/shared/modals/modal-backdrop.tsx",
+    "src/components/features/backends/environment-switch-overlay.tsx",
+    "src/components/features/chat/components/context-window-meter.tsx",
+    "src/components/features/conversation-panel/conversation-panel-wrapper.tsx",
     "src/components/features/command-menu/command-menu.tsx",
     "src/components/features/backends/backend-version.tsx",
     "src/components/features/settings/settings-nav-header.tsx",
     "src/components/features/settings/backend-synced-settings-badge.tsx",
+    "src/utils/custom-toast-handlers.tsx",
+    "src/utils/form-control-classes.ts",
+    "src/components/features/chat/chat-status-indicator.tsx",
+    "src/components/features/chat/components/context-window-ring.tsx",
+    "src/components/features/chat/user-message-body.tsx",
+    "src/components/features/conversation/conversation-main/conversation-main.tsx",
   ])("rejects an arbitrary value in migrated owner %s", async (filePath) => {
-    expect(await severities(arbitrary, filePath)).toEqual([2]);
+    const source = filePath.endsWith(".ts")
+      ? 'import { cn } from "#/utils/utils"; export const probe = cn("w-[123px]");'
+      : arbitrary;
+    expect(await severities(source, filePath)).toEqual([2]);
   });
 
   it.each([
