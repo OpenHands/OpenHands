@@ -32,6 +32,10 @@ import {
   type ChildConversationTarget,
 } from "#/constants/child-conversation";
 import type { LaunchChildConversationAction } from "#/types/agent-server/core";
+import {
+  resolveChildAgentProfile,
+  type ResolvedChildAgentProfile,
+} from "#/services/resolve-child-agent-profile";
 import { buildAgentCanvasUrl } from "#/utils/base-path";
 import { claimClientToolCall } from "#/utils/claim-client-tool-call";
 import { postClientToolResult } from "./client-tool-result";
@@ -73,6 +77,20 @@ interface LaunchSuccess {
   parent_link: boolean;
   /** Present when `parent_link` is false, explaining why. */
   parent_link_note?: string;
+  /**
+   * Saved agent profile the child was pinned to, or null when the call omitted
+   * `agent_profile` and kept the default settings path.
+   */
+  agent_profile_id: string | null;
+  agent_profile_name: string | null;
+  agent_kind: "openhands" | "acp" | null;
+  /** Model id the child runs. Null when the default path or an ACP default applies. */
+  model: string | null;
+  profile_source: "selected" | "inherited";
+  /** Set when a selected profile's `secret_refs` allow-list is in force. */
+  secret_scope?: "restricted" | "unrestricted";
+  /** Present when the applied model needs a short explanation. */
+  model_note?: string;
 }
 
 interface LaunchFailure {
@@ -90,6 +108,8 @@ interface ValidatedParams {
   repository: string | null;
   branch: string | null;
   isolation: ChildConversationIsolation;
+  /** Saved agent profile name or id. Null keeps the default settings path. */
+  agentProfile: string | null;
 }
 
 const failure = (error: string, guidance: string): LaunchFailure => ({
@@ -199,8 +219,66 @@ function validateLaunchParams(
       repository,
       branch,
       isolation: isolation ?? "worktree",
+      agentProfile: blankToNull(action.agent_profile),
     },
   };
+}
+
+function appliedProfileFields(profile: ResolvedChildAgentProfile | null) {
+  if (!profile) {
+    return {
+      agent_profile_id: null,
+      agent_profile_name: null,
+      agent_kind: null,
+      model: null,
+      profile_source: "inherited" as const,
+    };
+  }
+  return {
+    agent_profile_id: profile.id,
+    agent_profile_name: profile.name,
+    agent_kind: profile.agentKind,
+    model: profile.model,
+    profile_source: "selected" as const,
+    secret_scope: profile.secretRefsRestricted
+      ? ("restricted" as const)
+      : ("unrestricted" as const),
+    ...(profile.modelNote
+      ? { model_note: profile.modelNote }
+      : profile.agentKind === "acp" && !profile.model
+        ? {
+            model_note:
+              "This ACP profile does not pin acp_model; the provider's default model is used.",
+          }
+        : {}),
+  };
+}
+
+/**
+ * Resolve an explicit selector before creating the child.
+ *
+ * A restricted profile still launches through `agent_profile_id`. The agent
+ * server drops request secrets outside that profile's `secret_refs`, and
+ * omitting the id would fall back to the parent's `agent_settings`, which
+ * cannot enforce the allow-list.
+ */
+async function resolveRequestedProfile(
+  params: ValidatedParams,
+  cloudBackend: Backend | null,
+): Promise<
+  | { ok: true; profile: ResolvedChildAgentProfile | null }
+  | { ok: false; failure: LaunchFailure }
+> {
+  if (!params.agentProfile) return { ok: true, profile: null };
+  const resolved = await resolveChildAgentProfile({
+    selector: params.agentProfile,
+    target: params.target,
+    cloudBackend,
+  });
+  if (!resolved.ok) {
+    return { ok: false, failure: failure(resolved.error, resolved.guidance) };
+  }
+  return { ok: true, profile: resolved.profile };
 }
 
 function absoluteCanvasUrl(path: string) {
@@ -266,6 +344,10 @@ async function launchLocalChild(
   params: ValidatedParams,
   parentConversationId: string,
 ): Promise<LaunchChildConversationResult> {
+  const requested = await resolveRequestedProfile(params, null);
+  if (!requested.ok) return requested.failure;
+  const profile = requested.profile;
+
   // The agent-server rejects a parent whose workspace differs from the child's,
   // so the child requests the parent's own directory. `worktree` then carves an
   // isolated worktree out of it, which is what keeps siblings from colliding.
@@ -274,10 +356,15 @@ async function launchLocalChild(
       parentConversationId,
     );
   const parentMetadata = getStoredConversationMetadata(parentConversationId);
-  const profileLaunch = await parentProfileLaunch(parentConversationId);
+  // An explicit selector is the launch source. Parent inheritance would
+  // replace it, including a restricted profile that must not fall back to
+  // agent_settings.
+  const inheritedLaunch = profile
+    ? null
+    : await parentProfileLaunch(parentConversationId);
 
-  const createChild = (isolation: ChildConversationIsolation) =>
-    launchConversation(profileLaunch, {
+  const createChild = (isolation: ChildConversationIsolation) => {
+    const options = {
       initialUserMsg: params.task,
       metadata: parentMetadata
         ? {
@@ -287,9 +374,24 @@ async function launchLocalChild(
           }
         : null,
       workingDirOverride: workspace,
-      workspaceMode: isolation === "shared" ? "local_repo" : "new_worktree",
+      workspaceMode:
+        isolation === "shared"
+          ? ("local_repo" as const)
+          : ("new_worktree" as const),
       parentConversationId,
-    });
+    };
+    if (profile) {
+      return AgentServerConversationService.createConversation({
+        ...options,
+        agentProfileId: profile.id,
+        agentProfileKind: profile.agentKind,
+        ...(profile.llmProfileRef
+          ? { agentLlmProfileRef: profile.llmProfileRef }
+          : {}),
+      });
+    }
+    return launchConversation(inheritedLaunch!, options);
+  };
 
   let isolation = params.isolation;
   let isolationNote: string | null = null;
@@ -340,6 +442,7 @@ async function launchLocalChild(
     ...(isolationNote ? { isolation_note: isolationNote } : {}),
     parent_link: !parentLinkNote,
     ...(parentLinkNote ? { parent_link_note: parentLinkNote } : {}),
+    ...appliedProfileFields(profile),
   };
 }
 
@@ -389,6 +492,10 @@ async function launchCloudChild(
     );
   }
 
+  const requested = await resolveRequestedProfile(params, backend);
+  if (!requested.ok) return requested.failure;
+  const profile = requested.profile;
+
   const parentMetadata = getStoredConversationMetadata(parentConversationId);
   // The cloud child path bypasses `createConversation`, so read the
   // "Run on first message" toggle here to stamp the router instruction
@@ -426,6 +533,7 @@ async function launchCloudChild(
       // Cloud. Sending it would only hide the child from the Cloud
       // conversation list, which filters out anything with a parent.
       parent_conversation_id: null,
+      ...(profile ? { agent_profile_id: profile.id } : {}),
       ...(routerAtStartSuffix
         ? {
             agent_launch_additions: {
@@ -461,6 +569,7 @@ async function launchCloudChild(
     parent_link: false,
     parent_link_note:
       "This conversation runs on the local agent server, so OpenHands Cloud has no parent to link the child to.",
+    ...appliedProfileFields(profile),
   };
 }
 
