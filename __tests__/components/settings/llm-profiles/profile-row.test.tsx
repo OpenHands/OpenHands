@@ -112,6 +112,18 @@ describe("ProfileRow", () => {
     expect(
       screen.queryByTestId("profile-menu-trigger"),
     ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("profile-row-edit")).not.toBeInTheDocument();
+  });
+
+  it("opens the editor when a manager clicks the profile's name", async () => {
+    const user = userEvent.setup();
+    const handleEdit = vi.fn();
+
+    render(<ProfileRow {...defaultProps} onEdit={handleEdit} />);
+
+    await user.click(screen.getByText("gpt-4-profile"));
+
+    expect(handleEdit).toHaveBeenCalledWith(mockProfile);
   });
 
   it("opens menu when trigger button is clicked", async () => {

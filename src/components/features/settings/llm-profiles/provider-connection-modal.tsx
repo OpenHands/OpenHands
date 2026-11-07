@@ -171,8 +171,15 @@ export function ProviderConnectionModal({
           ? t(I18nKey.SETTINGS$PROVIDER_CONNECTION_ADD_TITLE)
           : t(I18nKey.SETTINGS$PROVIDER_CONNECTION_EDIT_TITLE)
       }
+      description={
+        isCreate
+          ? t(I18nKey.SETTINGS$PROVIDER_CONNECTION_ADD_DESCRIPTION)
+          : undefined
+      }
       footer={footer}
       onClose={handleClose}
+      showCloseButton
+      isCloseDisabled={isPending}
       initialFocusRef={firstFieldRef}
     >
       <div

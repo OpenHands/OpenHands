@@ -138,7 +138,7 @@ export function ProviderConnectionActionsMenu({
       <MenuItem
         index={0}
         icon={<AddModelsIcon width={16} height={16} />}
-        label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_BULK_ADD)}
+        label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_ADD_MODELS)}
         onClick={() => handleAction(onAddModels)}
         onKeyDown={handleKeyDown}
         menuItemsRef={menuItemsRef}
