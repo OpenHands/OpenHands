@@ -202,8 +202,26 @@ export function BackendSelector({
   const settingsLabel = t(I18nKey.SIDEBAR$SETTINGS);
   // `org` is consumed by the cloud settings loader so the page opens on the
   // org that is active here instead of the cloud's last-used org.
-  const cloudSettingsOrgQuery = active.orgId
-    ? `?org=${encodeURIComponent(active.orgId)}`
+  const isSingleOrgCloud =
+    backends.length === 1 && backends[0].kind === "cloud";
+  const singleCloudEntry = isSingleOrgCloud
+    ? cloudOrgs[backends[0].id]
+    : undefined;
+  const isSingleOrgResolved = Boolean(
+    isSingleOrgCloud &&
+    singleCloudEntry &&
+    !singleCloudEntry.isLoading &&
+    !singleCloudEntry.isError &&
+    singleCloudEntry.hasData &&
+    singleCloudEntry.orgs.length === 1,
+  );
+  const hideSelector = !hideTrigger && isSingleOrgResolved;
+
+  const effectiveOrgId =
+    active.orgId ??
+    (isSingleOrgResolved ? (singleCloudEntry?.orgs[0]?.id ?? null) : null);
+  const cloudSettingsOrgQuery = effectiveOrgId
+    ? `?org=${encodeURIComponent(effectiveOrgId)}`
     : "";
   const isRightPanelShown = useConversationStore(
     (state) => state.isRightPanelShown,
@@ -365,43 +383,52 @@ export function BackendSelector({
   return (
     <>
       {/* The menu spans this whole row, including the settings button. */}
-      <div className="relative flex items-center gap-2 w-full">
-        <div className="flex-1 min-w-0">
-          <Dropdown
-            testId="backend-selector"
-            key={`${activeValue}-${activeOption?.label ?? ""}`}
-            defaultValue={
-              activeOption ?? {
-                value: activeValue,
-                label: noBackendSelected ? noBackendLabel : active.backend.name,
-                prefix: noBackendSelected
-                  ? buildNoBackendPrefix()
-                  : buildStatusPrefix(healthByBackendId[active.backend.id]),
+      <div
+        className={cn(
+          "relative flex items-center gap-2 w-full",
+          hideSelector && "justify-end",
+        )}
+      >
+        {!hideSelector ? (
+          <div className="flex-1 min-w-0">
+            <Dropdown
+              testId="backend-selector"
+              key={`${activeValue}-${activeOption?.label ?? ""}`}
+              defaultValue={
+                activeOption ?? {
+                  value: activeValue,
+                  label: noBackendSelected
+                    ? noBackendLabel
+                    : active.backend.name,
+                  prefix: noBackendSelected
+                    ? buildNoBackendPrefix()
+                    : buildStatusPrefix(healthByBackendId[active.backend.id]),
+                }
               }
-            }
-            footer={addBackendFooter}
-            openUpward={openUpward}
-            matchTriggerWidth
-            anchorMenuToParent
-            tallMenu
-            onOpenChange={onMenuOpenChange}
-            hideTrigger={hideTrigger}
-            defaultOpen={defaultOpen}
-            openOnHover={!hideTrigger}
-            onChange={(item) => {
-              if (!item) return;
-              void handleSelectBackend(item.value);
-            }}
-            placeholder={
-              noBackendSelected
-                ? noBackendLabel
-                : (activeOption?.label ?? active.backend.name)
-            }
-            loading={someCloudLoading}
-            options={options}
-            className="h-10 px-2 py-0 bg-transparent border-transparent hover:bg-surface-raised focus-within:bg-surface-raised focus-within:border-transparent focus-within:ring-0"
-          />
-        </div>
+              footer={addBackendFooter}
+              openUpward={openUpward}
+              matchTriggerWidth
+              anchorMenuToParent
+              tallMenu
+              onOpenChange={onMenuOpenChange}
+              hideTrigger={hideTrigger}
+              defaultOpen={defaultOpen}
+              openOnHover={!hideTrigger}
+              onChange={(item) => {
+                if (!item) return;
+                void handleSelectBackend(item.value);
+              }}
+              placeholder={
+                noBackendSelected
+                  ? noBackendLabel
+                  : (activeOption?.label ?? active.backend.name)
+              }
+              loading={someCloudLoading}
+              options={options}
+              className="h-10 px-2 py-0 bg-transparent border-transparent hover:bg-surface-raised focus-within:bg-surface-raised focus-within:border-transparent focus-within:ring-0"
+            />
+          </div>
+        ) : null}
         {!hideTrigger ? (
           <StyledTooltip
             content={settingsLabel}
