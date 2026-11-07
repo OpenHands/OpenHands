@@ -878,8 +878,10 @@ code .token {
   max-height: 85vh;
 }
 
+/* The repository row is a size container, so the menu opened from its start
+   stays within the row however deeply the card nests it. */
 @utility automation-setup-repository-menu {
-  width: min(28rem, calc(100vw - 3rem));
+  width: min(28rem, 100cqw);
 }
 
 /* Command palette geometry and effects keep their viewport and filter composition. */
