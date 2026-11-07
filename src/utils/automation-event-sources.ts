@@ -93,6 +93,53 @@ function reportedEventKeys(
   return source === "github" ? capabilities.eventTypes : null;
 }
 
+/**
+ * A readable stand-in for an event key the deployment names no label for:
+ * separators become spaces, common abbreviations expand, and a family
+ * pattern says it matches any action. Deployment labels win over this —
+ * it only fills gaps for services that ship no catalog names.
+ */
+export function fallbackEventKeyLabel(pattern: string): string {
+  const family = pattern.endsWith(".*");
+  const core = family ? pattern.slice(0, -2) : pattern;
+  const text = core
+    .split(/[.:_-]/)
+    .filter(Boolean)
+    .map((token) => {
+      if (token === "pr") return "pull request";
+      if (token === "pullrequest") return "pull request";
+      return token;
+    })
+    .join(" ");
+  const labeled = text.replace(/^\w/, (char) => char.toUpperCase());
+  return family ? `${labeled} (any action)` : labeled;
+}
+
+/** One option the event key dropdown offers: the raw key plus a name. */
+export interface EventKeyOption {
+  key: string;
+  label: string;
+}
+
+/**
+ * The labeled event key options a source's catalog offers, in the order the
+ * deployment reports them. A key without a well-known name keeps its raw
+ * form as the label.
+ */
+export function eventKeyOptionsForSource(
+  capabilities: DeploymentCapabilities | null | undefined,
+  eventSource: string,
+): EventKeyOption[] {
+  const patterns = capabilities
+    ? (reportedEventKeys(capabilities, eventSource) ?? [])
+    : [];
+  const labels = capabilities?.eventLabelsBySource?.[eventSource];
+  return patterns.map((key) => ({
+    key,
+    label: labels?.[key] ?? fallbackEventKeyLabel(key),
+  }));
+}
+
 function describeEventSource(
   capabilities: DeploymentCapabilities,
   source: string,

@@ -52,6 +52,46 @@ const DATA_CENTER_EVENT_TYPES: Record<string, string[]> = {
   ],
 };
 
+// Display names the service's catalogs publish for each event key pattern
+// (OpenHands/automation capabilities `eventLabelsBySource`), so the setup
+// form renders well-named options in mock mode.
+const EVENT_LABELS_BY_SOURCE: Record<string, Record<string, string>> = {
+  github: {
+    "pull_request.*": "Pull request activity",
+    "pull_request_review.*": "Pull request review activity",
+    "issues.*": "Issue activity",
+    "issue_comment.*": "Issue comment activity",
+    push: "Push",
+    "release.*": "Release activity",
+  },
+  bitbucket_data_center: {
+    "pr:comment:added": "Pull request comment added",
+    "pr:comment:deleted": "Pull request comment deleted",
+    "pr:comment:edited": "Pull request comment edited",
+    "pr:declined": "Pull request declined",
+    "pr:deleted": "Pull request deleted",
+    "pr:from_ref_updated": "Pull request source branch updated",
+    "pr:merged": "Pull request merged",
+    "pr:modified": "Pull request modified",
+    "pr:opened": "Pull request opened",
+    "pr:reviewer:approved": "Reviewer approved",
+    "pr:reviewer:needs_work": "Reviewer requested changes",
+    "pr:reviewer:unapproved": "Reviewer removed approval",
+    "repo:comment:added": "Commit comment added",
+    "repo:comment:deleted": "Commit comment deleted",
+    "repo:comment:edited": "Commit comment edited",
+    "repo:refs_changed": "Branch or tag updated",
+  },
+  jira_dc: {
+    comment_created: "Comment created",
+    comment_deleted: "Comment deleted",
+    comment_updated: "Comment updated",
+    "jira:issue_created": "Issue created",
+    "jira:issue_deleted": "Issue deleted",
+    "jira:issue_updated": "Issue updated",
+  },
+};
+
 // The "supported" deployment from the published contract fixtures. Discovery
 // and preflight answer with it, so the setup flow runs against the same
 // reference data the extensions contract is verified against.
@@ -75,6 +115,7 @@ const CAPABILITIES: DeploymentCapabilities = {
     github: capabilitiesFixture.responses.supported.body.eventTypes,
     ...DATA_CENTER_EVENT_TYPES,
   },
+  eventLabelsBySource: EVENT_LABELS_BY_SOURCE,
 };
 
 interface DraftTrigger {
