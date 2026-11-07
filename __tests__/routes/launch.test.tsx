@@ -637,7 +637,10 @@ describe("LaunchRoute", () => {
     beforeEach(() => {
       vi.clearAllMocks();
       mockPreflight.mockResolvedValue(PREFLIGHT_RESPONSE);
-      mockCreate.mockResolvedValue({ id: "auto-42" });
+      mockCreate.mockResolvedValue({
+        automation: { id: "auto-42" },
+        created: true,
+      });
     });
 
     it("renders the Install Automation button in mode=automation", async () => {
@@ -765,6 +768,36 @@ describe("LaunchRoute", () => {
       await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalledWith("/automations/auto-42");
       });
+    });
+
+    it("shows an already-installed state instead of navigating when the service returns an existing automation", async () => {
+      const user = userEvent.setup();
+      mockCreate.mockResolvedValueOnce({
+        automation: { id: "auto-42" },
+        created: false,
+      });
+
+      renderLaunchRoute(
+        "?mode=automation&plugin_source=github:owner/news-digest",
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("plugin-trigger-section"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("trust-checkbox"));
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("launch-already-installed"),
+        ).toBeInTheDocument();
+      });
+      // The user can open the existing automation to edit it there.
+      await user.click(screen.getByTestId("open-to-edit-button"));
+      expect(mockNavigate).toHaveBeenCalledWith("/automations/auto-42");
     });
 
     it("surfaces the server detail message on install failure", async () => {

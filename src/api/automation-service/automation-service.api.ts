@@ -1,13 +1,5 @@
-import type { AutomationUpdate } from "#/types/automation";
-import axios from "axios";
-import {
-  clearPendingLocalTelemetryRevocation,
-  getTelemetryConsent,
-  getTelemetryDistinctId,
-  getTelemetryDistinctIdForConsentSync,
-  type TelemetryConsent,
-} from "#/services/telemetry";
 import type {
+  AutomationUpdate,
   Automation,
   AutomationCreatedByFilter,
   AutomationRun,
@@ -19,6 +11,14 @@ import type {
   AutomationRunsResponse,
   ChangeRunAsRequest,
 } from "#/types/automation";
+import axios from "axios";
+import {
+  clearPendingLocalTelemetryRevocation,
+  getTelemetryConsent,
+  getTelemetryDistinctId,
+  getTelemetryDistinctIdForConsentSync,
+  type TelemetryConsent,
+} from "#/services/telemetry";
 import type {
   GitSyncCheckResponse,
   GitSyncConfigUpdateRequest,
@@ -829,27 +829,38 @@ class AutomationService {
    * against the manifest's `config_schema`, resolves the declared
    * agent/LLM profile, and falls back to the manifest's suggested trigger.
    * Backend: POST /api/automation/v1/plugin-spec (OpenHands/automation#580)
+   *
+   * When a `template` id is supplied and an automation with that template is
+   * already installed, the service returns the existing automation (HTTP 200)
+   * instead of creating a new one (HTTP 201). The `created` flag distinguishes
+   * the two so callers can surface a "already installed" state instead of
+   * pretending the install was fresh.
    */
   static async createPluginSpecAutomation(
     body: CreatePluginSpecAutomationRequest,
-  ): Promise<Automation> {
+  ): Promise<{ automation: Automation; created: boolean }> {
     const active = getActiveBackend().backend;
     // Literal path (outside the interface manifest surface) like the drafts and
     // run-cancel paths.
     const path = `${AUTOMATION_BASE_PATH}/v1/plugin-spec`;
 
     if (active.kind === "cloud") {
-      return callCloudProxy<Automation>({
+      // The cloud proxy returns only the response body, not the HTTP status,
+      // so we cannot distinguish 201 (created) from 200 (existing) here.
+      // Optimistically report `created: true`; cloud dedupe detection is a
+      // follow-up that requires the proxy to surface status.
+      const automation = await callCloudProxy<Automation>({
         backend: active,
         method: "POST",
         path,
         body,
         headers: await buildAutomationRequestHeaders(),
       });
+      return { automation, created: true };
     }
 
-    const { data } = await localAutomationAxios.post<Automation>(path, body);
-    return data;
+    const response = await localAutomationAxios.post<Automation>(path, body);
+    return { automation: response.data, created: response.status === 201 };
   }
 
   /**

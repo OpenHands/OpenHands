@@ -605,6 +605,47 @@ describe("automation mode preflight", () => {
     expect(typeof submitted[0].parameters?.priority).toBe("number");
   });
 
+  it("renders a stale badge value as a disabled placeholder so display and submission agree", async () => {
+    const user = userEvent.setup();
+    // The badge pre-encodes mode: "fast", but the schema enum only allows
+    // "compact"/"full". The select must show the raw value (not "— select —")
+    // and submit it unchanged so the user isn't surprised by a 422.
+    renderModal(
+      [{ source: "github:org/recipe", parameters: { mode: "fast" } }],
+      {
+        mode: "automation",
+        preflight: {
+          ...cronPreflight,
+          fields: [
+            {
+              key: "mode",
+              type: "string",
+              label: "mode",
+              required: false,
+              options: ["compact", "full"],
+            },
+          ],
+        },
+      },
+    );
+
+    const select = screen.getByTestId(
+      "plugin-0-param-mode",
+    ) as HTMLSelectElement;
+    // The stale value is surfaced as a disabled option carrying the raw value.
+    const staleOption = screen.getByText("fast (current)") as HTMLOptionElement;
+    expect(staleOption.disabled).toBe(true);
+    // The select's current value is the raw badge value, not the placeholder.
+    expect(select.value).toBe("fast");
+
+    await user.click(screen.getByTestId("trust-checkbox"));
+    await user.click(screen.getByTestId("start-conversation-button"));
+
+    expect(mockOnInstallAutomation).toHaveBeenCalledTimes(1);
+    const submitted = mockOnInstallAutomation.mock.calls[0][0] as PluginSpec[];
+    expect(submitted[0].parameters).toEqual({ mode: "fast" });
+  });
+
   it("installs without an explicit trigger when preflight has no cron suggestion", async () => {
     const user = userEvent.setup();
     renderModal([{ source: "github:org/recipe" }], {

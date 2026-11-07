@@ -167,6 +167,12 @@ export default function LaunchRoute() {
     "conversation" | "automation"
   >("conversation");
   const [isInstalling, setIsInstalling] = React.useState(false);
+  // Set when the service returned an existing automation (HTTP 200) instead of
+  // creating a new one (HTTP 201). The user's config/trigger edits were not
+  // applied; we surface this instead of navigating as if the install were fresh.
+  const [alreadyInstalledId, setAlreadyInstalledId] = React.useState<
+    string | null
+  >(null);
 
   const parseResult = React.useMemo(
     () => parsePluginsFromUrl(searchParams),
@@ -275,25 +281,32 @@ export default function LaunchRoute() {
     setCreationError(null);
     setIsInstalling(true);
     try {
-      const created = await AutomationService.createPluginSpecAutomation({
-        name: automationNameForPlugin(plugin),
-        plugin: {
-          source: plugin.source,
-          ref: plugin.ref ?? undefined,
-          repo_path: plugin.repo_path ?? undefined,
-        },
-        config: (plugin.parameters ?? undefined) as
-          Record<string, unknown> | undefined,
-        trigger,
-        // Dedupe repeated badge clicks: the service returns the existing
-        // automation (HTTP 200) when this template id is already installed.
-        template: {
-          id: pluginSpecTemplateId(plugin),
-          version: pluginSpecTemplateVersion(preflight?.resolvedRef, plugin),
-        },
-        enabled: true,
-      });
-      navigate(automationDetailPath(created.id));
+      const { automation, created } =
+        await AutomationService.createPluginSpecAutomation({
+          name: automationNameForPlugin(plugin),
+          plugin: {
+            source: plugin.source,
+            ref: plugin.ref ?? undefined,
+            repo_path: plugin.repo_path ?? undefined,
+          },
+          config: (plugin.parameters ?? undefined) as
+            Record<string, unknown> | undefined,
+          trigger,
+          // Dedupe repeated badge clicks: the service returns the existing
+          // automation (HTTP 200) when this template id is already installed.
+          template: {
+            id: pluginSpecTemplateId(plugin),
+            version: pluginSpecTemplateVersion(preflight?.resolvedRef, plugin),
+          },
+          enabled: true,
+        });
+      if (!created) {
+        // The automation already existed — the user's config/trigger edits were
+        // not applied. Surface this instead of navigating as if fresh.
+        setAlreadyInstalledId(automation.id);
+        return;
+      }
+      navigate(automationDetailPath(automation.id));
     } catch (error) {
       setCreationErrorKind("automation");
       setCreationError(
@@ -333,6 +346,43 @@ export default function LaunchRoute() {
         onGoHome={handleGoHome}
         onTryAgain={handleTryAgain}
       />
+    );
+  }
+
+  // The automation was already installed — the user's edits were not applied.
+  if (alreadyInstalledId) {
+    return (
+      <div
+        className="flex h-full items-center justify-center"
+        data-testid="launch-already-installed"
+      >
+        <div className="max-w-md rounded-lg bg-surface p-6 text-center">
+          <h2 className="mb-4 text-xl font-medium text-contrast">
+            {t(I18nKey.LAUNCH$ALREADY_INSTALLED_TITLE)}
+          </h2>
+          <p className="mb-6 text-text-tertiary">
+            {t(I18nKey.LAUNCH$ALREADY_INSTALLED_BODY)}
+          </p>
+          <div className="flex justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate(automationDetailPath(alreadyInstalledId))}
+              className="rounded-md bg-contrast px-4 py-2 text-sm text-contrast-foreground hover:bg-contrast/90"
+              data-testid="open-to-edit-button"
+            >
+              {t(I18nKey.LAUNCH$OPEN_TO_EDIT)}
+            </button>
+            <button
+              type="button"
+              onClick={handleGoHome}
+              className="rounded-md bg-tertiary px-4 py-2 text-sm text-foreground hover:bg-interactive-hover"
+              data-testid="go-home-button"
+            >
+              {t(I18nKey.LAUNCH$GO_HOME)}
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 

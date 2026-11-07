@@ -2,6 +2,9 @@ import { SettingsInput } from "#/components/features/settings/settings-input";
 import { cn } from "#/utils/utils";
 
 const SELECT_PLACEHOLDER = "— select —";
+// Suffix shown on the disabled option that surfaces a badge value not in the
+// schema's enum, so display and submission agree.
+const STALE_VALUE_SUFFIX = "(current)";
 export interface PluginLaunchParameterInputProps {
   pluginIndex: number;
   paramKey: string;
@@ -68,13 +71,20 @@ export function PluginLaunchParameterInput({
         : -1;
       return index >= 0 ? enumValues![index] : selected;
     };
+    const currentValueStr = String(paramValue ?? "");
+    const valueMatchesOption = options.includes(currentValueStr);
+    // When the badge pre-encodes a value not in the schema's enum, render a
+    // disabled placeholder carrying the raw value so display and submission
+    // agree — otherwise the select shows "— select —" while pluginConfigs
+    // still holds the badge value.
+    const showStaleValueOption = currentValueStr !== "" && !valueMatchesOption;
     return (
       <label htmlFor={inputId} className="flex flex-col gap-1.5 text-sm">
         <span className="font-medium text-contrast">{displayLabel}</span>
         <select
           id={inputId}
           data-testid={inputId}
-          value={String(paramValue ?? "")}
+          value={currentValueStr}
           onChange={(e) =>
             onParameterChange(
               pluginIndex,
@@ -84,7 +94,12 @@ export function PluginLaunchParameterInput({
           }
           className="w-full rounded-md border border-tertiary-light bg-input px-3 py-2 text-contrast focus:border-primary focus:outline-none"
         >
-          {!required && (
+          {showStaleValueOption && (
+            <option value={currentValueStr} disabled>
+              {currentValueStr} {STALE_VALUE_SUFFIX}
+            </option>
+          )}
+          {!required && !showStaleValueOption && (
             <option value={SELECT_PLACEHOLDER}>{SELECT_PLACEHOLDER}</option>
           )}
           {options.map((option) => (

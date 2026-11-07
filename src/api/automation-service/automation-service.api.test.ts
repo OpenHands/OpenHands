@@ -454,7 +454,10 @@ describe("AutomationService.createPluginSpecAutomation", () => {
   beforeEach(() => {
     setRegisteredBackends([localBackend]);
     setActiveSelection({ backendId: localBackend.id });
-    localAxios.post.mockResolvedValue({ data: pluginSpecAutomation });
+    localAxios.post.mockResolvedValue({
+      data: pluginSpecAutomation,
+      status: 201,
+    });
   });
 
   afterEach(() => {
@@ -464,14 +467,28 @@ describe("AutomationService.createPluginSpecAutomation", () => {
   });
 
   it("creates an automation from the plugin spec on the local backend", async () => {
-    const created =
+    const { automation, created } =
       await AutomationService.createPluginSpecAutomation(pluginSpecRequest);
 
     expect(localAxios.post).toHaveBeenCalledWith(
       "/api/automation/v1/plugin-spec",
       pluginSpecRequest,
     );
-    expect(created.id).toBe("plugin-spec-automation");
+    expect(automation.id).toBe("plugin-spec-automation");
+    expect(created).toBe(true);
+  });
+
+  it("reports created=false when the service returns an existing automation (HTTP 200)", async () => {
+    localAxios.post.mockResolvedValueOnce({
+      data: pluginSpecAutomation,
+      status: 200,
+    });
+
+    const { automation, created } =
+      await AutomationService.createPluginSpecAutomation(pluginSpecRequest);
+
+    expect(automation.id).toBe("plugin-spec-automation");
+    expect(created).toBe(false);
   });
 
   it("routes cloud creates through the cloud proxy", async () => {
@@ -479,7 +496,7 @@ describe("AutomationService.createPluginSpecAutomation", () => {
     setActiveSelection({ backendId: cloudBackend.id });
     callCloudProxy.mockResolvedValueOnce(pluginSpecAutomation);
 
-    const created =
+    const { automation, created } =
       await AutomationService.createPluginSpecAutomation(pluginSpecRequest);
 
     expect(callCloudProxy).toHaveBeenCalledWith(
@@ -491,7 +508,8 @@ describe("AutomationService.createPluginSpecAutomation", () => {
       }),
     );
     expect(localAxios.post).not.toHaveBeenCalled();
-    expect(created.id).toBe("plugin-spec-automation");
+    expect(automation.id).toBe("plugin-spec-automation");
+    expect(created).toBe(true);
   });
 });
 
