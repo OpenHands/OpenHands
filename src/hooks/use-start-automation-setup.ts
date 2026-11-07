@@ -1,4 +1,9 @@
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
+import { getApiErrorMessage } from "#/utils/api-error-message";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+import { buildAutomationSetupContext } from "#/utils/automation-setup-context";
 import {
   PENDING_AUTOMATION_SETUP_ID,
   clearAutomationFormSession,
@@ -23,6 +28,7 @@ import {
  * starts only after the user sends a prompt.
  */
 export function useStartAutomationSetup() {
+  const { t } = useTranslation("openhands");
   const active = useActiveBackend();
   const { navigate } = useNavigation();
   const { startAutomationSetupConversation, isPending } =
@@ -37,6 +43,7 @@ export function useStartAutomationSetup() {
 
   const startConversationFromPrompt = useCallback(
     (prompt: string) => {
+      if (!prompt.trim()) return;
       const draft = getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID) ?? {
         prompt: "",
         kind: "prompt" as const,
@@ -60,20 +67,45 @@ export function useStartAutomationSetup() {
           draft.materializedAutomationId,
         );
       }
+      let launchId: string;
       startAutomationSetupConversation({
         query: prompt,
+        automationSetupContext: buildAutomationSetupContext(draft),
         entryPoint,
         automationSetupTags,
+        onStart: () => {
+          launchId = useConversationLaunchStore.getState().begin({
+            backendId: active.backend.id,
+            orgId: active.orgId ?? null,
+            message: prompt.trim(),
+            files: [],
+            automationSetupDraft: draft,
+          });
+          clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
+          navigate?.(`/conversations/${launchId}`);
+        },
         onSuccess: (conversation) => {
           const conversationId = conversation.conversation_id;
           initializeAutomationFormSession(conversationId, draft);
           markAutomationSetupHandoff(conversationId);
-          clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
-          navigate?.(`/conversations/${conversationId}`);
+          useConversationLaunchStore.getState().update(launchId, {
+            targetId: conversationId,
+          });
+        },
+        onError: (error) => {
+          useConversationLaunchStore.getState().update(launchId, {
+            error: getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)),
+          });
         },
       });
     },
-    [navigate, startAutomationSetupConversation],
+    [
+      active.backend.id,
+      active.orgId,
+      navigate,
+      startAutomationSetupConversation,
+      t,
+    ],
   );
 
   return {

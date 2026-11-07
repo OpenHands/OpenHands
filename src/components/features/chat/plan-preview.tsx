@@ -91,7 +91,7 @@ export function PlanPreview({
       {/* Content */}
       <div
         data-testid="plan-preview-content"
-        className="flex flex-col gap-2.5 p-4 text-[15px] text-contrast leading-7.25"
+        className="flex flex-col gap-2.5 p-4 text-sm-plus text-contrast leading-7.25"
       >
         {truncatedContent && (
           <>

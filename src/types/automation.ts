@@ -52,7 +52,17 @@ export type ChangeRunAsRequest =
 /** What kind of identity an automation runs as. */
 export type AutomationRunAsKind = "user" | "service";
 
+export interface AutomationPluginSpec {
+  plugin: { source: string; ref?: string; repo_path?: string };
+  config: Record<string, unknown>;
+}
+
+export type AutomationUpdate = Partial<Automation> & {
+  config?: Record<string, unknown>;
+};
+
 export interface Automation {
+  plugin_spec?: AutomationPluginSpec | null;
   id: string;
   name: string;
   trigger: AutomationTrigger;

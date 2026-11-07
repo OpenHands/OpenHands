@@ -462,6 +462,7 @@ export interface CreateConversationOptions {
   initialUserMsg?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
   /** The automation service's capabilities, for the setup assistant's form tool. */
   automationSetupCapabilities?: DeploymentCapabilities | null;
   conversationInstructions?: string;
@@ -558,6 +559,7 @@ class AgentServerConversationService {
       initialUserMsg,
       automationSetup,
       automationSetupTags,
+      automationSetupContext,
       automationSetupCapabilities,
       conversationInstructions,
       plugins,
@@ -596,7 +598,17 @@ class AgentServerConversationService {
         initial_message: initialUserMsg
           ? {
               role: "user",
-              content: [{ type: "text", text: initialUserMsg }],
+              content: [
+                {
+                  type: "text",
+                  text:
+                    automationSetup &&
+                    agentProfileKind === "acp" &&
+                    automationSetupContext
+                      ? `${initialUserMsg}\n\n${automationSetupContext}`
+                      : initialUserMsg,
+                },
+              ],
             }
           : null,
         title: conversationInstructions ?? null,
@@ -629,7 +641,12 @@ class AgentServerConversationService {
                   automationSetupCapabilities,
                 ),
               ],
-              system_message_suffix: AUTOMATION_SETUP_SYSTEM_SUFFIX,
+              system_message_suffix: [
+                AUTOMATION_SETUP_SYSTEM_SUFFIX,
+                automationSetupContext,
+              ]
+                .filter(Boolean)
+                .join("\n\n"),
             }
           : {}),
       };
@@ -674,6 +691,7 @@ class AgentServerConversationService {
       query: initialUserMsg,
       automationSetup,
       automationSetupTags,
+      automationSetupContext,
       automationSetupCapabilities,
       conversationInstructions,
       plugins,
