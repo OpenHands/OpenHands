@@ -151,7 +151,6 @@ control-openhands assert --field count --equals 1 --bug-shows 0 -- browser count
 
 ## Gotchas
 
-- `control-openhands conversation start --stay` on `/automations/setup` fails with `Conversation launch-<id>: HTTP 422`: the setup send first opens a `launch-<id>` start view and the CLI reads that id. Send through the composer and wait for the real id with `browser wait-url '/conversations/(?!launch-)[0-9a-f-]+'` instead (as the setup precondition does).
 - The stop and delete confirmation buttons carry `cancel-button` and `confirm-button`; role names inside `role=dialog` work too.
 - `stop-button`, `show-skills-button`, `show-hooks-button` and `show-agent-tools-button` also exist in the composer, and `ellipsis-button` in sidebar rows: always scope to `testid=chat-pane-header` or `testid=conversation-name-context-menu`.
 - Stop Runtime (status menu) and Stop Conversation (menu) both navigate to `/conversations`. On a finished local conversation the agent server keeps `finished`; use a running conversation to see `paused` and Start Runtime.
