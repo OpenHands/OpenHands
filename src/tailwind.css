@@ -16,6 +16,11 @@
   --radius-file-action: 7px;
   --radius-facet-control: 3px;
 
+  /* Markdown code padding follows the code's own font size, not the root. */
+  --spacing-code-inline-x: 0.4em;
+  --spacing-code-inline-y: 0.2em;
+  --spacing-code-block: 1em;
+
   /* Compact metadata retains its original pixel sizes and inherited leading. */
   --text-2xs: 11px;
   --text-3xs: 10px;
