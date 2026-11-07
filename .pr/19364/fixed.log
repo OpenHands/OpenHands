@@ -1,0 +1,154 @@
+
+Agent Canvas (Static)
+
+[1/2] Checking prerequisites...
+✓ uvx found
+[ports] Checking ports...
+[2/2] Starting services...
+16:22:28 [agent-server] Starting on port 18891...
+16:22:28 [agent-server] Using PyPI (1.59.0, default)
+16:22:31 [agent-server] WARNING  Current configuration will not reload as not all conditions are met, please refer to documentation.  config.py:311
+16:22:33 [agent-server] WARNING  VSCode server binary not found, VSCode will be disabled  vscode_service.py:50
+16:22:33 [agent-server] WARNING  VSCode service failed to start, continuing without VSCode  api.py:312
+16:22:33 [agent-server] ERROR    Error preloading chromium  tool_preload_service.py:43
+16:22:33 [agent-server] WARNING  Tool preload service failed to start - skipping  api.py:324
+16:22:33 [agent-server] INFO     127.0.0.1:58160 - "GET /server_info HTTP/1.1" 200
+16:22:33 [agent-server] Ready at http://127.0.0.1:18891/server_info
+16:22:33 [secrets] Seeding OPENHANDS_AUTOMATION_API_KEY into agent-server...
+16:22:33 [agent-server] WARNING  Failed to decrypt secret value (setting to None): . This may occur when loading conversations encrypted with a different key or when upgrading from older versions.  cipher.py:75
+16:22:33 [agent-server] ERROR    Cannot load secrets for update: A stored secret cannot be decrypted with any configured key. It was saved under a key that is neither OH_SECRET_KEY nor in OH_PREVIOUS_SECRET_KEYS: restore that key as OH_SECRET_KEY, or add it to OH_PREVIOUS_SECRET_KEYS to rotate to the current key.  store.py:552
+16:22:33 [agent-server] ERROR    Secret create blocked: Cannot load secrets from <isolated-state>/secrets.json. File may be corrupted or encrypted with a different key (restore the key it was saved under as OH_SECRET_KEY, or add it to OH_PREVIOUS_SECRET_KEYS). Refusing to overwrite with defaults to prevent data loss.  settings_router.py:601
+16:22:33 [agent-server] ERROR    HTTPException 500 on PUT /api/settings/secrets: Secrets file is corrupted or encrypted with a different key: restore that key as OH_SECRET_KEY or add it to OH_PREVIOUS_SECRET_KEYS  api.py:862
+16:22:33 [agent-server] INFO     127.0.0.1:58166 - "PUT /api/settings/secrets HTTP/1.1" 500
+16:22:33 [secrets] Retry 1/5 after 500...
+16:22:35 [agent-server] WARNING  Failed to decrypt secret value (setting to None): . This may occur when loading conversations encrypted with a different key or when upgrading from older versions.  cipher.py:75
+16:22:35 [agent-server] ERROR    Cannot load secrets for update: A stored secret cannot be decrypted with any configured key. It was saved under a key that is neither OH_SECRET_KEY nor in OH_PREVIOUS_SECRET_KEYS: restore that key as OH_SECRET_KEY, or add it to OH_PREVIOUS_SECRET_KEYS to rotate to the current key.  store.py:552
+16:22:35 [agent-server] ERROR    Secret create blocked: Cannot load secrets from <isolated-state>/secrets.json. File may be corrupted or encrypted with a different key (restore the key it was saved under as OH_SECRET_KEY, or add it to OH_PREVIOUS_SECRET_KEYS). Refusing to overwrite with defaults to prevent data loss.  settings_router.py:601
+16:22:35 [agent-server] ERROR    HTTPException 500 on PUT /api/settings/secrets: Secrets file is corrupted or encrypted with a different key: restore that key as OH_SECRET_KEY or add it to OH_PREVIOUS_SECRET_KEYS  api.py:862
+16:22:35 [agent-server] INFO     127.0.0.1:58160 - "PUT /api/settings/secrets HTTP/1.1" 500
+16:22:35 [secrets] Retry 2/5 after 500...
+16:22:37 [agent-server] WARNING  Failed to decrypt secret value (setting to None): . This may occur when loading conversations encrypted with a different key or when upgrading from older versions.  cipher.py:75
+16:22:37 [agent-server] ERROR    Cannot load secrets for update: A stored secret cannot be decrypted with any configured key. It was saved under a key that is neither OH_SECRET_KEY nor in OH_PREVIOUS_SECRET_KEYS: restore that key as OH_SECRET_KEY, or add it to OH_PREVIOUS_SECRET_KEYS to rotate to the current key.  store.py:552
+16:22:37 [agent-server] ERROR    Secret create blocked: Cannot load secrets from <isolated-state>/secrets.json. File may be corrupted or encrypted with a different key (restore the key it was saved under as OH_SECRET_KEY, or add it to OH_PREVIOUS_SECRET_KEYS). Refusing to overwrite with defaults to prevent data loss.  settings_router.py:601
+16:22:37 [agent-server] ERROR    HTTPException 500 on PUT /api/settings/secrets: Secrets file is corrupted or encrypted with a different key: restore that key as OH_SECRET_KEY or add it to OH_PREVIOUS_SECRET_KEYS  api.py:862
+16:22:37 [agent-server] INFO     127.0.0.1:58160 - "PUT /api/settings/secrets HTTP/1.1" 500
+16:22:37 [secrets] Retry 3/5 after 500...
+16:22:39 [agent-server] WARNING  Failed to decrypt secret value (setting to None): . This may occur when loading conversations encrypted with a different key or when upgrading from older versions.  cipher.py:75
+16:22:39 [agent-server] ERROR    Cannot load secrets for update: A stored secret cannot be decrypted with any configured key. It was saved under a key that is neither OH_SECRET_KEY nor in OH_PREVIOUS_SECRET_KEYS: restore that key as OH_SECRET_KEY, or add it to OH_PREVIOUS_SECRET_KEYS to rotate to the current key.  store.py:552
+16:22:39 [agent-server] ERROR    Secret create blocked: Cannot load secrets from <isolated-state>/secrets.json. File may be corrupted or encrypted with a different key (restore the key it was saved under as OH_SECRET_KEY, or add it to OH_PREVIOUS_SECRET_KEYS). Refusing to overwrite with defaults to prevent data loss.  settings_router.py:601
+16:22:39 [agent-server] ERROR    HTTPException 500 on PUT /api/settings/secrets: Secrets file is corrupted or encrypted with a different key: restore that key as OH_SECRET_KEY or add it to OH_PREVIOUS_SECRET_KEYS  api.py:862
+16:22:39 [agent-server] INFO     127.0.0.1:58160 - "PUT /api/settings/secrets HTTP/1.1" 500
+16:22:39 [secrets] Retry 4/5 after 500...
+16:22:41 [agent-server] WARNING  Failed to decrypt secret value (setting to None): . This may occur when loading conversations encrypted with a different key or when upgrading from older versions.  cipher.py:75
+16:22:41 [agent-server] ERROR    Cannot load secrets for update: A stored secret cannot be decrypted with any configured key. It was saved under a key that is neither OH_SECRET_KEY nor in OH_PREVIOUS_SECRET_KEYS: restore that key as OH_SECRET_KEY, or add it to OH_PREVIOUS_SECRET_KEYS to rotate to the current key.  store.py:552
+16:22:41 [agent-server] ERROR    Secret create blocked: Cannot load secrets from <isolated-state>/secrets.json. File may be corrupted or encrypted with a different key (restore the key it was saved under as OH_SECRET_KEY, or add it to OH_PREVIOUS_SECRET_KEYS). Refusing to overwrite with defaults to prevent data loss.  settings_router.py:601
+16:22:41 [agent-server] ERROR    HTTPException 500 on PUT /api/settings/secrets: Secrets file is corrupted or encrypted with a different key: restore that key as OH_SECRET_KEY or add it to OH_PREVIOUS_SECRET_KEYS  api.py:862
+16:22:41 [agent-server] INFO     127.0.0.1:58160 - "PUT /api/settings/secrets HTTP/1.1" 500
+16:22:41 [secrets] Warning: Failed to seed secret after 5 attempts: HTTP 500: {"detail":"Internal Server Error","exception":"500: Secrets file is corrupted or encrypted with a different key: restore that key as OH_SECRET_KEY or add it to OH_PREVIOUS_SECRET_KEYS"}
+16:22:41 [automation] Starting on port 18892...
+16:22:41 [automation] Using PyPI (1.26.1, default)
+16:22:41 [static] Starting on port 18893...
+16:22:41 [static] Serving from: /mnt/d/GitHub_project/oss-contributions/worktrees/openhands-19364/build
+16:22:42 [automation] warning: An executable named `uvicorn` is not provided by package `openhands-automation` but is available via the dependency `uvicorn`. Consider using `uv tool run --from uvicorn uvicorn` instead.
+16:22:42 [static] Static-server + proxy listening on http://127.0.0.1:18893/
+16:22:42 [static] Static dir: /mnt/d/GitHub_project/oss-contributions/worktrees/openhands-19364/build
+16:22:42 [static] Base path: /
+16:22:42 [static] /api/automation -> http://127.0.0.1:18892
+16:22:42 [static] /openapi.json -> http://127.0.0.1:18891
+16:22:42 [static] /server_info -> http://127.0.0.1:18891
+16:22:42 [static] /sockets -> http://127.0.0.1:18891
+16:22:42 [static] /health -> http://127.0.0.1:18891
+16:22:42 [static] /vscode -> http://127.0.0.1:19891
+16:22:42 [static] /ready -> http://127.0.0.1:18891
+16:22:42 [static] /alive -> http://127.0.0.1:18891
+16:22:42 [static] /redoc -> http://127.0.0.1:18891
+16:22:42 [static] /docs -> http://127.0.0.1:18891
+16:22:42 [static] /api -> http://127.0.0.1:18891
+16:22:42 [static] * (default) -> static files + SPA fallback
+16:22:44 [ingress] Starting on port 18890...
+16:22:44 [ingress] ╔═══════════════════════════════════════════════════════════════╗
+16:22:44 [ingress] ║  Ingress Proxy                                                ║
+16:22:44 [ingress] ╠═══════════════════════════════════════════════════════════════╣
+16:22:44 [ingress] ║  Listening on: http://localhost:18890/                          ║
+16:22:44 [ingress] ╠═══════════════════════════════════════════════════════════════╣
+16:22:44 [ingress] ║  Routes:                                                      ║
+16:22:44 [ingress] ║      /api/automation → http://127.0.0.1:18892                 ║
+16:22:44 [ingress] ║      /openapi.json → http://127.0.0.1:18891                   ║
+16:22:44 [ingress] ║      /server_info → http://127.0.0.1:18891                    ║
+16:22:44 [ingress] ║      /sockets → http://127.0.0.1:18891                        ║
+16:22:44 [ingress] ║      /health → http://127.0.0.1:18891                         ║
+16:22:44 [ingress] ║      /vscode → http://127.0.0.1:19891                         ║
+16:22:44 [ingress] ║      /ready → http://127.0.0.1:18891                          ║
+16:22:44 [ingress] ║      /alive → http://127.0.0.1:18891                          ║
+16:22:44 [ingress] ║      /redoc → http://127.0.0.1:18891                          ║
+16:22:44 [ingress] ║      /docs → http://127.0.0.1:18891                           ║
+16:22:44 [ingress] ║      /api → http://127.0.0.1:18891                            ║
+16:22:44 [ingress] ║      * (default) → http://localhost:18893                     ║
+16:22:44 [ingress] ║                                                               ║
+16:22:44 [ingress] ╚═══════════════════════════════════════════════════════════════╝
+
+╔══════════════════════════════════════════════════════════════╗
+║  Agent Canvas + Automation Stack                             ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  Ingress:      http://localhost:18890/                       ║
+║  Main UI:      http://localhost:18890/                       ║
+║  API Docs:     http://localhost:18890/api/automation/docs    ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+State directory: <isolated-state>/state
+Press Ctrl+C to stop
+
+16:22:46 [automation] {"message": "Workspace retention is enabled but the configured root <isolated-state>/state/workspaces/automation-runs does not exist on this host; no workspace will be purged.", "severity": "WARNING"}
+16:22:46 [ingress] Restarting (1/3)...
+16:22:46 [automation] Ready at http://127.0.0.1:18892/api/automation/health
+16:22:47 [ingress] Starting on port 18890...
+16:22:47 [ingress] ╔═══════════════════════════════════════════════════════════════╗
+16:22:47 [ingress] ║  Ingress Proxy                                                ║
+16:22:47 [ingress] ╠═══════════════════════════════════════════════════════════════╣
+16:22:47 [ingress] ║  Listening on: http://localhost:18890/                          ║
+16:22:47 [ingress] ╠═══════════════════════════════════════════════════════════════╣
+16:22:47 [ingress] ║  Routes:                                                      ║
+16:22:47 [ingress] ║      /api/automation → http://127.0.0.1:18892                 ║
+16:22:47 [ingress] ║      /openapi.json → http://127.0.0.1:18891                   ║
+16:22:47 [ingress] ║      /server_info → http://127.0.0.1:18891                    ║
+16:22:47 [ingress] ║      /sockets → http://127.0.0.1:18891                        ║
+16:22:47 [ingress] ║      /health → http://127.0.0.1:18891                         ║
+16:22:47 [ingress] ║      /vscode → http://127.0.0.1:19891                         ║
+16:22:47 [ingress] ║      /ready → http://127.0.0.1:18891                          ║
+16:22:47 [ingress] ║      /alive → http://127.0.0.1:18891                          ║
+16:22:47 [ingress] ║      /redoc → http://127.0.0.1:18891                          ║
+16:22:47 [ingress] ║      /docs → http://127.0.0.1:18891                           ║
+16:22:47 [ingress] ║      /api → http://127.0.0.1:18891                            ║
+16:22:47 [ingress] ║      * (default) → http://localhost:18893                     ║
+16:22:47 [ingress] ║                                                               ║
+16:22:47 [ingress] ╚═══════════════════════════════════════════════════════════════╝
+16:22:47 [ingress] Restarting (2/3)...
+16:22:48 [ingress] Starting on port 18890...
+16:22:49 [ingress] Restarting (3/3)...
+16:22:50 [ingress] Starting on port 18890...
+16:22:50 [ingress] ╔═══════════════════════════════════════════════════════════════╗
+16:22:50 [ingress] ║  Ingress Proxy                                                ║
+16:22:50 [ingress] ╠═══════════════════════════════════════════════════════════════╣
+16:22:50 [ingress] ║  Listening on: http://localhost:18890/                          ║
+16:22:50 [ingress] ╠═══════════════════════════════════════════════════════════════╣
+16:22:50 [ingress] ║  Routes:                                                      ║
+16:22:50 [ingress] ║      /api/automation → http://127.0.0.1:18892                 ║
+16:22:50 [ingress] ║      /openapi.json → http://127.0.0.1:18891                   ║
+16:22:50 [ingress] ║      /server_info → http://127.0.0.1:18891                    ║
+16:22:50 [ingress] ║      /sockets → http://127.0.0.1:18891                        ║
+16:22:50 [ingress] ║      /health → http://127.0.0.1:18891                         ║
+16:22:50 [ingress] ║      /vscode → http://127.0.0.1:19891                         ║
+16:22:50 [ingress] ║      /ready → http://127.0.0.1:18891                          ║
+16:22:50 [ingress] ║      /alive → http://127.0.0.1:18891                          ║
+16:22:50 [ingress] ║      /redoc → http://127.0.0.1:18891                          ║
+16:22:50 [ingress] ║      /docs → http://127.0.0.1:18891                           ║
+16:22:50 [ingress] ║      /api → http://127.0.0.1:18891                            ║
+16:22:50 [ingress] ║      * (default) → http://localhost:18893                     ║
+16:22:50 [ingress] ║                                                               ║
+16:22:50 [ingress] ╚═══════════════════════════════════════════════════════════════╝
+✗ The ingress exited 4 times (last: signal SIGKILL). Its [ingress] log lines show why.
+16:22:50 [agent-server] Stopping...
+16:22:50 [automation] Stopping...
+16:22:50 [static] Stopping...
