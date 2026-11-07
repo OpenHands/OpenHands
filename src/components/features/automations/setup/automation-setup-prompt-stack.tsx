@@ -690,7 +690,7 @@ export function AutomationSetupPromptStack({
           >
             <div
               data-testid="automation-setup-repository"
-              className="flex w-full min-w-0 items-start gap-1"
+              className="@container flex w-full min-w-0 items-start gap-1"
             >
               <div className="relative flex shrink-0 items-center gap-2">
                 <span className="text-sm">
