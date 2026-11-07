@@ -1741,9 +1741,6 @@ describe("AutomationSetupPanel", () => {
       screen.queryByTestId("automation-setup-event-filter"),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByTestId("automation-setup-event-key").parentElement,
-    ).toContainElement(screen.getByTestId("automation-setup-add-event-filter"));
-    expect(
       screen.getByTestId("automation-setup-add-event-filter"),
     ).toHaveTextContent("AUTOMATION_SETUP$ADD_FILTER");
 
@@ -3107,11 +3104,6 @@ describe("AutomationSetupPanel", () => {
           .getByTestId("automation-setup-event-source-option-github")
           .compareDocumentPosition(custom) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
-      expect(
-        document.querySelector(
-          '#automation-setup-event-key-options option[value="issues.*"]',
-        ),
-      ).not.toBeNull();
       await user.click(custom);
       const sourceInput = screen.getByTestId("automation-setup-event-source");
       expect(sourceInput).toHaveValue("");
@@ -3189,12 +3181,19 @@ describe("AutomationSetupPanel", () => {
         isLoading: false,
       } as never);
       mockSavedDraftEcho();
-      const eventTypeOptions = () =>
-        Array.from(
-          document.querySelectorAll(
-            "#automation-setup-event-key-options option",
-          ),
-        ).map((option) => option.getAttribute("value"));
+      const selectKey = async (
+        user: ReturnType<typeof userEvent.setup>,
+        key: string,
+      ) => {
+        const input = screen.getByTestId("automation-setup-event-key");
+        await user.type(input, key);
+        await user.click(
+          screen.getByRole("option", {
+            name: new RegExp(key.replace(/[.*]/g, "\\$&")),
+          }),
+        );
+        await user.keyboard("{Escape}");
+      };
       const pickSource = async (
         user: ReturnType<typeof userEvent.setup>,
         source: string,
@@ -3210,20 +3209,15 @@ describe("AutomationSetupPanel", () => {
       const user = userEvent.setup();
       renderPanel();
       await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
-      expect(eventTypeOptions()).toEqual(["issues.*", "issue_comment.*"]);
-      // GitHub's default key still matches a GitHub pattern.
-      expect(screen.getByTestId("automation-setup-event-key")).toHaveValue(
+      expect(screen.getByTestId("automation-event-picker")).toHaveTextContent(
         "issue_comment.created",
       );
-
       await pickSource(user, "jira_dc");
-      expect(eventTypeOptions()).toEqual([
-        "comment_created",
-        "jira:issue_created",
-      ]);
-      expect(screen.getByTestId("automation-setup-event-key")).toHaveValue(
-        "comment_created",
+      // Changing source preserves existing keys until the user edits the selection.
+      await user.click(
+        screen.getByRole("button", { name: /REMOVE.*issue_comment.created/ }),
       );
+      await selectKey(user, "comment_created");
       await user.click(
         screen.getByTestId("automation-setup-event-test-payload-toggle"),
       );
@@ -3238,10 +3232,10 @@ describe("AutomationSetupPanel", () => {
       ).toMatchObject({ webhookEvent: "comment_created" });
 
       await pickSource(user, "bitbucket_data_center");
-      expect(eventTypeOptions()).toEqual(["pr:comment:added", "pr:opened"]);
-      fireEvent.change(screen.getByTestId("automation-setup-event-key"), {
-        target: { value: "pr:opened" },
-      });
+      await user.click(
+        screen.getByRole("button", { name: /REMOVE.*comment_created/ }),
+      );
+      await selectKey(user, "pr:opened");
       expect(
         JSON.parse(
           (
@@ -3664,7 +3658,7 @@ describe("AutomationSetupPanel", () => {
     );
   });
 
-  it("keeps an event trigger's destination when saving an existing automation", async () => {
+  it("removes a cleared event filter while preserving the existing destination", async () => {
     vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
       id: "auto-1",
     } as never);
@@ -3682,11 +3676,15 @@ describe("AutomationSetupPanel", () => {
           type: "event",
           source: "github",
           on: "issues.opened",
+          filter: "repository.full_name == 'acme/app'",
           destination: "continue_conversation",
         },
       }),
     );
 
+    await user.click(
+      screen.getByTestId("automation-setup-event-filter-remove"),
+    );
     await user.click(screen.getByTestId("automation-setup-save"));
 
     await waitFor(() =>
