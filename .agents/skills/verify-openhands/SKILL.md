@@ -120,6 +120,13 @@ control-openhands stop                         # stops only this run; evidence s
   from *before* any client-side navigation: use `click ... --expect-url '<regex>'`
   (or `browser wait-url`) after every navigating click, because many routes
   redirect (`/settings` → `/settings/agents`, `/customize` → `/mcp`).
+- **Paper theme by default.** The run's browser starts in the Paper theme
+  (`openhands-color-theme=paper`, seeded once per browser profile), so
+  screenshots and reports share one look. A check that names a theme still
+  chooses it (F16) or sets that key, and the choice holds across reloads. A
+  check whose expected colours assume the app's own default theme starts the
+  browser with `CONTROL_OPENHANDS_THEME=default` (or another theme id) on the
+  first `browser` command of the run, or after `browser reset`.
 - **Arrange, don't fake.** `llm`, `fixture` and `api ... --write` exist to set up
   preconditions (a configured profile, a git repo, a dummy secret). They never
   count as proof that the UI path works; the map says which steps are UI proof.
