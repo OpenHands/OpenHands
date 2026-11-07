@@ -1,7 +1,6 @@
 import {
   useMutation,
   useQueryClient,
-  type QueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
@@ -28,70 +27,6 @@ function applyTagFlags<
     ...conversation,
     tags: withConversationTagFlags(conversation.tags, changes),
   };
-}
-
-/**
- * Applies tag flag changes to every cached copy of the conversation (the
- * single-conversation query, the flat list, and the paginated sidebar list)
- * and returns the previous entries so a caller can roll back. Used for the
- * optimistic half of {@link useUpdateConversationTagFlags}, and on its own
- * when the server changes a tag as a side effect (a sent message clears
- * `resolved`) and the UI should not wait for the next poll.
- */
-export function applyConversationTagFlagsToCache(
-  queryClient: QueryClient,
-  conversationId: string,
-  changes: Record<string, boolean>,
-) {
-  const conversationPrefix: QueryKey = ["user", "conversation", conversationId];
-  const listPrefix: QueryKey = ["user", "conversations"];
-  const previousConversationEntries = queryClient.getQueriesData<
-    AppConversation | null | undefined
-  >({ queryKey: conversationPrefix });
-  const previousListEntries = queryClient.getQueriesData<unknown>({
-    queryKey: listPrefix,
-  });
-
-  queryClient.setQueriesData<AppConversation | null | undefined>(
-    { queryKey: conversationPrefix },
-    (old) => (old ? applyTagFlags(old, conversationId, changes) : old),
-  );
-
-  queryClient.setQueriesData<unknown>(
-    { queryKey: listPrefix },
-    (old: unknown) => {
-      if (Array.isArray(old)) {
-        return old.map((conversation) =>
-          conversation && typeof conversation === "object"
-            ? applyTagFlags(
-                conversation as AppConversation,
-                conversationId,
-                changes,
-              )
-            : conversation,
-        );
-      }
-      if (
-        old &&
-        typeof old === "object" &&
-        Array.isArray((old as InfiniteConversationsData).pages)
-      ) {
-        const data = old as InfiniteConversationsData;
-        return {
-          ...data,
-          pages: data.pages.map((page) => ({
-            ...page,
-            items: page.items.map((conversation) =>
-              applyTagFlags(conversation, conversationId, changes),
-            ),
-          })),
-        };
-      }
-      return old;
-    },
-  );
-
-  return { previousConversationEntries, previousListEntries };
 }
 
 /**
@@ -125,11 +60,60 @@ export const useUpdateConversationTagFlags = () => {
       await queryClient.cancelQueries({ queryKey: conversationPrefix });
       await queryClient.cancelQueries({ queryKey: listPrefix });
 
-      return applyConversationTagFlagsToCache(
-        queryClient,
-        variables.conversationId,
-        variables.changes,
+      const previousConversationEntries = queryClient.getQueriesData<
+        AppConversation | null | undefined
+      >({ queryKey: conversationPrefix });
+      const previousListEntries = queryClient.getQueriesData<unknown>({
+        queryKey: listPrefix,
+      });
+
+      queryClient.setQueriesData<AppConversation | null | undefined>(
+        { queryKey: conversationPrefix },
+        (old) =>
+          old
+            ? applyTagFlags(old, variables.conversationId, variables.changes)
+            : old,
       );
+
+      queryClient.setQueriesData<unknown>(
+        { queryKey: listPrefix },
+        (old: unknown) => {
+          if (Array.isArray(old)) {
+            return old.map((conversation) =>
+              conversation && typeof conversation === "object"
+                ? applyTagFlags(
+                    conversation as AppConversation,
+                    variables.conversationId,
+                    variables.changes,
+                  )
+                : conversation,
+            );
+          }
+          if (
+            old &&
+            typeof old === "object" &&
+            Array.isArray((old as InfiniteConversationsData).pages)
+          ) {
+            const data = old as InfiniteConversationsData;
+            return {
+              ...data,
+              pages: data.pages.map((page) => ({
+                ...page,
+                items: page.items.map((conversation) =>
+                  applyTagFlags(
+                    conversation,
+                    variables.conversationId,
+                    variables.changes,
+                  ),
+                ),
+              })),
+            };
+          }
+          return old;
+        },
+      );
+
+      return { previousConversationEntries, previousListEntries };
     },
     onError: (_err, _variables, context) => {
       context?.previousConversationEntries.forEach(([queryKey, data]) => {

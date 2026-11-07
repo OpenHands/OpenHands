@@ -19550,8 +19550,8 @@
   "CHAT_INTERFACE$RESOLVED_TITLE": {
     "en": "This thread is resolved.",
     "ja": "このスレッドは解決済みです。",
-    "zh-CN": "此线程已解决。",
-    "zh-TW": "此執行緒已解決。",
+    "zh-CN": "此会话已解决。",
+    "zh-TW": "此對話串已解決。",
     "ko-KR": "이 스레드는 해결되었습니다.",
     "no": "Denne tråden er løst.",
     "ar": "تم حل هذه السلسلة.",
@@ -19604,8 +19604,8 @@
   "CHAT_INTERFACE$RESOLVED_REOPEN_FAILED": {
     "en": "Couldn't reopen this thread. Please try again.",
     "ja": "このスレッドを再開できませんでした。もう一度お試しください。",
-    "zh-CN": "无法重新打开此线程，请重试。",
-    "zh-TW": "無法重新開啟此執行緒，請再試一次。",
+    "zh-CN": "无法重新打开此会话，请重试。",
+    "zh-TW": "無法重新開啟此對話串，請再試一次。",
     "ko-KR": "이 스레드를 다시 열 수 없습니다. 다시 시도해 주세요.",
     "no": "Kunne ikke gjenåpne denne tråden. Prøv igjen.",
     "ar": "تعذر إعادة فتح هذه السلسلة. يرجى المحاولة مرة أخرى.",

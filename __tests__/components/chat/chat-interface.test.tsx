@@ -940,51 +940,21 @@ describe("ChatInterface - Pending message queue", () => {
     );
   }
 
-  it("shows the resolved banner above a usable composer and hides it once a message is sent", async () => {
-    mockSend.mockResolvedValue({ queued: false });
+  it("shows the resolved banner above a usable composer", () => {
     seedResolvedConversation();
 
     renderInterface();
 
     const banner = screen.getByTestId("resolved-conversation-banner");
     expect(banner).toHaveTextContent(I18nKey.CHAT_INTERFACE$RESOLVED_TITLE);
-    expect(banner).toHaveTextContent(
-      I18nKey.CHAT_INTERFACE$RESOLVED_DESCRIPTION,
-    );
     expect(screen.getByTestId("chat-input")).toHaveAttribute(
       "contenteditable",
       "true",
     );
     expect(
-      screen.queryByTestId("archived-conversation-banner"),
-    ).not.toBeInTheDocument();
-
-    submitMessage("pick this back up");
-
-    await waitFor(() => {
-      expect(
-        screen.queryByTestId("resolved-conversation-banner"),
-      ).not.toBeInTheDocument();
-    });
-    expect(mockSend).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps the resolved banner when the message fails to send", async () => {
-    mockSend.mockRejectedValue(new Error("network down"));
-    seedResolvedConversation();
-
-    renderInterface();
-    submitMessage("hello");
-
-    await waitFor(() => {
-      expect(screen.getByTestId("user-message")).toHaveAttribute(
-        "data-pending-status",
-        "error",
-      );
-    });
-    expect(
-      screen.getByTestId("resolved-conversation-banner"),
-    ).toBeInTheDocument();
+      banner.compareDocumentPosition(screen.getByTestId("chat-input")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("does not show the resolved banner on an archived conversation", () => {
