@@ -177,7 +177,7 @@ export function MessageReactions({ eventId, author }: MessageReactionsProps) {
               : "cursor-default",
           )}
         >
-          <span aria-hidden className={EMOJI_FONT}>
+          <span aria-hidden className={cn("text-base", EMOJI_FONT)}>
             {EMOJI_GLYPHS[emoji]}
           </span>
           {sources.size > 1 && (
