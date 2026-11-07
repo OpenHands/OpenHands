@@ -43,11 +43,15 @@ import {
 } from "#/utils/sdk-settings-schema";
 import {
   ACP_CUSTOM_PRESET_KEY,
+  acpEffortLabel,
+  getAcpEffortLevels,
   getAcpPreferredDefaultModel,
   getAcpProvider,
   getAcpProvidersForBackend,
   getAcpProviderSecrets,
+  joinAcpModelEffort,
   labelForAcpModel,
+  splitAcpModelEffort,
   type ACPModelOption,
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
@@ -116,6 +120,7 @@ const SYSTEM_PROMPT_MAX_LENGTH = 65536;
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
 const ACP_AGENT_DEFAULT_MODEL_KEY = "__agent_default_model__";
+const ACP_AGENT_DEFAULT_EFFORT_KEY = "__agent_default_effort__";
 const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
   agentType: "openhands",
   commandText: "",
@@ -1024,9 +1029,13 @@ export function AgentSettingsScreen({
 
   if (isLoading) return null;
 
+  const selectedModel = isCustomAcpModel
+    ? { model: acpModel, effort: null }
+    : splitAcpModelEffort(selectedPreset, acpModel.trim());
+  const baseAcpModel = selectedModel.model ?? "";
   const modelSuggestions = buildModelSuggestions(
     liveModels.models,
-    isCustomAcpModel ? "" : acpModel,
+    isCustomAcpModel ? "" : baseAcpModel,
   );
   const agentDefaultModelLabel = labelForAcpModel(
     liveModels.defaultModelId,
@@ -1054,14 +1063,20 @@ export function AgentSettingsScreen({
     return null;
   })();
   const selectedModelIsSuggestion = modelSuggestions.some(
-    ({ id }) => id === acpModel.trim(),
+    ({ id }) => id === baseAcpModel,
   );
-  let selectedModelKey = acpModel;
+  let selectedModelKey = baseAcpModel;
   if (offersAgentDefault && !isCustomAcpModel && !acpModel.trim()) {
     selectedModelKey = ACP_AGENT_DEFAULT_MODEL_KEY;
   } else if (isCustomAcpModel || !selectedModelIsSuggestion) {
     selectedModelKey = ACP_CUSTOM_MODEL_KEY;
   }
+  const effortLevels =
+    showModelSelector &&
+    selectedModelKey !== ACP_AGENT_DEFAULT_MODEL_KEY &&
+    selectedModelKey !== ACP_CUSTOM_MODEL_KEY
+      ? getAcpEffortLevels(selectedPreset)
+      : [];
   const commandPlaceholder =
     formatCommand(acpProviders[0]?.default_command ?? []) ||
     COMMAND_PLACEHOLDER_FALLBACK;
@@ -1757,8 +1772,40 @@ export function AgentSettingsScreen({
                   setAcpModel("");
                 } else {
                   setIsCustomAcpModel(false);
-                  setAcpModel(modelKey);
+                  setAcpModel(
+                    joinAcpModelEffort(modelKey, selectedModel.effort),
+                  );
                 }
+              }}
+            />
+          )}
+          {effortLevels.length > 0 && (
+            <SettingsDropdownInput
+              testId="agent-effort-selector"
+              name="agent-effort"
+              label={t(I18nKey.SCHEMA$LLM$REASONING_EFFORT$LABEL)}
+              items={[
+                {
+                  key: ACP_AGENT_DEFAULT_EFFORT_KEY,
+                  label: t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT),
+                },
+                ...effortLevels.map((effort) => ({
+                  key: effort,
+                  label: acpEffortLabel(effort, t),
+                })),
+              ]}
+              selectedKey={selectedModel.effort ?? ACP_AGENT_DEFAULT_EFFORT_KEY}
+              onSelectionChange={(key) => {
+                if (!key) return;
+                const effortKey = String(key);
+                setAcpModel(
+                  joinAcpModelEffort(
+                    baseAcpModel,
+                    effortKey === ACP_AGENT_DEFAULT_EFFORT_KEY
+                      ? null
+                      : effortKey,
+                  ),
+                );
               }}
             />
           )}

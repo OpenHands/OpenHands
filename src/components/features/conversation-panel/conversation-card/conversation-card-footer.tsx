@@ -6,6 +6,7 @@ import { RepositorySelection } from "#/api/open-hands.types";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { isExecutionPaused } from "#/utils/status";
 import {
+  acpEffortLabel,
   type ACPModelOption,
   getAcpProviderDisplayName,
   labelForAcpModel,
@@ -119,6 +120,7 @@ export function ConversationCardFooter({
       const modelLabel = labelForAcpModel(
         llmModel,
         acpModels?.length ? acpModels : rememberedModels,
+        (effort) => acpEffortLabel(effort, t),
       );
       const text = modelLabel ?? providerName;
       chip = {

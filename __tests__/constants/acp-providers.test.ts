@@ -9,6 +9,7 @@ import {
   getAcpPreferredDefaultModel,
   getAcpProviderDisplayName,
   getAcpProviderSecrets,
+  labelForAcpModel,
 } from "#/constants/acp-providers";
 
 describe("getAcpProviderDisplayName", () => {
@@ -253,5 +254,23 @@ describe("getAcpCredentialConflicts", () => {
       ),
     ).toEqual([]);
     expect(getAcpCredentialConflicts(null, () => true)).toEqual([]);
+  });
+});
+
+describe("labelForAcpModel", () => {
+  const models = [{ id: "opus[1m]", label: "Claude Opus (1M)" }];
+
+  it("names the effort of a listed model's <model>/<effort> id", () => {
+    expect(
+      labelForAcpModel("opus[1m]/high", models, (effort) =>
+        effort.toUpperCase(),
+      ),
+    ).toBe("Claude Opus (1M) · HIGH");
+  });
+
+  it("keeps a slashed id whose model isn't listed as is", () => {
+    expect(labelForAcpModel("opencode/big-pickle", models)).toBe(
+      "opencode/big-pickle",
+    );
   });
 });
