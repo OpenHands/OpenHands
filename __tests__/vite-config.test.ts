@@ -181,6 +181,12 @@ describe("vite library build", () => {
     };
 
     const css = file("styles.css");
+    // The library inlines the local font; its license must ship alongside it.
+    const fontLicense = file("assets/newsreader-OFL.txt");
+    expect(fontLicense).toContain(
+      "Copyright 2020 The Newsreader Project Authors",
+    );
+    expect(fontLicense).toContain("SIL OPEN FONT LICENSE Version 1.1");
     const stylesheet = parse(css);
     const declarations = (rule: Rule) => {
       const values: Record<string, string> = {};

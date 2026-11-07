@@ -135,6 +135,8 @@
   --oh-overlay: var(--cool-grey-925);
   --oh-overlay-foreground: var(--cool-grey-100);
   --oh-modal-title-foreground: #ffffff;
+  --oh-modal-description-foreground: #a3a3a3;
+  --oh-font-heading: inherit;
   --oh-muted: var(--cool-grey-400);
   --oh-text-secondary: var(--cool-grey-300); /* readable secondary text */
   --oh-text-tertiary: var(--cool-grey-200); /* tertiary, slightly dimmer */
@@ -306,6 +308,13 @@ button.extension-module-card-interactive {
 
 .heading {
   @apply text-[28px] leading-8 -tracking-[0.02em] font-bold text-content-2;
+}
+
+/* Display type is optional; dense controls, messages and code retain their fonts. */
+h1,
+h2,
+.heading {
+  font-family: var(--oh-font-heading);
 }
 
 /* Custom Chat Input */
