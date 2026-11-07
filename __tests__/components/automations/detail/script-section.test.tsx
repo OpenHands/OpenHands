@@ -95,6 +95,30 @@ describe("ScriptBody", () => {
     expect(AutomationService.fetchTarballBytes).toHaveBeenCalledWith("auto-1");
   });
 
+  it("badges and sorts a UTF-8 entrypoint file first", async () => {
+    // Arrange: the archive and the command both use the real UTF-8 name.
+    vi.spyOn(AutomationService, "fetchTarballBytes").mockResolvedValue(
+      new Uint8Array(
+        await packTarGzip([
+          { name: "main.py", content: "print('main')\n" },
+          { name: "café.py", content: "print('café')\n" },
+        ]),
+      ),
+    );
+
+    // Act
+    renderSection({ ...automation, entrypoint: "python café.py" });
+
+    // Assert
+    expect(await screen.findAllByTestId("automation-script-file")).toHaveLength(
+      2,
+    );
+    expect(filePaths()).toEqual(["café.py", "main.py"]);
+    expect(
+      screen.getAllByText(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_ENTRYPOINT),
+    ).toHaveLength(1);
+  });
+
   it("keeps each file's source closed until it is opened", async () => {
     // Arrange
     vi.spyOn(AutomationService, "fetchTarballBytes").mockResolvedValue(
