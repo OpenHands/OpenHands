@@ -203,7 +203,11 @@ export function MessageReactions({ eventId, author }: MessageReactionsProps) {
             <div
               role="menu"
               data-testid="reaction-picker"
-              className="absolute bottom-7 left-0 z-10 flex gap-0.5 rounded-full border border-border bg-base-secondary px-1 py-0.5 shadow-sm"
+              tabIndex={-1}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setPickerOpen(false);
+              }}
+              className="absolute left-7 top-1/2 z-10 -translate-y-1/2 flex gap-0.5 rounded-full border border-border bg-base-secondary px-1 py-0.5 shadow-sm"
             >
               {EMOJI_ORDER.map((emoji) => (
                 <button
