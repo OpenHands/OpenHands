@@ -1,5 +1,5 @@
 import type { AgentServerUICssVariableName } from "#/styles/agent-server-ui-style-scope";
-import type { ColorThemeDefinition } from "../types";
+import type { ColorThemeDefinition } from "../../types";
 
 // Warm paper and ink inspired by Liberty Labs. Supporting ink is darkened
 // for compact controls and tinted panels; status hues keep their meanings.

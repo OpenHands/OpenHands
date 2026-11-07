@@ -15,7 +15,7 @@ default. Paper stays light regardless of the operating system's appearance.
 Newsreader is used only for `h1`, `h2`, and `.heading`. Dense controls, message
 body text, and smaller supporting headings retain their existing fonts; code and
 terminal output remain monospaced. The locally bundled roman variable font
-uses `font-display: swap`. See [font provenance and licensing](../assets/fonts/README.md).
+uses `font-display: swap`. See [font provenance and licensing](./color-theme/definitions/paper/README.md).
 Both app and library builds include the full SIL OFL 1.1 license as
 `assets/newsreader-OFL.txt`.
 

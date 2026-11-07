@@ -144,7 +144,10 @@ export default defineConfig(({ mode }) => {
             type: "asset",
             fileName: "assets/newsreader-OFL.txt",
             source: await readFile(
-              new URL("./src/assets/fonts/newsreader-OFL.txt", import.meta.url),
+              new URL(
+                "./src/themes/color-theme/definitions/paper/newsreader-OFL.txt",
+                import.meta.url,
+              ),
               "utf8",
             ),
           });
