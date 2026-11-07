@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   missingCreateEndpoints: vi.fn<(entry: SetupEntry) => string[]>(() => []),
   tracking: {
     trackAutomationSetupOpened: vi.fn(),
+    trackAutomationSetupBlocked: vi.fn(),
     trackAutomationSetupValidated: vi.fn(),
     trackAutomationSetupCreated: vi.fn(),
     trackAutomationSetupFailed: vi.fn(),
@@ -533,6 +534,13 @@ describe("SetupDialog", () => {
     ).toHaveTextContent("SETUP$VALIDATION_REQUIRED");
     expect(AutomationService.validateDraft).not.toHaveBeenCalled();
     expect(screen.queryByTestId("setup-review")).toBeNull();
+    expect(mocks.tracking.trackAutomationSetupBlocked).toHaveBeenCalledWith({
+      automationId: ENTRY.id,
+      stage: "form",
+      reason: "local_validation",
+      field: "widgetName",
+      errorCode: "required",
+    });
   });
 
   it("creates from the derived payload and opens what was created", async () => {
@@ -734,6 +742,12 @@ describe("SetupDialog", () => {
 
     // Assert
     expect(screen.queryByTestId("setup-fallback-conversation")).toBeNull();
+    expect(mocks.tracking.trackAutomationSetupBlocked).toHaveBeenCalledWith({
+      automationId: ENTRY.id,
+      stage: "prerequisites",
+      reason: "webhookDelivery",
+      errorCode: "unsupported",
+    });
   });
 
   it("carries a repository typed but not added through to the review step", async () => {
@@ -770,6 +784,12 @@ describe("SetupDialog", () => {
       "createBundle, uploads",
     );
     expect(screen.queryByTestId("setup-field-widgetName")).toBeNull();
+    expect(mocks.tracking.trackAutomationSetupBlocked).toHaveBeenCalledWith({
+      automationId: BUNDLE_ENTRY.id,
+      stage: "prerequisites",
+      reason: "createBundle,uploads",
+      errorCode: "unsupported",
+    });
   });
 
   it("returns a rejected create to the field the service blamed", async () => {
@@ -808,6 +828,13 @@ describe("SetupDialog", () => {
     );
     expect(screen.queryByTestId("setup-review")).toBeNull();
     expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(mocks.tracking.trackAutomationSetupBlocked).toHaveBeenCalledWith({
+      automationId: ENTRY.id,
+      stage: "submit",
+      reason: "service_validation",
+      field: "schedule",
+      errorCode: "service_error",
+    });
   });
 
   it("omits a connected provider's secret-name field on a self-hosted instance and still names the default", async () => {
