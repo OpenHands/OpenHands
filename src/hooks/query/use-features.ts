@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { HttpError } from "@openhands/typescript-client";
 import type { FeatureFlag } from "@openhands/typescript-client/clients";
 import { featuresService } from "#/api/features-service/features-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
@@ -13,8 +14,10 @@ export const useFeatures = () => {
     queryFn: async () => {
       try {
         return await featuresService.listFeatures();
-      } catch {
-        return [];
+      } catch (error) {
+        // An agent server older than feature flags has no such route.
+        if (error instanceof HttpError && error.status === 404) return [];
+        throw error;
       }
     },
     staleTime: 1000 * 60,

@@ -4,7 +4,7 @@ import { SwitchSkeleton } from "#/components/features/settings/switch-skeleton";
 import { useFeatures } from "#/hooks/query/use-features";
 import { useUpdateFeature } from "#/hooks/mutation/use-update-feature";
 import { I18nKey } from "#/i18n/declaration";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { displayApiErrorToast } from "#/utils/custom-toast-handlers";
 
 /**
  * Features the user can turn on or off for themselves. The list, labels and
@@ -13,13 +13,23 @@ import { displayErrorToast } from "#/utils/custom-toast-handlers";
  */
 function FeaturesSettingsScreen() {
   const { t } = useTranslation("openhands");
-  const { data: features, isLoading } = useFeatures();
+  const { data: features, isLoading, isError } = useFeatures();
   const { mutate: updateFeature, isPending } = useUpdateFeature();
 
   if (isLoading) {
     return (
       <div data-testid="features-settings-screen">
         <SwitchSkeleton />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div data-testid="features-settings-screen">
+        <p className="text-sm text-danger">
+          {t(I18nKey.SETTINGS$FEATURES_LOAD_FAILED)}
+        </p>
       </div>
     );
   }
@@ -47,8 +57,9 @@ function FeaturesSettingsScreen() {
               updateFeature(
                 { key: feature.key, enabled },
                 {
-                  onError: () =>
-                    displayErrorToast(
+                  onError: (error) =>
+                    displayApiErrorToast(
+                      error,
                       t(I18nKey.SETTINGS$FEATURES_UPDATE_FAILED),
                     ),
                 },

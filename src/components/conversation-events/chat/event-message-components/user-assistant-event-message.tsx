@@ -5,7 +5,7 @@ import { MessageEvent } from "#/types/agent-server/core";
 import { ChatMessage } from "../../../features/chat/chat-message";
 import {
   MessageReactions,
-  useHasMessageReactions,
+  useMessageReactions,
 } from "../../../features/chat/message-reactions";
 import { ImageCarousel } from "../../../features/images/image-carousel";
 import { parseMessageFromEvent } from "../event-content-helpers/parse-message-from-event";
@@ -46,9 +46,10 @@ function UserAssistantEventMessageComponent({
   const forkInFlightRef = React.useRef(false);
 
   const reactionAuthor = event.source === "user" ? "user" : "agent";
-  const showReactions = useHasMessageReactions(
+  const reactions = useMessageReactions(
     event.source === "user" || event.source === "agent" ? event.id : undefined,
     reactionAuthor,
+    { isFromPlanningAgent },
   );
 
   const parsed = parseMessageFromEvent(event);
@@ -148,9 +149,7 @@ function UserAssistantEventMessageComponent({
         {imageUrls.length > 0 && (
           <ImageCarousel size="small" images={imageUrls} />
         )}
-        {showReactions && (
-          <MessageReactions eventId={event.id} author={reactionAuthor} />
-        )}
+        {reactions.visible && <MessageReactions state={reactions} />}
       </ChatMessage>
       {event.source === "agent" && event.critic_result != null && (
         <CriticResultDisplay criticResult={event.critic_result} />

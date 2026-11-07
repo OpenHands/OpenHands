@@ -3,6 +3,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import FeaturesSettingsScreen from "#/routes/features-settings";
+import { HttpError } from "@openhands/typescript-client";
 import { featuresService } from "#/api/features-service/features-service.api";
 
 vi.mock("#/contexts/active-backend-context", () => ({
@@ -61,6 +62,32 @@ describe("Features settings", () => {
 
     expect(
       await screen.findByText("SETTINGS$FEATURES_EMPTY"),
+    ).toBeInTheDocument();
+  });
+
+  it("treats an agent server without feature flags as having none", async () => {
+    vi.spyOn(featuresService, "listFeatures").mockRejectedValue(
+      new HttpError(404, "Not Found"),
+    );
+
+    renderWithProviders(<FeaturesSettingsScreen />);
+
+    expect(
+      await screen.findByText("SETTINGS$FEATURES_EMPTY"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows an error, not an empty list, when the server fails", async () => {
+    vi.spyOn(featuresService, "listFeatures").mockRejectedValue(
+      new HttpError(500, "Internal Server Error"),
+    );
+
+    renderWithProviders(<FeaturesSettingsScreen />);
+
+    expect(
+      await screen.findByText("SETTINGS$FEATURES_LOAD_FAILED", undefined, {
+        timeout: 10000,
+      }),
     ).toBeInTheDocument();
   });
 });

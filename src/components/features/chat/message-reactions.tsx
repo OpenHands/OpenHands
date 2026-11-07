@@ -6,10 +6,12 @@ import { featuresService } from "#/api/features-service/features-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useIsFeatureEnabled } from "#/hooks/query/use-features";
+import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore } from "#/stores/use-event-store";
 import { cn } from "#/utils/utils";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { displayApiErrorToast } from "#/utils/custom-toast-handlers";
 
 export const CONVERSATION_REACTIONS_FEATURE = "conversation_reactions";
 
@@ -27,6 +29,7 @@ const EMOJI_ORDER = Object.keys(EMOJI_GLYPHS) as ReactionEmoji[];
 const EMOJI_FONT = "font-emoji";
 
 type ReactionSource = "agent" | "user";
+type ReactionAuthor = "user" | "agent";
 
 interface StoredReaction {
   kind?: string;
@@ -36,35 +39,49 @@ interface StoredReaction {
   source?: string;
 }
 
+const compareEmoji = (a: string, b: string) =>
+  EMOJI_ORDER.indexOf(a.split(":")[0] as ReactionEmoji) -
+    EMOJI_ORDER.indexOf(b.split(":")[0] as ReactionEmoji) || a.localeCompare(b);
+
 /**
- * The current reactions on one message, as a stable string so the store
- * selector only re-renders this row when they change: `emoji:source` pairs in
- * a fixed order, joined by commas. The latest event for an (emoji, source)
- * pair wins.
+ * The current reactions of every message in one events array, as a stable
+ * string per message (`emoji:source` pairs in a fixed order, joined by
+ * commas) so a message's selector only re-renders it when its own reactions
+ * change. The latest event for a (message, emoji, source) wins. The index is
+ * built once per events array, not once per message.
  */
-export function reactionsKey(events: unknown[], targetEventId: string): string {
-  const current = new Map<string, boolean>();
+const reactionIndexes = new WeakMap<object, Map<string, string>>();
+
+function reactionIndex(events: readonly unknown[]): Map<string, string> {
+  const cached = reactionIndexes.get(events);
+  if (cached) return cached;
+
+  const current = new Map<string, Map<string, boolean>>();
   for (const raw of events) {
     const event = raw as StoredReaction;
     if (
       event.kind === "ReactionEvent" &&
-      event.target_event_id === targetEventId &&
+      event.target_event_id &&
       event.emoji &&
       (event.source === "agent" || event.source === "user")
     ) {
-      current.set(`${event.emoji}:${event.source}`, !event.removed);
+      const pairs = current.get(event.target_event_id) ?? new Map();
+      pairs.set(`${event.emoji}:${event.source}`, !event.removed);
+      current.set(event.target_event_id, pairs);
     }
   }
-  return [...current.entries()]
-    .filter(([, on]) => on)
-    .map(([pair]) => pair)
-    .sort(
-      (a, b) =>
-        EMOJI_ORDER.indexOf(a.split(":")[0] as ReactionEmoji) -
-          EMOJI_ORDER.indexOf(b.split(":")[0] as ReactionEmoji) ||
-        a.localeCompare(b),
-    )
-    .join(",");
+
+  const index = new Map<string, string>();
+  for (const [target, pairs] of current) {
+    const key = [...pairs.entries()]
+      .filter(([, on]) => on)
+      .map(([pair]) => pair)
+      .sort(compareEmoji)
+      .join(",");
+    if (key) index.set(target, key);
+  }
+  reactionIndexes.set(events, index);
+  return index;
 }
 
 function parseKey(key: string): Map<ReactionEmoji, Set<ReactionSource>> {
@@ -80,34 +97,48 @@ function parseKey(key: string): Map<ReactionEmoji, Set<ReactionSource>> {
   return byEmoji;
 }
 
-interface MessageReactionsProps {
-  /** The message (or finish action) the reactions are on. */
+export interface MessageReactionState {
   eventId: string;
-  /** Who wrote the message: chips line up with its bubble. */
-  author: "user" | "agent";
+  author: ReactionAuthor;
+  key: string;
+  canReact: boolean;
+  conversationId: string | null | undefined;
+  /** The message shows a reactions row: it has reactions or can get one. */
+  visible: boolean;
 }
 
-function useReactionState(eventId: string, author: "user" | "agent") {
-  const key = useEventStore((state) => reactionsKey(state.events, eventId));
+/**
+ * The reactions row state for one message. The message passes the row as
+ * bubble children only when `visible`, so messages without one keep their
+ * layout. The person can react only to the main agent's messages: a planning
+ * agent's messages live in a sub-conversation this route does not address.
+ */
+export function useMessageReactions(
+  eventId: string | undefined,
+  author: ReactionAuthor,
+  { isFromPlanningAgent = false }: { isFromPlanningAgent?: boolean } = {},
+): MessageReactionState {
+  const key = useEventStore((state) =>
+    eventId ? (reactionIndex(state.events).get(eventId) ?? "") : "",
+  );
   const enabled = useIsFeatureEnabled(CONVERSATION_REACTIONS_FEATURE);
   const isCloud = useActiveBackend().backend.kind === "cloud";
   const { conversationId } = useOptionalConversationId();
   const canReact =
-    enabled && !isCloud && !!conversationId && author === "agent";
-  return { key, canReact, conversationId };
-}
-
-/**
- * Whether a message shows a reactions row: it has reactions, or the person
- * can add one. The message passes the row as bubble children only then, so
- * messages without one keep their layout.
- */
-export function useHasMessageReactions(
-  eventId: string | undefined,
-  author: "user" | "agent",
-): boolean {
-  const { key, canReact } = useReactionState(eventId ?? "", author);
-  return !!eventId && (key !== "" || canReact);
+    !!eventId &&
+    enabled &&
+    !isCloud &&
+    !!conversationId &&
+    author === "agent" &&
+    !isFromPlanningAgent;
+  return {
+    eventId: eventId ?? "",
+    author,
+    key,
+    canReact,
+    conversationId,
+    visible: !!eventId && (key !== "" || canReact),
+  };
 }
 
 /**
@@ -115,11 +146,25 @@ export function useHasMessageReactions(
  * and the person's. On the agent's messages the person can add or take off
  * their own reaction while the "Conversation reactions" feature is on.
  */
-export function MessageReactions({ eventId, author }: MessageReactionsProps) {
+export function MessageReactions({
+  state: { eventId, author, key, canReact, conversationId },
+}: {
+  state: MessageReactionState;
+}) {
   const { t } = useTranslation("openhands");
-  const { key, canReact, conversationId } = useReactionState(eventId, author);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [pending, setPending] = React.useState(false);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const closePicker = React.useCallback(() => setPickerOpen(false), []);
+  const pickerRef = useClickOutsideElement<HTMLDivElement>(closePicker);
+  const choicesRef = React.useRef<HTMLDivElement>(null);
+  useCloseOnEscape(pickerOpen, closePicker, triggerRef);
+
+  React.useEffect(() => {
+    if (pickerOpen) {
+      choicesRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    }
+  }, [pickerOpen]);
 
   const reactions = parseKey(key);
   if (reactions.size === 0 && !canReact) return null;
@@ -127,7 +172,10 @@ export function MessageReactions({ eventId, author }: MessageReactionsProps) {
   const toggle = async (emoji: ReactionEmoji) => {
     if (!canReact || !conversationId || pending) return;
     setPending(true);
-    setPickerOpen(false);
+    if (pickerOpen) {
+      setPickerOpen(false);
+      triggerRef.current?.focus();
+    }
     try {
       await featuresService.react({
         conversationId,
@@ -136,7 +184,7 @@ export function MessageReactions({ eventId, author }: MessageReactionsProps) {
         removed: reactions.get(emoji)?.has("user") ?? false,
       });
     } catch (error) {
-      displayErrorToast(error instanceof Error ? error.message : null);
+      displayApiErrorToast(error, t(I18nKey.CHAT_INTERFACE$REACTION_FAILED));
     } finally {
       setPending(false);
     }
@@ -167,7 +215,7 @@ export function MessageReactions({ eventId, author }: MessageReactionsProps) {
           title={describe(sources)}
           aria-label={`${EMOJI_GLYPHS[emoji]} ${describe(sources)}`}
           aria-pressed={sources.has("user")}
-          disabled={!canReact}
+          aria-disabled={!canReact}
           onClick={() => toggle(emoji)}
           className={cn(
             "flex h-6 items-center gap-1 rounded-full border border-border px-2 text-xs leading-none",
@@ -186,8 +234,9 @@ export function MessageReactions({ eventId, author }: MessageReactionsProps) {
         </button>
       ))}
       {canReact && (
-        <div className="relative">
+        <div ref={pickerRef} className="relative">
           <button
+            ref={triggerRef}
             type="button"
             data-testid="add-reaction"
             title={t(I18nKey.CHAT_INTERFACE$ADD_REACTION)}
@@ -201,19 +250,16 @@ export function MessageReactions({ eventId, author }: MessageReactionsProps) {
           </button>
           {pickerOpen && (
             <div
-              role="menu"
+              ref={choicesRef}
+              role="group"
+              aria-label={t(I18nKey.CHAT_INTERFACE$ADD_REACTION)}
               data-testid="reaction-picker"
-              tabIndex={-1}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") setPickerOpen(false);
-              }}
               className="absolute left-7 top-1/2 z-10 -translate-y-1/2 flex gap-0.5 rounded-full border border-border bg-base-secondary px-1 py-0.5 shadow-sm"
             >
               {EMOJI_ORDER.map((emoji) => (
                 <button
                   key={emoji}
                   type="button"
-                  role="menuitem"
                   data-testid={`reaction-picker-${emoji}`}
                   aria-label={EMOJI_GLYPHS[emoji]}
                   onClick={() => toggle(emoji)}

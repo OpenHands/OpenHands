@@ -92,10 +92,13 @@ describe("useSettingsNavItems", () => {
     const { result } = renderHook(() => useSettingsNavItems());
 
     // Agent profiles are available on cloud too (OpenHands #15060), so every
-    // OSS item is present; only the `/settings` LLM-Profiles rename stays
-    // local-only, so on cloud every item is passed through unchanged.
+    // OSS item is present except Features (user feature flags live on a local
+    // agent server); the `/settings` LLM-Profiles rename stays local-only, so
+    // on cloud every other item is passed through unchanged.
     expect(result.current).toEqual(
-      OSS_NAV_ITEMS.map((item) => ({ type: "item", item })),
+      OSS_NAV_ITEMS.filter((item) => item.to !== "/settings/features").map(
+        (item) => ({ type: "item", item }),
+      ),
     );
   });
 

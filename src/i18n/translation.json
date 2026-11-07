@@ -42784,5 +42784,41 @@
     "uk": "функції прапорці експериментальні реакції емодзі бета features",
     "ca": "funcions flags experimental reaccions emoji beta features",
     "id": "fitur flag eksperimental reaksi emoji beta features"
+  },
+  "CHAT_INTERFACE$REACTION_FAILED": {
+    "en": "Could not change your reaction. Please try again.",
+    "ja": "リアクションを変更できませんでした。もう一度お試しください。",
+    "zh-CN": "无法更改你的回应，请重试。",
+    "zh-TW": "無法變更你的回應，請再試一次。",
+    "ko-KR": "반응을 변경할 수 없습니다. 다시 시도해 주세요.",
+    "no": "Kunne ikke endre reaksjonen din. Prøv igjen.",
+    "it": "Impossibile modificare la tua reazione. Riprova.",
+    "pt": "Não foi possível alterar sua reação. Tente novamente.",
+    "es": "No se pudo cambiar tu reacción. Inténtalo de nuevo.",
+    "ar": "تعذر تغيير تفاعلك. يرجى المحاولة مرة أخرى.",
+    "fr": "Impossible de modifier votre réaction. Veuillez réessayer.",
+    "tr": "Tepkiniz değiştirilemedi. Lütfen tekrar deneyin.",
+    "de": "Deine Reaktion konnte nicht geändert werden. Bitte versuche es erneut.",
+    "uk": "Не вдалося змінити вашу реакцію. Спробуйте ще раз.",
+    "ca": "No s'ha pogut canviar la teva reacció. Torna-ho a provar.",
+    "id": "Tidak dapat mengubah reaksi Anda. Silakan coba lagi."
+  },
+  "SETTINGS$FEATURES_LOAD_FAILED": {
+    "en": "Could not load features from the agent server.",
+    "ja": "エージェントサーバーから機能を読み込めませんでした。",
+    "zh-CN": "无法从代理服务器加载功能。",
+    "zh-TW": "無法從代理伺服器載入功能。",
+    "ko-KR": "에이전트 서버에서 기능을 불러올 수 없습니다.",
+    "no": "Kunne ikke laste funksjoner fra agentserveren.",
+    "it": "Impossibile caricare le funzionalità dal server dell'agente.",
+    "pt": "Não foi possível carregar os recursos do servidor do agente.",
+    "es": "No se pudieron cargar las funciones del servidor del agente.",
+    "ar": "تعذر تحميل الميزات من خادم الوكيل.",
+    "fr": "Impossible de charger les fonctionnalités depuis le serveur de l'agent.",
+    "tr": "Özellikler ajan sunucusundan yüklenemedi.",
+    "de": "Die Funktionen konnten nicht vom Agent-Server geladen werden.",
+    "uk": "Не вдалося завантажити функції з сервера агента.",
+    "ca": "No s'han pogut carregar les funcions del servidor de l'agent.",
+    "id": "Tidak dapat memuat fitur dari server agen."
   }
 }

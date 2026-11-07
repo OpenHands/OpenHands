@@ -3,7 +3,7 @@ import { FinishAction } from "#/types/agent-server/core/base/action";
 import { ChatMessage } from "../../../features/chat/chat-message";
 import {
   MessageReactions,
-  useHasMessageReactions,
+  useMessageReactions,
 } from "../../../features/chat/message-reactions";
 import { getEventContent } from "../event-content-helpers/get-event-content";
 import { CriticResultDisplay } from "./critic-result-display";
@@ -17,7 +17,9 @@ export function FinishEventMessage({
   event,
   isFromPlanningAgent = false,
 }: FinishEventMessageProps) {
-  const showReactions = useHasMessageReactions(event.id, "agent");
+  const reactions = useMessageReactions(event.id, "agent", {
+    isFromPlanningAgent,
+  });
   const eventContent = getEventContent(event);
   const message =
     typeof eventContent.details === "string"
@@ -32,9 +34,7 @@ export function FinishEventMessage({
         isFromPlanningAgent={isFromPlanningAgent}
         timestamp={event.timestamp}
       >
-        {showReactions && (
-          <MessageReactions eventId={event.id} author="agent" />
-        )}
+        {reactions.visible && <MessageReactions state={reactions} />}
       </ChatMessage>
       {event.critic_result != null && (
         <CriticResultDisplay criticResult={event.critic_result} />
