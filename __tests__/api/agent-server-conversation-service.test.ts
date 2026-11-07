@@ -682,9 +682,7 @@ describe("AgentServerConversationService", () => {
     });
 
     const content =
-      await AgentServerConversationService.readConversationFile(
-        "conv-windows",
-      );
+      await AgentServerConversationService.readConversationFile("conv-windows");
 
     expect(content).toBe("# Windows PLAN");
     expect(mockHttpGet).toHaveBeenCalledWith(
@@ -1850,6 +1848,7 @@ describe("AgentServerConversationService", () => {
       await AgentServerConversationService.createConversation({
         initialUserMsg: "Create a daily report automation",
         automationSetup: true,
+        automationSetupContext: "Selected automation: reviewer-123",
         automationSetupTags: {
           automationdraftid: "draft-1",
           automationmaterializeddraftid: "auto-1",
@@ -1880,7 +1879,14 @@ describe("AgentServerConversationService", () => {
       });
       // The agent is told to propose through the form, not the automation API.
       expect(body.system_message_suffix).toContain("automation_form_update");
-      expect(body.system_message_suffix).toBe(AUTOMATION_SETUP_SYSTEM_SUFFIX);
+      expect(body.system_message_suffix).toBe(
+        `${AUTOMATION_SETUP_SYSTEM_SUFFIX}\n\nSelected automation: reviewer-123`,
+      );
+      expect(request.body).toMatchObject({
+        initial_message: {
+          content: [{ type: "text", text: "Create a daily report automation" }],
+        },
+      });
       expect(body.client_tools.map((tool) => tool.name)).toEqual([
         "canvas_ui_control",
         "launch_child_conversation",
@@ -1905,6 +1911,8 @@ describe("AgentServerConversationService", () => {
 
       await AgentServerConversationService.createConversation({
         automationSetup: true,
+        initialUserMsg: "Help with this automation",
+        automationSetupContext: "Selected automation: reviewer-123",
         agentProfileKind: "acp",
       });
 
@@ -1918,6 +1926,16 @@ describe("AgentServerConversationService", () => {
       expect(body.tags).toEqual({ automationsetup: "draft" });
       expect(body.client_tools).toBeUndefined();
       expect(body.system_message_suffix).toBeUndefined();
+      expect(request.body).toMatchObject({
+        initial_message: {
+          content: [
+            {
+              type: "text",
+              text: "Help with this automation\n\nSelected automation: reviewer-123",
+            },
+          ],
+        },
+      });
     });
 
     it("leaves an ordinary cloud conversation's system message alone", async () => {
