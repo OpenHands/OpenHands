@@ -68,6 +68,8 @@ export function ResolvedConversationBanner() {
       queryClient.invalidateQueries({
         queryKey: ["user", "conversation", conversationId],
       });
+      // The sidebar list shows the tag too.
+      queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
     }
   }, [userMessageId, resolution, conversationId, queryClient]);
 
