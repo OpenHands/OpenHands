@@ -309,4 +309,44 @@ describe("PendingUserMessages", () => {
       expect(entry.errorMessage).toBe("still broken");
     });
   });
+
+  it("preserves augmented content and fileUrls when retrying a failed attachment message", async () => {
+    mockSend.mockResolvedValueOnce({ queued: false });
+    const userText = "Please inspect this file";
+    const serverContent =
+      "Please inspect this file\n\nFiles uploaded: /workspace/report.csv";
+    const fileUrls = ["/workspace/report.csv"];
+
+    const id = useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+      conversationId: ACTIVE_CONVO,
+      text: userText,
+      content: serverContent,
+      fileUrls,
+    });
+    useOptimisticUserMessageStore
+      .getState()
+      .markPendingMessageError(id, "Server unavailable");
+
+    renderWithProviders(<PendingUserMessages />);
+
+    // The rendered bubble must only show the user's visible text
+    expect(screen.getByTestId("user-message")).toHaveTextContent(userText);
+    expect(screen.getByTestId("user-message")).not.toHaveTextContent(
+      "Files uploaded:",
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("chat-message-retry"));
+
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "message",
+        args: expect.objectContaining({
+          content: serverContent,
+          file_urls: fileUrls,
+        }),
+      }),
+    );
+  });
 });
