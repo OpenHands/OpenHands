@@ -19,6 +19,10 @@
   /* Compact metadata retains its original pixel sizes and inherited leading. */
   --text-2xs: 11px;
   --text-3xs: 10px;
+  --text-4xs: 9px;
+  --text-xs-plus: 13px;
+  --text-sm-plus: 15px;
+  --text-title: 32px;
 
   --color-primary: var(--oh-color-primary);
   --color-logo: var(--oh-color-logo);
@@ -1065,4 +1069,17 @@ code .token {
 
 @utility conversation-options-bleed-width {
   width: calc(100% + 3rem);
+}
+
+/* Fixed content columns shared by metadata and automation summaries. */
+@utility metadata-grid-columns {
+  grid-template-columns: auto 1fr;
+}
+
+@utility automation-summary-columns {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+@utility run-log-detail-columns {
+  grid-template-columns: 5rem minmax(0, 1fr);
 }
