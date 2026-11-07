@@ -236,6 +236,14 @@ describe("vite library build", () => {
       expect(matches, `Single scoped recipe: ${name}`).toHaveLength(1);
       return matches[0];
     };
+    // Message wrapping must retain the legacy word-break behavior; the standard
+    // overflow utility controls the independent min-content wrapping contract.
+    expect(declarations(recipe("message-word-break"))).toEqual({
+      "word-break": "break-word",
+    });
+    expect(declarations(recipe("wrap-anywhere"))).toEqual({
+      "overflow-wrap": "anywhere",
+    });
     // Scoped to the Canvas root so it never restyles the host page.
     expect(css).toContain("[data-agent-server-ui] .flex{display:flex}");
     expect(css).not.toMatch(/(^|[{},])\.flex\{/);

@@ -542,6 +542,17 @@ export default [
     },
   },
   {
+    // Appearance owners already use class recipes and semantic variables.
+    // Keep the rest warning-only until each owner's dynamic styles are audited.
+    files: [
+      "src/ui/divider.tsx",
+      "src/ui/toggle-switch.tsx",
+      "src/ui/combobox-caret.tsx",
+      "src/components/features/backends/backend-status-dot.tsx",
+    ],
+    rules: { "shadcn/no-inline-styles": "error" },
+  },
+  {
     // Public embedding API: this owner must forward arbitrary caller styles.
     // Its opaque object cannot be converted to custom-properties-only styles.
     files: ["src/components/providers/agent-server-ui-root.tsx"],

@@ -22,9 +22,13 @@ the shared exact legacy-token exceptions remain unchanged.
 
 ## Inline-style rollout
 
-`shadcn/no-inline-styles` runs at warning severity across source, including UI
-primitive implementations. Numeric CSS custom properties and semantic token
-references pass; hardcoded variable colors and style elements still warn.
+`shadcn/no-inline-styles` warns globally, including UI primitive implementations.
+Four clean appearance owners reject inline styles at error severity: divider,
+toggle-switch, combobox-caret and backend-status-dot. The exact paths live in
+`eslint.config.js`, with executable probes in
+`__tests__/scripts/inline-styles-lint.test.ts`; other owners retain warnings.
+Numeric CSS custom properties and semantic token references still pass in both
+scopes. Hardcoded variable colors and style elements remain findings.
 Do not add a blanket property allowance or blindly replace measured dimensions,
 portal coordinates, or renderer-library styles with static classes. Review the
 value's owner before moving it to classes or CSS variables.
@@ -53,6 +57,13 @@ Use `isOpen` for rotation on `ComboboxCaretButton` and `ComboboxCaretInline`.
 `ComboboxCaretIcon` is the generic SVG and still permits caller orientation.
 Primitive implementations remain exempt from no-restyle. The existing narrow
 static-class exceptions do not imply that opaque values are checked by no-restyle.
+
+## Message wrapping recipes
+
+`message-word-break` retains `word-break: break-word` for chat bodies, corrective
+nudges and toast content. Toasts also use Tailwind's `wrap-anywhere` for their
+independent overflow-wrap behavior. Do not replace the former with `break-words`: it
+sets a different CSS property. Toast-library container styles remain library-owned.
 
 ## No Magic Strings
 
