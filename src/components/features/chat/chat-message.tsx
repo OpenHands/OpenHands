@@ -136,7 +136,7 @@ export function ChatMessage({
   ) : (
     <div
       ref={pendingMessageContentRef}
-      className="min-w-0 text-sm leading-6 whitespace-normal [word-break:break-word]"
+      className="min-w-0 text-sm leading-6 whitespace-normal message-word-break"
     >
       <MarkdownRenderer
         includeStandard

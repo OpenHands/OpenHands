@@ -119,7 +119,7 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
 
   return (
     <dl className="mt-4 grid gap-3 rounded-lg border border-border bg-black/20 p-3 text-xs">
-      <div className="grid gap-1 sm:grid-cols-[5rem_minmax(0,1fr)] sm:items-center">
+      <div className="grid gap-1 sm:run-log-detail-columns sm:items-center">
         <dt className="text-muted">
           {t(I18nKey.AUTOMATIONS$DETAIL$RUN_LABEL)}
         </dt>
@@ -129,7 +129,7 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
           </span>
         </dd>
       </div>
-      <div className="grid gap-1 sm:grid-cols-[5rem_minmax(0,1fr)] sm:items-start">
+      <div className="grid gap-1 sm:run-log-detail-columns sm:items-start">
         <dt className="pt-0.5 text-muted">
           {t(I18nKey.AUTOMATIONS$DETAIL$TASK_LABEL)}
         </dt>
@@ -161,7 +161,7 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
           ) : null}
         </dd>
       </div>
-      <div className="grid gap-1 sm:grid-cols-[5rem_minmax(0,1fr)] sm:items-start">
+      <div className="grid gap-1 sm:run-log-detail-columns sm:items-start">
         <dt className="pt-0.5 text-muted">
           {t(I18nKey.AUTOMATIONS$DETAIL$SYSTEM_LABEL)}
         </dt>

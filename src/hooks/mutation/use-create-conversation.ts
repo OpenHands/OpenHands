@@ -29,6 +29,7 @@ export interface CreateConversationVariables {
   query?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
   repository?: {
     name: string;
     gitProvider: Provider;
@@ -104,6 +105,7 @@ export const useCreateConversation = ({
         query,
         automationSetup,
         automationSetupTags,
+        automationSetupContext,
         conversationInstructions,
         plugins,
         repository,
@@ -141,6 +143,7 @@ export const useCreateConversation = ({
           initialUserMsg: query,
           automationSetup,
           ...(automationSetupTags ? { automationSetupTags } : {}),
+          automationSetupContext,
           conversationInstructions,
           plugins,
           metadata: repository

@@ -1,0 +1,1154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper — an optional Canvas theme</title>
+    <style>
+      :root {
+        --ink: #29241f;
+        --muted: #61574c;
+        --paper: #f4efe6;
+        --inset: #ece5da;
+        --raised: #faf7f1;
+        --rule: #cfc6b8;
+        --rust: #9b4428;
+        --green: #52644b;
+        --error: #ad302e;
+        --warning: #705515;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        --sans:
+          system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font: 16px/1.6 var(--sans);
+      }
+      a {
+        color: var(--rust);
+        text-underline-offset: 0.18em;
+      }
+      a:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid var(--rust);
+        outline-offset: 4px;
+      }
+      .wrap {
+        display: grid;
+        grid-template-columns: 190px minmax(0, 1fr);
+        gap: 46px;
+        max-width: 1190px;
+        margin: auto;
+        padding: 40px 30px 88px;
+      }
+      nav {
+        position: sticky;
+        top: 30px;
+        align-self: start;
+        font-size: 13px;
+      }
+      nav strong {
+        display: block;
+        font-size: 16px;
+        margin-bottom: 18px;
+      }
+      nav a {
+        display: block;
+        color: var(--muted);
+        padding: 7px 0;
+      }
+      nav small {
+        display: block;
+        color: var(--muted);
+        margin-top: 28px;
+      }
+      h1,
+      h2,
+      h3 {
+        line-height: 1.18;
+      }
+      h1 {
+        font:
+          normal 42px/1.1 Georgia,
+          serif;
+        letter-spacing: -0.025em;
+        margin: 0 0 20px;
+      }
+      h2 {
+        font-size: 25px;
+        margin: 46px 0 15px;
+      }
+      h3 {
+        font-size: 18px;
+        margin: 26px 0 12px;
+      }
+      p {
+        max-width: 72ch;
+        margin: 12px 0;
+      }
+      header {
+        border-bottom: 1px solid var(--rule);
+        padding-bottom: 25px;
+      }
+      .lead {
+        font-size: 18px;
+        color: var(--muted);
+      }
+      .decision {
+        margin-top: 22px;
+        padding: 14px 17px;
+        background: var(--inset);
+        border: 1px solid var(--rule);
+      }
+      .src {
+        font: 12px/1.6 var(--mono);
+        overflow-wrap: anywhere;
+      }
+      .sources {
+        margin: 10px 0 18px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      code {
+        font: 0.88em var(--mono);
+        background: var(--inset);
+        padding: 2px 4px;
+        border-radius: 3px;
+      }
+      pre {
+        overflow: auto;
+        max-height: 540px;
+        padding: 16px;
+        font: 12px/1.55 var(--mono);
+        background: var(--raised);
+        border-top: 1px solid var(--rule);
+        margin: 0;
+      }
+      pre code {
+        padding: 0;
+        background: none;
+      }
+      .pair {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+      figure {
+        margin: 12px 0;
+      }
+      figcaption {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 9px 0;
+      }
+      svg {
+        width: 100%;
+        height: auto;
+        display: block;
+        background: var(--raised);
+        border: 1px solid var(--rule);
+      }
+      svg text {
+        fill: var(--ink);
+        font: 13px var(--sans);
+      }
+      svg .small {
+        font: 11px var(--mono);
+        fill: var(--muted);
+      }
+      svg .title {
+        font-weight: 650;
+      }
+      svg .box {
+        fill: var(--inset);
+        stroke: var(--rule);
+      }
+      svg .added {
+        fill: var(--paper);
+        stroke: var(--rust);
+        stroke-width: 2;
+      }
+      svg .edge {
+        stroke: var(--muted);
+        fill: none;
+        stroke-width: 1.4;
+      }
+      svg .changed {
+        stroke: var(--rust);
+        fill: none;
+        stroke-width: 2;
+      }
+      .swatches {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin: 22px 0;
+      }
+      .swatch {
+        border-top: 25px solid var(--swatch);
+        padding: 10px 0;
+        font-size: 13px;
+      }
+      .swatch strong,
+      .swatch code {
+        display: block;
+      }
+      .swatch code {
+        background: none;
+        padding: 0;
+        font-size: 12px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 14px;
+        margin: 16px 0;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 12px 10px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      th {
+        font-weight: 650;
+        background: var(--inset);
+      }
+      td:first-child {
+        width: 29%;
+      }
+      ul {
+        padding-left: 22px;
+      }
+      li {
+        margin: 7px 0;
+      }
+      details {
+        border: 1px solid var(--rule);
+        margin: 16px 0;
+      }
+      summary {
+        cursor: pointer;
+        padding: 10px 14px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .meta {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      @media (max-width: 800px) {
+        .wrap {
+          display: block;
+          padding: 25px 20px 60px;
+        }
+        nav {
+          position: static;
+          border-bottom: 1px solid var(--rule);
+          margin-bottom: 25px;
+          padding-bottom: 16px;
+        }
+        nav strong,
+        nav small {
+          display: none;
+        }
+        nav a {
+          display: inline-block;
+          margin-right: 14px;
+        }
+        .pair {
+          grid-template-columns: 1fr;
+        }
+        h1 {
+          font-size: 34px;
+        }
+        .swatches {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        th,
+        td {
+          padding: 9px 6px;
+          overflow-wrap: anywhere;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <nav aria-label="Design document sections">
+        <strong>Paper</strong>
+        <a href="#integration">1. Native theme integration</a>
+        <a href="#roles">2. Colors and typography</a>
+        <a href="#renderers">3. Code, diffs and terminal</a>
+        <a href="#assets">4. Font distribution</a>
+        <a href="#verification">5. Verification boundary</a>
+        <small
+          >Review aid · 6 November 2026<br />Optional light theme<br /><code
+            >astra/paper-theme</code
+          ></small
+        >
+      </nav>
+      <main>
+        <header>
+          <h1>Paper: a warm light theme.</h1>
+          <p class="lead">
+            A warm light palette brings brown ink, rust accents and restrained
+            serif headings to the operational interface. The theme adds a choice
+            to Settings while preserving Canvas’s layout, workflows and default
+            palette.
+          </p>
+          <p class="decision">
+            <strong>★ Compatibility is additive.</strong> The new
+            <code>paper</code> key uses the same selector, bootstrap and
+            persistence path as every existing palette. OpenHands-Neutral
+            remains the default.
+          </p>
+          <p class="sources">
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/themes/color-theme/definitions/index.ts#L15"
+              >src/themes/color-theme/definitions/index.ts:15</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/themes/color-theme/runtime.ts#L41"
+              >src/themes/color-theme/runtime.ts:41</a
+            >
+          </p>
+        </header>
+        <section id="integration">
+          <h2>One new palette, the same state owner</h2>
+          <p>
+            <code>AVAILABLE_COLOR_THEMES</code> supplies the Settings options
+            from the registry. Selecting Paper calls <code>setColorTheme</code>,
+            which applies its CSS and persists the key. There is no second
+            preference, migration or backend setting.
+          </p>
+          <p class="sources">
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/components/features/settings/app-settings/theme-input.tsx#L12"
+              >src/components/features/settings/app-settings/theme-input.tsx:12</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/themes/color-theme/runtime.ts#L41"
+              >src/themes/color-theme/runtime.ts:41</a
+            >
+          </p>
+          <div class="pair">
+            <figure>
+              <svg
+                viewBox="0 0 420 315"
+                role="img"
+                aria-labelledby="before-title before-desc"
+              >
+                <title id="before-title">
+                  Before: five palettes share one selection path
+                </title>
+                <desc id="before-desc">
+                  The existing registry supplies ThemeInput. setColorTheme
+                  applies and persists the selection.
+                </desc>
+                <defs>
+                  <marker
+                    id="before-arrow"
+                    viewBox="0 0 8 8"
+                    refX="7"
+                    refY="4"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L8 4 L0 8 Z" fill="var(--muted)" />
+                  </marker>
+                </defs>
+                <text x="24" y="29" class="title">Before</text>
+                <a
+                  href="https://github.com/OpenHands/OpenHands/blob/8a0cd446ce2fd211a029c453e32f34c04ff1a859/src/themes/color-theme/definitions/index.ts#L14"
+                >
+                  <rect
+                    class="box"
+                    x="24"
+                    y="49"
+                    width="372"
+                    height="62"
+                    rx="4"
+                  />
+                  <text x="40" y="74" class="title">
+                    COLOR_THEMES: five palettes
+                  </text>
+                  <text x="40" y="94" class="small">
+                    definitions/index.ts:14
+                  </text>
+                </a>
+                <path
+                  class="edge"
+                  d="M210 111 V142"
+                  marker-end="url(#before-arrow)"
+                />
+                <a
+                  href="https://github.com/OpenHands/OpenHands/blob/8a0cd446ce2fd211a029c453e32f34c04ff1a859/src/components/features/settings/app-settings/theme-input.tsx#L12"
+                >
+                  <rect
+                    class="box"
+                    x="24"
+                    y="149"
+                    width="372"
+                    height="55"
+                    rx="4"
+                  />
+                  <text x="40" y="172" class="title">ThemeInput</text>
+                  <text x="40" y="190" class="small">theme-input.tsx:12</text>
+                </a>
+                <path
+                  class="edge"
+                  d="M210 204 V235"
+                  marker-end="url(#before-arrow)"
+                />
+                <a
+                  href="https://github.com/OpenHands/OpenHands/blob/8a0cd446ce2fd211a029c453e32f34c04ff1a859/src/themes/color-theme/runtime.ts#L41"
+                >
+                  <rect
+                    class="box"
+                    x="24"
+                    y="242"
+                    width="372"
+                    height="49"
+                    rx="4"
+                  />
+                  <text x="40" y="262" class="title">
+                    setColorTheme → apply + persist
+                  </text>
+                  <text x="40" y="280" class="small">runtime.ts:41</text>
+                </a>
+              </svg>
+              <figcaption>
+                The registry, rather than a bespoke settings control, owns the
+                list of available themes.
+              </figcaption>
+            </figure>
+            <figure>
+              <svg
+                viewBox="0 0 420 315"
+                role="img"
+                aria-labelledby="after-title after-desc"
+              >
+                <title id="after-title">
+                  After: Paper joins the same selection path
+                </title>
+                <desc id="after-desc">
+                  Paper is a sixth registry entry. The same ThemeInput and
+                  setColorTheme flow apply its light palette and remember it.
+                </desc>
+                <defs>
+                  <marker
+                    id="after-arrow"
+                    viewBox="0 0 8 8"
+                    refX="7"
+                    refY="4"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L8 4 L0 8 Z" fill="var(--rust)" />
+                  </marker>
+                </defs>
+                <text x="24" y="29" class="title">After</text>
+                <a
+                  href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/themes/color-theme/definitions/paper/index.ts#L149"
+                >
+                  <rect
+                    class="added"
+                    x="24"
+                    y="49"
+                    width="372"
+                    height="62"
+                    rx="4"
+                  />
+                  <text x="40" y="74" class="title">COLOR_THEMES + paper</text>
+                  <text x="40" y="94" class="small">
+                    paper.ts:149 · appearance: light
+                  </text>
+                </a>
+                <path
+                  class="changed"
+                  d="M210 111 V142"
+                  marker-end="url(#after-arrow)"
+                />
+                <a
+                  href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/components/features/settings/app-settings/theme-input.tsx#L12"
+                >
+                  <rect
+                    class="box"
+                    x="24"
+                    y="149"
+                    width="372"
+                    height="55"
+                    rx="4"
+                  />
+                  <text x="40" y="172" class="title">ThemeInput</text>
+                  <text x="40" y="190" class="small">
+                    unchanged settings interaction
+                  </text>
+                </a>
+                <path
+                  class="edge"
+                  d="M210 204 V235"
+                  marker-end="url(#after-arrow)"
+                />
+                <a
+                  href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/themes/color-theme/runtime.ts#L41"
+                >
+                  <rect
+                    class="box"
+                    x="24"
+                    y="242"
+                    width="372"
+                    height="49"
+                    rx="4"
+                  />
+                  <text x="40" y="262" class="title">
+                    setColorTheme → apply + persist
+                  </text>
+                  <text x="40" y="280" class="small">
+                    same browser preference and runtime
+                  </text>
+                </a>
+              </svg>
+              <figcaption>
+                Rust marks the new branch of the registry. The runtime and
+                default selection remain unchanged.
+              </figcaption>
+            </figure>
+          </div>
+          <details>
+            <summary>Registry and key changes</summary>
+            <pre>
+diff --git a/src/themes/color-theme/definitions/index.ts b/src/themes/color-theme/definitions/index.ts
+index d41b859b97..22a6f11c88 100644
+--- a/src/themes/color-theme/definitions/index.ts
++++ b/src/themes/color-theme/definitions/index.ts
+@@ -4,6 +4,7 @@ import { openhandsNeutral } from &quot;./openhands-neutral&quot;;
+ import { openhandsNeo } from &quot;./openhands-neo&quot;;
+ import { lightPlus } from &quot;./light-plus&quot;;
+ import { solarizedLight } from &quot;./solarized-light&quot;;
++import { paper } from &quot;./paper&quot;;
+
+ /**
+  * The theme registry.
+@@ -17,6 +18,7 @@ export const COLOR_THEMES: Record&lt;ColorThemeKey, ColorThemeDefinition&gt; = {
+   &quot;openhands-neo&quot;: openhandsNeo,
+   &quot;light-plus&quot;: lightPlus,
+   &quot;solarized-light&quot;: solarizedLight,
++  paper,
+ };
+
+ export const DEFAULT_COLOR_THEME: ColorThemeKey = &quot;openhands-neutral&quot;;
+diff --git a/src/themes/color-theme/types.ts b/src/themes/color-theme/types.ts
+index b68a9eb2f9..10bcd7c521 100644
+--- a/src/themes/color-theme/types.ts
++++ b/src/themes/color-theme/types.ts
+@@ -5,7 +5,8 @@ export type ColorThemeKey =
+   | &quot;openhands-neutral&quot;
+   | &quot;openhands-neo&quot;
+   | &quot;light-plus&quot;
+-  | &quot;solarized-light&quot;;
++  | &quot;solarized-light&quot;
++  | &quot;paper&quot;;
+
+ export type ColorThemeAppearance = &quot;dark&quot; | &quot;light&quot;;
+
+</pre>
+          </details>
+        </section>
+        <section id="roles">
+          <h2>Editorial color, operational type</h2>
+          <p>
+            Liberty Labs supplies the visual inspiration. Paper translates its
+            paper, ink and rust into Canvas’s existing semantic roles.
+            Supporting ink is darker on dense controls and tinted panels; green,
+            ochre and red preserve success, warning and error distinctions.
+          </p>
+          <div class="swatches" aria-label="Paper palette">
+            <div class="swatch" style="--swatch: #f4efe6">
+              <strong>Canvas paper</strong><code>#f4efe6</code>
+            </div>
+            <div class="swatch" style="--swatch: #29241f">
+              <strong>Primary ink</strong><code>#29241f</code>
+            </div>
+            <div class="swatch" style="--swatch: #9b4428">
+              <strong>Action / focus</strong><code>#9b4428</code>
+            </div>
+            <div class="swatch" style="--swatch: #675e54">
+              <strong>Supporting ink</strong><code>#675e54</code>
+            </div>
+          </div>
+          <p class="sources">
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/themes/color-theme/definitions/paper/index.ts#L69"
+              >src/themes/color-theme/definitions/paper/index.ts:69</a
+            >
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Surface or role</th>
+                <th>Paper treatment</th>
+                <th>Owner</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Canvas, panels, menus</td>
+                <td>
+                  Warm paper, inset paper and raised cream; thin existing
+                  borders.
+                </td>
+                <td><code>PAPER_TOKENS</code> and <code>PAPER_HEROUI</code></td>
+              </tr>
+              <tr>
+                <td>Selected / hover / focus</td>
+                <td>Warm neutral fills, rust keyboard focus and actions.</td>
+                <td>Existing semantic interaction roles</td>
+              </tr>
+              <tr>
+                <td>Display headings</td>
+                <td>
+                  Newsreader on <code>h1</code>, <code>h2</code> and
+                  <code>.heading</code>.
+                </td>
+                <td><code>--oh-font-heading</code></td>
+              </tr>
+              <tr>
+                <td>Controls and message bodies</td>
+                <td>
+                  Existing system sans fonts; smaller <code>h3</code> headings
+                  keep their current treatment.
+                </td>
+                <td>Existing component typography</td>
+              </tr>
+              <tr>
+                <td>Dialog descriptions</td>
+                <td>Dark supporting ink on light dialogs.</td>
+                <td><code>--oh-modal-description-foreground</code></td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="sources">
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/themes/color-theme/definitions/paper/index.ts#L69"
+              >src/themes/color-theme/definitions/paper/index.ts:69</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/tailwind.css#L309"
+              >src/tailwind.css:309</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/tailwind.config.js#L13"
+              >tailwind.config.js:13</a
+            >
+          </p>
+          <h3>Two public roles preserve existing defaults</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Public CSS role</th>
+                <th>Before</th>
+                <th>After</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>--oh-font-heading</code></td>
+                <td>Headings inherit their current family.</td>
+                <td>
+                  Default <code>inherit</code>; Paper selects local Newsreader,
+                  Georgia, serif.
+                </td>
+              </tr>
+              <tr>
+                <td><code>--oh-modal-description-foreground</code></td>
+                <td>
+                  <code>modal-muted</code> is fixed at <code>#a3a3a3</code>.
+                </td>
+                <td>
+                  Same default, with Paper overriding it to
+                  <code>#675e54</code>.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Both roles are available to embedding hosts through the existing
+            typed <code>styleOverrides</code> surface. Switching away from Paper
+            removes its overrides and restores the selected palette’s defaults.
+          </p>
+          <p class="sources">
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/styles/agent-server-ui-style-scope.ts#L51"
+              >src/styles/agent-server-ui-style-scope.ts:51</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/themes/color-theme/runtime.ts#L89"
+              >src/themes/color-theme/runtime.ts:89</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/OpenHands/OpenHands/blob/8a0cd446ce2fd211a029c453e32f34c04ff1a859/tailwind.config.js#L13"
+              >tailwind.config.js:13</a
+            >
+          </p>
+          <details>
+            <summary>Typography and dialog role changes</summary>
+            <pre>
+diff --git a/src/styles/agent-server-ui-style-scope.ts b/src/styles/agent-server-ui-style-scope.ts
+index 578fcb1a96..9d8eff6cda 100644
+--- a/src/styles/agent-server-ui-style-scope.ts
++++ b/src/styles/agent-server-ui-style-scope.ts
+@@ -48,6 +48,8 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
+   &quot;--oh-overlay&quot;: &quot;var(--cool-grey-925)&quot;,
+   &quot;--oh-overlay-foreground&quot;: &quot;var(--cool-grey-100)&quot;,
+   &quot;--oh-modal-title-foreground&quot;: &quot;#ffffff&quot;,
++  &quot;--oh-modal-description-foreground&quot;: &quot;#a3a3a3&quot;,
++  &quot;--oh-font-heading&quot;: &quot;inherit&quot;,
+   &quot;--oh-muted&quot;: &quot;var(--cool-grey-400)&quot;,
+   &quot;--oh-text-secondary&quot;: &quot;var(--cool-grey-300)&quot;,
+   &quot;--oh-text-tertiary&quot;: &quot;var(--cool-grey-200)&quot;,
+diff --git a/src/tailwind.css b/src/tailwind.css
+index 256558469f..5ed7031aff 100644
+--- a/src/tailwind.css
++++ b/src/tailwind.css
+@@ -131,6 +131,8 @@
+   --oh-overlay: var(--cool-grey-925);
+   --oh-overlay-foreground: var(--cool-grey-100);
+   --oh-modal-title-foreground: #ffffff;
++  --oh-modal-description-foreground: #a3a3a3;
++  --oh-font-heading: inherit;
+   --oh-muted: var(--cool-grey-400);
+   --oh-text-secondary: var(--cool-grey-300); /* readable secondary text */
+   --oh-text-tertiary: var(--cool-grey-200); /* tertiary, slightly dimmer */
+@@ -304,6 +306,13 @@ button.extension-module-card-interactive {
+   @apply text-[28px] leading-8 -tracking-[0.02em] font-bold text-content-2;
+ }
+
++/* Display type is optional; dense controls, messages and code retain their fonts. */
++h1,
++h2,
++.heading {
++  font-family: var(--oh-font-heading);
++}
++
+ /* Custom Chat Input */
+ .custom-scrollbar::-webkit-scrollbar {
+   width: 6px;
+diff --git a/tailwind.config.js b/tailwind.config.js
+index 295b99220d..b70661521f 100644
+--- a/tailwind.config.js
++++ b/tailwind.config.js
+@@ -10,7 +10,7 @@ export default {
+           input: &quot;#27272A&quot;,
+           primary: &quot;#F3CE49&quot;,
+           secondary: &quot;#737373&quot;,
+-          muted: &quot;#A3A3A3&quot;,
++          muted: &quot;var(--oh-modal-description-foreground)&quot;,
+         },
+         surface: {
+           DEFAULT: &quot;#050505&quot;,
+</pre>
+          </details>
+        </section>
+        <section id="renderers">
+          <h2>The palette reaches each renderer</h2>
+          <p>
+            Prism, Monaco and xterm require explicit palette entries. Paper uses
+            readable dark syntax colors on warm light surfaces; Monaco also
+            defines distinct green and rust diff tints. The terminal keeps all
+            sixteen ANSI slots and its mounted-scope foreground override.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Renderer</th>
+                <th>Addition</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Prism</td>
+                <td>
+                  Warm code block, ink punctuation, rust keywords, green
+                  strings, purple numbers, teal symbols.
+                </td>
+                <td>
+                  <a
+                    class="src"
+                    href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/themes/syntax-highlighter-themes.ts#L9"
+                    >src/themes/syntax-highlighter-themes.ts:9</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>Monaco</td>
+                <td>
+                  <code>openhands-diff-paper</code>, based on the light editor,
+                  with warm selection and green/rust diff colors.
+                </td>
+                <td>
+                  <a
+                    class="src"
+                    href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/components/features/diff-viewer/file-diff-viewer.tsx#L138"
+                    >src/components/features/diff-viewer/file-diff-viewer.tsx:138</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>xterm</td>
+                <td>
+                  Sixteen concrete ANSI colors and a rust selection tint. Cursor
+                  and foreground still follow the mounted scope.
+                </td>
+                <td>
+                  <a
+                    class="src"
+                    href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/themes/terminal-themes.ts#L62"
+                    >src/themes/terminal-themes.ts:62</a
+                  >
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <details>
+            <summary>Renderer mappings</summary>
+            <pre>
+diff --git a/src/components/features/diff-viewer/file-diff-viewer.tsx b/src/components/features/diff-viewer/file-diff-viewer.tsx
+index 4e17559e08..30dbdf2353 100644
+--- a/src/components/features/diff-viewer/file-diff-viewer.tsx
++++ b/src/components/features/diff-viewer/file-diff-viewer.tsx
+@@ -67,6 +67,7 @@ const MONACO_THEME_NAMES: Record&lt;ColorThemeKey, string&gt; = {
+   &quot;openhands-neo&quot;: &quot;openhands-diff-dark&quot;,
+   &quot;light-plus&quot;: &quot;openhands-diff-light-plus&quot;,
+   &quot;solarized-light&quot;: &quot;openhands-diff-solarized-light&quot;,
++  paper: &quot;openhands-diff-paper&quot;,
+ };
+
+ const beforeMount = (monaco: Monaco) =&gt; {
+@@ -133,6 +134,37 @@ const beforeMount = (monaco: Monaco) =&gt; {
+       &quot;editorUnnecessaryCode.opacity&quot;: &quot;rgba(88, 110, 117, 0.5)&quot;,
+     },
+   });
++
++  monaco.editor.defineTheme(&quot;openhands-diff-paper&quot;, {
++    base: &quot;vs&quot;,
++    inherit: true,
++    rules: [
++      { token: &quot;&quot;, foreground: &quot;29241F&quot; },
++      { token: &quot;comment&quot;, foreground: &quot;6B6258&quot; },
++      { token: &quot;keyword&quot;, foreground: &quot;9B4428&quot; },
++      { token: &quot;string&quot;, foreground: &quot;52644B&quot; },
++      { token: &quot;number&quot;, foreground: &quot;70456A&quot; },
++      { token: &quot;type&quot;, foreground: &quot;346458&quot; },
++      { token: &quot;delimiter&quot;, foreground: &quot;29241F&quot; },
++    ],
++    colors: {
++      &quot;editor.background&quot;: &quot;#FAF7F1&quot;,
++      &quot;editor.foreground&quot;: &quot;#29241F&quot;,
++      &quot;editorLineNumber.foreground&quot;: &quot;#6B6258&quot;,
++      &quot;editorLineNumber.activeForeground&quot;: &quot;#29241F&quot;,
++      &quot;editor.selectionBackground&quot;: &quot;#9B44282E&quot;,
++      &quot;editor.inactiveSelectionBackground&quot;: &quot;#9B44281A&quot;,
++      &quot;editor.lineHighlightBackground&quot;: &quot;#F4EFE6&quot;,
++      &quot;editorGutter.background&quot;: &quot;#FAF7F1&quot;,
++      &quot;diffEditor.insertedTextBackground&quot;: &quot;#52644B26&quot;,
++      &quot;diffEditor.removedTextBackground&quot;: &quot;#9B442826&quot;,
++      &quot;diffEditor.insertedLineBackground&quot;: &quot;#E8EDDF&quot;,
++      &quot;diffEditor.removedLineBackground&quot;: &quot;#F3E4DA&quot;,
++      &quot;diffEditor.border&quot;: &quot;#CFC6B8&quot;,
++      &quot;editorUnnecessaryCode.border&quot;: &quot;#00000000&quot;,
++      &quot;editorUnnecessaryCode.opacity&quot;: &quot;rgba(41, 36, 31, 0.45)&quot;,
++    },
++  });
+ };
+
+ export interface FileDiffViewerProps {
+diff --git a/src/themes/syntax-highlighter-themes.ts b/src/themes/syntax-highlighter-themes.ts
+index b6eaff4f73..53b49e9d5a 100644
+--- a/src/themes/syntax-highlighter-themes.ts
++++ b/src/themes/syntax-highlighter-themes.ts
+@@ -5,6 +5,49 @@ import {
+ } from &quot;react-syntax-highlighter/dist/esm/styles/prism&quot;;
+ import type { ColorThemeKey } from &quot;#/themes/color-themes&quot;;
+
++// Paper keeps code monospaced while using the same warm ink as the interface.
++const paper: typeof vs = {
++  &#x27;code[class*=&quot;language-&quot;]&#x27;: {
++    ...vs[&#x27;code[class*=&quot;language-&quot;]&#x27;],
++    color: &quot;#29241f&quot;,
++  },
++  &#x27;pre[class*=&quot;language-&quot;]&#x27;: {
++    ...vs[&#x27;pre[class*=&quot;language-&quot;]&#x27;],
++    color: &quot;#29241f&quot;,
++    backgroundColor: &quot;#faf7f1&quot;,
++    border: &quot;1px solid #cfc6b8&quot;,
++  },
++  comment: { color: &quot;#6b6258&quot;, fontStyle: &quot;italic&quot; },
++  prolog: { color: &quot;#6b6258&quot; },
++  doctype: { color: &quot;#6b6258&quot; },
++  cdata: { color: &quot;#6b6258&quot; },
++  punctuation: { color: &quot;#29241f&quot; },
++  operator: { color: &quot;#29241f&quot; },
++  keyword: { color: &quot;#9b4428&quot; },
++  atrule: { color: &quot;#9b4428&quot; },
++  tag: { color: &quot;#9b4428&quot; },
++  deleted: { color: &quot;#9b4428&quot; },
++  string: { color: &quot;#52644b&quot; },
++  char: { color: &quot;#52644b&quot; },
++  inserted: { color: &quot;#52644b&quot; },
++  &quot;attr-value&quot;: { color: &quot;#52644b&quot; },
++  number: { color: &quot;#70456a&quot; },
++  boolean: { color: &quot;#70456a&quot; },
++  constant: { color: &quot;#70456a&quot; },
++  function: { color: &quot;#346458&quot; },
++  &quot;class-name&quot;: { color: &quot;#346458&quot; },
++  selector: { color: &quot;#346458&quot; },
++  property: { color: &quot;#346458&quot; },
++  &quot;attr-name&quot;: { color: &quot;#346458&quot; },
++  builtin: { color: &quot;#346458&quot; },
++  url: { color: &quot;#346458&quot; },
++  symbol: { color: &quot;#70456a&quot; },
++  regex: { color: &quot;#79601f&quot; },
++  important: { color: &quot;#79601f&quot;, fontWeight: &quot;bold&quot; },
++  bold: { fontWeight: &quot;bold&quot; },
++  italic: { fontStyle: &quot;italic&quot; },
++};
++
+ // Exhaustive: adding a Canvas theme requires an explicit syntax palette.
+ const SYNTAX_THEMES: Record&lt;ColorThemeKey, typeof vs&gt; = {
+   &quot;openhands-deepsea&quot;: vscDarkPlus,
+@@ -12,6 +55,7 @@ const SYNTAX_THEMES: Record&lt;ColorThemeKey, typeof vs&gt; = {
+   &quot;openhands-neo&quot;: vscDarkPlus,
+   &quot;light-plus&quot;: vs,
+   &quot;solarized-light&quot;: solarizedlight,
++  paper,
+ };
+
+ export function getSyntaxHighlighterTheme(theme: ColorThemeKey) {
+diff --git a/src/themes/terminal-themes.ts b/src/themes/terminal-themes.ts
+index 101a31f462..63fcd9e943 100644
+--- a/src/themes/terminal-themes.ts
++++ b/src/themes/terminal-themes.ts
+@@ -59,12 +59,33 @@ const solarized: ITheme = {
+   brightWhite: &quot;#002b36&quot;,
+ };
+
++const paper: ITheme = {
++  black: &quot;#29241f&quot;,
++  red: &quot;#9b4428&quot;,
++  green: &quot;#52644b&quot;,
++  yellow: &quot;#79601f&quot;,
++  blue: &quot;#3f5f7c&quot;,
++  magenta: &quot;#70456a&quot;,
++  cyan: &quot;#346458&quot;,
++  white: &quot;#6b6258&quot;,
++  brightBlack: &quot;#6b6258&quot;,
++  brightRed: &quot;#84371f&quot;,
++  brightGreen: &quot;#43563c&quot;,
++  brightYellow: &quot;#6b5219&quot;,
++  brightBlue: &quot;#304f6d&quot;,
++  brightMagenta: &quot;#60365a&quot;,
++  brightCyan: &quot;#28564a&quot;,
++  brightWhite: &quot;#29241f&quot;,
++  selectionBackground: &quot;rgba(155, 68, 40, 0.18)&quot;,
++};
++
+ const palettes: Record&lt;ColorThemeKey, ITheme&gt; = {
+   &quot;openhands-deepsea&quot;: dark,
+   &quot;openhands-neutral&quot;: dark,
+   &quot;openhands-neo&quot;: dark,
+   &quot;light-plus&quot;: light,
+   &quot;solarized-light&quot;: solarized,
++  paper,
+ };
+
+ export function getTerminalTheme(
+@@ -77,8 +98,9 @@ export function getTerminalTheme(
+     foreground,
+     cursor: foreground,
+     selectionBackground:
+-      COLOR_THEMES[key].appearance === &quot;light&quot;
++      palettes[key].selectionBackground ??
++      (COLOR_THEMES[key].appearance === &quot;light&quot;
+         ? &quot;rgba(0, 80, 160, 0.2)&quot;
+-        : &quot;rgba(255, 255, 255, 0.25)&quot;,
++        : &quot;rgba(255, 255, 255, 0.25)&quot;),
+   };
+ }
+</pre>
+          </details>
+        </section>
+        <section id="assets">
+          <h2>The font and its license ship together</h2>
+          <p>
+            Paper owns its definition, font stylesheet, WOFF2, license, and
+            provenance together under
+            <code>src/themes/color-theme/definitions/paper/</code>. The
+            unmodified Newsreader roman variable WOFF2 retains its weight and
+            optical-size axes. It is sourced from Production Type and licensed
+            under SIL OFL 1.1. The standalone app serves it locally on demand;
+            the library includes the font data in its stylesheet. No additional
+            font CDN is introduced.
+          </p>
+          <p class="sources">
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/themes/color-theme/definitions/paper/newsreader.css#L2"
+              >src/themes/color-theme/definitions/paper/newsreader.css:2</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/themes/color-theme/definitions/paper/README.md#L1"
+              >src/themes/color-theme/definitions/paper/README.md:1</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/productiontype/Newsreader/tree/cfcb4f7af0e52c25e8df2a2431814c8e5fe2e155/fonts/variable/woff2"
+              >Production Type source revision</a
+            >
+          </p>
+          <p>
+            <code>bundle-newsreader-license</code> emits the complete copyright
+            and license as <code>assets/newsreader-OFL.txt</code> for both build
+            forms. This keeps the license independent of CSS comment
+            minification.
+          </p>
+          <p class="sources">
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/vite.config.ts#L140"
+              >vite.config.ts:140</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/__tests__/vite-config.test.ts#L184"
+              >__tests__/vite-config.test.ts:184</a
+            >
+          </p>
+          <details>
+            <summary>Font import and license emission</summary>
+            <pre>
+diff --git a/src/index.css b/src/index.css
+index c8f15914a4..738d31e34a 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -1,6 +1,8 @@
+ @import url(&quot;https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&amp;display=swap&quot;);
+ @import url(&quot;https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&amp;family=Outfit:wght@100..900&amp;display=swap&quot;);
+
++@import &quot;./themes/color-theme/definitions/paper/newsreader.css&quot;;
++
+ :root {
+   --oh-bg-dark: var(--cool-grey-950);
+   --oh-bg-light: var(--cool-grey-900);
+diff --git a/vite.config.ts b/vite.config.ts
+index d6f39f75ce..da40acaa67 100644
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -136,6 +136,23 @@ export default defineConfig(({ mode }) =&gt; {
+       ),
+     },
+     plugins: [
++      {
++        name: &quot;bundle-newsreader-license&quot;,
++        apply: &quot;build&quot;,
++        async generateBundle() {
++          this.emitFile({
++            type: &quot;asset&quot;,
++            fileName: &quot;assets/newsreader-OFL.txt&quot;,
++            source: await readFile(
++              new URL(
++                &quot;./src/themes/color-theme/definitions/paper/newsreader-OFL.txt&quot;,
++                import.meta.url,
++              ),
++              &quot;utf8&quot;,
++            ),
++          });
++        },
++      },
+       {
+         name: &quot;suppress-chrome-devtools-well-known&quot;,
+         apply: &quot;serve&quot;,
+</pre>
+          </details>
+        </section>
+        <section id="verification">
+          <h2>Review the theme through real controls</h2>
+          <p>
+            The focused coverage exercises registry availability, persistence
+            and bootstrap, rendered selector changes, heading/control font
+            separation, narrow layout, keyboard interaction, contrast, reduced
+            motion, and restoration of Neutral. Renderer coverage checks
+            syntax/ANSI readability and editor switching.
+          </p>
+          <p class="sources">
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/__tests__/themes/color-theme-runtime.test.tsx#L23"
+              >__tests__/themes/color-theme-runtime.test.tsx:23</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/tests/e2e/paper-theme.spec.ts#L1"
+              >tests/e2e/paper-theme.spec.ts:1</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/themes/syntax-highlighter-themes.test.ts#L26"
+              >src/themes/syntax-highlighter-themes.test.ts:26</a
+            >
+            ·
+            <a
+              class="src"
+              href="https://github.com/enyst/playground/blob/ec644d37f5e7706d6279f8440d0a287cce581c86/src/themes/terminal-themes.test.ts#L57"
+              >src/themes/terminal-themes.test.ts:57</a
+            >
+          </p>
+          <p>
+            Use the PR’s current validation results and desktop/narrow captures
+            as execution evidence. The diagrams and palette samples here explain
+            the implementation; they are not screenshots of a running Canvas.
+          </p>
+          <p class="meta">
+            Scope: an optional Canvas theme. Backend contracts, hosting,
+            authentication and deployments are outside this change. The PR
+            remains the authority for exact test outcomes and any remaining
+            limitations.
+          </p>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
