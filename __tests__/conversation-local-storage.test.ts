@@ -50,26 +50,43 @@ describe("conversation localStorage utilities", () => {
       expect(state.selectedTab).toBe("terminal");
     });
 
-    it("round-trips rightPanelShown through localStorage", () => {
+    it("does not persist rightPanelShown for new writes (#19280)", () => {
       const conversationId = "conv-right-panel";
       setConversationState(conversationId, {
         selectedTab: "terminal",
-        rightPanelShown: true,
         unpinnedTabs: ["browser"],
       });
 
-      const state = getConversationState(conversationId);
+      const stored = JSON.parse(
+        localStorage.getItem(
+          `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`,
+        ) as string,
+      ) as Record<string, unknown>;
 
-      expect(state.selectedTab).toBe("terminal");
-      expect(state.unpinnedTabs).toEqual(["browser"]);
-      expect(state.rightPanelShown).toBe(true);
+      expect(stored.selectedTab).toBe("terminal");
+      expect(stored.unpinnedTabs).toEqual(["browser"]);
+      expect("rightPanelShown" in stored).toBe(false);
     });
 
-    it("defaults rightPanelShown to false and drops corrupt values", () => {
-      expect(getConversationState("conv-right-panel-default").rightPanelShown).toBe(
-        false,
+    it("keeps legacy blobs loadable when they carry a boolean rightPanelShown", () => {
+      // Older builds wrote this field; the tolerant read keeps other fields
+      // intact while the stale boolean rides along untyped (#19280).
+      const conversationId = "conv-right-panel-legacy";
+      localStorage.setItem(
+        `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`,
+        JSON.stringify({
+          selectedTab: "terminal",
+          unpinnedTabs: ["browser"],
+          rightPanelShown: true,
+        }),
       );
 
+      const state = getConversationState(conversationId);
+      expect(state.selectedTab).toBe("terminal");
+      expect(state.unpinnedTabs).toEqual(["browser"]);
+    });
+
+    it("strips corrupt legacy rightPanelShown values on read (#19280)", () => {
       const conversationId = "conv-right-panel-corrupt";
       const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
       localStorage.setItem(
@@ -80,7 +97,11 @@ describe("conversation localStorage utilities", () => {
         }),
       );
 
-      expect(getConversationState(conversationId).rightPanelShown).toBe(false);
+      const state = getConversationState(conversationId);
+      expect(state.selectedTab).toBe("terminal");
+      expect(
+        (state as unknown as Record<string, unknown>).rightPanelShown,
+      ).toBeUndefined();
     });
 
     it("returns default state when key is missing or invalid", () => {
