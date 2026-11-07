@@ -1,0 +1,15 @@
+[
+  {
+    "kind": "ActionEvent",
+    "source": "agent",
+    "tool": "think",
+    "text": "",
+    "ts": "2026-10-26T08:06:36.733801"
+  },
+  {
+    "kind": "ConversationErrorEvent",
+    "source": "environment",
+    "text": "MaxBudgetReached: Agent reached maximum budget limit ($0.0001); accumulated cost $0.0004.",
+    "ts": "2026-10-26T08:06:36.737547"
+  }
+]

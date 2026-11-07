@@ -45,11 +45,13 @@ const AUTOMATION_SETUP_FREQUENCIES: AutomationSetupFrequency[] = [
 ];
 const STRING_FIELDS = [
   "name",
+  "runAsUserId",
   "prompt",
   "repository",
   "pluginSource",
   "pluginRef",
   "pluginList",
+  "pluginConfig",
   "customCode",
   "entrypoint",
   "setupScriptPath",
@@ -178,6 +180,12 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
   const existingRepositories = readAutomationRepositories(
     value.existingRepositories,
   );
+  const existingEventTrigger =
+    value.existingEventTrigger &&
+    typeof value.existingEventTrigger === "object" &&
+    !Array.isArray(value.existingEventTrigger)
+      ? value.existingEventTrigger
+      : null;
   const serverDraftId =
     typeof value.serverDraftId === "string" ? value.serverDraftId.trim() : "";
   const materializedAutomationId =
@@ -198,11 +206,15 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
     ...(normalizedPlugins.length > 0 ? { plugins: normalizedPlugins } : {}),
     form: normalizedForm,
     ...(editingAutomationId ? { editingAutomationId } : {}),
+    ...(value.existingPluginSpec
+      ? { existingPluginSpec: value.existingPluginSpec }
+      : {}),
     ...(existingCustomTarballPath ? { existingCustomTarballPath } : {}),
     ...(existingRepositories.length > 0 ? { existingRepositories } : {}),
     ...(value.canUpdateRepositories === true
       ? { canUpdateRepositories: true }
       : {}),
+    ...(existingEventTrigger ? { existingEventTrigger } : {}),
     ...(serverDraftId ? { serverDraftId } : {}),
     ...(materializedAutomationId ? { materializedAutomationId } : {}),
     ...(fieldMetadata ? { fieldMetadata } : {}),
@@ -300,6 +312,26 @@ export function patchAutomationFormSession(
 
   for (const [fieldName, value] of Object.entries(normalizedPatch)) {
     const field = fieldName as AutomationSetupField;
+    if (
+      existing.existingPluginSpec &&
+      [
+        "kind",
+        "prompt",
+        "repository",
+        "pluginSource",
+        "pluginRef",
+        "pluginList",
+        "customCode",
+        "entrypoint",
+        "setupScriptPath",
+        "setupScript",
+        "model",
+        "agentProfileId",
+      ].includes(field)
+    ) {
+      result.skipped.push(field);
+      continue;
+    }
     const currentValue = nextForm[field];
     const metadata = nextMetadata[field];
     const userDirty = metadata?.userDirty === true;

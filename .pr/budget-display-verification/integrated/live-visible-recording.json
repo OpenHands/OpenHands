@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "path": "/var/folders/15/pyrd6jhs3tnd259qd39xsplm0000gn/T/openhands-verify/budget-display-integrated/evidence/F27.budget-meter/live-visible.mp4",
+  "seconds": 12.8,
+  "recordedSeconds": 12.8,
+  "size": "1440x1000",
+  "fps": 4,
+  "captures": 51,
+  "changes": 11,
+  "misses": 0,
+  "capped": false,
+  "cutSeconds": 0,
+  "url": "http://127.0.0.1:18800/conversations/c3078282-b795-46aa-ad52-da6c193130ad",
+  "gif": "/var/folders/15/pyrd6jhs3tnd259qd39xsplm0000gn/T/openhands-verify/budget-display-integrated/evidence/F27.budget-meter/live-visible.gif"
+}
