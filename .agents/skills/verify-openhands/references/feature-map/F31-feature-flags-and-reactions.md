@@ -24,7 +24,7 @@ Source: `src/routes/features-settings.tsx`, `src/api/features-service/features-s
 - `F31.open`: the page opens from the settings navigation (`sidebar-settings-/settings/features`), the command menu ("Features") and `/settings/features`, and lists **Conversation reactions** with its description, off on a fresh run.
 - `F31.toggle`: clicking the switch turns the flag on at once, without Save; `GET /api/settings/features` agrees, and the switch is still on after a reload. Clicking again turns it off.
 - `F31.empty`: an agent server without feature flags (older than software-agent-sdk#6609) shows "This agent server has no features to turn on or off." instead of an error.
-- `F31.agent-reaction`: with the flag on, a new conversation's agent has `react` and `unreact`; when asked to react, its 👀 chip appears on the person's message (`testid=reaction-eyes`, `data-sources=agent`), and no "Reacted" tool card is shown.
+- `F31.agent-reaction`: with the flag on, a new conversation's agent has `react` and `unreact`; when asked to react first, its 👀 chip appears on the person's message and stays after the answer (`testid=reaction-eyes`, `data-sources=agent`), and no "Reacted" tool card is shown.
 - `F31.user-reaction`: with the flag on, the `add-reaction` button under the agent's answer opens a picker of six emoji; choosing ❤️ shows a pressed `reaction-heart` chip (`data-sources=user`) that survives a reload; clicking the chip takes the reaction off.
 - `F31.off`: with the flag off, existing chips still show but are not clickable and there is no `add-reaction`; `POST /api/conversations/<id>/reactions` answers 409 `Conversation reactions are turned off`; a conversation started afterwards has no `react`/`unreact` tools.
 
@@ -61,7 +61,7 @@ Preconditions:
 - **The agent reacts (`F31.agent-reaction`).**
   ```sh
   control-openhands browser goto /
-  control-openhands conversation start --prompt "React to this message with the eyes emoji and leave the reaction on (do not remove it). Then tell me in one short sentence what 17 times 23 is." --wait --timeout 300
+  control-openhands conversation start --prompt "Please react to this message with the eyes emoji first, then tell me in one short sentence what 17 times 23 is." --wait --timeout 300
   control-openhands api GET /api/conversations/<id>               # agent.tools names include react, unreact
   control-openhands browser goto /conversations/<id>
   control-openhands browser wait 'testid=reaction-eyes' --timeout 20000
@@ -69,7 +69,7 @@ Preconditions:
   control-openhands browser count 'text=Reacted :eyes:'           # 0
   control-openhands browser screenshot --feature F31.agent-reaction --name eyes
   ```
-  Ask the agent to leave the reaction on. The tool description tells it to unreact once it has answered, and since its answer ends the turn, a plain "react first" ask makes it react and unreact just before the answer: the events show both and no chip is left. Without any ask, deepseek-flash rarely reacts on its own.
+  The agent's reaction stays on after its answer: the events hold one agent `ReactionEvent` for `eyes` with `removed: false`. A chip that is gone after the answer means the agent took it off, which the `react` tool guidance no longer asks for.
 - **The person reacts (`F31.user-reaction`).**
   ```sh
   control-openhands browser click 'testid=add-reaction'
