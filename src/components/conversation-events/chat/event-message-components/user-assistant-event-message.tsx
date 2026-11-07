@@ -3,6 +3,10 @@ import { useTranslation } from "react-i18next";
 import { useNavigation } from "#/context/navigation-context";
 import { MessageEvent } from "#/types/agent-server/core";
 import { ChatMessage } from "../../../features/chat/chat-message";
+import {
+  MessageReactions,
+  useHasMessageReactions,
+} from "../../../features/chat/message-reactions";
 import { ImageCarousel } from "../../../features/images/image-carousel";
 import { parseMessageFromEvent } from "../event-content-helpers/parse-message-from-event";
 import { CriticResultDisplay } from "./critic-result-display";
@@ -40,6 +44,12 @@ function UserAssistantEventMessageComponent({
     useForkConversation();
   // Blocks a same-tick double-click, before `isForking` flips.
   const forkInFlightRef = React.useRef(false);
+
+  const reactionAuthor = event.source === "user" ? "user" : "agent";
+  const showReactions = useHasMessageReactions(
+    event.source === "user" || event.source === "agent" ? event.id : undefined,
+    reactionAuthor,
+  );
 
   const parsed = parseMessageFromEvent(event);
   // Route an inline <think> block (e.g. from a streamed reply) to the thinking
@@ -137,6 +147,9 @@ function UserAssistantEventMessageComponent({
       >
         {imageUrls.length > 0 && (
           <ImageCarousel size="small" images={imageUrls} />
+        )}
+        {showReactions && (
+          <MessageReactions eventId={event.id} author={reactionAuthor} />
         )}
       </ChatMessage>
       {event.source === "agent" && event.critic_result != null && (

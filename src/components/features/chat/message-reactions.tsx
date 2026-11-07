@@ -84,6 +84,29 @@ interface MessageReactionsProps {
   author: "user" | "agent";
 }
 
+function useReactionState(eventId: string, author: "user" | "agent") {
+  const key = useEventStore((state) => reactionsKey(state.events, eventId));
+  const enabled = useIsFeatureEnabled(CONVERSATION_REACTIONS_FEATURE);
+  const isCloud = useActiveBackend().backend.kind === "cloud";
+  const { conversationId } = useOptionalConversationId();
+  const canReact =
+    enabled && !isCloud && !!conversationId && author === "agent";
+  return { key, canReact, conversationId };
+}
+
+/**
+ * Whether a message shows a reactions row: it has reactions, or the person
+ * can add one. The message passes the row as bubble children only then, so
+ * messages without one keep their layout.
+ */
+export function useHasMessageReactions(
+  eventId: string | undefined,
+  author: "user" | "agent",
+): boolean {
+  const { key, canReact } = useReactionState(eventId ?? "", author);
+  return !!eventId && (key !== "" || canReact);
+}
+
 /**
  * Emoji reactions under a chat message: the agent's (from its `react` tool)
  * and the person's. On the agent's messages the person can add or take off
@@ -91,16 +114,11 @@ interface MessageReactionsProps {
  */
 export function MessageReactions({ eventId, author }: MessageReactionsProps) {
   const { t } = useTranslation("openhands");
-  const key = useEventStore((state) => reactionsKey(state.events, eventId));
-  const enabled = useIsFeatureEnabled(CONVERSATION_REACTIONS_FEATURE);
-  const isCloud = useActiveBackend().backend.kind === "cloud";
-  const { conversationId } = useOptionalConversationId();
+  const { key, canReact, conversationId } = useReactionState(eventId, author);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [pending, setPending] = React.useState(false);
 
   const reactions = parseKey(key);
-  const canReact =
-    enabled && !isCloud && !!conversationId && author === "agent";
   if (reactions.size === 0 && !canReact) return null;
 
   const toggle = async (emoji: ReactionEmoji) => {
@@ -133,7 +151,7 @@ export function MessageReactions({ eventId, author }: MessageReactionsProps) {
     <div
       data-testid="message-reactions"
       className={cn(
-        "-mt-1 flex flex-wrap items-center gap-1",
+        "flex flex-wrap items-center gap-1",
         author === "user" && "self-end",
       )}
     >

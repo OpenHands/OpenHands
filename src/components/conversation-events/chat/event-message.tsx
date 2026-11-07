@@ -32,7 +32,6 @@ import { PlanPreview } from "../../features/chat/plan-preview";
 import { ErrorEventMessage } from "./event-message-components/error-event-message";
 import { UserAssistantEventMessage } from "./event-message-components/user-assistant-event-message";
 import { FinishEventMessage } from "./event-message-components/finish-event-message";
-import { MessageReactions } from "../../features/chat/message-reactions";
 import { GenericEventMessageWrapper } from "./event-message-components/generic-event-message-wrapper";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
 import { CollapsibleThinking } from "./event-message-components/collapsible-thinking";
@@ -437,35 +436,8 @@ function EventMessageComponent({
   );
 }
 
-/** Who wrote a message or finish action a reaction can sit on, else null. */
-function reactionTargetAuthor(
-  event: EventMessageProps["event"],
-): "user" | "agent" | null {
-  if (isActionEvent(event)) {
-    return event.action.kind === "FinishAction" ? "agent" : null;
-  }
-  if (isMessageEvent(event) && event.id) {
-    if (event.source === "user") return "user";
-    if (event.source === "agent") return "agent";
-  }
-  return null;
-}
-
-function EventMessageWithReactions(props: EventMessageProps) {
-  const { event } = props;
-  const author = reactionTargetAuthor(event);
-  const content = <EventMessageComponent {...props} />;
-  if (author === null || !event.id) return content;
-  return (
-    <>
-      {content}
-      <MessageReactions eventId={String(event.id)} author={author} />
-    </>
-  );
-}
-
 // Messages passes stable event-specific lookup results, so an appended tail
 // can update only the wrappers whose event or positional state really changed.
 // Context and store subscriptions inside this component still bypass memo.
-export const EventMessage = React.memo(EventMessageWithReactions);
+export const EventMessage = React.memo(EventMessageComponent);
 EventMessage.displayName = "EventMessage";
