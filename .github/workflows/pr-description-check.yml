@@ -29,7 +29,7 @@ jobs:
         runs-on: ubuntu-24.04
         steps:
             - name: Checkout trusted workflow scripts
-              uses: actions/checkout@v7
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
               with:
                   ref: ${{ github.event.pull_request.base.sha }}
 
@@ -47,3 +47,4 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ github.token }}
               run: python .github/scripts/check_pr_description.py --files-file pr-files.txt
+

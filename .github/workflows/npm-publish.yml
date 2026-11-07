@@ -30,14 +30,14 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.tag || github.ref }}
 
       # Trusted publishing requires Node 22.14.0+ and npm 11.5.1+
       # See: https://docs.npmjs.com/trusted-publishers/
       - name: Set up Node.js for npm trusted publishing
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24.22.1"
           cache: npm
@@ -149,3 +149,4 @@ jobs:
 
       - name: Publish to npm with provenance
         run: npm publish --access public --provenance --tag ${{ steps.dist_tag.outputs.dist_tag }}
+
