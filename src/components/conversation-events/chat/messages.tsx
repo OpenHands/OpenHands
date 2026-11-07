@@ -44,9 +44,6 @@ interface MessagesProps {
   pendingSessionId?: string;
 }
 
-const getLastEventId = (events: OpenHandsEvent[]) => events.at(-1)?.id;
-const getLastEvent = (events: OpenHandsEvent[]) => events.at(-1);
-
 export const Messages: React.FC<MessagesProps> = React.memo(
   ({
     messages,
@@ -352,13 +349,17 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     prevProps.pendingMessages === nextProps.pendingMessages &&
     prevProps.pendingSessionId === nextProps.pendingSessionId &&
     prevProps.hasOlderEvents === nextProps.hasOlderEvents &&
+    // Mid-list in-place updates (streaming slot replacements, event swaps)
+    // keep lengths and the last element identical; scan element references so
+    // they still trigger a render instead of freezing the streamed bubble.
     prevProps.messages.length === nextProps.messages.length &&
+    prevProps.messages.every(
+      (message, index) => message === nextProps.messages[index],
+    ) &&
     prevProps.allEvents.length === nextProps.allEvents.length &&
-    getLastEventId(prevProps.messages) === getLastEventId(nextProps.messages) &&
-    getLastEventId(prevProps.allEvents) ===
-      getLastEventId(nextProps.allEvents) &&
-    getLastEvent(prevProps.messages) === getLastEvent(nextProps.messages) &&
-    getLastEvent(prevProps.allEvents) === getLastEvent(nextProps.allEvents),
+    prevProps.allEvents.every(
+      (event, index) => event === nextProps.allEvents[index],
+    ),
 );
 
 Messages.displayName = "Messages";
