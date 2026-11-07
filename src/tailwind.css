@@ -10,6 +10,9 @@
 }
 
 @theme inline {
+  /* Colour emoji first, for reaction chips: theme fonts can carry plain emoji glyphs. */
+  --font-emoji:
+    "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   /* Preserve existing absolute control geometry, independent of root font size. */
   --radius-pill: 100px;
   --radius-composer: 15px;

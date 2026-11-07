@@ -22,6 +22,9 @@ const EMOJI_GLYPHS: Record<ReactionEmoji, string> = {
   heart: "❤️",
 };
 const EMOJI_ORDER = Object.keys(EMOJI_GLYPHS) as ReactionEmoji[];
+// Theme fonts (Paper's serif, for one) can carry plain glyphs for some emoji;
+// prefer the platform's colour emoji font.
+const EMOJI_FONT = "font-emoji";
 
 type ReactionSource = "agent" | "user";
 
@@ -174,7 +177,9 @@ export function MessageReactions({ eventId, author }: MessageReactionsProps) {
               : "cursor-default",
           )}
         >
-          <span aria-hidden>{EMOJI_GLYPHS[emoji]}</span>
+          <span aria-hidden className={EMOJI_FONT}>
+            {EMOJI_GLYPHS[emoji]}
+          </span>
           {sources.size > 1 && (
             <span className="text-muted">{sources.size}</span>
           )}
@@ -208,7 +213,10 @@ export function MessageReactions({ eventId, author }: MessageReactionsProps) {
                   data-testid={`reaction-picker-${emoji}`}
                   aria-label={EMOJI_GLYPHS[emoji]}
                   onClick={() => toggle(emoji)}
-                  className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-sm hover:bg-interactive-hover"
+                  className={cn(
+                    "flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-sm hover:bg-interactive-hover",
+                    EMOJI_FONT,
+                  )}
                 >
                   {EMOJI_GLYPHS[emoji]}
                 </button>
