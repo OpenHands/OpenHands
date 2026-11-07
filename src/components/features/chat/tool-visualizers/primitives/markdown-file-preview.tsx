@@ -168,7 +168,7 @@ export function MarkdownFilePreview({
     >
       <div
         data-testid="markdown-file-preview-content"
-        className="max-h-40 overflow-y-auto px-4 py-3 text-contrast custom-scrollbar-always [--oh-scroll-fade-from:var(--oh-surface)]"
+        className="max-h-40 overflow-y-auto px-4 py-3 text-contrast custom-scrollbar-always scroll-fade-surface"
       >
         {/* Deliberately compact: the clipped in-stream card reuses the plan
             preview's small typography; the Files drawer renders the same

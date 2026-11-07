@@ -74,6 +74,7 @@
 
   /* Semantic border aliases */
   --color-border: var(--oh-border);
+  --color-scroll-fade: var(--oh-scroll-fade-from, var(--oh-color-base));
   --color-border-input: var(--oh-border-input);
   --color-border-subtle: var(--oh-border-subtle);
 
@@ -1148,6 +1149,11 @@ code .token {
 }
 
 /* Fixed content columns shared by metadata and automation summaries. */
+/* Markdown artifact cards blend table edges into their existing surface. */
+@utility scroll-fade-surface {
+  --oh-scroll-fade-from: var(--oh-surface);
+}
+
 @utility metadata-grid-columns {
   grid-template-columns: auto 1fr;
 }
