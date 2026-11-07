@@ -73,6 +73,10 @@ nudges and toast content. Toasts also use Tailwind's `wrap-anywhere` for their
 independent overflow-wrap behavior. Do not replace the former with `break-words`: it
 sets a different CSS property. Toast-library container styles remain library-owned.
 
+## File-drop illustration geometry
+
+The file-drop illustration uses `file-drop-image` and `file-drop-arrow` utilities for fixed SVG pixel offsets and rotation. Preserve pixel units in embedded roots; the shipped scoped library CSS contract covers these coordinates.
+
 ## No Magic Strings
 
 Avoid inline string literals when they represent reusable user-facing copy or shared program identifiers. The `i18next/no-literal-string` rule is set to `"error"` for configured JSX text and attributes, and targeted `no-restricted-syntax` rules enforce shared translation and query-key patterns. Do not claim broader lint enforcement than `eslint.config.js` provides.
