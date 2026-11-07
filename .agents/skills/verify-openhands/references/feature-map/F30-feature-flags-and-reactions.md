@@ -61,7 +61,7 @@ Preconditions:
 - **The agent reacts (`F30.agent-reaction`).**
   ```sh
   control-openhands browser goto /
-  control-openhands conversation start --prompt "Please react to this message with the eyes emoji first, then tell me in one short sentence what 17 times 23 is." --wait --timeout 300
+  control-openhands conversation start --prompt "React to this message with the eyes emoji and leave the reaction on (do not remove it). Then tell me in one short sentence what 17 times 23 is." --wait --timeout 300
   control-openhands api GET /api/conversations/<id>               # agent.tools names include react, unreact
   control-openhands browser goto /conversations/<id>
   control-openhands browser wait 'testid=reaction-eyes' --timeout 20000
@@ -69,7 +69,7 @@ Preconditions:
   control-openhands browser count 'text=Reacted :eyes:'           # 0
   control-openhands browser screenshot --feature F30.agent-reaction --name eyes
   ```
-  Without an explicit ask, deepseek-flash rarely reacts on its own: the only nudge is the tool description.
+  Ask the agent to leave the reaction on. The tool description tells it to unreact once it has answered, and since its answer ends the turn, a plain "react first" ask makes it react and unreact just before the answer: the events show both and no chip is left. Without any ask, deepseek-flash rarely reacts on its own.
 - **The person reacts (`F30.user-reaction`).**
   ```sh
   control-openhands browser click 'testid=add-reaction'
