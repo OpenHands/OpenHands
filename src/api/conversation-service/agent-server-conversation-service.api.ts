@@ -666,6 +666,7 @@ class AgentServerConversationService {
       profiles,
       agentLlmProfileRef,
     );
+    const prompt = settings.title_generation_prompt?.trim() || undefined;
     const conversationId = uuidv4();
     const resolvedWorkspaceMode =
       workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
@@ -712,6 +713,7 @@ class AgentServerConversationService {
       suppressRouterAtStart: options.suppressRouterAtStart,
       acpServer,
       titleLlmProfile,
+      prompt,
     });
 
     // Persist the selected workspace as a server-side conversation tag so local

@@ -308,6 +308,66 @@ describe("AppSettingsScreen", () => {
     });
   });
 
+  it("saves a custom title generation prompt", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        title_generation_prompt: "Use {conversation_content} as the title.",
+      }),
+    );
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderAppSettingsScreen();
+
+    const user = userEvent.setup();
+    const promptInput = await screen.findByRole("textbox", {
+      name: "SETTINGS$TITLE_GENERATION_PROMPT",
+    });
+    await user.clear(promptInput);
+    await user.click(promptInput);
+    await user.paste("Summarize {conversation_content}");
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title_generation_prompt: "Summarize {conversation_content}",
+        }),
+      );
+    });
+  });
+
+  it("resets a custom title generation prompt to the default", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ title_generation_prompt: "Do not use an emoji." }),
+    );
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderAppSettingsScreen();
+
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", {
+        name: "SETTINGS$TITLE_GENERATION_PROMPT_RESET",
+      }),
+    );
+    expect(
+      screen.getByRole("textbox", {
+        name: "SETTINGS$TITLE_GENERATION_PROMPT",
+      }),
+    ).toHaveValue("");
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ title_generation_prompt: null }),
+      );
+    });
+  });
+
   it("shows the active backend's values after switching back to a backend with cached settings", async () => {
     mockSettingsPerBackend();
     const { rerender } = renderAppSettingsScreen();

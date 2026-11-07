@@ -26,6 +26,8 @@ import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useFreeModels } from "#/hooks/query/use-free-models";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
+import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
+import { cn } from "#/utils/utils";
 import { getLockedCloudHost } from "#/api/agent-server-config";
 
 const AUTOMATIC_TITLE_LLM_PROFILE_KEY = "__automatic__";
@@ -68,6 +70,8 @@ function AppSettingsForm() {
   const [titleLlmProfileInput, setTitleLlmProfileInput] = React.useState<
     string | null | undefined
   >(undefined);
+  const [titleGenerationPromptInput, setTitleGenerationPromptInput] =
+    React.useState<string | undefined>(undefined);
 
   const storedTitleLlmProfile = React.useMemo(() => {
     const preference = settings?.title_llm_profile ?? null;
@@ -80,6 +84,12 @@ function AppSettingsForm() {
     titleLlmProfileInput === undefined
       ? storedTitleLlmProfile
       : titleLlmProfileInput;
+  const storedTitleGenerationPrompt = settings?.title_generation_prompt ?? null;
+  const titleGenerationPrompt =
+    titleGenerationPromptInput === undefined
+      ? (storedTitleGenerationPrompt ?? "")
+      : titleGenerationPromptInput;
+  const normalizedTitleGenerationPrompt = titleGenerationPrompt.trim() || null;
   const titleLlmProfileItems = React.useMemo(
     () => [
       {
@@ -130,6 +140,7 @@ function AppSettingsForm() {
         git_user_name: gitUserName,
         git_user_email: gitUserEmail,
         title_llm_profile: selectedTitleLlmProfile,
+        title_generation_prompt: normalizedTitleGenerationPrompt,
       },
       {
         onSuccess: () => {
@@ -141,6 +152,7 @@ function AppSettingsForm() {
           setGitUserNameHasChanged(false);
           setGitUserEmailHasChanged(false);
           setTitleLlmProfileInput(undefined);
+          setTitleGenerationPromptInput(undefined);
         },
         onError: (error) => {
           const errorMessage = retrieveAxiosErrorMessage(error);
@@ -189,6 +201,7 @@ function AppSettingsForm() {
     !analyticsSwitchHasChanged &&
     !soundNotificationsSwitchHasChanged &&
     selectedTitleLlmProfile === storedTitleLlmProfile &&
+    normalizedTitleGenerationPrompt === storedTitleGenerationPrompt &&
     !gitUserNameHasChanged &&
     !gitUserEmailHasChanged;
 
@@ -277,6 +290,46 @@ function AppSettingsForm() {
                 {t(I18nKey.SETTINGS$MANAGE_LLM_PROFILES)}
               </NavigationLink>
             )}
+            <div className="mt-5 flex flex-col gap-2.5">
+              <label
+                htmlFor="title-generation-prompt-input"
+                className="text-sm"
+              >
+                {t(I18nKey.SETTINGS$TITLE_GENERATION_PROMPT)}
+              </label>
+              <p
+                id="title-generation-prompt-description"
+                className="text-xs leading-5 text-tertiary-light"
+              >
+                {t(I18nKey.SETTINGS$TITLE_GENERATION_PROMPT_DESCRIPTION)}
+              </p>
+              <textarea
+                id="title-generation-prompt-input"
+                data-testid="title-generation-prompt-input"
+                name="title-generation-prompt-input"
+                value={titleGenerationPrompt}
+                maxLength={2000}
+                aria-describedby="title-generation-prompt-description"
+                placeholder={t(
+                  I18nKey.SETTINGS$TITLE_GENERATION_PROMPT_PLACEHOLDER,
+                )}
+                onChange={(event) =>
+                  setTitleGenerationPromptInput(event.target.value)
+                }
+                className={cn(
+                  formControlMultilineFieldClassName,
+                  "min-h-32 resize-y placeholder:italic",
+                )}
+              />
+              <BrandButton
+                variant="tertiary"
+                type="button"
+                isDisabled={!titleGenerationPrompt}
+                onClick={() => setTitleGenerationPromptInput("")}
+              >
+                {t(I18nKey.SETTINGS$TITLE_GENERATION_PROMPT_RESET)}
+              </BrandButton>
+            </div>
           </div>
 
           <VoiceInputSettings />
