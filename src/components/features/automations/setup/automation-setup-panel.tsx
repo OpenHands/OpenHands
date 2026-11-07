@@ -139,7 +139,10 @@ import {
   automationRepositoriesChanged,
   buildAutomationRepoSources,
 } from "#/utils/automation-repo-sources";
-import { EVENT_SOURCE_GUIDES } from "#/utils/automation-event-sources";
+import {
+  EVENT_SOURCE_GUIDES,
+  eventKeyOptionsForSource,
+} from "#/utils/automation-event-sources";
 
 const DEFAULT_TIMEZONE = "America/New_York";
 const DEFAULT_TIME = "09:00";
@@ -149,6 +152,7 @@ const DEFAULT_EVENT_SOURCE = "github";
 const REPO_UPDATE_FEATURE = "repoUpdate";
 const PLUGIN_CONFIG_UPDATE_FEATURE = "pluginConfigUpdate";
 const AGENT_PROFILES_FEATURE = "agentProfiles";
+
 /**
  * Used when the deployment has not advertised its event sources yet. These are
  * the automation service's built-in providers, which it reserves as source
@@ -160,6 +164,12 @@ const FALLBACK_EVENT_SOURCES = [
   "bitbucket_data_center",
   "jira_dc",
 ];
+
+/** Keys carry punctuation, so option test ids use a safe form. */
+function eventKeyOptionTestId(key: string): string {
+  return key.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
 const DEFAULT_EVENT_KEY = "issue_comment.created";
 const DEFAULT_CUSTOM_ENTRYPOINT = "python3 main.py";
 const MAIN_PY_FILENAME = "main.py";
@@ -2316,6 +2326,7 @@ export function AutomationSetupPanel({
                         eventTestPayload={eventTestPayload}
                         eventSourceOptions={eventSourceOptions}
                         eventTypeOptions={eventTypeOptions}
+                        deploymentCapabilities={deploymentCapabilities.data}
                         customWebhook={customWebhook}
                         customWebhookRegistration={customWebhookRegistration}
                         usesExistingAutomationTestPayload={isEditingExisting}
@@ -3549,6 +3560,7 @@ function EventFields({
   eventTestPayload,
   eventSourceOptions,
   eventTypeOptions,
+  deploymentCapabilities,
   customWebhook,
   customWebhookRegistration,
   usesExistingAutomationTestPayload,
@@ -3567,6 +3579,7 @@ function EventFields({
   eventTestPayload: string;
   eventSourceOptions: string[];
   eventTypeOptions: string[];
+  deploymentCapabilities: DeploymentCapabilities | undefined;
   customWebhook: CustomWebhookFormState;
   customWebhookRegistration: CustomWebhookCreateResponse | null;
   usesExistingAutomationTestPayload: boolean;
@@ -3590,10 +3603,26 @@ function EventFields({
     () => eventFilter.trim().length > 0,
   );
   const [isTestPayloadOpen, setIsTestPayloadOpen] = useState(false);
+  const [isEventKeyMenuOpen, setIsEventKeyMenuOpen] = useState(false);
+  const eventKeyInputRef = useRef<HTMLInputElement>(null);
+  const eventKeyMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const eventKeyMenuRef = useClickOutsideElement<HTMLDivElement>(
+    () => setIsEventKeyMenuOpen(false),
+    eventKeyMenuTriggerRef,
+  );
+  useCloseOnEscape(
+    isEventKeyMenuOpen,
+    () => setIsEventKeyMenuOpen(false),
+    eventKeyMenuTriggerRef,
+  );
   const showEventFilter =
     isEventFilterOpen ||
     eventFilter.trim().length > 0 ||
     streamingField === "eventFilter";
+  const eventKeyOptions = eventKeyOptionsForSource(
+    deploymentCapabilities,
+    eventSource,
+  );
   const knownSources = knownEventSources(eventSourceOptions);
   const sourceIsKnown = (source: string) =>
     knownSources.some(
@@ -3638,7 +3667,7 @@ function EventFields({
         <div className="flex min-w-0 flex-wrap items-end gap-2 self-start">
           <div
             className={cn(
-              "flex min-w-48 flex-1 flex-col gap-2",
+              "relative flex min-w-48 flex-1 flex-col gap-2",
               streamingHighlightClassName(streamingField === "eventKey"),
             )}
           >
@@ -3666,18 +3695,28 @@ function EventFields({
               )}
             >
               <input
+                ref={eventKeyInputRef}
                 id="automation-setup-event-key"
                 data-testid="automation-setup-event-key"
                 value={eventKey}
-                list="automation-setup-event-key-options"
                 onChange={(event) => setEventKey(event.target.value)}
                 className="min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-contrast outline-none"
               />
-              <datalist id="automation-setup-event-key-options">
-                {eventTypeOptions.map((eventType) => (
-                  <option key={eventType} value={eventType} />
-                ))}
-              </datalist>
+              {eventTypeOptions.length > 0 ? (
+                <button
+                  ref={eventKeyMenuTriggerRef}
+                  type="button"
+                  data-testid="automation-setup-event-key-toggle"
+                  aria-label={t(I18nKey.AUTOMATION_SETUP$EVENT_KEY)}
+                  aria-haspopup="menu"
+                  aria-expanded={isEventKeyMenuOpen}
+                  className="inline-flex shrink-0 items-center justify-center border-l border-border bg-tertiary px-2 text-muted hover:bg-interactive-hover hover:text-white"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => setIsEventKeyMenuOpen((open) => !open)}
+                >
+                  <ChevronDown className="size-4 shrink-0" aria-hidden />
+                </button>
+              ) : null}
               {showEventFilter ? null : (
                 <button
                   type="button"
@@ -3689,6 +3728,36 @@ function EventFields({
                 </button>
               )}
             </div>
+            {isEventKeyMenuOpen && eventKeyOptions.length > 0 ? (
+              <div
+                ref={eventKeyMenuRef}
+                role="menu"
+                data-testid="automation-setup-event-key-menu"
+                className="absolute inset-x-0 top-full z-60 mt-1 flex max-h-72 flex-col overflow-hidden rounded-md border border-border-subtle bg-tertiary py-1 shadow-lg"
+              >
+                <div className="min-h-0 flex-1 overflow-y-auto px-1">
+                  {eventKeyOptions.map((option) => (
+                    <ContextMenuListItem
+                      key={option.key}
+                      testId={`automation-setup-event-key-option-${eventKeyOptionTestId(option.key)}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setEventKey(option.key);
+                        setIsEventKeyMenuOpen(false);
+                        queueMicrotask(() => eventKeyInputRef.current?.focus());
+                      }}
+                      className="flex w-full flex-col items-start"
+                    >
+                      <span className="truncate">{option.label}</span>
+                      <span className="truncate text-xs text-muted">
+                        {option.key}
+                      </span>
+                    </ContextMenuListItem>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
           <button
             type="button"

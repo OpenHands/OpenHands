@@ -260,6 +260,12 @@ export interface DeploymentCapabilities {
    * here accepts any key. Older services omit it and list GitHub's in `eventTypes`.
    */
   eventTypesBySource?: Record<string, string[]>;
+  /**
+   * Human-readable names a setup UI can show for each pattern, per source.
+   * Older services omit it; a source or pattern missing here has no
+   * well-known name, so the raw key is shown instead.
+   */
+  eventLabelsBySource?: Record<string, Record<string, string>>;
 }
 
 /** A single problem with a draft, addressed to the field that caused it. */
