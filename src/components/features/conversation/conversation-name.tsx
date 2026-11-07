@@ -39,6 +39,7 @@ export function ConversationName() {
   const {
     handleDelete,
     handleStop,
+    handleUnarchive,
     handleDownloadConversation,
     handleDisplayCost,
     handleShowAgentTools,
@@ -61,6 +62,7 @@ export function ConversationName() {
     setConfirmStopModalVisible,
     systemMessage,
     shouldShowStop,
+    shouldShowUnarchive,
     shouldShowDownloadConversation,
     shouldShowDisplayCost,
     shouldShowAgentTools,
@@ -198,6 +200,7 @@ export function ConversationName() {
                 onRename={handleRename}
                 onDelete={handleDelete}
                 onStop={shouldShowStop ? handleStop : undefined}
+                onUnarchive={shouldShowUnarchive ? handleUnarchive : undefined}
                 onDisplayCost={
                   shouldShowDisplayCost ? handleDisplayCost : undefined
                 }
