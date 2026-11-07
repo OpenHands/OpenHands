@@ -10,11 +10,38 @@ import ProviderConnectionsService from "#/api/provider-connections-service/provi
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { useFreeModelsStore } from "#/stores/free-models-store";
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  getActiveSelection,
+  getRegisteredBackends,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
+
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displayErrorToast: vi.fn(),
+  displaySuccessToast: vi.fn(),
+}));
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
 
 describe("LLM profile creation with the real embedded form", () => {
   let inheritedStringSerializer: boolean | null | undefined;
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.clearAllMocks();
     inheritedStringSerializer = null;
     useFreeModelsStore
       .getState()
@@ -87,6 +114,258 @@ describe("LLM profile creation with the real embedded form", () => {
       },
     }));
   });
+
+  async function openNewProfile(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByTestId("add-llm-profile"));
+    await user.type(
+      await screen.findByTestId("llm-api-key-input"),
+      "draft-key",
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("save-profile-btn")).toBeEnabled(),
+    );
+  }
+
+  it.each([
+    ["LLMAuthenticationError", "SETTINGS$PROFILE_CHECK_AUTH_ERROR"],
+    ["UnknownProviderError", "SETTINGS$PROFILE_CHECK_GENERIC_ERROR"],
+  ])(
+    "keeps a safe %s failure until the draft changes, then allows retry",
+    async (type, reasonKey) => {
+      // Arrange: the backend's diagnostic contains data that must never be rendered.
+      vi.mocked(ProfilesService.validateProfile).mockResolvedValueOnce({
+        valid: false,
+        error: {
+          type,
+          message: '{"secret":"sk-do-not-display","error":"raw diagnostic"}',
+        },
+      });
+      const save = vi
+        .spyOn(ProfilesService, "saveProfile")
+        .mockResolvedValue({ name: "draft", message: "Saved" });
+      const rename = vi.spyOn(ProfilesService, "renameProfile");
+      const user = userEvent.setup();
+      renderWithProviders(<LlmSettingsLocalView />);
+      await openNewProfile(user);
+
+      // Act: submit through the actual embedded form.
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      // Assert: the form owns the durable feedback and retains the editable draft.
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("SETTINGS$PROFILE_CHECK_FAILED");
+      expect(alert).toHaveTextContent(reasonKey);
+      expect(document.body).not.toHaveTextContent("sk-do-not-display");
+      expect(document.body).not.toHaveTextContent("raw diagnostic");
+      expect(displayErrorToast).not.toHaveBeenCalled();
+      expect(save).not.toHaveBeenCalled();
+      expect(rename).not.toHaveBeenCalled();
+      expect(screen.getByTestId("llm-api-key-input")).toHaveValue("draft-key");
+      expect(screen.queryByTestId("set-indicator")).not.toBeInTheDocument();
+
+      await user.type(screen.getByTestId("llm-api-key-input"), "-corrected");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      await user.click(screen.getByTestId("save-profile-btn"));
+      await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    },
+  );
+
+  it.each([
+    {
+      label: "false after a field edit",
+      result: { valid: false },
+      change: "field",
+    },
+    {
+      label: "true after a name edit",
+      result: { valid: true },
+      change: "name",
+    },
+    { label: "null after a mode switch", result: null, change: "mode" },
+    {
+      label: "an error after leaving and reopening",
+      result: undefined,
+      change: "exit",
+    },
+  ])(
+    "discards $label and releases the pending submission",
+    async ({ result, change }) => {
+      // Arrange: preflight stays pending while the user revises or leaves the draft.
+      const preflight =
+        deferred<Awaited<ReturnType<typeof ProfilesService.validateProfile>>>();
+      vi.mocked(ProfilesService.validateProfile).mockReturnValueOnce(
+        preflight.promise,
+      );
+      const save = vi
+        .spyOn(ProfilesService, "saveProfile")
+        .mockResolvedValue({ name: "draft", message: "Saved" });
+      const rename = vi.spyOn(ProfilesService, "renameProfile");
+      const user = userEvent.setup();
+      renderWithProviders(<LlmSettingsLocalView />);
+      await openNewProfile(user);
+      await user.click(screen.getByTestId("save-profile-btn"));
+      await waitFor(() =>
+        expect(ProfilesService.validateProfile).toHaveBeenCalledOnce(),
+      );
+
+      // Act: real inputs synchronously revoke the old preflight's permission to write.
+      if (change === "field") {
+        await user.type(screen.getByTestId("llm-api-key-input"), "-new");
+      } else if (change === "name") {
+        await user.type(screen.getByTestId("profile-name-input"), "New");
+      } else if (change === "mode") {
+        const allTab = screen.getByTestId("sdk-section-all-toggle");
+        await user.click(
+          allTab.getAttribute("aria-selected") === "true"
+            ? screen.getByTestId("sdk-section-basic-toggle")
+            : allTab,
+        );
+      } else {
+        await user.click(screen.getByTestId("back-to-profiles"));
+        await user.click(await screen.findByTestId("add-llm-profile"));
+        await user.type(
+          await screen.findByTestId("llm-api-key-input"),
+          "new-draft-key",
+        );
+      }
+      expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
+      expect(screen.getByTestId("save-profile-btn")).toHaveTextContent(
+        "SETTINGS$PROFILE_WAITING_FOR_SUBMISSION",
+      );
+      await act(async () => {
+        if (result === undefined)
+          preflight.reject(new Error("stale backend error"));
+        else preflight.resolve(result);
+      });
+
+      // Assert: no old result reaches this draft; finally permits a fresh submission.
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(displayErrorToast).not.toHaveBeenCalled();
+      expect(displaySuccessToast).not.toHaveBeenCalled();
+      expect(save).not.toHaveBeenCalled();
+      expect(rename).not.toHaveBeenCalled();
+      await waitFor(() =>
+        expect(screen.getByTestId("save-profile-btn")).toBeEnabled(),
+      );
+      await user.click(screen.getByTestId("save-profile-btn"));
+      await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    },
+  );
+
+  it("finishes an active profile write and reapply without closing a newer editor", async () => {
+    // Arrange: this profile is already active and its persistence takes time.
+    const profile = {
+      name: "active",
+      model: "openai/gpt-4o",
+      base_url: null,
+      api_key_set: true,
+    };
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: [profile],
+      active_profile: profile.name,
+    });
+    vi.spyOn(ProfilesService, "getProfile").mockResolvedValue({
+      name: profile.name,
+      config: { model: profile.model, api_key: "encrypted-key" },
+      api_key_set: true,
+    });
+    const write =
+      deferred<Awaited<ReturnType<typeof ProfilesService.saveProfile>>>();
+    vi.spyOn(ProfilesService, "saveProfile").mockReturnValueOnce(write.promise);
+    const activate = vi
+      .spyOn(ProfilesService, "activateProfile")
+      .mockResolvedValue({
+        name: profile.name,
+        message: "Activated",
+        llm_applied: true,
+      });
+    const user = userEvent.setup();
+    renderWithProviders(<LlmSettingsLocalView />);
+    await user.click(await screen.findByTestId("profile-menu-trigger"));
+    await user.click(screen.getByTestId("profile-edit"));
+    await user.type(await screen.findByTestId("llm-api-key-input"), "-updated");
+    await user.click(screen.getByTestId("save-profile-btn"));
+    await waitFor(() =>
+      expect(ProfilesService.saveProfile).toHaveBeenCalledOnce(),
+    );
+
+    // Act: leave after the write has begun and open a fresh draft.
+    await user.click(screen.getByTestId("back-to-profiles"));
+    await user.click(await screen.findByTestId("add-llm-profile"));
+    await user.type(
+      await screen.findByTestId("llm-api-key-input"),
+      "new-draft-key",
+    );
+    await act(async () =>
+      write.resolve({ name: profile.name, message: "Saved" }),
+    );
+
+    // Assert: the existing write chain completes, but its UI result is obsolete.
+    await waitFor(() => expect(activate).toHaveBeenCalledWith(profile.name));
+    await waitFor(() =>
+      expect(screen.getByTestId("save-profile-btn")).toBeEnabled(),
+    );
+    expect(screen.getByTestId("llm-api-key-input")).toHaveValue(
+      "new-draft-key",
+    );
+    expect(displaySuccessToast).not.toHaveBeenCalled();
+  });
+
+  it.each(["backend change", "unmount"])(
+    "revokes a pending preflight on %s",
+    async (boundary) => {
+      // Arrange: use the real backend provider and registry for this boundary.
+      const previousBackends = getRegisteredBackends();
+      const previousSelection = getActiveSelection();
+      const preflight =
+        deferred<Awaited<ReturnType<typeof ProfilesService.validateProfile>>>();
+      vi.mocked(ProfilesService.validateProfile).mockReturnValueOnce(
+        preflight.promise,
+      );
+      const save = vi.spyOn(ProfilesService, "saveProfile");
+      const user = userEvent.setup();
+      const { unmount } = renderWithProviders(
+        <ActiveBackendProvider>
+          <LlmSettingsLocalView />
+        </ActiveBackendProvider>,
+      );
+      try {
+        await openNewProfile(user);
+        await user.click(screen.getByTestId("save-profile-btn"));
+        await waitFor(() =>
+          expect(ProfilesService.validateProfile).toHaveBeenCalledOnce(),
+        );
+
+        // Act: change backend context or remove the owner before validation returns.
+        if (boundary === "unmount") unmount();
+        else {
+          act(() => {
+            setRegisteredBackends([
+              ...previousBackends,
+              {
+                id: "other-backend",
+                name: "Other backend",
+                host: "http://localhost:9999",
+                apiKey: "",
+                kind: "local",
+              },
+            ]);
+            setActiveSelection({ backendId: "other-backend" });
+          });
+        }
+        await act(async () => preflight.resolve({ valid: true }));
+
+        // Assert: an accepted old check cannot authorize persistence in the new context.
+        expect(save).not.toHaveBeenCalled();
+        expect(displayErrorToast).not.toHaveBeenCalled();
+        expect(displaySuccessToast).not.toHaveBeenCalled();
+      } finally {
+        unmount();
+        setRegisteredBackends(previousBackends);
+        setActiveSelection(previousSelection);
+      }
+    },
+  );
 
   // @spec LLP-001 — New profiles preserve options and credential boundaries.
   it("saves an untouched displayed option without inheriting another profile's credentials", async () => {
