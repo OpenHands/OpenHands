@@ -105,7 +105,7 @@ export function AutomationViewToggle({
 
   const menu =
     open && portalStyle ? (
-      <ContextMenu ref={menuRef} theme="popover" className="min-w-[10rem]">
+      <ContextMenu ref={menuRef} theme="popover" className="min-w-40">
         {VIEW_OPTIONS.map((option) => (
           <li key={option.value}>
             <ContextMenuListItem

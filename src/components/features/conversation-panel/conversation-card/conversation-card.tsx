@@ -327,7 +327,7 @@ export function ConversationCard({
             // coarse-pointer devices also keep the reserve so the ellipsis stays
             // clickable without a hover pass.
             showPersistentPinIcon
-              ? "min-w-[3.75rem]"
+              ? "min-w-15"
               : hasHoverActions && hoverRevealReserveClassName(contextMenuOpen),
           )}
         >
