@@ -3,6 +3,7 @@ import { Navigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
+import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-settings/llm-settings-inputs-skeleton";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SchemaField } from "#/components/features/settings/sdk-settings/schema-field";
@@ -387,7 +388,7 @@ export function AgentSettingsScreen({
 }: AgentSettingsScreenProps) {
   const { t } = useTranslation("openhands");
   const { data: settings, isLoading } = useSettings();
-  const { data: schema } = useAgentSettingsSchema(
+  const { data: schema, isLoading: isSchemaLoading } = useAgentSettingsSchema(
     settings?.agent_settings_schema,
   );
   const backendKind = useActiveBackend().backend.kind;
@@ -831,6 +832,10 @@ export function AgentSettingsScreen({
     }),
     [schema, storedBehavior],
   );
+  // The embedded sections hydrate once, and a section can render with the
+  // schema before this form does (#18810). Until this form has the schema,
+  // the profile's stored values can't be read, so the sections wait.
+  const isBehaviorPending = !schema && isSchemaLoading;
   // Open each section on the view its stored values need, not the global one.
   const behaviorInitialView = React.useMemo(
     () =>
@@ -1448,22 +1453,26 @@ export function AgentSettingsScreen({
               <Typography.Text className="text-sm">
                 {t(titleKey)}
               </Typography.Text>
-              <SdkSectionPage
-                settingsSources={[
-                  {
-                    settingsSource: "agent_settings",
-                    sectionKeys: [section],
-                    excludeKeys: GLOBAL_BEHAVIOR_FIELD_KEYS,
-                  },
-                ]}
-                embedded
-                hideSaveButton
-                markInitialOverridesDirty={false}
-                initialValueOverrides={behaviorInitialValues[section]}
-                getInitialView={behaviorInitialView[section]}
-                onSaveControlChange={behaviorControlHandlers[section]}
-                testId={`agent-settings-${section}-fields`}
-              />
+              {isBehaviorPending ? (
+                <LlmSettingsInputsSkeleton />
+              ) : (
+                <SdkSectionPage
+                  settingsSources={[
+                    {
+                      settingsSource: "agent_settings",
+                      sectionKeys: [section],
+                      excludeKeys: GLOBAL_BEHAVIOR_FIELD_KEYS,
+                    },
+                  ]}
+                  embedded
+                  hideSaveButton
+                  markInitialOverridesDirty={false}
+                  initialValueOverrides={behaviorInitialValues[section]}
+                  getInitialView={behaviorInitialView[section]}
+                  onSaveControlChange={behaviorControlHandlers[section]}
+                  testId={`agent-settings-${section}-fields`}
+                />
+              )}
             </div>
           ))
         : null}

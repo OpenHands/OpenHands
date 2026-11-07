@@ -1759,6 +1759,70 @@ describe("AgentSettingsScreen — condenser and verification", () => {
     );
   });
 
+  // Regression for #18810: the embedded section hydrates once, so it must not
+  // hydrate before the editor can read the profile's values with the schema.
+  it.each([
+    ["conversation", "agent"],
+    ["agent", "conversation"],
+  ] as const)(
+    "opens on the profile's values when the %s schema arrives before the %s schema",
+    async (first, second) => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings({
+          agent_settings_schema: null,
+          conversation_settings_schema: null,
+        }),
+      );
+      const respond: Partial<Record<"agent" | "conversation", () => void>> = {};
+      vi.spyOn(SettingsService, "getSettingsSchema").mockReturnValue(
+        new Promise((resolve) => {
+          respond.agent = () =>
+            resolve(MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!);
+        }),
+      );
+      vi.spyOn(
+        SettingsService,
+        "getConversationSettingsSchema",
+      ).mockReturnValue(
+        new Promise((resolve) => {
+          respond.conversation = () =>
+            resolve(MOCK_DEFAULT_USER_SETTINGS.conversation_settings_schema!);
+        }),
+      );
+
+      const { control } = renderAgentSettingsScreen({
+        agentSettingsOverride: STORED,
+      });
+      // Let the settings load and every mounted schema query start its request.
+      await screen.findByTestId("agent-settings-screen");
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      // Both responses land before React Query notifies either query's observers.
+      await act(async () => {
+        respond[first]!();
+        respond[second]!();
+      });
+
+      const maxSize = await screen.findByTestId(
+        "sdk-settings-condenser.condenser_max_size",
+      );
+      expect(maxSize).toHaveValue(100);
+      expect(
+        screen.getByTestId("sdk-settings-verification.critic_enabled"),
+      ).toBeChecked();
+      expect(control().isDirty).toBe(false);
+
+      // Editing one condenser field keeps the profile's other stored values.
+      const user = userEvent.setup();
+      await user.click(
+        screen.getByTestId("sdk-settings-condenser.enable_default_condenser"),
+      );
+      await waitFor(() => expect(control().isDirty).toBe(true));
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        condenser: { enable_default_condenser: false, condenser_max_size: 100 },
+      });
+    },
+  );
+
   it("keeps the critic API key out of the profile", async () => {
     renderAgentSettingsScreen({ agentSettingsOverride: STORED });
 
