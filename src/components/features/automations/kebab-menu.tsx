@@ -36,22 +36,32 @@ export function KebabMenu({ items, triggerClassName }: KebabMenuProps) {
       if (!rect) return;
 
       const gap = 4;
+      // Keeps the menu off the very edge of the viewport once it is clamped.
+      const gutter = 8;
       // The real height is only measurable once the portal has painted; the
       // first pass falls back to an items-derived estimate (~36px per row).
       const measured = menuRef.current?.getBoundingClientRect().height ?? 0;
       const menuHeight = measured || items.length * 36;
-      const overflowsBelow =
-        rect.bottom + gap + menuHeight > window.innerHeight;
+      const roomBelow = window.innerHeight - rect.bottom - gap - gutter;
+      const roomAbove = rect.top - gap - gutter;
+      // Flip above the trigger when the menu would clip at the viewport
+      // bottom, but only while there is more room up there — flipping into an
+      // even smaller gap just moves the unreachable items to the top instead.
+      const placeAbove = menuHeight > roomBelow && roomAbove > roomBelow;
+      const room = Math.max(placeAbove ? roomAbove : roomBelow, 0);
 
       setPortalStyle({
         position: "fixed",
         zIndex: 9999,
-        // Flip above the trigger when the menu would clip at the viewport
-        // bottom. Bottom-anchoring keeps it hugging the trigger at any height.
-        ...(overflowsBelow
+        // Bottom-anchoring when flipped keeps the menu hugging the trigger at
+        // any height.
+        ...(placeAbove
           ? { bottom: window.innerHeight - rect.top + gap }
           : { top: rect.bottom + gap }),
         right: window.innerWidth - rect.right,
+        // A viewport too short for the menu on either side still has to reach
+        // every item, so cap the menu to the room it has and let it scroll.
+        ...(menuHeight > room ? { maxHeight: room, overflowY: "auto" } : {}),
       });
     };
 
