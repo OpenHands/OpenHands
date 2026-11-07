@@ -234,7 +234,7 @@ describe("color themes", () => {
       const modalSurface = luminance(resolve("--oh-color-base-secondary"));
 
       // Resolve the paints emitted for real catalog consumers, then composite
-      // their translucent backgrounds against the actual card surface.
+      // their translucent backgrounds against card, detail and overflow surfaces.
       const paint = (value: string): { color: number[]; alpha: number } => {
         const mix = /^color-mix\(in oklab, (.+) ([\d.]+)%, transparent\)$/.exec(
           value,
@@ -254,18 +254,24 @@ describe("color themes", () => {
           throw new Error(`Unsupported paint ${value}`);
         return { color: channels(value), alpha: 1 };
       };
-      const card = channels(resolve("--oh-color-base-secondary"));
-      for (const sample of catalogPaints) {
-        const background = paint(sample.background);
-        const surface = background.color.map(
-          (channel, index) =>
-            channel * background.alpha + card[index] * (1 - background.alpha),
-        );
-        const ink = paint(sample.ink);
-        expect(
-          contrast(luminance(ink.color), luminance(surface)),
-          sample.name,
-        ).toBeGreaterThanOrEqual(sample.minimum);
+      for (const surfaceRole of [
+        "--oh-color-base-secondary",
+        "--oh-surface",
+        "--oh-color-base",
+      ]) {
+        const card = channels(resolve(surfaceRole));
+        for (const sample of catalogPaints) {
+          const background = paint(sample.background);
+          const surface = background.color.map(
+            (channel, index) =>
+              channel * background.alpha + card[index] * (1 - background.alpha),
+          );
+          const ink = paint(sample.ink);
+          expect(
+            contrast(luminance(ink.color), luminance(surface)),
+            sample.name,
+          ).toBeGreaterThanOrEqual(sample.minimum);
+        }
       }
 
       for (const role of ["--oh-feedback-error", "--oh-feedback-success"]) {
