@@ -69,6 +69,15 @@ const FIELD_METADATA: Record<string, SettingsFieldMetadata> = {
       step: 0.1,
     },
   },
+  // Clamp the condenser "max size" input so it cannot go negative (#15813).
+  // `schema-field.tsx` already applies `min`/`max` from these constraints to the
+  // underlying number input, so the value is bounded both in the UI and at save time.
+  "condenser.condenser_max_size": {
+    constraints: {
+      min: 0,
+      step: 1,
+    },
+  },
 };
 
 export function getSettingsFieldConstraints(fieldKey: string) {
