@@ -78,6 +78,8 @@ agent-canvas --frontend-only  # static frontend + ingress only
 agent-canvas --backend-only   # agent server + automation backend + ingress only
 ```
 
+**Windows (PowerShell):** the same commands work on Windows; see [README.windows.md](./README.windows.md#option-1-without-a-docker-sandbox-windows-powershell) for the PowerShell prerequisites and first-run notes.
+
 ### Option 2: With a Docker Sandbox
 
 **Prerequisites**:
