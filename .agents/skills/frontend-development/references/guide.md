@@ -73,6 +73,10 @@ nudges and toast content. Toasts also use Tailwind's `wrap-anywhere` for their
 independent overflow-wrap behavior. Do not replace the former with `break-words`: it
 sets a different CSS property. Toast-library container styles remain library-owned.
 
+## File-drop illustration geometry
+
+The file-drop illustration uses `file-drop-image` and `file-drop-arrow` utilities for fixed SVG pixel offsets and rotation. Preserve pixel units in embedded roots; the shipped scoped library CSS contract covers these coordinates.
+
 ## No Magic Strings
 
 Avoid inline string literals when they represent reusable user-facing copy or shared program identifiers. The `i18next/no-literal-string` rule is set to `"error"` for configured JSX text and attributes, and targeted `no-restricted-syntax` rules enforce shared translation and query-key patterns. Do not claim broader lint enforcement than `eslint.config.js` provides.
@@ -166,7 +170,6 @@ When adding code that needs a new string, decide up front which rule it falls un
 - Theme/customization tokens for the embedded shell are exposed as `--oh-*` CSS variables. Override them through `styleOverrides`, `style`, or host CSS targeting `[data-agent-server-ui]`; Tailwind theme tokens in `src/tailwind.css` should continue to reference those variables with `@theme inline` so host apps can restyle the UI without reworking component class names.
 - Named control radii (`rounded-pill`, `rounded-composer`, `rounded-file-action`, `rounded-facet-control`) retain the existing absolute pixel values in `src/tailwind.css`. `cn()` registers these names in tailwind-merge's radius namespace so caller and directional overrides retain normal utility precedence. Keep the theme entries and merger registration aligned; do not replace these values with rem or percentage rounding.
 
-- The file-drop illustration uses `file-drop-image` and `file-drop-arrow` utilities for fixed SVG pixel offsets and rotation. Preserve pixel units in embedded roots; the shipped scoped library CSS contract covers these coordinates.
 - Small form feedback uses the `feedback-error` / `feedback-success` text roles (`--oh-feedback-error` / `--oh-feedback-success`), separately from the general danger/success control palette. Their built-in values must meet 4.5:1 on modal surfaces; host overrides remain owned by the embedding root. See `src/themes/README.md` and the theme contrast tests when migrating raw feedback colors.
 - Regression coverage for the CSS isolation work lives in `__tests__/agent-server-ui-providers.test.tsx`, `__tests__/agent-server-ui-style-scope.test.ts`, and the browser-level CSS-isolation test in `tests/e2e/mock-llm/regressions/mock-llm-ui-regressions.spec.ts`.
 - MCP credential selection: `SaveAsSecretToggle` keeps its native checkbox as the semantic control and uses `ToggleSwitchVisual` for the decorative track. Selection uses contrast/surface tokens. Keep both states' labels readable, allow long secret names to wrap with their help control, and preserve visible keyboard focus.
