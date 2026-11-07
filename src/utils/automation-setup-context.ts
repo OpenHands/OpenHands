@@ -9,6 +9,9 @@ export function buildAutomationSetupContext(
     automationId: draft.editingAutomationId ?? null,
     draftId: draft.serverDraftId ?? null,
     kind: draft.kind,
+    ...(draft.existingPluginSpec
+      ? { executablePlugin: draft.existingPluginSpec.plugin }
+      : {}),
     prompt: draft.prompt,
     ...form,
   };
