@@ -143,6 +143,7 @@ vi.mock(
   () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { createPortal } = require("react-dom");
+    const automationDraftLabel = "Unsaved automation name";
     return {
       AutomationSetupPanel: ({
         conversationId,
@@ -166,7 +167,9 @@ vi.mock(
             <div
               data-testid="automation-setup-panel"
               data-conversation-id={conversationId ?? ""}
-            />
+            >
+              <input aria-label={automationDraftLabel} defaultValue="" />
+            </div>
           </>
         );
       },
@@ -377,9 +380,9 @@ describe("ConversationMain - Layout Transition Stability", () => {
       screen.getByTestId("automation-setup-mobile-view-conversation"),
     );
 
-    expect(
-      screen.queryByTestId("automation-setup-mobile-form"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-mobile-form")).toHaveClass(
+      "hidden",
+    );
     expect(
       screen.queryByTestId("automation-setup-docked-composer"),
     ).not.toBeInTheDocument();
@@ -414,9 +417,9 @@ describe("ConversationMain - Layout Transition Stability", () => {
 
     await user.click(screen.getByTestId("docked-composer-submit"));
 
-    expect(
-      screen.queryByTestId("automation-setup-mobile-form"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-mobile-form")).toHaveClass(
+      "hidden",
+    );
 
     await user.click(screen.getByTestId("automation-setup-mobile-view-form"));
 
@@ -424,12 +427,37 @@ describe("ConversationMain - Layout Transition Stability", () => {
       requestAutomationSetupAgent();
     });
 
-    expect(
-      screen.queryByTestId("automation-setup-mobile-form"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-mobile-form")).toHaveClass(
+      "hidden",
+    );
     expect(screen.getByTestId("conversation-chat-panel")).not.toHaveClass(
       "hidden",
     );
+  });
+
+  it("retains unsaved phone form edits across view switches and discards them on exit", async () => {
+    const user = userEvent.setup();
+    mockIsMobile = true;
+    mockActiveConversationTags = { automation_setup: "true" };
+    markAutomationSetupHandoff("conv-1");
+    const rendered = renderConversationMain();
+    const name = await screen.findByRole("textbox", {
+      name: "Unsaved automation name",
+    });
+    await user.type(name, "Keep my draft");
+    await user.click(
+      screen.getByTestId("automation-setup-mobile-view-conversation"),
+    );
+    await user.click(screen.getByTestId("automation-setup-mobile-view-form"));
+    expect(
+      screen.getByRole("textbox", { name: "Unsaved automation name" }),
+    ).toHaveValue("Keep my draft");
+    rendered.unmount();
+    markAutomationSetupHandoff("conv-1");
+    renderConversationMain();
+    expect(
+      await screen.findByRole("textbox", { name: "Unsaved automation name" }),
+    ).toHaveValue("");
   });
 
   it("expands the automation form to full width when hiding the agent", async () => {
