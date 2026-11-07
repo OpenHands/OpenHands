@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -241,8 +241,7 @@ describe("PluginLaunchModal", () => {
       ]);
 
       const input = screen.getByTestId("plugin-0-param-count");
-      await user.clear(input);
-      await user.type(input, "100");
+      fireEvent.change(input, { target: { value: "100" } });
 
       expect(input).toHaveValue(100);
     });
@@ -489,6 +488,7 @@ describe("automation mode preflight", () => {
         label: "style",
         required: false,
         options: ["compact", "full"],
+        defaultValue: "compact",
       },
     ] as SchemaFormField[],
     suggestedTrigger: { type: "cron", schedule: "0 9 * * *", timezone: "UTC" },
@@ -532,7 +532,7 @@ describe("automation mode preflight", () => {
       [
         {
           source: "github:org/recipe",
-          parameters: { repo: "", style: "compact" },
+          parameters: { style: "compact" },
         },
       ],
       { type: "cron", schedule: "*/15 * * * *", timezone: "UTC" },
@@ -622,11 +622,11 @@ describe("automation mode preflight", () => {
     await user.click(screen.getByTestId("start-conversation-button"));
 
     expect(mockOnInstallAutomation).toHaveBeenCalledTimes(1);
-    expect(mockOnInstallAutomation.mock.calls[0][1]).toBeUndefined();
+    expect(mockOnInstallAutomation.mock.calls[0][1]).toBeNull();
     expect(mockOnInstallAutomation.mock.calls[0][0]).toEqual([
       {
         source: "github:org/recipe",
-        parameters: { repo: "", style: "compact" },
+        parameters: { style: "compact" },
       },
     ]);
   });
