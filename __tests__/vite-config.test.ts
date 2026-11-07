@@ -242,6 +242,14 @@ describe("vite library build", () => {
       expect(matches, `Single scoped recipe: ${name}`).toHaveLength(1);
       return matches[0];
     };
+    // Keep code padding relative to its own font size in embedded roots.
+    expect(declarations(recipe("px-code-inline-x"))).toEqual({
+      "padding-inline": ".4em",
+    });
+    expect(declarations(recipe("py-code-inline-y"))).toEqual({
+      "padding-block": ".2em",
+    });
+    expect(declarations(recipe("p-code-block"))).toEqual({ padding: "1em" });
     // The drop illustration uses fixed SVG pixel coordinates even in embeds.
     expect(declarations(recipe("file-drop-image"))).toEqual({
       top: "-40px",
