@@ -241,6 +241,13 @@ export type SetupFormValue = string | number | boolean | null | string[] | File;
 export type SetupFormValues = Record<string, SetupFormValue>;
 
 /** `GET /v1/capabilities` — what this deployment supports. */
+export interface AutomationEventOption {
+  key: string;
+  label: string;
+  group: string;
+  kind: "event" | "pattern";
+}
+
 export interface DeploymentCapabilities {
   ready: boolean;
   /** Absolute timeout ceiling enforced by this deployment's automation API. */
@@ -260,6 +267,7 @@ export interface DeploymentCapabilities {
    * here accepts any key. Older services omit it and list GitHub's in `eventTypes`.
    */
   eventTypesBySource?: Record<string, string[]>;
+  eventOptionsBySource?: Record<string, AutomationEventOption[]>;
 }
 
 /** A single problem with a draft, addressed to the field that caused it. */

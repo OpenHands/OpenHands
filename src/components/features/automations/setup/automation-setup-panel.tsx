@@ -1,4 +1,19 @@
-import type { AutomationUpdate } from "#/types/automation";
+import { AutomationEventPicker } from "./automation-event-picker";
+import type {
+  AutomationEventOption,
+  AutomationDraftApiResponse,
+  DeploymentCapabilities,
+  SetupRequestBody,
+} from "#/manifests/types";
+import {
+  buildAutomationEventTrigger,
+  parseAutomationEventKeys,
+} from "#/api/automation-setup-events";
+import type {
+  AutomationUpdate,
+  Automation,
+  AutomationRun,
+} from "#/types/automation";
 import {
   useCallback,
   useEffect,
@@ -81,7 +96,6 @@ import { useSendMessage } from "#/hooks/use-send-message";
 import {
   formControlBorderClassName,
   formControlFieldClassName,
-  formControlFocusWithinClassName,
   formControlHeightClassName,
   formControlMultilineFieldClassName,
   formControlRadiusClassName,
@@ -104,12 +118,6 @@ import {
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
 import { useNavigation } from "#/context/navigation-context";
-import type {
-  AutomationDraftApiResponse,
-  DeploymentCapabilities,
-  SetupRequestBody,
-} from "#/manifests/types";
-import type { Automation, AutomationRun } from "#/types/automation";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { ActivityLogItem } from "../detail/activity-log-item";
 import { requestAutomationSetupAgent } from "./automation-setup-agent-request";
@@ -335,15 +343,6 @@ function onceCron(scheduleDateTime: string): string {
   return `${minute} ${hour} ${day} ${month} *`;
 }
 
-function eventKeyPayload(value: string): string | string[] {
-  const keys = value
-    .split(",")
-    .map((key) => key.trim())
-    .filter(Boolean);
-  if (keys.length <= 1) return keys[0] ?? DEFAULT_EVENT_KEY;
-  return keys;
-}
-
 function cronWeekday(weekday: string): number {
   const value = Number(weekday);
   if (!Number.isInteger(value) || value < 0 || value > 6) return 1;
@@ -431,12 +430,6 @@ function eventTypeOptionsForSource(
   return eventSource === DEFAULT_EVENT_SOURCE
     ? (capabilities?.eventTypes ?? [])
     : [];
-}
-
-function eventTypeMatches(pattern: string, eventKey: string): boolean {
-  return pattern.endsWith(".*")
-    ? eventKey.startsWith(pattern.slice(0, -1))
-    : pattern === eventKey;
 }
 
 function buildDefaultEventTestPayload(
@@ -1128,7 +1121,12 @@ export function AutomationSetupPanel({
 
   useEffect(() => {
     if (isEventTestPayloadDirty) return;
-    setEventTestPayload(buildDefaultEventTestPayload(eventSource, eventKey));
+    setEventTestPayload(
+      buildDefaultEventTestPayload(
+        eventSource,
+        parseAutomationEventKeys(eventKey)[0],
+      ),
+    );
   }, [eventSource, eventKey, isEventTestPayloadDirty]);
 
   const clearQueuedStreams = useCallback(() => {
@@ -1388,15 +1386,12 @@ export function AutomationSetupPanel({
   const normalizedName = () => name.trim() || deriveName(prompt);
   const buildTrigger = () =>
     triggerKind === "event"
-      ? {
-          // Fields the form does not edit, such as `destination`, keep the
-          // values the edited automation already has.
-          ...(isEditingExisting ? existingEventTrigger : {}),
-          type: "event",
-          source: eventSource.trim() || DEFAULT_EVENT_SOURCE,
-          on: eventKeyPayload(eventKey),
-          ...(eventFilter.trim() ? { filter: eventFilter.trim() } : {}),
-        }
+      ? buildAutomationEventTrigger(
+          eventSource.trim() || DEFAULT_EVENT_SOURCE,
+          eventKey,
+          eventFilter,
+          isEditingExisting ? existingEventTrigger : undefined,
+        )
       : {
           type: "cron",
           schedule: toCron(
@@ -2316,6 +2311,11 @@ export function AutomationSetupPanel({
                         eventTestPayload={eventTestPayload}
                         eventSourceOptions={eventSourceOptions}
                         eventTypeOptions={eventTypeOptions}
+                        eventOptions={
+                          deploymentCapabilities.data?.eventOptionsBySource?.[
+                            eventSource
+                          ] ?? []
+                        }
                         customWebhook={customWebhook}
                         customWebhookRegistration={customWebhookRegistration}
                         usesExistingAutomationTestPayload={isEditingExisting}
@@ -2327,20 +2327,6 @@ export function AutomationSetupPanel({
                         streamingField={streamingField}
                         setEventSource={(value) => {
                           updateField("eventSource", value);
-                          // Keep the key when the new source delivers it; otherwise
-                          // start from the new source's first event type.
-                          const options = eventTypeOptionsForSource(
-                            deploymentCapabilities.data,
-                            value,
-                          );
-                          if (
-                            options.length > 0 &&
-                            !options.some((option) =>
-                              eventTypeMatches(option, eventKey),
-                            )
-                          ) {
-                            updateField("eventKey", options[0]);
-                          }
                         }}
                         setEventKey={(value) => updateField("eventKey", value)}
                         setEventFilter={(value) =>
@@ -3549,6 +3535,7 @@ function EventFields({
   eventTestPayload,
   eventSourceOptions,
   eventTypeOptions,
+  eventOptions,
   customWebhook,
   customWebhookRegistration,
   usesExistingAutomationTestPayload,
@@ -3567,6 +3554,7 @@ function EventFields({
   eventTestPayload: string;
   eventSourceOptions: string[];
   eventTypeOptions: string[];
+  eventOptions: AutomationEventOption[];
   customWebhook: CustomWebhookFormState;
   customWebhookRegistration: CustomWebhookCreateResponse | null;
   usesExistingAutomationTestPayload: boolean;
@@ -3599,6 +3587,12 @@ function EventFields({
     knownSources.some(
       (option) => option.toLowerCase() === source.trim().toLowerCase(),
     );
+  const pickerOptions: AutomationEventOption[] = [
+    ...eventOptions,
+    ...eventTypeOptions
+      .filter((key) => !eventOptions.some((option) => option.key === key))
+      .map((key) => ({ key, label: key, group: "", kind: "event" as const })),
+  ];
   const handleEventSourceChange = (value: string) => {
     const leavingKnownSource =
       sourceIsKnown(eventSource) && !sourceIsKnown(value);
@@ -3635,10 +3629,10 @@ function EventFields({
             {t(I18nKey.AUTOMATION_SETUP$EVENT_PUBLIC_URL_NOTICE)}
           </p>
         </div>
-        <div className="flex min-w-0 flex-wrap items-end gap-2 self-start">
+        <div className="flex min-w-0 flex-col gap-2 self-start">
           <div
             className={cn(
-              "flex min-w-48 flex-1 flex-col gap-2",
+              "flex min-w-0 flex-col gap-2",
               streamingHighlightClassName(streamingField === "eventKey"),
             )}
           >
@@ -3653,67 +3647,52 @@ function EventFields({
                 </span>
               ) : null}
             </label>
-            <div
-              className={cn(
-                "flex w-full min-w-0 overflow-hidden",
-                formControlHeightClassName,
-                formControlRadiusClassName,
-                formControlBorderClassName,
-                formControlSurfaceClassName,
-                formControlTransitionClassName,
-                formControlFocusWithinClassName,
-                streamingHighlightClassName(streamingField === "eventFilter"),
-              )}
-            >
-              <input
-                id="automation-setup-event-key"
-                data-testid="automation-setup-event-key"
+            <div className="flex min-w-0 items-start gap-2">
+              <AutomationEventPicker
                 value={eventKey}
-                list="automation-setup-event-key-options"
-                onChange={(event) => setEventKey(event.target.value)}
-                className="min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-contrast outline-none"
+                options={pickerOptions}
+                onChange={setEventKey}
               />
-              <datalist id="automation-setup-event-key-options">
-                {eventTypeOptions.map((eventType) => (
-                  <option key={eventType} value={eventType} />
-                ))}
-              </datalist>
-              {showEventFilter ? null : (
-                <button
-                  type="button"
-                  data-testid="automation-setup-add-event-filter"
-                  onClick={() => setIsEventFilterOpen(true)}
-                  className="inline-flex shrink-0 items-center border-l border-border bg-tertiary px-3 text-sm text-content hover:bg-interactive-hover"
-                >
-                  {t(I18nKey.AUTOMATION_SETUP$ADD_FILTER)}
-                </button>
-              )}
             </div>
           </div>
-          <button
-            type="button"
-            data-testid="automation-setup-ask-agent"
-            className={cn(addOptionButtonClassName, "h-9 gap-1.5")}
-            onClick={() => {
-              const prompt = t(I18nKey.AUTOMATION_SETUP$ASK_AGENT_EVENT_PROMPT);
-              // Outside a setup conversation there is nothing to send into:
-              // start one with the prompt instead of dropping the click.
-              if (onAskAgent) {
-                onAskAgent(prompt);
-                return;
-              }
-              requestAutomationSetupAgent();
-              void send({
-                action: "message",
-                args: {
-                  content: prompt,
-                },
-              });
-            }}
-          >
-            <SparkleIcon className="size-3.5 shrink-0" aria-hidden />
-            {t(I18nKey.AUTOMATION_SETUP$ASK_AGENT)}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {showEventFilter ? null : (
+              <button
+                type="button"
+                data-testid="automation-setup-add-event-filter"
+                onClick={() => setIsEventFilterOpen(true)}
+                className={cn(addOptionButtonClassName, "h-9")}
+              >
+                {t(I18nKey.AUTOMATION_SETUP$ADD_FILTER)}
+              </button>
+            )}
+            <button
+              type="button"
+              data-testid="automation-setup-ask-agent"
+              className={cn(addOptionButtonClassName, "h-9 gap-1.5")}
+              onClick={() => {
+                const prompt = t(
+                  I18nKey.AUTOMATION_SETUP$ASK_AGENT_EVENT_PROMPT,
+                );
+                // Outside a setup conversation there is nothing to send into:
+                // start one with the prompt instead of dropping the click.
+                if (onAskAgent) {
+                  onAskAgent(prompt);
+                  return;
+                }
+                requestAutomationSetupAgent();
+                void send({
+                  action: "message",
+                  args: {
+                    content: prompt,
+                  },
+                });
+              }}
+            >
+              <SparkleIcon className="size-3.5 shrink-0" aria-hidden />
+              {t(I18nKey.AUTOMATION_SETUP$ASK_AGENT)}
+            </button>
+          </div>
         </div>
         {showEventFilter ? (
           <div className="@min-[640px]:col-span-2">

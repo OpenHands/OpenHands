@@ -122,6 +122,26 @@ describe("automation_form_update client tool", () => {
     expect(description).not.toContain("azure_devops");
   });
 
+  it("gives the agent the same friendly event suggestions as the picker", () => {
+    const tool = buildAutomationFormUpdateClientTool({
+      ...DATA_CENTER_CAPABILITIES,
+      eventOptionsBySource: {
+        github: [
+          {
+            key: "pull_request.opened",
+            label: "Pull request opened",
+            group: "Pull requests",
+            kind: "event",
+          },
+        ],
+      },
+    });
+    expect(tool.description).toContain(
+      "Suggested events: Pull request opened (pull_request.opened).",
+    );
+    expect(tool.parameters).toEqual(defaultTool.parameters);
+  });
+
   it("lists GitHub's keys from an older service that has no per-source map", () => {
     const { description } = buildAutomationFormUpdateClientTool({
       ...DATA_CENTER_CAPABILITIES,

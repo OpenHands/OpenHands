@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Automation event selection</title
+  ><style>
+    body {
+      font: 16px/1.6 system-ui;
+      background: #fdfdfb;
+      color: #202020;
+      max-width: 1000px;
+      margin: auto;
+      padding: 40px;
+    }
+    h1 {
+      font-size: 34px;
+    }
+    h2 {
+      margin-top: 36px;
+    }
+    code,
+    pre {
+      background: #f3f1ec;
+      font-family: monospace;
+    }
+    pre {
+      padding: 16px;
+      overflow: auto;
+    }
+    a {
+      color: #2b4eaa;
+    }
+    .note {
+      border-left: 4px solid #2b4eaa;
+      padding: 12px 20px;
+      background: #e6ecfa;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    td,
+    th {
+      padding: 12px;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+    }
+    svg {
+      width: 100%;
+      height: auto;
+    }
+    nav a {
+      margin-right: 20px;
+    }
+  </style>
+  <nav>
+    <a href="#flow">Shared editing</a><a href="#api">Compatibility</a
+    ><a href="#evidence">Verification</a>
+  </nav>
+  <h1>Choose several events without writing a comma-separated list</h1>
+  <p>
+    The setup form gains a searchable picker with selected-event chips, friendly
+    names from the service, raw keys, and explicit custom entry. Manual edits
+    and the AI builder still write one shared form value.
+  </p>
+  <p class="note">
+    The saved trigger contract stays <code>on: string | string[]</code>. Filters
+    remain independent. Selecting “All events” saves the literal <code>*</code>.
+  </p>
+  <section id="flow">
+    <h2>Two input methods, one form value</h2>
+    <svg
+      viewBox="0 0 940 250"
+      role="img"
+      aria-label="Before: text and agent input write eventKey. After: picker and agent input write the same eventKey, which becomes trigger.on."
+    >
+      <defs>
+        <marker
+          id="arrow"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0 0L10 5L0 10" fill="#666" />
+        </marker>
+      </defs>
+      <g fill="#f7f6f1" stroke="#bbb">
+        <rect x="10" y="30" width="250" height="65" rx="7" />
+        <rect x="10" y="145" width="250" height="65" rx="7" stroke="#b25b0e" />
+        <rect x="340" y="85" width="230" height="75" rx="7" />
+        <rect x="660" y="85" width="260" height="75" rx="7" />
+      </g>
+      <g font-family="system-ui" font-size="16" fill="#202020">
+        <text x="25" y="58">Before: input + datalist</text>
+        <text x="25" y="81">Agent: eventKey string</text>
+        <text x="25" y="173">After: multi-select + chips</text>
+        <text x="25" y="196">Agent: same eventKey string</text>
+        <text x="360" y="115">Shared form: eventKey</text>
+        <text x="360" y="142">Manual-edit protection</text>
+        <text x="680" y="115">buildAutomationEventTrigger</text>
+        <text x="680" y="142">trigger.on + existing extras</text>
+      </g>
+      <g stroke="#666" marker-end="url(#arrow)">
+        <path d="M260 63L340 105" />
+        <path d="M260 177L340 140" />
+        <path d="M570 122H660" />
+      </g>
+    </svg>
+    <p>
+      Before:
+      <a
+        href="https://github.com/OpenHands/OpenHands/blob/9979fa2591681d0801f6b5c1d66fd87ea7230de4/src/components/features/automations/setup/automation-setup-panel.tsx#L3668"
+        >EventFields input</a
+      >. After:
+      <a
+        href="../src/components/features/automations/setup/automation-event-picker.tsx"
+        >AutomationEventPicker</a
+      >,
+      <a href="../src/api/automation-setup-events.ts"
+        >parseAutomationEventKeys / buildAutomationEventTrigger</a
+      >. The existing
+      <a href="../src/api/automation-form-session.ts"
+        >patchAutomationFormSession</a
+      >
+      remains the owner of agent/manual conflict protection.
+    </p>
+  </section>
+  <section id="api">
+    <h2>Additive metadata; unchanged agent tool schema</h2>
+    <table>
+      <tr>
+        <th>Boundary</th>
+        <th>Behavior</th>
+      </tr>
+      <tr>
+        <td>Service capabilities</td>
+        <td>
+          Optional eventOptionsBySource provides key, label, group and
+          event/pattern kind. Older services use eventTypesBySource or the
+          legacy GitHub eventTypes catalog.
+        </td>
+      </tr>
+      <tr>
+        <td>AI builder</td>
+        <td>
+          eventKey remains a string, including comma-separated multiple keys. No
+          new tool name, array wire field, Agent Server requirement or
+          duplicated selection state.
+        </td>
+      </tr>
+      <tr>
+        <td>Source switch</td>
+        <td>
+          Preserves keys and filters for explicit review instead of selecting
+          the new catalog’s first key.
+        </td>
+      </tr>
+      <tr>
+        <td>Empty selection</td>
+        <td>
+          Saves an empty list for validation instead of silently choosing the
+          default event.
+        </td>
+      </tr>
+      <tr>
+        <td>Custom search</td>
+        <td>
+          Typing changes only the search. Choosing the “Use custom key” result
+          commits it.
+        </td>
+      </tr>
+    </table>
+    <p>
+      Contracts: <a href="../src/manifests/types.ts">DeploymentCapabilities</a>,
+      <a href="../src/api/automation-form-client-tool.ts"
+        >automation form tool description</a
+      >,
+      <a href="../src/utils/automation-edit-draft.ts"
+        >existing edit-draft hydration</a
+      >.
+    </p>
+  </section>
+  <section id="evidence">
+    <h2>Evidence and limits</h2>
+    <p>
+      118 focused unit/component tests passed, including AI/manual protection,
+      existing edit hydration, key lists, wildcard persistence and shared
+      filters. The Playwright test exercises selection, search cancellation, the
+      outgoing draft request and desktop/phone layout with the app’s MSW
+      backend. Local-stack API readback verifies edited event lists and retained
+      destination settings.
+    </p>
+    <p>
+      <a href="../tests/e2e/automation-event-picker.spec.ts">Browser test</a> ·
+      <a href="../__tests__/services/automation-form.test.ts">AI form path</a> ·
+      <a
+        href="../__tests__/components/automations/automation-setup-panel.test.tsx"
+        >Setup saves</a
+      >
+    </p>
+    <p>
+      Provider webhook delivery, fresh onboarding, guided filters and project
+      routing remain outside this slice. Sample payload generation uses the
+      first selected key; per-event test selection is a follow-up. No
+      filter-clearing regression is claimed: the existing loader already strips
+      editable fields from saved trigger extras.
+    </p>
+  </section>
+</html>
