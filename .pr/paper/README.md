@@ -52,6 +52,18 @@ untouched.
 
 ## Validation
 
+Asset-location follow-up (`ec644d37f5`): moved the definition, font, stylesheet,
+license, and provenance into `src/themes/color-theme/definitions/paper/`.
+Both builds and 35 existing packaging/theme tests passed; focused lint and
+formatting passed. The emitted standalone font, inlined library font, and both
+license copies were verified byte-for-byte against their source files.
+The screenshots above predate this source-only move; rendering is unchanged.
+
+The original implementation passed [Ubuntu CI](https://github.com/OpenHands/OpenHands/actions/runs/42289965463)
+at `f6c9b33603`: all 887 files and 10,233 tests, lint, both builds, and package
+checks; the Windows app build also passed. The local results recorded for that
+implementation were:
+
 - `npm run lint`: passed; zero errors, 235 existing warnings; formatting passed.
 - `npm run build`, `npm run build:lib`, and `npm run build:mock`: passed. Both
   distribution modes include the full Newsreader OFL license.
