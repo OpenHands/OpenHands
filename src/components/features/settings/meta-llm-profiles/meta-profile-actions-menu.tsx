@@ -48,7 +48,7 @@ function MenuItem({
       disabled={disabled}
       className={cn(
         "group w-full cursor-pointer rounded px-2 py-2 text-start text-nowrap text-sm font-normal",
-        "text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)]",
+        "text-foreground hover:bg-interactive-hover",
         "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent",
       )}
       role="menuitem"
@@ -61,7 +61,7 @@ function MenuItem({
 
 interface MetaProfileActionsMenuProps {
   onEdit: () => void;
-  onSetActive: () => void;
+  onSetActive?: () => void;
   onDelete: () => void;
   isActive: boolean;
   isActivating: boolean;
@@ -176,7 +176,7 @@ export function MetaProfileActionsMenu({
     <div
       ref={menuRef}
       className={cn(
-        "absolute right-0 top-full z-10 mt-2 w-[160px] rounded-md border border-[var(--oh-border-subtle)] bg-tertiary px-1 py-1 shadow-lg",
+        "absolute right-0 top-full z-10 mt-2 w-[160px] rounded-md border border-border-subtle bg-tertiary px-1 py-1 shadow-lg",
         dropdownMenuListClassName,
         isPortaled &&
           "!static !top-auto !bottom-auto !left-auto !right-auto !mt-0",
@@ -194,18 +194,20 @@ export function MetaProfileActionsMenu({
         menuItemsRef={menuItemsRef}
         testId="meta-profile-edit"
       />
+      {onSetActive ? (
+        <MenuItem
+          index={1}
+          icon={<CheckCircleIcon width={16} height={16} />}
+          label={t(I18nKey.SETTINGS$META_PROFILE_ACTIVATE)}
+          onClick={() => handleAction(onSetActive)}
+          onKeyDown={handleKeyDown}
+          menuItemsRef={menuItemsRef}
+          disabled={setActiveDisabled}
+          testId="meta-profile-set-active"
+        />
+      ) : null}
       <MenuItem
-        index={1}
-        icon={<CheckCircleIcon width={16} height={16} />}
-        label={t(I18nKey.SETTINGS$META_PROFILE_ACTIVATE)}
-        onClick={() => handleAction(onSetActive)}
-        onKeyDown={handleKeyDown}
-        menuItemsRef={menuItemsRef}
-        disabled={setActiveDisabled}
-        testId="meta-profile-set-active"
-      />
-      <MenuItem
-        index={2}
+        index={onSetActive ? 2 : 1}
         icon={<DeleteIcon width={16} height={16} />}
         label={t(I18nKey.BUTTON$DELETE)}
         onClick={() => handleAction(onDelete)}

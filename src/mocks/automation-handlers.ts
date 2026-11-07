@@ -10,6 +10,7 @@ import type {
 } from "#/manifests/types";
 import type {
   Automation,
+  AutomationRepository,
   AutomationsResponse,
   AutomationRun,
   AutomationRunsResponse,
@@ -17,6 +18,39 @@ import type {
 import { AutomationRunStatus } from "#/types/automation";
 import { MOCK_AUTOMATIONS_RESPONSE } from "./automations.mock";
 import { MOCK_AUTOMATION_RUNS } from "./automation-runs.mock";
+
+// The built-in Data Center sources (OpenHands/automation 1.27.0) are newer
+// than the fixture too; these are the event keys the service's catalog lists
+// for them, so the mock deployment looks like an Enterprise instance with
+// Jira and Bitbucket Data Center.
+const DATA_CENTER_EVENT_TYPES: Record<string, string[]> = {
+  bitbucket_data_center: [
+    "pr:comment:added",
+    "pr:comment:deleted",
+    "pr:comment:edited",
+    "pr:declined",
+    "pr:deleted",
+    "pr:from_ref_updated",
+    "pr:merged",
+    "pr:modified",
+    "pr:opened",
+    "pr:reviewer:approved",
+    "pr:reviewer:needs_work",
+    "pr:reviewer:unapproved",
+    "repo:comment:added",
+    "repo:comment:deleted",
+    "repo:comment:edited",
+    "repo:refs_changed",
+  ],
+  jira_dc: [
+    "comment_created",
+    "comment_deleted",
+    "comment_updated",
+    "jira:issue_created",
+    "jira:issue_deleted",
+    "jira:issue_updated",
+  ],
+};
 
 // The "supported" deployment from the published contract fixtures. Discovery
 // and preflight answer with it, so the setup flow runs against the same
@@ -29,7 +63,18 @@ const CAPABILITIES: DeploymentCapabilities = {
   features: [
     ...(capabilitiesFixture.responses.supported.body.features ?? []),
     "automationDrafts",
+    // Changing a preset's repositories with PATCH is newer than the fixture too.
+    "repoUpdate",
   ],
+  repoProviders: ["bitbucket", "github", "gitlab"],
+  eventSources: [
+    ...capabilitiesFixture.responses.supported.body.eventSources,
+    ...Object.keys(DATA_CENTER_EVENT_TYPES),
+  ].sort(),
+  eventTypesBySource: {
+    github: capabilitiesFixture.responses.supported.body.eventTypes,
+    ...DATA_CENTER_EVENT_TYPES,
+  },
 };
 
 interface DraftTrigger {
@@ -50,14 +95,24 @@ function cronIntervalSeconds(schedule: string): number | null {
   return (match[1] ? Number(match[1]) : 1) * 60;
 }
 
-// Event deliveries registered for the mock organization. Distinct from
-// CAPABILITIES.eventTypes on purpose: a deployment can support an event type
-// that no webhook is registered to deliver, and preflight is what catches
+// Event deliveries registered for the mock organization, per source. Distinct
+// from CAPABILITIES.eventTypes on purpose: a deployment can support an event
+// type that no webhook is registered to deliver, and preflight is what catches
 // that gap — the fixtures' event-type-not-delivered scenario depends on one
-// supported type staying unregistered here.
-const REGISTERED_EVENT_TYPES = CAPABILITIES.eventTypes.filter(
-  (type) => type !== "pull_request_review_comment.created",
-);
+// supported GitHub type staying unregistered here.
+const REGISTERED_EVENT_TYPES_BY_SOURCE: Record<string, string[]> = {
+  github: CAPABILITIES.eventTypes.filter(
+    (type) => type !== "pull_request_review_comment.created",
+  ),
+  ...DATA_CENTER_EVENT_TYPES,
+};
+
+// A trailing `*` subscribes to a family of event keys, as in `pr:*`.
+function eventPatternMatches(pattern: string, eventType: string): boolean {
+  return pattern.endsWith("*")
+    ? eventType.startsWith(pattern.slice(0, -1))
+    : pattern === eventType;
+}
 
 // The deployment checks the contract fixtures record: a cron schedule below
 // triggers.cron.minIntervalSeconds, and an event type no webhook delivers.
@@ -82,12 +137,15 @@ function validateDraftTrigger(
   }
 
   // "*" subscribes to every event the source delivers, so it never names an
-  // unregistered type.
+  // unregistered type. A source without a catalog accepts any key.
+  const registered =
+    REGISTERED_EVENT_TYPES_BY_SOURCE[trigger.source ?? "github"];
   if (
     trigger.type === "event" &&
     trigger.on &&
     trigger.on !== "*" &&
-    !REGISTERED_EVENT_TYPES.includes(trigger.on)
+    registered &&
+    !registered.some((type) => eventPatternMatches(trigger.on ?? "", type))
   ) {
     const source = trigger.source === "github" ? "GitHub" : trigger.source;
     return [
@@ -194,7 +252,10 @@ export const AUTOMATION_HANDLERS = [
     const limit = Number(url.searchParams.get("limit") ?? "50");
     const offset = Number(url.searchParams.get("offset") ?? "0");
 
-    const all = Array.from(automations.values());
+    const tag = url.searchParams.get("tag");
+    const all = Array.from(automations.values()).filter(
+      (automation) => !tag || automation.tags?.includes(tag),
+    );
     const page = all.slice(offset, offset + limit);
 
     const response: AutomationsResponse = {
@@ -203,6 +264,21 @@ export const AUTOMATION_HANDLERS = [
     };
 
     return HttpResponse.json(response);
+  }),
+
+  // GET /api/automation/v1/tags — The org's tags with counts. Registered
+  // before /v1/:id so "tags" is not read as an automation id.
+  http.get("*/api/automation/v1/tags", async () => {
+    await delay(100);
+    const counts = new Map<string, number>();
+    automations.forEach((automation) =>
+      automation.tags?.forEach((tag) =>
+        counts.set(tag, (counts.get(tag) ?? 0) + 1),
+      ),
+    );
+    return HttpResponse.json({
+      tags: Array.from(counts, ([tag, count]) => ({ tag, count })),
+    });
   }),
 
   // GET /api/automation/v1/capabilities — What this deployment supports
@@ -418,11 +494,13 @@ export const AUTOMATION_HANDLERS = [
       prompt: string;
       model?: string;
       trigger: Automation["trigger"];
-      repos?: { url: string; ref?: string }[];
+      repos?: AutomationRepository[];
       plugins?: { source: string }[];
       timeout?: number;
     };
     const now = new Date().toISOString();
+    // Like the service: repositories live only in preset metadata, which the
+    // client lifts onto `repositories` when it reads the automation.
     const automation: Automation = {
       id: crypto.randomUUID(),
       name: body.name,
@@ -433,10 +511,11 @@ export const AUTOMATION_HANDLERS = [
       created_at: now,
       updated_at: now,
       last_triggered_at: null,
-      ...(body.repos?.[0] && {
-        repository: body.repos[0].url,
-        branch: body.repos[0].ref,
-      }),
+      preset_metadata: {
+        preset_type: params.kind,
+        prompt: body.prompt,
+        ...(body.repos?.length && { repos: body.repos }),
+      },
       ...(body.plugins && {
         plugins: body.plugins.map((plugin) => plugin.source),
       }),
@@ -510,7 +589,9 @@ export const AUTOMATION_HANDLERS = [
     const id = params.id as string;
     // Clone the request before reading the body to avoid "Body has already been read" errors
     // when MSW internally consumes the body during handler resolution.
-    const body = (await request.clone().json()) as Partial<Automation>;
+    const { repos, ...body } = (await request.clone().json()) as Partial<
+      Automation & { repos: AutomationRepository[] | null }
+    >;
     const automation = automations.get(id);
     if (!automation) {
       return HttpResponse.json(
@@ -519,9 +600,16 @@ export const AUTOMATION_HANDLERS = [
       );
     }
 
+    // Repositories replace the preset's whole list, as the service applies them.
+    let presetMetadata = automation.preset_metadata;
+    if (repos !== undefined) {
+      const { repos: _previous, ...rest } = presetMetadata ?? {};
+      presetMetadata = { ...rest, ...(repos?.length && { repos }) };
+    }
     const updated: Automation = {
       ...automation,
       ...body,
+      preset_metadata: presetMetadata,
       updated_at: new Date().toISOString(),
     };
     automations.set(id, updated);
@@ -548,11 +636,9 @@ export const AUTOMATION_HANDLERS = [
       conversation_id: null,
       bash_command_id: null,
       error_detail: null,
-      // A freshly dispatched run has not reported a phase yet — the service
-      // sends the fields as null rather than omitting them.
-      phase_code: null,
-      phase_label: null,
-      phase_updated_at: null,
+      // A freshly dispatched run has not reported a phase yet — the 1.9.0+
+      // service sends `current_phase: null`.
+      current_phase: null,
       started_at: new Date().toISOString(),
       completed_at: null,
     };

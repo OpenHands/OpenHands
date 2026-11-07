@@ -362,9 +362,6 @@ describe("AutomationsList — draft sections", () => {
     ).toBeInTheDocument();
 
     expect(
-      screen.queryByText(I18nKey.AUTOMATIONS$MATERIALIZED_DRAFTS),
-    ).not.toBeInTheDocument();
-    expect(
       screen.queryByText("Materialized test draft"),
     ).not.toBeInTheDocument();
     expect(
@@ -560,18 +557,26 @@ describe("AutomationsList — Edit from the row kebab", () => {
     // permissions come from) before mounting so the page sees it as the
     // active backend on first render.
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    // An admin edits a automation that runs as a service account; on a one that runs as a person only
+    // its creator can.
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [{ ...automation, run_as_kind: "service" }],
+      total: 1,
+    });
     const user = userEvent.setup();
     renderList();
     await waitFor(() => {
       expect(AutomationService.getAutomations).toHaveBeenCalledTimes(1);
     });
     await screen.findByText(automation.name);
+    // Run now renders once the caller's permissions have resolved.
+    await screen.findByTestId(`automation-run-now-${automation.id}`);
 
     // Act — open the row kebab and pick Edit. The aria-label resolves to
     // the I18n key in tests because `t` is mocked to return the key itself.
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
     await user.click(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+      await screen.findByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
     );
 
     // Assert — cloud uses the same collapsed setup form; the permission model
@@ -975,9 +980,9 @@ describe("AutomationsList — Load more", () => {
     // Assert
     await screen.findByText("Automation 120");
     expect(vi.mocked(AutomationService.getAutomations).mock.calls).toEqual([
-      [50, 0, undefined],
-      [50, 50, undefined],
-      [50, 100, undefined],
+      [50, 0, undefined, undefined],
+      [50, 50, undefined, undefined],
+      [50, 100, undefined, undefined],
     ]);
     expect(
       screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
@@ -1061,8 +1066,8 @@ describe("AutomationsList — Load more", () => {
     expect(
       vi.mocked(AutomationService.getAutomations).mock.calls.slice(1),
     ).toEqual([
-      [50, 50, undefined],
-      [50, 50, undefined],
+      [50, 50, undefined, undefined],
+      [50, 50, undefined, undefined],
     ]);
   });
 });

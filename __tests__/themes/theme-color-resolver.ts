@@ -51,7 +51,7 @@ function rawToken(theme: ColorThemeKey, name: string): string {
 }
 
 function substitute(theme: ColorThemeKey, value: string): string {
-  return value.replace(/var\((--[\w-]+)\)/g, (_, name: string) =>
+  return value.replace(/var\(\s*(--[\w-]+)\s*\)/g, (_, name: string) =>
     substitute(theme, rawToken(theme, name)),
   );
 }
@@ -123,7 +123,7 @@ function colorMix(args: string): Rgba {
 }
 
 function parseColor(input: string): Rgba {
-  const value = input.trim();
+  const value = input.trim().replace(/\s+/g, " ");
   if (value === "transparent") return [0, 0, 0, 0];
   const hexMatch = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
   if (hexMatch) {

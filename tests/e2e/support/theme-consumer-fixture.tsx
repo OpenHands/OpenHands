@@ -4,6 +4,7 @@ import { ActiveStatusBadge } from "../../../src/components/features/automations/
 import { GitControlBarBranchButton } from "../../../src/components/features/chat/git-control-bar-branch-button";
 import { GitControlBarRepoButton } from "../../../src/components/features/chat/git-control-bar-repo-button";
 import { WorkspaceModeSelector } from "../../../src/components/features/chat/workspace-mode-selector";
+import { getWorkspaceModeOptions } from "../../../src/utils/workspace-mode";
 
 export function mountThemeConsumerFixture(scope: Element) {
   const container = document.createElement("section");
@@ -31,6 +32,7 @@ export function mountThemeConsumerFixture(scope: Element) {
       </div>
       <WorkspaceModeSelector
         value="local_repo"
+        options={getWorkspaceModeOptions(false, true)}
         backendKind="local"
         onChange={() => {}}
       />

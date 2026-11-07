@@ -30,6 +30,14 @@ function profileFields(
   );
 }
 
+/** Keys of the section's fields each profile stores. */
+export function profileBehaviorFieldKeys(
+  schema: SettingsSchema | null | undefined,
+  section: ProfileBehaviorSection,
+): string[] {
+  return profileFields(schema, section).map((field) => field.key);
+}
+
 /** A stored profile section as form values; fields it lacks take the schema default. */
 export function toBehaviorFormValues(
   schema: SettingsSchema | null | undefined,

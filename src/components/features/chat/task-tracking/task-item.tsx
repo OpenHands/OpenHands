@@ -47,7 +47,7 @@ export function TaskItem({ task }: TaskItemProps) {
           {task.title}
         </Typography.Text>
         {task.notes && (
-          <Typography.Text className="text-[10px] text-muted">
+          <Typography.Text className="text-3xs text-muted">
             {t(I18nKey.TASK_TRACKING_OBSERVATION$TASK_NOTES)}: {task.notes}
           </Typography.Text>
         )}

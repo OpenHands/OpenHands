@@ -74,7 +74,7 @@ export function ContextWindowRing({
         strokeDasharray={circumference}
         strokeDashoffset={dashOffset}
         transform={`rotate(-90 ${CONTEXT_WINDOW_RING_SIZE / 2} ${CONTEXT_WINDOW_RING_SIZE / 2})`}
-        className="transition-[stroke-dashoffset,stroke] duration-300"
+        className="transition-context-ring duration-300"
         data-testid="context-window-ring-arc"
       />
     </svg>

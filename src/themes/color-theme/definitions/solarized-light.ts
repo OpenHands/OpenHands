@@ -68,6 +68,12 @@ const SOLARIZED_LIGHT_TOKENS: Partial<
   "--oh-color-basic": "#566A70",
   "--oh-feedback-error": "#B52825",
   "--oh-feedback-success": "#5D6A00",
+  // Alert ink clears small-text contrast on tinted and nested Markdown panels.
+  "--oh-markdown-alert-note": "#005A88",
+  "--oh-markdown-alert-tip": "#4E5A00",
+  "--oh-markdown-alert-important": "#6C3CA6",
+  "--oh-markdown-alert-warning": "#715200",
+  "--oh-markdown-alert-caution": "#A5201C",
   // @spec WN-001 — Darker warning text preserves contrast on Solarized surfaces
   "--oh-feedback-warning": "#735400",
   "--oh-color-tertiary": "#E6DFCC",

@@ -436,7 +436,7 @@ export function AddModelsModal({
         )}
 
         {selectedProvider && connectionId && (
-          <span className="min-w-0 max-w-full truncate text-xs text-[var(--oh-muted)]">
+          <span className="min-w-0 max-w-full truncate text-xs text-muted">
             {t(I18nKey.SETTINGS$ADD_MODELS_CONNECTION_BOUND, {
               provider: selectedProvider,
             })}
@@ -445,7 +445,7 @@ export function AddModelsModal({
         {selectedProvider && !connectionId && (
           <span
             data-testid="add-models-keyless-note"
-            className="min-w-0 max-w-full truncate text-xs text-[var(--oh-muted)]"
+            className="min-w-0 max-w-full truncate text-xs text-muted"
           >
             {t(I18nKey.SETTINGS$ADD_MODELS_KEYLESS_NOTE)}
           </span>
@@ -458,10 +458,7 @@ export function AddModelsModal({
         )}
 
         {showEmpty && (
-          <p
-            data-testid="add-models-empty"
-            className="text-sm text-[var(--oh-muted)]"
-          >
+          <p data-testid="add-models-empty" className="text-sm text-muted">
             {t(emptyMessage)}
           </p>
         )}

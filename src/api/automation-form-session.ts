@@ -13,6 +13,8 @@ import type {
   AutomationSetupTriggerKind,
   AutomationSetupFrequency,
 } from "#/api/automation-setup-types";
+import type { AutomationRepository } from "#/types/automation";
+import { readAutomationRepositories } from "#/utils/automation-preset-sources";
 
 const AUTOMATION_FORM_SESSION_CHANGED_EVENT =
   "openhands:automation-form-session-changed";
@@ -43,11 +45,13 @@ const AUTOMATION_SETUP_FREQUENCIES: AutomationSetupFrequency[] = [
 ];
 const STRING_FIELDS = [
   "name",
+  "runAsUserId",
   "prompt",
   "repository",
   "pluginSource",
   "pluginRef",
   "pluginList",
+  "pluginConfig",
   "customCode",
   "entrypoint",
   "setupScriptPath",
@@ -173,6 +177,15 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
     typeof value.existingCustomTarballPath === "string"
       ? value.existingCustomTarballPath.trim()
       : "";
+  const existingRepositories = readAutomationRepositories(
+    value.existingRepositories,
+  );
+  const existingEventTrigger =
+    value.existingEventTrigger &&
+    typeof value.existingEventTrigger === "object" &&
+    !Array.isArray(value.existingEventTrigger)
+      ? value.existingEventTrigger
+      : null;
   const serverDraftId =
     typeof value.serverDraftId === "string" ? value.serverDraftId.trim() : "";
   const materializedAutomationId =
@@ -193,7 +206,15 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
     ...(normalizedPlugins.length > 0 ? { plugins: normalizedPlugins } : {}),
     form: normalizedForm,
     ...(editingAutomationId ? { editingAutomationId } : {}),
+    ...(value.existingPluginSpec
+      ? { existingPluginSpec: value.existingPluginSpec }
+      : {}),
     ...(existingCustomTarballPath ? { existingCustomTarballPath } : {}),
+    ...(existingRepositories.length > 0 ? { existingRepositories } : {}),
+    ...(value.canUpdateRepositories === true
+      ? { canUpdateRepositories: true }
+      : {}),
+    ...(existingEventTrigger ? { existingEventTrigger } : {}),
     ...(serverDraftId ? { serverDraftId } : {}),
     ...(materializedAutomationId ? { materializedAutomationId } : {}),
     ...(fieldMetadata ? { fieldMetadata } : {}),
@@ -234,6 +255,19 @@ export function initializeAutomationFormSession(
   draft: AutomationSetupDraft,
 ) {
   sessions.set(conversationId, normalizeDraft(draft));
+}
+
+/** Record the repositories an edited automation clones after a save. */
+export function setAutomationFormSessionRepositories(
+  conversationId: string,
+  repositories: AutomationRepository[],
+) {
+  const existing = sessions.get(conversationId);
+  if (!existing) return;
+  sessions.set(
+    conversationId,
+    normalizeDraft({ ...existing, existingRepositories: repositories }),
+  );
 }
 
 export function getAutomationFormSession(
@@ -278,6 +312,26 @@ export function patchAutomationFormSession(
 
   for (const [fieldName, value] of Object.entries(normalizedPatch)) {
     const field = fieldName as AutomationSetupField;
+    if (
+      existing.existingPluginSpec &&
+      [
+        "kind",
+        "prompt",
+        "repository",
+        "pluginSource",
+        "pluginRef",
+        "pluginList",
+        "customCode",
+        "entrypoint",
+        "setupScriptPath",
+        "setupScript",
+        "model",
+        "agentProfileId",
+      ].includes(field)
+    ) {
+      result.skipped.push(field);
+      continue;
+    }
     const currentValue = nextForm[field];
     const metadata = nextMetadata[field];
     const userDirty = metadata?.userDirty === true;

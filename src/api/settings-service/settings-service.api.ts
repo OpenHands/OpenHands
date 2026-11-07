@@ -42,6 +42,8 @@ export const APP_PREFERENCE_FIELDS = [
   "enabled_skills",
   "run_router_at_conversation_start",
   "workspace_file_discovery",
+  "home_pinned_automations",
+  "default_profile_migrated",
 ] as const;
 
 export type AppPreferenceField = (typeof APP_PREFERENCE_FIELDS)[number];
@@ -532,8 +534,7 @@ const syncDerivedSettings = (settings: Partial<Settings>): Settings => {
 
   const llm = agentSettings.llm as Record<string, SettingsValue> | undefined;
   const condenser = agentSettings.condenser as
-    | Record<string, SettingsValue>
-    | undefined;
+    Record<string, SettingsValue> | undefined;
 
   if (typeof agentSettings.agent === "string") {
     merged.agent = agentSettings.agent;
@@ -560,8 +561,7 @@ const syncDerivedSettings = (settings: Partial<Settings>): Settings => {
     conversationSettings.security_analyzer === null
   ) {
     merged.security_analyzer = conversationSettings.security_analyzer as
-      | string
-      | null;
+      string | null;
   }
   if (typeof conversationSettings.max_iterations === "number") {
     merged.max_iterations = conversationSettings.max_iterations;
@@ -804,16 +804,14 @@ class SettingsService {
 
     // Extract agent_settings_diff
     const agentSettingsDiff = rest.agent_settings_diff as
-      | Record<string, SettingsValue>
-      | undefined;
+      Record<string, SettingsValue> | undefined;
     if (agentSettingsDiff && Object.keys(agentSettingsDiff).length > 0) {
       payload.agent_settings_diff = agentSettingsDiff;
     }
 
     // Extract conversation_settings_diff
     const conversationSettingsDiff = rest.conversation_settings_diff as
-      | Record<string, SettingsValue>
-      | undefined;
+      Record<string, SettingsValue> | undefined;
     if (
       conversationSettingsDiff &&
       Object.keys(conversationSettingsDiff).length > 0

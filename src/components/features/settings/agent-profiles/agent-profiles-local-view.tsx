@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
 import { useTranslation } from "react-i18next";
 import { AgentProfilesManager } from "./agent-profiles-manager";
-import { GlobalToolsNotice } from "./global-tools-notice";
 import { mergeAgentProfileSaveInput } from "./merge-agent-profile-save-input";
+import { newProfileSeed } from "./new-profile-seed";
 import { ProfileNameInput } from "#/components/features/settings/llm-profiles/profile-name-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
@@ -38,6 +41,12 @@ import {
   defaultSkillEnablement,
   toProfileSkillFields,
 } from "#/utils/skill-enablement";
+import {
+  applyDefaultAgentProfileToGlobal,
+  enabledMcpServerRefs,
+  sharedDefaultProfileFields,
+} from "#/hooks/mutation/sync-agent-profiles";
+import type { Settings } from "#/types/settings";
 
 type ViewMode = "list" | "create" | "edit";
 
@@ -85,6 +94,18 @@ function toAgentSettingsOverride(
   };
 }
 
+/** An OpenHands `default` opens on the MCP servers switched on and every secret. */
+function defaultProfileOverride(
+  profile: AgentProfile,
+  settings: Settings | undefined,
+): Record<string, SettingsValue> {
+  return {
+    ...toAgentSettingsOverride(profile),
+    mcp_server_refs: enabledMcpServerRefs(settings),
+    secret_refs: null,
+  };
+}
+
 /**
  * AgentProfilesLocalView mirrors {@link LlmSettingsLocalView}: a list of the
  * user's Agent profiles, with a create/edit view that reuses the existing Agent
@@ -100,12 +121,31 @@ export function AgentProfilesLocalView() {
   const { data: llmProfilesData, isLoading: isLlmProfilesLoading } =
     useLlmProfiles();
   const { data: settings } = useSettings();
+  const queryClient = useQueryClient();
+  const { backend } = useActiveBackend();
+  // Edits must build on, and land after, the one-time `default` migration.
+  const waitForMigration = useCallback(
+    () =>
+      backend.kind === "local"
+        ? ensureDefaultAgentProfileMigrated(queryClient, backend.id)
+        : Promise.resolve(true as const),
+    [backend.kind, backend.id, queryClient],
+  );
+  // On cloud, `default` is an ordinary profile name.
+  const isSharedDefault = useCallback(
+    (name: string | undefined) =>
+      backend.kind === "local" &&
+      name === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
+    [backend.kind],
+  );
 
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [profileName, setProfileName] = useState("");
+  const [nameTouched, setNameTouched] = useState(false);
   const [editingProfile, setEditingProfile] = useState<AgentProfile | null>(
     null,
   );
+  const [seedProfile, setSeedProfile] = useState<AgentProfile | null>(null);
   const [override, setOverride] = useState<Record<
     string,
     SettingsValue
@@ -140,24 +180,41 @@ export function AgentProfilesLocalView() {
       (viewMode === "edit" && profileName !== editingProfile?.name));
   const isNameValid = isNameFormatValid && !isDuplicateName;
 
-  const handleAddProfile = useCallback(() => {
+  const handleAddProfile = useCallback(async () => {
+    let seed: AgentProfile | null = null;
+    if (backend.kind === "local") {
+      try {
+        await waitForMigration();
+        const { profile } = await AgentProfilesService.getProfile(
+          WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
+        );
+        seed = newProfileSeed(profile);
+      } catch {
+        // Without a readable `default`, the editor starts from its own values.
+      }
+    }
     setProfileName("");
+    setNameTouched(false);
     setEditingProfile(null);
-    // A new profile starts from the skills selected on the Skills page.
+    setSeedProfile(seed);
+    // A new profile copies an OpenHands `default`, skills included.
     setOverride({
+      ...(seed
+        ? toAgentSettingsOverride(seed)
+        : agentProfileSupportsSkills()
+          ? toProfileSkillFields(defaultSkillEnablement(settings ?? {}))
+          : {}),
       agent_kind: "openhands",
-      ...(agentProfileSupportsSkills()
-        ? toProfileSkillFields(defaultSkillEnablement(settings ?? {}))
-        : {}),
     });
     setLlmProfileRef(defaultLlmProfileRef);
     setSaveControl(null);
     setViewMode("create");
-  }, [defaultLlmProfileRef, settings]);
+  }, [backend.kind, waitForMigration, defaultLlmProfileRef, settings]);
 
   const handleEditProfile = useCallback(
     async (summary: AgentProfileSummary) => {
       try {
+        await waitForMigration();
         // Fetch with encrypted secret exposure so any `skills[].mcp_tools`
         // values arrive as Fernet tokens rather than masks — the save below
         // round-trips the stored profile, and posting back a mask would
@@ -167,9 +224,21 @@ export function AgentProfilesLocalView() {
           "encrypted",
         );
         const profile = detail.profile;
+        const isDefault = isSharedDefault(profile.name);
         setEditingProfile(profile);
-        setOverride(toAgentSettingsOverride(profile));
-        if (profile.agent_kind === "openhands") {
+        setOverride(
+          isDefault && profile.agent_kind === "openhands"
+            ? defaultProfileOverride(profile, settings)
+            : toAgentSettingsOverride(profile),
+        );
+        if (isDefault) {
+          setLlmProfileRef(
+            defaultLlmProfileRef ||
+              (profile.agent_kind === "openhands"
+                ? profile.llm_profile_ref
+                : ""),
+          );
+        } else if (profile.agent_kind === "openhands") {
           // A profile can reference an LLM profile that's since been deleted
           // (or renamed): the dropdown would render nothing selected while
           // `llmProfileRef` still holds the stale name and saves it straight
@@ -194,13 +263,23 @@ export function AgentProfilesLocalView() {
         displayErrorToast(t(I18nKey.ERROR$GENERIC));
       }
     },
-    [t, llmProfiles, isLlmProfilesLoading, defaultLlmProfileRef],
+    [
+      t,
+      llmProfiles,
+      isLlmProfilesLoading,
+      defaultLlmProfileRef,
+      waitForMigration,
+      isSharedDefault,
+      settings,
+    ],
   );
 
   const handleBackToList = useCallback(() => {
     setViewMode("list");
     setEditingProfile(null);
+    setSeedProfile(null);
     setProfileName("");
+    setNameTouched(false);
     setOverride(null);
     setSaveControl(null);
   }, []);
@@ -236,9 +315,15 @@ export function AgentProfilesLocalView() {
     const originalName = editingProfile?.name;
     const isRename =
       viewMode === "edit" && originalName && originalName !== trimmedName;
+    const savesDefault =
+      viewMode === "edit" &&
+      isSharedDefault(originalName) &&
+      trimmedName === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME &&
+      input.agent_kind === "openhands";
 
     setIsSaving(true);
     try {
+      await waitForMigration();
       // Persist ACP credentials (global secrets) before the profile spec.
       if (saveControl.credentials.isDirty) {
         const ok = await saveControl.credentials.save({ silent: true });
@@ -259,10 +344,12 @@ export function AgentProfilesLocalView() {
       // the edited fields so the fields this editor doesn't model survive an
       // edit (kind-aware — a kind switch stays a clean variant replacement).
       const profile = mergeAgentProfileSaveInput(
-        viewMode === "edit" ? editingProfile : null,
-        input,
+        viewMode === "edit" ? editingProfile : seedProfile,
+        savesDefault ? sharedDefaultProfileFields(input) : input,
       );
       await saveProfile.mutateAsync({ name: trimmedName, profile });
+      if (savesDefault)
+        await applyDefaultAgentProfileToGlobal(queryClient, input);
 
       displaySuccessToast(
         viewMode === "create"
@@ -283,16 +370,19 @@ export function AgentProfilesLocalView() {
     profileName,
     viewMode,
     editingProfile,
+    seedProfile,
     saveProfile,
     renameProfile,
     t,
     handleBackToList,
+    waitForMigration,
+    isSharedDefault,
+    queryClient,
   ]);
 
   if (viewMode === "list") {
     return (
       <div className="flex flex-col gap-4">
-        <GlobalToolsNotice />
         <AgentProfilesManager
           onAddProfile={handleAddProfile}
           onEditProfile={handleEditProfile}
@@ -310,6 +400,11 @@ export function AgentProfilesLocalView() {
       ? t(I18nKey.SETTINGS$PROFILE_LOADED, { name: editingProfile.name })
       : t(I18nKey.SETTINGS$AGENT_PROFILE_SAVE_HINT);
   const isOpenHands = saveControl?.agentType !== "acp";
+  const isDefaultLocked =
+    viewMode === "edit" && isSharedDefault(editingProfile?.name);
+  const isEditingDefault =
+    isDefaultLocked &&
+    profileName.trim() === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME;
   const nameDirty = viewMode === "edit" && profileName !== editingProfile?.name;
   const loadedLlmRef =
     editingProfile?.agent_kind === "openhands"
@@ -322,6 +417,40 @@ export function AgentProfilesLocalView() {
     Boolean(saveControl?.isDirty) ||
     nameDirty ||
     llmRefDirty;
+
+  // @spec FF-001 — Profile validation feedback follows the host error role
+  // OpenHands profiles reference an LLM profile (required).
+  const llmPicker =
+    llmProfiles.length > 0 ? (
+      <div className="flex flex-col gap-2">
+        <SettingsDropdownInput
+          testId="agent-profile-llm-selector"
+          name="agent-profile-llm"
+          label={t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_LABEL)}
+          items={llmProfiles.map((p) => ({
+            key: p.name,
+            label: p.model ? `${p.name} (${p.model})` : p.name,
+          }))}
+          selectedKey={llmProfileRef}
+          onSelectionChange={(key) => key && setLlmProfileRef(String(key))}
+        />
+        {isEditingDefault ? (
+          <p
+            data-testid="agent-profile-llm-default-note"
+            className="text-xs text-tertiary-alt"
+          >
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_LLM_NOTE)}
+          </p>
+        ) : null}
+      </div>
+    ) : (
+      <p
+        data-testid="agent-profile-no-llm"
+        className="text-sm text-feedback-error"
+      >
+        {t(I18nKey.SETTINGS$AGENT_PROFILE_NO_LLM)}
+      </p>
+    );
 
   return (
     <div className="flex flex-col gap-6">
@@ -343,51 +472,41 @@ export function AgentProfilesLocalView() {
         </p>
       </div>
 
-      <ProfileNameInput
-        testId="agent-profile-name-input"
-        value={profileName}
-        onChange={setProfileName}
-        isRequired
-        error={
-          isDuplicateName
-            ? t(I18nKey.SETTINGS$AGENT_PROFILE_NAME_TAKEN)
-            : undefined
-        }
-      />
+      <div className="flex flex-col gap-2">
+        <ProfileNameInput
+          testId="agent-profile-name-input"
+          value={profileName}
+          onChange={(name) => {
+            setNameTouched(true);
+            setProfileName(name);
+          }}
+          // A new profile's empty name isn't an error until the user types.
+          isRequired={viewMode === "edit" || nameTouched}
+          isDisabled={isDefaultLocked}
+          error={
+            isDuplicateName
+              ? t(I18nKey.SETTINGS$AGENT_PROFILE_NAME_TAKEN)
+              : undefined
+          }
+        />
+        {isDefaultLocked ? (
+          <p
+            data-testid="agent-profile-default-locked-note"
+            className="text-xs text-tertiary-alt"
+          >
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_DEFAULT_LOCKED)}
+          </p>
+        ) : null}
+      </div>
 
       {/* Reuse the existing Agent settings form to define the agent. */}
       <AgentSettingsScreen
         key={viewMode === "edit" ? `edit-${editingProfile?.id}` : "new-profile"}
         agentSettingsOverride={override}
         onSaveControlChange={setSaveControl}
-        isDefaultProfile={
-          profileName.trim() === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME
-        }
+        isDefaultProfile={isEditingDefault}
+        llmPicker={llmPicker}
       />
-
-      {/* @spec FF-001 — Profile validation feedback follows the host error role */}
-      {/* OpenHands profiles reference an LLM profile (required). */}
-      {isOpenHands &&
-        (llmProfiles.length > 0 ? (
-          <SettingsDropdownInput
-            testId="agent-profile-llm-selector"
-            name="agent-profile-llm"
-            label={t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_LABEL)}
-            items={llmProfiles.map((p) => ({
-              key: p.name,
-              label: p.model ? `${p.name} (${p.model})` : p.name,
-            }))}
-            selectedKey={llmProfileRef}
-            onSelectionChange={(key) => key && setLlmProfileRef(String(key))}
-          />
-        ) : (
-          <p
-            data-testid="agent-profile-no-llm"
-            className="text-sm text-feedback-error"
-          >
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_NO_LLM)}
-          </p>
-        ))}
 
       <div className="flex justify-start gap-3 pt-4">
         <BrandButton

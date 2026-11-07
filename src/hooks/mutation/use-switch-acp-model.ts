@@ -37,8 +37,8 @@ interface SwitchAcpModelVars {
  * (``agent_profile_id`` and ``agent_settings`` are mutually exclusive launch
  * sources), so writing ``agent_settings.acp_model`` would not affect them.
  * Only when the profile list resolves with no active ACP profile does the
- * write fall back to the ``agent_settings_diff`` the legacy launch path
- * reads. A failed profile discovery propagates instead of downgrading
+ * write fall back to the ``agent_settings_diff`` a Cloud launch without a
+ * profile reads. A failed profile discovery propagates instead of downgrading
  * (#16523): an active-profile launch ignores agent_settings, so persisting
  * the pick there would silently drop it.
  *
@@ -102,8 +102,8 @@ export const useSwitchAcpModel = () => {
         return;
       }
 
-      // No active ACP profile: persist as the agent-settings default the
-      // legacy launch path reads. The backend deep-merges
+      // No active ACP profile: persist as the agent-settings default a Cloud
+      // launch without a profile reads. The backend deep-merges
       // ``agent_settings_diff`` into the existing ``agent_settings`` dict, so
       // a scalar ``acp_model`` diff updates only the model and preserves the
       // selected provider + command.

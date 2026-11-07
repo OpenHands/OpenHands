@@ -22,6 +22,7 @@ interface BuildHomeAutomationMenuItemsOptions {
   automation: Automation;
   t: (key: I18nKey) => string;
   canManage: boolean;
+  canEdit: boolean;
   isRunPending: boolean;
   isCancelPending: boolean;
   canCancel: boolean;
@@ -44,6 +45,7 @@ export function buildHomeAutomationMenuItems({
   automation,
   t,
   canManage,
+  canEdit,
   isRunPending,
   isCancelPending,
   canCancel,
@@ -92,7 +94,7 @@ export function buildHomeAutomationMenuItems({
     testId: `${testIdPrefix}-view-${automation.id}`,
   });
 
-  if (canManage && onEdit) {
+  if (canEdit && onEdit) {
     items.push({
       kind: "item",
       key: "edit",

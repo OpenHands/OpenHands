@@ -261,6 +261,67 @@ describe("ModalBackdrop focus management", () => {
     expect(popoverInput).toHaveFocus();
   });
 
+  // A combobox that opens on focus moves virtual focus to its selected option
+  // (portaled outside the dialog) while its own focus event is still on the
+  // way to window: browsers flush React's update between the event's
+  // listeners. A document listener gives jsdom the same order.
+  function ComboboxOpeningOnFocus() {
+    const optionRef = React.useRef<HTMLLIElement>(null);
+    React.useEffect(() => {
+      const moveVirtualFocus = (event: FocusEvent) => {
+        if ((event.target as Element).getAttribute("role") !== "combobox") {
+          return;
+        }
+        optionRef.current?.dispatchEvent(
+          new FocusEvent("focusin", { bubbles: true }),
+        );
+      };
+      document.addEventListener("focusin", moveVirtualFocus);
+      return () => document.removeEventListener("focusin", moveVirtualFocus);
+    }, []);
+    return (
+      <>
+        <input
+          role="combobox"
+          aria-label="provider"
+          aria-controls="providers"
+          aria-expanded="true"
+        />
+        {createPortal(
+          <ul id="providers" role="listbox" aria-label="providers">
+            <li ref={optionRef} role="option" aria-selected="true">
+              OpenAI
+            </li>
+          </ul>,
+          document.body,
+        )}
+      </>
+    );
+  }
+
+  it("keeps focus on a combobox that moves virtual focus to its option as it opens", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    render(
+      <PageWithModal
+        renderModalContent={() => (
+          <>
+            <button type="button">first</button>
+            <ComboboxOpeningOnFocus />
+          </>
+        )}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "open" }));
+    const combobox = screen.getByRole("combobox", { name: "provider" });
+
+    // Act
+    combobox.focus();
+
+    // Assert
+    expect(combobox).toHaveFocus();
+  });
+
   it("restores focus to the opener when the dialog closes", async () => {
     const user = userEvent.setup();
     render(<PageWithModal renderModalContent={threeButtons} />);

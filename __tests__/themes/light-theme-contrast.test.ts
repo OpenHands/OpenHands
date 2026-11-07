@@ -49,30 +49,17 @@ const CONTROL_PAGE_SURFACES = [
   "--oh-surface",
 ];
 
-describe.each(LIGHT_THEMES)("%s contrast contract", (theme) => {
+// These palette choices belong to the Light+/Solarized contrast pass. Paper
+// has its own surface hierarchy and uses its light warning hue as a fill.
+const CONTRAST_PASS_THEMES = ["light-plus", "solarized-light"] as const;
+
+describe.each(CONTRAST_PASS_THEMES)("%s palette contrast contract", (theme) => {
   it.each(BODY_TEXT)("%s meets WCAG AA on every panel surface", (text) => {
     for (const surface of PANEL_SURFACES) {
       expect
         .soft(
           contrast(surfaceColor(theme, text), surfaceColor(theme, surface)),
           `${text} on ${surface}`,
-        )
-        .toBeGreaterThanOrEqual(4.5);
-    }
-  });
-
-  it("keeps filled-button labels readable", () => {
-    for (const [fill, label] of [
-      ["--oh-color-primary", "--oh-accent-foreground"],
-      ["--oh-accent", "--oh-accent-foreground"],
-      ["--oh-success", "--oh-success-foreground"],
-      ["--oh-warning", "--oh-warning-foreground"],
-      ["--oh-danger", "--oh-danger-foreground"],
-    ]) {
-      expect
-        .soft(
-          contrast(surfaceColor(theme, fill), surfaceColor(theme, label)),
-          `${label} on ${fill}`,
         )
         .toBeGreaterThanOrEqual(4.5);
     }
@@ -94,34 +81,6 @@ describe.each(LIGHT_THEMES)("%s contrast contract", (theme) => {
     }
   });
 
-  it("makes automation and settings list-row hover visible on its list surface", () => {
-    const list = surfaceColor(theme, "--oh-surface");
-    const hover = over(
-      utilityColor(
-        theme,
-        colorUtility(automationActivityRowClassName, "bg", "hover:"),
-      ),
-      list,
-    );
-    // Capped by BODY_TEXT above: a darker hover would drop row text below AA.
-    expect(contrast(hover, list)).toBeGreaterThanOrEqual(1.12);
-    expect(
-      contrast(hover, list),
-      "row hover must separate more than the raised surface it replaced",
-    ).toBeGreaterThan(
-      contrast(surfaceColor(theme, "--oh-surface-raised"), list),
-    );
-  });
-
-  it("keeps the established Neutral hover treatment as a dark override", () => {
-    expect(automationActivityRowClassName).toContain(
-      "dark:hover:bg-surface-raised",
-    );
-    expect(automationActivityRowClassName).toContain(
-      "dark:has-[:focus-visible]:bg-surface-raised",
-    );
-  });
-
   it("separates raised buttons and dividers from the page", () => {
     const base = surfaceColor(theme, "--oh-color-base");
     const surface = surfaceColor(theme, "--oh-surface");
@@ -134,6 +93,61 @@ describe.each(LIGHT_THEMES)("%s contrast contract", (theme) => {
     expect(
       contrast(surfaceColor(theme, "--oh-border"), base),
     ).toBeGreaterThanOrEqual(1.5);
+  });
+});
+
+describe.each(LIGHT_THEMES)("%s shared-control contrast", (theme) => {
+  it("keeps filled-button labels readable", () => {
+    for (const [fill, label] of [
+      ["--oh-color-primary", "--oh-accent-foreground"],
+      ["--oh-accent", "--oh-accent-foreground"],
+      ["--oh-success", "--oh-success-foreground"],
+      ["--oh-warning", "--oh-warning-foreground"],
+      ["--oh-danger", "--oh-danger-foreground"],
+    ]) {
+      expect
+        .soft(
+          contrast(surfaceColor(theme, fill), surfaceColor(theme, label)),
+          `${label} on ${fill}`,
+        )
+        .toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("makes automation row hover and keyboard focus visible on its list surface", () => {
+    const list = surfaceColor(theme, "--oh-surface");
+    for (const state of ["hover:", "has-[:focus-visible]:"]) {
+      const variant =
+        theme === "paper"
+          ? `[[data-agent-server-ui][data-color-theme=paper]_&]:${state}`
+          : state;
+      const hover = over(
+        utilityColor(
+          theme,
+          colorUtility(automationActivityRowClassName, "bg", variant),
+        ),
+        list,
+      );
+      expect(contrast(hover, list), state).toBeGreaterThanOrEqual(1.12);
+      if (theme === "light-plus" || theme === "solarized-light") {
+        // These palettes darken the old raised treatment; Paper preserves it.
+        expect(
+          contrast(hover, list),
+          "row hover must separate more than the raised surface it replaced",
+        ).toBeGreaterThan(
+          contrast(surfaceColor(theme, "--oh-surface-raised"), list),
+        );
+      }
+    }
+  });
+
+  it("keeps the established Neutral hover treatment as a dark override", () => {
+    expect(automationActivityRowClassName).toContain(
+      "dark:hover:bg-surface-raised",
+    );
+    expect(automationActivityRowClassName).toContain(
+      "dark:has-[:focus-visible]:bg-surface-raised",
+    );
   });
 
   it.each(Object.entries(OUTLINED_CONTROLS))(

@@ -6,6 +6,7 @@ for (const theme of [
   "openhands-neo",
   "light-plus",
   "solarized-light",
+  "paper",
 ] as const) {
   test(`${theme} preserves shared control borders through focus and blur`, async ({
     page,
@@ -75,6 +76,11 @@ for (const theme of [
       const { dropdownFilterTriggerClassName } = await import(
         /* @vite-ignore */ dropdownModule
       );
+      const automationModule =
+        "/src/components/features/automations/automation-view-mode.ts";
+      const { automationActivityRowClassName } = await import(
+        /* @vite-ignore */ automationModule
+      );
       const scope = document.querySelector(
         "[data-agent-server-ui] [data-theme]",
       );
@@ -95,29 +101,44 @@ for (const theme of [
       trigger.dataset.testid = "focus-cascade-trigger";
       trigger.className = dropdownFilterTriggerClassName;
       trigger.textContent = "Focus cascade filter";
+      const row = document.createElement("div");
+      row.dataset.testid = "focus-cascade-automation-row";
+      row.className = automationActivityRowClassName;
+      const rowButton = document.createElement("button");
+      rowButton.textContent = "Open automation";
+      row.append(rowButton);
       const end = document.createElement("button");
       end.type = "button";
       end.textContent = "End focus check";
       const reference = document.createElement("span");
       reference.style.visibility = "hidden";
-      fixture.append(shell, trigger, end, reference);
+      fixture.append(shell, trigger, row, end, reference);
       scope.append(fixture);
 
       // Let this browser normalize color-mix(), avoiding differences in color
       // serialization between Chromium, Firefox, and WebKit.
-      reference.style.borderColor =
-        colorTheme !== "light-plus" && colorTheme !== "solarized-light"
-          ? "var(--oh-border)"
-          : "var(--oh-border-input)";
+      reference.style.borderColor = ![
+        "light-plus",
+        "solarized-light",
+        "paper",
+      ].includes(colorTheme)
+        ? "var(--oh-border)"
+        : "var(--oh-border-input)";
       const restingBorder = getComputedStyle(reference).borderTopColor;
       reference.style.borderColor =
         "color-mix(in oklab, var(--oh-contrast) 40%, transparent)";
       reference.style.backgroundColor =
         "color-mix(in oklab, var(--oh-contrast) 20%, transparent)";
+      const ringColor = getComputedStyle(reference).backgroundColor;
+      reference.style.backgroundColor =
+        colorTheme === "light-plus" || colorTheme === "solarized-light"
+          ? "var(--oh-interactive-hover-low)"
+          : "var(--oh-surface-raised)";
       return {
         restingBorder,
         focusedBorder: getComputedStyle(reference).borderTopColor,
-        ringColor: getComputedStyle(reference).backgroundColor,
+        ringColor,
+        rowHighlight: getComputedStyle(reference).backgroundColor,
       };
     }, theme);
 
@@ -164,6 +185,44 @@ for (const theme of [
       );
     }
 
+    // Shared automation rows retain each palette's hover and keyboard cue.
+    const row = page.getByTestId("focus-cascade-automation-row");
+    // Embedded Canvas has one scoped root. Remove the SPA body's extra
+    // scope marker so it cannot accidentally make a broken selector match.
+    await row.evaluate((el) => {
+      const root = el.closest("[data-agent-server-ui]");
+      for (
+        let ancestor = root?.parentElement;
+        ancestor;
+        ancestor = ancestor.parentElement
+      ) {
+        if (ancestor.hasAttribute("data-agent-server-ui")) {
+          ancestor.setAttribute("data-restore-ui-scope", "");
+          ancestor.removeAttribute("data-agent-server-ui");
+        }
+      }
+    });
+    await row.hover();
+    await expect(row).toHaveCSS("background-color", expected.rowHighlight);
+    const end = page.getByRole("button", { name: "End focus check" });
+    await end.click();
+    await end.press(
+      browserName === "webkit" && process.platform === "darwin"
+        ? "Alt+Shift+Tab"
+        : "Shift+Tab",
+    );
+    await expect(row.getByRole("button")).toBeFocused();
+    await expect(row).toHaveCSS("background-color", expected.rowHighlight);
+
+    await page.evaluate(() => {
+      for (const ancestor of document.querySelectorAll(
+        "[data-restore-ui-scope]",
+      )) {
+        ancestor.setAttribute("data-agent-server-ui", "");
+        ancestor.removeAttribute("data-restore-ui-scope");
+      }
+    });
+
     await page
       .getByTestId("focus-cascade-fixture")
       .evaluate((el) => el.remove());
@@ -184,7 +243,7 @@ for (const theme of [
     const fixture = page.getByTestId("theme-consumer-fixture");
     const draft = fixture.getByTestId("active-status-badge-draft");
     await expect(draft).toBeVisible();
-    if (theme === "light-plus" || theme === "solarized-light") {
+    if (["light-plus", "solarized-light", "paper"].includes(theme)) {
       const ratio = await draft.evaluate((el) => {
         const style = getComputedStyle(el);
         const canvas = document.createElement("canvas");
