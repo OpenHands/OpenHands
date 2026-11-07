@@ -153,7 +153,7 @@ export function EnvironmentSwitchOverlay() {
     <div
       data-testid="environment-switch-overlay"
       data-target={target}
-      className="environment-switch-overlay pointer-events-none fixed inset-0 z-[2147483646] flex items-center justify-center"
+      className="environment-switch-overlay pointer-events-none fixed inset-0 z-2147483646 flex items-center justify-center"
       aria-live="polite"
       aria-atomic="true"
     >

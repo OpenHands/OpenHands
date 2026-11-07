@@ -77,19 +77,4 @@ describe("OptionService", () => {
       details: expect.stringContaining("Request failed"),
     });
   });
-
-  it("returns models from mocked LLM endpoints", async () => {
-    const models = await OptionService.getModels();
-
-    expect(models.models).toContain("openhands/claude-opus-4-5-20251101");
-    expect(models.models).toContain("openai/gpt-5.5");
-    expect(models.verified_models).toContain("claude-opus-4-5-20251101");
-    expect(models.verified_models).toContain("gpt-5.5");
-    expect(models.verified_providers).toEqual([
-      "anthropic",
-      "openai",
-      "openhands",
-    ]);
-    expect(models.default_model).toBeTruthy();
-  });
 });

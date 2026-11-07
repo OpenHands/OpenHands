@@ -1,3 +1,6 @@
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+import type { AppConversationPage } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { withConversationTagFlags } from "#/utils/conversation-tag-flags";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRoutesStub } from "react-router";
@@ -21,8 +24,6 @@ import {
 } from "./conversation-panel-test-utils";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
-import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
-import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import {
@@ -43,6 +44,111 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
 
 describe("ConversationPanel list loading", () => {
   setupConversationPanelTest();
+
+  it("keeps one prompt-titled row until the saved row arrives, including a delayed list response", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-startup" });
+    useConversationLaunchStore.setState({ launches: {} });
+    useConversationLaunchStore.getState().begin({
+      backendId: cloudBackend.id,
+      orgId: "org-startup",
+      message: "Explain startup",
+      files: [],
+      targetId: "task-startup",
+    });
+    const task = {
+      id: "startup",
+      status: "WORKING",
+      request: {},
+      app_conversation_id: null,
+    };
+    vi.spyOn(AgentServerConversationService, "getStartTask").mockResolvedValue(
+      task as never,
+    );
+    let resolveList!: (page: AppConversationPage) => void;
+    vi.mocked(AgentServerConversationService.searchConversations)
+      .mockResolvedValueOnce({ items: [], next_page_id: null })
+      .mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveList = resolve;
+          }),
+      );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <ActiveBackendProvider>
+          <NavigationProvider
+            value={{
+              currentPath: "/conversations/task-startup",
+              conversationId: "task-startup",
+              navigate: vi.fn(),
+              isNavigating: false,
+            }}
+          >
+            <ConversationPanel />
+          </NavigationProvider>
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+    await screen.findByText("Explain startup");
+    await waitFor(() =>
+      expect(AgentServerConversationService.getStartTask).toHaveBeenCalled(),
+    );
+    act(() =>
+      client.setQueryData(["start-task", "startup"], {
+        ...task,
+        status: "READY",
+        app_conversation_id: "12345-real",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        AgentServerConversationService.searchConversations,
+      ).toHaveBeenCalledTimes(2),
+    );
+    expect(screen.getAllByText("Explain startup")).toHaveLength(1);
+    expect(
+      screen.queryByText("CONVERSATION$NO_CONVERSATIONS"),
+    ).not.toBeInTheDocument();
+    await act(async () =>
+      resolveList({
+        items: [
+          createMockConversation({
+            id: "12345-real",
+            title: "Conversation 12345",
+            sandbox_status: "RUNNING",
+          }),
+        ],
+        next_page_id: null,
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText("Explain startup")).toHaveLength(1),
+    );
+    expect(screen.getAllByTestId("conversation-card")).toHaveLength(1);
+    expect(screen.queryByText("Conversation 12345")).not.toBeInTheDocument();
+    act(() =>
+      client.setQueryData(
+        [
+          "user",
+          "conversations",
+          "paginated",
+          20,
+          cloudBackend.id,
+          "org-startup",
+        ],
+        { pages: [{ items: [], next_page_id: null }], pageParams: [undefined] },
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Explain startup")).not.toBeInTheDocument(),
+    );
+    useConversationLaunchStore.setState({ launches: {} });
+    client.clear();
+  });
 
   it("pins the active backend onto each conversation link", async () => {
     // A tab opened with cmd/ctrl-click does not reliably inherit the opener's
@@ -238,8 +344,16 @@ describe("ConversationPanel list loading", () => {
     // fetching the next page must surface the unarchived conversation.
     const user = userEvent.setup();
     const page1 = [
-      createMockConversation({ id: "archived-1", title: "Archived 1" }),
-      createMockConversation({ id: "archived-2", title: "Archived 2" }),
+      createMockConversation({
+        id: "archived-1",
+        title: "Archived 1",
+        tags: { archived: "true" },
+      }),
+      createMockConversation({
+        id: "archived-2",
+        title: "Archived 2",
+        tags: { archived: "true" },
+      }),
     ];
     const page2 = [
       createMockConversation({
@@ -257,11 +371,6 @@ describe("ConversationPanel list loading", () => {
       return { items: page1, next_page_id: "page-2" };
     });
 
-    useArchivedConversationsStore.setState({
-      archivesByBackendId: {
-        "default-local": ["archived-1", "archived-2"],
-      },
-    });
     useConversationPanelPreferencesStore.setState({
       showArchivedConversations: false,
     });
@@ -647,9 +756,17 @@ describe("ConversationPanel list loading", () => {
 
   describe("pinned conversations", () => {
     it("shows a pinned section above the conversations list when pins exist", async () => {
-      usePinnedConversationsStore
-        .getState()
-        .pinConversation("default-local", "2");
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: mockConversations.map((conversation) =>
+          conversation.id === "2"
+            ? { ...conversation, tags: { pinned: "true" } }
+            : conversation,
+        ),
+        next_page_id: null,
+      });
 
       renderConversationPanel();
 
@@ -668,9 +785,17 @@ describe("ConversationPanel list loading", () => {
     });
 
     it("renders pinned conversations only in the pinned section in chronological mode", async () => {
-      usePinnedConversationsStore
-        .getState()
-        .pinConversation("default-local", "2");
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: mockConversations.map((conversation) =>
+          conversation.id === "2"
+            ? { ...conversation, tags: { pinned: "true" } }
+            : conversation,
+        ),
+        next_page_id: null,
+      });
 
       renderConversationPanel();
 
@@ -688,9 +813,17 @@ describe("ConversationPanel list loading", () => {
       useConversationPanelPreferencesStore.setState({
         organizeMode: "grouped",
       });
-      usePinnedConversationsStore
-        .getState()
-        .pinConversation("default-local", "2");
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: mockConversations.map((conversation) =>
+          conversation.id === "2"
+            ? { ...conversation, tags: { pinned: "true" } }
+            : conversation,
+        ),
+        next_page_id: null,
+      });
 
       renderConversationPanel();
 
@@ -705,9 +838,30 @@ describe("ConversationPanel list loading", () => {
     });
 
     it("hides the pinned section after the last pin is removed", async () => {
-      usePinnedConversationsStore
-        .getState()
-        .pinConversation("default-local", "2");
+      const items = mockConversations.map((conversation) =>
+        conversation.id === "2"
+          ? { ...conversation, tags: { pinned: "true" } }
+          : { ...conversation },
+      );
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items,
+        next_page_id: null,
+      });
+      // Stateful fake: tag-flag writes update what later searches return,
+      // mirroring the server round-trip the settle-invalidation performs.
+      vi.spyOn(
+        AgentServerConversationService,
+        "updateConversationTagFlags",
+      ).mockImplementation(async (conversationId, _currentTags, changes) => {
+        const target = items.find(
+          (conversation) => conversation.id === conversationId,
+        )!;
+        target.tags = withConversationTagFlags(target.tags, changes);
+        return target;
+      });
 
       const user = userEvent.setup();
       renderConversationPanel();
@@ -739,14 +893,12 @@ describe("ConversationPanel list loading", () => {
         AgentServerConversationService,
         "searchConversations",
       ).mockResolvedValue({
-        items: manyConversations,
+        items: manyConversations.map((conversation) => ({
+          ...conversation,
+          tags: { pinned: "true" },
+        })),
         next_page_id: null,
       });
-      for (const conversation of manyConversations) {
-        usePinnedConversationsStore
-          .getState()
-          .pinConversation("default-local", conversation.id);
-      }
 
       renderConversationPanel();
 

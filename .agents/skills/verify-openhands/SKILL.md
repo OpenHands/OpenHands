@@ -158,11 +158,12 @@ control-openhands stop                         # stops only this run; evidence s
   `service pause automation` and `service resume automation` queue and release
   real requests for in-flight race checks. Resume before stopping the run. `browser
   network` (with `--bodies`, what the page sent, credentials redacted;
-  the display `body` is capped at 2000 characters. `bodyFields.plugins` retains
-  only the request's top-level `plugins` before that cap, using the same
+  the display `body` is capped at 2000 characters. `bodyFields` retains only
+  the request's top-level `plugins`, `conversation_runtime`, `worktree`,
+  `worktree_options` and `container` before that cap, using the same
   recursive credential/env/header and URL redaction. Its complete JSON
   projection is bounded to 16384 UTF-8 bytes; an oversized projection is omitted
-  with `bodyFieldsOmitted.plugins` explaining why. No projection of other
+  with `bodyFieldsOmitted.<field>` explaining why. No projection of other
   top-level fields is made, and neither body fields nor omission metadata appear
   without `--bodies`; every row also times its response: `responseMs`,
   `durationMs`, `completedTs`, `outcome` and `completedSeq`, and `--order
