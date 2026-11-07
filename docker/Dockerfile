@@ -143,6 +143,9 @@ COPY --from=frontend-build /build/build /opt/agent-canvas/frontend
 # Copy the static-server scripts and their production runtime deps.
 COPY scripts/static-server.mjs /opt/agent-canvas/static-server.mjs
 COPY scripts/bind-host.mjs /opt/agent-canvas/bind-host.mjs
+COPY scripts/feature-policy.mjs /opt/agent-canvas/feature-policy.mjs
+# feature-policy.mjs reads ../config/features.json relative to itself.
+COPY config/features.json /opt/config/features.json
 COPY scripts/proxy-utils.mjs /opt/agent-canvas/proxy-utils.mjs
 # static-server.mjs mounts the MARS web bridge, which pulls in these modules.
 COPY scripts/http-body.mjs /opt/agent-canvas/http-body.mjs

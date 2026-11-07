@@ -23,6 +23,7 @@ import {
   setQueryClient,
 } from "#/index";
 import i18n from "#/i18n";
+import { useFeaturePolicy } from "#/feature-policy/feature-policy-context";
 
 const telemetryProviderMock = vi.hoisted(() => vi.fn());
 vi.mock("#/components/providers/telemetry-provider", () => ({
@@ -208,6 +209,29 @@ describe("AgentServerUIProviders", () => {
           uiHost: analytics.uiHost,
         },
       }),
+    );
+  });
+
+  it("applies a host-supplied feature policy to its children", () => {
+    function AddBackendAvailability() {
+      const featurePolicy = useFeaturePolicy();
+      return (
+        <span data-testid="add-backend-enabled">
+          {String(featurePolicy.isEnabled("backends.add"))}
+        </span>
+      );
+    }
+
+    render(
+      <AgentServerUIProviders
+        featurePolicy={{ version: 1, disabled: ["backends.add"] }}
+      >
+        <AddBackendAvailability />
+      </AgentServerUIProviders>,
+    );
+
+    expect(screen.getByTestId("add-backend-enabled")).toHaveTextContent(
+      "false",
     );
   });
 

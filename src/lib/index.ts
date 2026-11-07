@@ -15,6 +15,15 @@ export {
   type AgentServerUIRootProps,
 } from "../components/providers";
 export {
+  FEATURE_IDS,
+  type FeatureId,
+  type FeaturePolicy,
+} from "../feature-policy/feature-policy";
+export {
+  FeaturePolicyProvider,
+  useFeaturePolicy,
+} from "../feature-policy/feature-policy-context";
+export {
   createAgentServerQueryClient,
   getDefaultQueryClient,
   getQueryClient,

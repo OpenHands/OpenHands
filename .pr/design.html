@@ -1,0 +1,367 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Startup feature policy · design</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --warn-soft:#fbf1e6; --ok:#2f7a3a; --ok-soft:#e7f3e8; --crit:#a02020;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:4px 0}
+  nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  nav.toc .files{margin-top:22px}
+  nav.toc .files h3{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+  nav.toc .files ul{list-style:none;padding:0;margin:0}
+  nav.toc .files li{margin:3px 0;font-family:var(--mono);font-size:11.5px;display:flex;gap:6px;justify-content:space-between}
+  nav.toc .files li::before{content:none}
+  nav.toc .files .n{color:var(--subtle);white-space:nowrap}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:34px;margin:6px 0 4px;letter-spacing:-.01em;line-height:1.2}
+  header.title .sub{color:var(--muted);max-width:740px;margin:8px 0 0}
+  header.title .stats{font-family:var(--mono);font-size:12.5px;color:var(--subtle);margin-top:10px}
+  h2{font-size:22px;margin:44px 0 10px;line-height:1.3} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  h3{font-size:16px;margin:22px 0 8px}
+  p{max-width:760px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  pre{font-family:var(--mono);font-size:13px;background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;border:1px solid var(--rule);line-height:1.55}
+  pre code{background:transparent;padding:0}
+  .kw{color:#7048a8}.str{color:var(--ok)}.com{color:var(--subtle);font-style:italic}
+  .add{background:var(--ok-soft);display:block} .del{background:#f8e5e5;display:block;color:var(--crit)}
+  .table-wrap{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px;max-width:800px}
+  .callout.warn{border-color:var(--warn);background:var(--warn-soft)} .callout.note{border-color:var(--muted);background:var(--code-bg)}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  details{border:1px solid var(--rule);border-radius:6px;margin:12px 0;max-width:900px}
+  details>summary{cursor:pointer;padding:8px 12px;color:var(--muted);font-size:13px;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸ "} details[open]>summary::before{content:"▾ "}
+  details>div,details>pre{margin:0 12px 12px}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  .ba figure{margin:0}
+  .card{border:1px solid var(--rule);border-radius:8px;background:var(--card);padding:6px 18px 14px;margin:18px 0}
+  .card h3{margin-top:14px}
+  .tag{font-family:var(--mono);font-size:11px;padding:1px 6px;border-radius:3px;background:var(--elevated);border:1px solid var(--rule);color:var(--muted);margin-left:6px;vertical-align:middle}
+  @media(max-width:860px){.wrap{grid-template-columns:1fr}.ba{grid-template-columns:1fr} nav.toc{position:static}}
+</style></head><body>
+<div class="wrap">
+  <nav class="toc"><h2>Contents</h2><ol>
+    <li><a href="#what">One policy, one gated button</a></li>
+    <li><a href="#api">Additive API, no default change</a></li>
+    <li><a href="#rule">backends.add hides one button</a></li>
+    <li><a href="#flow">Validated once, injected once</a></li>
+    <li><a href="#grow">Rules grow one element at a time</a></li>
+    <li><a href="#files">Per-file changes</a></li>
+    <li><a href="#risk">Boundaries and verification</a></li>
+  </ol>
+  <div class="files">
+    <h3>Policy loading</h3>
+    <ul>
+      <li><a href="#f-loader">🟢 scripts/feature-policy.mjs</a><span class="n">+91</span></li>
+      <li><a href="#f-catalog">🟢 config/features.json</a><span class="n">+10</span></li>
+      <li><a href="#f-static">✏️ scripts/static-server.mjs</a><span class="n">+31</span></li>
+      <li><a href="#f-mech">⚙️ vite.config.ts</a><span class="n">+8 −1</span></li>
+      <li><a href="#f-mech">⚙️ docker/Dockerfile</a><span class="n">+3</span></li>
+    </ul>
+    <h3>Frontend API</h3>
+    <ul>
+      <li><a href="#f-api">🟢 src/feature-policy/ (2 files)</a><span class="n">+80</span></li>
+      <li><a href="#f-providers">✏️ agent-server-ui-providers.tsx</a><span class="n">+14 −2</span></li>
+      <li><a href="#f-mech">⚙️ src/lib/index.ts</a><span class="n">+9</span></li>
+      <li><a href="#f-mech">⚙️ src/react-app-env.d.ts</a><span class="n">+8</span></li>
+    </ul>
+    <h3>First rule</h3>
+    <ul>
+      <li><a href="#rule">✏️ backend-selector.tsx</a><span class="n">+6 −1</span></li>
+    </ul>
+    <h3>Tests</h3>
+    <ul>
+      <li><a href="#risk">🟢 feature-policy.test.ts</a><span class="n">+111</span></li>
+      <li><a href="#risk">✏️ static-server.test.ts</a><span class="n">+44</span></li>
+      <li><a href="#risk">✏️ backend-selector.test.tsx</a><span class="n">+23</span></li>
+      <li><a href="#risk">✏️ agent-server-ui-providers.test.tsx</a><span class="n">+24</span></li>
+      <li><a href="#risk">✏️ docker-script-imports.test.ts</a><span class="n">+19 −3</span></li>
+    </ul>
+    <h3>Docs</h3>
+    <ul>
+      <li><a href="#f-mech">✏️ docs/SELF_HOSTING.md</a><span class="n">+22</span></li>
+      <li><a href="#f-mech">✏️ 2 skill guides</a><span class="n">+28</span></li>
+    </ul>
+  </div>
+  </nav>
+
+  <main>
+    <header class="title">
+      <div class="eyebrow">Design doc · feat(feature-policy)</div>
+      <h1>Startup feature policy, gating Add Backend first</h1>
+      <p class="sub">An operator can now list Canvas controls to turn off in an environment variable. The launcher validates that list once at startup and injects it into the page. One React hook, <code>useFeaturePolicy()</code>, answers "is this control allowed?" wherever the UI decides to render it. This PR ships that plumbing plus exactly one rule, <code>backends.add</code>, so reviewers can judge the pattern on a single, small call site.</p>
+      <div class="stats">19 files · +531 / −7 · base <a class="src" href="https://github.com/OpenHands/OpenHands/commit/ee80223e76501c61177d0857670ad108e7d008ca">ee80223e7</a> · head <a class="src" href="https://github.com/DevinVinson/OpenHands/commit/a39cc929233ed1f0a6b1f723b8220d7a9322b4db">a39cc9292</a></div>
+    </header>
+
+    <section id="what">
+      <h2><span class="num">1</span>One policy, one gated button</h2>
+      <div class="callout">★ <strong>With no policy configured, nothing changes.</strong> Every feature is on unless its ID is listed, builds never bake a policy in, and the only UI edit is one condition in <a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/src/components/features/backends/backend-selector.tsx#L241">backend-selector.tsx:241</a>.</div>
+      <p>The motivating case: someone runs Canvas on a small VM for a few people behind their own sign-in. They set it up fully, then want those users to focus on chatting with an agent instead of reconfiguring the instance. Today the only lock Canvas has is <code>lockToCloud</code>, a single-purpose switch. This PR adds a general one.</p>
+      <figure class="fig">
+        <svg viewBox="0 0 960 300" role="img" aria-labelledby="f1-t f1-d">
+          <title id="f1-t">How a policy reaches the backend selector, before and after</title>
+          <desc id="f1-d">Before, there is no path from operator config to the UI. After, the env var is validated by the loader, injected by the static server, read by useFeaturePolicy and checked in BackendSelector.</desc>
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--subtle)"/></marker>
+            <marker id="arr-chg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--warn)"/></marker>
+            <linearGradient id="subj" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".10"/><stop offset="1" stop-color="var(--accent)" stop-opacity=".02"/></linearGradient>
+            <style>
+              .existing{fill:var(--code-bg);stroke:var(--subtle);stroke-width:1.4;stroke-dasharray:5 3}
+              .ex-title{font:700 13px var(--sans);fill:var(--muted)} .ex-detail{font:11px var(--mono);fill:var(--subtle)}
+              .new{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2} .subj{fill:url(#subj);stroke:var(--accent);stroke-width:2}
+              .new-title{font:800 13px var(--sans);fill:var(--accent)} .detail{font:11px var(--mono);fill:var(--fg)}
+              .edge{stroke:var(--subtle);stroke-width:1.5;stroke-dasharray:5 3;fill:none}
+              .edge-chg{stroke:var(--warn);stroke-width:1.8;fill:none;stroke-dasharray:5 3}
+              .row{font:700 11px var(--sans);fill:var(--muted);letter-spacing:.12em}
+              .gap{font:700 11px var(--mono);fill:var(--warn)}
+            </style>
+          </defs>
+          <!-- ===== BEFORE ===== -->
+          <text class="row" x="24" y="34">BEFORE</text>
+          <g>
+            <rect class="existing" x="24" y="48" width="200" height="64" rx="6"/>
+            <text class="ex-title" x="124" y="76" text-anchor="middle">launcher env</text>
+            <text class="ex-detail" x="124" y="96" text-anchor="middle">no feature setting</text>
+            <rect class="existing" x="380" y="48" width="200" height="64" rx="6"/>
+            <text class="ex-title" x="480" y="76" text-anchor="middle">index.html</text>
+            <text class="ex-detail" x="480" y="96" text-anchor="middle">lockToCloud, auth, …</text>
+            <rect class="existing" x="736" y="48" width="200" height="64" rx="6"/>
+            <text class="ex-title" x="836" y="76" text-anchor="middle">BackendSelector</text>
+            <text class="ex-detail" x="836" y="96" text-anchor="middle">Add shown unless Cloud-locked</text>
+            <path class="edge" d="M224,80 L380,80" marker-end="url(#arr)"/>
+            <path class="edge" d="M580,80 L736,80" marker-end="url(#arr)"/>
+          </g>
+          <!-- ===== AFTER ===== -->
+          <text class="row" x="24" y="164">AFTER</text>
+          <g>
+            <rect class="new" x="24" y="178" width="160" height="78" rx="6"/>
+            <text class="new-title" x="104" y="204" text-anchor="middle">AGENT_CANVAS_</text>
+            <text class="new-title" x="104" y="220" text-anchor="middle">FEATURES(_FILE)</text>
+            <text class="detail" x="104" y="242" text-anchor="middle">operator env</text>
+            <rect class="new" x="214" y="178" width="160" height="78" rx="6"/>
+            <text class="new-title" x="294" y="204" text-anchor="middle">resolveFeaturePolicy</text>
+            <text class="detail" x="294" y="224" text-anchor="middle">feature-policy.mjs:43</text>
+            <text class="detail" x="294" y="242" text-anchor="middle">throws if invalid</text>
+            <rect class="new" x="404" y="178" width="160" height="78" rx="6"/>
+            <text class="new-title" x="484" y="204" text-anchor="middle">static-server</text>
+            <text class="detail" x="484" y="224" text-anchor="middle">static-server.mjs:450</text>
+            <text class="detail" x="484" y="242" text-anchor="middle">window.__…POLICY__</text>
+            <rect class="new" x="594" y="178" width="160" height="78" rx="6"/>
+            <text class="new-title" x="674" y="204" text-anchor="middle">useFeaturePolicy()</text>
+            <text class="detail" x="674" y="224" text-anchor="middle">feature-policy-</text>
+            <text class="detail" x="674" y="242" text-anchor="middle">context.tsx:44</text>
+            <rect class="subj" x="784" y="178" width="152" height="78" rx="6"/>
+            <text class="new-title" x="860" y="204" text-anchor="middle">BackendSelector</text>
+            <text class="detail" x="860" y="224" text-anchor="middle">showAddBackend</text>
+            <text class="detail" x="860" y="242" text-anchor="middle">backend-selector:241</text>
+            <path class="edge-chg" d="M184,217 L214,217" marker-end="url(#arr-chg)"/>
+            <path class="edge-chg" d="M374,217 L404,217" marker-end="url(#arr-chg)"/>
+            <path class="edge-chg" d="M564,217 L594,217" marker-end="url(#arr-chg)"/>
+            <path class="edge-chg" d="M754,217 L784,217" marker-end="url(#arr-chg)"/>
+            <rect x="380" y="270" width="208" height="18" rx="5" fill="var(--elevated)" stroke="var(--rule)"/>
+            <text class="gap" x="484" y="283" text-anchor="middle">invalid policy → exit 1</text>
+          </g>
+        </svg>
+        <figcaption>Fig 1 · The policy has exactly one path to the UI: validated at startup, injected once, read through one hook. Orange edges are new.</figcaption>
+      </figure>
+    </section>
+
+    <section id="api">
+      <h2><span class="num">2</span>Additive API, no default change</h2>
+      <p>Everything public is new and optional. Existing launch flags, environment variables, library exports and component props keep their behavior.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Surface</th><th>Before</th><th>After</th><th>Compatibility</th></tr></thead>
+        <tbody>
+          <tr><td>Operator env</td><td>none</td><td><code>AGENT_CANVAS_FEATURES='{"version":1,"disabled":[…]}'</code> or <code>AGENT_CANVAS_FEATURES_FILE=/path</code></td><td>Additive. Unset = today's behavior.</td></tr>
+          <tr><td>Page global</td><td>none</td><td><code>window.__AGENT_CANVAS_FEATURE_POLICY__</code>, written only when a policy is set</td><td>Additive, same pattern as <code>__AGENT_CANVAS_LOCK_TO_CLOUD__</code>.</td></tr>
+          <tr><td><code>AgentServerUIProviders</code></td><td>no policy prop</td><td><code>featurePolicy?: FeaturePolicy</code> <a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/src/components/providers/agent-server-ui-providers.tsx#L53">providers.tsx:53</a></td><td>Optional prop; omitted = injected policy, or none.</td></tr>
+          <tr><td>Library exports</td><td>—</td><td><code>FEATURE_IDS</code>, <code>FeatureId</code>, <code>FeaturePolicy</code>, <code>FeaturePolicyProvider</code>, <code>useFeaturePolicy</code> <a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/src/lib/index.ts#L17">lib/index.ts:17</a></td><td>Additive.</td></tr>
+        </tbody>
+      </table></div>
+      <pre><code><span class="kw">const</span> featurePolicy = useFeaturePolicy();
+<span class="kw">if</span> (!featurePolicy.isEnabled(<span class="str">"backends.add"</span>)) …   <span class="com">// FeatureId is a union, so a typo fails to compile</span></code></pre>
+      <div class="callout note">ⓘ The hook returns an object rather than a boolean so the same API works inside loops and callbacks (nav lists, menu items) where hooks can't be called. IDs are written as string literals at call sites, so <code>grep -rn '"backends.add"' src</code> lists every gate.</div>
+    </section>
+
+    <section id="rule">
+      <h2><span class="num">3</span><code>backends.add</code> hides one button and nothing else</h2>
+      <p>The backend selector's menu footer already hid Add Backend when Canvas is locked to a Cloud host. The policy joins that existing condition. Manage Backends is untouched, so the footer is never left empty.</p>
+      <div class="ba">
+        <figure class="fig">
+          <svg viewBox="0 0 420 210" role="img" aria-labelledby="f2a-t f2a-d">
+            <title id="f2a-t">Backend menu before</title>
+            <desc id="f2a-d">The menu lists Local, then Add Backend and Manage Backends.</desc>
+            <style>
+              .m-box{fill:var(--card);stroke:var(--rule-strong);stroke-width:1.2}
+              .m-row{font:13px var(--sans);fill:var(--fg)} .m-sub{font:11px var(--mono);fill:var(--subtle)}
+              .m-sep{stroke:var(--rule);stroke-width:1}
+              .m-hl{fill:var(--elevated);stroke:var(--subtle);stroke-width:1.2;stroke-dasharray:5 3}
+            </style>
+            <rect class="m-box" x="40" y="20" width="340" height="170" rx="8"/>
+            <text class="m-row" x="64" y="56">● Local</text>
+            <line class="m-sep" x1="56" y1="76" x2="364" y2="76"/>
+            <rect class="m-hl" x="52" y="88" width="316" height="34" rx="5"/>
+            <text class="m-row" x="64" y="110">+ Add Backend</text>
+            <text class="m-sub" x="356" y="110" text-anchor="end">add-backend-menu-item</text>
+            <text class="m-row" x="64" y="152">⚙ Manage Backends</text>
+            <text class="m-sub" x="64" y="178">backend-selector.tsx:281 (base)</text>
+          </svg>
+          <figcaption>Before · Add Backend shows unless Canvas is locked to Cloud.</figcaption>
+        </figure>
+        <figure class="fig">
+          <svg viewBox="0 0 420 210" role="img" aria-labelledby="f2b-t f2b-d">
+            <title id="f2b-t">Backend menu after, with backends.add disabled</title>
+            <desc id="f2b-d">The menu lists Local and Manage Backends; Add Backend is gone.</desc>
+            <style>
+              .m-box{fill:var(--card);stroke:var(--rule-strong);stroke-width:1.2}
+              .m-row{font:13px var(--sans);fill:var(--fg)} .m-sub{font:11px var(--mono);fill:var(--subtle)}
+              .m-sep{stroke:var(--rule);stroke-width:1}
+              .m-gone{fill:none;stroke:var(--warn);stroke-width:1.8;stroke-dasharray:5 3}
+              .m-gap{font:700 11px var(--mono);fill:var(--warn)}
+            </style>
+            <rect class="m-box" x="40" y="20" width="340" height="170" rx="8"/>
+            <text class="m-row" x="64" y="56">● Local</text>
+            <line class="m-sep" x1="56" y1="76" x2="364" y2="76"/>
+            <rect class="m-gone" x="52" y="88" width="316" height="34" rx="5"/>
+            <text class="m-gap" x="210" y="110" text-anchor="middle">not rendered when backends.add is off</text>
+            <text class="m-row" x="64" y="152">⚙ Manage Backends</text>
+            <text class="m-sub" x="64" y="178">backend-selector.tsx:241, :286</text>
+          </svg>
+          <figcaption>After · With <code>backends.add</code> disabled, only that row goes away. Same in the collapsed sidebar popover.</figcaption>
+        </figure>
+      </div>
+      <pre><code>  <span class="kw">const</span> featurePolicy = useFeaturePolicy();
+  …
+<span class="add">  <span class="com">// The operator's `backends.add` policy hides Add Backend; Manage stays.</span></span><span class="add">  <span class="kw">const</span> showAddBackend =</span><span class="add">    !isLockedToCloud &amp;&amp; featurePolicy.isEnabled(<span class="str">"backends.add"</span>);</span>  …
+<span class="del">-      {isLockedToCloud ? null : (</span><span class="add">+      {showAddBackend &amp;&amp; (</span>        &lt;button data-testid=<span class="str">"add-backend-menu-item"</span> …&gt;</code></pre>
+      <p>Sources: before <a class="src" href="https://github.com/OpenHands/OpenHands/blob/ee80223e76501c61177d0857670ad108e7d008ca/src/components/features/backends/backend-selector.tsx#L281">backend-selector.tsx:281</a> · after <a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/src/components/features/backends/backend-selector.tsx#L241">:241</a>, <a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/src/components/features/backends/backend-selector.tsx#L286">:286</a> · test <a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/__tests__/components/backends/backend-selector.test.tsx#L876">backend-selector.test.tsx:876</a></p>
+      <div class="callout warn">⚠ <strong>Partial by design.</strong> The Manage Backends window has its own "+ Add Backend" button, and this PR leaves it visible. Covering it is a separate, reviewable change (see §5). The catalog description says exactly what the ID covers today.</div>
+    </section>
+
+    <section id="flow">
+      <h2><span class="num">4</span>Validated once, injected once</h2>
+      <p>The loader is a small, dependency-free module, so the static server, the Vite dev server and tests all share one implementation.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Step</th><th>Where</th><th>Behavior</th></tr></thead>
+        <tbody>
+          <tr><td>1. Resolve</td><td><a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/scripts/feature-policy.mjs#L43">feature-policy.mjs:43</a></td><td>Reads inline JSON or a file. Returns <code>null</code> when neither is set.</td></tr>
+          <tr><td>2. Validate</td><td><a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/scripts/feature-policy.mjs#L48">feature-policy.mjs:48–88</a></td><td>Throws on both variables set, unreadable file, bad JSON, non-object, wrong <code>version</code>, non-array <code>disabled</code>, or an ID missing from <code>config/features.json</code>. Duplicates are dropped.</td></tr>
+          <tr><td>3. Parse at startup</td><td><a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/scripts/static-server.mjs#L107">static-server.mjs:107</a></td><td><code>parseArgs</code> calls the loader; the existing main catch prints the error and exits 1.</td></tr>
+          <tr><td>4. Inject</td><td><a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/scripts/static-server.mjs#L450">static-server.mjs:450</a></td><td>Adds one line to the existing inline config script, escaped with <code>serializeForInlineScript</code>. Logs <code>Features disabled: …</code> (<a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/scripts/static-server.mjs#L798">:798</a>).</td></tr>
+          <tr><td>Dev server</td><td><a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/vite.config.ts#L141">vite.config.ts:141</a></td><td><code>define</code>s the same resolved policy only for <code>serve</code>; builds get <code>null</code>, which the bundler folds away.</td></tr>
+          <tr><td>Read</td><td><a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/src/feature-policy/feature-policy.ts#L23">feature-policy.ts:23</a></td><td>Window global first, then the dev value, else everything on. It becomes the context default, so standalone Canvas needs no provider.</td></tr>
+        </tbody>
+      </table></div>
+      <pre><code>$ AGENT_CANVAS_FEATURES='{"version":1,"disabled":["backend.add"]}' node scripts/static-server.mjs …
+Unknown feature IDs in AGENT_CANVAS_FEATURES: backend.add. Known IDs: backends.add.
+<span class="com"># exit code 1: a typo never falls back to the full UI</span></code></pre>
+      <div class="callout note">ⓘ Every launcher (npm CLI, <code>dev:static</code>, Docker entrypoint, Electron) spawns <code>static-server.mjs</code> with its own environment, so none of them needed a new flag. Docker copies the loader and <code>config/features.json</code> to the paths its <code>../config</code> import expects (<a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/docker/Dockerfile#L146">Dockerfile:146</a>).</div>
+    </section>
+
+    <section id="grow">
+      <h2><span class="num">5</span>Rules grow one element at a time</h2>
+      <p>The catalog starts with a single entry on purpose. Each next rule is its own PR or commit, so a reviewer can check exactly what one ID hides and how.</p>
+      <pre><code><span class="com">// config/features.json</span>
+{ <span class="str">"id"</span>: <span class="str">"backends.add"</span>,
+  <span class="str">"description"</span>: <span class="str">"Hides \"Add Backend\" in the backend selector menu (sidebar, expanded and collapsed)."</span> }</code></pre>
+      <p>Adding or extending a rule takes four edits:</p>
+      <ol>
+        <li>Add the ID to <code>config/features.json</code>, or extend an existing ID's description to name the new element.</li>
+        <li>Add it to <code>FEATURE_IDS</code> in <a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/src/feature-policy/feature-policy.ts#L5">feature-policy.ts:5</a>. A contract test fails if the two lists differ (<a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/__tests__/scripts/feature-policy.test.ts#L102">feature-policy.test.ts:102</a>).</li>
+        <li>Gate the element with <code>featurePolicy.isEnabled("…")</code> where the UI already decides whether it renders.</li>
+        <li>Add a test that renders the element under <code>FeaturePolicyProvider</code>.</li>
+      </ol>
+      <p>Natural next candidate: extending <code>backends.add</code> to the Manage Backends window's add button, which would make the ID cover every add-backend path in the sidebar.</p>
+    </section>
+
+    <section id="files">
+      <h2><span class="num">6</span>Per-file changes</h2>
+      <div class="card" id="f-loader">
+        <h3>🟢 <code>scripts/feature-policy.mjs</code> is the only place a policy is parsed <span class="tag">+91</span></h3>
+        <p>New. Exports <code>resolveFeaturePolicy(env)</code> and <code>loadFeatureCatalog()</code>. The catalog is a JSON import, so it resolves the same way from the repo, the npm package, Electron and the flat Docker layout. <a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/scripts/feature-policy.mjs#L18">feature-policy.mjs:18</a></p>
+      </div>
+      <div class="card" id="f-catalog">
+        <h3>🟢 <code>config/features.json</code> lists the IDs and exactly what each hides <span class="tag">+10</span></h3>
+        <p>New. One entry. Published in the npm package (<code>config/</code> is already in <code>files</code>) so a backend can read the same IDs later.</p>
+      </div>
+      <div class="card" id="f-static">
+        <h3>✏️ <code>scripts/static-server.mjs</code> injects one more global <span class="tag">+31</span></h3>
+        <p>Before: injects session key, auth flag, runtime info, Cloud lock, base paths and telemetry flag. After: also <code>featurePolicy</code>, threaded through the same <code>injectionOpts</code> and <code>needsRuntimeInjection</code> path. Help text documents the two variables. <a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/scripts/static-server.mjs#L450">static-server.mjs:450</a></p>
+      </div>
+      <div class="card" id="f-api">
+        <h3>🟢 <code>src/feature-policy/</code> owns the policy in the frontend <span class="tag">+80</span></h3>
+        <p><code>feature-policy.ts</code> holds the ID union and the reader; <code>feature-policy-context.tsx</code> holds <code>FeaturePolicyProvider</code> and <code>useFeaturePolicy()</code>. No component reads the window global or env directly. <a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/src/feature-policy/feature-policy-context.tsx#L44">feature-policy-context.tsx:44</a></p>
+      </div>
+      <div class="card" id="f-providers">
+        <h3>✏️ <code>AgentServerUIProviders</code> passes an embedded host's policy down <span class="tag">+14 −2</span></h3>
+        <p>When <code>featurePolicy</code> is given, children are wrapped in <code>FeaturePolicyProvider</code>; otherwise nothing changes. <a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/src/components/providers/agent-server-ui-providers.tsx#L118">agent-server-ui-providers.tsx:118</a></p>
+      </div>
+      <div class="card" id="f-mech">
+        <h3>⚙️ Mechanical changes</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>File</th><th>Before → after</th></tr></thead>
+          <tbody>
+            <tr><td><code>vite.config.ts</code></td><td>no policy → <code>__AGENT_CANVAS_DEV_FEATURE_POLICY__</code> define (serve only)</td></tr>
+            <tr><td><code>src/react-app-env.d.ts</code></td><td>— → type declaration for that define</td></tr>
+            <tr><td><code>src/lib/index.ts</code></td><td>— → 5 new exports</td></tr>
+            <tr><td><code>docker/Dockerfile</code></td><td>— → copy loader and catalog</td></tr>
+            <tr><td><code>__tests__/scripts/docker-script-imports.test.ts</code></td><td>treated <code>../</code> imports as npm packages → checks they are copied to <code>/opt/&lt;file&gt;</code></td></tr>
+            <tr><td><code>docs/SELF_HOSTING.md</code></td><td>— → "Limit what users can change" section with the not-a-security-boundary warning</td></tr>
+            <tr><td>frontend-development / local-stack-runtime guides</td><td>— → how to gate an element and add an ID; the env vars</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <section id="risk">
+      <h2><span class="num">7</span>Boundaries and verification</h2>
+      <div class="callout warn">⚠ <strong>This hides controls; it does not enforce anything.</strong> Anyone with the session key can call the Agent Server directly, and the agent has a shell. <code>docs/SELF_HOSTING.md</code> says so. The policy JSON is backend-neutral, so the Agent Server could enforce the same IDs in a later, separate change in software-agent-sdk.</div>
+      <h3>Tests</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Test</th><th>Covers</th></tr></thead>
+        <tbody>
+          <tr><td><a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/__tests__/scripts/feature-policy.test.ts#L25">feature-policy.test.ts</a></td><td>No policy, inline, file, dedupe; six invalid inputs each throw; catalog equals <code>FEATURE_IDS</code>.</td></tr>
+          <tr><td><a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/__tests__/scripts/static-server.test.ts#L597">static-server.test.ts:597</a></td><td><code>parseArgs</code> reads the env; the served page carries the global; no global without a policy.</td></tr>
+          <tr><td><a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/__tests__/components/backends/backend-selector.test.tsx#L876">backend-selector.test.tsx:876</a></td><td>With <code>backends.add</code> off, Add Backend is gone and Manage Backends remains.</td></tr>
+          <tr><td><a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/__tests__/agent-server-ui-providers.test.tsx#L215">agent-server-ui-providers.test.tsx:215</a></td><td>An embedded host's <code>featurePolicy</code> prop reaches <code>useFeaturePolicy()</code>.</td></tr>
+          <tr><td><a class="src" href="https://github.com/DevinVinson/OpenHands/blob/a39cc929233ed1f0a6b1f723b8220d7a9322b4db/__tests__/scripts/docker-script-imports.test.ts#L43">docker-script-imports.test.ts</a></td><td>The image copies the catalog the loader imports.</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Manual check</h3>
+      <p>Ran the published launcher (<code>node bin/agent-canvas.mjs</code>) with an isolated home and state directory, once with <code>{"version":1,"disabled":["backends.add"]}</code> and once with no policy:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Where</th><th>No policy</th><th><code>backends.add</code> off</th></tr></thead>
+        <tbody>
+          <tr><td>Startup log</td><td>no feature line</td><td><code>Features disabled: backends.add</code></td></tr>
+          <tr><td>Backend menu, expanded sidebar</td><td>Local · Add Backend · Manage Backends</td><td>Local · Manage Backends</td></tr>
+          <tr><td>Backend popover, collapsed sidebar</td><td>Local · Add Backend · Manage Backends</td><td>Local · Manage Backends</td></tr>
+          <tr><td>Manage Backends window</td><td>+ Add Backend</td><td>+ Add Backend (not covered yet, see §3)</td></tr>
+        </tbody>
+      </table></div>
+      <p><code>npm run lint</code> (0 errors), <code>npm run build</code> and <code>npm run build:lib</code> pass.</p>
+    </section>
+  </main>
+</div>
+</body></html>

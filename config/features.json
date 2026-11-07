@@ -1,0 +1,10 @@
+{
+  "_comment": "Feature IDs an operator may turn off at startup with AGENT_CANVAS_FEATURES / AGENT_CANVAS_FEATURES_FILE. Read by scripts/feature-policy.mjs to validate a policy, and published so backends can honor the same IDs. Each description lists exactly the UI elements the ID hides today. IDs are stable: never rename one; mark a retired ID deprecated instead. Keep FEATURE_IDS in src/feature-policy/feature-policy.ts in step.",
+  "version": 1,
+  "features": [
+    {
+      "id": "backends.add",
+      "description": "Hides \"Add Backend\" in the backend selector menu (sidebar, expanded and collapsed)."
+    }
+  ]
+}
