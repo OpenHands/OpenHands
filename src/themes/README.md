@@ -6,7 +6,7 @@ them; changing the page background alone is not a complete theme.
 
 ## Paper
 
-Paper (`paper`) is an optional light palette inspired by Liberty Labs: warm
+Paper (`paper`) is an optional light palette inspired by newsletter style: warm
 paper surfaces, brown ink, rust actions, and restrained green, ochre, and red
 status colors. Select it in Settings → Application → Color Theme. It uses the
 existing `setColorTheme` and browser preference; OpenHands-Neutral remains the
