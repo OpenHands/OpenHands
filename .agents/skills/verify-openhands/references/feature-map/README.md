@@ -259,8 +259,9 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F27 | [Workspace tools](F27-workspace-tools.md) | terminal, browser, planner, task list, usage, `canvas_ui_control` | drawer tabs | LLM | 31 |
 | F28 | [Automation setup page](F28-automation-setup-page.md) | blank form, kind toggle, schedule presets, event fields, timeout, draft save and validation, draft Test, Create | **Add Automation → Create Automation**, `/automations/setup`, draft Resume, kebab Edit | automation service; no LLM | 18 |
 | F29 | [ACP agent sessions](F29-acp-sessions.md) | an ACP (Codex) conversation: narration order, tool cards, edits and Changes, follow-up, model switch, Stop, reload and restart, usage | Home composer with an ACP profile active (F13) | approved Codex login (`CODEX_AUTH_JSON`); fixture repo | 11 |
+| F30 | [Insider Cat and Voice](F30-insider-cat.md) | saved Cat identity, profile capabilities, new/resume/condense, companion, voice lifecycle and saved-agent handoff | installed Projects App, Cat badges, normal conversation/panel | reviewed Insider App; compatible SDK; real LLM; Voice provider and microphone for audio branches; recipes pending live proof | 22 |
 
-29 families, 836 sub-features. `control-openhands map ids` lists every ID with its file.
+30 families, 858 sub-features. `control-openhands map ids` lists every ID with its file.
 
 ### Neighbouring families
 

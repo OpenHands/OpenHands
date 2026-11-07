@@ -1086,8 +1086,124 @@ async function stopLauncher(run) {
   return { stopped: !groupAlive(pgid), forced };
 }
 
+// The build directory is shared by runs from this checkout. Only known runs in
+// this verification home (and the selected run's sibling directory) are scanned;
+// this does not discover arbitrary servers or other agents' verification homes.
+function assertRebuildAllowed(run) {
+  const canonical = (path) => realpathSync(path);
+  if (!run.repo || canonical(run.repo) !== canonical(repoRoot))
+    throw new CliError("Rebuild must run from the checkout recorded by this run", {
+      code: 3,
+      hint: "Use the run's own verify-openhands script; do not rebuild another checkout's artifacts.",
+    });
+  if (nodeMajor() < 24 || !existsSync(join(repoRoot, "node_modules")))
+    throw new CliError("Rebuild needs Node >=24 and this checkout's node_modules", {
+      code: 3,
+      hint: "Prepare the build dependencies before restarting; the run is unchanged.",
+    });
+  const conflicts = [];
+  const seen = new Set();
+  for (const home of new Set([verifyHome, dirname(run.dir)])) {
+    if (!existsSync(home)) continue;
+    for (const name of readdirSync(home)) {
+      if (name === "current" || name.startsWith(".")) continue;
+      const dir = join(home, name);
+      const file = join(dir, "run.json");
+      if (!existsSync(file)) continue;
+      let other;
+      let key;
+      try {
+        key = canonical(dir);
+        other = JSON.parse(readFileSync(file, "utf8"));
+      } catch {
+        throw new CliError(`Cannot inspect known run metadata at ${file}`, {
+          code: 3,
+          hint: "Resolve the unreadable run record before rebuilding shared output. Nothing was stopped.",
+        });
+      }
+      if (key === canonical(run.dir) || seen.has(key)) continue;
+      seen.add(key);
+      const servesBuild = groupAlive(other.launcherPgid) || groupAlive(other.lockedCloud?.pgid);
+      if (!servesBuild) continue;
+      if (!other.repo || !existsSync(other.repo) || canonical(other.repo) === canonical(repoRoot))
+        conflicts.push(dir);
+    }
+  }
+  if (conflicts.length)
+    throw new CliError("Other live verification runs may serve this checkout's build; rebuild refused", {
+      code: 3,
+      hint: "Keep their build intact. Use a separate checkout or coordinate stopping only runs you own.",
+      extra: { conflicts },
+    });
+}
+
+function recordRebuild(run, entry) {
+  run.buildHistory = [...(run.buildHistory ?? []), entry];
+  saveRun(run);
+  const directory = join(run.dir, "evidence");
+  mkdirSync(directory, { recursive: true });
+  appendFileSync(join(directory, "build-history.jsonl"), `${JSON.stringify(entry)}\n`);
+}
+
+function rebuildFrontend(run) {
+  const previous = { revision: run.revision, buildId: run.buildId };
+  const requested = { revision: checkoutRevision(), buildId: buildId() };
+  const startedAt = new Date().toISOString();
+  const attemptId = `${Date.now()}-${randomBytes(4).toString("hex")}`;
+  const marker = join(repoRoot, "build", "verify-revision.txt");
+  run.frontendRebuild = { status: "building", attemptId, startedAt };
+  recordRebuild(run, { event: "started", attemptId, at: startedAt, previous, requested });
+  // A failed build can leave a partial directory. It must never keep a stamp
+  // claiming the old artifact, or be served by a subsequent plain restart.
+  rmSync(marker, { force: true });
+  try {
+    process.stderr.write(`rebuilding ${requested.revision} (build inputs ${requested.buildId}; npm run build:app)...\n`);
+    const result = spawnSync("npm", ["run", "build:app"], {
+      cwd: repoRoot,
+      stdio: ["ignore", 2, 2],
+      env: { ...process.env, VITE_DO_NOT_TRACK: "1" },
+    });
+    if (result.status !== 0)
+      throw new Error(`npm run build:app failed (exit ${result.status ?? "none"}${result.signal ? `, signal ${result.signal}` : ""})`);
+    if (!existsSync(join(repoRoot, "build", "index.html")))
+      throw new Error("Build exited successfully but build/index.html is missing");
+    const current = { revision: checkoutRevision(), buildId: buildId() };
+    if (current.buildId !== requested.buildId)
+      throw new Error("Frontend build inputs changed during the build; output was not stamped");
+    writeFileSync(marker, `${current.buildId}\n`);
+    run.revision = current.revision;
+    run.buildId = current.buildId;
+    run.builtThisRun = true;
+    const finishedAt = new Date().toISOString();
+    run.frontendRebuild = { status: "complete", attemptId, startedAt, finishedAt };
+    recordRebuild(run, { event: "succeeded", attemptId, at: finishedAt, previous, requested, current });
+    return { previous, current, history: join(run.dir, "evidence", "build-history.jsonl") };
+  } catch (error) {
+    rmSync(marker, { force: true });
+    // Preserve the last proven identity, even when recording success itself
+    // failed after the marker was written. The run remains stopped.
+    Object.assign(run, previous);
+    const failedAt = new Date().toISOString();
+    run.frontendRebuild = { status: "failed", attemptId, startedAt, failedAt };
+    recordRebuild(run, { event: "failed", attemptId, at: failedAt, previous, requested, reason: error.message });
+    throw new CliError(`Rebuild failed; this run remains stopped: ${error.message}`, {
+      code: 3,
+      hint: "State, keys and evidence are retained. Fix the build and use restart --rebuild; plain restart is refused until a rebuild succeeds.",
+      extra: { run: run.dir, previous, buildHistory: join(run.dir, "evidence", "build-history.jsonl") },
+    });
+  }
+}
+
 async function cmdRestart({ flags }) {
+  if (flags.rebuild !== undefined && flags.rebuild !== true)
+    usage("restart --rebuild takes no value", "control-openhands restart --rebuild --run <owned-run>");
   const run = loadRun(flags);
+  if (!flags.rebuild && ["building", "failed"].includes(run.frontendRebuild?.status))
+    throw new CliError("The previous frontend rebuild did not complete; plain restart refused", {
+      code: 3,
+      hint: "State and evidence are retained. Fix the build and use restart --rebuild.",
+    });
+  if (flags.rebuild) assertRebuildAllowed(run);
   if (
     !run.launcherArgs ||
     !existsSync(join(run.dir, "private", "launcher-env.json"))
@@ -1116,7 +1232,26 @@ async function cmdRestart({ flags }) {
         hint: "The run is still up. Free that port and restart again, or launch --new for a free block.",
       },
     );
+  const restoreLockedCloud = Boolean(flags.rebuild && groupAlive(run.lockedCloud?.pgid));
+  if (flags.rebuild) {
+    const locked = await stopLockedCloud(run);
+    if (!locked.stopped)
+      throw new CliError("Owned locked-Cloud server did not stop; rebuild refused", { code: 3 });
+  }
   const stopped = await stopLauncher(run);
+  let rebuilt;
+  if (flags.rebuild) {
+    const open = [];
+    for (const [name, port] of Object.entries(run.ports))
+      if (await portOpen(port)) open.push(`${name}:${port}`);
+    if (!stopped.stopped || open.length)
+      throw new CliError("Owned services did not fully stop; rebuild refused", {
+        code: 3, extra: { open },
+      });
+    // Recheck known peers after stopping, before mutating the shared directory.
+    assertRebuildAllowed(run);
+    rebuilt = rebuildFrontend(run);
+  }
   run.ports = next.ports;
   if (flags["rotate-key"]) {
     writeFileSync(
@@ -1129,10 +1264,12 @@ async function cmdRestart({ flags }) {
   run.restartedAt = new Date().toISOString();
   saveRun(run);
   await waitForStack(run, intFlag(flags.timeout, 600));
+  if (restoreLockedCloud) await startLockedCloud(run, intFlag(flags.timeout, 600));
   out({
     ok: true,
     run: run.dir,
     baseUrl: run.baseUrl,
+    ...(rebuilt ? { rebuiltFrontend: true, ...rebuilt } : {}),
     stopped,
     ports: run.ports,
     rotatedKey: Boolean(flags["rotate-key"]),
@@ -1307,7 +1444,7 @@ async function cmdDoctor({ flags }) {
       add(
         unchanged
           ? "checkout build inputs unchanged since launch"
-          : "checkout build inputs changed since launch; relaunch with --build auto to serve them",
+          : "checkout build inputs changed since launch; restart --rebuild to serve them",
         unchanged,
         `launch=${run.buildId} now=${current}`,
         "warn",
@@ -2906,17 +3043,24 @@ async function cmdBrowser({ positional, flags }) {
       const reducedMotion = flags["reduced-motion"];
       if (
         rest.length ||
+        (flags.voice !== undefined && flags.voice !== true) ||
         (reducedMotion !== undefined &&
           !["reduce", "no-preference"].includes(reducedMotion))
       )
         usage(
-          "browser media --reduced-motion needs reduce | no-preference",
-          "control-openhands browser media --reduced-motion no-preference",
+          "browser media accepts --voice and --reduced-motion reduce | no-preference",
+          "control-openhands browser media --voice --reduced-motion no-preference",
         );
       result = await browserCall(run, "media", {
         clear: Boolean(flags.clear),
         reducedMotion,
+        ...(flags.voice ? { voice: true } : {}),
       });
+      if (flags.voice && !result.voice)
+        throw new CliError("This browser daemon predates Voice media observation", {
+          code: 3,
+          hint: "End the current call, then browser stop and browser start for this owned run before repeating --voice.",
+        });
       break;
     }
     case "toasts":
@@ -3392,6 +3536,7 @@ async function cmdEvidence({ positional, flags }) {
       artifacts,
       note: flags.note === true ? undefined : flags.note,
       revision: run.revision,
+      buildId: run.buildId,
       backend: `${run.mode} agent-server ${run.versions?.agentServer ?? "?"}`,
       url: page.url,
       viewport: page.viewport
@@ -3470,6 +3615,7 @@ async function cmdEvidence({ positional, flags }) {
         ok: true,
         run: run.runId,
         revision: run.revision,
+        ...(run.buildHistory?.length ? { buildId: run.buildId, buildHistory: run.buildHistory } : {}),
         checks: latest.size,
         counts,
         families: Object.fromEntries(
@@ -3492,6 +3638,11 @@ async function cmdEvidence({ positional, flags }) {
       `Checks: ${latest.size} — ${REPORT_RESULTS.map((r) => `${r} ${counts[r]}`).join(", ")}. Families: ${families.size}.`,
       "",
     ];
+    if (run.buildHistory?.length)
+      lines.push(
+        "This run contains rebuild attempts. Results retain each ledger row's revision/buildId; they are not all claims about the current build. See evidence/build-history.jsonl.",
+        "",
+      );
     if (changes) {
       lines.push(`## Changes since baseline`, "");
       const section = (title, list) => {
@@ -4710,7 +4861,7 @@ Public-mode runs only: types the run's session key into whichever prompt the UI
 shows (the onboarding "Add a backend" step, or api-key-entry-screen, filling
 Host Name when empty). Never prints the key. Local-mode runs need no login.
 `,
-  restart: `control-openhands restart [--rotate-key] [--timeout SEC]
+  restart: `control-openhands restart [--rebuild] [--rotate-key] [--timeout SEC]
 
 Stops this run's launcher process group and starts it again with the same
 state directory, port block and keys, then waits for readiness. It asks the
@@ -4719,6 +4870,22 @@ editor port to match, with a warning; when a newly needed editor port is busy
 it refuses before stopping anything. --rotate-key writes a new session key
 first, so the browser's stored key becomes stale (public mode then shows the
 API-key prompt again). Reload the browser afterwards.
+
+--rebuild explicitly rebuilds this checkout's frontend after stopping the owned
+run (including its locked-Cloud server), then stamps the actual build identity
+and updates run.json revision/buildId. Normal restart reuses the existing build;
+SDK-only changes do not need --rebuild. A known other live run from this checkout
+in OH_VERIFY_HOME or the selected run's parent refuses rebuilding before stopping.
+This guard cannot discover arbitrary servers or runs in other verification homes;
+coordinate those separately or use a dedicated checkout.
+Previous/new identities and failed attempts are retained in run.json buildHistory
+and evidence/build-history.jsonl; new ledger rows include buildId. Existing
+ledger rows, keys, state and run ID are preserved. A failed or interrupted build
+leaves the run stopped, without a valid stamp; plain restart is refused until
+restart --rebuild succeeds. Concurrent source changes invalidate the build.
+After a successful rebuild, reload the browser and run doctor before recording
+new evidence. The already-loaded browser page is still the previous bundle until
+reload; end any Voice call before restarting services.
 `,
   service: `control-openhands service status
 control-openhands service stop|pause|resume automation|agent-server|frontend
@@ -5000,8 +5167,16 @@ Verbs
   downloads [--last N] [--inspect] [--contains TEXT]   saved files; --inspect adds a text head or zip entry names
   storage [--session] [--values]         localStorage (or sessionStorage) keys; values only on request
                                          (keys, tokens and secrets inside values are redacted)
-  media [--clear] [--reduced-motion reduce|no-preference]
+  media [--clear] [--voice] [--reduced-motion reduce|no-preference]
                                          observe playback; optionally emulate active-page motion preference
+        (--voice adds microphone permission/capture/track state, peer states and inbound audio
+         bytesReceived/packetsReceived/totalAudioEnergy/totalSamplesReceived when supported,
+         plus detached audio element state; read-only, no permissions or media are supplied)
+        (only local observation IDs; no SDP, ICE addresses, device labels/IDs or transcripts)
+        (per document, last 128 observations per kind; dropped counts are explicit;
+         collected=true retains last observed state, not proof of cleanup; --clear clears plays only)
+        (restart an older owned browser daemon before use; this ends active calls;
+         RTP counters prove received media, never physical speaker audibility)
   network-state offline|online|status     interrupt or restore this browser context's real network; status is read-only
                                          (all its tabs; restore online before doctor/cleanup; no request interception)
   network [--external] [--filter REGEX] [--clear] [--last N] [--bodies] [--order request|completion]
