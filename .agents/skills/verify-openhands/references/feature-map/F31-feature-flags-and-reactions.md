@@ -1,10 +1,10 @@
 # F31 — Feature flags and conversation reactions
 
-Settings → Features lists the features a user can turn on or off for
-themselves. The agent server supplies the list (`GET /api/settings/features`),
+Settings → Experimental lists the features a user can turn on or off for
+themselves. The agent server supplies the list (`GET /api/settings/experimental`),
 including each feature's label and description, so a new feature appears here
 without a Canvas change. Each switch saves at once with
-`PATCH /api/settings/features/{key}`. Flags are read when a conversation
+`PATCH /api/settings/experimental/{key}`. Flags are read when a conversation
 starts, so a change applies to conversations started after it.
 
 The first feature is **Conversation reactions** (`conversation_reactions`, off
@@ -17,12 +17,12 @@ chips still show but the picker is gone, the reactions route answers 409, and
 new conversations do not get the tools. Local backend only: Cloud lists no
 features.
 
-Source: `src/routes/features-settings.tsx`, `src/api/features-service/features-service.api.ts`, `src/hooks/query/use-features.ts`, `src/hooks/mutation/use-update-feature.ts`, `src/components/features/chat/message-reactions.tsx`, `src/components/conversation-events/chat/event-message-components/user-assistant-event-message.tsx`, `src/components/conversation-events/chat/event-message-components/finish-event-message.tsx`, `src/components/conversation-events/chat/event-content-helpers/should-render-event.ts`, `src/constants/settings-nav.tsx`, `src/components/features/command-menu/command-menu-items.tsx`.
+Source: `src/routes/experimental-settings.tsx`, `src/api/experimental-features-service/experimental-features-service.api.ts`, `src/hooks/query/use-experimental-features.ts`, `src/hooks/mutation/use-update-experimental-feature.ts`, `src/components/features/chat/message-reactions.tsx`, `src/components/conversation-events/chat/event-message-components/user-assistant-event-message.tsx`, `src/components/conversation-events/chat/event-message-components/finish-event-message.tsx`, `src/components/conversation-events/chat/event-content-helpers/should-render-event.ts`, `src/constants/settings-nav.tsx`, `src/components/features/command-menu/command-menu-items.tsx`.
 
 ## Sub-features
 
-- `F31.open`: the page opens from the settings navigation (`sidebar-settings-/settings/features`), the command menu ("Features") and `/settings/features`, and lists **Conversation reactions** with its description, off on a fresh run.
-- `F31.toggle`: clicking the switch turns the flag on at once, without Save; `GET /api/settings/features` agrees, and the switch is still on after a reload. Clicking again turns it off.
+- `F31.open`: the page opens from the settings navigation (`sidebar-settings-/settings/experimental`), the command menu ("Experimental") and `/settings/experimental`, and lists **Conversation reactions** with its description, off on a fresh run.
+- `F31.toggle`: clicking the switch turns the flag on at once, without Save; `GET /api/settings/experimental` agrees, and the switch is still on after a reload. Clicking again turns it off.
 - `F31.empty`: an agent server without feature flags (older than software-agent-sdk#6609) shows "This agent server has no features to turn on or off." instead of an error.
 - `F31.agent-reaction`: with the flag on, a new conversation's agent has `react` and `unreact`; when asked to react first, its 👀 chip appears on the person's message and stays after the answer (`testid=reaction-eyes`, `data-sources=agent`), and no "Reacted" tool card is shown.
 - `F31.user-reaction`: with the flag on, the `add-reaction` button under the agent's answer opens a picker of six emoji; choosing ❤️ shows a pressed `reaction-heart` chip (`data-sources=user`) that survives a reload; clicking the chip takes the reaction off.
@@ -30,16 +30,16 @@ Source: `src/routes/features-settings.tsx`, `src/api/features-service/features-s
 
 ## How to get to it (user POV)
 
-- Sidebar settings gear (`backend-selector-settings-link`), then **Features** in the settings navigation (`sidebar-settings-/settings/features`).
-- Direct URL `/settings/features`.
-- Command menu (`Control+k` or `Meta+k`): search "Features".
+- Sidebar settings gear (`backend-selector-settings-link`), then **Experimental** in the settings navigation (`sidebar-settings-/settings/experimental`).
+- Direct URL `/settings/experimental`.
+- Command menu (`Control+k` or `Meta+k`): search "Experimental".
 - Reactions: in any conversation started while the flag is on (`/conversations/<id>`).
 
 ## Driving it with control-openhands
 
 Preconditions:
 
-- Baseline state on an Agent Server that has feature flags (software-agent-sdk#6609 or later): `control-openhands launch --sdk-path <software-agent-sdk checkout>` until it is released. `control-openhands api GET /api/settings/features` lists `conversation_reactions`.
+- Baseline state on an Agent Server that has feature flags (software-agent-sdk#6609 or later): `control-openhands launch --sdk-path <software-agent-sdk checkout>` until it is released. `control-openhands api GET /api/settings/experimental` lists `conversation_reactions`.
 - `F31.agent-reaction` and later need an active LLM profile (`control-openhands llm preset deepseek`).
 - Use the Paper theme for screenshots (`F16.paper-theme`).
 
@@ -47,15 +47,15 @@ Preconditions:
   ```sh
   control-openhands browser goto /
   control-openhands browser press Control+k
-  control-openhands browser type 'testid=command-menu >> role=combobox' Features
+  control-openhands browser type 'testid=command-menu >> role=combobox' Experimental
   control-openhands browser press Enter
-  control-openhands browser url                                   # ends in /settings/features
-  control-openhands browser snapshot 'testid=features-settings-screen'   # checkbox "Conversation reactions" + description
+  control-openhands browser url                                   # ends in /settings/experimental
+  control-openhands browser snapshot 'testid=experimental-settings-screen'   # checkbox "Conversation reactions" + description
   control-openhands browser screenshot --feature F31.open --name off
-  control-openhands browser click 'testid=features-settings-screen >> text=Conversation reactions'
-  control-openhands api GET /api/settings/features                # enabled: true
+  control-openhands browser click 'testid=experimental-settings-screen >> text=Conversation reactions'
+  control-openhands api GET /api/settings/experimental                # enabled: true
   control-openhands browser reload
-  control-openhands browser eval "document.querySelector('[data-testid=feature-switch-conversation_reactions]').checked"   # true
+  control-openhands browser eval "document.querySelector('[data-testid=experimental-switch-conversation_reactions]').checked"   # true
   ```
   The label is clicked, not the hidden checkbox: the switch's visual covers it.
 - **The agent reacts (`F31.agent-reaction`).**
@@ -83,8 +83,8 @@ Preconditions:
   Clicking `testid=reaction-heart` again takes it off (`browser count 'testid=reaction-heart'` is `0` once the event arrives).
 - **Turned off (`F31.off`).**
   ```sh
-  control-openhands browser goto /settings/features
-  control-openhands browser click 'testid=features-settings-screen >> text=Conversation reactions'
+  control-openhands browser goto /settings/experimental
+  control-openhands browser click 'testid=experimental-settings-screen >> text=Conversation reactions'
   control-openhands api POST /api/conversations/<id>/reactions --write --data '{"emoji":"+1"}'   # status 409
   control-openhands browser goto /conversations/<id>
   control-openhands browser count 'testid=add-reaction'           # 0; existing chips still show
