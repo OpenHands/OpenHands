@@ -224,11 +224,6 @@ describe("SkillInstallRestartBanner", () => {
     await waitFor(() => {
       const call = createConversationSpy.mock.lastCall;
 
-      console.log(
-        "DEBUG_CALLS",
-        createConversationSpy.mock.calls.length,
-        JSON.stringify(call),
-      );
       // The parsed install root is reused directly as the launch workspace.
       expect(call?.[0]?.workingDirOverride).toBe("/tmp/demo-ws");
       expect(call?.[0]?.workspaceMode).toBe("local_repo");
