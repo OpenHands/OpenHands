@@ -26,10 +26,11 @@ describe("Features settings", () => {
     vi.restoreAllMocks();
   });
 
-  it("lists the server's features and turns one on", async () => {
-    vi.spyOn(experimentalFeaturesService, "listExperimentalFeatures").mockResolvedValue([
-      reactions(false),
-    ]);
+  it("lists the server's experimental features and turns one on", async () => {
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockResolvedValue([reactions(false)]);
     const update = vi
       .spyOn(experimentalFeaturesService, "updateExperimentalFeature")
       .mockResolvedValue(reactions(true));
@@ -55,8 +56,11 @@ describe("Features settings", () => {
     await waitFor(() => expect(toggle).toBeChecked());
   });
 
-  it("says so when the server has no features", async () => {
-    vi.spyOn(experimentalFeaturesService, "listExperimentalFeatures").mockResolvedValue([]);
+  it("says so when the server has no experimental features", async () => {
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockResolvedValue([]);
 
     renderWithProviders(<ExperimentalSettingsScreen />);
 
@@ -65,10 +69,11 @@ describe("Features settings", () => {
     ).toBeInTheDocument();
   });
 
-  it("treats an agent server without feature flags as having none", async () => {
-    vi.spyOn(experimentalFeaturesService, "listExperimentalFeatures").mockRejectedValue(
-      new HttpError(404, "Not Found"),
-    );
+  it("treats an agent server without experimental features as having none", async () => {
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockRejectedValue(new HttpError(404, "Not Found"));
 
     renderWithProviders(<ExperimentalSettingsScreen />);
 
@@ -78,9 +83,10 @@ describe("Features settings", () => {
   });
 
   it("shows an error, not an empty list, when the server fails", async () => {
-    vi.spyOn(experimentalFeaturesService, "listExperimentalFeatures").mockRejectedValue(
-      new HttpError(500, "Internal Server Error"),
-    );
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockRejectedValue(new HttpError(500, "Internal Server Error"));
 
     renderWithProviders(<ExperimentalSettingsScreen />);
 

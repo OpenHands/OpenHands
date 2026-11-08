@@ -285,7 +285,7 @@ export const createCommandMenuItems = ({
   return items.filter(
     (item) =>
       (isCloud || item.to !== COMMAND_MENU_ROUTE.condenserSettings) &&
-      // User feature flags live on a local agent server.
+      // Experimental features live on a local agent server.
       (!isCloud || item.to !== COMMAND_MENU_ROUTE.experimentalSettings) &&
       (!isLockedToCloud ||
         item.group !== "settings" ||

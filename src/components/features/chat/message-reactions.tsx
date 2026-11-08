@@ -13,7 +13,8 @@ import { useEventStore } from "#/stores/use-event-store";
 import { cn } from "#/utils/utils";
 import { displayApiErrorToast } from "#/utils/custom-toast-handlers";
 
-export const CONVERSATION_REACTIONS_FEATURE = "conversation_reactions";
+export const CONVERSATION_REACTIONS_EXPERIMENTAL_FEATURE =
+  "conversation_reactions";
 
 const EMOJI_GLYPHS: Record<ReactionEmoji, string> = {
   eyes: "👀",
@@ -122,7 +123,7 @@ export function useMessageReactions(
     eventId ? (reactionIndex(state.events).get(eventId) ?? "") : "",
   );
   const enabled = useIsExperimentalFeatureEnabled(
-    CONVERSATION_REACTIONS_FEATURE,
+    CONVERSATION_REACTIONS_EXPERIMENTAL_FEATURE,
   );
   const isCloud = useActiveBackend().backend.kind === "cloud";
   const { conversationId } = useOptionalConversationId();

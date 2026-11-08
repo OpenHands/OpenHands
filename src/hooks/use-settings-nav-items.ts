@@ -19,7 +19,7 @@ export type SettingsNavRenderedItem =
 
 // Locally each agent profile owns these settings.
 const PROFILE_OWNED_SETTINGS_PATHS = new Set(["/settings/condenser"]);
-// User feature flags live on a local agent server; Cloud has none yet.
+// Experimental features live on a local agent server; Cloud has none yet.
 const LOCAL_ONLY_SETTINGS_PATHS = new Set(["/settings/experimental"]);
 
 export function useSettingsNavItems(): SettingsNavRenderedItem[] {

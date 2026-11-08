@@ -9,7 +9,7 @@ import { displayApiErrorToast } from "#/utils/custom-toast-handlers";
 /**
  * Experimental features the user can turn on or off for themselves. The list, labels and
  * descriptions come from the agent server (`GET /api/settings/experimental`), so a
- * new feature needs no Canvas change to appear here.
+ * new experimental feature needs no Canvas change to appear here.
  */
 function ExperimentalSettingsScreen() {
   const { t } = useTranslation("openhands");
