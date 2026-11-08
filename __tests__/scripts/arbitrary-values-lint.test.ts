@@ -36,6 +36,17 @@ describe("Canvas arbitrary-value guard adoption", () => {
     "src/components/features/chat/components/context-window-ring.tsx",
     "src/components/features/chat/user-message-body.tsx",
     "src/components/features/conversation/conversation-main/conversation-main.tsx",
+    "src/components/features/chat/drag-over.tsx",
+    "src/components/features/chat/chat-markdown-path-code.tsx",
+    "src/components/features/markdown/code.tsx",
+    "src/components/shared/horizontal-scroll-fade.tsx",
+    "src/components/features/markdown/markdown-table-scroll.tsx",
+    "src/components/features/automations/recommended-automations-rail.tsx",
+    "src/components/features/automations/automation-view-toggle.tsx",
+    "src/components/features/automations/dashboard/automations-dashboard-controls.tsx",
+    "src/components/features/automations/detail/run-phase.tsx",
+    "src/components/features/conversation-panel/conversation-card/conversation-card.tsx",
+    "src/utils/hover-reveal-classes.ts",
   ])("rejects an arbitrary value in migrated owner %s", async (filePath) => {
     const source = filePath.endsWith(".ts")
       ? 'import { cn } from "#/utils/utils"; export const probe = cn("w-[123px]");'

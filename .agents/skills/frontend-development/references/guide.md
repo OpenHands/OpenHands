@@ -1,6 +1,6 @@
 ## Arbitrary-value guard adoption
 
-`shadcn/no-arbitrary-values` warns globally. Fourteen migrated owners reject new
+`shadcn/no-arbitrary-values` warns globally. Twenty-five migrated owners reject new
 arbitrary classes: command-menu, backend-version, settings-nav-header,
 backend-synced-settings-badge, modal-backdrop, environment-switch-overlay,
 context-window-meter and conversation-panel-wrapper. Completed message/motion
@@ -8,20 +8,24 @@ owners also reject new arbitrary values: custom-toast-handlers,
 form-control-classes, chat-status-indicator, context-window-ring,
 user-message-body and conversation-main. Their exact paths are in `eslint.config.js`,
 with executable probes in `__tests__/scripts/arbitrary-values-lint.test.ts`.
+Completed Markdown code/path chips, horizontal fade consumers, file-drop artwork, automation view/filter/run-phase bounds, conversation-card reserves and the hover-reveal helper also reject new arbitrary values.
 Other components, routes and primitive implementations retain warnings during
 migration. Keep legitimate measured/portal geometry with its owner; do not
 expand this file list or add exemptions without auditing the remaining values.
 
 ## Raw-color class-map scanning
 
-`shadcn/no-raw-colors` warns globally. Three migrated owners reject new raw colors:
-backend-status-dot, Markdown blockquote and mcp-server-health. Start-task badge
-and indicator remain warning-only pending their separate migration. Their exact paths in `eslint.config.js` also
-enable `scanAllStrings` so literal class recipes remain
-visible when dynamic map or helper lookups hide them from class-site analysis.
-Keep this adoption scoped: scanning every string can mistake program tags for
-color utilities. Review newly included findings before extending the file list;
-the shared exact legacy-token exceptions remain unchanged.
+`shadcn/no-raw-colors` rejects raw Tailwind palette utilities, undeclared named
+color utilities and raw SVG paint throughout source, including primitive
+implementations. The seven exact legacy JS-config/plugin color exceptions stay
+valid. Backend-status-dot, Markdown blockquote and mcp-server-health additionally
+use `scanAllStrings` for literal class recipes hidden behind map/helper lookups;
+keep broad scanning away from unrelated program tags. Executable probes use the
+real flat config in `__tests__/scripts/raw-colors-lint.test.ts`.
+
+Bracketed hex/rgba color classes remain covered by the independently staged
+`shadcn/no-arbitrary-values` policy above. Do not claim that the palette guard
+finishes that migration or checks opaque runtime expressions.
 
 ## Horizontal scroll fades
 
