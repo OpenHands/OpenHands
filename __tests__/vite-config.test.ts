@@ -285,6 +285,23 @@ describe("vite library build", () => {
     expect(css).toContain("[data-agent-server-ui] .xterm");
     expect(css).toContain("fonts.googleapis.com");
 
+    // Inset recipes retain direction, absolute pixels and public color hooks.
+    expect(
+      recipes("shadow-badge-inset")
+        .map((rule) => declarations(rule)["--tw-shadow"]?.replace(/,\s+/g, ","))
+        .filter(Boolean)
+        .at(-1),
+    ).toBe(
+      "inset 0 1px 0 var(--tw-shadow-color,color-mix(in srgb,var(--oh-contrast) 18%,transparent))",
+    );
+    for (const [name, offset] of [
+      ["shadow-reorder-before", "2px"],
+      ["shadow-reorder-after", "-2px"],
+    ]) {
+      expect(declarations(recipe(name))["--tw-shadow"]).toBe(
+        `inset 0 ${offset} 0 0 var(--tw-shadow-color,var(--oh-focus))`,
+      );
+    }
     // Extension dialogs keep their viewport limits in the shipped library.
     expect(declarations(recipe("extension-dialog-viewport"))).toMatchObject({
       "max-width": "90vw",

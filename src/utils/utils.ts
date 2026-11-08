@@ -26,6 +26,11 @@ const mergeTailwindClasses = extendTailwindMerge({
         "transition-sidebar-width",
       ],
       animate: ["animate-chat-status-pulse"],
+      shadow: [
+        "shadow-badge-inset",
+        "shadow-reorder-before",
+        "shadow-reorder-after",
+      ],
     },
   },
 });
