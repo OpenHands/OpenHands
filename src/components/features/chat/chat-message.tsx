@@ -10,11 +10,17 @@ import { TextShimmer } from "#/components/shared/text-shimmer";
 import { MessageTimestamp } from "./message-timestamp";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
 import { PendingStopIcon } from "./pending-stop-icon";
+import { AssistantChatPre } from "./chat-markdown-path-code";
 import {
   UserMessageBody,
   chatBubbleMarkdownComponents,
   USER_MESSAGE_LINE_HEIGHT_PX,
 } from "./user-message-body";
+
+const assistantMarkdownComponents = {
+  ...chatBubbleMarkdownComponents,
+  pre: AssistantChatPre,
+};
 
 export type ChatMessagePendingStatus = "sending" | "error";
 
@@ -142,7 +148,11 @@ export function ChatMessage({
         includeStandard
         includeHeadings
         allowHtml
-        components={chatBubbleMarkdownComponents}
+        components={
+          type === "agent"
+            ? assistantMarkdownComponents
+            : chatBubbleMarkdownComponents
+        }
         streaming={isStreaming}
       >
         {message}

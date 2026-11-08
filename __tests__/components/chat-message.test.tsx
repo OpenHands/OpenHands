@@ -4,6 +4,7 @@ import {
   screen,
   waitFor,
   fireEvent,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
@@ -11,6 +12,34 @@ import util from "util";
 import { ChatMessage } from "#/components/features/chat/chat-message";
 
 describe("ChatMessage", () => {
+  it.each([
+    ["", "https://example.com"],
+    ["text", "first line\nsecond line"],
+  ])(
+    "renders and copies assistant fenced code (%s)",
+    async (language, code) => {
+      const user = userEvent.setup();
+      const message = [
+        "Inline `snippet`.",
+        "",
+        `\`\`\`${language}`,
+        code,
+        "```",
+      ].join("\n");
+      render(<ChatMessage type="agent" message={message} />);
+
+      const assistant = within(screen.getByTestId("markdown-renderer"));
+      expect(assistant.getByText("snippet").closest("pre")).toBeNull();
+      const blockCopy = assistant.getByTestId("copy-to-clipboard");
+      expect(blockCopy.closest("pre")).toBeNull();
+
+      fireEvent.mouseEnter(blockCopy);
+      expect(blockCopy).toBeVisible();
+      await user.click(blockCopy);
+      expect(await navigator.clipboard.readText()).toBe(code);
+    },
+  );
+
   it.each(["user", "agent"] as const)(
     "shows the exact timestamp from the %s message's relative label",
     async (type) => {

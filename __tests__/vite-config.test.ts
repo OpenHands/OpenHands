@@ -250,6 +250,10 @@ describe("vite library build", () => {
     expect(declarations(recipe("scroll-fade-surface"))).toEqual({
       "--oh-scroll-fade-from": "var(--oh-surface)",
     });
+    const assistantCodeBlock = declarations(recipe("assistant-code-block"));
+    expect(assistantCodeBlock["background-color"]).toBe("var(--oh-surface)");
+    expect(assistantCodeBlock.border).toBe("1px solid var(--oh-border)");
+    expect(assistantCodeBlock["border-inline-start-width"]).toBe("4px");
     // Keep code padding relative to its own font size in embedded roots.
     expect(declarations(recipe("px-code-inline-x"))).toEqual({
       "padding-inline": ".4em",
