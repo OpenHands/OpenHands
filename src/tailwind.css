@@ -1160,6 +1160,11 @@ code .token {
   --oh-scroll-fade-from: var(--oh-surface);
 }
 
+/* Message bubbles blend wide-table edges into their tertiary fill. */
+@utility scroll-fade-tertiary {
+  --oh-scroll-fade-from: var(--oh-color-tertiary);
+}
+
 @utility metadata-grid-columns {
   grid-template-columns: auto 1fr;
 }
