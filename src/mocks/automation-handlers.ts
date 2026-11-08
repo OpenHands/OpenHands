@@ -71,6 +71,68 @@ const CAPABILITIES: DeploymentCapabilities = {
     ...capabilitiesFixture.responses.supported.body.eventSources,
     ...Object.keys(DATA_CENTER_EVENT_TYPES),
   ].sort(),
+  eventOptionsBySource: {
+    github: [
+      {
+        key: "issue_comment.created",
+        label: "Issue or pull request comment added",
+        group: "Comments",
+        kind: "event",
+      },
+      {
+        key: "issues.opened",
+        label: "Issue opened",
+        group: "Issues",
+        kind: "event",
+      },
+      {
+        key: "pull_request.opened",
+        label: "Pull request opened",
+        group: "Pull requests",
+        kind: "event",
+      },
+      {
+        key: "pull_request.synchronize",
+        label: "Pull request commits updated",
+        group: "Pull requests",
+        kind: "event",
+      },
+      {
+        key: "pull_request.*",
+        label: "Pull requests — all actions",
+        group: "Pull requests",
+        kind: "pattern",
+      },
+    ],
+    bitbucket_data_center: [
+      {
+        key: "pr:opened",
+        label: "Pull request opened",
+        group: "Pull requests",
+        kind: "event",
+      },
+      {
+        key: "pr:comment:added",
+        label: "Pull request comment added",
+        group: "Comments",
+        kind: "event",
+      },
+    ],
+    jira_dc: [
+      {
+        key: "comment_created",
+        label: "Issue comment added",
+        group: "Comments",
+        kind: "event",
+      },
+      {
+        key: "jira:issue_created",
+        label: "Issue created",
+        group: "Issues",
+        kind: "event",
+      },
+    ],
+  },
   eventTypesBySource: {
     github: capabilitiesFixture.responses.supported.body.eventTypes,
     ...DATA_CENTER_EVENT_TYPES,
@@ -80,7 +142,7 @@ const CAPABILITIES: DeploymentCapabilities = {
 interface DraftTrigger {
   type?: string;
   schedule?: string;
-  on?: string;
+  on?: string | string[];
   source?: string;
 }
 
@@ -140,12 +202,16 @@ function validateDraftTrigger(
   // unregistered type. A source without a catalog accepts any key.
   const registered =
     REGISTERED_EVENT_TYPES_BY_SOURCE[trigger.source ?? "github"];
+  const keys = Array.isArray(trigger.on) ? trigger.on : [trigger.on ?? ""];
   if (
     trigger.type === "event" &&
     trigger.on &&
-    trigger.on !== "*" &&
     registered &&
-    !registered.some((type) => eventPatternMatches(trigger.on ?? "", type))
+    !keys.some(
+      (key) =>
+        key === "*" ||
+        registered.some((type) => eventPatternMatches(key, type)),
+    )
   ) {
     const source = trigger.source === "github" ? "GitHub" : trigger.source;
     return [

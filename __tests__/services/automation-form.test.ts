@@ -69,6 +69,43 @@ describe("handleAutomationFormUpdateAction", () => {
     });
   });
 
+  it("applies multiple event keys without rewriting the saved advanced filter", () => {
+    const filter = "contains(labels[].name, 'ready') || author.login == 'bot'";
+    initializeAutomationFormSession("conv-1", {
+      prompt: "Review updates",
+      kind: "prompt",
+      form: { eventKey: "*", eventFilter: filter },
+      existingEventTrigger: { destination: "continue_conversation" },
+    });
+    handleAutomationFormUpdateAction(
+      {
+        kind: AUTOMATION_FORM_UPDATE_ACTION_KIND,
+        fields: { eventKey: "pr:opened, pr:comment:*" },
+      },
+      "conv-1",
+      "event-keys-1",
+    );
+    expect(getAutomationFormSession("conv-1")).toMatchObject({
+      form: { eventKey: "pr:opened, pr:comment:*", eventFilter: filter },
+      existingEventTrigger: { destination: "continue_conversation" },
+    });
+    patchAutomationFormSession(
+      "conv-1",
+      { eventKey: "custom:*" },
+      { source: "user" },
+    );
+    const result = handleAutomationFormUpdateAction(
+      {
+        kind: AUTOMATION_FORM_UPDATE_ACTION_KIND,
+        fields: { eventKey: "*" },
+      },
+      "conv-1",
+      "event-keys-2",
+    );
+    expect(result.skipped).toEqual(["eventKey"]);
+    expect(getAutomationFormSession("conv-1")?.form?.eventKey).toBe("custom:*");
+  });
+
   it("does not replay duplicate agent events", () => {
     initializeAutomationFormSession("conv-1", {
       prompt: "Initial automation",

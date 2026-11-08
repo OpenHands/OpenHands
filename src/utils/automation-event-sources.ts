@@ -105,6 +105,12 @@ function describeEventSource(
       ? `event keys ${keys.join(", ")}.`
       : "any event key the source delivers.",
   ];
+  const options = capabilities.eventOptionsBySource?.[source];
+  if (options?.length) {
+    parts.push(
+      `Suggested events: ${options.map((option) => `${option.label} (${option.key})`).join(", ")}.`,
+    );
+  }
   if (guide) {
     parts.push(`The payload names the event in "${guide.eventKeyField}".`);
   }
