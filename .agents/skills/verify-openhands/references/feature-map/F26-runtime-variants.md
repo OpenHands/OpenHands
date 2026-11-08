@@ -121,6 +121,8 @@ Preconditions:
 
 ## Gotchas
 
+- Paper font packaging and isolation require a built library host using the distributed stylesheet and Paper: the Newsreader face must load inside Canvas while host headings keep their own fonts, and the build must retain `assets/newsreader-OFL.txt`. The standalone F16.paper-theme screenshot does not exercise this consumer. Record this embedded Paper check as `not-run` until that host is exercised; the existing generic host-style check alone does not prove it.
+
 - Hold a service port with an owned stand-in (`node -e` listener), not with another launcher that is still starting: a launcher binds its automation port only when automation starts, which on a fresh private `HOME` can be minutes after its ingress answers. A conflict check run in that window finds the port free and starts a second stack.
 - `control-openhands launch` covers only the full stack and `--public`. Partial stacks and `--host` need a hand-started launcher with its own `HOME`, `OH_CANVAS_SAFE_STATE_DIR` and all three `OH_CANVAS_SAFE_*_PORT` variables; without them it writes into the real `~/.openhands/agent-canvas` and grabs the default ports 8000/18000/18001/3001 that another agent may be using.
 - A hand-started launcher's first start downloads the agent-server into its private `HOME` cache (30–90 s). Prefix assignments are expanded left to right, so `HOME=$Q/home UV_CACHE_DIR=$HOME/.cache/uv` points the cache into `$Q/home` too, not at your real cache. Reuse one `$Q` for repeat launches to keep it warm.

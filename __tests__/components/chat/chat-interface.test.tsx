@@ -922,6 +922,53 @@ describe("ChatInterface - Pending message queue", () => {
     expect(messages[0]).toHaveTextContent("first");
     expect(messages[1]).toHaveTextContent("second");
   });
+
+  function seedResolvedConversation(sandboxStatus = "RUNNING") {
+    queryClient.setQueryData(
+      [
+        "user",
+        "conversation",
+        "test-conversation-id",
+        (makeDefaultLocalBackend() ?? NO_BACKEND).id,
+        null,
+      ],
+      {
+        id: "test-conversation-id",
+        sandbox_status: sandboxStatus,
+        tags: { resolved: "auto", project: "abc" },
+      },
+    );
+  }
+
+  it("shows the resolved banner above a usable composer", () => {
+    seedResolvedConversation();
+
+    renderInterface();
+
+    const banner = screen.getByTestId("resolved-conversation-banner");
+    expect(banner).toHaveTextContent(I18nKey.CHAT_INTERFACE$RESOLVED_TITLE);
+    expect(screen.getByTestId("chat-input")).toHaveAttribute(
+      "contenteditable",
+      "true",
+    );
+    expect(
+      banner.compareDocumentPosition(screen.getByTestId("chat-input")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("does not show the resolved banner on an archived conversation", () => {
+    seedResolvedConversation("MISSING");
+
+    renderInterface();
+
+    expect(
+      screen.getByTestId("archived-conversation-banner"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("resolved-conversation-banner"),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("ChatInterface - Saved draft after submit", () => {

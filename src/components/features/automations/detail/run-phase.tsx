@@ -73,7 +73,7 @@ export function RunPhase({ currentPhase, wide = false }: RunPhaseProps) {
           data-testid="run-phase"
           className={cn(
             "min-w-0 truncate text-xs text-muted",
-            wide ? "max-w-[28rem]" : "max-w-[12rem]",
+            wide ? "max-w-112" : "max-w-48",
           )}
         >
           {text}
