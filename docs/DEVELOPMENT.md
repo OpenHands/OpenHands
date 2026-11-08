@@ -468,6 +468,20 @@ You can create a `.env` file in the project directory with these variables based
 | `VITE_USE_TLS`              | Use HTTPS/WSS for the Vite proxy target                                                   | `false`                |
 | `VITE_FRONTEND_PORT`        | Port to run the frontend application                                                      | `3001`                 |
 | `VITE_INSECURE_SKIP_VERIFY` | Skip TLS certificate verification for proxied backend requests                            | `false`                |
+| `VITE_MAX_FILE_SIZE_MB`     | Build-time maximum size (MB) of a single chat attachment, enforced by the frontend        | `3`                    |
+| `VITE_MAX_TOTAL_SIZE_MB`    | Build-time maximum combined size (MB) of all chat attachments in one message              | `3`                    |
+
+The two limits above are also overridable at **runtime** without rebuilding, by the
+static server (Docker image / `npm run dev:static`) injecting them into the page:
+
+- `AGENT_CANVAS_MAX_FILE_MB` → `window.__AGENT_CANVAS_MAX_FILE_SIZE__`
+- `AGENT_CANVAS_MAX_TOTAL_MB` → `window.__AGENT_CANVAS_MAX_TOTAL_SIZE__`
+
+Their defaults come from `config/defaults.json` (`upload.maxFileMb` /
+`upload.maxTotalMb`). Prefer the runtime variables for a running deployment —
+a `3`MB cap keeps base64-embedded images under the WebSocket frame limit (4MB)
+— and raise it only for file uploads, which travel over HTTP with no server-side
+cap. See `docker/entrypoint.sh` for the full variable list.
 
 ### Cloud organization recovery in embedded hosts
 
