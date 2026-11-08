@@ -96,6 +96,17 @@ describe.each(CONTRAST_PASS_THEMES)("%s palette contrast contract", (theme) => {
   });
 });
 
+it("keeps Light+ backend hosts and uploaded-file details readable on interactive fills", () => {
+  // BackendRow keeps muted host text on hover and keyboard focus. UploadedFile
+  // uses the same pairing for its extension and its filename while uploading.
+  const background = surfaceColor("light-plus", "--oh-interactive-hover");
+  const text = utilityColor("light-plus", "text-muted");
+
+  expect(contrast(over(text, background), background)).toBeGreaterThanOrEqual(
+    4.5,
+  );
+});
+
 describe.each(LIGHT_THEMES)("%s shared-control contrast", (theme) => {
   it("keeps filled-button labels readable", () => {
     for (const [fill, label] of [
@@ -204,14 +215,16 @@ describe.each(LIGHT_THEMES)("%s shared-control contrast", (theme) => {
     }
   });
 
-  it("routes every outlined shared control through the same boundary utility", () => {
-    const boundary = colorUtility(formControlBorderClassName, "border");
-    expect(boundary).toBe("border-border-input");
+  it("gives every outlined shared control the same light boundary color", () => {
+    const boundary = tokenColor(theme, "--oh-border-input");
     for (const classList of [
+      formControlBorderClassName,
       ...Object.values(OUTLINED_CONTROLS),
       formControlBackNavButtonClassName,
     ]) {
-      expect(colorUtility(classList, "border")).toBe(boundary);
+      expect(utilityColor(theme, colorUtility(classList, "border"))).toEqual(
+        boundary,
+      );
     }
   });
 });

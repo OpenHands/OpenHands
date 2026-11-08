@@ -1,4 +1,32 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
+
+async function renderedTextContrast(locator: Locator): Promise<number> {
+  return locator.evaluate((el) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    const context = canvas.getContext("2d")!;
+    const luminance = (color: string) => {
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+      const channels = [r, g, b].map((value) => {
+        const c = value / 255;
+        return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    };
+    let surface: Element | null = el;
+    let background = "rgba(0, 0, 0, 0)";
+    while (surface && background === "rgba(0, 0, 0, 0)") {
+      background = getComputedStyle(surface).backgroundColor;
+      surface = surface.parentElement;
+    }
+    const ink = luminance(getComputedStyle(el).color);
+    const fill = luminance(background);
+    return (Math.max(ink, fill) + 0.05) / (Math.min(ink, fill) + 0.05);
+  });
+}
 
 for (const theme of [
   "openhands-neutral",
@@ -227,47 +255,73 @@ for (const theme of [
       .getByTestId("focus-cascade-fixture")
       .evaluate((el) => el.remove());
     const fixtureModule = "/tests/e2e/support/theme-consumer-fixture.tsx";
-    await page.evaluate(async (modulePath) => {
-      const { mountThemeConsumerFixture } = await import(
-        /* @vite-ignore */ modulePath
-      );
-      const scope = document.querySelector(
-        "[data-agent-server-ui] [data-theme]",
-      );
-      if (!scope) throw new Error("The themed app scope was not mounted");
-      const cleanup = mountThemeConsumerFixture(scope);
-      (
-        window as typeof window & { cleanupThemeFixture?: () => void }
-      ).cleanupThemeFixture = cleanup;
-    }, fixtureModule);
+    const appearanceOverride =
+      theme === "openhands-neutral"
+        ? "light"
+        : theme === "light-plus"
+          ? "dark"
+          : undefined;
+    await page.evaluate(
+      async ({ modulePath, appearanceOverride }) => {
+        const { mountThemeConsumerFixture } = await import(
+          /* @vite-ignore */ modulePath
+        );
+        const scope = document.querySelector(
+          "[data-agent-server-ui] [data-theme]",
+        );
+        if (!scope) throw new Error("The themed app scope was not mounted");
+        const cleanup = mountThemeConsumerFixture(scope, appearanceOverride);
+        (
+          window as typeof window & { cleanupThemeFixture?: () => void }
+        ).cleanupThemeFixture = cleanup;
+      },
+      { modulePath: fixtureModule, appearanceOverride },
+    );
     const fixture = page.getByTestId("theme-consumer-fixture");
+    if (appearanceOverride) {
+      const embeddedField = page.getByTestId("theme-appearance-override");
+      const expectedBorder = await embeddedField.evaluate((el, appearance) => {
+        const reference = document.createElement("span");
+        reference.style.borderColor =
+          appearance === "light"
+            ? "var(--oh-border-input)"
+            : "var(--oh-border)";
+        el.parentElement!.append(reference);
+        const border = getComputedStyle(reference).borderTopColor;
+        reference.remove();
+        return border;
+      }, appearanceOverride);
+      await expect(embeddedField).toHaveCSS("border-top-color", expectedBorder);
+    }
     const draft = fixture.getByTestId("active-status-badge-draft");
     await expect(draft).toBeVisible();
     if (["light-plus", "solarized-light", "paper"].includes(theme)) {
-      const ratio = await draft.evaluate((el) => {
-        const style = getComputedStyle(el);
-        const canvas = document.createElement("canvas");
-        canvas.width = canvas.height = 1;
-        const context = canvas.getContext("2d")!;
-        const luminance = (color: string) => {
-          context.clearRect(0, 0, 1, 1);
-          context.fillStyle = color;
-          context.fillRect(0, 0, 1, 1);
-          const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
-          const channels = [r, g, b].map((value) => {
-            const c = value / 255;
-            return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-          });
-          return (
-            channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
-          );
-        };
-        const ink = luminance(style.color);
-        const fill = luminance(style.backgroundColor);
-        return (Math.max(ink, fill) + 0.05) / (Math.min(ink, fill) + 0.05);
-      });
-      expect(ratio).toBeGreaterThanOrEqual(4.5);
+      expect(await renderedTextContrast(draft)).toBeGreaterThanOrEqual(4.5);
     }
+    if (theme === "light-plus") {
+      const extension = fixture
+        .getByTestId("theme-uploaded-file")
+        .getByText("TXT", { exact: true });
+      expect(await renderedTextContrast(extension)).toBeGreaterThanOrEqual(4.5);
+    }
+    const stateBorders = await fixture.evaluate((el) => {
+      const reference = document.createElement("span");
+      el.append(reference);
+      reference.style.borderColor = "var(--oh-danger)";
+      const invalid = getComputedStyle(reference).borderTopColor;
+      reference.style.borderColor = "var(--oh-border-subtle)";
+      const disabled = getComputedStyle(reference).borderTopColor;
+      reference.remove();
+      return { invalid, disabled };
+    });
+    await expect(fixture.getByTestId("theme-caller-invalid")).toHaveCSS(
+      "border-top-color",
+      stateBorders.invalid,
+    );
+    await expect(fixture.getByTestId("theme-disabled")).toHaveCSS(
+      "border-top-color",
+      stateBorders.disabled,
+    );
     for (const override of [null, "rgb(97, 43, 151)"]) {
       const expectedInk = await fixture.evaluate((el, color) => {
         if (color)

@@ -957,6 +957,16 @@ code .token {
   @apply tracking-[0.12em];
 }
 
+/* Keep the resting boundary overridable by caller colors and control states.
+   Appearance changes the color without adding selector specificity. */
+@utility border-control {
+  border-color: var(--oh-border-input);
+
+  &:where(.dark *) {
+    border-color: var(--oh-border);
+  }
+}
+
 @utility transition-control-shell {
   transition-property: background-color, border-color, box-shadow, opacity;
   transition-timing-function: var(

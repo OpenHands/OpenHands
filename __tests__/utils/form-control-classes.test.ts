@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  formControlBorderClassName,
   formControlButtonClassName,
   formControlFieldClassName,
   formControlShellClassName,
 } from "#/utils/form-control-classes";
 import { dropdownFilterTriggerClassName } from "#/utils/dropdown-classes";
+import { cn } from "#/utils/utils";
 
 describe("formControlClasses", () => {
   it("standardizes fields, shells, and buttons to 36px with rounded-lg", () => {
     expect(formControlFieldClassName).toContain("h-9");
     expect(formControlFieldClassName).toContain("rounded-lg");
-    expect(formControlFieldClassName).toContain("border-border-input");
-    expect(formControlFieldClassName).toContain("dark:border-border");
     expect(formControlFieldClassName).toContain("bg-base-secondary");
 
     expect(formControlShellClassName).toContain("h-9");
@@ -20,6 +20,12 @@ describe("formControlClasses", () => {
 
     expect(formControlButtonClassName).toContain("h-9");
     expect(formControlButtonClassName).toContain("rounded-lg");
+  });
+
+  it("lets caller validation colors replace the shared resting border", () => {
+    expect(cn(formControlBorderClassName, "border-danger")).toBe(
+      "border border-danger",
+    );
   });
 
   it("preserves dark focus borders for fields, shells, and filter triggers", () => {

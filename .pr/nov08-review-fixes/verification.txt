@@ -1,0 +1,55 @@
+PR 17730 — November 8 review fixes
+
+Before: 35d2cd56220ac8707df13cb7725211a172b89846.
+After: the working tree committed with this evidence (build-input fingerprint
+04f8593f3166c925-dirty). No product source changed after its production build.
+
+Both runs used production Canvas, real Agent Server 1.60.1, Automation,
+private state, and Chromium at 1440x1000 through control-openhands.
+Doctor passed. No MSW or LLM execution was used for these captures.
+DigitalOcean alone used the repository's bundled local stand-in; its account
+is fictional and no DigitalOcean resource was created.
+
+1. Light+ hover contrast
+   Settings > Application > Light+ > Manage Backends > hover Local.
+   Before: #616161 text on #D0D0D0, 4.0154:1.
+   After:  #595959 text on #D0D0D0, 4.5414:1.
+   The same muted role is used by uploaded-file extension labels.
+   Images: before-light-hover.png / after-light-hover.png.
+
+2. Neutral error border
+   Add Backend > Providers > DigitalOcean (stand-in) > New Agent.
+   Enter "bad name!", then blur the field. aria-invalid=true in both runs.
+   Before: normal #404040 border hides the validation state.
+   After: danger #e76a5e border remains visible when unfocused.
+   Images: before-neutral-invalid-name.png / after-neutral-invalid-name.png.
+
+3. Neutral disabled border
+   Settings > Application > change Git Username > pause the private Agent
+   Server through control-openhands > Save. The native fieldset is disabled.
+   Sample after the CSS transition; resume the server after capture.
+   Before: normal #404040 border.
+   After: subtle #313131 border, matching --oh-border-subtle.
+   Images: before-neutral-disabled-field.png / after-neutral-disabled-field.png.
+   These screenshots demonstrate disabled styling, not save latency.
+
+The implementation uses one named border-control utility. Its dark appearance
+branch adds no specificity; caller colors can replace the default with cn(),
+and disabled/focus selectors win normally. Explicit light/dark embedded roots
+and host border-token overrides remain covered by compiled-CSS browser tests.
+
+Verification:
+- Both regressions failed focused checks before their fixes.
+- 216 focused tests across 14 files passed; the additional BackNav/related
+  component check passed 56 tests after removing a stale class-only assertion.
+- Six Chromium theme cases passed; Neutral and Light+ also passed in WebKit.
+- Firefox was attempted but its pinned browser exited before test execution:
+  "Could not find profile folder" (also reproduced with TMPDIR=/private/tmp).
+- Lint/typecheck, production app build, and library build passed.
+- Full suite: 10,408 passed, 1 skipped, 7 todo; three failures. Two are the
+  previously reproduced macOS Bash 3.2 Docker session-key tests. The third
+  was a stale BackNav class assertion collected before its removal; the
+  current BackNav file and related controls passed the focused 56-test rerun.
+
+The verification stacks and DigitalOcean stand-ins were stopped. Existing
+review approvals were retained; no new review request was needed.

@@ -34,6 +34,20 @@ function declarations(blockPattern: RegExp): Record<string, string> {
 const ROOT_DEFAULTS = declarations(/^:root\s*\{([\s\S]*?)^\}/gm);
 const TAILWIND_THEME = declarations(/^@theme inline\s*\{([\s\S]*?)^\}/gm);
 
+// Named utilities can own a base color without adding a theme alias. Read only
+// top-level declarations; appearance and interactive-state cascades are covered
+// by the browser tests against the compiled stylesheet.
+const CUSTOM_UTILITY_COLORS: Record<string, string> = Object.fromEntries(
+  [...TAILWIND_CSS.matchAll(/^@utility ([\w-]+)\s*\{([^{}]*)/gm)].flatMap(
+    ([, name, block]) => {
+      const color = block.match(
+        /(?:^|;)\s*(?:background-color|border-color|color)\s*:\s*([^;]+);/,
+      );
+      return color ? [[name, color[1].trim()]] : [];
+    },
+  ),
+);
+
 export const ALL_THEMES = Object.keys(COLOR_THEMES) as ColorThemeKey[];
 
 export const LIGHT_THEMES = ALL_THEMES.filter(
@@ -176,9 +190,13 @@ export function utilityColor(theme: ColorThemeKey, className: string): Rgba {
   );
   if (!match) throw new Error(`Not a color utility: ${className}`);
   const variable = /^\[var\((--[\w-]+)\)\]$/.exec(match[1]);
+  const unvariedUtility = className
+    .replace(/^(?:[\w-]+:)*/, "")
+    .replace(/\/\d+$/, "");
   const alias = variable
     ? `var(${variable[1]})`
-    : TAILWIND_THEME[`--color-${match[1]}`];
+    : (CUSTOM_UTILITY_COLORS[unvariedUtility] ??
+      TAILWIND_THEME[`--color-${match[1]}`]);
   if (!alias) throw new Error(`No Tailwind color alias for ${className}`);
   const color = parseColor(substitute(theme, alias));
   const opacity = match[2] === undefined ? 1 : Number(match[2]) / 100;

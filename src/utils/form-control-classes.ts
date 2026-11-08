@@ -6,8 +6,7 @@ export const formControlHeightClassName = "h-9 min-h-9";
 export const formControlRadiusClassName = "rounded-lg";
 
 /** Interactive boundary for fields, triggers, and outlined buttons (3:1 target). */
-export const formControlBorderClassName =
-  "border border-border-input dark:border-border";
+export const formControlBorderClassName = "border border-control";
 
 export const formControlSurfaceClassName = "bg-base-secondary";
 
