@@ -177,16 +177,32 @@ export function mountCanvasExtensionAppView({
       frame.title = labels.loading;
       frame.setAttribute("sandbox", created.iframeSandbox);
       frame.className = "h-full w-full border-0 bg-white";
-      frame.addEventListener(
-        "load",
-        () => {
-          if (!disposed && currentGeneration === generation) {
-            clearLoadTimeout();
-            container.replaceChildren(frame);
-          }
-        },
-        { once: true },
-      );
+      // A frame that navigates to the app origin runs with the app origin.
+      let frameLoaded = false;
+      let frameUnloaded = false;
+      frame.addEventListener("load", () => {
+        if (disposed || currentGeneration !== generation || frameUnloaded) {
+          return;
+        }
+        clearLoadTimeout();
+        if (!frameLoaded) {
+          frameLoaded = true;
+          container.replaceChildren(frame);
+          return;
+        }
+        // Cross-origin frames throw on read and stay mounted.
+        let frameOrigin: string | null = null;
+        try {
+          frameOrigin = frame.contentWindow?.location.origin ?? null;
+        } catch {
+          frameOrigin = null;
+        }
+        if (frameOrigin === window.location.origin) {
+          frameUnloaded = true;
+          renderError(labels.unavailable, created.url);
+          void revoke();
+        }
+      });
       frame.addEventListener(
         "error",
         () => {

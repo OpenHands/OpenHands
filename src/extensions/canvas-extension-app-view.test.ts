@@ -255,4 +255,60 @@ describe("mountCanvasExtensionAppView", () => {
     expect(createSession).toHaveBeenCalledTimes(1);
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("unloads the frame and revokes the session when it navigates to the app origin", async () => {
+    const container = document.createElement("div");
+    const revokeSession = vi.fn().mockResolvedValue(undefined);
+
+    mountCanvasExtensionAppView({
+      container,
+      labels,
+      createSession: vi.fn().mockResolvedValue(session),
+      revokeSession,
+    });
+
+    const frame = await vi.waitUntil(() => container.querySelector("iframe"));
+    fireEvent.load(frame);
+    expect(container.querySelector("iframe")).not.toBeNull();
+
+    Object.defineProperty(frame, "contentWindow", {
+      value: { location: { origin: window.location.origin } },
+      configurable: true,
+    });
+    fireEvent.load(frame);
+
+    await vi.waitFor(() =>
+      expect(container).toHaveTextContent(labels.unavailable),
+    );
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(container.querySelector("button")).toHaveTextContent(labels.retry);
+    expect(container.querySelector("a")).toHaveAttribute("href", session.url);
+    expect(revokeSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the frame mounted when it navigates within its session origin", async () => {
+    const container = document.createElement("div");
+    const revokeSession = vi.fn().mockResolvedValue(undefined);
+
+    mountCanvasExtensionAppView({
+      container,
+      labels,
+      createSession: vi.fn().mockResolvedValue(session),
+      revokeSession,
+    });
+
+    const frame = await vi.waitUntil(() => container.querySelector("iframe"));
+    fireEvent.load(frame);
+
+    Object.defineProperty(frame, "contentWindow", {
+      value: { location: { origin: new URL(session.url).origin } },
+      configurable: true,
+    });
+    fireEvent.load(frame);
+
+    await Promise.resolve();
+    expect(container.querySelector("iframe")).not.toBeNull();
+    expect(container).not.toHaveTextContent(labels.unavailable);
+    expect(revokeSession).not.toHaveBeenCalled();
+  });
 });
