@@ -31,6 +31,7 @@
   --color-on-primary: var(--oh-color-base);
   --color-base-secondary: var(--oh-color-base-secondary);
   --color-danger: var(--oh-color-danger);
+  --color-danger-foreground: var(--oh-danger-foreground);
   --color-success: var(--oh-color-success);
   /* @spec MCP-004 — Form feedback follows readable theme text roles */
   --color-feedback-error: var(--oh-feedback-error);

@@ -185,9 +185,7 @@ export function SecretForm({
         pattern="^[a-zA-Z][a-zA-Z0-9_]{0,63}$"
         title={t(I18nKey.SETTINGS$SECRET_NAME_PATTERN_TITLE)}
       />
-      {error && (
-        <p className="text-danger text-sm dark:text-red-500">{error}</p>
-      )}
+      {error && <p className="text-danger text-sm">{error}</p>}
 
       <div className="flex flex-col gap-2.5 w-full min-w-0">
         <label htmlFor={valueInputId} className="text-sm">

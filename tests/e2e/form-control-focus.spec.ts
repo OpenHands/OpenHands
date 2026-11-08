@@ -1,7 +1,10 @@
 import { expect, test, type Locator } from "@playwright/test";
 
-async function renderedTextContrast(locator: Locator): Promise<number> {
-  return locator.evaluate((el) => {
+async function renderedContrast(
+  locator: Locator,
+  foregroundProperty: "color" | "stroke" = "color",
+): Promise<number> {
+  return locator.evaluate((el, property) => {
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = 1;
     const context = canvas.getContext("2d")!;
@@ -22,10 +25,10 @@ async function renderedTextContrast(locator: Locator): Promise<number> {
       background = getComputedStyle(surface).backgroundColor;
       surface = surface.parentElement;
     }
-    const ink = luminance(getComputedStyle(el).color);
+    const ink = luminance(getComputedStyle(el)[property]);
     const fill = luminance(background);
     return (Math.max(ink, fill) + 0.05) / (Math.min(ink, fill) + 0.05);
-  });
+  }, foregroundProperty);
 }
 
 for (const theme of [
@@ -296,13 +299,32 @@ for (const theme of [
     const draft = fixture.getByTestId("active-status-badge-draft");
     await expect(draft).toBeVisible();
     if (["light-plus", "solarized-light", "paper"].includes(theme)) {
-      expect(await renderedTextContrast(draft)).toBeGreaterThanOrEqual(4.5);
+      expect(await renderedContrast(draft)).toBeGreaterThanOrEqual(4.5);
     }
     if (theme === "light-plus") {
       const extension = fixture
         .getByTestId("theme-uploaded-file")
         .getByText("TXT", { exact: true });
-      expect(await renderedTextContrast(extension)).toBeGreaterThanOrEqual(4.5);
+      expect(await renderedContrast(extension)).toBeGreaterThanOrEqual(4.5);
+    }
+    if (["light-plus", "solarized-light", "paper"].includes(theme)) {
+      const toggle = fixture.getByTestId("theme-selected-toggle");
+      await toggle.hover();
+      await expect(toggle).toHaveAttribute("data-showing-remove", "true");
+      const removeIcon = toggle.locator("svg path");
+      await expect(removeIcon).toBeVisible();
+      const hoverFill = await toggle.evaluate((el) => {
+        const reference = document.createElement("span");
+        reference.style.backgroundColor = "var(--oh-danger)";
+        el.append(reference);
+        const fill = getComputedStyle(reference).backgroundColor;
+        reference.remove();
+        return fill;
+      });
+      await expect(toggle).toHaveCSS("background-color", hoverFill);
+      await expect
+        .poll(() => renderedContrast(removeIcon, "stroke"))
+        .toBeGreaterThanOrEqual(3);
     }
     const stateBorders = await fixture.evaluate((el) => {
       const reference = document.createElement("span");
@@ -316,6 +338,14 @@ for (const theme of [
     });
     await expect(fixture.getByTestId("theme-caller-invalid")).toHaveCSS(
       "border-top-color",
+      stateBorders.invalid,
+    );
+    await expect(fixture.getByTestId("theme-error")).toHaveCSS(
+      "border-top-color",
+      stateBorders.invalid,
+    );
+    await expect(fixture.getByTestId("theme-error-error")).toHaveCSS(
+      "color",
       stateBorders.invalid,
     );
     await expect(fixture.getByTestId("theme-disabled")).toHaveCSS(

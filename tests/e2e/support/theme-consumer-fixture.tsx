@@ -1,6 +1,7 @@
 /* eslint-disable i18next/no-literal-string -- test-only fixture labels identify the exercised control states */
 import { createPortal } from "react-dom";
 import { AgentServerUIRoot } from "../../../src/components/providers/agent-server-ui-root";
+import { CirclePlusCheckToggle } from "../../../src/components/shared/buttons/circle-plus-check-toggle";
 import { SettingsInput } from "../../../src/components/features/settings/settings-input";
 import { UploadedFile } from "../../../src/components/features/chat/uploaded-file";
 import { createRoot } from "react-dom/client";
@@ -63,6 +64,14 @@ export function mountThemeConsumerFixture(
         />
         <SettingsInput
           type="text"
+          testId="theme-error"
+          name="theme-error"
+          label="Validation error"
+          defaultValue="invalid name!"
+          error="Use a valid name"
+        />
+        <SettingsInput
+          type="text"
           testId="theme-disabled"
           name="theme-disabled"
           label="Disabled control"
@@ -78,6 +87,11 @@ export function mountThemeConsumerFixture(
           onRemove={() => {}}
         />
       </div>
+      <CirclePlusCheckToggle
+        testId="theme-selected-toggle"
+        isSelected
+        onToggle={() => {}}
+      />
       <ActiveStatusBadge automation={{ enabled: false, state: "DRAFT" }} />
       <div data-testid="theme-branch-icon">
         <GitControlBarBranchButton
