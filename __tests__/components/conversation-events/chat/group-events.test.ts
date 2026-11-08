@@ -800,3 +800,41 @@ it("places an unanchored resume after UTC history without timezone suffixes", ()
     vi.unstubAllEnvs();
   }
 });
+
+describe("groupEvents - reactions", () => {
+  const reactAction = (thought: TextContent[]): ActionEvent =>
+    ({
+      ...makeBashAction("react-1", thought),
+      action: { kind: "ReactAction", emoji: "eyes", message_id: null },
+      tool_name: "react",
+    }) as unknown as ActionEvent;
+  const reactResult = (actionId: string): ObservationEvent =>
+    ({
+      ...makeBashObservation("react-obs-1", actionId),
+      tool_name: "react",
+      observation: {
+        kind: "ReactionObservation",
+        content: [{ type: "text", text: "Reacted :eyes:" }],
+        is_error: false,
+        target_event_id: "msg-1",
+        emoji: "eyes",
+        removed: false,
+      },
+    }) as unknown as ObservationEvent;
+
+  it("keeps the agent's narration on a reaction and drops its card", () => {
+    const action = reactAction([{ type: "text", text: "On it, looking now." }]);
+    const result_ = reactResult(action.id);
+
+    const result = groupEvents([result_], undefined, [action, result_]);
+
+    expect(result).toEqual([{ kind: "thought", action, index: 0 }]);
+  });
+
+  it("renders nothing for a reaction without narration", () => {
+    const action = reactAction([]);
+    const result_ = reactResult(action.id);
+
+    expect(groupEvents([result_], undefined, [action, result_])).toEqual([]);
+  });
+});

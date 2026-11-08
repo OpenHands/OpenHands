@@ -27,10 +27,10 @@ describe("Features settings", () => {
   });
 
   it("lists the server's experimental features and turns one on", async () => {
-    vi.spyOn(
-      experimentalFeaturesService,
-      "listExperimentalFeatures",
-    ).mockResolvedValue([reactions(false)]);
+    // The server's list before and after the switch (read again to reconcile).
+    vi.spyOn(experimentalFeaturesService, "listExperimentalFeatures")
+      .mockResolvedValueOnce([reactions(false)])
+      .mockResolvedValue([reactions(true)]);
     const update = vi
       .spyOn(experimentalFeaturesService, "updateExperimentalFeature")
       .mockResolvedValue(reactions(true));
@@ -50,7 +50,11 @@ describe("Features settings", () => {
     await user.click(toggle);
 
     expect(update).toHaveBeenCalledWith(
-      { key: "conversation_reactions", enabled: true },
+      expect.objectContaining({
+        backend: expect.objectContaining({ id: "local-1" }),
+        key: "conversation_reactions",
+        enabled: true,
+      }),
       expect.anything(),
     );
     await waitFor(() => expect(toggle).toBeChecked());

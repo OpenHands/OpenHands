@@ -4,7 +4,7 @@ import {
   type ExperimentalFeature,
 } from "@openhands/typescript-client/clients";
 import type { ReactionEmoji } from "@openhands/typescript-client";
-import { getActiveBackend } from "../backend-registry/active-store";
+import type { Backend } from "../backend-registry/types";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 
 /**
@@ -12,26 +12,35 @@ import { getAgentServerClientOptions } from "../agent-server-client-options";
  * user sets for themselves, read by the agent server when a conversation
  * starts. Local agent server only; Cloud has no such settings yet, so it lists
  * none.
+ *
+ * Every call names the backend it talks to. Each backend keeps its own
+ * switches, and the person can change the active backend while a request is
+ * queued or in flight, so the caller fixes the backend when the person acts
+ * (see useExperimentalFeatures and useUpdateExperimentalFeature).
  */
+const settingsClient = (backend: Backend) =>
+  new SettingsClient(
+    getAgentServerClientOptions({ host: backend.host, apiKey: backend.apiKey }),
+  );
+
 export const experimentalFeaturesService = {
-  listExperimentalFeatures: async (): Promise<ExperimentalFeature[]> => {
-    if (getActiveBackend().backend.kind === "cloud") return [];
-    return new SettingsClient(
-      getAgentServerClientOptions(),
-    ).listExperimentalFeatures();
+  listExperimentalFeatures: async (
+    backend: Backend,
+  ): Promise<ExperimentalFeature[]> => {
+    if (backend.kind === "cloud") return [];
+    return settingsClient(backend).listExperimentalFeatures();
   },
 
   updateExperimentalFeature: async ({
+    backend,
     key,
     enabled,
   }: {
+    backend: Backend;
     key: string;
     enabled: boolean;
   }): Promise<ExperimentalFeature> =>
-    new SettingsClient(getAgentServerClientOptions()).updateExperimentalFeature(
-      key,
-      enabled,
-    ),
+    settingsClient(backend).updateExperimentalFeature(key, enabled),
 
   /** Put the person's reaction on a message, or take it off. */
   react: async ({
