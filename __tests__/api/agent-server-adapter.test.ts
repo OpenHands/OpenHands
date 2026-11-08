@@ -33,7 +33,6 @@ import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import type { HookConfig } from "@openhands/typescript-client";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import type { SettingsValue } from "#/types/settings";
-import { useModelStore } from "#/stores/model-store";
 
 const {
   mockGetAgentServerWorkingDir,
@@ -133,7 +132,6 @@ beforeEach(() => {
     apiKey: "session-key",
     kind: "local",
   });
-  useModelStore.getState().setHomeManualModelPick(false);
 });
 
 const PROFILE = {
@@ -541,26 +539,47 @@ describe("buildStartConversationRequest", () => {
       ]);
     });
 
-    it("adds automation setup tags to local conversation requests", () => {
-      const payload = buildStartConversationRequest({
-        ...PROFILE,
-        settings: DEFAULT_SETTINGS,
-        automationSetup: true,
-        automationSetupTags: {
-          automationdraftid: "draft-1",
-          automationmaterializeddraftid: "auto-1",
-        },
-      });
+    it.each(["openhands", "acp"] as const)(
+      "adds automation identity and context for local %s conversations",
+      (agentProfileKind) => {
+        const payload = buildStartConversationRequest({
+          ...PROFILE,
+          settings: DEFAULT_SETTINGS,
+          automationSetup: true,
+          agentProfileKind,
+          query: "Help with this automation",
+          automationSetupContext: "Selected automation: reviewer-123",
+          automationSetupTags: {
+            automationdraftid: "draft-1",
+            automationmaterializeddraftid: "auto-1",
+          },
+        });
 
-      expect(payload.tags).toEqual(
-        expect.objectContaining({
-          automationsetup: "draft",
-          automationdraftid: "draft-1",
-          automationmaterializeddraftid: "auto-1",
-          clientsource: "agentcanvas",
-        }),
-      );
-    });
+        expect(payload.tags).toEqual(
+          expect.objectContaining({
+            automationsetup: "draft",
+            automationdraftid: "draft-1",
+            automationmaterializeddraftid: "auto-1",
+            clientsource: "agentcanvas",
+          }),
+        );
+        if (agentProfileKind === "openhands") {
+          expect(
+            payload.agent_launch_additions?.system_message_suffix_append,
+          ).toContain("Selected automation: reviewer-123");
+          expect(payload.initial_message?.content).toEqual([
+            { type: "text", text: "Help with this automation" },
+          ]);
+        } else {
+          expect(payload.initial_message?.content).toEqual([
+            {
+              type: "text",
+              text: "Help with this automation\n\nSelected automation: reviewer-123",
+            },
+          ]);
+        }
+      },
+    );
 
     it.each([
       {

@@ -181,6 +181,12 @@ describe("vite library build", () => {
     };
 
     const css = file("styles.css");
+    // The library inlines the local font; its license must ship alongside it.
+    const fontLicense = file("assets/newsreader-OFL.txt");
+    expect(fontLicense).toContain(
+      "Copyright 2020 The Newsreader Project Authors",
+    );
+    expect(fontLicense).toContain("SIL OPEN FONT LICENSE Version 1.1");
     const stylesheet = parse(css);
     const declarations = (rule: Rule) => {
       const values: Record<string, string> = {};
@@ -236,6 +242,43 @@ describe("vite library build", () => {
       expect(matches, `Single scoped recipe: ${name}`).toHaveLength(1);
       return matches[0];
     };
+    // A named gradient stop retains the existing ancestor override/fallback.
+    const scrollFade = recipe("from-scroll-fade");
+    expect(declarations(scrollFade)["--tw-gradient-from"]).toBe(
+      "var(--oh-scroll-fade-from,var(--oh-color-base))",
+    );
+    expect(declarations(recipe("scroll-fade-surface"))).toEqual({
+      "--oh-scroll-fade-from": "var(--oh-surface)",
+    });
+    expect(declarations(recipe("scroll-fade-tertiary"))).toEqual({
+      "--oh-scroll-fade-from": "var(--oh-color-tertiary)",
+    });
+    // Keep code padding relative to its own font size in embedded roots.
+    expect(declarations(recipe("px-code-inline-x"))).toEqual({
+      "padding-inline": ".4em",
+    });
+    expect(declarations(recipe("py-code-inline-y"))).toEqual({
+      "padding-block": ".2em",
+    });
+    expect(declarations(recipe("p-code-block"))).toEqual({ padding: "1em" });
+    // The drop illustration uses fixed SVG pixel coordinates even in embeds.
+    expect(declarations(recipe("file-drop-image"))).toEqual({
+      top: "-40px",
+      left: "-10px",
+      rotate: "-27deg",
+    });
+    expect(declarations(recipe("file-drop-arrow"))).toEqual({
+      top: "-16px",
+      left: "-20px",
+    });
+    // Message wrapping must retain the legacy word-break behavior; the standard
+    // overflow utility controls the independent min-content wrapping contract.
+    expect(declarations(recipe("message-word-break"))).toEqual({
+      "word-break": "break-word",
+    });
+    expect(declarations(recipe("wrap-anywhere"))).toEqual({
+      "overflow-wrap": "anywhere",
+    });
     // Scoped to the Canvas root so it never restyles the host page.
     expect(css).toContain("[data-agent-server-ui] .flex{display:flex}");
     expect(css).not.toMatch(/(^|[{},])\.flex\{/);
@@ -408,6 +451,41 @@ describe("vite library build", () => {
 
     // Connection chooser disclosures retain exact fractional tracks and their
     // motion override after extraction and library selector scoping.
+    const transitionProperties = {
+      "transition-control-shell":
+        "background-color,border-color,box-shadow,opacity",
+      "!transition-control-shell":
+        "background-color,border-color,box-shadow,opacity",
+      "transition-control-transform": "transform",
+      "transition-context-ring": "stroke-dashoffset,stroke",
+      "transition-panel-width": "width",
+      "transition-sidebar-width": "width,min-width",
+    };
+    for (const [name, properties] of Object.entries(transitionProperties)) {
+      const motion = recipe(name);
+      expect(declarations(motion)).toEqual({
+        "transition-property": properties,
+        "transition-timing-function":
+          "var(--tw-ease,var(--default-transition-timing-function))",
+        "transition-duration":
+          "var(--tw-duration,var(--default-transition-duration))",
+      });
+      motion.walkDecls((declaration) => {
+        expect(Boolean(declaration.important)).toBe(name.startsWith("!"));
+      });
+    }
+    expect(declarations(recipe("animate-chat-status-pulse"))).toEqual({
+      animation: "1.2s ease-in-out infinite pulse",
+    });
+    const pulseFrames: Record<string, Record<string, string>> = {};
+    stylesheet.walkAtRules("keyframes", (frames) => {
+      if (frames.params === "pulse")
+        frames.walkRules((frame) => {
+          pulseFrames[frame.selector] = declarations(frame);
+        });
+    });
+    expect(pulseFrames).toEqual({ "50%": { opacity: ".5" } });
+
     const disclosure = recipe("backend-chooser-disclosure");
     expect(declarations(disclosure)).toMatchObject({
       "transition-property": "grid-template-rows",
@@ -599,6 +677,41 @@ describe("vite library build", () => {
     // Compact type tokens must not introduce a line-height default.
     expect(declarations(recipe("text-2xs"))).toEqual({ "font-size": "11px" });
     expect(declarations(recipe("text-3xs"))).toEqual({ "font-size": "10px" });
+
+    for (const [name, size] of Object.entries({
+      "text-4xs": "9px",
+      "text-xs-plus": "13px",
+      "text-sm-plus": "15px",
+      "text-title": "32px",
+    })) {
+      expect(declarations(recipe(name))).toEqual({ "font-size": size });
+    }
+
+    expect(declarations(recipe("metadata-grid-columns"))).toEqual({
+      "grid-template-columns": "auto 1fr",
+    });
+    expect(declarations(recipe("automation-summary-columns"))).toEqual({
+      "grid-template-columns": "auto minmax(0,1fr)",
+    });
+    const runDetails = recipe("sm:run-log-detail-columns");
+    expect(declarations(runDetails)).toEqual({
+      "grid-template-columns": "5rem minmax(0,1fr)",
+    });
+    expect(runDetails.parent).toMatchObject({
+      type: "atrule",
+      name: "media",
+      params: "(width>=40rem)",
+    });
+
+    const radiusContracts = {
+      "rounded-pill": "100px",
+      "rounded-composer": "15px",
+      "rounded-file-action": "7px",
+      "rounded-facet-control": "3px",
+    };
+    for (const [name, radius] of Object.entries(radiusContracts)) {
+      expect(declarations(recipe(name))).toEqual({ "border-radius": radius });
+    }
 
     // `package.json` routes `require` here; stripped CSS imports must not
     // leave it unparseable.

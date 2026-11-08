@@ -26,6 +26,7 @@ import {
   initializeAutomationFormSession,
 } from "#/api/automation-form-session";
 import type { AutomationSetupKind } from "#/api/automation-setup-types";
+import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import { SearchInput } from "#/components/features/automations/search-input";
@@ -55,11 +56,16 @@ import {
   useAutomationCreatorFilterUserId,
   useAutomationPermissions,
 } from "#/hooks/use-automation-permissions";
-import type { Automation, AutomationSpec } from "#/types/automation";
+import type {
+  Automation,
+  AutomationExportFile,
+  AutomationSpec,
+} from "#/types/automation";
 import {
   getAutomationExportFilename,
   parseAutomationFile,
   serializeAutomation,
+  serializeScriptAutomation,
 } from "#/utils/automation-export";
 import {
   automationDetailPath,
@@ -531,8 +537,21 @@ export default function AutomationsList() {
     if (automation) openEditor(automation);
   };
 
-  const handleExport = (automation: Automation) => {
-    const contents = `${JSON.stringify(serializeAutomation(automation), null, 2)}\n`;
+  const handleExport = async (automation: Automation) => {
+    let file: AutomationExportFile;
+    try {
+      // A script automation's file has to carry its bundle.
+      file = automation.prompt
+        ? serializeAutomation(automation)
+        : serializeScriptAutomation(
+            automation,
+            await AutomationService.fetchTarballBytes(automation.id),
+          );
+    } catch (error) {
+      displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
+      return;
+    }
+    const contents = `${JSON.stringify(file, null, 2)}\n`;
     downloadBlob(
       new Blob([contents], { type: "application/json" }),
       getAutomationExportFilename(automation),

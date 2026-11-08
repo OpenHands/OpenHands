@@ -1,3 +1,4 @@
+import type { AutomationUpdate } from "#/types/automation";
 import axios from "axios";
 import {
   clearPendingLocalTelemetryRevocation,
@@ -10,6 +11,7 @@ import type {
   Automation,
   AutomationCreatedByFilter,
   AutomationRun,
+  AutomationScriptBundle,
   AutomationSpec,
   AutomationTagCount,
   AutomationTrigger,
@@ -45,6 +47,7 @@ import type {
   DraftValidationError,
 } from "#/manifests/types";
 import { withPresetSources } from "#/utils/automation-preset-sources";
+import { base64ToBytes } from "#/utils/base64";
 import { downloadBlob } from "#/utils/utils";
 import type { Backend, ResolvedActiveBackend } from "../backend-registry/types";
 import {
@@ -372,6 +375,30 @@ function buildCreateAutomationRequest(spec: AutomationSpec) {
   };
 }
 
+/**
+ * The bundle endpoint takes the real trigger and the disabled state in one
+ * call, unlike the preset endpoints the prompt import goes through, and
+ * forbids fields it does not declare (no prompt, repositories or plugins).
+ */
+function buildCreateScriptAutomationBody(
+  spec: AutomationSpec,
+  script: AutomationScriptBundle,
+  tarballPath: string,
+) {
+  return {
+    name: spec.name,
+    trigger: buildImportedTrigger(spec),
+    enabled: false,
+    tarball_path: tarballPath,
+    entrypoint: script.entrypoint,
+    ...(script.setup_script_path && {
+      setup_script_path: script.setup_script_path,
+    }),
+    ...(spec.model && { model: spec.model }),
+    ...(spec.timeout != null && { timeout: spec.timeout }),
+  };
+}
+
 async function buildPinnedLocalConfig(backend: Backend) {
   const apiKey = backend.apiKey.trim();
   return {
@@ -527,6 +554,13 @@ class AutomationService {
 
   static async createAutomation(spec: AutomationSpec): Promise<Automation> {
     const active = getActiveBackend();
+    if (spec.script) {
+      return AutomationService.createScriptAutomation(
+        active,
+        spec,
+        spec.script,
+      );
+    }
     const { path, body } = buildCreateAutomationRequest(spec);
 
     let created: Automation;
@@ -595,9 +629,46 @@ class AutomationService {
     }
   }
 
+  /**
+   * Import a script automation: upload the bundle the file carries, then
+   * create against the path the upload returned, the way the custom setup
+   * flow does.
+   */
+  private static async createScriptAutomation(
+    active: ResolvedActiveBackend,
+    spec: AutomationSpec,
+    script: AutomationScriptBundle,
+  ): Promise<Automation> {
+    // Resolve the endpoint before uploading, so a deployment without bundle
+    // support fails without leaving an upload behind.
+    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpointForTarget("custom")}`;
+    const tarballPath = await AutomationService.uploadAutomationTarball(
+      spec.name.slice(0, 255),
+      base64ToBytes(script.tarball_base64),
+    );
+    const body = buildCreateScriptAutomationBody(spec, script, tarballPath);
+
+    if (active.backend.kind === "cloud") {
+      return callCloudProxy<Automation>({
+        backend: active.backend,
+        method: "POST",
+        path,
+        body,
+        headers: await buildPinnedCloudHeaders(active),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<Automation>(
+      path,
+      body,
+      await buildPinnedLocalConfig(active.backend),
+    );
+    return data;
+  }
+
   static async updateAutomation(
     id: string,
-    body: Partial<Automation>,
+    body: AutomationUpdate,
   ): Promise<Automation> {
     const active = getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}`;

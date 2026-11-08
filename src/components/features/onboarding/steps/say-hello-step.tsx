@@ -93,7 +93,7 @@ export function SayHelloStep({
       <form
         onSubmit={handleSubmit}
         data-testid="onboarding-hello-input-form"
-        className="mt-6 box-border flex w-full shrink-0 flex-col items-start justify-center rounded-[15px] border border-border bg-surface-raised p-4"
+        className="mt-6 box-border flex w-full shrink-0 flex-col items-start justify-center rounded-composer border border-border bg-surface-raised p-4"
       >
         <div className="relative w-full">
           <div className="box-border flex w-full shrink-0 flex-row items-end justify-between gap-2 p-0 pb-4.5">

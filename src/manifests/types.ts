@@ -203,6 +203,8 @@ export interface SetupEntry {
   id: string;
   name: string;
   description: string;
+  /** Mermaid source for a small diagram of what the automation does. */
+  diagram?: string;
   /**
    * Version of the template this entry publishes, sent with the create request
    * as provenance. A bundle declares its own at `setup.bundle.version`; a

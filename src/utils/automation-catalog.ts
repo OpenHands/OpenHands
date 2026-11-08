@@ -538,6 +538,29 @@ function getAutomationTemplateEntry(
 }
 
 /**
+ * What the template an automation was created from says about it: the
+ * catalog description and, when the entry ships one, its Mermaid diagram.
+ * Null without template provenance. Read live from the pinned catalog, so a
+ * reworded template reaches every automation created from it.
+ */
+export function getAutomationTemplateOverview(
+  automation: Automation,
+): { description: string; diagram: string | null } | null {
+  const entry = getAutomationTemplateEntry(automation);
+  if (!entry) return null;
+  return { description: entry.description, diagram: getEntryDiagram(entry) };
+}
+
+/**
+ * A catalog entry's Mermaid diagram, or null. The field is newer than some
+ * catalog releases and is published data, so it is read guarded.
+ */
+export function getEntryDiagram(entry: object): string | null {
+  const { diagram } = entry as { diagram?: unknown };
+  return typeof diagram === "string" && diagram.length > 0 ? diagram : null;
+}
+
+/**
  * The value statement an automation card shows for its completed runs, or
  * null when there is nothing defensible to say: no template provenance, no
  * honored `impact` declaration, an unknown count (older service with more

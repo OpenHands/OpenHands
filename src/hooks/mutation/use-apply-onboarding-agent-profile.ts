@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { HttpError } from "@openhands/typescript-client";
 import AgentProfilesService, {
   WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
+  type AgentProfile,
   type AgentProfileSaveInput,
 } from "#/api/agent-profiles-service/agent-profiles-service.api";
 import { mergeAgentProfileSaveInput } from "#/components/features/settings/agent-profiles/merge-agent-profile-save-input";
@@ -12,21 +13,45 @@ import { isNoBackend } from "#/api/backend-registry/active-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
 
-/**
- * The well-known agent profile onboarding configures. Conversations launch from
- * the active AGENT profile (#1571), so onboarding must land the user's choice on
- * an active profile — not just global agent_settings / a standalone LLM profile,
- * which the active profile wouldn't reference. Reusing the seeded "default" name
- * upserts that one profile (its id is preserved on overwrite) rather than
- * spawning a parallel one.
- */
-export const ONBOARDING_AGENT_PROFILE_NAME =
-  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME;
+type AcpSaveInput = Extract<AgentProfileSaveInput, { agent_kind: "acp" }>;
+
+export type OnboardingAgentProfile =
+  | Extract<AgentProfileSaveInput, { agent_kind: "openhands" }>
+  | (AcpSaveInput & { acp_server: NonNullable<AcpSaveInput["acp_server"]> });
+
+const MAX_ACP_PROFILE_NAMES = 10;
+
+async function readProfile(name: string): Promise<AgentProfile | null> {
+  return AgentProfilesService.getProfile(name)
+    .then((detail) => detail.profile)
+    .catch((error: unknown) => {
+      if (error instanceof HttpError && error.status === 404) return null;
+      throw error;
+    });
+}
+
+/** Find the provider's profile, or the first free name for it: `codex`, `codex-2`, … */
+async function findAcpProfile(
+  acpServer: string,
+  attempt = 1,
+): Promise<{ name: string; stored: AgentProfile | null }> {
+  const name = attempt === 1 ? acpServer : `${acpServer}-${attempt}`;
+  const stored = await readProfile(name);
+  if (
+    stored === null ||
+    (stored.agent_kind === "acp" && stored.acp_server === acpServer)
+  ) {
+    return { name, stored };
+  }
+  if (attempt >= MAX_ACP_PROFILE_NAMES) {
+    throw new Error(`No free agent profile name for ${acpServer}`);
+  }
+  return findAcpProfile(acpServer, attempt + 1);
+}
 
 /**
- * Configure and activate the onboarding agent profile from the user's choices:
- * an OpenHands profile pointing at the LLM profile onboarding just created, or
- * an ACP profile for the chosen provider (which owns its own LLM — no key).
+ * Configure and activate the agent profile for the user's onboarding choice:
+ * OpenHands lands on `default`, an ACP provider on its own profile.
  *
  * Best-effort: a failure is swallowed so onboarding is never blocked; the
  * error shows when the user starts a conversation.
@@ -38,7 +63,7 @@ export function useApplyOnboardingAgentProfile() {
   const activateProfile = useActivateAgentProfile();
 
   return useCallback(
-    async (profile: AgentProfileSaveInput) => {
+    async (profile: OnboardingAgentProfile) => {
       try {
         if (backend.kind === "local" && !isNoBackend(backend)) {
           // A failed migration retries later and merges over this save.
@@ -47,32 +72,25 @@ export function useApplyOnboardingAgentProfile() {
             backend.id,
           ).catch(() => undefined);
         }
-        // An OpenHands choice merges over the stored `default`: it carries the
-        // user's migrated skills, condenser and verification, which
-        // re-onboarding must keep. An ACP choice replaces the profile, so a
-        // previous provider's command never runs under the new one.
-        const stored =
-          profile.agent_kind === "openhands"
-            ? await AgentProfilesService.getProfile(
-                ONBOARDING_AGENT_PROFILE_NAME,
-              )
-                .then((detail) => detail.profile)
-                .catch((error: unknown) => {
-                  if (error instanceof HttpError && error.status === 404) {
-                    return null;
-                  }
-                  throw error;
-                })
-            : null;
-        await saveProfile.mutateAsync({
-          name: ONBOARDING_AGENT_PROFILE_NAME,
-          profile: mergeAgentProfileSaveInput(stored, profile),
-        });
+        let name: string = WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME;
+        let id: string | null | undefined;
+        if (profile.agent_kind === "acp") {
+          // A provider's existing profile keeps the user's model and command.
+          const found = await findAcpProfile(profile.acp_server);
+          name = found.name;
+          id = found.stored?.id;
+          if (!found.stored) await saveProfile.mutateAsync({ name, profile });
+        } else {
+          // Merge over the stored `default`: it carries the user's migrated
+          // skills, condenser and verification, which re-onboarding must keep.
+          const stored = await readProfile(name);
+          await saveProfile.mutateAsync({
+            name,
+            profile: mergeAgentProfileSaveInput(stored, profile),
+          });
+        }
         // activate needs the stable id; the save response only echoes the name.
-        const detail = await AgentProfilesService.getProfile(
-          ONBOARDING_AGENT_PROFILE_NAME,
-        );
-        const id = detail.profile.id;
+        id ??= (await AgentProfilesService.getProfile(name)).profile.id;
         if (id) await activateProfile.mutateAsync(id);
       } catch (error) {
         console.error("Failed to configure onboarding agent profile:", error);

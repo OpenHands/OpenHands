@@ -127,6 +127,8 @@ interface ConversationWebSocketContextType {
   mainConnectionState: WebSocketConnectionState;
   sendMessage: (message: SendMessageRequest) => Promise<SendMessageResult>;
   isLoadingHistory: boolean;
+  /** True once the current main socket has finished its initial history replay. */
+  isHistoryReady: boolean;
   reconnect: () => void;
   /**
    * True once the main or planning socket has opened at least once for the
@@ -371,7 +373,10 @@ export function ConversationWebSocketProvider({
 
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
-    (event: ConversationStateUpdateEventStats) => {
+    (
+      event: ConversationStateUpdateEventStats,
+      sourceConversationId: string,
+    ) => {
       const usageToMetrics = event.value.usage_to_metrics;
       if (!usageToMetrics) {
         return;
@@ -422,11 +427,14 @@ export function ConversationWebSocketProvider({
         { cost: 0, maxBudgetPerTask: null, usage: null },
       );
 
-      useMetricsStore.getState().setMetrics({
-        cost: combined.cost,
-        max_budget_per_task: combined.maxBudgetPerTask,
-        usage: combined.usage,
-      });
+      useMetricsStore.getState().setMetrics(
+        {
+          cost: combined.cost,
+          max_budget_per_task: combined.maxBudgetPerTask,
+          usage: combined.usage,
+        },
+        sourceConversationId,
+      );
     },
     [],
   );
@@ -440,6 +448,23 @@ export function ConversationWebSocketProvider({
     useConversationHistory(conversationId);
 
   const historyScope = getConversationHistoryScope();
+  const historyConnectionKey = JSON.stringify([
+    historyScope,
+    conversationId,
+    conversationUrl,
+    sessionApiKey,
+  ]);
+  const [readyHistoryConnectionKey, setReadyHistoryConnectionKey] = useState<
+    string | null
+  >(null);
+  // REST failure releases the socket gate, but does not prove the chat is
+  // empty. Readiness belongs to this connection's completed replay instead.
+  const isHistoryReady = readyHistoryConnectionKey === historyConnectionKey;
+  useEffect(() => {
+    // Forget the old connection even if the user switches back before the
+    // replacement socket opens and runs its lifecycle callbacks.
+    setReadyHistoryConnectionKey(null);
+  }, [historyConnectionKey]);
   const { data: persistedHistory } =
     usePersistedConversationHistory(conversationId);
   const visibleHistory = useMemo(() => {
@@ -730,12 +755,30 @@ export function ConversationWebSocketProvider({
         const routed = routeSessionFrame(
           JSON.parse(messageEvent.data),
           mainDeltaBatcherRef.current,
-          mainCursorRef.current.observe,
+          (seq) => {
+            const cursor = mainCursorRef.current;
+            const previousSeq = cursor.value ?? -1;
+            cursor.observe(seq);
+            const throughSeq = mainReplayThroughSeqRef.current;
+            if (
+              throughSeq !== null &&
+              previousSeq < throughSeq &&
+              (cursor.value ?? -1) >= throughSeq
+            ) {
+              setReadyHistoryConnectionKey(historyConnectionKey);
+            }
+          },
           mainReplayThroughSeqRef.current,
           (throughSeq) => {
             mainReplayThroughSeqRef.current = throughSeq;
             mainReplayStatusRef.current = null;
             mainReplayOwnsStatusRef.current = false;
+            setReadyHistoryConnectionKey(
+              throughSeq === null ||
+                (mainCursorRef.current.value ?? -1) >= throughSeq
+                ? historyConnectionKey
+                : null,
+            );
           },
         );
         if (!routed) return;
@@ -851,8 +894,8 @@ export function ConversationWebSocketProvider({
                 setExecutionStatus(conversationId, reportedStatus);
               }
             }
-            if (isStatsConversationStateUpdateEvent(event)) {
-              updateMetricsFromStats(event);
+            if (isStatsConversationStateUpdateEvent(event) && conversationId) {
+              updateMetricsFromStats(event, conversationId);
             }
             // Mirror goal status into the store. Intentionally duplicated across
             // the main and planning WebSocket handlers (like the execution_status
@@ -1003,6 +1046,7 @@ export function ConversationWebSocketProvider({
       consumeMatchingPendingMessage,
       queryClient,
       conversationId,
+      historyConnectionKey,
       setExecutionStatus,
       updateMetricsFromStats,
       handleNonErrorEvent,
@@ -1154,8 +1198,11 @@ export function ConversationWebSocketProvider({
                 setExecutionStatus(planningConversationId, reportedStatus);
               }
             }
-            if (isStatsConversationStateUpdateEvent(event)) {
-              updateMetricsFromStats(event);
+            if (
+              isStatsConversationStateUpdateEvent(event) &&
+              planningConversationId
+            ) {
+              updateMetricsFromStats(event, planningConversationId);
             }
             // Mirror goal status into the store. Intentionally duplicated across
             // the main and planning WebSocket handlers (like the execution_status
@@ -1244,9 +1291,11 @@ export function ConversationWebSocketProvider({
     return {
       queryParams,
       sessionApiKey,
+      connectionKey: historyConnectionKey,
       reconnect: { enabled: true },
       onOpen: () => {
         mainReplayThroughSeqRef.current = null;
+        setReadyHistoryConnectionKey(null);
         mainConnectionError.cancel();
         setMainConnectionState("OPEN");
         hasConnectedRefMain.current = true; // Mark that we've successfully connected
@@ -1258,11 +1307,13 @@ export function ConversationWebSocketProvider({
         useEventStore.getState().clearStreamingSlots();
       },
       onClose: () => {
+        setReadyHistoryConnectionKey(null);
         setMainConnectionState("CLOSED");
         mainDeltaBatcherRef.current?.reset();
         useEventStore.getState().clearStreamingSlots();
       },
       onError: () => {
+        setReadyHistoryConnectionKey(null);
         setMainConnectionState("CLOSED");
         mainConnectionError.report();
       },
@@ -1273,6 +1324,7 @@ export function ConversationWebSocketProvider({
     mainConnectionError,
     clearConnectionError,
     sessionApiKey,
+    historyConnectionKey,
   ]);
 
   // Separate WebSocket options for planning agent connection
@@ -1672,6 +1724,7 @@ export function ConversationWebSocketProvider({
       mainConnectionState,
       sendMessage,
       isLoadingHistory,
+      isHistoryReady,
       reconnect,
       hasConnectedOnce:
         hasConnectedRefMain.current || hasConnectedRefPlanning.current,
@@ -1684,6 +1737,7 @@ export function ConversationWebSocketProvider({
       planningConnectionState,
       sendMessage,
       isLoadingHistory,
+      isHistoryReady,
       reconnect,
     ],
   );
