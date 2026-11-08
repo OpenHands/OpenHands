@@ -242,6 +242,20 @@ describe("vite library build", () => {
       expect(matches, `Single scoped recipe: ${name}`).toHaveLength(1);
       return matches[0];
     };
+    // Typography recipes retain signed values and their original units.
+    for (const [name, value] of [
+      ["tracking-metadata", ".11px"],
+      ["tracking-label", ".01em"],
+      ["tracking-title", "-.01em"],
+      ["tracking-heading", "-.02em"],
+      ["tracking-auth-code", ".08em"],
+      ["tracking-device-code", ".3em"],
+    ]) {
+      expect(declarations(recipe(name))).toEqual({
+        "--tw-tracking": value,
+        "letter-spacing": value,
+      });
+    }
     // A named gradient stop retains the existing ancestor override/fallback.
     const scrollFade = recipe("from-scroll-fade");
     expect(declarations(scrollFade)["--tw-gradient-from"]).toBe(
