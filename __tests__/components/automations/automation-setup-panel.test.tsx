@@ -3108,10 +3108,8 @@ describe("AutomationSetupPanel", () => {
           .compareDocumentPosition(custom) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
       expect(
-        document.querySelector(
-          '#automation-setup-event-key-options option[value="issues.*"]',
-        ),
-      ).not.toBeNull();
+        screen.getByTestId("automation-setup-event-key-toggle"),
+      ).toBeInTheDocument();
       await user.click(custom);
       const sourceInput = screen.getByTestId("automation-setup-event-source");
       expect(sourceInput).toHaveValue("");
@@ -3184,6 +3182,16 @@ describe("AutomationSetupPanel", () => {
             jira_dc: ["comment_created", "jira:issue_created"],
             bitbucket_data_center: ["pr:comment:added", "pr:opened"],
           },
+          eventLabelsBySource: {
+            jira_dc: {
+              comment_created: "Comment created",
+              "jira:issue_created": "Issue created",
+            },
+            bitbucket_data_center: {
+              "pr:comment:added": "Pull request comment added",
+              "pr:opened": "Pull request opened",
+            },
+          },
           triggers: {},
         },
         isLoading: false,
@@ -3192,9 +3200,21 @@ describe("AutomationSetupPanel", () => {
       const eventTypeOptions = () =>
         Array.from(
           document.querySelectorAll(
-            "#automation-setup-event-key-options option",
+            "[data-testid^='automation-setup-event-key-option-']",
           ),
-        ).map((option) => option.getAttribute("value"));
+        ).map((option) => option.textContent);
+      const openEventKeyMenu = async (
+        user: ReturnType<typeof userEvent.setup>,
+      ) => {
+        await user.click(
+          screen.getByTestId("automation-setup-event-key-toggle"),
+        );
+        return Array.from(
+          document.querySelectorAll(
+            "[data-testid^='automation-setup-event-key-option-']",
+          ),
+        ).map((option) => option.getAttribute("data-testid"));
+      };
       const pickSource = async (
         user: ReturnType<typeof userEvent.setup>,
         source: string,
@@ -3210,16 +3230,28 @@ describe("AutomationSetupPanel", () => {
       const user = userEvent.setup();
       renderPanel();
       await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
-      expect(eventTypeOptions()).toEqual(["issues.*", "issue_comment.*"]);
+      // Menu options only exist while the menu is open; the toggle is the
+      // affordance, and its presence follows the source's catalog.
+      expect(
+        screen.queryByTestId("automation-setup-event-key-toggle"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("automation-setup-event-key-menu"),
+      ).not.toBeInTheDocument();
+      expect(await openEventKeyMenu(user)).toEqual([
+        "automation-setup-event-key-option-issues",
+        "automation-setup-event-key-option-issue-comment",
+      ]);
       // GitHub's default key still matches a GitHub pattern.
       expect(screen.getByTestId("automation-setup-event-key")).toHaveValue(
         "issue_comment.created",
       );
 
       await pickSource(user, "jira_dc");
-      expect(eventTypeOptions()).toEqual([
-        "comment_created",
-        "jira:issue_created",
+      // Without labels for this source the raw keys are the names.
+      expect(await openEventKeyMenu(user)).toEqual([
+        "automation-setup-event-key-option-comment-created",
+        "automation-setup-event-key-option-jira-issue-created",
       ]);
       expect(screen.getByTestId("automation-setup-event-key")).toHaveValue(
         "comment_created",
@@ -3238,10 +3270,24 @@ describe("AutomationSetupPanel", () => {
       ).toMatchObject({ webhookEvent: "comment_created" });
 
       await pickSource(user, "bitbucket_data_center");
-      expect(eventTypeOptions()).toEqual(["pr:comment:added", "pr:opened"]);
-      fireEvent.change(screen.getByTestId("automation-setup-event-key"), {
-        target: { value: "pr:opened" },
-      });
+      expect(await openEventKeyMenu(user)).toEqual([
+        "automation-setup-event-key-option-pr-comment-added",
+        "automation-setup-event-key-option-pr-opened",
+      ]);
+      // The deployment's labels replace the raw keys as option names.
+      expect(eventTypeOptions()).toEqual([
+        "Pull request comment addedpr:comment:added",
+        "Pull request openedpr:opened",
+      ]);
+      await user.click(
+        screen.getByTestId("automation-setup-event-key-option-pr-opened"),
+      );
+      expect(screen.getByTestId("automation-setup-event-key")).toHaveValue(
+        "pr:opened",
+      );
+      expect(
+        screen.queryByTestId("automation-setup-event-key-menu"),
+      ).not.toBeInTheDocument();
       expect(
         JSON.parse(
           (
