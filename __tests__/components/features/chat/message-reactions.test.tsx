@@ -7,7 +7,7 @@ import {
   MessageReactions,
   useMessageReactions,
 } from "#/components/features/chat/message-reactions";
-import { featuresService } from "#/api/features-service/features-service.api";
+import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
 import { useEventStore } from "#/stores/use-event-store";
 import type { OHEvent } from "#/stores/use-event-store";
 
@@ -81,7 +81,7 @@ describe("MessageReactions", () => {
   });
 
   it("shows the agent's reaction on the person's message", async () => {
-    vi.spyOn(featuresService, "listFeatures").mockResolvedValue(
+    vi.spyOn(experimentalFeaturesService, "listExperimentalFeatures").mockResolvedValue(
       featureState(true),
     );
     useEventStore.getState().addEvents([reaction("a", "eyes", "agent")]);
@@ -96,7 +96,7 @@ describe("MessageReactions", () => {
   });
 
   it("keeps the latest reaction per emoji and source, for one message", async () => {
-    vi.spyOn(featuresService, "listFeatures").mockResolvedValue(
+    vi.spyOn(experimentalFeaturesService, "listExperimentalFeatures").mockResolvedValue(
       featureState(false),
     );
     useEventStore
@@ -123,7 +123,7 @@ describe("MessageReactions", () => {
 
   it("shows no row on the agent's message while the feature is off, and a picker once it is on", async () => {
     const list = vi
-      .spyOn(featuresService, "listFeatures")
+      .spyOn(experimentalFeaturesService, "listExperimentalFeatures")
       .mockResolvedValue(featureState(false));
 
     const off = renderWithProviders(<Row author="agent" />);
@@ -141,7 +141,7 @@ describe("MessageReactions", () => {
 
   it("does not offer reactions on a planning agent's message", async () => {
     const list = vi
-      .spyOn(featuresService, "listFeatures")
+      .spyOn(experimentalFeaturesService, "listExperimentalFeatures")
       .mockResolvedValue(featureState(true));
 
     renderWithProviders(<Row author="agent" isFromPlanningAgent />);
@@ -151,7 +151,7 @@ describe("MessageReactions", () => {
   });
 
   it("closes the picker on Escape and returns focus to its button", async () => {
-    vi.spyOn(featuresService, "listFeatures").mockResolvedValue(
+    vi.spyOn(experimentalFeaturesService, "listExperimentalFeatures").mockResolvedValue(
       featureState(true),
     );
     const user = userEvent.setup();
@@ -167,10 +167,10 @@ describe("MessageReactions", () => {
   });
 
   it("shows the server's reason when a reaction fails", async () => {
-    vi.spyOn(featuresService, "listFeatures").mockResolvedValue(
+    vi.spyOn(experimentalFeaturesService, "listExperimentalFeatures").mockResolvedValue(
       featureState(true),
     );
-    vi.spyOn(featuresService, "react").mockRejectedValue(
+    vi.spyOn(experimentalFeaturesService, "react").mockRejectedValue(
       new HttpError(409, "Conflict", {
         detail: "Conversation reactions are turned off",
       }),
@@ -193,10 +193,10 @@ describe("MessageReactions", () => {
   });
 
   it("lets the person react to the agent's message while the feature is on", async () => {
-    vi.spyOn(featuresService, "listFeatures").mockResolvedValue(
+    vi.spyOn(experimentalFeaturesService, "listExperimentalFeatures").mockResolvedValue(
       featureState(true),
     );
-    const react = vi.spyOn(featuresService, "react").mockResolvedValue();
+    const react = vi.spyOn(experimentalFeaturesService, "react").mockResolvedValue();
     const user = userEvent.setup();
 
     renderWithProviders(<Row author="agent" />);
@@ -213,10 +213,10 @@ describe("MessageReactions", () => {
   });
 
   it("takes the person's own reaction off when its chip is clicked", async () => {
-    vi.spyOn(featuresService, "listFeatures").mockResolvedValue(
+    vi.spyOn(experimentalFeaturesService, "listExperimentalFeatures").mockResolvedValue(
       featureState(true),
     );
-    const react = vi.spyOn(featuresService, "react").mockResolvedValue();
+    const react = vi.spyOn(experimentalFeaturesService, "react").mockResolvedValue();
     useEventStore.getState().addEvents([reaction("a", "heart", "user")]);
     const user = userEvent.setup();
 

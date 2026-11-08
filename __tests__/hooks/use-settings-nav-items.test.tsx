@@ -96,7 +96,7 @@ describe("useSettingsNavItems", () => {
     // agent server); the `/settings` LLM-Profiles rename stays local-only, so
     // on cloud every other item is passed through unchanged.
     expect(result.current).toEqual(
-      OSS_NAV_ITEMS.filter((item) => item.to !== "/settings/features").map(
+      OSS_NAV_ITEMS.filter((item) => item.to !== "/settings/experimental").map(
         (item) => ({ type: "item", item }),
       ),
     );

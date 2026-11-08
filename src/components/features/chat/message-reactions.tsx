@@ -2,10 +2,10 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { SmilePlus } from "lucide-react";
 import type { ReactionEmoji } from "@openhands/typescript-client";
-import { featuresService } from "#/api/features-service/features-service.api";
+import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
-import { useIsFeatureEnabled } from "#/hooks/query/use-features";
+import { useIsExperimentalFeatureEnabled } from "#/hooks/query/use-experimental-features";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { I18nKey } from "#/i18n/declaration";
@@ -121,7 +121,9 @@ export function useMessageReactions(
   const key = useEventStore((state) =>
     eventId ? (reactionIndex(state.events).get(eventId) ?? "") : "",
   );
-  const enabled = useIsFeatureEnabled(CONVERSATION_REACTIONS_FEATURE);
+  const enabled = useIsExperimentalFeatureEnabled(
+    CONVERSATION_REACTIONS_FEATURE,
+  );
   const isCloud = useActiveBackend().backend.kind === "cloud";
   const { conversationId } = useOptionalConversationId();
   const canReact =
@@ -177,7 +179,7 @@ export function MessageReactions({
       triggerRef.current?.focus();
     }
     try {
-      await featuresService.react({
+      await experimentalFeaturesService.react({
         conversationId,
         emoji,
         targetEventId: eventId,

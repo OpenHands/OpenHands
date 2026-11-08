@@ -44,7 +44,7 @@ export const COMMAND_MENU_ROUTE = {
   verificationSettings: "/settings/verification",
   runtimeSettings: "/settings/runtime",
   appSettings: "/settings/app",
-  featuresSettings: "/settings/features",
+  experimentalSettings: "/settings/experimental",
   secretsSettings: "/settings/secrets",
 } as const;
 
@@ -63,7 +63,7 @@ export type CommandMenuItemId =
   | "verification-settings"
   | "runtime-settings"
   | "app-settings"
-  | "features-settings"
+  | "experimental-settings"
   | "secrets-settings"
   | "toggle-sidebar";
 
@@ -248,13 +248,13 @@ export const createCommandMenuItems = ({
       to: COMMAND_MENU_ROUTE.appSettings,
     },
     {
-      id: "features-settings",
+      id: "experimental-settings",
       group: "settings",
-      titleKey: I18nKey.SETTINGS$NAV_FEATURES,
-      descriptionKey: I18nKey.SETTINGS$PAGE_FEATURES_SUBLINE,
-      keywordsKey: I18nKey.COMMAND_MENU$FEATURES_SETTINGS_KEYWORDS,
+      titleKey: I18nKey.SETTINGS$NAV_EXPERIMENTAL,
+      descriptionKey: I18nKey.SETTINGS$PAGE_EXPERIMENTAL_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$EXPERIMENTAL_SETTINGS_KEYWORDS,
       icon: <FlaskConical size={ICON_SIZE} />,
-      to: COMMAND_MENU_ROUTE.featuresSettings,
+      to: COMMAND_MENU_ROUTE.experimentalSettings,
     },
     {
       id: "secrets-settings",
@@ -286,7 +286,7 @@ export const createCommandMenuItems = ({
     (item) =>
       (isCloud || item.to !== COMMAND_MENU_ROUTE.condenserSettings) &&
       // User feature flags live on a local agent server.
-      (!isCloud || item.to !== COMMAND_MENU_ROUTE.featuresSettings) &&
+      (!isCloud || item.to !== COMMAND_MENU_ROUTE.experimentalSettings) &&
       (!isLockedToCloud ||
         item.group !== "settings" ||
         item.to === COMMAND_MENU_ROUTE.settings ||

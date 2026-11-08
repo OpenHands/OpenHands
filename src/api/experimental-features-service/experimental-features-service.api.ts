@@ -8,25 +8,27 @@ import { getActiveBackend } from "../backend-registry/active-store";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 
 /**
- * User-facing feature flags (`/api/settings/features`): yes/no switches the
+ * User-facing feature flags (`/api/settings/experimental`): yes/no switches the
  * user sets for themselves, read by the agent server when a conversation
  * starts. Local agent server only; Cloud has no such settings yet, so it lists
  * none.
  */
-export const featuresService = {
-  listFeatures: async (): Promise<FeatureFlag[]> => {
+export const experimentalFeaturesService = {
+  listExperimentalFeatures: async (): Promise<FeatureFlag[]> => {
     if (getActiveBackend().backend.kind === "cloud") return [];
-    return new SettingsClient(getAgentServerClientOptions()).listFeatures();
+    return new SettingsClient(
+      getAgentServerClientOptions(),
+    ).listExperimentalFeatures();
   },
 
-  updateFeature: async ({
+  updateExperimentalFeature: async ({
     key,
     enabled,
   }: {
     key: string;
     enabled: boolean;
   }): Promise<FeatureFlag> =>
-    new SettingsClient(getAgentServerClientOptions()).updateFeature(
+    new SettingsClient(getAgentServerClientOptions()).updateExperimentalFeature(
       key,
       enabled,
     ),

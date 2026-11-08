@@ -79,9 +79,9 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
   {
     // User-facing feature flags, listed by the agent server.
     icon: <FlaskConical className="size-4" strokeWidth={2} aria-hidden />,
-    to: "/settings/features",
-    text: "SETTINGS$NAV_FEATURES",
-    subtitle: "SETTINGS$PAGE_FEATURES_SUBLINE",
+    to: "/settings/experimental",
+    text: "SETTINGS$NAV_EXPERIMENTAL",
+    subtitle: "SETTINGS$PAGE_EXPERIMENTAL_SUBLINE",
   },
   {
     icon: <KeyIcon width={16} height={16} />,
