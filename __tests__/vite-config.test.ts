@@ -250,6 +250,9 @@ describe("vite library build", () => {
     expect(declarations(recipe("scroll-fade-surface"))).toEqual({
       "--oh-scroll-fade-from": "var(--oh-surface)",
     });
+    expect(declarations(recipe("scroll-fade-tertiary"))).toEqual({
+      "--oh-scroll-fade-from": "var(--oh-color-tertiary)",
+    });
     // Keep code padding relative to its own font size in embedded roots.
     expect(declarations(recipe("px-code-inline-x"))).toEqual({
       "padding-inline": ".4em",
