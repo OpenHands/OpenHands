@@ -77,7 +77,10 @@ import {
   type WorkspaceMode,
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
-import { toAcpModelOptions } from "#/constants/acp-providers";
+import {
+  toAcpEffortChoices,
+  toAcpModelOptions,
+} from "#/constants/acp-providers";
 import { isPlannerConversationOf } from "#/utils/plan-file";
 import { buildAutomationSetupModeTags } from "#/utils/automation-draft-tags";
 import {
@@ -1105,6 +1108,8 @@ class AgentServerConversationService {
       status: toRuntimeStatus(data.execution_status),
       stats: data.stats ?? { usage_to_metrics: {} },
       available_models: toAcpModelOptions(data.available_models),
+      current_effort: data.current_effort ?? null,
+      available_efforts: toAcpEffortChoices(data.available_efforts),
     };
   }
 
@@ -1446,13 +1451,23 @@ class AgentServerConversationService {
 
   /**
    * Switch a started ACP conversation's reasoning effort live (or persist it
-   * for one not yet run). Local backends only: the Cloud app server has no
-   * proxy route for it yet.
+   * for one not yet run). The ACP analog of {@link switchAcpModel}.
    */
   static async switchAcpEffort(
     conversationId: string,
     effort: string,
   ): Promise<void> {
+    const { backend } = getActiveBackend();
+    if (backend.kind === "cloud") {
+      await callCloudProxy({
+        backend,
+        method: "POST",
+        path: `/api/v1/app-conversations/${conversationId}/switch_acp_effort`,
+        body: { effort },
+      });
+      return;
+    }
+
     await new ConversationClient(getAgentServerClientOptions()).switchAcpEffort(
       conversationId,
       effort,

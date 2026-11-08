@@ -331,4 +331,8 @@ export interface RuntimeConversationInfo {
   stats: RuntimeConversationStats;
   /** Models an ACP session reported; empty otherwise. */
   available_models: ACPModelOption[];
+  /** Reasoning effort an ACP session reports for its current model. */
+  current_effort?: string | null;
+  /** Effort levels an ACP session offers for its current model. */
+  available_efforts?: ACPEffortChoice[];
 }

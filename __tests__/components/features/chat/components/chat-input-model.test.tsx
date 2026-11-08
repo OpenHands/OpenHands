@@ -39,6 +39,15 @@ vi.mock("#/hooks/mutation/use-switch-acp-effort", () => ({
 const sessionModelsMock = vi.fn();
 vi.mock("#/hooks/query/use-acp-session-models", () => ({
   useAcpSessionModels: () => sessionModelsMock(),
+  useAcpSessionEffort: (
+    conversation: {
+      acp_available_efforts?: unknown[] | null;
+      acp_current_effort?: string | null;
+    } | null,
+  ) => ({
+    efforts: conversation?.acp_available_efforts ?? [],
+    currentEffort: conversation?.acp_current_effort ?? null,
+  }),
 }));
 const discoveryMock = vi.fn();
 vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
@@ -493,26 +502,6 @@ describe("ChatInputModel", () => {
     expect(
       screen.getByTestId("chat-input-acp-effort-option-low"),
     ).toHaveAttribute("aria-pressed", "true");
-  });
-
-  it("does not offer a live effort switch on Cloud", () => {
-    useActiveBackendMock.mockReturnValue({ backend: { kind: "cloud" } });
-    sessionModelsMock.mockReturnValue(CLAUDE_MODELS);
-    useActiveConversationMock.mockReturnValue({
-      data: {
-        conversation_id: "test-conversation-id",
-        agent_kind: "acp",
-        acp_server: "claude-code",
-        llm_model: "opus[1m]",
-        acp_current_effort: "high",
-        acp_available_efforts: EFFORTS,
-      },
-    });
-
-    renderWithProviders(<ChatInputModel />);
-    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
-
-    expect(screen.queryByTestId("chat-input-acp-effort-option-low")).toBeNull();
   });
 
   it("saves the home effort for the chosen model and offers the agent's own", () => {

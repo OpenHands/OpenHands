@@ -60,6 +60,15 @@ vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
 const useAcpSessionModelsMock = vi.fn();
 vi.mock("#/hooks/query/use-acp-session-models", () => ({
   useAcpSessionModels: (...args: unknown[]) => useAcpSessionModelsMock(...args),
+  useAcpSessionEffort: (
+    conversation: {
+      acp_available_efforts?: unknown[] | null;
+      acp_current_effort?: string | null;
+    } | null,
+  ) => ({
+    efforts: conversation?.acp_available_efforts ?? [],
+    currentEffort: conversation?.acp_current_effort ?? null,
+  }),
 }));
 
 const NO_LIVE_MODELS = { models: [], defaultModelId: null };

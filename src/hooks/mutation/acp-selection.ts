@@ -10,6 +10,7 @@ import {
   AGENT_PROFILES_RETRY_OPTIONS,
   SETTINGS_QUERY_KEYS,
 } from "#/hooks/query/query-keys";
+import { ACP_SESSION_RUNTIME_QUERY_KEY } from "#/hooks/query/use-acp-session-models";
 import { invalidateConversationQueries } from "./conversation-mutation-utils";
 
 /** The ACP launch fields the home page picker can save. */
@@ -85,6 +86,9 @@ export function refreshAfterAcpSelection(
 ): void {
   if (conversationId) {
     invalidateConversationQueries(queryClient, conversationId);
+    queryClient.invalidateQueries({
+      queryKey: [ACP_SESSION_RUNTIME_QUERY_KEY, conversationId],
+    });
     return;
   }
   // Clear the stale settings cache so the next conversation-start reads the

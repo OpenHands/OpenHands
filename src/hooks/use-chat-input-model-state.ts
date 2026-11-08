@@ -10,7 +10,10 @@ import { useCanManageOrgProfiles } from "#/hooks/use-can-manage-org-profiles";
 import { useActiveAcpProfileDetail } from "#/hooks/query/use-active-acp-profile-detail";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useAcpModelDiscovery } from "#/hooks/query/use-acp-model-discovery";
-import { useAcpSessionModels } from "#/hooks/query/use-acp-session-models";
+import {
+  useAcpSessionEffort,
+  useAcpSessionModels,
+} from "#/hooks/query/use-acp-session-models";
 import {
   acpEffortOf,
   getAcpPreferredDefaultModel,
@@ -89,6 +92,9 @@ export function useChatInputModelState(): ChatInputModelState {
     isActiveAcpConversation ? conversation : null,
   );
   const liveModels = sessionModels.length ? sessionModels : discovered.models;
+  const sessionEffort = useAcpSessionEffort(
+    isActiveAcpConversation ? conversation : null,
+  );
 
   const settingsAcpModel =
     typeof settings?.agent_settings?.acp_model === "string"
@@ -125,15 +131,12 @@ export function useChatInputModelState(): ChatInputModelState {
   let selectedEffort: string | null = null;
   let agentDefaultEffortLabel: string | null = null;
   if (isActiveAcpConversation) {
-    const sessionEfforts = conversation?.acp_available_efforts ?? [];
-    // The Cloud app server has no route to switch effort live yet. Until the
-    // session reports its levels, use what the agent offers for this model.
-    if (backend.kind !== "cloud") {
-      effortChoices = sessionEfforts.length
-        ? sessionEfforts
-        : discovered.effortsFor(currentModelId);
-    }
-    selectedEffort = conversation?.acp_current_effort ?? null;
+    // Until the session reports its levels, use what the agent offers for
+    // this model.
+    effortChoices = sessionEffort.efforts.length
+      ? sessionEffort.efforts
+      : discovered.effortsFor(currentModelId);
+    selectedEffort = sessionEffort.currentEffort;
   } else if (isHomeAcp) {
     effortChoices = discovered.effortsFor(selectedModelId);
     selectedEffort = acpEffortOf(

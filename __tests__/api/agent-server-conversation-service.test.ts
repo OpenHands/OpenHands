@@ -682,9 +682,7 @@ describe("AgentServerConversationService", () => {
     });
 
     const content =
-      await AgentServerConversationService.readConversationFile(
-        "conv-windows",
-      );
+      await AgentServerConversationService.readConversationFile("conv-windows");
 
     expect(content).toBe("# Windows PLAN");
     expect(mockHttpGet).toHaveBeenCalledWith(
@@ -3182,6 +3180,23 @@ describe("AgentServerConversationService", () => {
         "/api/v1/app-conversations/conv-cloud/switch_acp_model",
       );
       expect(requests[0].body).toEqual({ model: "claude-opus-4-7" });
+    });
+
+    it("switches an ACP effort through the cloud app endpoint", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+      const requests = captureRequests(["post"], { success: true });
+
+      await AgentServerConversationService.switchAcpEffort(
+        "conv-cloud",
+        "high",
+      );
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0].url).toContain(
+        "/api/v1/app-conversations/conv-cloud/switch_acp_effort",
+      );
+      expect(requests[0].body).toEqual({ effort: "high" });
     });
   });
 
