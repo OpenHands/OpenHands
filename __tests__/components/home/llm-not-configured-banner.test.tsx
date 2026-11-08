@@ -240,4 +240,46 @@ describe("LlmNotConfiguredBanner", () => {
     // Assert
     expect(navigate).toHaveBeenCalledWith("/settings/llm");
   });
+
+  it("names the profile and offers an edit action when it lost its API key", async () => {
+    // Arrange: the #15609 state — a profile exists and appears selected, but
+    // `api_key_set` is false, so the generic "set up an LLM" copy would read
+    // as if nothing were configured. The banner should name the profile that
+    // needs repair instead.
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ llm_api_key_set: false }),
+    );
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [
+        {
+          name: "active-profile",
+          model: "openai/gpt-4.1",
+          base_url: null,
+          api_key_set: false,
+        },
+      ],
+      active_profile: "active-profile",
+    });
+    vi.spyOn(ProfilesService, "getProfile").mockResolvedValue({
+      name: "active-profile",
+      api_key_set: false,
+      config: { model: "openai/gpt-4.1" },
+    } as Awaited<ReturnType<typeof ProfilesService.getProfile>>);
+
+    // Act
+    const { navigate } = renderBanner();
+
+    // Assert: the message switches to the missing-key copy (the test env
+    // renders raw i18n keys) and the CTA becomes the profile-edit action…
+    const banner = await screen.findByTestId("home-llm-not-configured-banner");
+    expect(banner).toHaveTextContent("HOME$LLM_MISSING_API_KEY_MESSAGE");
+    expect(banner).toHaveTextContent("SETTINGS$EDIT_LLM_PROFILE");
+
+    // …and the CTA still routes to the LLM profile editor.
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByTestId("home-llm-not-configured-action"),
+    );
+    expect(navigate).toHaveBeenCalledWith("/settings/llm");
+  });
 });
