@@ -6,7 +6,7 @@ all-in-one image (frontend + agent-server + automation) on Kubernetes as a
 RBAC.
 
 > [!WARNING]
-> This Helm chart is experimental. Agent Canvas is an unauthenticated, single-tenant application. This helm chart doesn't address scale or zero-downtime deployments.
+> This Helm chart is experimental. Agent Canvas is an unauthenticated, single-tenant application. This Helm chart doesn't address scale or zero-downtime deployments.
 
 ## When to use this
 
@@ -186,14 +186,14 @@ config:
 
 ## Security
 
-The agent server can read and write the pod filesystem, execute shell
+The agent-server can read and write the pod filesystem, execute shell
 commands, and — when RBAC is enabled — mutate the Kubernetes cluster it runs
 in. There is no built-in authentication in Agent Canvas, so treat the release
 namespace as trusted infrastructure:
 
 - Put it behind an **authenticated** ingress (oauth2-proxy, Cloudflare Access,
   tailscale-serve, etc.) before exposing it to the internet.
-- Avoid a bare `LoadBalancer` — the agent server accepts any request with the
+- Avoid a bare `LoadBalancer` — the agent-server accepts any request with the
   right `LOCAL_BACKEND_API_KEY`, so exposing it directly means anyone who can
   guess the key can drive the agent.
 - Only turn on `rbac.clusterAdmin` when you truly need cluster-wide access;
