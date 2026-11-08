@@ -17,6 +17,9 @@ interface ModalBackdropProps {
   "aria-label"?: string;
 }
 
+let activeModalCount = 0;
+let bodyOverflowBeforeLock = "";
+
 export function ModalBackdrop({
   children,
   onClose,
@@ -29,6 +32,22 @@ export function ModalBackdrop({
   // The dialog is on top: menus and drawers opened before it never take its
   // Escape, whether or not it closes on Escape itself.
   useEscapeBoundary(true);
+
+  React.useEffect(() => {
+    if (activeModalCount === 0) {
+      bodyOverflowBeforeLock = document.body.style.overflow;
+    }
+    activeModalCount += 1;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      activeModalCount -= 1;
+      if (activeModalCount === 0) {
+        document.body.style.overflow = bodyOverflowBeforeLock;
+        bodyOverflowBeforeLock = "";
+      }
+    };
+  }, []);
 
   React.useEffect(() => {
     if (!closeOnEscape) return undefined;
