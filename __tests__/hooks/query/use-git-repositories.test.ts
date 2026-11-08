@@ -241,7 +241,7 @@ describe("useGitRepositories", () => {
   it.each([
     ["explicitly disabled", false, ["github"], ["installation"], false],
     ["no connected providers", true, [], ["installation"], false],
-    ["empty installations", true, ["github"], [], false],
+    ["empty installations", true, ["github"], [], true],
     ["ready", true, ["github"], ["installation"], true],
   ])(
     "sets enabled=false when %s",

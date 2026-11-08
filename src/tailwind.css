@@ -10,9 +10,24 @@
 }
 
 @theme inline {
+  /* Preserve existing absolute control geometry, independent of root font size. */
+  --radius-pill: 100px;
+  --radius-composer: 15px;
+  --radius-file-action: 7px;
+  --radius-facet-control: 3px;
+
+  /* Markdown code padding follows the code's own font size, not the root. */
+  --spacing-code-inline-x: 0.4em;
+  --spacing-code-inline-y: 0.2em;
+  --spacing-code-block: 1em;
+
   /* Compact metadata retains its original pixel sizes and inherited leading. */
   --text-2xs: 11px;
   --text-3xs: 10px;
+  --text-4xs: 9px;
+  --text-xs-plus: 13px;
+  --text-sm-plus: 15px;
+  --text-title: 32px;
 
   --color-primary: var(--oh-color-primary);
   --color-logo: var(--oh-color-logo);
@@ -59,6 +74,7 @@
 
   /* Semantic border aliases */
   --color-border: var(--oh-border);
+  --color-scroll-fade: var(--oh-scroll-fade-from, var(--oh-color-base));
   --color-border-input: var(--oh-border-input);
   --color-border-subtle: var(--oh-border-subtle);
 
@@ -91,6 +107,7 @@
   --color-cool-grey-925: var(--cool-grey-925);
   --color-cool-grey-950: var(--cool-grey-950);
   --color-cool-grey-975: var(--cool-grey-975);
+  --animate-chat-status-pulse: pulse 1.2s ease-in-out infinite;
 }
 
 :root {
@@ -125,6 +142,8 @@
   --oh-overlay: var(--cool-grey-925);
   --oh-overlay-foreground: var(--cool-grey-100);
   --oh-modal-title-foreground: #ffffff;
+  --oh-modal-description-foreground: #a3a3a3;
+  --oh-font-heading: inherit;
   --oh-muted: var(--cool-grey-400);
   --oh-text-secondary: var(--cool-grey-300); /* readable secondary text */
   --oh-text-tertiary: var(--cool-grey-200); /* tertiary, slightly dimmer */
@@ -296,6 +315,13 @@ button.extension-module-card-interactive {
 
 .heading {
   @apply text-[28px] leading-8 -tracking-[0.02em] font-bold text-content-2;
+}
+
+/* Display type is optional; dense controls, messages and code retain their fonts. */
+h1,
+h2,
+.heading {
+  font-family: var(--oh-font-heading);
 }
 
 /* Custom Chat Input */
@@ -724,6 +750,22 @@ code .token {
     0px 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
 
+/* Fixed SVG illustration coordinates stay in pixels in embedded roots. */
+@utility file-drop-image {
+  top: -40px;
+  left: -10px;
+  rotate: -27deg;
+}
+
+@utility file-drop-arrow {
+  top: -16px;
+  left: -20px;
+}
+
+@utility message-word-break {
+  word-break: break-word;
+}
+
 /* Window drag handle for the macOS desktop app's hidden title bar. */
 @utility app-region-drag {
   -webkit-app-region: drag;
@@ -793,8 +835,9 @@ code .token {
   scrollbar-gutter: stable;
 }
 
+/* Matches the detail page's max-w-4xl, so view and edit share one column. */
 @utility automation-setup-content {
-  max-width: 800px;
+  max-width: 56rem;
 }
 
 @utility automation-setup-card {
@@ -834,7 +877,7 @@ code .token {
   --automation-setup-cron-width: 14rem;
   --automation-setup-datetime-width: 15rem;
   --automation-setup-time-width: 9.5rem;
-  --automation-setup-timezone-width: 16rem;
+  --automation-setup-timezone-width: 12.5rem;
 }
 
 @utility automation-setup-model-trigger {
@@ -893,6 +936,51 @@ code .token {
 @utility command-menu-trigger-hint {
   font-size: 10px;
   @apply tracking-[0.12em];
+}
+
+@utility transition-control-shell {
+  transition-property: background-color, border-color, box-shadow, opacity;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-control-transform {
+  transition-property: transform;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-context-ring {
+  transition-property: stroke-dashoffset, stroke;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-panel-width {
+  transition-property: width;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-sidebar-width {
+  transition-property: width, min-width;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
 }
 
 /* Both chooser disclosures keep their mounted content on the same grid rail. */
@@ -1058,4 +1146,22 @@ code .token {
 
 @utility conversation-options-bleed-width {
   width: calc(100% + 3rem);
+}
+
+/* Fixed content columns shared by metadata and automation summaries. */
+/* Markdown artifact cards blend table edges into their existing surface. */
+@utility scroll-fade-surface {
+  --oh-scroll-fade-from: var(--oh-surface);
+}
+
+@utility metadata-grid-columns {
+  grid-template-columns: auto 1fr;
+}
+
+@utility automation-summary-columns {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+@utility run-log-detail-columns {
+  grid-template-columns: 5rem minmax(0, 1fr);
 }
