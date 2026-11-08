@@ -18,17 +18,20 @@ import { getACPToolCallContent } from "#/components/conversation-events/chat/eve
 export const HISTORY_SEARCH_PAGE_SIZE = 100;
 export const HISTORY_SEARCH_PAGES_PER_BATCH = 5;
 export const HISTORY_SEARCH_MATCH_LIMIT = 200;
-export const HISTORY_CONTEXT_PAGE_SIZE = 12;
+export const HISTORY_CONTEXT_RADIUS = 12;
 const EXCERPT_LENGTH = 180;
 
 export type SearchHistoryPage = (
   options: EventSearchOptions,
 ) => Promise<EventSearchPage<OpenHandsEvent>>;
+type HistoryPageAnchor = Pick<EventSearchOptions, "pageId" | "timestampLt">;
 export interface HistoryMatch {
   id: string;
   timestamp: string | null;
   excerpt: string;
   kind: "message" | "tool";
+  page: HistoryPageAnchor;
+  newerPage?: HistoryPageAnchor;
 }
 export interface HistorySearchSnapshot {
   matches: HistoryMatch[];
@@ -100,6 +103,7 @@ export class HistorySearchSession {
   private pageId: string | undefined;
   private timestampLt: string | undefined;
   private usedCursor = false;
+  private previousPage: HistoryPageAnchor | undefined;
   private cancelled = false;
   private needle: string;
 
@@ -152,15 +156,22 @@ export class HistorySearchSession {
         pageIndex += 1
       ) {
         if (this.cancelled) break;
+        const anchor: HistoryPageAnchor = {
+          ...(this.pageId ? { pageId: this.pageId } : {}),
+          ...(this.timestampLt ? { timestampLt: this.timestampLt } : {}),
+        };
         const page = await search({
           limit: HISTORY_SEARCH_PAGE_SIZE,
           sortOrder: "TIMESTAMP_DESC",
           strictPagination: true,
-          ...(this.pageId ? { pageId: this.pageId } : {}),
-          ...(this.timestampLt ? { timestampLt: this.timestampLt } : {}),
+          ...anchor,
         });
         if (this.cancelled) break;
-        if (!Array.isArray(page.items)) throw new PaginationError("pagination");
+        if (
+          !Array.isArray(page.items) ||
+          page.items.length > HISTORY_SEARCH_PAGE_SIZE
+        )
+          throw new PaginationError("pagination");
         let added = 0;
         for (const event of page.items) {
           if (event.id && this.seenIds.has(event.id)) continue;
@@ -178,6 +189,8 @@ export class HistorySearchSession {
               timestamp: event.timestamp ?? null,
               excerpt: excerpt(text, index),
               kind: isMessageEvent(event) ? "message" : "tool",
+              page: anchor,
+              newerPage: this.previousPage,
             });
           }
         }
@@ -216,6 +229,7 @@ export class HistorySearchSession {
             throw new PaginationError("pagination");
           this.timestampLt = oldest;
         }
+        this.previousPage = anchor;
         this.state.limitReached =
           this.state.matches.length >= HISTORY_SEARCH_MATCH_LIMIT;
         progress(this.snapshot());
@@ -246,32 +260,42 @@ export async function loadHistoryContext(
   match: HistoryMatch,
   search: SearchHistoryPage,
 ): Promise<OpenHandsEvent[]> {
-  if (!match.timestamp) throw new PaginationError("pagination");
-  const [older, newer] = await Promise.all([
-    search({
-      limit: HISTORY_CONTEXT_PAGE_SIZE,
+  const read = async (anchor: HistoryPageAnchor) => {
+    const page = await search({
+      ...anchor,
+      limit: HISTORY_SEARCH_PAGE_SIZE,
       sortOrder: "TIMESTAMP_DESC",
-      timestampLt: match.timestamp,
       strictPagination: true,
-    }),
-    search({
-      limit: HISTORY_CONTEXT_PAGE_SIZE,
-      sortOrder: "TIMESTAMP",
-      timestampGte: match.timestamp,
-      strictPagination: true,
-    }),
-  ]);
-  if (!Array.isArray(older.items) || !Array.isArray(newer.items))
-    throw new PaginationError("pagination");
-  const events = new Map<string, OpenHandsEvent>();
-  for (const event of [
-    ...older.items.slice(0, HISTORY_CONTEXT_PAGE_SIZE),
-    ...newer.items.slice(0, HISTORY_CONTEXT_PAGE_SIZE),
-  ]) {
-    if (event.id) events.set(event.id, event);
+    });
+    if (
+      !Array.isArray(page.items) ||
+      page.items.length > HISTORY_SEARCH_PAGE_SIZE
+    )
+      throw new PaginationError("pagination");
+    return page;
+  };
+  // Replay the scan's page rather than deriving a new timestamp window. This
+  // preserves backend cursor semantics, including differently formatted dates.
+  const page = await read(match.page);
+  const index = page.items.findIndex((event) => event.id === match.id);
+  if (index < 0) throw new PaginationError("incomplete");
+  let window = page.items.slice(
+    Math.max(0, index - HISTORY_CONTEXT_RADIUS + 1),
+    index + HISTORY_CONTEXT_RADIUS + 1,
+  );
+  const newerNeeded = HISTORY_CONTEXT_RADIUS - 1 - index;
+  const olderNeeded = HISTORY_CONTEXT_RADIUS - (page.items.length - index - 1);
+  if (newerNeeded > 0 && match.newerPage) {
+    const newer = await read(match.newerPage);
+    window = [...newer.items.slice(-newerNeeded), ...window];
   }
-  if (!events.has(match.id)) throw new PaginationError("incomplete");
-  return [...events.values()].sort((left, right) =>
-    (left.timestamp ?? "").localeCompare(right.timestamp ?? ""),
+  if (olderNeeded > 0 && page.next_page_id) {
+    const older = await read({ pageId: page.next_page_id });
+    window = [...window, ...older.items.slice(0, olderNeeded)];
+  }
+  const events = new Map(window.map((event) => [event.id, event]));
+  return [...events.values()].sort(
+    (left, right) =>
+      Date.parse(left.timestamp ?? "") - Date.parse(right.timestamp ?? ""),
   );
 }

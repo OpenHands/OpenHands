@@ -128,9 +128,11 @@ function HistorySearchDialog({
     const current = () => mounted.current && version.current === request;
     if (fresh) {
       session.current?.cancel();
+      session.current = null;
       contextVersion.current += 1;
       setContext(null);
       setContextError(false);
+      setContextLoading(false);
       setSnapshot(null);
       setSearchedQuery(query.trim());
       setPreparing(true);

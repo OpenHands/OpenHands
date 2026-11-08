@@ -85,9 +85,9 @@ describe("Find in conversation", () => {
     expect(result).toHaveTextContent("2026");
     await user.click(result);
     await screen.findByTestId("history-search-context");
-    expect(search).toHaveBeenCalledTimes(3);
+    expect(search).toHaveBeenCalledTimes(2);
     expect(
-      search.mock.calls.slice(1).every((call) => call[3]?.limit === 12),
+      search.mock.calls.slice(1).every((call) => call[3]?.limit === 100),
     ).toBe(true);
     await user.click(
       screen.getByRole("button", { name: "HISTORY_SEARCH$RETURN_LIVE" }),
@@ -297,5 +297,32 @@ describe("Find in conversation", () => {
     await screen.findByText("HISTORY_SEARCH$CONTEXT_ERROR");
     await user.click(result);
     await screen.findByTestId("history-search-context");
+  });
+
+  it("does not restore a previous query's matches when cancelling a new count read", async () => {
+    renderSearch();
+    const user = await begin();
+    await screen.findByRole("button", { name: /old error decision/ });
+    let resolve!: (total: number) => void;
+    count.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    await user.clear(screen.getByRole("searchbox"));
+    await user.type(screen.getByRole("searchbox"), "different query");
+    await user.click(
+      screen.getByRole("button", { name: "HISTORY_SEARCH$SUBMIT" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "HISTORY_SEARCH$CANCEL" }),
+    );
+    expect(
+      screen.queryByRole("button", { name: /old error decision/ }),
+    ).not.toBeInTheDocument();
+    await act(async () => {
+      resolve(1);
+    });
   });
 });

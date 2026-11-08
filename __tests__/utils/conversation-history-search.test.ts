@@ -49,6 +49,8 @@ describe("persisted history search", () => {
         timestamp: message(1).timestamp,
         excerpt: "old DECISION architecture",
         kind: "message",
+        page: { pageId: "older" },
+        newerPage: {},
       },
     ]);
     expect(search.mock.calls[1][0]).toMatchObject({
@@ -279,31 +281,89 @@ describe("persisted history search", () => {
     expect(search).toHaveBeenCalledTimes(2);
   });
 
-  it("opens at most two small context pages and requires the target to be present", async () => {
+  it("replays the matching cursor page when timestamp filters cannot recover the target", async () => {
+    const match = {
+      id: "event-3",
+      timestamp: "2026-11-01T00:00:03+00:00",
+      excerpt: "needle",
+      kind: "message" as const,
+      page: { pageId: "older" },
+      newerPage: {},
+    };
+    const search = vi.fn().mockImplementation(async (options) => ({
+      items:
+        options.pageId === "older"
+          ? Array.from({ length: 8 }, (_, n) => message(7 - n))
+          : Array.from({ length: 100 }, (_, n) => message(107 - n)),
+    }));
+    const events = await loadHistoryContext(match, search);
+    expect(events.map((event) => event.id)).toContain("event-3");
+    expect(events).toHaveLength(15);
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(
+      search.mock.calls.every(
+        ([options]) =>
+          options.limit === 100 &&
+          !options.timestampGte &&
+          !options.timestampLt,
+      ),
+    ).toBe(true);
+  });
+
+  it("reads one bounded page for an interior match and requires the target to be present", async () => {
     const match = {
       id: "event-3",
       timestamp: message(3).timestamp,
       excerpt: "needle",
       kind: "message" as const,
+      page: {},
     };
-    const search = vi
-      .fn()
-      .mockResolvedValueOnce({ items: [message(2), message(1)] })
-      .mockResolvedValueOnce({ items: [message(3), message(4)] });
+    const search = vi.fn().mockResolvedValueOnce({
+      items: [message(4), message(3), message(2), message(1)],
+    });
     expect((await loadHistoryContext(match, search)).map((e) => e.id)).toEqual([
       "event-1",
       "event-2",
       "event-3",
       "event-4",
     ]);
-    expect(search).toHaveBeenCalledTimes(2);
+    expect(search).toHaveBeenCalledTimes(1);
     expect(
       search.mock.calls.every(
-        ([options]) => options.limit === 12 && options.strictPagination,
+        ([options]) => options.limit === 100 && options.strictPagination,
       ),
     ).toBe(true);
     await expect(
       loadHistoryContext(match, vi.fn().mockResolvedValue({ items: [] })),
     ).rejects.toThrow("incomplete");
+  });
+
+  it("bounds context across both adjacent cursor pages to 24 mounted events", async () => {
+    const match = {
+      id: "event-15",
+      timestamp: message(15).timestamp,
+      excerpt: "needle",
+      kind: "message" as const,
+      page: { pageId: "current" },
+      newerPage: { pageId: "newer" },
+    };
+    const search = vi.fn().mockImplementation(async ({ pageId }) =>
+      pageId === "current"
+        ? {
+            items: [17, 16, 15, 14, 13].map((n) => message(n)),
+            next_page_id: "older",
+          }
+        : {
+            items: Array.from(
+              { length: pageId === "newer" ? 100 : 13 },
+              (_, n) => message((pageId === "newer" ? 117 : 12) - n),
+            ),
+          },
+    );
+    const events = await loadHistoryContext(match, search);
+    expect(events).toHaveLength(24);
+    expect(events[0].id).toBe("event-3");
+    expect(events[23].id).toBe("event-26");
+    expect(search).toHaveBeenCalledTimes(3);
   });
 });
