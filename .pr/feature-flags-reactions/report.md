@@ -49,7 +49,7 @@ Checks: 5 — pass 5, fail 0, blocked 0, not-run 0, xfail 0, xpass 0. Families: 
 
 ## Screenshots
 
-- `features-off.png`, `features-on.png`: Settings → Features, off then on.
+- `experimental-on.png`: Settings → Experimental, with Conversation reactions on (after the rename to Experimental and `/api/settings/experimental`).
 - `agent-eyes.png`: the agent's 👀 on the person's message after its answer.
 - `picker.png`: the reaction picker under the agent's answer.
 - `eyes-and-heart.png`: 👀 from the agent and ❤️ from the person, after a reload.
