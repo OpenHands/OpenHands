@@ -49,7 +49,20 @@ export function historyEventText(event: OpenHandsEvent): string {
       ? parseMessageFromEvent(event)
       : "";
   }
-  if (isActionEvent(event)) return getActionContent(event);
+  if (isActionEvent(event)) {
+    const thought = event.thought
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n");
+    const action = event.action;
+    const details =
+      "file_text" in action &&
+      "command" in action &&
+      action.command === "create"
+        ? `${action.path}\n${action.file_text ?? ""}`
+        : getActionContent(event);
+    return `${thought}\n${details}`;
+  }
   if (isObservationEvent(event)) {
     // Visualizers can show more output than the legacy 1,000-character details summary.
     const content =
@@ -59,7 +72,10 @@ export function historyEventText(event: OpenHandsEvent): string {
             .map((part) => part.text)
             .join("\n")
         : "";
-    return `${getObservationContent(event)}\n${content}`;
+    if (!content) return getObservationContent(event);
+    const command =
+      "command" in event.observation ? event.observation.command : "";
+    return `${command ?? ""}\n${content}`;
   }
   if (isACPToolCallEvent(event)) return getACPToolCallContent(event);
   return "";

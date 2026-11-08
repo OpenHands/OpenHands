@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MessageEvent, ObservationEvent } from "#/types/agent-server/core";
+import type {
+  ActionEvent,
+  MessageEvent,
+  ObservationEvent,
+} from "#/types/agent-server/core";
+import { SecurityRisk } from "#/types/agent-server/core/base/common";
 import type { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
 import {
   HistorySearchSession,
@@ -69,11 +74,43 @@ describe("persisted history search", () => {
         tool_name: "terminal",
         is_error: false,
         content: [
-          { type: "text", text: `${"x".repeat(1200)} older-tool-error` },
+          {
+            type: "text",
+            text: `begin-output ${"x".repeat(1200)} older-tool-error`,
+          },
         ],
       },
     };
     expect(historyEventText(event)).toContain("older-tool-error");
+    expect(historyEventText(event).split("begin-output")).toHaveLength(2);
+  });
+
+  it("searches visible assistant thoughts alongside a tool command", () => {
+    const event: ActionEvent = {
+      id: "action",
+      timestamp: message(1).timestamp,
+      source: "agent",
+      thought: [{ type: "text", text: "earlier assistant decision" }],
+      thinking_blocks: [],
+      action: {
+        kind: "TerminalAction",
+        command: "cat old.txt",
+        is_input: false,
+        reset: false,
+        timeout: null,
+      },
+      tool_name: "terminal",
+      tool_call_id: "call",
+      tool_call: {
+        id: "call",
+        type: "function",
+        function: { name: "terminal", arguments: "{}" },
+      },
+      llm_response_id: "response",
+      security_risk: SecurityRisk.UNKNOWN,
+    };
+    expect(historyEventText(event)).toContain("earlier assistant decision");
+    expect(historyEventText(event)).toContain("cat old.txt");
   });
 
   it("uses the ACP display projection for commands and results", () => {
@@ -98,14 +135,12 @@ describe("persisted history search", () => {
   it("omits system messages and injected goal-loop prompts", async () => {
     const system = message(1, "needle system-only");
     system.llm_message.role = "system";
-    const search = vi
-      .fn()
-      .mockResolvedValue({
-        items: [
-          system,
-          message(2, "The goal is NOT yet complete (audit iteration needle)"),
-        ],
-      });
+    const search = vi.fn().mockResolvedValue({
+      items: [
+        system,
+        message(2, "The goal is NOT yet complete (audit iteration needle)"),
+      ],
+    });
     expect(
       (await new HistorySearchSession("needle").scanBatch(search)).matches,
     ).toEqual([]);
@@ -201,11 +236,9 @@ describe("persisted history search", () => {
     expect(
       await new HistorySearchSession("needle").scanBatch(cursorSearch),
     ).toMatchObject({ phase: "error", error: "pagination" });
-    const legacy = vi
-      .fn()
-      .mockResolvedValue({
-        items: Array.from({ length: 100 }, (_, n) => message(n)),
-      });
+    const legacy = vi.fn().mockResolvedValue({
+      items: Array.from({ length: 100 }, (_, n) => message(n)),
+    });
     expect(
       await new HistorySearchSession("needle").scanBatch(legacy),
     ).toMatchObject({ phase: "error", error: "pagination" });
