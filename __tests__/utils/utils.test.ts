@@ -504,3 +504,19 @@ describe("Markdown code spacing composition", () => {
     expect(cn("p-code-block", "px-4")).toBe("p-code-block px-4");
   });
 });
+
+describe("Canvas public color role composition", () => {
+  it("keeps color roles independent from typography and respects later caller colors", () => {
+    expect(cn("text-sm leading-4", "text-on-accent")).toBe(
+      "text-sm leading-4 text-on-accent",
+    );
+    expect(cn("text-sm text-on-accent", "text-feedback-error")).toBe(
+      "text-sm text-feedback-error",
+    );
+    expect(cn("text-feedback-error", "text-on-accent")).toBe("text-on-accent");
+    expect(cn("bg-surface", "bg-canvas-background")).toBe(
+      "bg-canvas-background",
+    );
+    expect(cn("bg-canvas-background", "bg-surface")).toBe("bg-surface");
+  });
+});

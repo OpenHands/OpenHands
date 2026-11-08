@@ -32,6 +32,7 @@
   --color-primary: var(--oh-color-primary);
   --color-logo: var(--oh-color-logo);
   --color-canvas-base: var(--oh-color-base);
+  --color-canvas-background: var(--oh-background);
   /* Keep color names distinct from font sizes such as text-base. */
   --color-on-primary: var(--oh-color-base);
   --color-base-secondary: var(--oh-color-base-secondary);
@@ -91,6 +92,7 @@
   --color-status-success: var(--oh-status-success);
   --color-status-error: var(--oh-status-error);
   --color-accent: var(--oh-accent);
+  --color-on-accent: var(--oh-accent-foreground);
   --color-warning: var(--oh-warning);
 
   /* Cool Grey scale */
