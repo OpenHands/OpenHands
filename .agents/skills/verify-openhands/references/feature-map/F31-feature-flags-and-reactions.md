@@ -26,11 +26,12 @@ Source: `src/routes/experimental-settings.tsx`, `src/api/experimental-features-s
 - `F31.empty`: an agent server without feature flags (older than software-agent-sdk#6609) shows "This agent server has no experimental features to turn on or off." instead of an error.
 - `F31.agent-reaction`: with the flag on, a new conversation's agent has `react` and `unreact`; when asked to react first, its 👀 chip appears on the person's message and stays after the answer (`testid=reaction-eyes`, `data-sources=agent`), and no "Reacted" tool card is shown.
 - `F31.user-reaction`: with the flag on, the `add-reaction` button under the agent's answer opens a picker of six emoji; choosing ❤️ shows a pressed `reaction-heart` chip (`data-sources=user`) that survives a reload; clicking the chip takes the reaction off.
-- `F31.off`: with the flag off, existing chips still show but are not clickable and there is no `add-reaction`; `POST /api/conversations/<id>/reactions` answers 409 `Conversation reactions are turned off`; a conversation started afterwards has no `react`/`unreact` tools.
-- `F31.confirm-pending`: with Confirmation Mode on and Security Analyzer **None** (always confirm), the agent's `react` call waits for approval and shows in the chat as its own row ("Add eyes reaction to …") above **Cancel** / **Continue**, so the person sees what they approve. **Continue** records the reaction: the row goes, the 👀 chip shows. **Cancel** shows the row as **Rejected**, no chip and no `ReactionEvent`.
+- `F31.off`: with the flag off, existing chips still show but are not clickable and there is no `add-reaction`; `POST /api/conversations/<id>/reactions` answers 409 `Conversation reactions are turned off`; a conversation started afterwards has no `react`/`unreact` tools and still does ordinary work (a terminal command runs and the agent answers with its output).
+- `F31.confirm-pending`: with Confirmation Mode on and Security Analyzer **None** (always confirm), the agent's `react` call waits for approval and shows in the chat as its own row ("Add eyes reaction to …") above **Cancel** / **Continue**, so the person sees what they approve. **Continue** records the reaction: the row goes, the 👀 chip shows. **Cancel** shows the row as **Rejected**, no chip and no `ReactionEvent`. When the agent sends `react` together with another tool call, Cancel rejects both: both rows read **Rejected** inside the collapsed **Used a tool, ran a command** group. Confirmation keeps working afterwards: a later terminal action asks again, and **Continue** runs it.
 - `F31.narration`: text the agent writes with its `react` call (the action's thought) stays in the chat next to the chip after the call finishes and after a reload; only the tool row is dropped.
 - `F31.react-while-running`: the person can react to an earlier answer while the agent runs a long command; the chip appears and the run carries on and finishes once, without a second run. The reaction is recorded when the agent's current step ends (the step holds the conversation's state lock), so the chip can take as long as the running command.
 - `F31.backend-scope`: each backend keeps its own switch: turning it on on one backend leaves another backend's page showing its own value, and switching back shows the first backend's. A switch flipped while the browser is offline, followed by a backend switch and reconnect, still reaches the backend it was flipped on (that server changes, the other does not, and the page for the now active backend shows that backend's value).
+- `F31.history`: chips fold the latest event per (message, emoji, source), so one 👀 chip can carry both the agent's and the person's reaction (`data-sources=agent,user`, count 2); taking the person's off leaves the agent's chip. Chips survive a reload and a `restart`, and no reaction starts a run (the conversation stays `finished`). **Branch from here** on the agent's answer copies the history up to that message: chips on it from before the answer stay, but a reaction the person added afterwards is not in the branch (see Gotchas); a reaction added in the branch does not reach the source.
 - `F31.docker`: on a server with the Docker runtime, a conversation started from Home with **Docker** picked gets `react`/`unreact` while the flag is on: the agent's 👀 and the person's ❤️ work as in Local mode and survive a reload. Turning the flag off takes effect at once for the Docker conversation (no `add-reaction`, the reactions route answers 409 from the host), and a Docker conversation started afterwards has no reaction tools.
 
 ## How to get to it (user POV)
@@ -96,6 +97,8 @@ Preconditions:
   control-openhands browser goto /
   control-openhands conversation start --prompt "Please react to this message with the eyes emoji first, then say hi." --wait --timeout 300
   control-openhands api GET /api/conversations/<new-id>           # no react / unreact in agent.tools
+  control-openhands conversation start --prompt "QA_F31_OFF Run the terminal command: echo qa-off-ok . Then reply with its output in one line." --wait --timeout 300 --stay
+  control-openhands browser text 'testid=chat-interface'          # "qa-off-ok"; no add-reaction under the answer
   ```
 
 - **Always confirm (`F31.confirm-pending`).**
@@ -110,7 +113,23 @@ Preconditions:
   control-openhands browser text 'testid=chat-interface'          # the row now reads "Rejected"
   control-openhands browser count 'testid=reaction-eyes'          # 0
   ```
-  Repeat with a new conversation and `testid=action-confirm-button` (Continue): the conversation finishes, the row is gone and `testid=reaction-eyes` is `1`. Turn Confirmation Mode off again afterwards.
+  Repeat with a new conversation and `testid=action-confirm-button` (Continue): the conversation finishes, the row is gone and `testid=reaction-eyes` is `1`.
+  Follow-up confirmation, with Confirmation Mode still on:
+  ```sh
+  control-openhands browser goto /
+  control-openhands conversation start --prompt "QA_F31_CONFIRM2 Put a 👀 reaction on this message, then run the terminal command: echo qa-confirmed . Then reply with its output in one line." --wait --until waiting_for_confirmation --timeout 180 --stay
+  control-openhands browser click 'testid=action-reject-button'
+  control-openhands conversation wait <id> --until idle,finished --timeout 180
+  control-openhands browser click 'text=Used a tool, ran a command'      # only when the agent sent both calls at once
+  control-openhands browser text 'testid=chat-interface'          # each pending row now reads "Rejected"
+  control-openhands conversation send <id> --prompt "Now run only the terminal command: echo qa-confirmed . Then reply with its output in one line."
+  control-openhands conversation wait <id> --until waiting_for_confirmation --timeout 180
+  control-openhands browser click 'testid=action-confirm-button'
+  control-openhands conversation wait <id> --until finished,idle --timeout 180   # finished
+  control-openhands browser text 'testid=chat-interface'          # "qa-confirmed" under "Run echo qa-confirmed command"
+  control-openhands browser count 'testid=reaction-eyes'          # 0: the rejected reaction never landed
+  ```
+  Turn Confirmation Mode off again afterwards (click its label, `testid=save-button`).
 - **Narration stays (`F31.narration`).**
   ```sh
   control-openhands browser goto /
@@ -122,6 +141,31 @@ Preconditions:
   control-openhands browser screenshot --feature F31.narration --name kept
   ```
   If the model puts no text in the call's thought, run it again: the check needs a non-empty thought.
+- **Reactions through history (`F31.history`).** The flag is on.
+  ```sh
+  control-openhands browser goto /
+  control-openhands conversation start --prompt "QA_F31_HISTORY Please react to this message with the eyes emoji first, then reply with the single word ok." --wait --timeout 300 --stay
+  UM=$(control-openhands api GET "/api/conversations/<id>/events/search" --query kind=ReactionEvent --field items.0.target_event_id)
+  control-openhands api POST /api/conversations/<id>/reactions --write --data "{\"emoji\":\"eyes\",\"target_event_id\":\"$UM\"}"   # arrange: the person's 👀 on their own message (the UI only offers the picker on the agent's)
+  control-openhands browser eval "(e=>e.dataset.sources+' '+e.textContent)(document.querySelector('[data-testid=reaction-eyes]'))"   # agent,user 👀2 (live, no reload)
+  control-openhands browser screenshot --feature F31.history --name both-sources
+  control-openhands api POST /api/conversations/<id>/reactions --write --data "{\"emoji\":\"eyes\",\"target_event_id\":\"$UM\",\"removed\":true}"
+  control-openhands browser eval "(e=>e.dataset.sources+' '+e.textContent)(document.querySelector('[data-testid=reaction-eyes]'))"   # agent 👀
+  control-openhands browser click 'testid=add-reaction' --hover-first
+  control-openhands browser click 'testid=reaction-picker-heart'
+  control-openhands restart
+  control-openhands browser goto /conversations/<id>
+  control-openhands browser wait 'testid=reaction-heart' --timeout 30000   # 👀 (agent) and ❤️ (user) both back
+  control-openhands conversation status <id>                      # finished: no reaction started a run
+  control-openhands browser hover 'testid=agent-message'
+  control-openhands browser click 'button[aria-label="Branch from here"] >> nth=1' --force --expect-url '/conversations/(?!<id>)'
+  control-openhands browser wait 'testid=reaction-eyes'           # the agent's 👀; no reaction-heart (added after the answer)
+  control-openhands browser click 'testid=add-reaction' --hover-first
+  control-openhands browser click 'testid=reaction-picker-tada'
+  control-openhands browser goto /conversations/<id>
+  control-openhands browser count 'testid=reaction-tada'          # 0: the branch's reaction stays in the branch
+  ```
+  The chip on the person's own message is read-only (`aria-disabled`), so the person's part of a shared chip is arranged and removed through the API; the chip's rendering is what this checks.
 - **React while the agent runs (`F31.react-while-running`).**
   ```sh
   control-openhands browser goto /
@@ -174,4 +218,6 @@ Preconditions:
 - Headless Chromium on Linux needs a colour emoji font (`fonts-noto-color-emoji`) for the chips to read as emoji in screenshots.
 - A direct tool call (`execute_tool`) during a step is recorded by the run loop when the step returns; no UI path makes such calls, so two concurrent ones are covered by the SDK's unit tests, not by this family.
 - `F31.react-while-running`: a person's reaction (like any message) waits for the agent's current step, which holds the state lock, so on a long command the chip comes when the command ends. That is expected today, not a hang.
+- A stale `GET /api/settings/experimental` that completes after a successful switch must not flip the switch back. `control-openhands` has no way to hold one real response while letting another through (`service pause` holds all of them, `network-state` drops them), so this ordering is covered by `__tests__/hooks/mutation/use-update-experimental-feature.test.tsx`, not by a live recipe. A response gate in the harness would make it drivable.
+- `F31.history`: **Branch from here** copies events up to the branched message, and reactions are events, so a reaction added to that message after it was sent is not in the branch (seen 2026-11-08: the person's ❤️ on the answer was missing in the branch, the agent's earlier 👀 was there). Whether a branch should carry the message's current reactions is an open product question; until it is settled, this is the expected behaviour.
 - `F31.empty` needs an older Agent Server (`launch --new --sdk-version 1.60.1`); it is not part of the default pass.
