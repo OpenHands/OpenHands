@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import ReactDOM from "react-dom";
 import { ChevronDown, FileUp, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
@@ -7,6 +6,7 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
 import { ContextMenu } from "#/ui/context-menu";
 import { KebabMenuItemContent } from "./kebab-menu-item-content";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 interface AddAutomationMenuProps {
   onAdd: () => void;
@@ -140,12 +140,11 @@ export function AddAutomationMenu({
         <ChevronDown className="size-4 shrink-0" aria-hidden />
       </BrandButton>
 
-      {open && portalStyle && typeof document !== "undefined"
-        ? ReactDOM.createPortal(
-            <div style={portalStyle}>{menu}</div>,
-            document.body,
-          )
-        : null}
+      {open && portalStyle && typeof document !== "undefined" ? (
+        <AppearancePortal>
+          <div style={portalStyle}>{menu}</div>
+        </AppearancePortal>
+      ) : null}
     </>
   );
 }
