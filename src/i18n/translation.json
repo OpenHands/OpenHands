@@ -14417,6 +14417,24 @@
     "uk": "За репозиторієм",
     "id": "Berdasarkan repositori"
   },
+  "CONVERSATION_PANEL$BY_TAG": {
+    "en": "By tag",
+    "ja": "タグ別",
+    "zh-CN": "按标签",
+    "zh-TW": "依標籤",
+    "ko-KR": "태그별",
+    "no": "Etter tag",
+    "ar": "حسب الوسم",
+    "de": "Nach Tag",
+    "fr": "Par tag",
+    "it": "Per tag",
+    "pt": "Por tag",
+    "es": "Por etiqueta",
+    "ca": "Per etiqueta",
+    "tr": "Etikete göre",
+    "uk": "За тегом",
+    "id": "Berdasarkan tag"
+  },
   "CONVERSATION_PANEL$CHRONOLOGICAL": {
     "en": "By date",
     "ja": "日付順",
@@ -15118,6 +15136,24 @@
     "tr": "Depo yok",
     "uk": "Немає репозиторію",
     "id": "Tidak ada repositori"
+  },
+  "CONVERSATION_PANEL$NO_TAG": {
+    "en": "No tag",
+    "ja": "タグなし",
+    "zh-CN": "无标签",
+    "zh-TW": "無標籤",
+    "ko-KR": "태그 없음",
+    "no": "Ingen tag",
+    "ar": "بدون وسم",
+    "de": "Kein Tag",
+    "fr": "Aucun tag",
+    "it": "Nessun tag",
+    "pt": "Sem tag",
+    "es": "Sin etiqueta",
+    "ca": "Sense etiqueta",
+    "tr": "Etiket yok",
+    "uk": "Без тегу",
+    "id": "Tanpa tag"
   },
   "CONVERSATION_PANEL$NEW_THREAD_FOLDER_ARIA": {
     "en": "Create thread folder — choose workspace or repository",

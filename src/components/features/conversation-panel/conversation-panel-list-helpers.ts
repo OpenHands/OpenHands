@@ -20,6 +20,8 @@ import {
 export type ConversationSortField = "created" | "updated";
 export type ThreadScope = "all" | "relevant";
 export type OrganizeMode = "grouped" | "chronological";
+/** What a grouped list is grouped by: workspace/repository folders or tags. */
+export type ConversationGroupBy = "location" | "tag";
 export type AutomationFilterMode =
   "all" | "hide-automations" | "only-automations";
 export type OlderConversationCutoff = "1h" | "1d" | "7d" | "30d";
@@ -374,6 +376,17 @@ export type ConversationGroupLaunch = {
   };
 };
 
+export const NO_TAG_GROUP_ID = "__none_tag";
+const TAG_GROUP_ID_PREFIX = "tag:";
+
+export type ConversationGroup = {
+  id: string;
+  label: string;
+  conversations: AppConversation[];
+  /** `null` when the folder has no sensible "new conversation" target. */
+  launch: ConversationGroupLaunch | null;
+};
+
 function buildGroupLaunch(
   id: string,
   backendKind: BackendKind,
@@ -469,18 +482,33 @@ function repositoryGroup(conversation: AppConversation): {
 }
 
 /**
- * Resolves the stable folder identity used by grouped conversation views.
+ * Resolves the stable folder identities a conversation belongs to in grouped
+ * views. Workspace/repository grouping yields exactly one; tag grouping yields
+ * one per user-facing `key=value` tag, so a multi-tag conversation appears in
+ * several folders and an untagged one falls into the "no tag" bucket.
  *
  * Keeping this shared with `groupConversations` lets pagination reason about
- * folder discovery without duplicating workspace/repository normalization.
+ * folder discovery without duplicating the grouping rules.
  */
-function getConversationGroupIdentity(
+function getConversationGroupIdentities(
   conversation: AppConversation,
   backendKind: BackendKind,
-): { id: string; label: string } {
-  return backendKind === "local"
-    ? workspaceGroup(conversation)
-    : repositoryGroup(conversation);
+  groupBy: ConversationGroupBy,
+): { id: string; label: string }[] {
+  if (groupBy === "tag") {
+    const facets = collectTagFacets([conversation]);
+    return facets.length > 0
+      ? facets.map((facet) => ({
+          id: `${TAG_GROUP_ID_PREFIX}${facet}`,
+          label: facet,
+        }))
+      : [{ id: NO_TAG_GROUP_ID, label: "" }];
+  }
+  return [
+    backendKind === "local"
+      ? workspaceGroup(conversation)
+      : repositoryGroup(conversation),
+  ];
 }
 
 /**
@@ -506,29 +534,40 @@ export function getGroupDiscoveryConversationIds(
   items: readonly AppConversation[],
   pageByConversationId: ReadonlyMap<string, number>,
   backendKind: BackendKind,
-  options?: { forceIncludeConversationId?: string | null },
+  options?: {
+    forceIncludeConversationId?: string | null;
+    groupBy?: ConversationGroupBy;
+  },
 ): Set<string> {
-  // Resolve each conversation's folder identity exactly once; both passes
+  // Resolve each conversation's folder identities exactly once; both passes
   // below (finding each folder's discovery page, then collecting the ids on
-  // that page) read from this record instead of re-running the
-  // workspace/repository normalization.
+  // that page) read from this record instead of re-running the grouping rules.
+  const groupBy = options?.groupBy ?? "location";
   const resolved = items.map((conversation) => ({
     conversationId: conversation.id,
-    groupId: getConversationGroupIdentity(conversation, backendKind).id,
+    groupIds: getConversationGroupIdentities(
+      conversation,
+      backendKind,
+      groupBy,
+    ).map((identity) => identity.id),
     page: pageByConversationId.get(conversation.id) ?? 0,
   }));
 
   const discoveryPageByGroupId = new Map<string, number>();
-  for (const { groupId, page } of resolved) {
-    const currentDiscoveryPage = discoveryPageByGroupId.get(groupId);
-    if (currentDiscoveryPage === undefined || page < currentDiscoveryPage) {
-      discoveryPageByGroupId.set(groupId, page);
+  for (const { groupIds, page } of resolved) {
+    for (const groupId of groupIds) {
+      const currentDiscoveryPage = discoveryPageByGroupId.get(groupId);
+      if (currentDiscoveryPage === undefined || page < currentDiscoveryPage) {
+        discoveryPageByGroupId.set(groupId, page);
+      }
     }
   }
 
   const discoveryIds = new Set<string>();
-  for (const { conversationId, groupId, page } of resolved) {
-    if (page === discoveryPageByGroupId.get(groupId)) {
+  for (const { conversationId, groupIds, page } of resolved) {
+    if (
+      groupIds.some((groupId) => page === discoveryPageByGroupId.get(groupId))
+    ) {
       discoveryIds.add(conversationId);
     }
   }
@@ -550,12 +589,7 @@ export function groupConversations(
   sortField: ConversationSortField,
   labels: { emptyWorkspace: string; emptyRepository: string },
   knownWorkspaces?: readonly LocalWorkspace[],
-): {
-  id: string;
-  label: string;
-  conversations: AppConversation[];
-  launch: ConversationGroupLaunch;
-}[] {
+): ConversationGroup[] {
   const byId = new Map<
     string,
     { label: string; conversations: AppConversation[] }
@@ -592,7 +626,11 @@ export function groupConversations(
   };
 
   for (const c of items) {
-    let { id, label: rawLabel } = getConversationGroupIdentity(c, backendKind);
+    let { id, label: rawLabel } = getConversationGroupIdentities(
+      c,
+      backendKind,
+      "location",
+    )[0]!;
     if (id === "__none_workspace") {
       const recovered = recoverWorkspaceGroup(c);
       if (recovered) {
@@ -614,13 +652,65 @@ export function groupConversations(
     }
   }
 
+  return sortConversationGroups(byId, sortField, (id, conversations) =>
+    buildGroupLaunch(id, backendKind, conversations),
+  );
+}
+
+/**
+ * Groups conversations into one folder per user-facing `key=value` tag. A
+ * conversation carrying several tags is listed under each of them; one with
+ * none goes to the "no tag" folder. Folders carry no launch target — a new
+ * conversation has no way to inherit the folder's tag.
+ */
+export function groupConversationsByTag(
+  items: readonly AppConversation[],
+  sortField: ConversationSortField,
+  labels: { emptyTag: string; formatTag: (facet: string) => string },
+): ConversationGroup[] {
+  const byId = new Map<
+    string,
+    { label: string; conversations: AppConversation[] }
+  >();
+  for (const c of items) {
+    for (const { id, label } of getConversationGroupIdentities(
+      c,
+      "local",
+      "tag",
+    )) {
+      const bucket = byId.get(id);
+      if (bucket) {
+        bucket.conversations.push(c);
+      } else {
+        byId.set(id, {
+          label:
+            id === NO_TAG_GROUP_ID ? labels.emptyTag : labels.formatTag(label),
+          conversations: [c],
+        });
+      }
+    }
+  }
+  return sortConversationGroups(byId, sortField, () => null);
+}
+
+function sortConversationGroups(
+  byId: ReadonlyMap<
+    string,
+    { label: string; conversations: AppConversation[] }
+  >,
+  sortField: ConversationSortField,
+  buildLaunch: (
+    id: string,
+    conversations: AppConversation[],
+  ) => ConversationGroupLaunch | null,
+): ConversationGroup[] {
   const groups = [...byId.entries()].map(([id, g]) => {
     const conversations = sortConversationsByField(g.conversations, sortField);
     return {
       id,
       label: g.label,
       conversations,
-      launch: buildGroupLaunch(id, backendKind, conversations),
+      launch: buildLaunch(id, conversations),
     };
   });
 

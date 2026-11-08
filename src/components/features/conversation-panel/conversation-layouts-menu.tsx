@@ -54,6 +54,16 @@ const LAYOUT_PRESETS: LayoutPreset[] = [
     },
   },
   {
+    id: "by-tag",
+    icon: Tag,
+    labelKey: I18nKey.CONVERSATION_PANEL$BY_TAG,
+    settings: {
+      ...DEFAULT_LAYOUT_SETTINGS,
+      organizeMode: "grouped",
+      groupBy: "tag",
+    },
+  },
+  {
     id: "recent-activity",
     icon: Clock3,
     labelKey: I18nKey.CONVERSATION_PANEL$LAYOUT_RECENT_ACTIVITY,

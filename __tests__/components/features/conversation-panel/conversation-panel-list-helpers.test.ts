@@ -9,6 +9,7 @@ import {
   getGroupConversationPreview,
   getGroupDiscoveryConversationIds,
   groupConversations,
+  groupConversationsByTag,
   GROUP_CONVERSATIONS_PREVIEW_LIMIT,
   isAutomationConversation,
   isOlderConversationCutoff,
@@ -932,5 +933,89 @@ describe("partitionByCutoff", () => {
     expect(isOlderConversationCutoff("1h")).toBe(true);
     expect(isOlderConversationCutoff("1d")).toBe(true);
     expect(isOlderConversationCutoff("2h")).toBe(false);
+  });
+});
+
+describe("grouping by tag", () => {
+  const labels = {
+    emptyTag: "No tag",
+    formatTag: (facet: string) => facet,
+  };
+  const make = (
+    id: string,
+    tags: Record<string, string> | null,
+    updated_at = "2024-01-02T00:00:00.000Z",
+  ) =>
+    ({
+      ...base,
+      id,
+      title: id,
+      updated_at,
+      tags,
+      workspace: { working_dir: "/workspace" },
+    }) as unknown as AppConversation;
+
+  it("lists a multi-tag conversation under each tag and untagged ones under No tag", () => {
+    const items = [
+      make("a", { team: "infra", env: "prod" }),
+      make("b", { team: "infra" }),
+      make("c", null),
+      make("d", { pinned: "true" }),
+    ];
+
+    const groups = groupConversationsByTag(items, "updated", labels);
+
+    const idsByGroup = Object.fromEntries(
+      groups.map((g) => [g.id, g.conversations.map((c) => c.id).sort()]),
+    );
+    expect(idsByGroup).toEqual({
+      "tag:env=prod": ["a"],
+      "tag:team=infra": ["a", "b"],
+      __none_tag: ["c", "d"],
+    });
+    expect(groups.find((g) => g.id === "__none_tag")?.label).toBe("No tag");
+    expect(groups.every((g) => g.launch === null)).toBe(true);
+  });
+
+  it("orders folders by their most recently active conversation", () => {
+    const groups = groupConversationsByTag(
+      [
+        make("old", { team: "a" }, "2024-01-01T00:00:00.000Z"),
+        make("new", { team: "b" }, "2024-03-01T00:00:00.000Z"),
+      ],
+      "updated",
+      labels,
+    );
+
+    expect(groups.map((g) => g.id)).toEqual(["tag:team=b", "tag:team=a"]);
+  });
+
+  it("uses the supplied formatter for folder labels", () => {
+    const groups = groupConversationsByTag(
+      [make("a", { team: "infra" })],
+      "updated",
+      { ...labels, formatTag: (facet) => `<${facet}>` },
+    );
+
+    expect(groups[0]?.label).toBe("<team=infra>");
+  });
+
+  it("discovers each tag folder on the first page that contains it", () => {
+    const items = [
+      make("p0", { team: "a" }),
+      make("p1-a", { team: "a" }),
+      make("p1-both", { team: "a", env: "prod" }),
+    ];
+    const pages = new Map([
+      ["p0", 0],
+      ["p1-a", 1],
+      ["p1-both", 1],
+    ]);
+
+    const ids = getGroupDiscoveryConversationIds(items, pages, "cloud", {
+      groupBy: "tag",
+    });
+
+    expect([...ids].sort()).toEqual(["p0", "p1-both"]);
   });
 });
