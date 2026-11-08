@@ -16,6 +16,11 @@ import { InteractiveChatBox } from "#/components/features/chat/interactive-chat-
 import { ComposerDockedProvider } from "#/context/composer-docked-context";
 import { useStartAutomationSetup } from "#/hooks/use-start-automation-setup";
 import { I18nKey } from "#/i18n/declaration";
+import {
+  automationDetailPath,
+  automationListPath,
+} from "#/manifests/automation-interface";
+import { AutomationPageHeader } from "#/components/features/automations/automation-page-header";
 import { buildAutomationDraftTags } from "#/utils/automation-draft-tags";
 import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
@@ -48,9 +53,12 @@ export default function AutomationSetupNew() {
   useEffect(
     () =>
       subscribeAutomationFormSession(PENDING_AUTOMATION_SETUP_ID, (next) => {
-        setDraft(next ?? (automationId || draftId ? null : BLANK_DRAFT));
+        // The panel clears the session when it unmounts, so a cleared session
+        // must not drop the draft: that would unmount the panel and leave the
+        // page on the loading state, since nothing loads the draft again.
+        if (next) setDraft(next);
       }),
-    [automationId, draftId],
+    [],
   );
 
   useEffect(() => {
@@ -104,19 +112,16 @@ export default function AutomationSetupNew() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-canvas-base">
-      <header
-        data-testid="automation-setup-topbar"
-        className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-[var(--oh-border)] bg-canvas-base px-3"
-      >
-        <h2 className="min-w-0 truncate text-sm font-medium text-content">
-          {title}
-        </h2>
-        <div
-          ref={setToolbarElement}
-          data-testid="automation-setup-toolbar"
-          className="flex min-w-0 shrink-0 items-center gap-1.5"
-        />
-      </header>
+      <AutomationPageHeader
+        testId="automation-setup-topbar"
+        title={title}
+        backTo={
+          automationId
+            ? automationDetailPath(automationId)
+            : automationListPath()
+        }
+        actionsRef={setToolbarElement}
+      />
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         {draft ? (
           <AutomationSetupPanel
@@ -126,21 +131,22 @@ export default function AutomationSetupNew() {
             toolbarPortal={toolbarElement}
             showInlineHeader={false}
             reserveComposerSpace
+            onAskAgent={startConversationFromPrompt}
           />
         ) : (
           <div
             role="status"
-            className="flex flex-1 items-center justify-center text-sm text-[var(--oh-muted)]"
+            className="flex flex-1 items-center justify-center text-sm text-muted"
           >
             {t(I18nKey.AUTOMATION_SETUP$LOADING_DRAFT)}
           </div>
         )}
-        <div className="custom-scrollbar-always pointer-events-none absolute inset-0 z-20 overflow-y-scroll px-5 [scrollbar-gutter:stable] [&::-webkit-scrollbar-thumb]:bg-transparent">
-          <div className="relative mx-auto h-full w-full min-w-0 max-w-[800px]">
+        <div className="automation-setup-scroll-gutter custom-scrollbar-always pointer-events-none absolute inset-0 z-20 overflow-y-scroll px-5 [&::-webkit-scrollbar-thumb]:bg-transparent">
+          <div className="automation-setup-content relative mx-auto h-full w-full min-w-0">
             <div
               ref={setComposerTarget}
               data-testid="automation-setup-docked-composer"
-              className="pointer-events-auto absolute inset-x-0 bottom-5 overflow-visible rounded-[15px] shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+              className="automation-setup-composer-dock pointer-events-auto absolute inset-x-0 bottom-5 overflow-visible"
             />
           </div>
         </div>
@@ -167,3 +173,6 @@ export default function AutomationSetupNew() {
     </div>
   );
 }
+
+// @spec AWI-001 — Interface-defined automation section identity
+export { AUTOMATION_TITLE_HANDLE as handle } from "./title-handle";

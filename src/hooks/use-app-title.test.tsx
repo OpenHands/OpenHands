@@ -2,7 +2,16 @@ import React from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
+import {
+  createMemoryRouter,
+  matchRoutes,
+  RouterProvider,
+  Outlet,
+  type RouteObject,
+  useNavigate,
+} from "react-router";
+import routeConfig from "../routes";
+import * as automationInterface from "#/manifests/automation-interface";
 import { createInstance } from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
@@ -47,7 +56,44 @@ function makeConversation(
   };
 }
 
-function renderAppTitleHook(path = "/", basename?: string) {
+const routeModules = import.meta.glob<{ handle?: unknown }>("../routes/*.tsx");
+
+// Use the real route registrations and their exported handles, without mounting
+// each page's unrelated UI or loaders. A catch-all therefore really is a 404.
+function titleRoutes(
+  entries: typeof routeConfig,
+  probe: React.ReactNode,
+): RouteObject[] {
+  return entries.map((entry) => {
+    const common = {
+      id: entry.file,
+      HydrateFallback: () => null,
+      lazy: async () => ({
+        handle: (await routeModules[`../${entry.file}`]()).handle,
+      }),
+      element:
+        entry.file === "routes/root-layout.tsx" ? (
+          <>
+            {probe}
+            <Outlet />
+          </>
+        ) : (
+          <Outlet />
+        ),
+    };
+    return entry.index
+      ? { ...common, index: true }
+      : {
+          ...common,
+          path: entry.path,
+          children: entry.children
+            ? titleRoutes(entry.children, probe)
+            : undefined,
+        };
+  });
+}
+
+async function renderAppTitleHook(path = "/", basename?: string) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -64,26 +110,33 @@ function renderAppTitleHook(path = "/", basename?: string) {
       ]),
     ),
   });
+  // Await real route-module imports before rendering so their first-load cost
+  // is not mistaken for a failed title update by Testing Library's 1s poll.
+  await Promise.all(
+    (matchRoutes(titleRoutes(routeConfig, null), path, basename) ?? []).map(
+      ({ route }) => routeModules[`../${route.id}`](),
+    ),
+  );
+  let router: ReturnType<typeof createMemoryRouter>;
   const hook = renderHook(
     () => ({ title: useAppTitle(), navigate: useNavigate() }),
     {
-      wrapper: ({ children }) => (
-        <QueryClientProvider client={queryClient}>
-          <I18nextProvider i18n={i18n}>
-            <MemoryRouter basename={basename} initialEntries={[path]}>
-              <Routes>
-                <Route
-                  path="/conversations/:conversationId/*"
-                  element={children}
-                />
-                <Route path="*" element={children} />
-              </Routes>
-            </MemoryRouter>
-          </I18nextProvider>
-        </QueryClientProvider>
-      ),
+      wrapper: ({ children }) => {
+        router ??= createMemoryRouter(titleRoutes(routeConfig, children), {
+          basename,
+          initialEntries: [path],
+        });
+        return (
+          <QueryClientProvider client={queryClient}>
+            <I18nextProvider i18n={i18n}>
+              <RouterProvider router={router} />
+            </I18nextProvider>
+          </QueryClientProvider>
+        );
+      },
     },
   );
+  await waitFor(() => expect(hook.result.current).not.toBeNull());
   return { ...hook, queryClient, i18n };
 }
 
@@ -93,28 +146,57 @@ describe("useAppTitle", () => {
   );
 
   beforeEach(() => {
+    vi.restoreAllMocks();
     getConversations.mockReset().mockResolvedValue([makeConversation()]);
     useConversationStateStore.getState().reset();
   });
 
   // @spec AWI-001 — Localized section titles
   it.each([
-    ["/", "Home | OpenHands"],
-    ["/conversations", "Conversations | OpenHands"],
-    ["/automations", "Automations | OpenHands"],
-    ["/automations/templates", "Automations | OpenHands"],
+    ["/", "New Chat | OpenHands"],
+    ["/conversations", "New Chat | OpenHands"],
     ["/settings", "Settings | OpenHands"],
     ["/settings/llm?tab=profiles", "Settings | OpenHands"],
+    ["/customize", "Customize | OpenHands"],
+    ["/mcp", "Model Context Protocol (MCP) | OpenHands"],
+    ["/skills", "Skills | OpenHands"],
+    ["/plugins", "Plugins | OpenHands"],
+    ["/apps", "Apps for Agent Canvas | OpenHands"],
     ["/settings-other", "OpenHands"],
-  ])("identifies the section at %s", (path, expected) => {
-    const { result } = renderAppTitleHook(path);
+    ["/settings/does-not-exist", "OpenHands"],
+    ["/settings/llm/deeper", "OpenHands"],
+    ["/automations/a/b", "OpenHands"],
+  ])("identifies the section at %s", async (path, expected) => {
+    const { result } = await renderAppTitleHook(path);
     expect(result.current.title).toBe(expected);
     expect(getConversations).not.toHaveBeenCalled();
   });
 
+  it("uses the admitted automation label and falls back when the interface is absent", async () => {
+    const copy = automationInterface.getInterfaceCopy();
+    const getCopy = vi
+      .spyOn(automationInterface, "getInterfaceCopy")
+      .mockReturnValue({
+        ...copy,
+        sidebarLabel: "Team workflows",
+      });
+    const gate = vi
+      .spyOn(automationInterface, "hasAutomationInterface")
+      .mockReturnValue(true);
+    const { result } = await renderAppTitleHook("/automations/templates");
+    expect(result.current.title).toBe("Team workflows | OpenHands");
+
+    gate.mockReturnValue(false);
+    getCopy.mockImplementation(() => {
+      throw new Error("Unavailable interface must not be read");
+    });
+    await act(() => result.current.navigate("/automations"));
+    expect(result.current.title).toBe("OpenHands");
+  });
+
   it("updates section titles on navigation and language changes under a base path", async () => {
-    const { result, i18n } = renderAppTitleHook("/canvas/", "/canvas");
-    expect(result.current.title).toBe("Home | OpenHands");
+    const { result, i18n } = await renderAppTitleHook("/canvas/", "/canvas");
+    expect(result.current.title).toBe("New Chat | OpenHands");
 
     await act(() => result.current.navigate("/settings/llm"));
     expect(result.current.title).toBe("Settings | OpenHands");
@@ -126,7 +208,7 @@ describe("useAppTitle", () => {
   it.each(["/conversations/123", "/conversations/123/panel"])(
     "uses the conversation title at %s and updates it after refetch",
     async (path) => {
-      const { result, queryClient } = renderAppTitleHook(path);
+      const { result, queryClient } = await renderAppTitleHook(path);
       await waitFor(() =>
         expect(result.current.title).toBe("My Conversation | OpenHands"),
       );
@@ -150,7 +232,8 @@ describe("useAppTitle", () => {
         resolveConversation = resolve;
       }),
     );
-    const { result, queryClient } = renderAppTitleHook("/conversations/123");
+    const { result, queryClient } =
+      await renderAppTitleHook("/conversations/123");
     expect(result.current.title).toBe("OpenHands");
 
     await act(() => resolveConversation([makeConversation({ title: null })]));
@@ -167,7 +250,7 @@ describe("useAppTitle", () => {
     [ExecutionStatus.ERROR, "🔴"],
     [ExecutionStatus.STUCK, "🔴"],
   ])("preserves the %s status emoji", async (status, emoji) => {
-    const { result } = renderAppTitleHook("/conversations/123");
+    const { result } = await renderAppTitleHook("/conversations/123");
     await waitFor(() =>
       expect(result.current.title).toBe("My Conversation | OpenHands"),
     );
@@ -183,7 +266,7 @@ describe("useAppTitle", () => {
     getConversations.mockResolvedValue([
       makeConversation({ execution_status: ExecutionStatus.RUNNING }),
     ]);
-    const { result } = renderAppTitleHook("/conversations/123");
+    const { result } = await renderAppTitleHook("/conversations/123");
     await waitFor(() =>
       expect(result.current.title).toBe("🟢 My Conversation | OpenHands"),
     );

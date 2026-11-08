@@ -13,6 +13,7 @@ function renderModal(
   props: Partial<{
     message: string;
     isLoading: boolean;
+    parametersSupported: boolean;
   }> = {},
 ) {
   const queryClient = new QueryClient({
@@ -23,6 +24,7 @@ function renderModal(
     <QueryClientProvider client={queryClient}>
       <PluginLaunchModal
         plugins={plugins}
+        parametersSupported={props.parametersSupported ?? true}
         message={props.message}
         isLoading={props.isLoading ?? false}
         onStartConversation={mockOnStartConversation}
@@ -39,7 +41,9 @@ describe("PluginLaunchModal", () => {
 
   describe("Plugin Display Name Extraction", () => {
     it("should extract plugin name from repo_path when provided", () => {
-      renderModal([{ source: "github:owner/repo", repo_path: "plugins/my-plugin" }]);
+      renderModal([
+        { source: "github:owner/repo", repo_path: "plugins/my-plugin" },
+      ]);
 
       // Plugin name should be "my-plugin" from the path
       expect(screen.getByText("my-plugin")).toBeInTheDocument();
@@ -54,9 +58,7 @@ describe("PluginLaunchModal", () => {
     });
 
     it("should extract name from git URL", () => {
-      renderModal([
-        { source: "https://github.com/owner/repo-name.git" },
-      ]);
+      renderModal([{ source: "https://github.com/owner/repo-name.git" }]);
 
       const elements = screen.getAllByText("repo-name");
       expect(elements.length).toBeGreaterThan(0);
@@ -296,13 +298,13 @@ describe("PluginLaunchModal", () => {
 
       expect(screen.getByText("LAUNCH$ADDITIONAL_PLUGINS")).toBeInTheDocument();
       // When no repo_path, the full repo path is shown
-      expect(screen.getAllByText("owner/without-params").length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText("owner/without-params").length,
+      ).toBeGreaterThan(0);
     });
 
     it("should show ref in simple plugin list", () => {
-      renderModal([
-        { source: "github:owner/plugin", ref: "main" },
-      ]);
+      renderModal([{ source: "github:owner/plugin", ref: "main" }]);
 
       expect(screen.getByText("@ main")).toBeInTheDocument();
     });
@@ -363,10 +365,9 @@ describe("PluginLaunchModal", () => {
 
     it("should call onStartConversation with message when provided", async () => {
       const user = userEvent.setup();
-      renderModal(
-        [{ source: "github:owner/repo" }],
-        { message: "/city-weather:now Tokyo" },
-      );
+      renderModal([{ source: "github:owner/repo" }], {
+        message: "/city-weather:now Tokyo",
+      });
 
       // Check the trust checkbox first
       await user.click(screen.getByTestId("trust-checkbox"));
@@ -423,5 +424,37 @@ describe("PluginLaunchModal", () => {
       // First plugin should have new value
       expect(input1).toHaveValue("new-val1");
     });
+  });
+});
+
+describe("unsupported backend plugin parameters", () => {
+  it("explains the unsupported configuration and prevents starting even after trust", async () => {
+    const user = userEvent.setup();
+    renderModal([{ source: "local-plugin", parameters: { city: "Paris" } }], {
+      parametersSupported: false,
+    });
+    await user.type(screen.getByTestId("plugin-0-param-city"), " test");
+    await user.click(screen.getByTestId("trust-checkbox"));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "LAUNCH$PARAMETERS_UNSUPPORTED_LOCAL",
+    );
+    expect(screen.getByTestId("start-conversation-button")).toBeDisabled();
+    await user.click(screen.getByTestId("start-conversation-button"));
+    expect(mockOnStartConversation).not.toHaveBeenCalled();
+  });
+
+  it("allows coordinate-only plugins when parameters are unsupported", async () => {
+    const user = userEvent.setup();
+    renderModal([{ source: "local-plugin", parameters: {} }], {
+      parametersSupported: false,
+    });
+    await user.click(screen.getByTestId("trust-checkbox"));
+    await user.click(screen.getByTestId("start-conversation-button"));
+
+    expect(mockOnStartConversation).toHaveBeenCalledWith(
+      [{ source: "local-plugin", parameters: {} }],
+      undefined,
+    );
   });
 });

@@ -33,17 +33,6 @@
             ]
         },
         {
-            "name": "Conversations",
-            "url": "conversations",
-            "icons": [
-                {
-                    "src": "android-chrome-192x192.png",
-                    "sizes": "192x192",
-                    "type": "image/png"
-                }
-            ]
-        },
-        {
             "name": "Automations",
             "url": "automations",
             "icons": [
@@ -54,5 +43,6 @@
                 }
             ]
         }
-    ]
+    ],
+    "scope": "."
 }

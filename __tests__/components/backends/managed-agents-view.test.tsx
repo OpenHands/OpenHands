@@ -373,4 +373,51 @@ describe("ManagedAgentsView", () => {
       expect(bridge.deleteAgentConfig).toHaveBeenCalledWith("cfg_1"),
     );
   });
+
+  it("names the signed-in team and says where its sign-in is kept", async () => {
+    const connection = {
+      ...CONNECTION,
+      teamName: "Research",
+      email: "me@example.com",
+    };
+    window.marsBridge = fakeBridge({
+      ...SIGNED_IN,
+      connections: [connection],
+      active: connection,
+      storage: { kind: "keychain", label: "macOS Keychain", host: "studio" },
+    });
+    renderView();
+
+    const account = await screen.findByTestId("managed-agents-account");
+    expect(account).toHaveTextContent("Research · me@example.com");
+    expect(
+      screen.getByTestId("digitalocean-sign-in-storage"),
+    ).toHaveTextContent("DO_AGENTS$SAVED_IN_KEYCHAIN");
+  });
+
+  it("warns when the host could not keep the sign-in", async () => {
+    window.marsBridge = fakeBridge({
+      ...SIGNED_IN,
+      active: { ...CONNECTION, isSaved: false },
+      storage: { kind: "keychain", label: "macOS Keychain", host: "studio" },
+    });
+    renderView();
+
+    expect(
+      await screen.findByTestId("digitalocean-sign-in-storage"),
+    ).toHaveTextContent("DO_AGENTS$NOT_SAVED");
+  });
+
+  it("warns when nothing on the host keeps sign-ins", async () => {
+    window.marsBridge = fakeBridge({
+      ...SIGNED_IN,
+      isPersistent: false,
+      storage: { kind: "memory", label: "memory", host: "studio" },
+    });
+    renderView();
+
+    expect(
+      await screen.findByTestId("digitalocean-sign-in-storage"),
+    ).toHaveTextContent("DO_AGENTS$NOT_SAVED");
+  });
 });

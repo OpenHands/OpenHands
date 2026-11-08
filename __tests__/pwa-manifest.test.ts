@@ -4,8 +4,10 @@ import { matchRoutes, type RouteObject } from "react-router";
 import { describe, expect, it } from "vitest";
 import routes from "../src/routes";
 
+const publicDirectory = resolve(__dirname, "../public");
+
 const manifest = JSON.parse(
-  readFileSync(resolve("public/site.webmanifest"), "utf8"),
+  readFileSync(resolve(publicDirectory, "site.webmanifest"), "utf8"),
 );
 
 function routeObjects(entries: typeof routes): RouteObject[] {
@@ -33,18 +35,29 @@ describe("installed-app manifest", () => {
         `${basePath}site.webmanifest`,
         "https://canvas.example",
       );
+      const installedFrom = new URL(`${basePath}settings/llm`, manifestUrl);
+      const startUrl = manifest.start_url
+        ? new URL(manifest.start_url, manifestUrl)
+        : installedFrom;
+      const scope = manifest.scope
+        ? new URL(manifest.scope, manifestUrl)
+        : new URL(".", startUrl);
       const shortcuts = manifest.shortcuts as {
         name: string;
         url: string;
         icons: { src: string }[];
       }[];
-      expect(shortcuts).toHaveLength(3);
+      expect(shortcuts).toHaveLength(2);
+      expect(new Set(shortcuts.map(({ url }) => url)).size).toBe(
+        shortcuts.length,
+      );
 
       for (const shortcut of shortcuts) {
         expect(shortcut.name.trim()).not.toBe("");
         expect(shortcut.url).not.toMatch(/^(?:\/|[a-z][a-z\d+.-]*:)/i);
         const target = new URL(shortcut.url, manifestUrl);
         expect(target.origin).toBe(manifestUrl.origin);
+        expect(target.pathname.startsWith(scope.pathname)).toBe(true);
         expect(target.pathname.startsWith(basePath)).toBe(true);
         const appPath = `/${target.pathname.slice(basePath.length)}`;
         const matches = matchRoutes(routeObjects(routes), appPath);
@@ -57,7 +70,7 @@ describe("installed-app manifest", () => {
           expect(iconUrl.pathname.startsWith(basePath)).toBe(true);
           expect(
             existsSync(
-              resolve("public", iconUrl.pathname.slice(basePath.length)),
+              resolve(publicDirectory, iconUrl.pathname.slice(basePath.length)),
             ),
           ).toBe(true);
         }

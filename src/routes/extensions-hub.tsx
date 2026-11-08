@@ -1,3 +1,5 @@
+import type { RouteTitleHandle } from "./title-handle";
+import { I18nKey } from "#/i18n/declaration";
 import { Navigate } from "react-router";
 import {
   SETTINGS_COMPACT_MAX_WIDTH,
@@ -14,3 +16,8 @@ export default function ExtensionsHub() {
 
   return <Navigate to="/mcp" replace />;
 }
+
+// @spec AWI-001 — Localized section identity
+export const handle = {
+  titleKey: I18nKey.NAV$CUSTOMIZE,
+} satisfies RouteTitleHandle;

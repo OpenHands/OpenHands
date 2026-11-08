@@ -192,8 +192,11 @@ test.describe("active profile deletion + reconciliation", () => {
       await waitForTestId(page, "profile-actions-menu");
       await page.getByTestId("profile-delete").click();
 
-      // Confirm in the delete modal.
-      await page.getByTestId("delete-profile-confirm").click();
+      // Confirm in the delete modal, and let the delete finish: it first moves
+      // the `default` agent profile off this LLM profile.
+      const confirm = page.getByTestId("delete-profile-confirm");
+      await confirm.click();
+      await expect(confirm).toBeHidden({ timeout: 30_000 });
 
       // useEnsureActiveProfile re-activates the only remaining profile. Poll
       // with reload — the delete + activate mutations may take a moment on CI.

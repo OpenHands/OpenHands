@@ -1,3 +1,4 @@
+import type { RouteTitleHandle } from "./title-handle";
 import React from "react";
 import { AxiosError } from "axios";
 import {
@@ -9,6 +10,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useUpdateMcpServer } from "#/hooks/mutation/use-update-mcp-server";
+import { useCloudMcpSettingsUrl } from "#/hooks/use-cloud-mcp-settings-url";
 import { parseMcpConfig } from "#/utils/mcp-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
@@ -30,6 +32,7 @@ import {
   MarketplaceSection,
   InstallServerModal,
   CustomServerEditor,
+  McpManagedInSettings,
   type McpSectionFilter,
 } from "#/components/features/mcp-page";
 
@@ -43,6 +46,10 @@ export default function MCPPage() {
   const { t } = useTranslation("openhands");
   const { data: settings, isLoading } = useSettings();
   const { mutate: updateMcpServer } = useUpdateMcpServer();
+  // On an OpenHands Enterprise instance with organization MCP servers, they
+  // are managed on its Settings > MCP page instead (OHE-3869).
+  const { url: cloudMcpSettingsUrl, isLoading: isLoadingCloudMcpSettings } =
+    useCloudMcpSettingsUrl();
 
   const [installEntry, setInstallEntry] =
     React.useState<MarketplaceEntry | null>(null);
@@ -94,7 +101,7 @@ export default function MCPPage() {
     );
   };
 
-  if (isLoading || !settings) {
+  if (isLoading || !settings || isLoadingCloudMcpSettings) {
     return (
       <div
         data-testid="mcp-page"
@@ -104,6 +111,23 @@ export default function MCPPage() {
         <div className="flex h-full flex-1 items-center justify-center px-4 lg:px-0">
           <div className="h-8 w-8 rounded-full border-2 border-transparent border-t-contrast animate-spin" />
         </div>
+      </div>
+    );
+  }
+
+  if (cloudMcpSettingsUrl) {
+    return (
+      <div
+        data-testid="mcp-page"
+        className="flex h-full gap-4 lg:gap-10 lg:pl-10"
+      >
+        <ExtensionsNavigation />
+        <main className={settingsLikeMainScrollClassName}>
+          <div className="mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6">
+            <ExtensionsCompactNavigation />
+            <McpManagedInSettings settingsUrl={cloudMcpSettingsUrl} />
+          </div>
+        </main>
       </div>
     );
   }
@@ -191,3 +215,8 @@ export default function MCPPage() {
     </div>
   );
 }
+
+// @spec AWI-001 — Localized section identity
+export const handle = {
+  titleKey: I18nKey.SETTINGS$MCP_TITLE,
+} satisfies RouteTitleHandle;

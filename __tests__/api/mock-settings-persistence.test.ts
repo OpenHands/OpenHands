@@ -228,6 +228,32 @@ describe("mock settings schemas and state", () => {
         choices: ["llm", "none"],
         depends_on: ["confirmation_mode"],
       }),
+      default_runtime: contract("runtime", "string", "local", "major", {
+        choices: ["local", "worktree", "docker"],
+      }),
+      worktree_base: contract("runtime", "string", "default_branch", "major", {
+        choices: ["default_branch", "head", "ref"],
+        depends_on: ["default_runtime=worktree"],
+      }),
+      worktree_base_ref: contract("runtime", "string", null, "major", {
+        depends_on: ["default_runtime=worktree", "worktree_base=ref"],
+      }),
+      worktree_branch_prefix: contract(
+        "runtime",
+        "string",
+        "openhands/",
+        "major",
+        { depends_on: ["default_runtime=worktree"] },
+      ),
+      container_memory: contract("runtime", "string", null, "major", {
+        depends_on: ["default_runtime=docker"],
+      }),
+      container_cpus: contract("runtime", "number", null, "major", {
+        depends_on: ["default_runtime=docker"],
+      }),
+      container_browser: contract("runtime", "boolean", true, "major", {
+        depends_on: ["default_runtime=docker"],
+      }),
     };
     for (const version of ["", "/v1"]) {
       for (const [schema, expected] of [
@@ -305,7 +331,11 @@ describe("mock settings schemas and state", () => {
       expect(response.ok).toBe(true);
       expect(body).toMatchObject({
         model_name: "ConversationSettings",
-        sections: [{ key: "general" }, { key: "verification" }],
+        sections: [
+          { key: "general" },
+          { key: "verification" },
+          { key: "runtime" },
+        ],
       });
     }
   });

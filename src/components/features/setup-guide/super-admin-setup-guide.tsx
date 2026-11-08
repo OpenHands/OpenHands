@@ -10,6 +10,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight, Check, ClipboardList, X } from "lucide-react";
 import { getLockedCloudHost } from "#/api/agent-server-config";
+import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
@@ -88,8 +89,10 @@ export default function SuperAdminSetupGuide() {
     guideOrgId,
     visible,
     refetch,
+    dismiss,
   } = useSuperAdminSetupGuide();
   const [open, setOpen] = useState(true);
+  const [confirmDismiss, setConfirmDismiss] = useState(false);
   const tourActive = useSyncExternalStore(
     subscribeGuidedTourActive,
     isGuidedTourActive,
@@ -308,7 +311,12 @@ export default function SuperAdminSetupGuide() {
                 type="button"
                 aria-label={t(I18nKey.BUTTON$CLOSE)}
                 className={ICON_BUTTON_CLASS}
-                onClick={() => setOpen(false)}
+                // Closing asks whether to turn the guide off for good;
+                // cancelling leaves it closed to the pill.
+                onClick={() => {
+                  setOpen(false);
+                  setConfirmDismiss(true);
+                }}
               >
                 <X className="size-4" strokeWidth={2} aria-hidden />
               </button>
@@ -420,6 +428,17 @@ export default function SuperAdminSetupGuide() {
         <ClipboardList className="size-4" strokeWidth={2} aria-hidden />
         {title}
       </button>
+
+      {confirmDismiss ? (
+        <ConfirmationModal
+          text={t(I18nKey.ONBOARDING$SETUP_GUIDE_DISMISS_CONFIRM)}
+          onConfirm={() => {
+            setConfirmDismiss(false);
+            dismiss();
+          }}
+          onCancel={() => setConfirmDismiss(false)}
+        />
+      ) : null}
     </div>
   );
 }

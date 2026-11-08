@@ -1,5 +1,5 @@
 import { Tooltip } from "@heroui/react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { AUTOMATION_RUN_ACTIVITY_LIMIT } from "#/hooks/query/use-latest-automation-runs";
@@ -130,14 +130,18 @@ function RunActivityBar({
       >
         <span
           className={cn(
-            "w-1 shrink-0 origin-bottom rounded-[1px]",
+            "h-(--automation-run-bar-height) w-1 shrink-0 origin-bottom rounded-[1px]",
             "transition-transform duration-100 ease-out motion-reduce:transition-none",
             // Grow the hovered/focused bar so it reads clearly among neighbors.
             "group-hover/spark-bar:scale-x-[1.4] group-hover/spark-bar:scale-y-[1.15]",
             "group-focus-visible/spark-bar:scale-x-[1.4] group-focus-visible/spark-bar:scale-y-[1.15]",
             barColorClassForStatus(display.badgeStatus),
           )}
-          style={{ height: durationMsToSparklineBarHeightPx(durationMs) }}
+          style={
+            {
+              "--automation-run-bar-height": `${durationMsToSparklineBarHeightPx(durationMs)}px`,
+            } as CSSProperties
+          }
         />
       </NavigationLink>
     </Tooltip>
@@ -177,8 +181,12 @@ export function AutomationRunActivitySparkline({
       aria-label={t(I18nKey.FEATURED_AUTOMATIONS$RUN_ACTIVITY_LABEL, {
         count: bars.length,
       })}
-      className="inline-flex shrink-0 items-end"
-      style={{ height: AUTOMATION_RUN_ACTIVITY_TRACK_PX }}
+      className="inline-flex h-(--automation-run-activity-track-height) shrink-0 items-end"
+      style={
+        {
+          "--automation-run-activity-track-height": `${AUTOMATION_RUN_ACTIVITY_TRACK_PX}px`,
+        } as CSSProperties
+      }
       onMouseDown={(event) => event.preventDefault()}
     >
       {bars.map((run, index) => (

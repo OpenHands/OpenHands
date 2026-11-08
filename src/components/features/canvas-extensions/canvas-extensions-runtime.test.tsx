@@ -1,7 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { createMemoryRouter, RouterProvider, Outlet } from "react-router";
+import CanvasExtensionPage, {
+  handle as extensionPageHandle,
+} from "#/routes/canvas-extension-page";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useAppTitle } from "#/hooks/use-app-title";
 import CanvasExtensionsService from "#/api/canvas-extensions-service";
 import {
   setActiveSelection,
@@ -55,8 +59,10 @@ const extension: InstalledCanvasExtensionInfo = {
 
 function RuntimeProbe() {
   const runtime = useCanvasExtensionsRuntime();
+  const title = useAppTitle();
   return (
     <div>
+      <span data-testid="app-title">{title}</span>
       <span data-testid="page-count">{runtime.pages.length}</span>
       <span data-testid="page-href">{runtime.pages[0]?.href}</span>
       <span data-testid="runtime-error">
@@ -70,18 +76,36 @@ function renderRuntime(
   moduleLoader: (source: string) => Promise<{
     activate: (host: CanvasExtensionHost) => void | (() => void);
   }>,
+  path = "/",
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  const router = createMemoryRouter(
+    [
+      {
+        element: (
+          <CanvasExtensionsRuntimeProvider moduleLoader={moduleLoader}>
+            <RuntimeProbe />
+            <Outlet />
+          </CanvasExtensionsRuntimeProvider>
+        ),
+        children: [
+          {
+            path: "/extensions/:extensionName/*",
+            handle: extensionPageHandle,
+            element: <CanvasExtensionPage />,
+          },
+          { path: "*", element: null },
+        ],
+      },
+    ],
+    { initialEntries: [path] },
+  );
   const rendered = render(
     <QueryClientProvider client={queryClient}>
       <ActiveBackendProvider>
-        <MemoryRouter>
-          <CanvasExtensionsRuntimeProvider moduleLoader={moduleLoader}>
-            <RuntimeProbe />
-          </CanvasExtensionsRuntimeProvider>
-        </MemoryRouter>
+        <RouterProvider router={router} />
       </ActiveBackendProvider>
     </QueryClientProvider>,
   );
@@ -134,6 +158,37 @@ describe("CanvasExtensionsRuntimeProvider", () => {
 
     rendered.unmount();
     expect(disposeActivation).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["/extensions/demo-extension/dashboard", "Dashboard | OpenHands"],
+    ["/extensions/demo-extension/dashboard/nested", "Dashboard | OpenHands"],
+    ["/extensions/demo-extension/dashboard-other", "OpenHands"],
+    ["/extensions/demo-extension/DASHBOARD", "OpenHands"],
+    ["/extensions/demo-extension/%64ashboard", "Dashboard | OpenHands"],
+    ["/extensions/other/dashboard", "OpenHands"],
+    ["/", "OpenHands"],
+  ])("sets the browser title for %s", async (path, expectedTitle) => {
+    renderRuntime(
+      async () => ({
+        activate: (host: CanvasExtensionHost) => {
+          host.registerPage("dashboard", ({ container }) => {
+            container.append(document.createTextNode("Dashboard mounted"));
+          });
+        },
+      }),
+      path,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("page-count")).toHaveTextContent("1"),
+    );
+    expect(screen.getByTestId("app-title").textContent).toBe(expectedTitle);
+    if (expectedTitle === "Dashboard | OpenHands") {
+      expect(await screen.findByText("Dashboard mounted")).toBeInTheDocument();
+    } else {
+      expect(screen.queryByText("Dashboard mounted")).not.toBeInTheDocument();
+    }
   });
 
   it("re-activates an extension refreshed without a version change", async () => {

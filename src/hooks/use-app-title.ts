@@ -1,23 +1,25 @@
-import { matchPath, useLocation, useParams } from "react-router";
+import { useMatches, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
-import { I18nKey } from "#/i18n/declaration";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
 import { getAgentStateEmoji } from "#/utils/agent-state-emoji";
+import {
+  selectCanvasExtensionPage,
+  useCanvasExtensionsRuntime,
+} from "#/components/features/canvas-extensions/canvas-extensions-runtime";
+import {
+  getInterfaceCopy,
+  hasAutomationInterface,
+} from "#/manifests/automation-interface";
+import type { RouteTitleHandle } from "#/routes/title-handle";
 
 const APP_TITLE = "OpenHands";
 
-const SECTION_TITLES = [
-  { path: "/", key: I18nKey.BUTTON$HOME },
-  { path: "/conversations", key: I18nKey.SIDEBAR$CONVERSATIONS },
-  { path: "/automations/*", key: I18nKey.FEATURED_AUTOMATIONS$SECTION_TITLE },
-  { path: "/settings/*", key: I18nKey.SETTINGS$TITLE },
-];
-
-// @spec AWI-001 — Localized section titles with stable conversation status
+// @spec AWI-001 — Localized matched-route titles with stable conversation status
 export const useAppTitle = () => {
-  const { pathname } = useLocation();
+  const matches = useMatches();
   const { t } = useTranslation("openhands");
+  const { pages } = useCanvasExtensionsRuntime();
   const { conversationId } = useParams<{ conversationId: string }>();
   const { data: conversation } = useUserConversation(conversationId ?? null);
   const liveExecutionStatus = useConversationStateStore((state) =>
@@ -33,10 +35,26 @@ export const useAppTitle = () => {
       : APP_TITLE;
 
   if (!conversationId) {
-    const section = SECTION_TITLES.find(({ path }) =>
-      matchPath(path, pathname),
-    );
-    return section ? `${t(section.key)} | ${APP_TITLE}` : APP_TITLE;
+    const match = [...matches].reverse().find(({ handle }) => {
+      const titleHandle = handle as RouteTitleHandle | undefined;
+      return titleHandle?.titleKey || titleHandle?.titleSource;
+    });
+    const handle = match?.handle as RouteTitleHandle | undefined;
+    let sectionTitle: string | undefined;
+    if (handle?.titleSource === "automation") {
+      sectionTitle = hasAutomationInterface()
+        ? getInterfaceCopy().sidebarLabel
+        : undefined;
+    } else if (handle?.titleSource === "extension") {
+      sectionTitle = selectCanvasExtensionPage(
+        pages,
+        match?.params.extensionName ?? "",
+        match?.params["*"] ?? "",
+      )?.contribution.title;
+    } else if (handle?.titleKey) {
+      sectionTitle = t(handle.titleKey);
+    }
+    return sectionTitle ? `${sectionTitle} | ${APP_TITLE}` : APP_TITLE;
   }
 
   const executionStatus =

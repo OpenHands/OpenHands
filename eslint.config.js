@@ -93,6 +93,20 @@ function createNoDirectAgentServerFetchRule() {
   };
 }
 
+// Retain these exact JS-config/plugin colors pending their token audit.
+// Do not exempt raw palettes or whole namespaces.
+const legacyColorClasses = [
+  // hero.ts / @heroui/theme.
+  "bg-background",
+  "bg-content1",
+  "text-primary-foreground",
+  // tailwind.config.js.
+  "bg-status-fail-bg",
+  "text-status-fail-text",
+  "text-content-muted",
+  "text-modal-muted",
+];
+
 export default [
   // Files / dirs we never want to lint.
   {
@@ -403,7 +417,8 @@ export default [
   // and ToggleSwitch callers can dim the control for disabled/pending states.
   // Carets expose layout and text color; their padding/shape stay internal.
   // Stateful carets own rotation through isOpen; generic icons retain orientation.
-  // Next: finish the color migration before promoting to error; define contracts
+  // Three audited owners below reject raw colors; finish migration before
+  // promoting globally. Define contracts
   // for the remaining UI primitives and audit dynamic styles for no-inline-styles.
   // 0.2.0 also improves render-prop, destructuring, barrel-export, and custom
   // animation recognition. Vue/Svelte support adds no new rule names or parsers
@@ -449,19 +464,7 @@ export default [
       "shadcn/no-raw-colors": [
         "warn",
         {
-          // Retain existing JS-config/plugin exceptions for a separate token audit.
-          // Exact classes only: do not exempt raw palettes or whole namespaces.
-          allow: [
-            // hero.ts / @heroui/theme: semantic colors pending the token audit.
-            "bg-background",
-            "bg-content1",
-            "text-primary-foreground",
-            // tailwind.config.js: existing named tokens, pending theme migration.
-            "bg-status-fail-bg",
-            "text-status-fail-text",
-            "text-content-muted",
-            "text-modal-muted",
-          ],
+          allow: legacyColorClasses,
         },
       ],
       // Warning-only while measured layout, portal placement, accessibility
@@ -486,6 +489,56 @@ export default [
     },
   },
   {
+    // These completed owners use named recipes; other geometry stays warning-only.
+    files: [
+      "src/components/shared/modals/modal-backdrop.tsx",
+      "src/components/features/backends/environment-switch-overlay.tsx",
+      "src/components/features/chat/components/context-window-meter.tsx",
+      "src/components/features/conversation-panel/conversation-panel-wrapper.tsx",
+      "src/components/features/command-menu/command-menu.tsx",
+      "src/components/features/backends/backend-version.tsx",
+      "src/components/features/settings/settings-nav-header.tsx",
+      "src/components/features/settings/backend-synced-settings-badge.tsx",
+      "src/utils/custom-toast-handlers.tsx",
+      "src/utils/form-control-classes.ts",
+      "src/components/features/chat/chat-status-indicator.tsx",
+      "src/components/features/chat/components/context-window-ring.tsx",
+      "src/components/features/chat/user-message-body.tsx",
+      "src/components/features/conversation/conversation-main/conversation-main.tsx",
+    ],
+    rules: { "shadcn/no-arbitrary-values": "error" },
+  },
+  {
+    // Audit literal class recipes that dynamic map/helper lookups hide.
+    // Keep broad string scanning away from unrelated program tags.
+    files: [
+      "src/components/features/backends/backend-status-dot.tsx",
+      "src/components/features/markdown/blockquote.tsx",
+      "src/components/features/mcp-page/mcp-server-health.tsx",
+    ],
+    rules: {
+      "shadcn/no-raw-colors": [
+        "warn",
+        { allow: legacyColorClasses, scanAllStrings: true },
+      ],
+    },
+  },
+  {
+    // These three owners are migrated. Start-task palette findings remain
+    // warning-only above until their separate migration is complete.
+    files: [
+      "src/components/features/backends/backend-status-dot.tsx",
+      "src/components/features/markdown/blockquote.tsx",
+      "src/components/features/mcp-page/mcp-server-health.tsx",
+    ],
+    rules: {
+      "shadcn/no-raw-colors": [
+        "error",
+        { allow: legacyColorClasses, scanAllStrings: true },
+      ],
+    },
+  },
+  {
     // Primitive implementations own appearance and variant helpers. Token and
     // unknown-class checks still apply to their definitions.
     files: ["src/ui/**/*.{ts,tsx}"],
@@ -493,6 +546,17 @@ export default [
       "shadcn/no-restyle": "off",
       "shadcn/require-static-classes": "off",
     },
+  },
+  {
+    // Appearance owners already use class recipes and semantic variables.
+    // Keep the rest warning-only until each owner's dynamic styles are audited.
+    files: [
+      "src/ui/divider.tsx",
+      "src/ui/toggle-switch.tsx",
+      "src/ui/combobox-caret.tsx",
+      "src/components/features/backends/backend-status-dot.tsx",
+    ],
+    rules: { "shadcn/no-inline-styles": "error" },
   },
   {
     // Public embedding API: this owner must forward arbitrary caller styles.

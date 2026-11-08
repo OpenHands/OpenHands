@@ -14,4 +14,4 @@ export const clientLoader = () => {
   return null;
 };
 
-export { default } from "./home";
+export { default, handle } from "./home";

@@ -25,6 +25,7 @@ import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { useFreeModelsStore } from "#/stores/free-models-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import ConversationService from "#/api/conversation-service/conversation-service.api";
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -38,7 +39,6 @@ vi.mock("react-i18next", async () => {
         const translations: Record<string, string> = {
           CONVERSATION$CREATED: "Created",
           CONVERSATION$AGO: "ago",
-          CONVERSATION$UPDATED: "Updated",
           COMMON$NO_REPOSITORY: "No repository",
           CONVERSATION$ACP_AGENT_GENERIC: "ACP",
           CONVERSATION_PANEL$PIN_CONVERSATION: "Pin conversation",
@@ -472,6 +472,40 @@ describe("ConversationCard", () => {
 
     await vi.waitFor(() =>
       expect(onContextMenuToggle).toHaveBeenCalledWith(false),
+    );
+  });
+
+  it("opens the VS Code URL without an opener reference", async () => {
+    const user = userEvent.setup();
+    const vscodeUrl = "https://vscode.example.dev/?tkn=abc&folder=workspace";
+    vi.spyOn(ConversationService, "getVSCodeUrl").mockResolvedValue({
+      vscode_url: vscodeUrl,
+    });
+    renderWithProviders(
+      <ConversationCard
+        conversationId="conv-1"
+        onDelete={onDelete}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        showOptions
+        contextMenuOpen
+        onContextMenuToggle={vi.fn()}
+      />,
+    );
+
+    await user.click(
+      within(screen.getByTestId("context-menu")).getByTestId(
+        "download-vscode-button",
+      ),
+    );
+
+    await vi.waitFor(() =>
+      expect(window.open).toHaveBeenCalledWith(
+        vscodeUrl,
+        "_blank",
+        "noopener,noreferrer",
+      ),
     );
   });
 
@@ -1297,5 +1331,60 @@ describe("ConversationCard", () => {
       screen.getByTestId("conversation-pin-toggle-conversation-1"),
     ).toBeVisible();
     expect(screen.getByRole("time")).toBeInTheDocument();
+  });
+
+  it("dims the title and grays the dot for an explicitly archived row with a present runtime", () => {
+    // A RUNNING conversation archived through the menu: the chip, the dimmed
+    // title, and the archive dot must agree even though the runtime is fine.
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        executionStatus={ExecutionStatus.RUNNING}
+        sandboxStatus="RUNNING"
+        isArchived
+      />,
+    );
+
+    const card = screen.getByTestId("conversation-card");
+    expect(
+      within(card).getByTestId("conversation-card-archived-chip"),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(within(card).getByTestId("conversation-card-title")).toHaveClass(
+      "opacity-60",
+    );
+  });
+
+  it("infers the archived presentation from a missing runtime when isArchived is omitted", () => {
+    // Standalone callers that only know the sandbox status must still see the
+    // archive dot, the dimmed title, and the chip — the false default used to
+    // override the header's missing-runtime fallback.
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        executionStatus={ExecutionStatus.FINISHED}
+        sandboxStatus="MISSING"
+      />,
+    );
+
+    const card = screen.getByTestId("conversation-card");
+    expect(
+      within(card).getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(
+      within(card).queryByTestId("conversation-status-check"),
+    ).not.toBeInTheDocument();
+    expect(within(card).getByTestId("conversation-card-title")).toHaveClass(
+      "opacity-60",
+    );
+    expect(
+      within(card).getByTestId("conversation-card-archived-chip"),
+    ).toBeInTheDocument();
   });
 });

@@ -86,12 +86,40 @@ Create TDD tests for behavioral changes. Keep tests focused on user behavior and
 
 Use the `e2e-testing` skill for suite selection and E2E-specific requirements.
 
-## Specifications and Releases
+## Releases
 
-- Spec files live under `specs/`. Keep spec IDs stable and mark deprecated specs with strikethrough rather than renumbering them.
-- Tag implementation code and tests with `// @spec BM-002 — Short title` comments immediately above the relevant block so coverage remains grep-able.
 - Follow `.agents/skills/release.md` for release automation. Never hand-edit a release-please branch.
 
 ## DigitalOcean Managed Agents
 
 Before changing `scripts/mars-*` / `scripts/tunnel-*`, `src/api/mars/`, the Managed Agents UI (`src/components/features/backends/managed-agents/`) or the MARS hooks, read `src/api/mars/AGENTS.md`.
+
+## Dependency release-age policy
+
+- Wait at least seven days after publication before adding or updating a
+  third-party npm or PyPI version, including transitive lockfile changes.
+  A weekly update schedule alone does not enforce this minimum age.
+- Keep the npm Dependabot `cooldown.default-days: 7`. This repository has
+  no Python Dependabot entry or uv project/lock. Apply the PyPI age rule to
+  version changes in Docker or launcher install commands as well.
+  Existing named first-party exceptions do not exempt their third-party
+  dependencies. Do not add broad exemptions or disable the cutoff to make a
+  resolver succeed.
+- Verify the exact version's publication/upload time from npm or PyPI metadata
+  rather than the package's creation date.
+  If age cannot be established, report the missing evidence rather than guess.
+- Security updates can bypass Dependabot cooldown. An urgent exception needs
+  explicit maintainer approval recorded in the PR with the package, version,
+  advisory/reason, and publication time. Agents must not grant themselves an
+  exception. Keep overrides narrow and remove temporary exceptions afterward.
+- Repository resolver settings do not protect downstream `pip install` or
+  `uv tool install` consumers, and do not retroactively validate existing locks.
+  Use the committed lock for reproducible installs; review newly resolved
+  artifacts before committing a lock update.
+
+This repository pins npm 11.12.1 in `package.json` (`packageManager` and Volta);
+use `npm --version` to confirm the active tool. The previous npm 10.5.0 pin
+silently ignored `--min-release-age`. For manual npm dependency resolution, run
+`npm install --min-release-age=7` (days), or verify registry timestamps before
+committing the result. The option requires npm >= 11.10. `npm ci` replays the
+lock and is not proof that newly locked versions meet the age rule.

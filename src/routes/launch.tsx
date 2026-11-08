@@ -5,6 +5,7 @@ import { PluginLaunchModal } from "#/components/features/launch/plugin-launch-mo
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { I18nKey } from "#/i18n/declaration";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 
 type ErrorType = "no_plugins" | "invalid_format" | "creation_failed";
 
@@ -135,6 +136,7 @@ function ErrorDisplay({
 }
 
 export default function LaunchRoute() {
+  const { backend } = useActiveBackend();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { t } = useTranslation("openhands");
@@ -195,6 +197,7 @@ export default function LaunchRoute() {
     <div className="h-full" data-testid="launch-route">
       <PluginLaunchModal
         plugins={parseResult.plugins}
+        parametersSupported={backend.kind !== "local"}
         message={parseResult.message}
         isLoading={createConversation.isPending}
         onStartConversation={handleStartConversation}
