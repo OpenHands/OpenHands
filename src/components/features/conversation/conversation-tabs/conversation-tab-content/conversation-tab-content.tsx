@@ -17,6 +17,7 @@ const BrowserTab = lazy(() => import("#/routes/browser-tab"));
 const PlannerTab = lazy(() => import("#/routes/planner-tab"));
 const TaskListTab = lazy(() => import("#/routes/task-list-tab"));
 const UsageTab = lazy(() => import("#/routes/usage-tab"));
+const ResourcesTab = lazy(() => import("#/routes/resources-tab"));
 const Terminal = lazy(() => import("#/components/features/terminal/terminal"));
 
 const TAB_CONFIG = {
@@ -27,6 +28,7 @@ const TAB_CONFIG = {
   terminal: { component: Terminal },
   planner: { component: PlannerTab },
   usage: { component: UsageTab },
+  resources: { component: ResourcesTab },
 };
 
 export function ConversationTabContent() {

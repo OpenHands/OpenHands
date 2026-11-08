@@ -37,6 +37,25 @@ export const AGENT_PROFILES_QUERY_KEYS = {
     ["agent-profiles", backendId, orgId, "detail", name] as const,
 } as const;
 
+export const CONVERSATION_RESOURCES_QUERY_KEYS = {
+  all: ["conversation-resources"] as const,
+  detail: (
+    backendId: string,
+    connectionRevision: number,
+    orgId: string | null,
+    conversationId: string | undefined,
+    runtimeUrl: string | null | undefined,
+  ) =>
+    [
+      "conversation-resources",
+      backendId,
+      connectionRevision,
+      orgId,
+      conversationId,
+      runtimeUrl,
+    ] as const,
+} as const;
+
 export const TOOL_CATALOG_QUERY_KEYS = {
   all: ["tool-catalog"] as const,
 } as const;

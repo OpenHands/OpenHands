@@ -787,7 +787,7 @@ describe("ConversationTabs localStorage behavior", () => {
 
       // Wraps around the start of the strip.
       await user.keyboard("{ArrowLeft}{ArrowLeft}");
-      expect(screen.getByTestId("conversation-tab-usage")).toHaveFocus();
+      expect(screen.getByTestId("conversation-tab-resources")).toHaveFocus();
     });
 
     it("activates the focused tab with Enter", async () => {
