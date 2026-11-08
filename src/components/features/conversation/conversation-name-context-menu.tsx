@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom";
-import { ExternalLink, Gauge, Share2 } from "lucide-react";
+import { ArchiveRestore, ExternalLink, Gauge, Share2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -30,6 +30,7 @@ interface ConversationNameContextMenuProps {
   onRename?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDelete?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onUnarchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDisplayCost?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowAgentTools?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowSkills?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -94,6 +95,7 @@ export function ConversationNameContextMenu({
   onRename,
   onDelete,
   onStop,
+  onUnarchive,
   onDisplayCost,
   onShowAgentTools,
   onShowSkills,
@@ -163,7 +165,7 @@ export function ConversationNameContextMenu({
   }, [onClose, anchorElement]);
   const hasTools = Boolean(onShowAgentTools || onShowSkills || onShowHooks);
   const hasInfo = Boolean(onDisplayCost);
-  const hasControl = Boolean(onStop || onDelete);
+  const hasControl = Boolean(onStop || onUnarchive || onDelete);
   const stopLabelKey =
     backend.kind === "cloud"
       ? I18nKey.COMMON$CLOSE_CONVERSATION_STOP_RUNTIME
@@ -357,6 +359,15 @@ export function ConversationNameContextMenu({
             />
           </ContextMenuListItem>
         </ArchivedDisabledTooltip>
+      )}
+
+      {onUnarchive && (
+        <ContextMenuListItem testId="unarchive-button" onClick={onUnarchive}>
+          <ConversationNameContextMenuIconText
+            icon={<ArchiveRestore size={16} aria-hidden />}
+            text={t(I18nKey.COMMON$UNARCHIVE_CONVERSATION)}
+          />
+        </ContextMenuListItem>
       )}
 
       {onDelete && (
