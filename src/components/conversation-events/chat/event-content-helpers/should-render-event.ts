@@ -107,11 +107,10 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
       return false;
     }
 
-    // A reaction shows as a chip on its message (MessageReactions), so the
-    // react / unreact tool call itself stays out of the chat.
-    if ((["ReactAction", "UnreactAction"] as string[]).includes(actionType)) {
-      return false;
-    }
+    // A react / unreact call stays visible while it has no observation (the
+    // UI list swaps an action for its observation), so the person sees the
+    // emoji and message they are asked to confirm. Its successful
+    // observation is hidden below: the reaction then shows as a chip.
 
     // The model switch tool reuses the same inline model message UI as
     // `/model <profile>` once the observation arrives.

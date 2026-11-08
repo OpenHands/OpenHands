@@ -289,7 +289,7 @@ describe("shouldRenderEvent - /goal loop re-prompts", () => {
 });
 
 describe("shouldRenderEvent - reactions", () => {
-  it("hides the react / unreact tool calls, which show as chips instead", () => {
+  it("shows a pending react / unreact call and hides its successful result", () => {
     const react = createOtherActionEvent("react-1");
     const reactAction = {
       ...react,
@@ -311,8 +311,18 @@ describe("shouldRenderEvent - reactions", () => {
       },
     } as unknown as OpenHandsEvent;
 
-    expect(shouldRenderEvent(reactAction)).toBe(false);
-    expect(shouldRenderEvent(unreactAction)).toBe(false);
+    // Pending (for example awaiting confirmation): the person sees the call.
+    expect(shouldRenderEvent(reactAction)).toBe(true);
+    expect(shouldRenderEvent(unreactAction)).toBe(true);
+    // Done: the observation replaces the call and the chip shows instead.
     expect(shouldRenderEvent(observation)).toBe(false);
+    const failed = {
+      ...observation,
+      observation: {
+        ...(observation as unknown as { observation: object }).observation,
+        is_error: true,
+      },
+    } as unknown as OpenHandsEvent;
+    expect(shouldRenderEvent(failed)).toBe(true);
   });
 });
