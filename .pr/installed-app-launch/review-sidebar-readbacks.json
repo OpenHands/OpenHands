@@ -1,0 +1,55 @@
+{
+  "rows": [
+    {
+      "ok": true,
+      "value": {
+        "title": "Apps for Agent Canvas | OpenHands",
+        "timeOrigin": 1794105229824.1
+      }
+    },
+    {
+      "ok": true,
+      "value": {
+        "title": "Automate | OpenHands",
+        "timeOrigin": 1794105229824.1
+      }
+    },
+    {
+      "ok": true,
+      "value": {
+        "title": "New Chat | OpenHands",
+        "timeOrigin": 1794105229824.1
+      }
+    },
+    {
+      "ok": true,
+      "value": {
+        "title": "Model Context Protocol (MCP) | OpenHands",
+        "timeOrigin": 1794105229824.1
+      }
+    }
+  ],
+  "errors": {
+    "ok": true,
+    "since": "last clear",
+    "summary": {},
+    "pageErrors": 0,
+    "appErrors": 0,
+    "warnings": 0,
+    "events": []
+  },
+  "recording": {
+    "ok": true,
+    "path": "/var/folders/n3/g9qp4sy16dd0r2c7blw23ls00000gn/T/openhands-verify/pr18635-review-fixed/evidence/AWI-001/sidebar-review-fixed.webm",
+    "seconds": 1.7,
+    "recordedSeconds": 0.8,
+    "size": "1440x1000",
+    "fps": 10,
+    "captures": 7,
+    "changes": 6,
+    "misses": 0,
+    "capped": false,
+    "cutSeconds": 0,
+    "url": "http://127.0.0.1:19100/mcp"
+  }
+}

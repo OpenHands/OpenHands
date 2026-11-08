@@ -1,0 +1,88 @@
+
+> @openhands/agent-canvas@1.37.0 test
+> npm run make-i18n && vitest run --maxWorkers=2
+
+
+> @openhands/agent-canvas@1.37.0 make-i18n
+> node scripts/make-i18n-translations.cjs
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./src/styles/agent-server-ui-style-scope" without a file extension (vite.config.ts:16:8). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.5 /Users/fangjiaxin/Documents/cs146s/OpenHands
+
+Not implemented: navigation to another Document
+ ❯ |jsdom| __tests__/scripts/docker-runtime-packages.test.ts (3 tests | 1 failed) 247ms
+   ❯ Docker runtime package metadata (3)
+     × selects a snapshot after the seven-day observation period 236ms
+ ❯ |jsdom| __tests__/scripts/docker-session-key-policy.test.ts (2 tests | 2 failed) 17ms
+   ❯ Docker session-key injection policy (2)
+     × does not inject the key by default 7ms
+     × requires an explicit true value and warns when enabled 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |jsdom| __tests__/scripts/docker-runtime-packages.test.ts > Docker runtime package metadata > selects a snapshot after the seven-day observation period
+Error: Command failed: python3 /Users/fangjiaxin/Documents/cs146s/OpenHands/.github/scripts/update_debian_snapshot.py --dockerfile /var/folders/n3/g9qp4sy16dd0r2c7blw23ls00000gn/T/canvas-dockerfile-EqaeIY/Dockerfile --now 2026-10-07T23:03:00Z --skip-network-check
+Traceback (most recent call last):
+  File "/Users/fangjiaxin/Documents/cs146s/OpenHands/.github/scripts/update_debian_snapshot.py", line 9, in <module>
+    from datetime import UTC, datetime, timedelta
+ImportError: cannot import name 'UTC' from 'datetime' (/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/datetime.py)
+
+ ❯ __tests__/scripts/docker-runtime-packages.test.ts:47:5
+     45|     );
+     46|
+     47|     execFileSync(
+       |     ^
+     48|       "python3",
+     49|       [
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  |jsdom| __tests__/scripts/docker-session-key-policy.test.ts > Docker session-key injection policy > does not inject the key by default
+AssertionError: expected 127 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 127
+
+ ❯ resolveStaticServerArgs __tests__/scripts/docker-session-key-policy.test.ts:48:25
+     46|     env,
+     47|   });
+     48|   expect(result.status).toBe(0);
+       |                         ^
+     49|   return {
+     50|     args: result.stdout.trim() ? result.stdout.trim().split("\n") : [],
+ ❯ __tests__/scripts/docker-session-key-policy.test.ts:57:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  |jsdom| __tests__/scripts/docker-session-key-policy.test.ts > Docker session-key injection policy > requires an explicit true value and warns when enabled
+AssertionError: expected 127 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 127
+
+ ❯ resolveStaticServerArgs __tests__/scripts/docker-session-key-policy.test.ts:48:25
+     46|     env,
+     47|   });
+     48|   expect(result.status).toBe(0);
+       |                         ^
+     49|   return {
+     50|     args: result.stdout.trim() ? result.stdout.trim().split("\n") : [],
+ ❯ __tests__/scripts/docker-session-key-policy.test.ts:61:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed | 886 passed (888)
+      Tests  3 failed | 10282 passed | 1 skipped | 7 todo (10293)
+   Start at  02:27:42
+   Duration  424.30s (tests 37%, import 28%, environment 24%, setup 9%, transform 2%)
+

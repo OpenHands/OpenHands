@@ -1,0 +1,117 @@
+{
+  "rows": [
+    {
+      "requested": "/settings/does-not-exist",
+      "observed": {
+        "ok": true,
+        "value": {
+          "title": "OpenHands",
+          "path": "/settings/does-not-exist",
+          "notFound": true
+        }
+      }
+    },
+    {
+      "requested": "/settings/llm/deeper",
+      "observed": {
+        "ok": true,
+        "value": {
+          "title": "OpenHands",
+          "path": "/settings/llm/deeper",
+          "notFound": true
+        }
+      }
+    },
+    {
+      "requested": "/automations/a/b",
+      "observed": {
+        "ok": true,
+        "value": {
+          "title": "OpenHands",
+          "path": "/automations/a/b",
+          "notFound": true
+        }
+      }
+    },
+    {
+      "requested": "/",
+      "observed": {
+        "ok": true,
+        "value": {
+          "title": "New Chat | OpenHands",
+          "path": "/",
+          "notFound": false
+        }
+      }
+    },
+    {
+      "requested": "/conversations",
+      "observed": {
+        "ok": true,
+        "value": {
+          "title": "New Chat | OpenHands",
+          "path": "/conversations",
+          "notFound": false
+        }
+      }
+    },
+    {
+      "requested": "/settings/llm",
+      "observed": {
+        "ok": true,
+        "value": {
+          "title": "Settings | OpenHands",
+          "path": "/settings/llm",
+          "notFound": false
+        }
+      }
+    },
+    {
+      "requested": "/automations",
+      "observed": {
+        "ok": true,
+        "value": {
+          "title": "Automate | OpenHands",
+          "path": "/automations",
+          "notFound": false
+        }
+      }
+    },
+    {
+      "requested": "/mcp",
+      "observed": {
+        "ok": true,
+        "value": {
+          "title": "Model Context Protocol (MCP) | OpenHands",
+          "path": "/mcp",
+          "notFound": false
+        }
+      }
+    },
+    {
+      "requested": "/apps",
+      "observed": {
+        "ok": true,
+        "value": {
+          "title": "Apps for Agent Canvas | OpenHands",
+          "path": "/apps",
+          "notFound": false
+        }
+      }
+    }
+  ],
+  "recording": {
+    "ok": true,
+    "path": "/var/folders/n3/g9qp4sy16dd0r2c7blw23ls00000gn/T/openhands-verify/pr18635-review-fixed/evidence/AWI-001/review-fixed.webm",
+    "seconds": 6.8,
+    "recordedSeconds": 11.4,
+    "size": "1440x1000",
+    "fps": 10,
+    "captures": 14,
+    "changes": 5,
+    "misses": 2,
+    "capped": false,
+    "cutSeconds": 0,
+    "url": "http://127.0.0.1:19100/apps"
+  }
+}

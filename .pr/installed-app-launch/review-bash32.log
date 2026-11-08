@@ -1,0 +1,5 @@
+GNU bash, version 3.2.57(1)-release (arm64-apple-darwin24)
+Copyright (C) 2007 Free Software Foundation, Inc.
+
+exit=127
+/bin/bash: line 10: STATIC_SERVER_SESSION_KEY_ARGS[@]: unbound variable

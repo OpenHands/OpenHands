@@ -1,0 +1,412 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> @openhands/agent-canvas@1.37.0 prelint
+> npm run make-i18n
+
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> @openhands/agent-canvas@1.37.0 make-i18n
+> node scripts/make-i18n-translations.cjs
+
+
+> @openhands/agent-canvas@1.37.0 lint
+> npm run typecheck && eslint src && prettier --check src/**/*.{ts,tsx}
+
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> @openhands/agent-canvas@1.37.0 typecheck
+> react-router typegen && tsc
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./src/styles/agent-server-ui-style-scope" without a file extension (vite.config.ts:16:8). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./src/styles/agent-server-ui-style-scope" without a file extension (vite.config.ts:16:8). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/api/automation-service/automation-service.api.ts
+   1:39  warning  '/Users/fangjiaxin/Documents/cs146s/OpenHands/src/types/automation.ts' imported multiple times  import-x/no-duplicates
+  21:8   warning  '/Users/fangjiaxin/Documents/cs146s/OpenHands/src/types/automation.ts' imported multiple times  import-x/no-duplicates
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/conversation-events/chat/event-message-components/corrective-nudge-message.tsx
+  19:19  warning  "mt-[5px]" hardcodes an off-token value. Use "mt-1.25" instead (same value, on the scale)  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/conversation-events/chat/task-tracking/task-item.tsx
+  21:38  warning  "text-[#ffffff]" hardcodes a color. Nearest theme tokens: text-primary, text-content-2. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  23:47  warning  "text-[#ffffff]" hardcodes a color. Nearest theme tokens: text-primary, text-content-2. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  27:38  warning  "text-[#ffffff]" hardcodes a color. Nearest theme tokens: text-primary, text-content-2. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/conversation-events/chat/task-tracking/task-list-section.tsx
+  20:36  warning  "tracking-[0.11px]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/automations/add-automation-menu.tsx
+  145:25  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/automations/automation-view-toggle.tsx
+  108:60  warning  "min-w-[10rem]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+  155:25  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only        shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/automations/dashboard/automations-dashboard-controls.tsx
+  166:21  warning  "min-w-[16rem]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/automations/detail/run-logs-modal.tsx
+  256:26  warning  "border-[var(--oh-primary)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/automations/detail/run-phase.tsx
+  76:20  warning  "max-w-[28rem]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+  76:38  warning  "max-w-[12rem]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/automations/kebab-menu.tsx
+  141:25  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/automations/setup/automation-setup-panel.tsx
+    1:39  warning  '/Users/fangjiaxin/Documents/cs146s/OpenHands/src/types/automation.ts' imported multiple times  import-x/no-duplicates
+  112:48  warning  '/Users/fangjiaxin/Documents/cs146s/OpenHands/src/types/automation.ts' imported multiple times  import-x/no-duplicates
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/backends/manage-backends-modal.tsx
+  171:41  warning  "h-[80vh]" hardcodes an off-token value. Use a theme token or scale value instead      shadcn/no-arbitrary-values
+  171:54  warning  "max-h-[70vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/btw-messages.tsx
+  22:17  warning  "max-h-[40vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/change-agent-button.tsx
+  172:15  warning  "border-[#597FF4]" hardcodes a color and no declared theme color is close to it. Use one of: accent, base-secondary, basic, border, border-input, border-subtle, canvas-base, content, content-2, contrast, cool-grey-100, cool-grey-200 (+50 more), or declare --color-<name> in src/styles.css    shadcn/no-arbitrary-values
+  172:15  warning  "bg-[#4A67BD]" hardcodes a color. Nearest theme tokens: bg-cool-grey-600. Use one of those, or declare --color-<name> in src/styles.css                                                                                                                                                             shadcn/no-arbitrary-values
+  178:13  warning  "hover:bg-[#597FF4]" hardcodes a color and no declared theme color is close to it. Use one of: accent, base-secondary, basic, border, border-input, border-subtle, canvas-base, content, content-2, contrast, cool-grey-100, cool-grey-200 (+50 more), or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/chat-message.tsx
+  172:11  warning  "border-[#597ff4]" hardcodes a color and no declared theme color is close to it. Use one of: accent, base-secondary, basic, border, border-input, border-subtle, canvas-base, content, content-2, contrast, cool-grey-100, cool-grey-200 (+50 more), or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/components/chat-input-actions.tsx
+  385:17  warning  "top-[-4px]" hardcodes an off-token value. Use a theme token or scale value instead    shadcn/no-arbitrary-values
+  451:15  warning  "top-[-4px]" hardcodes an off-token value. Use a theme token or scale value instead    shadcn/no-arbitrary-values
+  465:25  warning  "max-h-[60vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+  570:31  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only       shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/components/chat-input-container.tsx
+  74:40  warning  "border-[#597FF4]" hardcodes a color and no declared theme color is close to it. Use one of: accent, base-secondary, basic, border, border-input, border-subtle, canvas-base, content, content-2, contrast, cool-grey-100, cool-grey-200 (+50 more), or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/components/chat-input-llm-profile-picker.tsx
+  257:31  warning  Inline style sets maxHeight. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/components/chat-input-model.tsx
+  205:21  warning  "max-h-[60vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/components/context-window-meter.tsx
+  122:37  warning  Inline style sets borderColor. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+  135:33  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values        shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/components/context-window-ring.tsx
+  62:26  warning  Inline style sets stroke. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/git-control-bar-branch-button.tsx
+  52:13  warning  "border-[rgba(71,74,84,0.50)]" hardcodes a color. Nearest theme tokens: border-border, border-border-subtle. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/git-control-bar-repo-button.tsx
+  85:9  warning  "border-[rgba(71,74,84,0.50)]" hardcodes a color. Nearest theme tokens: border-border, border-border-subtle. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/plan-preview.tsx
+   70:20  warning  "border-[#597FF4]" hardcodes a color and no declared theme color is close to it. Use one of: accent, base-secondary, basic, border, border-input, border-subtle, canvas-base, content, content-2, contrast, cool-grey-100, cool-grey-200 (+50 more), or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+   74:36  warning  "tracking-[0.11px]" hardcodes an off-token value. Use a theme token or scale value instead                                                                                                                                                                                                        shadcn/no-arbitrary-values
+   84:38  warning  "tracking-[0.11px]" hardcodes an off-token value. Use a theme token or scale value instead                                                                                                                                                                                                        shadcn/no-arbitrary-values
+  108:27  warning  "text-[#4a67bd]" hardcodes a color. Nearest theme tokens: text-cool-grey-600. Use one of those, or declare --color-<name> in src/styles.css                                                                                                                                                       shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/task-tracking/task-item.tsx
+  25:38  warning  "text-[#ffffff]" hardcodes a color. Nearest theme tokens: text-primary, text-content-2. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  27:47  warning  "text-[#ffffff]" hardcodes a color. Nearest theme tokens: text-primary, text-content-2. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  31:38  warning  "text-[#ffffff]" hardcodes a color. Nearest theme tokens: text-primary, text-content-2. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/tool-visualizers/primitives/code-block.tsx
+  55:14  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/tool-visualizers/primitives/markdown-file-preview.tsx
+  186:38  warning  "tracking-[0.11px]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+  197:40  warning  "tracking-[0.11px]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/chat/workspace-mode-selector.tsx
+  76:11  warning  "border-[rgba(71,74,84,0.50)]" hardcodes a color. Nearest theme tokens: border-border, border-border-subtle. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation-panel/budget-progress-bar.tsx
+  24:18  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation-panel/cloud-new-conversation-menu.tsx
+  230:21  warning  Inline style sets position. Style through classes; use CSS custom properties for dynamic values                                                          shadcn/no-inline-styles
+  231:16  warning  Inline style sets top. Style through classes; use CSS custom properties for dynamic values                                                               shadcn/no-inline-styles
+  232:17  warning  Inline style sets left. Style through classes; use CSS custom properties for dynamic values                                                              shadcn/no-inline-styles
+  233:18  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values                                                             shadcn/no-inline-styles
+  333:27  warning  "text-[#F87171]" hardcodes a color. Nearest theme tokens: text-status-error, text-danger. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation-panel/conversation-card/conversation-card-context-menu.tsx
+  98:27  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation-panel/conversation-card/conversation-card-preview.tsx
+  160:17  warning  "max-w-[min(280px,90vw)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation-panel/conversation-card/conversation-card.tsx
+  330:17  warning  "min-w-[3.75rem]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation-panel/conversation-card/conversation-tag-chips.tsx
+  318:25  warning  Inline style sets position. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+  319:20  warning  Inline style sets top. Style through classes; use CSS custom properties for dynamic values       shadcn/no-inline-styles
+  320:21  warning  Inline style sets left. Style through classes; use CSS custom properties for dynamic values      shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation-panel/conversation-panel.tsx
+  1270:13  warning  "w-[calc(100%+0.625rem)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation-panel/exit-conversation-modal.tsx
+  34:23  warning  "bg-[#C63143]" hardcodes a color and no declared theme color is close to it. Use one of: accent, base-secondary, basic, border, border-input, border-subtle, canvas-base, content, content-2, contrast, cool-grey-100, cool-grey-200 (+50 more), or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation-panel/local-new-conversation-menu.tsx
+  156:21  warning  Inline style sets position. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+  157:16  warning  Inline style sets top. Style through classes; use CSS custom properties for dynamic values       shadcn/no-inline-styles
+  158:17  warning  Inline style sets left. Style through classes; use CSS custom properties for dynamic values      shadcn/no-inline-styles
+  159:18  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values     shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation-panel/skills-modal-section.tsx
+  19:38  warning  "tracking-[0.01em]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation/conversation-git-actions-menu.tsx
+  110:14  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation/conversation-main/conversation-main.tsx
+  304:37  warning  Inline style sets transitionProperty. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+  331:21  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values               shadcn/no-inline-styles
+  337:21  warning  Inline style sets transitionProperty. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+  417:22  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values               shadcn/no-inline-styles
+  422:35  warning  Inline style sets transitionProperty. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation/conversation-name-context-menu.tsx
+   83:17  warning  "translate-x-[calc(1rem-1px)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+  200:35  warning  "translate-x-[34%]" hardcodes an off-token value. Use a theme token or scale value instead             shadcn/no-arbitrary-values
+  378:19  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only                       shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation/conversation-name-with-status.tsx
+  135:25  warning  "ml-[3.5px]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation/conversation-overview-context-menu.tsx
+  414:19  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation/conversation-overview-drawer.tsx
+  51:52  warning  "max-h-[min(50vh,420px)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation/conversation-overview-panel.tsx
+  51:23  warning  "max-w-[45%]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation/conversation-overview-toggle.tsx
+  125:20  warning  Inline style sets top. Style through classes; use CSS custom properties for dynamic values    shadcn/no-inline-styles
+  126:21  warning  Inline style sets left. Style through classes; use CSS custom properties for dynamic values   shadcn/no-inline-styles
+  127:22  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation/conversation-tabs/conversation-tabs-context-menu.tsx
+  274:19  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation/conversation-tabs/conversation-tabs.tsx
+  321:21  warning  "left-[-10000px]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/conversation/usage-panel/context-meter.tsx
+  90:27  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/diff-viewer/commit-row.tsx
+  48:25  warning  "w-[7ch]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/diff-viewer/editor-container.tsx
+  19:9  warning  "h-[var(--editor-height)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/diff-viewer/uncommitted-changes-row.tsx
+  38:25  warning  "w-[7ch]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/files-tab/file-quick-row.tsx
+  23:3  warning  "[scrollbar-width:none]" hardcodes an off-token value. Use a theme token or scale value instead     shadcn/no-arbitrary-values
+  23:3  warning  "[-ms-overflow-style:none]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/files-tab/highlighted-source-view.tsx
+  53:16  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/files-tab/workspace-file-discovery-settings.tsx
+  63:11  warning  "max-h-[90vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/home/featured-automations/automation-run-activity-sparkline.tsx
+   69:13  warning  "rounded-[1px]" hardcodes an off-token value. Nearest on the scale: rounded-xs (2px), rounded-facet-control (3px)      shadcn/no-arbitrary-values
+  133:13  warning  "rounded-[1px]" hardcodes an off-token value. Nearest on the scale: rounded-xs (2px), rounded-facet-control (3px)      shadcn/no-arbitrary-values
+  136:13  warning  "group-hover/spark-bar:scale-x-[1.4]" hardcodes an off-token value. Use a theme token or scale value instead           shadcn/no-arbitrary-values
+  136:13  warning  "group-hover/spark-bar:scale-y-[1.15]" hardcodes an off-token value. Use a theme token or scale value instead          shadcn/no-arbitrary-values
+  137:13  warning  "group-focus-visible/spark-bar:scale-x-[1.4]" hardcodes an off-token value. Use a theme token or scale value instead   shadcn/no-arbitrary-values
+  137:13  warning  "group-focus-visible/spark-bar:scale-y-[1.15]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/home/featured-automations/home-automation-menu.tsx
+  149:22  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/home/featured-automations/pinned-automation-card.tsx
+  161:11  warning  "shadow-[inset_0_2px_0_0_var(--oh-focus)]" hardcodes an off-token value. Use a theme token or scale value instead   shadcn/no-arbitrary-values
+  164:11  warning  "shadow-[inset_0_-2px_0_0_var(--oh-focus)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/home/home-chat-launcher.tsx
+  440:48  warning  "pt-[max(4rem,28vh)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/home/shared/clear-button.tsx
+  27:9  warning  "text-[#fff]" hardcodes a color. Nearest theme tokens: text-primary, text-content-2. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/images/image-lightbox.tsx
+  47:21  warning  "max-h-[90vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+  47:21  warning  "max-w-[90vw]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/markdown/code.tsx
+  59:16  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/markdown/headings.tsx
+  24:19  warning  "-tracking-[0.01em]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/mcp-logo-badge.tsx
+  54:9   warning  "shadow-[inset_0_1px_0_color-mix(in_srgb,var(--oh-contrast)_18%,transparent)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+  59:26  warning  Inline style sets backgroundColor. Style through classes; use CSS custom properties for dynamic values                                                 shadcn/no-inline-styles
+  61:11  warning  Inline style sets color. Style through classes; use CSS custom properties for dynamic values                                                           shadcn/no-inline-styles
+  71:21  warning  "p-[22%]" hardcodes an off-token value. Use a theme token or scale value instead                                                                       shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/mcp-page/custom-server-editor.tsx
+  242:21  warning  "max-w-[90vw]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+  242:21  warning  "max-h-[90vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/mcp-page/mcp-logo-stack-badge.tsx
+  8:3  warning  "shadow-[inset_0_1px_0_color-mix(in_srgb,var(--oh-contrast)_18%,transparent)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/onboarding/steps/say-hello-step.tsx
+  82:17  warning  "max-h-[calc(90vh-7rem)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/onboarding/steps/setup-llm-step.tsx
+  344:17  warning  "max-h-[calc(90vh-7rem)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/settings/acp-credentials-section.tsx
+  49:36  warning  "text-[#717888]" hardcodes a color. Nearest theme tokens: text-cool-grey-600, text-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/settings/agent-canvas-update-card.tsx
+  170:11  warning  "max-h-[80vh]" hardcodes an off-token value. Use a theme token or scale value instead                                                                                                                                                                                                                shadcn/no-arbitrary-values
+  214:30  warning  "border-[#3B82F6]/30" hardcodes a color and no declared theme color is close to it. Use one of: accent, base-secondary, basic, border, border-input, border-subtle, canvas-base, content, content-2, contrast, cool-grey-100, cool-grey-200 (+50 more), or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  214:30  warning  "bg-[#1E3A5F]" hardcodes a color. Nearest theme tokens: bg-border-subtle, bg-cool-grey-900. Use one of those, or declare --color-<name> in src/styles.css                                                                                                                                            shadcn/no-arbitrary-values
+  214:30  warning  "text-[#3B82F6]" hardcodes a color and no declared theme color is close to it. Use one of: accent, base-secondary, basic, border, border-input, border-subtle, canvas-base, content, content-2, contrast, cool-grey-100, cool-grey-200 (+50 more), or declare --color-<name> in src/styles.css       shadcn/no-arbitrary-values
+  225:31  warning  "hover:text-[var(--oh-text)]" hardcodes an off-token value. Use a theme token or scale value instead                                                                                                                                                                                                 shadcn/no-arbitrary-values
+  242:31  warning  "hover:text-[var(--oh-text)]" hardcodes an off-token value. Use a theme token or scale value instead                                                                                                                                                                                                 shadcn/no-arbitrary-values
+  327:23  warning  "bg-[#1E3A5F]" hardcodes a color. Nearest theme tokens: bg-border-subtle, bg-cool-grey-900. Use one of those, or declare --color-<name> in src/styles.css                                                                                                                                            shadcn/no-arbitrary-values
+  327:23  warning  "text-[#3B82F6]" hardcodes a color and no declared theme color is close to it. Use one of: accent, base-secondary, basic, border, border-input, border-subtle, canvas-base, content, content-2, contrast, cool-grey-100, cool-grey-200 (+50 more), or declare --color-<name> in src/styles.css       shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/settings/agent-canvas-version-modal.tsx
+  110:25  warning  "text-[#3B82F6]" hardcodes a color and no declared theme color is close to it. Use one of: accent, base-secondary, basic, border, border-input, border-subtle, canvas-base, content, content-2, contrast, cool-grey-100, cool-grey-200 (+50 more), or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  127:29  warning  "bg-[#1E3A5F]" hardcodes a color. Nearest theme tokens: bg-border-subtle, bg-cool-grey-900. Use one of those, or declare --color-<name> in src/styles.css                                                                                                                                       shadcn/no-arbitrary-values
+  127:29  warning  "text-[#3B82F6]" hardcodes a color and no declared theme color is close to it. Use one of: accent, base-secondary, basic, border, border-input, border-subtle, canvas-base, content, content-2, contrast, cool-grey-100, cool-grey-200 (+50 more), or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  135:26  warning  "text-[var(--oh-text)]" hardcodes an off-token value. Use a theme token or scale value instead                                                                                                                                                                                                  shadcn/no-arbitrary-values
+  144:27  warning  "hover:text-[var(--oh-text)]" hardcodes an off-token value. Use a theme token or scale value instead                                                                                                                                                                                            shadcn/no-arbitrary-values
+  152:28  warning  "text-[var(--oh-text)]" hardcodes an off-token value. Use a theme token or scale value instead                                                                                                                                                                                                  shadcn/no-arbitrary-values
+  164:31  warning  "hover:text-[var(--oh-text)]" hardcodes an off-token value. Use a theme token or scale value instead                                                                                                                                                                                            shadcn/no-arbitrary-values
+  229:25  warning  "hover:text-[var(--oh-text)]" hardcodes an off-token value. Use a theme token or scale value instead                                                                                                                                                                                            shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/settings/agent-canvas-version-tile.tsx
+  77:23  warning  "text-[#3B82F6]" hardcodes a color and no declared theme color is close to it. Use one of: accent, base-secondary, basic, border, border-input, border-subtle, canvas-base, content, content-2, contrast, cool-grey-100, cool-grey-200 (+50 more), or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/settings/agent-profiles/agent-profile-actions-menu.tsx
+  196:19  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/settings/brand-button.tsx
+  60:11  warning  "text-[var(--oh-accent-foreground)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/settings/llm-profiles/add-models-modal.tsx
+  393:23  warning  "bg-[var(--oh-background)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+  421:25  warning  "bg-[var(--oh-background)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/settings/llm-profiles/profile-actions-menu.tsx
+  221:19  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/settings/llm-profiles/provider-connection-actions-menu.tsx
+  174:19  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/settings/llm-settings/openai-subscription-auth-card.tsx
+  207:25  warning  "tracking-[0.08em]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/settings/meta-llm-profiles/meta-profile-actions-menu.tsx
+  179:9   warning  "w-[160px]" hardcodes an off-token value. Use "w-40" instead (same value, on the scale)  shadcn/no-arbitrary-values
+  227:19  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only         shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/settings/settings-switch.tsx
+  61:27  warning  "font-[500]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/setup-guide/super-admin-setup-guide.tsx
+  337:33  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/sidebar/mars-session-panel.tsx
+  285:22  warning  "w-[calc(100%+0.625rem)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+  322:21  warning  "max-h-[40vh]" hardcodes an off-token value. Use a theme token or scale value instead             shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/sidebar/sidebar-rail-body.tsx
+  379:27  warning  "bottom-[-4px]" hardcodes an off-token value. Use a theme token or scale value instead            shadcn/no-arbitrary-values
+  412:15  warning  "w-[calc(100%+0.625rem)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/sidebar/sidebar.tsx
+  285:15  warning  "w-[min(300px,85vw)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/skills/build-skill-pills.tsx
+  142:21  warning  "border-[rgba(248,113,113,0.35)]" hardcodes a color. Nearest theme tokens: border-status-error, border-danger. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  142:21  warning  "bg-[rgba(248,113,113,0.12)]" hardcodes a color. Nearest theme tokens: bg-status-error, bg-danger. Use one of those, or declare --color-<name> in src/styles.css              shadcn/no-arbitrary-values
+  142:21  warning  "text-[#fca5a5]" hardcodes a color. Nearest theme tokens: text-markdown-alert-caution. Use one of those, or declare --color-<name> in src/styles.css                          shadcn/no-arbitrary-values
+  144:27  warning  "bg-[#fca5a5]" hardcodes a color. Nearest theme tokens: bg-markdown-alert-caution. Use one of those, or declare --color-<name> in src/styles.css                              shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/skills/skill-card-pill-row.tsx
+  260:25  warning  Inline style sets position. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+  261:20  warning  Inline style sets top. Style through classes; use CSS custom properties for dynamic values       shadcn/no-inline-styles
+  262:21  warning  Inline style sets left. Style through classes; use CSS custom properties for dynamic values      shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/features/skills/skill-icon-badge.tsx
+  18:9  warning  "shadow-[inset_0_1px_0_color-mix(in_srgb,var(--oh-contrast)_18%,transparent)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/shared/badge.tsx
+  11:9  warning  "text-[var(--oh-accent-foreground)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/shared/buttons/circle-plus-check-toggle.tsx
+   96:17  warning  "bg-[rgba(248,113,113,0.14)]" hardcodes a color. Nearest theme tokens: bg-status-error, bg-danger. Use one of those, or declare --color-<name> in src/styles.css                    shadcn/no-arbitrary-values
+   96:17  warning  "text-[#ef4444]" hardcodes a color. Nearest theme tokens: text-danger, text-status-error. Use one of those, or declare --color-<name> in src/styles.css                             shadcn/no-arbitrary-values
+   96:17  warning  "hover:bg-[rgba(248,113,113,0.24)]" hardcodes a color. Nearest theme tokens: hover:bg-status-error, hover:bg-danger. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  110:25  warning  "stroke-[2.5]" hardcodes an off-token value. Use a theme token or scale value instead                                                                                               shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/shared/modals/settings/model-selector.tsx
+  320:25  warning  Inline style sets left. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/shared/risk-alert.tsx
+  24:11  warning  "bg-[#4A0709]" hardcodes a color. Nearest theme tokens: bg-base-secondary. Use one of those, or declare --color-<name> in src/styles.css                       shadcn/no-arbitrary-values
+  24:11  warning  "border-[#FF0006]" hardcodes a color. Nearest theme tokens: border-status-error, border-danger. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/components/shared/text-shimmer.tsx
+  72:7   warning  A <style> element injects CSS outside the design system. Use classes, or declare the rule in your theme CSS  shadcn/no-inline-styles
+  79:16  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only                             shadcn/no-inline-styles
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/routes/agent-settings.tsx
+  1667:25  warning  "border-[#717888]" hardcodes a color. Nearest theme tokens: border-cool-grey-600, border-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css                                shadcn/no-arbitrary-values
+  1667:25  warning  "placeholder:text-[#717888]" hardcodes a color. Nearest theme tokens: placeholder:text-cool-grey-600, placeholder:text-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  1692:40  warning  "text-[#717888]" hardcodes a color. Nearest theme tokens: text-cool-grey-600, text-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css                                      shadcn/no-arbitrary-values
+  1701:25  warning  "border-[#3D4046]" hardcodes a color. Nearest theme tokens: border-border-subtle, border-cool-grey-900. Use one of those, or declare --color-<name> in src/styles.css                                shadcn/no-arbitrary-values
+  1709:25  warning  "border-[#3D4046]" hardcodes a color. Nearest theme tokens: border-border-subtle, border-cool-grey-900. Use one of those, or declare --color-<name> in src/styles.css                                shadcn/no-arbitrary-values
+  1785:25  warning  "text-[#717888]" hardcodes a color. Nearest theme tokens: text-cool-grey-600, text-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css                                      shadcn/no-arbitrary-values
+  1796:27  warning  "text-[#717888]" hardcodes a color. Nearest theme tokens: text-cool-grey-600, text-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css                                      shadcn/no-arbitrary-values
+  1806:25  warning  "text-[#717888]" hardcodes a color. Nearest theme tokens: text-cool-grey-600, text-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css                                      shadcn/no-arbitrary-values
+  1811:38  warning  "text-[#717888]" hardcodes a color. Nearest theme tokens: text-cool-grey-600, text-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css                                      shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/routes/device-verify.tsx
+  155:28  warning  "tracking-[0.3em]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/ui/pre.tsx
+  42:14  warning  "max-h-[60vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/ui/typography.tsx
+  8:11  warning  "-tracking-[0.02em]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/utils/hover-reveal-classes.ts
+  78:13  warning  "min-w-[3.75rem]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/utils/modal-classes.ts
+  5:3  warning  "-tracking-[0.01em]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+/Users/fangjiaxin/Documents/cs146s/OpenHands/src/utils/settings-list-classes.ts
+  23:3  warning  "max-h-[min(70vh,39rem)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+✖ 183 problems (0 errors, 183 warnings)
+  0 errors and 2 warnings potentially fixable with the `--fix` option.
+
+Checking formatting...
+All matched files use Prettier code style!
