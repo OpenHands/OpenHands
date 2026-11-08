@@ -1,0 +1,96 @@
+{
+  "fontFace": [
+    {
+      "family": "Canvas Newsreader",
+      "status": "loaded"
+    }
+  ],
+  "fontResponses": [
+    {
+      "path": "/assets/newsreader-roman-tcB4qQtO.woff2",
+      "type": "font",
+      "app": true,
+      "status": 200,
+      "outcome": "finished"
+    },
+    {
+      "path": "/assets/newsreader-roman-tcB4qQtO.woff2",
+      "type": "font",
+      "app": true,
+      "status": 200,
+      "outcome": "finished"
+    },
+    {
+      "path": "/assets/newsreader-roman-tcB4qQtO.woff2",
+      "type": "font",
+      "app": true,
+      "status": 200,
+      "outcome": "finished"
+    },
+    {
+      "path": "/assets/newsreader-roman-tcB4qQtO.woff2",
+      "type": "font",
+      "app": true,
+      "status": 200,
+      "outcome": "finished"
+    }
+  ],
+  "markdown": {
+    "heading": "\"Canvas Newsreader\", Georgia, serif",
+    "body": "-apple-system, \"SF Pro\", \"system-ui\", \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Fira Sans\", \"Droid Sans\", \"Helvetica Neue\", sans-serif",
+    "code": "Consolas, \"Bitstream Vera Sans Mono\", \"Courier New\", Courier, monospace",
+    "comment": "rgb(107, 98, 88)",
+    "keyword": "rgb(155, 68, 40)",
+    "string": "rgb(82, 100, 75)"
+  },
+  "markdownPhone": {
+    "box": {
+      "x": 0,
+      "y": 48,
+      "width": 390,
+      "height": 796
+    },
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "insideViewport": true,
+    "pageHorizontalOverflow": false
+  },
+  "markdownExecution": {
+    "status": "idle",
+    "modelCalls": 0,
+    "arrangement": "autotitle:false, no initial_message, user event run:false, localhost:1 endpoint; no Send or Play"
+  },
+  "diffModes": [
+    {
+      "background": "rgb(250, 247, 241)",
+      "ink": "rgb(41, 36, 31)",
+      "text": "def\u00a0add(a,\u00a0b):\u00a0\u00a0\u00a0\u00a0return\u00a0a\u00a0+\u00a0b"
+    },
+    {
+      "background": "rgb(250, 247, 241)",
+      "ink": "rgb(41, 36, 31)",
+      "text": "def\u00a0add(a,\u00a0b):\u00a0\u00a0\u00a0\u00a0return\u00a0a\u00a0+\u00a0b\u00a0+\u00a01def\u00a0sub(a,\u00a0b):\u00a0\u00a0\u00a0\u00a0return\u00a0a\u00a0-\u00a0b"
+    }
+  ],
+  "restoredEditorBackground": "rgb(30, 30, 30)",
+  "knownError": {
+    "issue": "https://github.com/OpenHands/OpenHands/issues/17567",
+    "pageErrors": 1,
+    "messages": [
+      "TextModel got disposed before DiffEditorWidget model got reset\n\nError: TextModel got disposed before DiffEditorWidget model got reset"
+    ]
+  },
+  "cleanup": {
+    "launcherStopped": true,
+    "ports": {
+      "ingress": "closed",
+      "agentServer": "closed",
+      "automation": "closed",
+      "frontend": "closed",
+      "vscode": "closed"
+    },
+    "ok": true
+  }
+}

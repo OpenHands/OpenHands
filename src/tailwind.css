@@ -16,6 +16,11 @@
   --radius-file-action: 7px;
   --radius-facet-control: 3px;
 
+  /* Markdown code padding follows the code's own font size, not the root. */
+  --spacing-code-inline-x: 0.4em;
+  --spacing-code-inline-y: 0.2em;
+  --spacing-code-block: 1em;
+
   /* Compact metadata retains its original pixel sizes and inherited leading. */
   --text-2xs: 11px;
   --text-3xs: 10px;
@@ -69,6 +74,7 @@
 
   /* Semantic border aliases */
   --color-border: var(--oh-border);
+  --color-scroll-fade: var(--oh-scroll-fade-from, var(--oh-color-base));
   --color-border-input: var(--oh-border-input);
   --color-border-subtle: var(--oh-border-subtle);
 
@@ -744,6 +750,18 @@ code .token {
     0px 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
 
+/* Fixed SVG illustration coordinates stay in pixels in embedded roots. */
+@utility file-drop-image {
+  top: -40px;
+  left: -10px;
+  rotate: -27deg;
+}
+
+@utility file-drop-arrow {
+  top: -16px;
+  left: -20px;
+}
+
 @utility message-word-break {
   word-break: break-word;
 }
@@ -1131,6 +1149,16 @@ code .token {
 }
 
 /* Fixed content columns shared by metadata and automation summaries. */
+/* Markdown artifact cards blend table edges into their existing surface. */
+@utility scroll-fade-surface {
+  --oh-scroll-fade-from: var(--oh-surface);
+}
+
+/* Message bubbles blend wide-table edges into their tertiary fill. */
+@utility scroll-fade-tertiary {
+  --oh-scroll-fade-from: var(--oh-color-tertiary);
+}
+
 @utility metadata-grid-columns {
   grid-template-columns: auto 1fr;
 }

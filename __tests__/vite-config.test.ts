@@ -242,6 +242,35 @@ describe("vite library build", () => {
       expect(matches, `Single scoped recipe: ${name}`).toHaveLength(1);
       return matches[0];
     };
+    // A named gradient stop retains the existing ancestor override/fallback.
+    const scrollFade = recipe("from-scroll-fade");
+    expect(declarations(scrollFade)["--tw-gradient-from"]).toBe(
+      "var(--oh-scroll-fade-from,var(--oh-color-base))",
+    );
+    expect(declarations(recipe("scroll-fade-surface"))).toEqual({
+      "--oh-scroll-fade-from": "var(--oh-surface)",
+    });
+    expect(declarations(recipe("scroll-fade-tertiary"))).toEqual({
+      "--oh-scroll-fade-from": "var(--oh-color-tertiary)",
+    });
+    // Keep code padding relative to its own font size in embedded roots.
+    expect(declarations(recipe("px-code-inline-x"))).toEqual({
+      "padding-inline": ".4em",
+    });
+    expect(declarations(recipe("py-code-inline-y"))).toEqual({
+      "padding-block": ".2em",
+    });
+    expect(declarations(recipe("p-code-block"))).toEqual({ padding: "1em" });
+    // The drop illustration uses fixed SVG pixel coordinates even in embeds.
+    expect(declarations(recipe("file-drop-image"))).toEqual({
+      top: "-40px",
+      left: "-10px",
+      rotate: "-27deg",
+    });
+    expect(declarations(recipe("file-drop-arrow"))).toEqual({
+      top: "-16px",
+      left: "-20px",
+    });
     // Message wrapping must retain the legacy word-break behavior; the standard
     // overflow utility controls the independent min-content wrapping contract.
     expect(declarations(recipe("message-word-break"))).toEqual({

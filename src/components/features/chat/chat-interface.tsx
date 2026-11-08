@@ -47,6 +47,7 @@ import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-e
 import { ErrorMessageBanner } from "./error-message-banner";
 import { ConnectionRecoveryNotice } from "./connection-recovery-notice";
 import { SkillInstallRestartBanner } from "./skill-install-restart-banner";
+import { ResolvedConversationBanner } from "./resolved-conversation-banner";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { Messages } from "#/components/conversation-events/chat/messages";
@@ -806,6 +807,8 @@ export function ChatInterface({
             {llmBlocked && !isArchivedConversation && (
               <LlmNotConfiguredBanner />
             )}
+
+            {!isArchivedConversation && <ResolvedConversationBanner />}
 
             {isArchivedConversation ? (
               // Archived / sandbox-error: show a read-only notice in place of

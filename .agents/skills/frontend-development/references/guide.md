@@ -1,9 +1,12 @@
 ## Arbitrary-value guard adoption
 
-`shadcn/no-arbitrary-values` warns globally. Eight migrated owners reject new
+`shadcn/no-arbitrary-values` warns globally. Fourteen migrated owners reject new
 arbitrary classes: command-menu, backend-version, settings-nav-header,
 backend-synced-settings-badge, modal-backdrop, environment-switch-overlay,
-context-window-meter and conversation-panel-wrapper. Their exact paths are in `eslint.config.js`,
+context-window-meter and conversation-panel-wrapper. Completed message/motion
+owners also reject new arbitrary values: custom-toast-handlers,
+form-control-classes, chat-status-indicator, context-window-ring,
+user-message-body and conversation-main. Their exact paths are in `eslint.config.js`,
 with executable probes in `__tests__/scripts/arbitrary-values-lint.test.ts`.
 Other components, routes and primitive implementations retain warnings during
 migration. Keep legitimate measured/portal geometry with its owner; do not
@@ -19,6 +22,10 @@ visible when dynamic map or helper lookups hide them from class-site analysis.
 Keep this adoption scoped: scanning every string can mistake program tags for
 color utilities. Review newly included findings before extending the file list;
 the shared exact legacy-token exceptions remain unchanged.
+
+## Horizontal scroll fades
+
+`from-scroll-fade` resolves the existing `--oh-scroll-fade-from` ancestor override with `--oh-color-base` as fallback. The `scroll-fade-surface` utility sets that override to `--oh-surface` for Markdown artifact cards. Keep left/right edge visibility, direction, animation and scroll handling with their current owners; do not replace this override with a fixed palette color.
 
 ## Inline-style rollout
 
@@ -52,6 +59,10 @@ important modifier intact; `transition-transform` includes more properties than
 the existing transform-only contract. Register custom transition and animation
 names in `cn` so later caller utilities retain Tailwind's conflict precedence.
 
+## Exact rem layout aliases
+
+Automation popover widths, run-phase limits and conversation hover-action reserves use the existing spacing scale (`min-w-40`, `min-w-64`, `max-w-112`, `max-w-48`, `min-w-15`) instead of equivalent arbitrary rem literals. Preserve each responsive hover/focus variant. Geometry is equivalent on the default spacing scale; explicit host scale overrides follow normal named-token behavior. Do not apply this substitution to fixed pixel geometry: a rem alias would change behavior when the embedding root font size differs.
+
 ## Workspace files
 
 Local Files discovery preferences belong to `misc_settings.app_preferences.workspace_file_discovery`, keyed by working directory on the active backend. `useWorkspaceFileDiscovery` reads the settings cache and saves sparse workspace patches. Preserve default exclusions and the 2,000-file cap when no configuration exists. Fetch one extra result to distinguish truncation from an exact-size list. Cloud keeps its server-side listing contract without these controls.
@@ -66,12 +77,20 @@ Use `isOpen` for rotation on `ComboboxCaretButton` and `ComboboxCaretInline`.
 Primitive implementations remain exempt from no-restyle. The existing narrow
 static-class exceptions do not imply that opaque values are checked by no-restyle.
 
+## Markdown code spacing
+
+Inline code and workspace-path chips share `px-code-inline-x` / `py-code-inline-y`; plain code blocks use `p-code-block`. Their theme spacing entries retain em units so padding follows the element font. Register these spacing names in `cn()` so general and directional caller overrides keep normal precedence. The scoped library CSS and class-composition tests cover this contract.
+
 ## Message wrapping recipes
 
 `message-word-break` retains `word-break: break-word` for chat bodies, corrective
 nudges and toast content. Toasts also use Tailwind's `wrap-anywhere` for their
 independent overflow-wrap behavior. Do not replace the former with `break-words`: it
 sets a different CSS property. Toast-library container styles remain library-owned.
+
+## File-drop illustration geometry
+
+The file-drop illustration uses `file-drop-image` and `file-drop-arrow` utilities for fixed SVG pixel offsets and rotation. Preserve pixel units in embedded roots; the shipped scoped library CSS contract covers these coordinates.
 
 ## No Magic Strings
 
