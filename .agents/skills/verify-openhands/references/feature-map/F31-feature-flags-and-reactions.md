@@ -23,7 +23,7 @@ Source: `src/routes/experimental-settings.tsx`, `src/api/experimental-features-s
 
 - `F31.open`: the page opens from the settings navigation (`sidebar-settings-/settings/experimental`), the command menu ("Experimental") and `/settings/experimental`, and lists **Conversation reactions** with its description, off on a fresh run.
 - `F31.toggle`: clicking the switch turns the flag on at once, without Save; `GET /api/settings/experimental` agrees, and the switch is still on after a reload. Clicking again turns it off.
-- `F31.empty`: an agent server without feature flags (older than software-agent-sdk#6609) shows "This agent server has no features to turn on or off." instead of an error.
+- `F31.empty`: an agent server without feature flags (older than software-agent-sdk#6609) shows "This agent server has no experimental features to turn on or off." instead of an error.
 - `F31.agent-reaction`: with the flag on, a new conversation's agent has `react` and `unreact`; when asked to react first, its 👀 chip appears on the person's message and stays after the answer (`testid=reaction-eyes`, `data-sources=agent`), and no "Reacted" tool card is shown.
 - `F31.user-reaction`: with the flag on, the `add-reaction` button under the agent's answer opens a picker of six emoji; choosing ❤️ shows a pressed `reaction-heart` chip (`data-sources=user`) that survives a reload; clicking the chip takes the reaction off.
 - `F31.off`: with the flag off, existing chips still show but are not clickable and there is no `add-reaction`; `POST /api/conversations/<id>/reactions` answers 409 `Conversation reactions are turned off`; a conversation started afterwards has no `react`/`unreact` tools.
