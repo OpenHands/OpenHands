@@ -40,6 +40,17 @@ describe("<BtwMessages />", () => {
     expect(entriesFor(CONV)).toEqual([]);
   });
 
+  it("renders a failed BTW response as text without turning its URL into a link", () => {
+    const id = useBtwStore.getState().addPending(CONV, "why?");
+    const error = "Authentication failed. See https://example.invalid/help";
+    useBtwStore.getState().fail(CONV, id, error);
+
+    render(<BtwMessages conversationId={CONV} />);
+
+    expect(screen.getByText(error)).toBeInTheDocument();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
   it("keeps long responses in a scrollable region", () => {
     const id = useBtwStore.getState().addPending(CONV, "why?");
     const longResponse = Array.from(
