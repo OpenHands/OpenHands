@@ -70,6 +70,22 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
     ).toEqual([]);
   });
 
+  it("keeps bracketed color literals under the separately staged arbitrary-value rule", async () => {
+    const [result] = await eslint.lintText(
+      'export function Probe() { return <div className="text-[#ec4899]" />; }',
+      { filePath: "src/routes/color-probe.tsx" },
+    );
+    expect(result.fatalErrorCount).toBe(0);
+    expect(
+      result.messages.filter(({ ruleId }) => ruleId === "shadcn/no-raw-colors"),
+    ).toEqual([]);
+    expect(
+      result.messages
+        .filter(({ ruleId }) => ruleId === "shadcn/no-arbitrary-values")
+        .map(({ severity }) => severity),
+    ).toEqual([1]);
+  });
+
   it("accepts SVG classes that disable paint", async () => {
     const [result] = await eslint.lintText(
       'export function Probe() { return <svg className="fill-none stroke-none" />; }',
@@ -85,7 +101,7 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
   });
 
   it.each(["src/routes/color-probe.tsx", "src/ui/color-probe.tsx"])(
-    "warns on raw colors and unknown tokens while accepting verified tokens in %s",
+    "rejects raw colors and unknown tokens while accepting verified tokens in %s",
     async (filePath) => {
       const [result] = await eslint.lintText(probe, { filePath });
       expect(result.fatalErrorCount).toBe(0);
@@ -94,10 +110,10 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
           .filter((message) => message.ruleId === "shadcn/no-raw-colors")
           .map(({ line, severity }) => ({ line, severity })),
       ).toEqual([
-        { line: 4, severity: 1 },
-        { line: 5, severity: 1 },
-        { line: 6, severity: 1 },
-        { line: 10, severity: 1 },
+        { line: 4, severity: 2 },
+        { line: 5, severity: 2 },
+        { line: 6, severity: 2 },
+        { line: 10, severity: 2 },
       ]);
     },
   );
