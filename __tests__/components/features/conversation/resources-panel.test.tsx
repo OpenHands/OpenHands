@@ -45,6 +45,7 @@ function resources(): ConversationResources {
     ],
     mcpServers: [{ name: "docs", healthKey: "docs-health", type: "stdio" }],
     secretNames: ["GITHUB_TOKEN"],
+    secretScopeOnly: false,
     condenser: { kind: "LLMSummarizingCondenser", maxSize: 240, keepFirst: 2 },
     verification: { kind: null },
   };

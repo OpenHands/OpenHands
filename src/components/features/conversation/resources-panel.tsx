@@ -234,6 +234,11 @@ export function ResourcesPanel() {
         title={t(I18nKey.SETTINGS$NAV_SECRETS)}
         settings="/settings/secrets"
       >
+        {agentProfileSupportsSecretRefs() && data.secretScopeOnly && (
+          <p className="text-xs text-muted">
+            {t(I18nKey.RESOURCES$SECRET_SCOPE_HINT)}
+          </p>
+        )}
         {!agentProfileSupportsSecretRefs() || data.secretNames === null ? (
           unavailable
         ) : data.secretNames.length === 0 ? (

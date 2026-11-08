@@ -1,4 +1,22 @@
 {
+  "RESOURCES$SECRET_SCOPE_HINT": {
+    "en": "Secret names allowed by the launch profile.",
+    "ja": "起動プロファイルで許可されたシークレット名です。",
+    "zh-CN": "启动配置允许使用的密钥名称。",
+    "zh-TW": "啟動設定檔允許使用的密鑰名稱。",
+    "ko-KR": "시작 프로필에서 허용한 비밀 이름입니다.",
+    "no": "Hemmelighetsnavn tillatt av oppstartsprofilen.",
+    "it": "Nomi dei segreti consentiti dal profilo di avvio.",
+    "pt": "Nomes dos segredos permitidos pelo perfil de inicialização.",
+    "es": "Nombres de secretos permitidos por el perfil de inicio.",
+    "ar": "أسماء الأسرار المسموح بها في ملف بدء التشغيل.",
+    "fr": "Noms des secrets autorisés par le profil de lancement.",
+    "tr": "Başlatma profilinin izin verdiği gizli bilgi adları.",
+    "de": "Vom Startprofil erlaubte Namen von Geheimnissen.",
+    "uk": "Назви секретів, дозволених профілем запуску.",
+    "ca": "Noms dels secrets permesos pel perfil d’inici.",
+    "id": "Nama rahasia yang diizinkan oleh profil peluncuran."
+  },
   "RESOURCES$TITLE": {
     "en": "Resources",
     "ja": "リソース",

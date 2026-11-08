@@ -167,6 +167,7 @@ describe("conversation resources", () => {
     delete snapshot.agent.agent_context;
     delete snapshot.agent.mcp_config;
     delete snapshot.secret_registry;
+    snapshot.launched_agent_profile!.secret_refs = null;
     getConversation.mockResolvedValue(snapshot);
     const result = await ConversationResourcesService.load(
       "conversation-id",
@@ -175,6 +176,18 @@ describe("conversation resources", () => {
     expect(result.skills).toBeNull();
     expect(result.mcpServers).toBeNull();
     expect(result.secretNames).toBeNull();
+  });
+
+  it("labels the launch secret allow-list when the runtime has not registered secrets yet", async () => {
+    const snapshot = conversation();
+    snapshot.secret_registry = { secret_sources: {} };
+    getConversation.mockResolvedValue(snapshot);
+    const result = await ConversationResourcesService.load(
+      "conversation-id",
+      getActiveBackend(),
+    );
+    expect(result.secretNames).toEqual(["GITHUB_TOKEN"]);
+    expect(result.secretScopeOnly).toBe(true);
   });
 
   it("includes lazily discovered project skills using the runtime workspace and launch deny-list", async () => {

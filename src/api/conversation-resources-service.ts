@@ -26,6 +26,7 @@ export interface ConversationResources {
   skills: SkillInfo[] | null;
   mcpServers: { name: string; healthKey: string; type: string }[] | null;
   secretNames: string[] | null;
+  secretScopeOnly: boolean;
   condenser: {
     kind: string;
     maxSize?: number;
@@ -62,6 +63,12 @@ function projectResources(info: ConversationInfo): ConversationResources {
   const stamp = info.launched_agent_profile;
   const isAcp = agent.kind === "ACPAgent";
   const skills = context?.skills;
+  const recordedSecretNames = secretSources
+    ? Object.keys(secretSources).sort()
+    : [];
+  const launchSecretNames = Array.isArray(stamp?.secret_refs)
+    ? stamp.secret_refs
+    : null;
 
   return {
     agentKind: isAcp ? "acp" : "openhands",
@@ -98,7 +105,10 @@ function projectResources(info: ConversationInfo): ConversationResources {
             type: server.type,
           }))
         : null,
-    secretNames: secretSources ? Object.keys(secretSources).sort() : null,
+    secretNames:
+      recordedSecretNames.length > 0 ? recordedSecretNames : launchSecretNames,
+    secretScopeOnly:
+      recordedSecretNames.length === 0 && launchSecretNames !== null,
     condenser:
       condenser && text(condenser.kind)
         ? {
