@@ -325,4 +325,58 @@ describe("Find in conversation", () => {
       resolve(1);
     });
   });
+
+  it("honors Continue immediately after cancellation while the previous page is pending", async () => {
+    let resolve!: (page: { items: MessageEvent[] }) => void;
+    search.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    renderSearch();
+    const user = await begin();
+    await waitFor(() => expect(search).toHaveBeenCalledTimes(1));
+    await user.click(
+      screen.getByRole("button", { name: "HISTORY_SEARCH$CANCEL" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "HISTORY_SEARCH$CONTINUE" }),
+    );
+    await act(async () => {
+      resolve({ items: [message] });
+    });
+    await screen.findByRole("button", { name: /old error decision/ });
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(count).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels a queued continuation without restarting it after the old page settles", async () => {
+    let resolve!: (page: { items: MessageEvent[] }) => void;
+    search.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    renderSearch();
+    const user = await begin();
+    await waitFor(() => expect(search).toHaveBeenCalledTimes(1));
+    await user.click(
+      screen.getByRole("button", { name: "HISTORY_SEARCH$CANCEL" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "HISTORY_SEARCH$CONTINUE" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "HISTORY_SEARCH$CANCEL" }),
+    );
+    await act(async () => {
+      resolve({ items: [message] });
+    });
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("button", { name: /old error decision/ }),
+    ).not.toBeInTheDocument();
+  });
 });

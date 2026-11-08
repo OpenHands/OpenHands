@@ -91,6 +91,7 @@ function HistorySearchDialog({
   const [contextLoading, setContextLoading] = useState(false);
   const [contextError, setContextError] = useState(false);
   const session = useRef<HistorySearchSession | null>(null);
+  const pendingScan = useRef<Promise<HistorySearchSnapshot> | null>(null);
   const version = useRef(0);
   const contextVersion = useRef(0);
   const mounted = useRef(true);
@@ -129,6 +130,7 @@ function HistorySearchDialog({
     if (fresh) {
       session.current?.cancel();
       session.current = null;
+      pendingScan.current = null;
       contextVersion.current += 1;
       setContext(null);
       setContextError(false);
@@ -152,12 +154,25 @@ function HistorySearchDialog({
       if (!current()) return;
       setPreparing(false);
       session.current = new HistorySearchSession(query, total);
+    } else if (pendingScan.current) {
+      // A cancelled transport can still be in flight. Preserve this explicit
+      // Continue action until it settles, then resume the saved checkpoint.
+      setSnapshot(
+        (previous) =>
+          previous && { ...previous, phase: "scanning", running: true },
+      );
+      await pendingScan.current;
     }
     if (!current() || !session.current) return;
-    await session.current.scanBatch(searchPage, (next) => {
+    const pending = session.current.scanBatch(searchPage, (next) => {
       if (current()) setSnapshot(next);
     });
-    if (current()) scanning.current = false;
+    pendingScan.current = pending;
+    await pending;
+    if (current()) {
+      scanning.current = false;
+      pendingScan.current = null;
+    }
   };
 
   const cancel = () => {
