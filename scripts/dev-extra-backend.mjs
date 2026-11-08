@@ -43,7 +43,10 @@ function parsePort(value, fallback) {
  * @param {string} cwd
  * @param {Record<string, string | undefined>} env
  */
-export function buildExtraBackendConfig(cwd = process.cwd(), env = process.env) {
+export function buildExtraBackendConfig(
+  cwd = process.cwd(),
+  env = process.env,
+) {
   const base = buildSafeDevConfig(cwd, env);
 
   const backendPort = parsePort(
@@ -70,7 +73,7 @@ function isEnoentError(error) {
       typeof error === "object" &&
       "code" in error &&
       error.code === "ENOENT") ||
-      /ENOENT/.test(String(error)),
+    /ENOENT/.test(String(error)),
   );
 }
 
@@ -94,10 +97,14 @@ async function waitForServer(url, timeoutMs = DEFAULT_WAIT_TIMEOUT_MS) {
 }
 
 function spawnProcess(command, args, options = {}) {
-  const child = spawn(command, args, getProcessTreeSpawnOptions({
-    stdio: "inherit",
-    ...options,
-  }));
+  const child = spawn(
+    command,
+    args,
+    getProcessTreeSpawnOptions({
+      stdio: "inherit",
+      ...options,
+    }),
+  );
 
   child.once("error", (error) => {
     if (isEnoentError(error) && command === "uvx") {
@@ -164,6 +171,14 @@ async function main() {
     {
       cwd: config.cwd,
       env: {
+        // Deliberately not opting into the editor path prefix. This server is
+        // reached by registering it as an extra backend from a browser whose
+        // origin belongs to some *other* stack, so a prefix on that origin
+        // either does not resolve or — worse — resolves to the bundled
+        // stack's editor, silently handing back a different container's
+        // workspace. No single global prefix can disambiguate the two, so this
+        // launcher stays out of prefix-mode; the editor button is unavailable
+        // for conversations on an extra backend.
         ...process.env,
         ...buildAgentServerEnv(config),
       },
@@ -190,6 +205,12 @@ async function main() {
 
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
+  // The agent-server is spawned detached, so a SIGHUP that kills this launcher
+  // (terminal or multiplexer death) would otherwise leave it running and holding
+  // its port. Forward SIGTERM rather than SIGHUP: uvicorn only handles
+  // SIGINT/SIGTERM, so a forwarded SIGHUP would terminate the agent-server by
+  // default action instead of shutting it down gracefully.
+  process.on("SIGHUP", () => shutdown("SIGTERM"));
 
   const backendErrored = new Promise((_, reject) => {
     backend.once("error", (error) => reject(error));
@@ -221,9 +242,7 @@ async function main() {
 
   backend.once("exit", (code) => {
     if (!shuttingDown) {
-      console.error(
-        `agent-server exited unexpectedly with code ${code ?? 0}`,
-      );
+      console.error(`agent-server exited unexpectedly with code ${code ?? 0}`);
       shutdown();
       process.exitCode = code ?? 1;
     } else {

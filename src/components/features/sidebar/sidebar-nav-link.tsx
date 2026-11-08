@@ -1,7 +1,9 @@
 import React from "react";
+import { Pin } from "lucide-react";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { useNavigation } from "#/context/navigation-context";
+import { hoverRevealActionClassName } from "#/utils/hover-reveal-classes";
 import { cn } from "#/utils/utils";
 import { SidebarCollapsedIconSlot } from "./sidebar-collapsed-icon-slot";
 import {
@@ -23,6 +25,14 @@ function isPathActive(currentPath: string, to: string, end: boolean) {
   return currentPath === to || currentPath.startsWith(`${to}/`);
 }
 
+export interface SidebarNavLinkPinAction {
+  pinned: boolean;
+  onToggle: () => void;
+  /** Localized aria-label; pin vs unpin variants resolved by the caller. */
+  label: string;
+  testId: string;
+}
+
 interface SidebarNavLinkProps {
   to: string;
   label: string;
@@ -34,11 +44,14 @@ interface SidebarNavLinkProps {
   collapsed?: boolean;
   hoverContent?: React.ReactNode;
   /**
-   * When true, forces the active style regardless of the current path.
+   * When true, forces the active style (and `aria-current`) regardless of the
+   * current path.
    * Useful for links that should appear active for multiple related routes
    * (e.g. the Extensions link being active on /mcp and /plugins too).
    */
   forceActive?: boolean;
+  /** Pin-as-home toggle; rendered only when the sidebar is expanded. */
+  pinAction?: SidebarNavLinkPinAction;
 }
 
 export function SidebarNavLink({
@@ -52,9 +65,11 @@ export function SidebarNavLink({
   collapsed = false,
   hoverContent,
   forceActive = false,
+  pinAction,
 }: SidebarNavLinkProps) {
   const { currentPath } = useNavigation();
   const active = forceActive || isPathActive(currentPath, to, end);
+  const showPinAction = !collapsed && pinAction != null;
 
   const link = (
     <NavigationLink
@@ -63,6 +78,7 @@ export function SidebarNavLink({
       data-testid={testId}
       tabIndex={disabled ? -1 : 0}
       aria-label={collapsed ? label : undefined}
+      aria-current={active ? "page" : undefined}
       // Announce the disabled state to assistive tech. The visual disabled
       // styling plus tabIndex=-1 + preventDefault gives sighted/keyboard users
       // the right behaviour already; this closes the screen-reader gap so the
@@ -81,6 +97,8 @@ export function SidebarNavLink({
             : SIDEBAR_ROW_INTERACTIVE_CLASS.idle),
         disabled && "opacity-50",
         disabled && "pointer-events-none",
+        // Constant right reserve so label truncation doesn't reflow on hover.
+        showPinAction && "pr-9",
       )}
     >
       {icon ? (
@@ -96,13 +114,48 @@ export function SidebarNavLink({
     </NavigationLink>
   );
 
-  if (!collapsed) return link;
+  if (!collapsed) {
+    if (!pinAction) return link;
+
+    // NavigationLink renders an <a>, so the pin toggle is an absolutely
+    // positioned sibling rather than a nested button. Bare `group` is safe
+    // here: only collapsed rows use it, and this branch is expanded-only.
+    return (
+      <div className="group relative">
+        {link}
+        <button
+          type="button"
+          data-testid={pinAction.testId}
+          aria-pressed={pinAction.pinned}
+          aria-label={pinAction.label}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            pinAction.onToggle();
+          }}
+          className={cn(
+            "absolute right-1.5 top-1/2 -translate-y-1/2",
+            "flex shrink-0 cursor-pointer items-center justify-center rounded-md p-1",
+            "text-muted hover:bg-contrast/10 hover:text-contrast",
+            hoverRevealActionClassName(pinAction.pinned),
+          )}
+        >
+          <Pin
+            className={cn("h-3.5 w-3.5", pinAction.pinned && "fill-current")}
+            aria-hidden
+          />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <StyledTooltip
       content={hoverContent ?? label}
       placement="right"
-      tooltipClassName={hoverContent ? "p-0 bg-tertiary text-white" : undefined}
+      tooltipClassName={
+        hoverContent ? "p-0 bg-tertiary text-contrast" : undefined
+      }
     >
       {link}
     </StyledTooltip>

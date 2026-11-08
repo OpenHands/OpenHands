@@ -1,3 +1,6 @@
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -29,6 +32,28 @@ describe("dev process utils", () => {
       cwd: "/tmp",
       detached: process.platform !== "win32",
     });
+  });
+
+  it("passes shell metacharacters to services as literal arguments", async () => {
+    const constraint = "agent-client-protocol<0.11";
+    const child = spawn(
+      process.execPath,
+      ["-e", "process.stdout.write(process.argv[1])", constraint],
+      getProcessTreeSpawnOptions({
+        shell: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      }),
+    );
+    let stdout = "";
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+
+    const [exitCode] = await once(child, "exit");
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(constraint);
   });
 });
 

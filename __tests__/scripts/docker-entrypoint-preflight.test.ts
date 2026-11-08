@@ -95,6 +95,20 @@ function runReport(osError: string) {
 }
 
 describe("docker/entrypoint.sh startup preflight", () => {
+  it.skipIf(process.platform === "win32")(
+    "preserves an existing .write-test file",
+    () => {
+      const directory = path.join(scratch, "preserved");
+      const setup = spawnSync("mkdir", ["-p", directory]);
+      expect(setup.status).toBe(0);
+      const existing = path.join(directory, ".write-test");
+      writeFileSync(existing, "user data");
+      const result = runScript("", { OPENHANDS_DIR: directory });
+      expect(result.status).toBe(0);
+      expect(readFileSync(existing, "utf-8")).toBe("user data");
+    },
+  );
+
   it.skipIf(process.platform === "win32").each(["default", "override"])(
     "creates and probes the %s browser config directory",
     (mode) => {
@@ -156,43 +170,25 @@ describe("docker/entrypoint.sh startup preflight", () => {
   );
 
   it.skipIf(process.platform === "win32")(
-    "suggests directory-only host permissions without changing the container user",
+    "suggests private state access and a named volume",
     () => {
-      const osError =
-        "mkdir: cannot create directory '/host/.openhands': Permission denied";
-
-      const result = runReport(osError);
-
-      expect(result.status).toBe(0);
-      expect(result.stderr).toContain(`Underlying error: ${osError}`);
-      expect(result.stderr).toContain(
-        "find ~/.openhands -type d -exec chmod a+rwX {} +",
-      );
-      expect(result.stderr).toContain("root-owned");
-      expect(result.stderr).toContain("sudo find");
-      expect(result.stderr).not.toContain("--user");
-      expect(result.stderr).not.toContain("-type f");
-      expect(result.stderr).toContain("existing file modes stay unchanged");
+      const result = runReport("Permission denied");
+      expect(result.stderr).toContain("ownership or ACLs");
+      expect(result.stderr).toContain("named Docker volume");
+      expect(result.stderr).not.toContain("chmod a+rwX");
     },
   );
 
   it.skipIf(process.platform === "win32")(
-    "includes existing-file permissions only for the workspace hint",
+    "explains existing workspace file permissions",
     () => {
       const result = runScript(
         `report_unwritable "Workspace directory" "/projects" "Permission denied" "~/projects"`,
       );
-
-      expect(result.status).toBe(0);
       expect(result.stderr).toContain(
-        "find ~/projects -type d -exec chmod a+rwX {} +",
+        "Existing project files also need read/write access",
       );
-      expect(result.stderr).toContain(
-        "find ~/projects -type f -exec chmod a+rw {} +",
-      );
-      expect(result.stderr).toContain("all host users read/write access");
-      expect(result.stderr).toContain("secret-file modes stay private");
-      expect(result.stderr).not.toContain("existing file modes stay unchanged");
+      expect(result.stderr).not.toContain("named Docker volume");
     },
   );
 

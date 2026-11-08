@@ -261,6 +261,20 @@ describe("SetupAcpSecretsStep", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders OpenCode's auth store and API key, with no base URL", () => {
+    renderStep("opencode");
+
+    expect(
+      screen.getByTestId("onboarding-acp-secret-OPENCODE_AUTH_CONTENT"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("onboarding-acp-secret-OPENCODE_API_KEY"),
+    ).toHaveAttribute("type", "password");
+    expect(
+      screen.queryByTestId("onboarding-acp-secret-OPENCODE_BASE_URL"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows no banner when the provider is not authenticated", () => {
     acpAuthStatusMock.mockReturnValue({
       status: "unauthenticated",
@@ -274,6 +288,25 @@ describe("SetupAcpSecretsStep", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("onboarding-acp-auth-checking"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the 'credentials configured' banner when a credential is stored but the probe can't confirm a login", async () => {
+    acpAuthStatusMock.mockReturnValue({
+      status: "unknown",
+      isChecking: false,
+      isSupported: true,
+    });
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([
+      { name: "ANTHROPIC_API_KEY" },
+    ]);
+    renderStep("claude-code");
+
+    expect(
+      await screen.findByTestId("onboarding-acp-auth-configured"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("onboarding-acp-auth-detected"),
     ).not.toBeInTheDocument();
   });
 

@@ -1,19 +1,19 @@
 import { cn } from "#/utils/utils";
 
 export const gitControlBarActionButtonBaseClassName =
-  "flex flex-row gap-1 items-center justify-center rounded-[100px]";
+  "flex flex-row gap-1 items-center justify-center rounded-pill";
 
 export function gitControlBarActionButtonClassName(isEnabled: boolean) {
   return cn(
     gitControlBarActionButtonBaseClassName,
     isEnabled
-      ? "bg-[var(--oh-surface)] hover:bg-tertiary cursor-pointer text-white"
-      : "bg-[var(--oh-surface)] cursor-not-allowed opacity-50 text-[var(--oh-muted)]",
+      ? "bg-surface hover:bg-tertiary cursor-pointer text-contrast"
+      : "bg-surface cursor-not-allowed opacity-50 text-muted",
   );
 }
 
 export function gitControlBarActionIconColor(isEnabled: boolean) {
-  return isEnabled ? "white" : "var(--oh-muted)";
+  return isEnabled ? "var(--oh-contrast)" : "var(--oh-muted)";
 }
 
 export const gitControlBarActionLabelClassName =

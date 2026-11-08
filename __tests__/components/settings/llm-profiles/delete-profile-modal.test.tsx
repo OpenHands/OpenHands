@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HttpError } from "@openhands/typescript-client";
 import { DeleteProfileModal } from "#/components/features/settings/llm-profiles/delete-profile-modal";
 import { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
@@ -124,16 +125,17 @@ describe("DeleteProfileModal", () => {
 
     await user.click(screen.getByTestId("delete-profile-confirm"));
 
+    // The toast and close run after the mutation's async onSuccess, which
+    // settles later than the deleteProfile call itself.
     await waitFor(() => {
       expect(ProfilesService.deleteProfile).toHaveBeenCalledWith(
         "profile-to-delete",
       );
+      expect(toastHandlers.displaySuccessToast).toHaveBeenCalledWith(
+        'Profile "profile-to-delete" deleted',
+      );
+      expect(handleClose).toHaveBeenCalled();
     });
-
-    expect(toastHandlers.displaySuccessToast).toHaveBeenCalledWith(
-      'Profile "profile-to-delete" deleted',
-    );
-    expect(handleClose).toHaveBeenCalled();
   });
 
   it("shows error toast on delete failure", async () => {
@@ -153,6 +155,33 @@ describe("DeleteProfileModal", () => {
       );
     });
 
+    expect(handleClose).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's `detail` instead of the raw HttpError text when the server refuses the delete", async () => {
+    // Arrange — the agent-server refuses to delete the last profile, which the
+    // `default` agent profile still uses, with a 409 the shared TypeScript
+    // client throws as an HttpError.
+    const user = userEvent.setup();
+    const handleClose = vi.fn();
+    const detail = "LLM profile is referenced by 1 agent profile(s): default";
+    vi.mocked(ProfilesService.deleteProfile).mockRejectedValue(
+      new HttpError(
+        409,
+        "Conflict",
+        { detail },
+        `HTTP request failed (409 Conflict): {"detail":"${detail}"}`,
+      ),
+    );
+    renderModal(mockProfile, handleClose);
+
+    // Act
+    await user.click(screen.getByTestId("delete-profile-confirm"));
+
+    // Assert
+    await waitFor(() => {
+      expect(toastHandlers.displayErrorToast).toHaveBeenCalledWith(detail);
+    });
     expect(handleClose).not.toHaveBeenCalled();
   });
 

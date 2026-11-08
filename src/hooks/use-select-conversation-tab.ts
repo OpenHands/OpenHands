@@ -4,6 +4,7 @@ import {
   type ConversationTab,
 } from "#/stores/conversation-store";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { requestPanelReveal } from "#/services/canvas-ui";
 
 /**
  * Custom hook for selecting conversation tabs with consistent behavior.
@@ -19,11 +20,20 @@ export function useSelectConversationTab() {
     selectedTab,
     isRightPanelShown,
     setHasRightPanelToggled,
+    setIsOverviewPanelShown,
+    setIsRightPanelShown,
     setSelectedTab,
+    setCommitsAutoExpandSection,
   } = useConversationStore();
 
-  const { setSelectedTab: setPersistedSelectedTab } =
+  const { setSelectedTab: setPersistedSelectedTab, setRightPanelShown } =
     useConversationLocalStorageState(conversationId ?? "");
+
+  const setPanelOpen = (open: boolean) => {
+    setHasRightPanelToggled(open);
+    setIsRightPanelShown(open);
+    setRightPanelShown?.(open);
+  };
 
   const onTabChange = (value: ConversationTab | null) => {
     setSelectedTab(value);
@@ -37,12 +47,13 @@ export function useSelectConversationTab() {
    */
   const selectTab = (tab: ConversationTab) => {
     if (selectedTab === tab && isRightPanelShown) {
-      setHasRightPanelToggled(false);
+      setPanelOpen(false);
     } else {
       onTabChange(tab);
       if (!isRightPanelShown) {
-        setHasRightPanelToggled(true);
+        setPanelOpen(true);
       }
+      setIsOverviewPanelShown(false);
     }
   };
 
@@ -50,12 +61,23 @@ export function useSelectConversationTab() {
    * Navigates to a tab without toggle behavior.
    * Always shows the panel and selects the tab, even if already selected.
    * Use this for "View" or "Read More" buttons that should always navigate.
+   * At phone width the drawer is its own page, so this also opens it there.
    */
   const navigateToTab = (tab: ConversationTab) => {
     onTabChange(tab);
-    if (!isRightPanelShown) {
-      setHasRightPanelToggled(true);
-    }
+    setPanelOpen(true);
+    setIsOverviewPanelShown(false);
+    requestPanelReveal();
+  };
+
+  const navigateToChanges = () => {
+    setCommitsAutoExpandSection("uncommitted");
+    navigateToTab("commits");
+  };
+
+  const navigateToCommits = () => {
+    setCommitsAutoExpandSection(null);
+    navigateToTab("commits");
   };
 
   /**
@@ -67,6 +89,8 @@ export function useSelectConversationTab() {
   return {
     selectTab,
     navigateToTab,
+    navigateToChanges,
+    navigateToCommits,
     isTabActive,
     onTabChange,
     selectedTab,

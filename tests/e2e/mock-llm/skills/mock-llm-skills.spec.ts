@@ -11,7 +11,7 @@
  *    agent-server creates a worktree from the repo, and since the skill
  *    is committed, `load_project_skills` finds it in the worktree.
  *
- * 2. **User skills** from `~/.openhands/skills/` are loaded and trigger
+ * 2. **User skills** from the server's persistence directory are loaded and trigger
  *    on matching keywords.
  *
  * 3. **Skill deletion**: removing a skill file means it is NOT loaded
@@ -236,9 +236,7 @@ test.describe("skill loading: project, user, and deletion", () => {
             const body = (await resp.json()) as { items?: unknown[] };
             for (const item of body.items ?? []) {
               const e = item as Record<string, unknown>;
-              const skills =
-                (e.activated_skills as string[] | undefined) ??
-                (e.activated_microagents as string[] | undefined);
+              const skills = e.activated_skills as string[] | undefined;
               if (skills?.includes(PROJECT_SKILL_NAME)) return "FOUND";
             }
             return "NOT_FOUND";
@@ -253,9 +251,9 @@ test.describe("skill loading: project, user, and deletion", () => {
     });
   });
 
-  // ── Test 2: User skill loaded from ~/.openhands/skills/ ──────────
+  // Test 2: User skill loaded from the server's persistence directory
 
-  test("user skill in ~/.openhands/skills/ triggers on matching keyword", async ({
+  test("user skill in the persistence directory triggers on matching keyword", async ({
     page,
     request,
   }) => {
@@ -306,9 +304,7 @@ test.describe("skill loading: project, user, and deletion", () => {
             const body = (await resp.json()) as { items?: unknown[] };
             for (const item of body.items ?? []) {
               const e = item as Record<string, unknown>;
-              const skills =
-                (e.activated_skills as string[] | undefined) ??
-                (e.activated_microagents as string[] | undefined);
+              const skills = e.activated_skills as string[] | undefined;
               if (skills?.includes(USER_SKILL_NAME)) return "FOUND";
             }
             return "NOT_FOUND";
@@ -381,9 +377,7 @@ test.describe("skill loading: project, user, and deletion", () => {
 
             for (const item of items) {
               const e = item as Record<string, unknown>;
-              const skills =
-                (e.activated_skills as string[] | undefined) ??
-                (e.activated_microagents as string[] | undefined);
+              const skills = e.activated_skills as string[] | undefined;
               if (skills?.includes(USER_SKILL_NAME))
                 return `UNEXPECTEDLY_FOUND`;
             }

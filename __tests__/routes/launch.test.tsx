@@ -97,7 +97,9 @@ describe("LaunchRoute", () => {
       renderLaunchRoute("?plugins=not-valid-base64!!!");
 
       expect(screen.getByTestId("launch-error")).toBeInTheDocument();
-      expect(screen.getByText("LAUNCH$ERROR_INVALID_FORMAT")).toBeInTheDocument();
+      expect(
+        screen.getByText("LAUNCH$ERROR_INVALID_FORMAT"),
+      ).toBeInTheDocument();
     });
 
     it("should show error for invalid JSON in decoded base64", () => {
@@ -106,7 +108,9 @@ describe("LaunchRoute", () => {
       renderLaunchRoute(`?plugins=${invalidJson}`);
 
       expect(screen.getByTestId("launch-error")).toBeInTheDocument();
-      expect(screen.getByText("LAUNCH$ERROR_INVALID_FORMAT")).toBeInTheDocument();
+      expect(
+        screen.getByText("LAUNCH$ERROR_INVALID_FORMAT"),
+      ).toBeInTheDocument();
     });
 
     it("should show error when decoded plugins is not an array", () => {
@@ -115,7 +119,9 @@ describe("LaunchRoute", () => {
       renderLaunchRoute(`?plugins=${notArray}`);
 
       expect(screen.getByTestId("launch-error")).toBeInTheDocument();
-      expect(screen.getByText("LAUNCH$ERROR_INVALID_FORMAT")).toBeInTheDocument();
+      expect(
+        screen.getByText("LAUNCH$ERROR_INVALID_FORMAT"),
+      ).toBeInTheDocument();
     });
 
     it("should show error when plugin is missing source", () => {
@@ -124,7 +130,9 @@ describe("LaunchRoute", () => {
       renderLaunchRoute(`?plugins=${missingSource}`);
 
       expect(screen.getByTestId("launch-error")).toBeInTheDocument();
-      expect(screen.getByText("LAUNCH$ERROR_INVALID_FORMAT")).toBeInTheDocument();
+      expect(
+        screen.getByText("LAUNCH$ERROR_INVALID_FORMAT"),
+      ).toBeInTheDocument();
     });
 
     it("should parse simple params format (plugin_source)", () => {
@@ -132,13 +140,13 @@ describe("LaunchRoute", () => {
 
       expect(screen.getByTestId("plugin-launch-modal")).toBeInTheDocument();
       // Plugin name appears multiple times, use getAllByText
-      expect(screen.getAllByText("owner/simple-repo").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("owner/simple-repo").length).toBeGreaterThan(
+        0,
+      );
     });
 
     it("should parse simple params with ref", () => {
-      renderLaunchRoute(
-        "?plugin_source=github:owner/repo&plugin_ref=v1.0.0",
-      );
+      renderLaunchRoute("?plugin_source=github:owner/repo&plugin_ref=v1.0.0");
 
       expect(screen.getByTestId("plugin-launch-modal")).toBeInTheDocument();
       // Plugin name appears multiple times, use getAllByText
@@ -159,9 +167,13 @@ describe("LaunchRoute", () => {
       const encoded = btoa(JSON.stringify(plugins));
       const message = "Hello, this is a safe message";
 
-      renderLaunchRoute(`?plugins=${encoded}&message=${encodeURIComponent(message)}`);
+      renderLaunchRoute(
+        `?plugins=${encoded}&message=${encodeURIComponent(message)}`,
+      );
 
-      expect(screen.getByText("Hello, this is a safe message")).toBeInTheDocument();
+      expect(
+        screen.getByText("Hello, this is a safe message"),
+      ).toBeInTheDocument();
     });
 
     it("should remove script tags from message (XSS prevention)", () => {
@@ -182,7 +194,7 @@ describe("LaunchRoute", () => {
     it("should strip img tags with onerror handlers (XSS prevention)", () => {
       const plugins = [{ source: "github:owner/repo" }];
       const encoded = btoa(JSON.stringify(plugins));
-      const maliciousMessage = '<img src=x onerror=alert(1)>Safe content';
+      const maliciousMessage = "<img src=x onerror=alert(1)>Safe content";
 
       renderLaunchRoute(
         `?plugins=${encoded}&message=${encodeURIComponent(maliciousMessage)}`,
@@ -197,7 +209,7 @@ describe("LaunchRoute", () => {
     it("should strip svg tags with onload handlers (XSS prevention)", () => {
       const plugins = [{ source: "github:owner/repo" }];
       const encoded = btoa(JSON.stringify(plugins));
-      const maliciousMessage = '<svg/onload=alert(1)>Safe content';
+      const maliciousMessage = "<svg/onload=alert(1)>Safe content";
 
       renderLaunchRoute(
         `?plugins=${encoded}&message=${encodeURIComponent(maliciousMessage)}`,
@@ -212,7 +224,7 @@ describe("LaunchRoute", () => {
     it("should strip all HTML tags for plain text display", () => {
       const plugins = [{ source: "github:owner/repo" }];
       const encoded = btoa(JSON.stringify(plugins));
-      const htmlMessage = '<div><p>Hello</p> <b>World</b></div>';
+      const htmlMessage = "<div><p>Hello</p> <b>World</b></div>";
 
       renderLaunchRoute(
         `?plugins=${encoded}&message=${encodeURIComponent(htmlMessage)}`,
@@ -227,7 +239,9 @@ describe("LaunchRoute", () => {
       const encoded = btoa(JSON.stringify(plugins));
       const longMessage = "A".repeat(600);
 
-      renderLaunchRoute(`?plugins=${encoded}&message=${encodeURIComponent(longMessage)}`);
+      renderLaunchRoute(
+        `?plugins=${encoded}&message=${encodeURIComponent(longMessage)}`,
+      );
 
       // Should be truncated to 500 chars
       const displayedMessage = screen.getByText(/A{100,}/);
@@ -311,7 +325,9 @@ describe("LaunchRoute", () => {
 
       renderLaunchRoute(`?plugins=${encoded}`);
 
-      expect(screen.getByTestId("start-conversation-button")).toBeInTheDocument();
+      expect(
+        screen.getByTestId("start-conversation-button"),
+      ).toBeInTheDocument();
     });
 
     it("should display close button", () => {
@@ -346,8 +362,12 @@ describe("LaunchRoute", () => {
 
       expect(screen.getByText("LAUNCH$PLUGINS")).toBeInTheDocument();
       // Plugin names appear multiple times (title area and list), use getAllByText
-      expect(screen.getAllByText("owner/repo-without-params").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("owner/another-repo").length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText("owner/repo-without-params").length,
+      ).toBeGreaterThan(0);
+      expect(screen.getAllByText("owner/another-repo").length).toBeGreaterThan(
+        0,
+      );
     });
 
     it("should show additional plugins label when mixing params and no-params plugins", () => {
@@ -382,7 +402,6 @@ describe("LaunchRoute", () => {
       renderLaunchRoute(`?plugins=${encoded}`);
 
       // Check that the checkbox has a label associated with it
-      const checkbox = screen.getByTestId("trust-checkbox");
       const label = document.querySelector('label[for="trust-checkbox"]');
       expect(label).toBeInTheDocument();
     });
@@ -399,7 +418,7 @@ describe("LaunchRoute", () => {
       // In test environment, the translation key is shown
       const label = document.querySelector('label[for="trust-checkbox"]');
       expect(label).toBeInTheDocument();
-      expect(label?.textContent).toContain("LAUNCH$TRUST_SKILL_CHECKBOX");
+      expect(label?.textContent).toContain("LAUNCH$TRUST_PLUGIN_CHECKBOX");
     });
 
     it("should disable start button when trust checkbox is unchecked", () => {
@@ -430,9 +449,7 @@ describe("LaunchRoute", () => {
   describe("Conversation Creation", () => {
     it("should call createConversation with plugins when start button clicked after checking trust", async () => {
       const user = userEvent.setup();
-      const plugins = [
-        { source: "github:owner/repo", parameters: { apiKey: "test" } },
-      ];
+      const plugins = [{ source: "github:owner/repo" }];
       const encoded = btoa(JSON.stringify(plugins));
 
       renderLaunchRoute(`?plugins=${encoded}`);
@@ -448,7 +465,7 @@ describe("LaunchRoute", () => {
               source: "github:owner/repo",
               ref: null,
               repo_path: null,
-              parameters: { apiKey: "test" },
+              parameters: null,
             },
           ],
           query: undefined,
@@ -463,7 +480,9 @@ describe("LaunchRoute", () => {
       const encoded = btoa(JSON.stringify(plugins));
       const message = "/city-weather:now Tokyo";
 
-      renderLaunchRoute(`?plugins=${encoded}&message=${encodeURIComponent(message)}`);
+      renderLaunchRoute(
+        `?plugins=${encoded}&message=${encodeURIComponent(message)}`,
+      );
 
       // First check the trust checkbox
       await user.click(screen.getByTestId("trust-checkbox"));
@@ -499,7 +518,9 @@ describe("LaunchRoute", () => {
       await user.click(screen.getByTestId("start-conversation-button"));
 
       await waitFor(() => {
-        expect(mockNavigate).toHaveBeenCalledWith("/conversations/new-conv-456");
+        expect(mockNavigate).toHaveBeenCalledWith(
+          "/conversations/new-conv-456",
+        );
       });
     });
 
@@ -553,7 +574,9 @@ describe("LaunchRoute", () => {
 
       await waitFor(() => {
         expect(screen.getByTestId("launch-error")).toBeInTheDocument();
-        expect(screen.getByText("LAUNCH$ERROR_CREATION_FAILED")).toBeInTheDocument();
+        expect(
+          screen.getByText("LAUNCH$ERROR_CREATION_FAILED"),
+        ).toBeInTheDocument();
       });
     });
 
@@ -576,3 +599,23 @@ describe("LaunchRoute", () => {
     });
   });
 });
+
+it.each(
+  [{ city: "Tokyo" }, 5, false, []].map((parameters) => ({ parameters })),
+)(
+  "identifies unsupported Local plugin parameters $parameters before creating a conversation",
+  async ({ parameters }) => {
+    vi.clearAllMocks();
+    const user = userEvent.setup();
+    renderLaunchRoute(
+      `?plugins=${btoa(JSON.stringify([{ source: "local-plugin", parameters }]))}`,
+    );
+    await user.click(screen.getByTestId("trust-checkbox"));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "LAUNCH$PARAMETERS_UNSUPPORTED_LOCAL",
+    );
+    expect(screen.getByTestId("start-conversation-button")).toBeDisabled();
+    await user.click(screen.getByTestId("start-conversation-button"));
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  },
+);

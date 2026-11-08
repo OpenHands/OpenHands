@@ -1,11 +1,11 @@
 import React from "react";
 import { cn } from "#/utils/utils";
 import {
-  AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES,
-  AGENT_SERVER_UI_DEFAULT_THEME,
   type AgentServerUIStyleOverrides,
   type AgentServerUITheme,
 } from "#/styles/agent-server-ui-style-scope";
+import { useColorTheme } from "#/hooks/use-color-theme";
+import { COLOR_THEMES } from "#/themes/color-themes";
 
 export interface AgentServerUIRootProps extends Omit<
   React.HTMLAttributes<HTMLDivElement>,
@@ -20,17 +20,18 @@ export interface AgentServerUIRootProps extends Omit<
 
 export function AgentServerUIRoot({
   children,
-  theme = AGENT_SERVER_UI_DEFAULT_THEME,
+  theme,
   className,
   style,
   styleOverrides,
   contentClassName,
   ...divProps
 }: AgentServerUIRootProps) {
+  const colorTheme = useColorTheme();
+  const appearance = theme ?? COLOR_THEMES[colorTheme].appearance;
   const scopedStyle = React.useMemo(
     () =>
       ({
-        ...AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES,
         ...styleOverrides,
         ...style,
       }) as React.CSSProperties,
@@ -40,14 +41,16 @@ export function AgentServerUIRoot({
   return (
     <div
       data-agent-server-ui=""
+      data-color-theme={colorTheme}
+      data-color-scheme={appearance}
       {...divProps}
       className={className}
-      // CSS custom properties injected onto the scope root so descendants can resolve var(--oh-*)
+      // Only consumer overrides are inline; theme defaults belong to CSS.
       style={scopedStyle}
     >
       <div
-        className={cn(theme, contentClassName, "text-foreground")}
-        data-theme={theme}
+        className={cn(appearance, contentClassName, "text-foreground")}
+        data-theme={appearance}
       >
         {children}
       </div>

@@ -10,12 +10,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import net from "node:net";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { applySessionKeyPolicy } from "./bind-host.mjs";
 import {
   getProcessTreeSpawnOptions,
   isProcessRunning,
@@ -37,6 +39,11 @@ const SHARED_DEFAULTS = JSON.parse(
 );
 
 const DEFAULT_BACKEND_PORT = SHARED_DEFAULTS.ports.agentServer;
+// Path prefix the bundled editor is served under. The same value has to reach
+// agent-server (as OH_VSCODE_BASE_PATH, so openvscode-server is launched with
+// --server-base-path and advertises the prefix) and the ingress route table,
+// or the advertised URL and the route that serves it disagree.
+export const VSCODE_BASE_PATH = SHARED_DEFAULTS.paths.vscodeBasePath;
 const DEFAULT_VITE_PORT = 3001;
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_AGENT_SERVER_PACKAGE = SHARED_DEFAULTS.packages.agentServer;
@@ -48,16 +55,14 @@ const LOCAL_AGENT_SERVER_SUBDIRS = [
   "openhands-workspace",
 ];
 const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
-// Temporary transitive-dep pin: openhands-sdk 1.40.1 leaves agent-client-protocol
-// unbounded (>=0.10.1), but acp 0.11.0 reordered the ACP prompt() args and breaks
-// the SDK's ACP client. Hold acp <0.11 until a fixed SDK ships. See config/defaults.json.
-const AGENT_CLIENT_PROTOCOL_CONSTRAINT =
-  SHARED_DEFAULTS.constraints?.agentClientProtocol;
 const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_API_KEY =
   SHARED_DEFAULTS.telemetry.posthogApiKey;
 const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_HOST =
   SHARED_DEFAULTS.telemetry.posthogHost;
 const AGENT_SERVER_POSTHOG_CONSTRAINT = "posthog>=6,<7";
+// Interpreter request passed to uvx for agent-server and automation; see
+// buildUvxPythonArgs.
+const DEFAULT_UVX_PYTHON_REQUEST = SHARED_DEFAULTS.python.uvxRequest;
 const FRONTEND_REQUIRED_BINS = ["cross-env", "react-router"];
 
 /**
@@ -272,11 +277,13 @@ export async function assertPortsFree(portConfigs, host = "127.0.0.1") {
   const lines = busy
     .map(({ name, port }) => `   • ${name}: port ${port}`)
     .join("\n");
-  throw new Error(
+  const error = new Error(
     `Cannot start: the following ports are already in use:\n\n${lines}\n\n` +
       `Another agent-canvas instance may already be running.\n` +
-      `Stop it first, or override the port via environment variables (e.g. PORT=<other>).`,
+      `Stop it first, or override the occupied ports via environment variables (for ingress, --port <other> or PORT=<other>).`,
   );
+  error.code = "EADDRINUSE";
+  throw error;
 }
 
 /**
@@ -322,6 +329,51 @@ export async function findFreePorts(portConfigs, host = "127.0.0.1") {
   }
 
   return result;
+}
+
+/**
+ * Resolve the internal frontend (Vite / static-server) port.
+ *
+ * Users reach the frontend through the ingress, so a taken preferred port is
+ * not fatal: fall back to a free OS-assigned port instead. A port is taken
+ * when another launcher service owns it, when it cannot be bound on the host
+ * the frontend binds, or when anything answers on 127.0.0.1 or ::1. The
+ * ingress proxies to `localhost`, which can resolve to either, and a bind
+ * probe alone misses `::1` and (on macOS) wildcard listeners, which would then
+ * serve another app in place of Canvas.
+ *
+ * @param {number} preferredPort - The port to try first
+ * @param {{bindHost?: string, reservedPorts?: number[]}} [options]
+ *   bindHost: the host the frontend binds; reservedPorts: ports owned by other
+ *   launcher services
+ * @returns {Promise<number>} The port the frontend should bind
+ */
+export async function resolveFrontendPort(
+  preferredPort,
+  { bindHost = "127.0.0.1", reservedPorts = [] } = {},
+) {
+  const answersOnLoopback = async (port) =>
+    (
+      await Promise.all([
+        isPortBusy(port, "127.0.0.1"),
+        isPortBusy(port, "::1"),
+      ])
+    ).includes(true);
+  const isUsable = async (port) =>
+    !reservedPorts.includes(port) &&
+    (await tryPort(port, bindHost)) &&
+    !(await answersOnLoopback(port));
+
+  if (await isUsable(preferredPort)) return preferredPort;
+
+  const maxAttempts = 100;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const port = await findFreePort(0, bindHost);
+    if (await isUsable(port)) return port;
+  }
+  throw new Error(
+    `Could not allocate a frontend port after ${maxAttempts} attempts`,
+  );
 }
 
 export function formatMissingUvxGuidance(cwd = process.cwd()) {
@@ -397,6 +449,37 @@ export function validateFrontendDependencies(
 }
 
 /**
+ * Modules the agent-server imports at startup (`--import-modules`). They are
+ * resolved from `tools/`, which `buildAgentServerEnv` exposes through
+ * OH_EXTRA_PYTHON_PATH. Importing `canvas_ui_tool` eagerly registers the SDK's
+ * builtin FinishTool so automation presets (openhands-automation >= 1.9.0) can
+ * resolve it on the remote conversations they dispatch — see the note at the
+ * bottom of tools/canvas_ui_tool.py.
+ */
+export const AGENT_SERVER_IMPORT_MODULES = "canvas_ui_tool";
+
+/**
+ * Build the `--python` arguments for a uvx-launched service.
+ *
+ * When no suitable interpreter is installed, uvx downloads the newest
+ * CPython it knows, and the SDK's compiled dependencies lag each new
+ * Python release by weeks. A fresh machine therefore failed to start as
+ * soon as Python 3.15 shipped (#18654). Requesting a range makes uvx reuse
+ * any installed interpreter inside it and otherwise download the newest
+ * matching one. An explicit `--python` would outrank uv's own UV_PYTHON
+ * variable, so it is omitted when UV_PYTHON is set.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @returns {string[]}
+ */
+export function buildUvxPythonArgs(env = process.env) {
+  if (env.UV_PYTHON) {
+    return [];
+  }
+  return ["--python", DEFAULT_UVX_PYTHON_REQUEST];
+}
+
+/**
  * Build the uvx command and arguments for running agent-server.
  *
  * Environment variables (highest precedence first):
@@ -406,11 +489,14 @@ export function validateFrontendDependencies(
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
- * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.40.1")
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.60.1")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
  * git branch or commit instead.
+ *
+ * UV_PYTHON, when set, replaces the default interpreter request (the
+ * python.uvxRequest range in config/defaults.json) given to uvx.
  *
  * @param {Record<string, string | undefined>} env
  * @returns {{ command: string, args: string[], source: string }}
@@ -420,7 +506,7 @@ export function buildAgentServerCommand(env = process.env) {
   const gitRef = env.OH_AGENT_SERVER_GIT_REF;
   const version = env.OH_AGENT_SERVER_VERSION;
 
-  const uvxArgs = [];
+  const uvxArgs = buildUvxPythonArgs(env);
   let source = "";
 
   if (localPath) {
@@ -484,9 +570,6 @@ export function buildAgentServerCommand(env = process.env) {
       "--with",
       `openhands-workspace==${version}`,
     );
-    if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
-      uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
-    }
     uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${version})`;
@@ -503,13 +586,14 @@ export function buildAgentServerCommand(env = process.env) {
       "--with",
       `openhands-workspace==${DEFAULT_AGENT_SERVER_VERSION}`,
     );
-    if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
-      uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
-    }
     uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${DEFAULT_AGENT_SERVER_VERSION}, default)`;
   }
+
+  // Everything after the executable name is an agent-server CLI argument.
+  // Import the registration module before any conversation is created.
+  uvxArgs.push("--import-modules", AGENT_SERVER_IMPORT_MODULES);
 
   return {
     command: "uvx",
@@ -557,6 +641,15 @@ export function buildSafeDevConfig(cwd = process.cwd(), env = process.env) {
   return buildConfigFromPorts({ backendPort, vscodePort }, cwd, env);
 }
 
+export function getViteSessionApiKey(config, env = process.env) {
+  return (
+    applySessionKeyPolicy({
+      host: env.VITE_BIND_HOST || "127.0.0.1",
+      sessionApiKey: config.sessionApiKey,
+    }).sessionApiKey || ""
+  );
+}
+
 /**
  * Build safe dev configuration with dynamic port allocation.
  *
@@ -599,6 +692,7 @@ export async function buildSafeDevConfigAsync(
  * @property {string} cwd
  * @property {number} backendPort
  * @property {number} vscodePort
+ * @property {string} vscodeBasePath
  * @property {string} stateDir
  * @property {string} tmuxTmpDir
  * @property {string} conversationsPath
@@ -610,7 +704,25 @@ export async function buildSafeDevConfigAsync(
  * @property {string} secretKey
  * @property {string} sessionApiKey
  * @property {string} canvasToolsDir
+ * @property {string | null} extensionsDir
  */
+
+/**
+ * The installed `@openhands/extensions` package, so the agent-server reads the
+ * same public skills Canvas bundles instead of cloning the repository.
+ * @returns {string | null}
+ */
+export function resolveExtensionsDir() {
+  try {
+    return path.dirname(
+      createRequire(import.meta.url).resolve(
+        "@openhands/extensions/package.json",
+      ),
+    );
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Internal helper to build config from already-resolved ports.
@@ -657,6 +769,7 @@ function buildConfigFromPorts(ports, cwd, env) {
     cwd,
     backendPort,
     vscodePort,
+    vscodeBasePath: VSCODE_BASE_PATH,
     stateDir,
     // tmux socket directory. Defaults to <stateDir>/tmux (under
     // ~/.openhands/agent-canvas), matching where the rest of dev state lives
@@ -684,17 +797,18 @@ function buildConfigFromPorts(ports, cwd, env) {
     secretKey,
     sessionApiKey,
     canvasToolsDir,
+    extensionsDir: resolveExtensionsDir(),
   };
 }
 
 /**
- * Build the environment variables object for spawning the agent-server process.
+ * Telemetry-related env vars for the agent-server process.
  *
- * This is exported so downstream consumers (e.g., automation service) can use
- * the same env vars without duplicating the mapping logic.
+ * Split out from `buildAgentServerEnv` so callers that assemble their own
+ * agent-server environment can reuse the same mapping.
  *
- * @param {ReturnType<typeof buildSafeDevConfig>} config - Config from buildSafeDevConfig
- * @returns {Record<string, string>} Environment variables for agent-server
+ * @param {Record<string, string | undefined>} [env] - Source environment.
+ * @returns {Record<string, string>} Telemetry env vars for agent-server
  */
 export function buildAgentServerTelemetryEnv(env = process.env) {
   const telemetryDisabled =
@@ -739,9 +853,182 @@ export function buildAgentServerTelemetryEnv(env = process.env) {
   return result;
 }
 
-export function buildAgentServerEnv(config, env = process.env) {
+/**
+ * Default log level for the backends Canvas launches.
+ *
+ * Both the agent-server and the automation service read `LOG_LEVEL` and default
+ * it to `INFO`. At `INFO` they emit library-internal startup chatter — most
+ * visibly SQLAlchemy's ORM model-mapping output, several hundred lines of it
+ * from the automation service alone — that buries the few lines a user needs
+ * (service URLs, readiness, real warnings). `WARNING` keeps actionable signals
+ * such as the automation workspace-retention warning while dropping the rest.
+ */
+export const DEFAULT_BACKEND_LOG_LEVEL = "WARNING";
+
+/**
+ * The log level to use for a backend Canvas spawns, before it is applied to
+ * any particular variable.
+ *
+ * Exported so the Uvicorn `--log-level` flag (which takes a lowercase name and
+ * governs the startup banner and per-request access lines, separately from the
+ * app's `LOG_LEVEL`) can be kept in step with the service level.
+ *
+ * @param {object} [options]
+ * @param {boolean} [options.verbose] - Raise to DEBUG.
+ * @param {Record<string, string | undefined>} [options.env] - Source environment.
+ * @returns {string} An uppercase logging level name
+ */
+export function backendLogLevel(options = {}) {
+  const { verbose = false, env = process.env } = options;
+  return verbose ? "DEBUG" : env.LOG_LEVEL || DEFAULT_BACKEND_LOG_LEVEL;
+}
+
+/** The only names Uvicorn's `--log-level` accepts; anything else exits 2. */
+export const UVICORN_LOG_LEVELS = [
+  "critical",
+  "error",
+  "warning",
+  "info",
+  "debug",
+  "trace",
+];
+
+// Python logging aliases that `logging.getLevelNamesMapping()` accepts but
+// Uvicorn does not.
+const UVICORN_LEVEL_ALIASES = { warn: "warning", fatal: "critical" };
+
+// Python level numbers, highest first, mapped to the Uvicorn name at or below
+// them (Uvicorn's `trace` sits below `debug`).
+const UVICORN_LEVEL_BY_NUMBER = [
+  [50, "critical"],
+  [40, "error"],
+  [30, "warning"],
+  [20, "info"],
+  [10, "debug"],
+  [5, "trace"],
+];
+
+/**
+ * Narrow a logging level to something Uvicorn's `--log-level` accepts.
+ *
+ * The app reads `LOG_LEVEL` through Python's logging module, which also
+ * understands `WARN`, `FATAL`, numeric levels and `NOTSET`; Uvicorn validates
+ * the flag with a `click.Choice` over {@link UVICORN_LOG_LEVELS} and exits 2 on
+ * anything else, taking the service — and with it the dev stack — down. So the
+ * env value keeps its raw form and only the Uvicorn argument is narrowed here.
+ *
+ * Values Uvicorn cannot represent fall back to `info`, Uvicorn's own default,
+ * which is what the launchers passed before they set the flag at all.
+ *
+ * @param {string | number | undefined} level
+ * @returns {string} A name from {@link UVICORN_LOG_LEVELS}
+ */
+export function uvicornLogLevel(level) {
+  const name = String(level ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (UVICORN_LOG_LEVELS.includes(name)) return name;
+  if (UVICORN_LEVEL_ALIASES[name]) return UVICORN_LEVEL_ALIASES[name];
+
+  if (/^\d+$/.test(name)) {
+    const numeric = Number(name);
+    // Python's NOTSET is 0 and means "inherit", not "most verbose"; treat it
+    // like the `notset` name and fall back to Uvicorn's own default. Uvicorn's
+    // lowest name is `trace`, which covers everything below `debug`.
+    if (numeric === 0) return "info";
+    const match = UVICORN_LEVEL_BY_NUMBER.find(([value]) => numeric >= value);
+    return match ? match[1] : "trace";
+  }
+
+  return "info";
+}
+
+/**
+ * Logging environment for a backend Canvas spawns.
+ *
+ * Defaults to {@link DEFAULT_BACKEND_LOG_LEVEL} so a plain launch is readable,
+ * while any explicit `LOG_LEVEL` / `AUTOMATION_LOG_LEVEL` in the caller's
+ * environment still wins, so troubleshooting needs no code change. `--verbose`
+ * opts back into `DEBUG`.
+ *
+ * `AUTOMATION_LOG_LEVEL` is set only for the automation service: the
+ * agent-server does not read it, and setting it there would be misleading.
+ *
+ * @param {object} [options]
+ * @param {boolean} [options.verbose] - Raise both services to DEBUG.
+ * @param {boolean} [options.automation] - Also set AUTOMATION_LOG_LEVEL.
+ * @param {Record<string, string | undefined>} [options.env] - Source environment.
+ * @returns {Record<string, string>} Logging env vars for the backend process
+ */
+export function buildBackendLogEnv(options = {}) {
+  const { verbose = false, automation = false, env = process.env } = options;
+  const level = backendLogLevel({ verbose, env });
+
+  return {
+    LOG_LEVEL: level,
+    ...(automation
+      ? {
+          AUTOMATION_LOG_LEVEL: verbose
+            ? "DEBUG"
+            : env.AUTOMATION_LOG_LEVEL || level,
+        }
+      : {}),
+  };
+}
+
+/**
+ * Build the environment variables object for spawning the agent-server process.
+ *
+ * This is exported so downstream consumers (e.g., automation service) can use
+ * the same env vars without duplicating the mapping logic.
+ *
+ * `vscodeBasePath` is an explicit opt-in rather than a field read off `config`,
+ * and that is deliberate. Setting it changes the URL `/api/vscode/url`
+ * advertises: agent-server appends the prefix to the browser origin the
+ * frontend sends, so the editor is only reachable if the same origin also
+ * routes that prefix to the editor port. A launcher that sets it without
+ * registering the route advertises `<origin>/vscode/…`, which serves the
+ * canvas SPA shell instead of the editor.
+ *
+ * Requiring the caller to name it makes the pairing greppable: every call site
+ * that passes `vscodeBasePath` must also register a matching route, and
+ * `__tests__/scripts/vscode-base-path-opt-in.test.ts` asserts that no launcher
+ * opts in without one.
+ *
+ * @param {ReturnType<typeof buildSafeDevConfig>} config - Config from buildSafeDevConfig
+ * @param {{vscodeBasePath?: string | null, env?: Record<string, string | undefined>, verbose?: boolean}} [options]
+ * @param {string | null} [options.vscodeBasePath] - Opt into prefix-mode by
+ *   passing the path prefix the caller also routes to `config.vscodePort`.
+ * @param {Record<string, string | undefined>} [options.env] - Source
+ *   environment for the telemetry mapping (defaults to `process.env`).
+ * @param {boolean} [options.verbose] - Raise the agent-server to DEBUG
+ *   logging instead of the default `WARNING` (see buildBackendLogEnv).
+ * @returns {Record<string, string>} Environment variables for agent-server
+ */
+export function buildAgentServerEnv(config, options = {}) {
+  const { vscodeBasePath = null, env = process.env, verbose = false } = options;
+  const conversationRuntimeEnv = Object.fromEntries(
+    [
+      "OH_CONVERSATION_RUNTIME",
+      "OH_CONVERSATION_RUNTIME_SELECTABLE",
+      "OH_CONVERSATION_IMAGE",
+      "OH_CONVERSATION_IMAGE_HAS_BROWSER",
+      "OH_CONVERSATION_CONTAINER_MEMORY",
+      "OH_CONVERSATION_CONTAINER_CPUS",
+      "OH_CONVERSATION_CONTAINER_PIDS_LIMIT",
+      "OH_CONVERSATION_CONTAINER_STARTUP_TIMEOUT",
+    ]
+      .filter((key) => env[key] !== undefined)
+      .map((key) => [key, env[key]]),
+  );
   return {
     ...buildAgentServerTelemetryEnv(env),
+    ...buildBackendLogEnv({ verbose, env }),
+    ...conversationRuntimeEnv,
+    ...(env.VITE_ENABLE_BROWSER_TOOLS === "false"
+      ? { OH_ENABLE_BROWSER: env.OH_ENABLE_BROWSER || "false" }
+      : {}),
     // Force Python to use UTF-8 for all file I/O and streams.
     //
     // On Windows, Python defaults to the system ANSI codepage (e.g. cp1252).
@@ -759,6 +1046,13 @@ export function buildAgentServerEnv(config, env = process.env) {
     OH_CONVERSATIONS_PATH: config.conversationsPath,
     OH_BASH_EVENTS_DIR: config.bashEventsDir,
     OH_VSCODE_PORT: String(config.vscodePort),
+    // Serve the editor under a path prefix on the canvas origin rather than on
+    // its own published port. agent-server passes this to openvscode-server as
+    // --server-base-path and includes it in the URL from /api/vscode/url, which
+    // matches the ingress route the caller registers for the same prefix.
+    //
+    // Omitted unless the caller opts in — see the note on this function.
+    ...(vscodeBasePath ? { OH_VSCODE_BASE_PATH: vscodeBasePath } : {}),
     OH_SECRET_KEY: config.secretKey,
     // Use OH_SESSION_API_KEYS_0 for agent-server V1 config format
     OH_SESSION_API_KEYS_0: config.sessionApiKey,
@@ -777,6 +1071,9 @@ export function buildAgentServerEnv(config, env = process.env) {
     // Let the agent-server resolve canvas_ui_tool when old persisted metadata
     // requests that compatibility module during startup.
     OH_EXTRA_PYTHON_PATH: config.canvasToolsDir,
+    ...(env.EXTENSIONS_PATH || config.extensionsDir
+      ? { EXTENSIONS_PATH: env.EXTENSIONS_PATH || config.extensionsDir }
+      : {}),
   };
 }
 
@@ -954,7 +1251,12 @@ async function main() {
       cwd: config.cwd,
       env: {
         ...process.env,
-        ...buildAgentServerEnv(config),
+        // Opt into prefix-mode: the Vite dev server proxies the same prefix to
+        // `config.vscodePort` (see VITE_VSCODE_TARGET below), so the advertised
+        // URL resolves on the frontend origin the browser is actually on.
+        ...buildAgentServerEnv(config, {
+          vscodeBasePath: config.vscodeBasePath,
+        }),
       },
     },
   );
@@ -986,6 +1288,12 @@ async function main() {
 
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
+  // Services are spawned detached, so a SIGHUP that kills this launcher (terminal
+  // or multiplexer death) would otherwise leave the whole tree running. Forward
+  // SIGTERM rather than SIGHUP: uvicorn only handles SIGINT/SIGTERM, so a
+  // forwarded SIGHUP would terminate the agent-server by default action instead
+  // of shutting it down gracefully.
+  process.on("SIGHUP", () => shutdown("SIGTERM"));
 
   const backendErrored = new Promise((_, reject) => {
     backend.once("error", (error) => reject(error));
@@ -1021,8 +1329,13 @@ async function main() {
       VITE_BACKEND_HOST: config.backendHost,
       VITE_BACKEND_BASE_URL: config.backendBaseUrl,
       VITE_WORKING_DIR: config.workingDir,
-      // Pass session API key so frontend can authenticate with agent-server
-      VITE_SESSION_API_KEY: config.sessionApiKey,
+      VITE_SESSION_API_KEY: getViteSessionApiKey(config),
+      // This mode has no static server or ingress in front of Vite, so Vite's
+      // own proxy is the only thing that can serve the editor prefix on the
+      // frontend origin. The editor is a separate process on a port of its
+      // own, so it needs its own proxy target rather than VITE_BACKEND_HOST.
+      VITE_VSCODE_BASE_PATH: config.vscodeBasePath,
+      VITE_VSCODE_TARGET: `http://127.0.0.1:${config.vscodePort}`,
       // dev:minimal deliberately does NOT supply runtime-services info (the
       // frontend here talks straight to the agent-server over
       // VITE_BACKEND_BASE_URL — there is no ingress or static-server in front

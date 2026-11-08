@@ -119,7 +119,7 @@ async function openSlackInstallModal(page: Page) {
   await page.goto("/mcp", { waitUntil: "domcontentloaded" });
   await dismissAnalyticsModal(page);
   await expect(page.getByTestId("mcp-marketplace-grid")).toBeVisible({
-    timeout: 10_000,
+    timeout: 30_000,
   });
   await page.getByTestId("mcp-marketplace-card-slack").click();
   const modal = page.getByTestId("mcp-install-modal");

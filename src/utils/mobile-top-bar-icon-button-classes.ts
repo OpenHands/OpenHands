@@ -11,7 +11,7 @@ import {
  */
 export const mobileTopBarIconButtonClassName = cn(
   "inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md p-1",
-  "text-[var(--oh-muted)]",
+  "text-muted",
   formControlTransitionClassName,
   formControlMutedHoverClassName,
 );

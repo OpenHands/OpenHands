@@ -1,18 +1,80 @@
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { BackendKind } from "#/api/backend-registry/types";
+import type { LocalWorkspace } from "#/types/workspace";
 import type { Provider } from "#/types/settings";
+import type { I18nKey } from "#/i18n/declaration";
 import {
   AUTOMATION_NAME_TAG_KEY,
   AUTOMATION_TAG_KEYS,
+  getDisplayConversationTags,
 } from "#/api/agent-server-adapter";
+import {
+  getConversationTagLabel,
+  getConversationTagValueLabel,
+} from "./conversation-card/conversation-tag-display";
+import {
+  AUTOMATION_SETUP_TAG_KEY,
+  AUTOMATION_SETUP_TAG_VALUE,
+} from "#/utils/automation-draft-tags";
 
 export type ConversationSortField = "created" | "updated";
 export type ThreadScope = "all" | "relevant";
 export type OrganizeMode = "grouped" | "chronological";
 export type AutomationFilterMode =
-  | "all"
-  | "hide-automations"
-  | "only-automations";
+  "all" | "hide-automations" | "only-automations";
+export type OlderConversationCutoff = "1h" | "1d" | "7d" | "30d";
+
+export const OLDER_CONVERSATION_CUTOFFS = [
+  "1h",
+  "1d",
+  "7d",
+  "30d",
+] as const satisfies readonly OlderConversationCutoff[];
+
+export const DEFAULT_OLDER_CONVERSATION_CUTOFF: OlderConversationCutoff = "7d";
+
+export const OLDER_CONVERSATION_CUTOFF_MS: Record<
+  OlderConversationCutoff,
+  number
+> = {
+  "1h": 60 * 60 * 1000,
+  "1d": 24 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
+  "30d": 30 * 24 * 60 * 60 * 1000,
+};
+
+export function isOlderConversationCutoff(
+  value: unknown,
+): value is OlderConversationCutoff {
+  return (
+    typeof value === "string" &&
+    (OLDER_CONVERSATION_CUTOFFS as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Splits conversations by last update relative to `nowMs`. Missing or
+ * unparseable timestamps stay in `recent` so they are never hidden by the
+ * hide-older toggle.
+ */
+export function partitionByCutoff<T extends { updated_at: string }>(
+  items: readonly T[],
+  cutoffMs: number,
+  nowMs: number = Date.now(),
+): { recent: T[]; older: T[] } {
+  const cutoff = nowMs - cutoffMs;
+  const recent: T[] = [];
+  const older: T[] = [];
+  for (const item of items) {
+    const updatedAt = item.updated_at ? Date.parse(item.updated_at) : NaN;
+    if (Number.isFinite(updatedAt) && updatedAt < cutoff) {
+      older.push(item);
+    } else {
+      recent.push(item);
+    }
+  }
+  return { recent, older };
+}
 
 /** Max conversations shown under a workspace/repo folder before "View more". */
 export const GROUP_CONVERSATIONS_PREVIEW_LIMIT = 5;
@@ -234,6 +296,74 @@ export function applyAutomationConversationFilter(
   });
 }
 
+/**
+ * Distinct user-facing `key=value` facets among the given conversations,
+ * sorted A–Z for stable menu order. Reserved/internal tag keys are excluded
+ * via `getDisplayConversationTags`; unlike the automation filter there is no
+ * unnamed bucket — a conversation with no user tags simply yields no facet.
+ */
+export function collectTagFacets(
+  conversations: readonly AppConversation[],
+): string[] {
+  const facets = new Set<string>();
+  for (const conversation of conversations) {
+    for (const [key, value] of getDisplayConversationTags(conversation.tags)) {
+      facets.add(`${key}=${value}`);
+    }
+  }
+  return [...facets].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Display form of a stored facet: a bare tag (empty value, stored as `key=`)
+ * renders as just the key. Matching keeps the raw `key=value` form — this is
+ * label-only.
+ */
+export function formatTagFacetLabel(
+  facet: string,
+  t?: (key: I18nKey) => string,
+): string {
+  const separatorIndex = facet.indexOf("=");
+  const key = separatorIndex === -1 ? facet : facet.slice(0, separatorIndex);
+  const value = separatorIndex === -1 ? "" : facet.slice(separatorIndex + 1);
+  if (
+    key.trim().toLowerCase() === AUTOMATION_SETUP_TAG_KEY &&
+    value === AUTOMATION_SETUP_TAG_VALUE
+  ) {
+    const label = t ? getConversationTagLabel(key, t) : "Automation setup";
+    const valueLabel = t
+      ? getConversationTagValueLabel(key, value, t)
+      : "Draft";
+    return `${label}: ${valueLabel}`;
+  }
+  return facet.endsWith("=") ? facet.slice(0, -1) : facet;
+}
+
+/**
+ * Union semantics: a conversation matches when it carries ANY selected
+ * facet, mirroring the automation multi-select. An empty selection — or one
+ * that no longer intersects the available facets (tags edited away, stale
+ * selections persisted from another backend) — leaves the list unfiltered
+ * instead of yielding an unfillable empty list.
+ */
+export function applyTagConversationFilter(
+  conversations: readonly AppConversation[],
+  selectedFacets: readonly string[],
+  availableFacets: readonly string[],
+): AppConversation[] {
+  const facetSet = new Set(availableFacets);
+  const effectiveFacets = selectedFacets.filter((facet) => facetSet.has(facet));
+  if (effectiveFacets.length === 0) {
+    return [...conversations];
+  }
+  const narrowing = new Set(effectiveFacets);
+  return conversations.filter((conversation) =>
+    getDisplayConversationTags(conversation.tags).some(([key, value]) =>
+      narrowing.has(`${key}=${value}`),
+    ),
+  );
+}
+
 /** Subset of `useCreateConversation` variables for launching from a group row */
 export type ConversationGroupLaunch = {
   workingDir?: string;
@@ -419,6 +549,7 @@ export function groupConversations(
   backendKind: BackendKind,
   sortField: ConversationSortField,
   labels: { emptyWorkspace: string; emptyRepository: string },
+  knownWorkspaces?: readonly LocalWorkspace[],
 ): {
   id: string;
   label: string;
@@ -430,11 +561,45 @@ export function groupConversations(
     { label: string; conversations: AppConversation[] }
   >();
 
+  // Index the registered workspace folders by normalized path so legacy
+  // conversations created before workspace tags existed can be recovered by
+  // matching their runtime `working_dir` against a known workspace (#17386).
+  const knownWorkspacePaths = new Map<string, string>();
+  if (backendKind === "local" && knownWorkspaces) {
+    for (const ws of knownWorkspaces) {
+      const normalized = ws.path.trim().replace(/\/+$/, "");
+      if (normalized) {
+        knownWorkspacePaths.set(normalized, ws.name);
+        byId.set(`ws:${normalized}`, { label: ws.name, conversations: [] });
+      }
+    }
+  }
+
+  // A `local_repo` conversation runs directly in its workspace folder, so its
+  // `working_dir` equals a registered workspace path and can be recovered. A
+  // `new_worktree` conversation runs in a unique generated worktree that never
+  // matches a registered path, so only its server tag (read in
+  // `toAppConversation`) can regroup it — pre-tag worktree conversations stay
+  // under "No workspace".
+  const recoverWorkspaceGroup = (
+    c: AppConversation,
+  ): { id: string; label: string } | null => {
+    if (backendKind !== "local" || knownWorkspacePaths.size === 0) return null;
+    const runtimeDir = c.workspace?.working_dir?.trim().replace(/\/+$/, "");
+    if (!runtimeDir) return null;
+    const name = knownWorkspacePaths.get(runtimeDir);
+    return name ? { id: `ws:${runtimeDir}`, label: name } : null;
+  };
+
   for (const c of items) {
-    const { id, label: rawLabel } = getConversationGroupIdentity(
-      c,
-      backendKind,
-    );
+    let { id, label: rawLabel } = getConversationGroupIdentity(c, backendKind);
+    if (id === "__none_workspace") {
+      const recovered = recoverWorkspaceGroup(c);
+      if (recovered) {
+        id = recovered.id;
+        rawLabel = recovered.label;
+      }
+    }
     const label =
       id === "__none_workspace"
         ? labels.emptyWorkspace

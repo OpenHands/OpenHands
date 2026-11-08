@@ -15,7 +15,7 @@ interface HooksModalHeaderProps {
 }
 
 const ICON_BUTTON_CLASS =
-  "rounded-md p-1 text-white hover:bg-tertiary cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed";
+  "rounded-md p-1 text-contrast hover:bg-tertiary cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed";
 
 export function HooksModalHeader({
   isLoading,
@@ -32,7 +32,7 @@ export function HooksModalHeader({
       <div className="flex w-full items-start justify-between gap-4 pr-10">
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <BaseModalTitle title={t(I18nKey.HOOKS_MODAL$TITLE)} />
-          <Typography.Text className="text-sm text-[var(--oh-muted)]">
+          <Typography.Text className="text-sm text-muted">
             {t(I18nKey.HOOKS_MODAL$WARNING)}
           </Typography.Text>
         </div>

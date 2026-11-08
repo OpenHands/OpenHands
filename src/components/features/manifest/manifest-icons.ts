@@ -3,6 +3,7 @@ import {
   Bot,
   CircleAlert,
   LayoutDashboard,
+  Library,
   Sparkles,
   Timer,
   type LucideIcon,
@@ -17,6 +18,7 @@ import type { InterfaceIconSlug } from "#/manifests/types";
 export const MANIFEST_ICON_BY_SLUG = {
   "layout-dashboard": LayoutDashboard,
   sparkles: Sparkles,
+  library: Library,
   bot: Bot,
   "circle-alert": CircleAlert,
   activity: Activity,

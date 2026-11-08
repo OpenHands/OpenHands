@@ -47,6 +47,9 @@ import {
   buildAgentServerCommand,
   buildSafeDevConfig,
   buildAgentServerEnv,
+  backendLogLevel,
+  uvicornLogLevel,
+  buildBackendLogEnv,
   formatMissingUvxGuidance,
   isPortBusy,
   releaseStaleConversationLeases,
@@ -60,10 +63,17 @@ import {
 import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
+  buildAutomationCorsOrigins,
   buildAutomationTelemetryEnv,
   buildAutomationRuntimeServicesInfo,
   buildConfig,
+  buildRouteArgs,
+  getAgentServerBaseUrl,
+  getLocalServiceRoutes,
+  getNoReferrerPrefixArgs,
+  getVSCodeAdvertiseArgs,
 } from "./dev-with-automation.mjs";
+import { applySessionKeyPolicy, bindHostArgs } from "./bind-host.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -112,6 +122,8 @@ export function parseArgs(argv = process.argv.slice(2)) {
     automationRepo: null,
     skipBuild: false,
     verbose: false,
+    host: null,
+    allowLanSessionKey: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -119,6 +131,13 @@ export function parseArgs(argv = process.argv.slice(2)) {
       case "-p":
       case "--port":
         config.port = parseInt(argv[++i], 10);
+        break;
+      case "-H":
+      case "--host":
+        config.host = argv[++i];
+        break;
+      case "--allow-lan-session-key":
+        config.allowLanSessionKey = true;
         break;
       case "--automation-ref":
         config.automationGitRef = argv[++i];
@@ -156,10 +175,12 @@ USAGE:
 
 OPTIONS:
   -p, --port <port>           Ingress port (default: 8000)
+  -H, --host <host>           Bind address for ingress/static (default: 127.0.0.1)
+  --allow-lan-session-key      Inject the session key on a non-loopback bind (opt-in)
   --automation-ref <ref>      Git ref for automation backend (default: main)
   --automation-repo <url>     Git repo URL for automation
   --skip-build                Reuse existing build/ directory (faster restart)
-  -v, --verbose               Show detailed output
+  -v, --verbose               Set backend log level to DEBUG (default: WARNING)
   -h, --help                  Show this help
 
 ENVIRONMENT VARIABLES:
@@ -167,6 +188,11 @@ ENVIRONMENT VARIABLES:
   OH_AUTOMATION_GIT_REF       Alternative to --automation-ref
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK
   OH_SECRET_KEY               Secret key for sessions
+  LOG_LEVEL                   Log level for both backends (default: WARNING)
+                              Python names and aliases both work; aliases and
+                              numbers are mapped onto Uvicorn's own set.
+  AUTOMATION_LOG_LEVEL        Log level for the automation service only
+                              (default: LOG_LEVEL)
 
 ACCESS POINTS:
   Main UI:      http://localhost:PORT/
@@ -285,6 +311,27 @@ async function waitForService(name, url, timeoutMs = 30000) {
 // dev-with-automation; the only difference is the frontend service.)
 // ═══════════════════════════════════════════════════════════════════════════
 
+// The static server and the ingress proxy front the same local backends, so
+// they share one route table — dev-with-automation's, rather than a second
+// copy here. The copy this replaces claimed to stay identical to that table
+// but nothing enforced it, and it had already drifted: the editor prefix was
+// missing, so `/vscode` fell through to the SPA fallback and answered editor
+// requests with the canvas shell.
+//
+// This mode always launches both local backends (it never runs frontend-only),
+// so it asks for their routes unconditionally. Every target is IPv4 loopback:
+// the backends bind to `0.0.0.0`, which only accepts IPv4, but localhost can
+// resolve to ::1 first (notably on Windows).
+function buildLocalServiceRouteArgs(config) {
+  return buildRouteArgs(
+    getLocalServiceRoutes({
+      ...config,
+      launchAgentServer: true,
+      launchAutomation: true,
+    }),
+  );
+}
+
 function startAgentServer(config) {
   logService(
     "agent-server",
@@ -303,7 +350,13 @@ function startAgentServer(config) {
   });
 
   const agentServerEnv = {
-    ...buildAgentServerEnv(safeConfig),
+    // Opt into prefix-mode: both the static server and the ingress below build
+    // their route tables from `getLocalServiceRoutes`, which registers this
+    // same prefix against `config.vscodePort`.
+    ...buildAgentServerEnv(safeConfig, {
+      vscodeBasePath: config.vscodeBasePath,
+      verbose: config.verbose,
+    }),
     ...buildAgentServerAutomationEnv(config),
   };
 
@@ -328,14 +381,16 @@ function startAgentServer(config) {
 function buildAutomationBackendEnv(config, env = process.env) {
   // Both backends share the same session API key value.
   return {
-    AUTOMATION_AGENT_SERVER_URL: `http://localhost:${config.agentServerPort}`,
+    AUTOMATION_AGENT_SERVER_URL: getAgentServerBaseUrl(config),
     AUTOMATION_AGENT_SERVER_API_KEY: config.sessionApiKey,
     AUTOMATION_DB_URL: `sqlite+aiosqlite:///${join(config.stateDir, "automations.db")}`,
     AUTOMATION_BASE_URL: `http://localhost:${config.ingressPort}`,
     AUTOMATION_WORKSPACE_BASE: join(config.stateDir, "workspaces"),
     AUTOMATION_LOCAL_API_KEY: config.sessionApiKey,
     ...buildAutomationTelemetryEnv(env),
-    AUTOMATION_CORS_ORIGINS: `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:3001,http://127.0.0.1:3001`,
+    // Quiet the automation service by default; see buildBackendLogEnv.
+    ...buildBackendLogEnv({ verbose: config.verbose, automation: true, env }),
+    AUTOMATION_CORS_ORIGINS: buildAutomationCorsOrigins(config),
     FILE_STORE: "local",
     LOCAL_STORAGE_PATH: join(config.stateDir, "storage"),
     OPENHANDS_SUPPRESS_BANNER: "1",
@@ -361,6 +416,10 @@ function startAutomationBackend(config) {
       "0.0.0.0",
       "--port",
       config.autoBackendPort.toString(),
+      // Uvicorn's own level; see uvicornLogLevel. Uvicorn rejects the Python
+      // aliases and numeric levels the app itself accepts, so narrow it.
+      "--log-level",
+      uvicornLogLevel(backendLogLevel({ verbose: config.verbose })),
     ],
     {
       cwd: config.stateDir,
@@ -368,6 +427,26 @@ function startAutomationBackend(config) {
       color: c.green,
     },
   );
+}
+
+/**
+ * One MARS web bridge per stack, on the server the browser reaches: the
+ * ingress, guarded by the stack's session key (the same one the page holds).
+ * The static child behind it gets `MARS_WEB=0`: a second bridge there would
+ * answer /mars/* with its own, separate sign-in state for anyone who opens
+ * that port directly. Without the key the ingress bridge would take
+ * destroySession and savePat from any local process, the agent's shell
+ * included, so a stack with no session key mounts nothing.
+ */
+export function buildMarsWebEnv(role, config) {
+  if (role === "static") return { MARS_WEB: "0" };
+  return config.sessionApiKey
+    ? {
+        MARS_WEB_KEY: config.sessionApiKey,
+        ...(config.stateDir ? { MARS_STATE_DIR: config.stateDir } : {}),
+        ...(config.secretKey ? { OH_SECRET_KEY: config.secretKey } : {}),
+      }
+    : { MARS_WEB: "0" };
 }
 
 function startStaticServer(config) {
@@ -386,6 +465,12 @@ function startStaticServer(config) {
       frontendKind: "static",
     }),
   );
+  const keyPolicy = applySessionKeyPolicy({
+    host: config.bindHost,
+    allowLanSessionKey: config.allowLanSessionKey,
+    sessionApiKey: config.sessionApiKey,
+    warn: (msg) => logService("static", msg, c.yellow),
+  });
   spawnService(
     "static",
     "node",
@@ -395,40 +480,31 @@ function startStaticServer(config) {
       join(config.canvasPath, "build"),
       "--port",
       String(config.vitePort),
+      ...bindHostArgs(config.bindHost),
       ...(process.env.VITE_BASE_PATH
         ? ["--base-path", process.env.VITE_BASE_PATH]
         : []),
-      // Inject the API key so the pre-built frontend can authenticate
-      // to the agent-server without a baked-in VITE_SESSION_API_KEY.
-      ...(config.sessionApiKey
-        ? ["--session-api-key", config.sessionApiKey]
+      ...(keyPolicy.sessionApiKey && config.allowLanSessionKey
+        ? ["--allow-lan-session-key"]
         : []),
+      ...(keyPolicy.authRequired ? ["--auth-required"] : []),
       "--runtime-services-info",
       runtimeServicesInfo,
-      "--route",
-      `/api/automation=http://localhost:${config.autoBackendPort}`,
-      "--route",
-      `/api=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/sockets=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/server_info=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/health=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/ready=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/alive=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/docs=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/redoc=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/openapi.json=http://localhost:${config.agentServerPort}`,
+      ...buildLocalServiceRouteArgs(config),
+      // Only the static server injects into the document, so only it can tell
+      // the frontend this origin serves the editor. The ingress below routes
+      // the same prefix but proxies the HTML through untouched.
+      ...getVSCodeAdvertiseArgs(config),
+      ...getNoReferrerPrefixArgs(config),
     ],
     {
       cwd: config.canvasPath,
       color: c.magenta,
+      // Clear an inherited key if policy forbids injecting it.
+      env: {
+        ...buildMarsWebEnv("static", config),
+        SESSION_API_KEY: keyPolicy.sessionApiKey || "",
+      },
     },
   );
 }
@@ -451,34 +527,18 @@ function startIngress(config) {
       ingressScript,
       "--port",
       config.ingressPort.toString(),
+      ...bindHostArgs(config.bindHost),
       "--runtime-services-info",
       runtimeServicesInfo,
-      "--route",
-      `/api/automation=http://localhost:${config.autoBackendPort}`,
-      "--route",
-      `/api=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/sockets=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/server_info=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/health=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/ready=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/alive=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/docs=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/redoc=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/openapi.json=http://localhost:${config.agentServerPort}`,
+      ...buildLocalServiceRouteArgs(config),
+      ...getNoReferrerPrefixArgs(config),
       "--default",
       `http://localhost:${config.vitePort}`,
     ],
     {
       cwd: projectRoot,
       color: c.yellow,
+      env: buildMarsWebEnv("ingress", config),
     },
   );
 }
@@ -580,6 +640,7 @@ async function main() {
     join(config.stateDir, "workspaces"),
     join(config.stateDir, "bash_events"),
     join(config.stateDir, "storage"),
+    config.tmuxTmpDir,
   ]) {
     mkdirSync(dir, { recursive: true });
   }
@@ -621,7 +682,7 @@ async function main() {
   startAgentServer(config);
   await waitForService(
     "agent-server",
-    `http://localhost:${config.agentServerPort}/server_info`,
+    `${getAgentServerBaseUrl(config)}/server_info`,
   );
 
   startAutomationBackend(config);
@@ -641,7 +702,12 @@ async function main() {
 // Exports for testing
 // ═══════════════════════════════════════════════════════════════════════════
 
-export { buildAutomationBackendEnv, buildFrontend, startStaticServer };
+export {
+  buildAutomationBackendEnv,
+  buildFrontend,
+  buildLocalServiceRouteArgs,
+  startStaticServer,
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Main entry point (only when run directly, not when imported)
@@ -653,7 +719,7 @@ const isMainModule =
 if (isMainModule) {
   main().catch((err) => {
     logError(`Fatal error: ${err.message}`);
-    if (err.stack) {
+    if (err.stack && err.code !== "EADDRINUSE") {
       console.error(c.dim + err.stack + c.reset);
     }
     process.exit(1);

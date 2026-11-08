@@ -25,11 +25,14 @@ import { createServer } from "node:http";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
+import { DEFAULT_BIND_HOST, resolveBindHost } from "./bind-host.mjs";
+import { mountMarsWebBridge } from "./mars-web-bridge.mjs";
 import {
   createProxyHandlers,
   createRouter,
   isBenignSocketError,
   isServerInfoRequest,
+  matchesPathPrefix,
   proxyServerInfoRequest,
 } from "./proxy-utils.mjs";
 
@@ -41,8 +44,10 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const config = {
     port: 8000,
+    host: null,
     routes: {},
     defaultBackend: null,
+    noReferrerPrefixes: [],
     runtimeServicesInfo: null,
   };
 
@@ -51,6 +56,10 @@ function parseArgs() {
       case "-p":
       case "--port":
         config.port = parseInt(args[++i], 10);
+        break;
+      case "-H":
+      case "--host":
+        config.host = args[++i];
         break;
       case "-r":
       case "--route":
@@ -62,6 +71,16 @@ function parseArgs() {
       case "--default":
         config.defaultBackend = args[++i];
         break;
+      case "--no-referrer-prefix": {
+        const prefix = args[++i];
+        if (!prefix || !prefix.startsWith("/")) {
+          throw new Error(
+            `--no-referrer-prefix value must start with '/': ${prefix ?? "(empty)"}`,
+          );
+        }
+        config.noReferrerPrefixes.push(prefix);
+        break;
+      }
       case "--runtime-services-info":
         config.runtimeServicesInfo = args[++i] || null;
         break;
@@ -86,13 +105,18 @@ USAGE:
 
 OPTIONS:
   -p, --port <port>           Port to listen on (default: 8000)
+  -H, --host <host>           Address to bind (default: 127.0.0.1 loopback)
   -r, --route <path=url>      Add a route (can be repeated)
   -d, --default <url>         Default backend for unmatched routes
+  --no-referrer-prefix <p>    Send "Referrer-Policy: no-referrer" on proxied
+                              responses under <p>. For upstreams whose URL
+                              carries a credential in the query string.
   --runtime-services-info     Runtime services JSON for /server_info
   -h, --help                  Show this help
 
 ENVIRONMENT VARIABLES:
   INGRESS_PORT                Port to listen on
+  INGRESS_HOST                Bind address (default: 127.0.0.1)
   INGRESS_ROUTES              JSON object: {"path": "url", ...}
   INGRESS_DEFAULT             Default backend URL
   INGRESS_RUNTIME_SERVICES_INFO
@@ -134,8 +158,10 @@ function buildConfig(args, env = process.env) {
 
   return {
     port: args.port || parseInt(env.INGRESS_PORT, 10) || 8000,
+    host: resolveBindHost({ flag: args.host, env: env.INGRESS_HOST }),
     routes,
     defaultBackend: args.defaultBackend || env.INGRESS_DEFAULT || null,
+    noReferrerPrefixes: args.noReferrerPrefixes ?? [],
     runtimeServicesInfo:
       args.runtimeServicesInfo || env.INGRESS_RUNTIME_SERVICES_INFO || null,
   };
@@ -149,14 +175,29 @@ export function startIngress(config) {
   const route = createRouter(config.routes, config.defaultBackend);
   const proxy = createProxyHandlers({ label: `ingress:${config.port}` });
   const uninstallDiagnostics = proxy.installDiagnostics();
+  // DigitalOcean Managed Agents for the browser: with MARS_WEB=1, host the MARS
+  // bridge and proxies to sessions' tunnel listeners, behind the session key
+  // (MARS_WEB_KEY; dev-with-automation passes the stack's key).
+  const marsWeb = mountMarsWebBridge({ host: config.host });
+
+  const noReferrerPrefixes = config.noReferrerPrefixes ?? [];
 
   const server = createServer((req, res) => {
-    const backend = route(req.url ?? "/");
+    const url = req.url ?? "/";
+    if (marsWeb?.handleHttp(req, res)) return;
+    const backend = route(url);
 
     if (!backend) {
       res.writeHead(503);
       res.end("No backend configured for this route");
       return;
+    }
+
+    // See the matching note in static-server.mjs: the editor's URL carries
+    // agent-server's session key as a query parameter, so the document must
+    // not send a Referer on the subresources the workbench loads.
+    if (noReferrerPrefixes.some((prefix) => matchesPathPrefix(url, prefix))) {
+      res.setHeader("Referrer-Policy", "no-referrer");
     }
 
     if (
@@ -173,6 +214,7 @@ export function startIngress(config) {
 
   // Handle WebSocket upgrades
   server.on("upgrade", (req, socket, head) => {
+    if (marsWeb?.handleUpgrade(req, socket, head)) return;
     const backend = route(req.url ?? "/");
 
     if (!backend) {
@@ -196,8 +238,11 @@ export function startIngress(config) {
     }
   });
   server.on("close", uninstallDiagnostics);
+  server.on("close", () => {
+    void marsWeb?.dispose().catch(() => {});
+  });
 
-  server.listen(config.port, () => {
+  server.listen(config.port, config.host || DEFAULT_BIND_HOST, () => {
     console.log("");
     console.log(
       "╔═══════════════════════════════════════════════════════════════╗",

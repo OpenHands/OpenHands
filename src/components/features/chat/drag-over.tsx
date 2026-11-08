@@ -13,15 +13,15 @@ export function DragOver() {
           <ImageIcon
             width={36}
             height={36}
-            className="rotate-[-27deg] absolute top-[-40px] left-[-10px]"
+            className="absolute file-drop-image"
           />
           <ArrowDownCurveIcon
             width={16}
             height={16}
-            className="absolute top-[-16px] left-[-20px]"
+            className="absolute file-drop-arrow"
           />
         </div>
-        <div className="drag-over-content">
+        <div>
           <p>{t(I18nKey.COMMON$DROP_YOUR_FILES_HERE)}</p>
         </div>
       </div>

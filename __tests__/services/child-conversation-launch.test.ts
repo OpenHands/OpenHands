@@ -5,7 +5,11 @@ import {
   LAUNCH_CHILD_CONVERSATION_ACTION_KIND,
   LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
 } from "#/constants/child-conversation";
-import { setStoredConversationMetadata } from "#/api/conversation-metadata-store";
+import {
+  getStoredConversationMetadata,
+  setStoredConversationMetadata,
+} from "#/api/conversation-metadata-store";
+import { getQueryClient } from "#/query-client-config";
 import { useGoalStore } from "#/stores/goal-store";
 import type { LaunchChildConversationAction } from "#/types/agent-server/core";
 import { isLaunchChildConversationActionEvent } from "#/types/agent-server/type-guards";
@@ -23,6 +27,12 @@ const {
   mockGetCloudStartTask,
   mockPickCloudBackend,
   mockGetCachedAgentServerVersion,
+  mockGetSettings,
+  mockListMetaProfiles,
+  mockBatchGetAppConversations,
+  mockListAgentProfiles,
+  mockListLlmProfiles,
+  mockSupportsLaunchLlmOverride,
 } = vi.hoisted(() => ({
   mockCreateConversation: vi.fn(),
   mockResolveWorkingDir: vi.fn(),
@@ -32,7 +42,23 @@ const {
   mockGetCloudStartTask: vi.fn(),
   mockPickCloudBackend: vi.fn(),
   mockGetCachedAgentServerVersion: vi.fn(),
+  mockGetSettings: vi.fn(),
+  mockListMetaProfiles: vi.fn(),
+  mockBatchGetAppConversations: vi.fn(),
+  mockListAgentProfiles: vi.fn(),
+  mockListLlmProfiles: vi.fn(),
+  mockSupportsLaunchLlmOverride: vi.fn(),
 }));
+
+vi.mock(
+  "#/hooks/use-migrate-default-agent-profile",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("#/hooks/use-migrate-default-agent-profile")
+    >()),
+    ensureDefaultAgentProfileMigrated: vi.fn().mockResolvedValue(true),
+  }),
+);
 
 vi.mock(
   "#/api/conversation-service/agent-server-conversation-service.api",
@@ -42,9 +68,29 @@ vi.mock(
       resolveConversationWorkingDir: mockResolveWorkingDir,
       sendMessage: mockSendMessage,
       updateConversationTitle: mockUpdateTitle,
+      batchGetAppConversations: mockBatchGetAppConversations,
     },
   }),
 );
+
+vi.mock(
+  "#/api/agent-profiles-service/agent-profiles-service.api",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("#/api/agent-profiles-service/agent-profiles-service.api")
+    >()),
+    default: { listProfiles: mockListAgentProfiles, getProfile: vi.fn() },
+  }),
+);
+
+vi.mock("#/api/profiles-service/profiles-service.api", () => ({
+  default: { listProfiles: mockListLlmProfiles },
+}));
+
+vi.mock("#/api/agent-server-adapter", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/api/agent-server-adapter")>()),
+  backendSupportsLaunchLlmOverride: mockSupportsLaunchLlmOverride,
+}));
 
 vi.mock("#/api/cloud/conversation-service.api", () => ({
   createCloudAppConversation: mockCreateCloudAppConversation,
@@ -68,6 +114,14 @@ vi.mock("#/api/agent-server-compatibility", () => ({
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
   displaySuccessToastWithLink: vi.fn(),
+}));
+
+vi.mock("#/api/settings-service/settings-service.api", () => ({
+  default: { getSettings: mockGetSettings },
+}));
+
+vi.mock("#/api/meta-profiles-service/meta-profiles-service.api", () => ({
+  default: { listMetaProfiles: mockListMetaProfiles },
 }));
 
 const PARENT_ID = "parent-conversation-id";
@@ -133,6 +187,35 @@ describe("handleLaunchChildConversationAction", () => {
     mockUpdateTitle.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue(undefined);
     mockGetCachedAgentServerVersion.mockReturnValue("1.37.1");
+    mockGetSettings.mockResolvedValue({
+      run_router_at_conversation_start: false,
+    });
+    mockListMetaProfiles.mockResolvedValue({
+      meta_profiles: [],
+      active_meta_profile: null,
+    });
+    mockBatchGetAppConversations.mockResolvedValue([]);
+    getQueryClient().clear();
+    // A parent without a recorded profile launches its child from the active
+    // one, the seeded `default` here.
+    mockListAgentProfiles.mockResolvedValue({
+      profiles: [
+        {
+          id: "profile-default",
+          name: "default",
+          agent_kind: "openhands",
+          revision: 1,
+          llm_profile_ref: "default",
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: "profile-default",
+    });
+    mockListLlmProfiles.mockResolvedValue({
+      profiles: [],
+      active_profile: null,
+    });
+    mockSupportsLaunchLlmOverride.mockResolvedValue(true);
   });
 
   describe("parameter validation", () => {
@@ -202,12 +285,64 @@ describe("handleLaunchChildConversationAction", () => {
       );
 
       expect(mockCreateConversation).toHaveBeenCalledWith({
+        agentProfileId: "profile-default",
+        agentProfileKind: "openhands",
+        agentLlmProfileRef: "default",
         initialUserMsg: "Add a regression test for the parser",
         metadata: PARENT_REPO_METADATA,
         workingDirOverride: "/Users/jane/projects/foo",
         workspaceMode: "new_worktree",
         parentConversationId: PARENT_ID,
       });
+    });
+
+    it("launches the child from the parent's agent profile and current LLM", async () => {
+      seedWorktreeCapableParent();
+      mockBatchGetAppConversations.mockResolvedValue([
+        {
+          agent_kind: "openhands",
+          active_profile: "fast",
+          launched_agent_profile: {
+            agent_profile_id: "profile-1",
+            revision: 3,
+          },
+        },
+      ]);
+      mockListAgentProfiles.mockResolvedValue({
+        profiles: [
+          {
+            id: "profile-1",
+            name: "reviewer",
+            agent_kind: "openhands",
+            revision: 3,
+            llm_profile_ref: "slow",
+            mcp_server_refs: null,
+          },
+        ],
+        active_agent_profile_id: null,
+      });
+      mockListLlmProfiles.mockResolvedValue({
+        profiles: [{ name: "slow" }, { name: "fast" }],
+        active_profile: "slow",
+      });
+
+      await handleLaunchChildConversationAction(
+        action({}),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockCreateConversation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentProfileId: "profile-1",
+          agentProfileKind: "openhands",
+          agentLlmProfileOverride: "fast",
+          parentConversationId: PARENT_ID,
+        }),
+      );
+      expect(getStoredConversationMetadata("child-id")?.active_profile).toBe(
+        "fast",
+      );
     });
 
     it("reports the child's id, url and status back to the agent", async () => {
@@ -251,6 +386,9 @@ describe("handleLaunchChildConversationAction", () => {
       );
 
       expect(mockCreateConversation).toHaveBeenCalledWith({
+        agentProfileId: "profile-default",
+        agentProfileKind: "openhands",
+        agentLlmProfileRef: "default",
         initialUserMsg: expect.anything(),
         metadata: null,
         workingDirOverride: "/Users/jane/projects/foo",
@@ -305,6 +443,9 @@ describe("handleLaunchChildConversationAction", () => {
 
       expect(mockCreateConversation).toHaveBeenCalledTimes(1);
       expect(mockCreateConversation).toHaveBeenCalledWith({
+        agentProfileId: "profile-default",
+        agentProfileKind: "openhands",
+        agentLlmProfileRef: "default",
         initialUserMsg: expect.anything(),
         metadata: null,
         workingDirOverride: "/Users/jane/projects/foo",
@@ -335,6 +476,9 @@ describe("handleLaunchChildConversationAction", () => {
 
       expect(mockCreateConversation).toHaveBeenCalledTimes(2);
       expect(mockCreateConversation).toHaveBeenLastCalledWith({
+        agentProfileId: "profile-default",
+        agentProfileKind: "openhands",
+        agentLlmProfileRef: "default",
         initialUserMsg: expect.anything(),
         metadata: PARENT_REPO_METADATA,
         workingDirOverride: "/Users/jane/projects/foo",
@@ -436,6 +580,58 @@ describe("handleLaunchChildConversationAction", () => {
       );
     });
 
+    it("skips the meta-profiles fetch and launch additions when the router toggle is off", async () => {
+      mockCreateCloudAppConversation.mockResolvedValue({
+        id: "start-task-id",
+        app_conversation_id: "cloud-child-id",
+        status: "READY",
+      });
+
+      await handleLaunchChildConversationAction(
+        action({ target: "cloud" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockListMetaProfiles).not.toHaveBeenCalled();
+      const [request] = mockCreateCloudAppConversation.mock.calls.at(-1) as [
+        Record<string, unknown>,
+      ];
+      expect(request).not.toHaveProperty("agent_launch_additions");
+    });
+
+    it("stamps the router instruction when the toggle is on and a meta-profile is active", async () => {
+      mockGetSettings.mockResolvedValue({
+        run_router_at_conversation_start: true,
+      });
+      mockListMetaProfiles.mockResolvedValue({
+        meta_profiles: [{ name: "router" }],
+        active_meta_profile: "router",
+      });
+      mockCreateCloudAppConversation.mockResolvedValue({
+        id: "start-task-id",
+        app_conversation_id: "cloud-child-id",
+        status: "READY",
+      });
+
+      await handleLaunchChildConversationAction(
+        action({ target: "cloud" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockCreateCloudAppConversation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agent_launch_additions: {
+            system_message_suffix_append: expect.stringContaining(
+              "route_task_to_model",
+            ),
+          },
+        }),
+        cloudBackend,
+      );
+    });
+
     // Cloud provisions the sandbox asynchronously and only fills in
     // `app_conversation_id` at READY, so reporting the first response would
     // hand the agent a result with no conversation to open.
@@ -461,9 +657,33 @@ describe("handleLaunchChildConversationAction", () => {
         status: "launched",
         target: "cloud",
         conversation_id: "cloud-child-id",
-        url: "https://app.all-hands.dev/conversations/cloud-child-id",
+        url: "https://app.all-hands.dev/canvas/conversations/cloud-child-id",
         initial_status: "READY",
         parent_link: false,
+      });
+    });
+
+    // Cloud and self-hosted Enterprise serve the legacy UI at the host root and
+    // Agent Canvas under /canvas.
+    it("links the child to the backend's Agent Canvas, not its legacy UI", async () => {
+      mockPickCloudBackend.mockReturnValueOnce({
+        ...cloudBackend,
+        host: "https://openhands.example.com/",
+      });
+      mockCreateCloudAppConversation.mockResolvedValue({
+        id: "start-task-id",
+        app_conversation_id: "cloud-child-id",
+        status: "READY",
+      });
+
+      await handleLaunchChildConversationAction(
+        action({ target: "cloud" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(reportedResult()).toMatchObject({
+        url: "https://openhands.example.com/canvas/conversations/cloud-child-id",
       });
     });
 

@@ -50,51 +50,37 @@ describe("conversation localStorage utilities", () => {
       expect(state.selectedTab).toBe("terminal");
     });
 
-    it("silently drops the legacy rightPanelShown field from older persisted blobs", () => {
-      // Older builds persisted the right-drawer state alongside the
-      // selected tab. The schema no longer carries that field — verify
-      // the read path strips it instead of leaking the unknown property
-      // onto consumers (and that legacy `false` values don't somehow
-      // pin the panel closed forever).
-      const conversationId = "conv-legacy-right-panel";
-      const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
-      localStorage.setItem(
-        key,
-        JSON.stringify({
-          selectedTab: "terminal",
-          rightPanelShown: false,
-          unpinnedTabs: ["browser"],
-        }),
-      );
+    it("round-trips rightPanelShown through localStorage", () => {
+      const conversationId = "conv-right-panel";
+      setConversationState(conversationId, {
+        selectedTab: "terminal",
+        rightPanelShown: true,
+        unpinnedTabs: ["browser"],
+      });
 
       const state = getConversationState(conversationId);
 
       expect(state.selectedTab).toBe("terminal");
       expect(state.unpinnedTabs).toEqual(["browser"]);
-      expect(state).not.toHaveProperty("rightPanelShown");
+      expect(state.rightPanelShown).toBe(true);
     });
 
-    it("also drops legacy rightPanelShown: true (not just the falsy variant)", () => {
-      // Older builds could persist either boolean. The previous test
-      // covered `false`; this one covers `true` so an upgrading user
-      // with the drawer open can't have it leak through into the new
-      // schema either.
-      const conversationId = "conv-legacy-right-panel-true";
+    it("defaults rightPanelShown to false and drops corrupt values", () => {
+      expect(getConversationState("conv-right-panel-default").rightPanelShown).toBe(
+        false,
+      );
+
+      const conversationId = "conv-right-panel-corrupt";
       const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
       localStorage.setItem(
         key,
         JSON.stringify({
           selectedTab: "terminal",
-          rightPanelShown: true,
-          unpinnedTabs: ["browser"],
+          rightPanelShown: "yes",
         }),
       );
 
-      const state = getConversationState(conversationId);
-
-      expect(state.selectedTab).toBe("terminal");
-      expect(state.unpinnedTabs).toEqual(["browser"]);
-      expect(state).not.toHaveProperty("rightPanelShown");
+      expect(getConversationState(conversationId).rightPanelShown).toBe(false);
     });
 
     it("returns default state when key is missing or invalid", () => {
@@ -160,6 +146,30 @@ describe("conversation localStorage utilities", () => {
       expect(state.subConversationTaskId).toBeNull();
       expect(state.selectedTab).toBe("files");
       expect(state.unpinnedTabs).toEqual([]);
+      expect(state.unpinnedOverviewSections).toEqual([]);
+      expect(state.unpinnedOverviewGitParts).toEqual([]);
+    });
+
+    it("persists and sanitizes unpinnedOverviewSections", () => {
+      const conversationId = "conv-overview-pins";
+      setConversationState(conversationId, {
+        unpinnedOverviewSections: ["skills", "not-a-section", "mcp", "workspace"],
+      });
+
+      const state = getConversationState(conversationId);
+      // Legacy section ids (mcp/skills/secrets/…) are dropped by the allowlist.
+      expect(state.unpinnedOverviewSections).toEqual(["workspace"]);
+    });
+
+    it("persists and sanitizes unpinnedOverviewGitParts", () => {
+      const conversationId = "conv-overview-git-pins";
+      setConversationState(conversationId, {
+        unpinnedOverviewGitParts: ["branch", "not-a-part", "issues"],
+      });
+
+      const state = getConversationState(conversationId);
+      // Legacy git part ids (issues) are dropped by the allowlist.
+      expect(state.unpinnedOverviewGitParts).toEqual(["branch"]);
     });
 
     it("retrieves subConversationTaskId from localStorage when it exists", () => {
@@ -217,14 +227,29 @@ describe("conversation localStorage utilities", () => {
       expect(state.selectedTab).toBe("files");
     });
 
-    it("filters obsolete tabs out of stored unpinnedTabs (changes / editor / served / app)", () => {
-      // Returning users may have unpinned the now-removed Changes,
-      // Editor, Served, or App tabs in a previous version. Those names
+    it("migrates a stored Diffs (changes) tab selection to Commits", () => {
+      const conversationId = "conv-123";
+      const consolidatedKey = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+
+      localStorage.setItem(
+        consolidatedKey,
+        JSON.stringify({
+          selectedTab: "changes",
+          unpinnedTabs: [],
+        }),
+      );
+
+      const state = getConversationState(conversationId);
+
+      expect(state.selectedTab).toBe("commits");
+    });
+
+    it("filters obsolete tabs out of stored unpinnedTabs (editor / served / app / changes)", () => {
+      // Returning users may have unpinned the now-removed Editor, Served,
+      // App, or Diffs (`changes`) tabs in a previous version. Those names
       // should not survive the read — otherwise they linger forever in
       // localStorage since the UI has no way to surface them again to be
-      // re-pinned. We cover ALL four removed names here (the previous
-      // version of this test missed `app` and the gap let a denylist-vs-
-      // whitelist regression slip through review).
+      // re-pinned.
       const conversationId = "conv-123";
       const consolidatedKey = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
 
@@ -238,8 +263,7 @@ describe("conversation localStorage utilities", () => {
 
       const state = getConversationState(conversationId);
 
-      // Only the still-valid `terminal` entry survives; all four
-      // obsolete names are dropped.
+      // Obsolete names are dropped; still-valid `terminal` stays.
       expect(state.unpinnedTabs).toEqual(["terminal"]);
     });
   });
@@ -537,53 +561,19 @@ describe("conversation localStorage utilities", () => {
     });
   });
 
-  describe("filesTabDiffView persistence", () => {
-    // The diff-view toggle is per-conversation: in a git repo it
-    // defaults to ON, in a plain workspace it defaults to OFF, but the
-    // user's last explicit choice should win. Verify the boolean
-    // round-trips through localStorage and that the unset case stays
-    // `null` (so the higher layer can apply the repo-aware default).
-
-    it("defaults to null when nothing is stored", () => {
-      const state = getConversationState("files-diff-conv-1");
-      expect(state.filesTabDiffView).toBeNull();
-    });
-
-    it("round-trips `true` through localStorage", () => {
-      const conversationId = "files-diff-conv-2";
-      setConversationState(conversationId, { filesTabDiffView: true });
+  describe("filesTabDiffView preference", () => {
+    it("preserves filesTabDiffView from stored blobs on read", () => {
+      const conversationId = "files-diff-legacy";
+      localStorage.setItem(
+        `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`,
+        JSON.stringify({
+          selectedTab: "files",
+          filesTabDiffView: true,
+        }),
+      );
 
       const state = getConversationState(conversationId);
       expect(state.filesTabDiffView).toBe(true);
-
-      // Also verify the on-disk shape — important because the consumer
-      // code reads it back via `JSON.parse`, so a wrong-type value would
-      // be a silent regression.
-      const raw = localStorage.getItem(
-        `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`,
-      );
-      expect(raw).not.toBeNull();
-      expect(JSON.parse(raw as string).filesTabDiffView).toBe(true);
-    });
-
-    it("round-trips `false` through localStorage", () => {
-      const conversationId = "files-diff-conv-3";
-      setConversationState(conversationId, { filesTabDiffView: false });
-
-      const state = getConversationState(conversationId);
-      expect(state.filesTabDiffView).toBe(false);
-    });
-
-    it("is isolated per conversation", () => {
-      setConversationState("files-diff-convA", { filesTabDiffView: true });
-      setConversationState("files-diff-convB", { filesTabDiffView: false });
-
-      expect(getConversationState("files-diff-convA").filesTabDiffView).toBe(
-        true,
-      );
-      expect(getConversationState("files-diff-convB").filesTabDiffView).toBe(
-        false,
-      );
     });
   });
 
@@ -656,6 +646,47 @@ describe("conversation localStorage utilities", () => {
 
       const state = getConversationState(conversationId);
       expect(state.filesTabContentViewMode).toBe("rich");
+    });
+  });
+
+  describe("files tab open-state / tree persistence", () => {
+    it("defaults to an expanded tree and no open files", () => {
+      const state = getConversationState("files-open-defaults");
+      expect(state.filesTabTreeVisible).toBe(true);
+      expect(state.filesTabOpenPaths).toEqual([]);
+      expect(state.filesTabSelectedPath).toBeNull();
+    });
+
+    it("round-trips tree visibility and open tabs", () => {
+      const conversationId = "files-open-roundtrip";
+      setConversationState(conversationId, {
+        filesTabTreeVisible: false,
+        filesTabOpenPaths: ["README.md", "src/main.ts"],
+        filesTabSelectedPath: "src/main.ts",
+      });
+
+      const state = getConversationState(conversationId);
+      expect(state.filesTabTreeVisible).toBe(false);
+      expect(state.filesTabOpenPaths).toEqual(["README.md", "src/main.ts"]);
+      expect(state.filesTabSelectedPath).toBe("src/main.ts");
+    });
+
+    it("sanitizes corrupt open-state fields", () => {
+      const conversationId = "files-open-corrupt";
+      const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          filesTabTreeVisible: "yes",
+          filesTabOpenPaths: ["ok.ts", 12, "", null],
+          filesTabSelectedPath: { path: "nope" },
+        }),
+      );
+
+      const state = getConversationState(conversationId);
+      expect(state.filesTabTreeVisible).toBe(true);
+      expect(state.filesTabOpenPaths).toEqual(["ok.ts"]);
+      expect(state.filesTabSelectedPath).toBeNull();
     });
   });
 });

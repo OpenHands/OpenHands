@@ -1,7 +1,10 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import React from "react";
-import { Command, useCommandStore } from "#/stores/command-store";
+import { useColorTheme } from "#/hooks/use-color-theme";
+import { getTerminalTheme } from "#/themes/terminal-themes";
+import { useEventStore } from "#/stores/use-event-store";
+import { Command, getTerminalCommands } from "#/utils/terminal-commands";
 import { parseTerminalOutput } from "#/utils/parse-terminal-output";
 
 /*
@@ -85,16 +88,14 @@ function resolveTerminalForeground(host: HTMLElement): string {
   return getComputedStyle(host).color;
 }
 
-// Create a persistent reference that survives component unmounts
-// This ensures terminal history is preserved when navigating away and back
-const persistentLastCommandIndex = { current: 0 };
-
 export const useTerminal = () => {
-  const commands = useCommandStore((state) => state.commands);
+  const colorTheme = useColorTheme();
+  const events = useEventStore((state) => state.events);
+  const commands = React.useMemo(() => getTerminalCommands(events), [events]);
   const terminal = React.useRef<Terminal | null>(null);
   const fitAddon = React.useRef<FitAddon | null>(null);
   const ref = React.useRef<HTMLDivElement>(null);
-  const lastCommandIndex = persistentLastCommandIndex; // Use the persistent reference
+  const renderedCommands = React.useRef<Command[]>([]);
   const isDisposed = React.useRef(false);
 
   const createTerminal = (host: HTMLDivElement) =>
@@ -108,10 +109,7 @@ export const useTerminal = () => {
       // Canvas fillStyle does not resolve CSS variables; use transparency so
       // the host / panel background shows through (`allowTransparency` required).
       allowTransparency: true,
-      theme: {
-        background: "rgba(0, 0, 0, 0)",
-        foreground: resolveTerminalForeground(host),
-      },
+      theme: getTerminalTheme(colorTheme, resolveTerminalForeground(host)),
     });
 
   const fitTerminalSafely = React.useCallback(() => {
@@ -148,45 +146,42 @@ export const useTerminal = () => {
 
     if (ref.current) {
       initializeTerminal();
-      // Render all commands in array
-      // This happens when we just switch to Terminal from other tabs
-      if (commands.length > 0) {
-        for (let i = 0; i < commands.length; i += 1) {
-          if (commands[i].type === "input") {
-            terminal.current.write("$ ");
-          }
-          // Don't pass isUserInput=true here because we're initializing the terminal
-          // and need to show all previous commands
-          renderCommand(commands[i], terminal.current, false);
-        }
-        lastCommandIndex.current = commands.length;
-      }
-      // Don't show prompt in read-only terminal
     }
 
     return () => {
       isDisposed.current = true;
       terminal.current?.dispose();
-      lastCommandIndex.current = 0;
+      renderedCommands.current = [];
     };
   }, []);
 
   React.useEffect(() => {
-    if (
-      terminal.current &&
-      commands.length > 0 &&
-      lastCommandIndex.current < commands.length
-    ) {
-      for (let i = lastCommandIndex.current; i < commands.length; i += 1) {
-        if (commands[i].type === "input") {
-          terminal.current.write("$ ");
-        }
-        // Pass true for isUserInput to skip rendering user input commands
-        // that have already been displayed as the user typed
-        renderCommand(commands[i], terminal.current, false);
-      }
-      lastCommandIndex.current = commands.length;
+    const host = ref.current;
+    if (!terminal.current?.options || !host) return;
+    terminal.current.options.theme = getTerminalTheme(
+      colorTheme,
+      resolveTerminalForeground(host),
+    );
+  }, [colorTheme]);
+
+  React.useEffect(() => {
+    if (!terminal.current) return;
+    const previous = renderedCommands.current;
+    const isAppend = previous.every(
+      (command, index) =>
+        commands[index]?.type === command.type &&
+        commands[index]?.content === command.content,
+    );
+    // Older history pages and conversation switches replace the visible prefix.
+    if (!isAppend) {
+      terminal.current.reset();
+      terminal.current.write("\x1b[?25l");
     }
+    for (const command of commands.slice(isAppend ? previous.length : 0)) {
+      if (command.type === "input") terminal.current.write("$ ");
+      renderCommand(command, terminal.current);
+    }
+    renderedCommands.current = commands;
   }, [commands]);
 
   React.useEffect(() => {
@@ -208,5 +203,5 @@ export const useTerminal = () => {
     };
   }, [fitTerminalSafely]);
 
-  return ref;
+  return { ref, hasOutput: commands.length > 0 };
 };

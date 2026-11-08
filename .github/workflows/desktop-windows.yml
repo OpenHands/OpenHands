@@ -17,6 +17,7 @@ on:
       - .github/workflows/desktop-windows.yml
       - electron/**
       - electron-builder.config.mjs
+      - scripts/download-arch-utils.mjs
       - scripts/download-uv.mjs
       - scripts/download-node.mjs
   release:
@@ -44,7 +45,7 @@ jobs:
       - name: Set up Node.js with npm cache
         uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: "24.22.1"
           cache: npm
 
       - name: Install dependencies

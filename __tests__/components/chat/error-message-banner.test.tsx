@@ -47,19 +47,65 @@ describe("ErrorMessageBanner", () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
-  it("shows a red error icon beside the message", () => {
+  it("shows an error icon beside the message", () => {
     render(<ErrorMessageBanner message="Something went wrong" />);
 
-    const icon = screen.getByTestId("error-message-banner-icon");
-    expect(icon).toHaveStyle({ color: "var(--oh-status-error)" });
+    expect(screen.getByTestId("error-message-banner-icon")).toBeInTheDocument();
+  });
+
+  it("uses a warning icon for non-internal outcomes", () => {
+    render(
+      <ErrorMessageBanner
+        message="Incorrect API key"
+        classification={{
+          kind: "auth",
+          retryable: false,
+          user_action: "settings",
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("warning-message-banner-icon")).toHaveClass(
+      "text-warning",
+    );
+  });
+
+  it("uses the error icon for internal outcomes", () => {
+    render(
+      <ErrorMessageBanner
+        message="Something went wrong"
+        classification={{
+          kind: "internal",
+          retryable: false,
+          user_action: "none",
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("error-message-banner-icon")).toBeInTheDocument();
+  });
+
+  it("uses the error icon for unknown (diagnostic) outcomes", () => {
+    render(
+      <ErrorMessageBanner
+        message="Something went wrong"
+        classification={{
+          kind: "unknown",
+          retryable: false,
+          user_action: "none",
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("error-message-banner-icon")).toBeInTheDocument();
   });
 
   it("uses greyscale theme tokens instead of red error styling", () => {
     render(<ErrorMessageBanner message="Something went wrong" />);
 
     const banner = screen.getByTestId("error-message-banner");
-    expect(banner.className).toContain("border-[var(--oh-border)]");
-    expect(banner.className).toContain("bg-[var(--oh-surface-raised)]");
+    expect(banner.className).toContain("border-border");
+    expect(banner.className).toContain("bg-surface-raised");
     expect(banner.className).not.toContain("#FF0006");
     expect(banner.className).not.toContain("#4A0709");
   });

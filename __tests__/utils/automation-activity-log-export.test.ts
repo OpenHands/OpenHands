@@ -57,6 +57,7 @@ const sampleRow = (
   conversation_url: "http://localhost:8000/conversations/c1",
   error: "boom",
   cost: null,
+  phase: null,
   ...overrides,
 });
 
@@ -113,6 +114,98 @@ describe("automation-activity-log-export", () => {
     expect(csv.split("\n")[1]).toContain("0.4213");
   });
 
+  it("carries current_phase into the export row's phase field", () => {
+    const run = sampleRun({ current_phase: "Examining the diff" });
+
+    const row = mapAutomationRunToExportRow(run, automation);
+
+    expect(row.phase).toBe("Examining the diff");
+  });
+
+  it.each([
+    ["null", null],
+    ["undefined", undefined],
+  ])(
+    "normalizes a %s current_phase to a null phase field",
+    (_label, current_phase) => {
+      const run = sampleRun({ current_phase });
+
+      const row = mapAutomationRunToExportRow(run, automation);
+
+      expect(row.phase).toBeNull();
+    },
+  );
+
+  it("trims a padded phase before exporting it", () => {
+    const run = sampleRun({ current_phase: "  Queued  " });
+
+    const row = mapAutomationRunToExportRow(run, automation);
+
+    expect(row.phase).toBe("Queued");
+  });
+
+  it.each([
+    ["completed", AutomationRunStatus.COMPLETED],
+    ["cancelled", AutomationRunStatus.CANCELLED],
+  ])(
+    "exports the last phase of a %s run, which no screen shows",
+    (_label, status) => {
+      // The export deliberately does not go through `shouldShowRunPhase`:
+      // that predicate decides what deserves screen space, and hides the
+      // phase once a run's status says everything. A record is not a screen —
+      // filtering here would make a run that finished in a known phase
+      // indistinguishable from one that never reported a phase at all.
+      const run = sampleRun({
+        status,
+        current_phase: "Agent is working on the task",
+      });
+
+      const row = mapAutomationRunToExportRow(run, automation);
+
+      expect(row.phase).toBe("Agent is working on the task");
+    },
+  );
+
+  it("includes a phase column in the CSV header", () => {
+    const rows: AutomationRunExportRow[] = [sampleRow({ phase: "queued" })];
+    const csv = serializeActivityLogRowsCsv(rows);
+    expect(csv.split("\n")[0].split(",")).toContain("phase");
+  });
+
+  it("renders an empty cell (not the string 'null') for a run without a phase", () => {
+    // Arrange: one run with a phase, one without — both in the same export.
+    // `trigger` is overridden to a single-key object so its JSON-stringified,
+    // quoted cell has no internal comma to confuse the naive column split
+    // below (the CSV escaping itself is covered by a separate test).
+    const rows: AutomationRunExportRow[] = [
+      sampleRow({
+        run_id: "r-with-phase",
+        trigger: { type: "cron" },
+        phase: "Agent is working on the task",
+      }),
+      sampleRow({
+        run_id: "r-without-phase",
+        trigger: { type: "cron" },
+        phase: null,
+      }),
+    ];
+
+    // Act
+    const csv = serializeActivityLogRowsCsv(rows);
+    const lines = csv.trim().split("\n");
+    const header = lines[0].split(",");
+    const phaseColumnIndex = header.indexOf("phase");
+
+    // Assert
+    const withPhaseCells = lines[1].split(",");
+    const withoutPhaseCells = lines[2].split(",");
+    expect(withPhaseCells[phaseColumnIndex]).toBe(
+      "Agent is working on the task",
+    );
+    expect(withoutPhaseCells[phaseColumnIndex]).toBe("");
+    expect(withoutPhaseCells[phaseColumnIndex]).not.toBe("null");
+  });
+
   it("serializes CSV with conversation URL and escaped fields", () => {
     const rows: AutomationRunExportRow[] = [
       sampleRow({
@@ -151,14 +244,22 @@ describe("automation-activity-log-export", () => {
       "http://localhost:8000/conversations/c2",
     );
     expect(AutomationService.listAutomationRuns).toHaveBeenCalledTimes(2);
-    expect(AutomationService.listAutomationRuns).toHaveBeenNthCalledWith(1, "a1", {
-      limit: 100,
-      offset: 0,
-    });
-    expect(AutomationService.listAutomationRuns).toHaveBeenNthCalledWith(2, "a1", {
-      limit: 100,
-      offset: 1,
-    });
+    expect(AutomationService.listAutomationRuns).toHaveBeenNthCalledWith(
+      1,
+      "a1",
+      {
+        limit: 100,
+        offset: 0,
+      },
+    );
+    expect(AutomationService.listAutomationRuns).toHaveBeenNthCalledWith(
+      2,
+      "a1",
+      {
+        limit: 100,
+        offset: 1,
+      },
+    );
   });
 
   it("downloads JSON after paging list runs", async () => {
@@ -212,5 +313,13 @@ describe("automation-activity-log-export", () => {
     );
     const blob = vi.mocked(downloadBlob).mock.calls[0][0] as Blob;
     expect(blob.type).toBe("text/csv;charset=utf-8");
+  });
+
+  it("exports whitespace-only current_phase as an empty cell, same as no phase", () => {
+    const run = sampleRun({ current_phase: "   " });
+
+    const row = mapAutomationRunToExportRow(run, automation);
+
+    expect(row.phase).toBeNull();
   });
 });

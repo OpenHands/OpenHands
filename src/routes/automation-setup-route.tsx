@@ -1,6 +1,9 @@
 import { useLoaderData, useLocation, useNavigate } from "react-router";
 import { Route } from "./+types/automation-setup-route";
-import { automationListPath } from "#/manifests/automation-interface";
+import {
+  automationListPath,
+  hasAutomationInterface,
+} from "#/manifests/automation-interface";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import { SetupDialog } from "#/components/features/manifest/manifest-setup-dialog";
 
@@ -15,7 +18,9 @@ import { SetupDialog } from "#/components/features/manifest/manifest-setup-dialo
 export const clientLoader = ({ params }: Route.ClientLoaderArgs) => {
   const entry = SETUP_REGISTRY.findById(params.automationId ?? "");
 
-  if (!entry) {
+  // Setup submits against the interface manifest's endpoints, so without an
+  // admitted manifest the page has nothing to submit to either.
+  if (!entry || !hasAutomationInterface()) {
     throw new Response(null, { status: 404, statusText: "Not Found" });
   }
 

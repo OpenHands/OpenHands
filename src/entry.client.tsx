@@ -11,17 +11,29 @@ import {
   AgentServerUIProviders,
   DEFAULT_AGENT_SERVER_ANALYTICS,
 } from "./components/providers";
+import { installMarsWebBridge } from "./api/mars/mars-web-bridge";
 import { waitForI18n } from "./i18n";
 import { shouldStartMockWorker } from "./mocks/should-start-mock-worker";
+import { withBasePathSlash } from "./utils/base-path-url";
+
+// Sign-in lands on the bare base path; the router only matches it with a
+// trailing slash, so add the slash before hydrating.
+const slashedUrl = withBasePathSlash(window.location, import.meta.env.BASE_URL);
+if (slashedUrl) {
+  window.history.replaceState(window.history.state, "", slashedUrl);
+}
 
 async function prepareApp() {
-  await waitForI18n();
+  // DigitalOcean Managed Agents in the browser: present only when the server
+  // this page came from hosts the MARS bridge (scripts/mars-web-bridge.mjs).
+  // Must settle before render — the UI reads `window.marsBridge` synchronously.
+  await Promise.all([waitForI18n(), installMarsWebBridge()]);
 
   if (shouldStartMockWorker()) {
     const { worker } = await import("./mocks/browser");
 
     await worker.start({
-      onUnhandledRequest: "bypass",
+      onUnhandledFrame: "bypass",
     });
   }
 

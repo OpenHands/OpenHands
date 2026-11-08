@@ -3,6 +3,7 @@ import {
   useNavigation,
   type NavigationOptions,
 } from "#/context/navigation-context";
+import { buildAgentCanvasPath } from "#/utils/base-path";
 
 interface NavigationLinkClassNameState {
   isActive: boolean;
@@ -16,8 +17,7 @@ export interface NavigationLinkProps extends Omit<
   replace?: boolean;
   end?: boolean;
   className?:
-    | string
-    | ((state: NavigationLinkClassNameState) => string | undefined);
+    string | ((state: NavigationLinkClassNameState) => string | undefined);
 }
 
 function isModifiedEvent(event: React.MouseEvent<HTMLAnchorElement>) {
@@ -61,6 +61,7 @@ export const NavigationLink = React.forwardRef<
       children,
       target,
       rel,
+      "aria-current": ariaCurrent,
       ...props
     },
     ref,
@@ -91,12 +92,14 @@ export const NavigationLink = React.forwardRef<
       <a
         {...props}
         ref={ref}
-        href={to}
+        href={buildAgentCanvasPath(to)}
         target={target}
         rel={rel}
         onClick={handleClick}
         className={resolvedClassName}
-        aria-current={isActive ? "page" : undefined}
+        // A caller that knows the link stands for a whole section (e.g. the
+        // sidebar Customize row on /mcp) can mark it current explicitly.
+        aria-current={ariaCurrent ?? (isActive ? "page" : undefined)}
       >
         {children}
       </a>

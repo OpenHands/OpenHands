@@ -61,9 +61,9 @@ test.describe("onboarding recent regressions", () => {
   });
 
   // Regression coverage for #1077 / PR #1089: first-run LLM setup
-  // should not default users to the OpenHands provider.
+  // should default users to the configured default provider and model.
 
-  test("defaults the LLM setup step to OpenAI GPT-5.5", async ({
+  test("defaults the LLM setup step to OpenAI GPT-5.6 Sol", async ({
     page,
   }) => {
     await showOnboarding(page, {
@@ -86,6 +86,42 @@ test.describe("onboarding recent regressions", () => {
           }
           await route.fulfill({ response, json: body });
         });
+        // The local LLM step edits the active LLM profile, else the one the
+        // `default` agent profile points at, and keeps that profile's model.
+        // Hide both, which earlier specs may have set, so the step starts a
+        // fresh profile with the default model, as on a first install.
+        await page.route("**/api/profiles", async (route, req) => {
+          if (req.method() !== "GET") {
+            await route.fallback();
+            return;
+          }
+          const response = await route.fetch();
+          const body = await response.json();
+          await route.fulfill({
+            response,
+            json: { ...body, active_profile: null },
+          });
+        });
+        await page.route("**/api/agent-profiles", async (route, req) => {
+          if (req.method() !== "GET") {
+            await route.fallback();
+            return;
+          }
+          const response = await route.fetch();
+          const body = await response.json();
+          await route.fulfill({
+            response,
+            json: {
+              ...body,
+              profiles: (body?.profiles ?? []).map(
+                (profile: { name?: string }) =>
+                  profile.name === "default"
+                    ? { ...profile, llm_profile_ref: null }
+                    : profile,
+              ),
+            },
+          });
+        });
       },
     });
     await advanceOnboardingToLlmStep(page);
@@ -100,13 +136,13 @@ test.describe("onboarding recent regressions", () => {
     // The model input displays the model ID without the provider prefix.
     await expect(
       modelInput,
-      "first-run onboarding should default to GPT-5.5",
-    ).toHaveValue("gpt-5.5", {
+      "first-run onboarding should default to GPT-5.6 Sol",
+    ).toHaveValue("gpt-5.6-sol", {
       timeout: 10_000,
     });
     await expect(
       page.getByTestId("openhands-account-help"),
-      "OpenHands account helper should stay hidden for OpenAI defaults",
-    ).toHaveCount(0);
+      "OpenHands account helper should be hidden for OpenAI defaults",
+    ).toBeHidden();
   });
 });

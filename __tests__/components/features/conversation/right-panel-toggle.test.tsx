@@ -61,10 +61,10 @@ describe("RightPanelToggle", () => {
     expect(storeState.hasRightPanelToggled).toBe(false);
     expect(storeState.isRightPanelShown).toBe(false);
 
-    const raw = localStorage.getItem(`conversation-state-${CONVERSATION_ID}`);
-    if (raw !== null) {
-      expect(JSON.parse(raw)).not.toHaveProperty("rightPanelShown");
-    }
+    const storedState = JSON.parse(
+      localStorage.getItem(`conversation-state-${CONVERSATION_ID}`)!,
+    );
+    expect(storedState.rightPanelShown).toBe(false);
   });
 
   it("should show the panel when clicked while panel is hidden", async () => {
@@ -84,10 +84,10 @@ describe("RightPanelToggle", () => {
     expect(storeState.hasRightPanelToggled).toBe(true);
     expect(storeState.isRightPanelShown).toBe(true);
 
-    const raw = localStorage.getItem(`conversation-state-${CONVERSATION_ID}`);
-    if (raw !== null) {
-      expect(JSON.parse(raw)).not.toHaveProperty("rightPanelShown");
-    }
+    const storedState = JSON.parse(
+      localStorage.getItem(`conversation-state-${CONVERSATION_ID}`)!,
+    );
+    expect(storedState.rightPanelShown).toBe(true);
   });
 
   it("should have aria-pressed attribute reflecting panel state on desktop", () => {

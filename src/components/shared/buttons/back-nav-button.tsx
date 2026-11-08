@@ -5,7 +5,8 @@ import { formControlBackNavButtonClassName } from "#/utils/form-control-classes"
 import { BackNavButtonContent } from "./back-nav-button-content";
 
 type BackNavButtonBaseProps = {
-  children: React.ReactNode;
+  children?: React.ReactNode;
+  ariaLabel?: string;
   testId?: string;
   className?: string;
 };
@@ -20,8 +21,7 @@ type BackNavButtonAsLinkProps = BackNavButtonBaseProps & {
 };
 
 export type BackNavButtonProps =
-  | BackNavButtonAsButtonProps
-  | BackNavButtonAsLinkProps;
+  BackNavButtonAsButtonProps | BackNavButtonAsLinkProps;
 
 export function BackNavButton(
   props: BackNavButtonAsLinkProps,
@@ -30,7 +30,7 @@ export function BackNavButton(
   props: BackNavButtonAsButtonProps,
 ): React.JSX.Element;
 export function BackNavButton(props: BackNavButtonProps) {
-  const { children, testId, className } = props;
+  const { children, ariaLabel, testId, className } = props;
   const classes = cn(formControlBackNavButtonClassName, className);
 
   if ("to" in props) {
@@ -39,6 +39,7 @@ export function BackNavButton(props: BackNavButtonProps) {
         to={props.to}
         onClick={props.onClick}
         data-testid={testId}
+        aria-label={ariaLabel}
         className={classes}
       >
         <BackNavButtonContent>{children}</BackNavButtonContent>
@@ -51,6 +52,7 @@ export function BackNavButton(props: BackNavButtonProps) {
       type="button"
       onClick={props.onClick}
       data-testid={testId}
+      aria-label={ariaLabel}
       className={classes}
     >
       <BackNavButtonContent>{children}</BackNavButtonContent>

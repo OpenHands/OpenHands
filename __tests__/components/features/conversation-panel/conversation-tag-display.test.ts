@@ -99,8 +99,17 @@ describe("getDisplayConversationTags", () => {
         repo: "other/repo",
         workspace: "/tmp/ws",
         working_dir: "/tmp/wd",
+        automationtrigger: "cron",
+        automationid: "3f2b6c1e-1111-4222-8333-abcdefabcdef",
+        automationname: "Nightly Audit",
+        automationrunid: "run-0001",
+        automationsetup: "draft",
+        automationdraftid: "draft-1",
+        automationmaterializeddraftid: "auto-draft-1",
+        automationeditid: "auto-1",
       }),
     ).toEqual([
+      ["automationsetup", "draft"],
       ["origin", "slack"],
       ["env", "prod"],
       ["owner", "alice"],
@@ -109,14 +118,16 @@ describe("getDisplayConversationTags", () => {
 
   it("ranks priority keys by their normalized name", () => {
     // The reserved-key filter normalizes the key, so the priority lookup must
-    // too — otherwise a cloud-stamped `Origin` sorts alphabetically instead of
-    // leading the row.
+    // too — otherwise cloud-stamped priority tags sort alphabetically instead
+    // of leading the row.
     expect(
       getDisplayConversationTags({
         env: "prod",
         Origin: "slack",
+        " AutomationSetup ": "draft",
       }),
     ).toEqual([
+      [" AutomationSetup ", "draft"],
       ["Origin", "slack"],
       ["env", "prod"],
     ]);
@@ -127,7 +138,7 @@ describe("getDisplayConversationTags", () => {
     expect(getDisplayConversationTags(undefined)).toEqual([]);
   });
 
-  it("drops blank and whitespace-only tag values", () => {
+  it("keeps bare tags (empty value) but drops whitespace-only values", () => {
     expect(
       getDisplayConversationTags({
         appmode: "work",
@@ -138,6 +149,7 @@ describe("getDisplayConversationTags", () => {
     ).toEqual([
       ["appmode", "work"],
       ["owner", "alice"],
+      ["worktools", ""],
     ]);
   });
 });
@@ -153,6 +165,7 @@ describe("getConversationTagLabelKind", () => {
     ["repo_name", "repo"],
     ["selected_branch", "branch"],
     ["archiveworkspacepath", "workspace"],
+    ["automationsetup", "automation_setup"],
     ["Appmode", "app_mode"],
     ["worktools", "work_tools"],
     ["Workwsid", "work_wsid"],
@@ -173,6 +186,10 @@ describe("getConversationTagLabel", () => {
         return "Branch";
       case I18nKey.CONVERSATION_PANEL$PREVIEW_WORKSPACE:
         return "Workspace";
+      case I18nKey.AUTOMATION_SETUP$TITLE:
+        return "Automation setup";
+      case I18nKey.AUTOMATIONS$DETAIL$DRAFT:
+        return "Draft";
       case I18nKey.CONVERSATION_PANEL$PREVIEW_APP_MODE:
         return "App mode";
       case I18nKey.CONVERSATION_PANEL$PREVIEW_WORK_TOOLS:
@@ -190,6 +207,12 @@ describe("getConversationTagLabel", () => {
     expect(getConversationTagLabel("archiveworkspacepath", t)).toBe(
       "Workspace",
     );
+    expect(getConversationTagLabel("automationsetup", t)).toBe(
+      "Automation setup",
+    );
+    expect(formatConversationTagTooltip("automationsetup", "draft", t)).toBe(
+      "Automation setup: Draft",
+    );
     expect(getConversationTagLabel("Appmode", t)).toBe("App mode");
     expect(getConversationTagLabel("worktools", t)).toBe("Work tools");
     expect(getConversationTagLabel("Workwsid", t)).toBe("Workspace ID");
@@ -203,6 +226,10 @@ describe("getConversationTagLabel", () => {
     expect(getConversationTagLabel("owner", t)).toBe("Owner");
   });
 
+  it("shows the label alone for bare tags (empty value)", () => {
+    expect(formatConversationTagTooltip("work", "", t)).toBe("Work");
+  });
+
   it("labels origin and source by their own names, not Git", () => {
     expect(getConversationTagLabel("origin", t)).toBe("Origin");
     expect(getConversationTagLabel("source", t)).toBe("Source");
@@ -211,5 +238,17 @@ describe("getConversationTagLabel", () => {
     );
     // The git host stamp keeps the Git label.
     expect(getConversationTagLabel("git_provider", t)).toBe("Git");
+  });
+});
+
+describe("getDisplayConversationTags — launched agent profile tags", () => {
+  it("keeps the app server's agent profile id and revision out of the display tags", () => {
+    expect(
+      getDisplayConversationTags({
+        agentprofileid: "3f2a1b9c-d4e5-4f60-8a7b-9c0d1e2f3a4b",
+        agentprofilerevision: "3",
+        owner: "alice",
+      }),
+    ).toEqual([["owner", "alice"]]);
   });
 });

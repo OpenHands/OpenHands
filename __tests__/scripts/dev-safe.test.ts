@@ -13,7 +13,8 @@ import path from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it, afterEach } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { server as mswServer } from "#/mocks/node";
 import {
   assertPortsFree,
   buildSafeDevConfig,
@@ -23,17 +24,23 @@ import {
   buildAgentServerEnv,
   buildAgentServerTelemetryEnv,
   buildRuntimeServicesInfo,
+  buildUvxPythonArgs,
   formatMissingUvxGuidance,
   formatMissingFrontendDependenciesGuidance,
   getMissingFrontendDependencyBins,
+  getViteSessionApiKey,
   validateFrontendDependencies,
   validateLocalAgentServerPath,
   findFreePort,
   findFreePorts,
   getOrCreatePersistedSessionApiKey,
   resetPersistedSessionApiKeyCache,
+  resolveExtensionsDir,
+  resolveFrontendPort,
 } from "../../scripts/dev-safe.mjs";
 import {
+  chmodSync,
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -41,6 +48,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+
+beforeAll(() => mswServer.close());
+afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -93,6 +103,82 @@ describe("findFreePort", () => {
     const port = await findFreePort(0, "127.0.0.1");
     expect(typeof port).toBe("number");
     expect(port).toBeGreaterThan(0);
+  });
+});
+
+describe("resolveFrontendPort", () => {
+  const servers: net.Server[] = [];
+
+  afterEach(() => {
+    for (const server of servers) {
+      server.close();
+    }
+    servers.length = 0;
+  });
+
+  // Hold a port the way another local app would: listening on `host`.
+  // Resolves null when the host has no such address (e.g. IPv6 disabled).
+  function holdPort(host: string): Promise<number | null> {
+    return new Promise((resolve) => {
+      const server = net.createServer();
+      server.once("error", () => resolve(null));
+      server.listen(0, host, () => {
+        servers.push(server);
+        resolve((server.address() as net.AddressInfo).port);
+      });
+    });
+  }
+
+  it("keeps the preferred port when nothing uses it", async () => {
+    const preferred = await findFreePort(0);
+    expect(await resolveFrontendPort(preferred)).toBe(preferred);
+  });
+
+  // The ingress proxies to `localhost`, so any listener that name can reach
+  // would serve its app in place of Canvas. A bind probe on 127.0.0.1 alone
+  // misses the IPv6 and (on macOS) the wildcard cases.
+  it.for(["127.0.0.1", "0.0.0.0", "::1", "::"])(
+    "falls back when another app listens on %s",
+    async (host, { skip }) => {
+      const taken = await holdPort(host);
+      if (taken === null) return skip(`no ${host} on this host`);
+
+      const port = await resolveFrontendPort(taken);
+
+      expect(port).not.toBe(taken);
+      expect(port).toBeGreaterThan(0);
+    },
+  );
+
+  it("never returns a port reserved for another launcher service", async () => {
+    const reserved = await findFreePort(0);
+
+    const port = await resolveFrontendPort(reserved, {
+      reservedPorts: [reserved],
+    });
+
+    expect(port).not.toBe(reserved);
+    expect(port).toBeGreaterThan(0);
+  });
+
+  // On Linux a wildcard bind (docker runtime mode, --host 0.0.0.0) fails while
+  // another app holds the port on any single address, so the probe has to use
+  // the host the frontend really binds.
+  it("returns a port the frontend can bind on its bind host", async ({
+    skip,
+  }) => {
+    const taken = await holdPort("127.0.0.2");
+    if (taken === null) return skip("no 127.0.0.2 on this host");
+
+    const port = await resolveFrontendPort(taken, { bindHost: "0.0.0.0" });
+
+    const server = net.createServer();
+    servers.push(server);
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(port, "0.0.0.0", resolve);
+    });
+    expect(server.listening).toBe(true);
   });
 });
 
@@ -384,6 +470,25 @@ describe("formatMissingUvxGuidance", () => {
 });
 
 describe("buildAgentServerTelemetryEnv", () => {
+  const agentServerConfig = {
+    cwd: "/tmp/cwd",
+    backendPort: 18000,
+    tmuxTmpDir: "/tmp/tmux",
+    stateDir: "/tmp/state",
+    conversationsPath: "/tmp/conversations",
+    workspacesPath: "/tmp/workspaces",
+    bashEventsDir: "/tmp/bash-events",
+    vscodePort: 19000,
+    vscodeBasePath: "/vscode",
+    secretKey: "secret",
+    sessionApiKey: "session",
+    backendBaseUrl: "http://127.0.0.1:18000",
+    backendHost: "127.0.0.1:18000",
+    workingDir: "/tmp/workspaces",
+    canvasToolsDir: "/tmp/tools",
+    extensionsDir: "/tmp/node_modules/@openhands/extensions",
+  };
+
   it("configures PostHog telemetry by default without seeding consent", () => {
     expect(buildAgentServerTelemetryEnv({})).toEqual({
       OH_TELEMETRY_EXPORTER: "posthog",
@@ -431,25 +536,82 @@ describe("buildAgentServerTelemetryEnv", () => {
   });
 
   it("includes telemetry defaults in the full agent-server environment", () => {
-    const env = buildAgentServerEnv(
-      {
-        tmuxTmpDir: "/tmp/tmux",
-        stateDir: "/tmp/state",
-        conversationsPath: "/tmp/conversations",
-        bashEventsDir: "/tmp/bash-events",
-        vscodePort: 19000,
-        secretKey: "secret",
-        sessionApiKey: "session",
-        backendBaseUrl: "http://127.0.0.1:18000",
-        canvasToolsDir: "/tmp/tools",
-      },
-      {},
-    );
+    const env = buildAgentServerEnv(agentServerConfig, { env: {} });
 
     expect(env).toMatchObject({
       OH_TELEMETRY_EXPORTER: "posthog",
       OH_SESSION_API_KEYS_0: "session",
     });
+  });
+
+  it("forwards configured Docker conversation runtime settings", () => {
+    const configured = buildAgentServerEnv(agentServerConfig, {
+      env: {
+        OH_CONVERSATION_RUNTIME: "docker",
+        OH_CONVERSATION_IMAGE: "agent-server:test",
+        OH_CONVERSATION_IMAGE_HAS_BROWSER: "true",
+        OH_CONVERSATION_CONTAINER_MEMORY: "2g",
+        OH_CONVERSATION_CONTAINER_CPUS: "1",
+        OH_CONVERSATION_CONTAINER_PIDS_LIMIT: "256",
+        OH_CONVERSATION_CONTAINER_STARTUP_TIMEOUT: "180",
+      },
+    });
+
+    expect(configured).toMatchObject({
+      OH_CONVERSATION_RUNTIME: "docker",
+      OH_CONVERSATION_IMAGE: "agent-server:test",
+      OH_CONVERSATION_IMAGE_HAS_BROWSER: "true",
+      OH_CONVERSATION_CONTAINER_MEMORY: "2g",
+      OH_CONVERSATION_CONTAINER_CPUS: "1",
+      OH_CONVERSATION_CONTAINER_PIDS_LIMIT: "256",
+      OH_CONVERSATION_CONTAINER_STARTUP_TIMEOUT: "180",
+    });
+    expect(
+      buildAgentServerEnv(agentServerConfig, { env: {} }),
+    ).not.toHaveProperty("OH_CONVERSATION_RUNTIME");
+  });
+
+  it("turns the browser off on the agent-server when browser tools are disabled", () => {
+    expect(
+      buildAgentServerEnv(agentServerConfig, {
+        env: { VITE_ENABLE_BROWSER_TOOLS: "false" },
+      }),
+    ).toMatchObject({ OH_ENABLE_BROWSER: "false" });
+    expect(
+      buildAgentServerEnv(agentServerConfig, { env: {} }),
+    ).not.toHaveProperty("OH_ENABLE_BROWSER");
+  });
+
+  it("points the agent-server at the installed extensions package", () => {
+    expect(
+      buildAgentServerEnv(agentServerConfig, { env: {} }).EXTENSIONS_PATH,
+    ).toBe("/tmp/node_modules/@openhands/extensions");
+    expect(
+      buildAgentServerEnv(agentServerConfig, {
+        env: { EXTENSIONS_PATH: "/custom/extensions" },
+      }).EXTENSIONS_PATH,
+    ).toBe("/custom/extensions");
+    expect(
+      buildAgentServerEnv(
+        { ...agentServerConfig, extensionsDir: null },
+        { env: {} },
+      ),
+    ).not.toHaveProperty("EXTENSIONS_PATH");
+  });
+
+  it("resolves the extensions package that ships the public skills", () => {
+    const dir = resolveExtensionsDir();
+
+    expect(dir).not.toBeNull();
+    expect(existsSync(path.join(dir as string, "skills"))).toBe(true);
+  });
+
+  it("keeps an explicit OH_ENABLE_BROWSER when browser tools are disabled", () => {
+    expect(
+      buildAgentServerEnv(agentServerConfig, {
+        env: { VITE_ENABLE_BROWSER_TOOLS: "false", OH_ENABLE_BROWSER: "true" },
+      }),
+    ).toMatchObject({ OH_ENABLE_BROWSER: "true" });
   });
 });
 
@@ -460,21 +622,23 @@ describe("buildAgentServerCommand", () => {
     expect(cmd.command).toBe("uvx");
     // Defaults to the released PyPI version with all SDK packages pinned to same version
     expect(cmd.args).toEqual([
+      "--python",
+      ">=3.12,<3.15",
       "--from",
-      "openhands-agent-server==1.40.1",
+      "openhands-agent-server==1.60.1",
       "--with",
-      "openhands-sdk==1.40.1",
+      "openhands-sdk==1.60.1",
       "--with",
-      "openhands-tools==1.40.1",
+      "openhands-tools==1.60.1",
       "--with",
-      "openhands-workspace==1.40.1",
-      "--with",
-      "agent-client-protocol<0.11",
+      "openhands-workspace==1.60.1",
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
-    expect(cmd.source).toBe("PyPI (1.40.1, default)");
+    expect(cmd.source).toBe("PyPI (1.60.1, default)");
   });
 
   it("uses specific PyPI version when OH_AGENT_SERVER_VERSION is set with all packages pinned", () => {
@@ -484,6 +648,8 @@ describe("buildAgentServerCommand", () => {
     // Uses --from syntax because executable name (agent-server) differs from package name (openhands-agent-server)
     // All SDK packages are pinned to the same version
     expect(cmd.args).toEqual([
+      "--python",
+      ">=3.12,<3.15",
       "--from",
       "openhands-agent-server==1.18.0",
       "--with",
@@ -493,10 +659,10 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "openhands-workspace==1.18.0",
       "--with",
-      "agent-client-protocol<0.11",
-      "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("PyPI (1.18.0)");
   });
@@ -508,6 +674,8 @@ describe("buildAgentServerCommand", () => {
 
     expect(cmd.command).toBe("uvx");
     expect(cmd.args).toEqual([
+      "--python",
+      ">=3.12,<3.15",
       "--reinstall",
       "--from",
       "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-agent-server",
@@ -520,6 +688,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("git (feature-branch)");
   });
@@ -529,6 +699,8 @@ describe("buildAgentServerCommand", () => {
 
     expect(cmd.command).toBe("uvx");
     expect(cmd.args).toEqual([
+      "--python",
+      ">=3.12,<3.15",
       "--reinstall",
       "--from",
       "git+https://github.com/OpenHands/software-agent-sdk@abc1234#subdirectory=openhands-agent-server",
@@ -541,6 +713,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("git (abc1234)");
   });
@@ -565,6 +739,8 @@ describe("buildAgentServerCommand", () => {
 
     expect(cmd.command).toBe("uvx");
     expect(cmd.args).toEqual([
+      "--python",
+      ">=3.12,<3.15",
       "--reinstall",
       "--from",
       path.join(sdk, "openhands-agent-server"),
@@ -577,6 +753,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe(`local (${sdk})`);
   });
@@ -597,12 +775,64 @@ describe("buildAgentServerCommand", () => {
     expect(cmd.args).not.toContain("openhands-agent-server==1.18.0");
   });
 
+  it("passes --import-modules to the agent-server, after the executable, in every source mode", () => {
+    // The flag must sit after "agent-server" so uvx hands it to the server
+    // instead of parsing it itself. tools/canvas_ui_tool.py documents why the
+    // module has to be imported before any conversation is created.
+    const variants = [
+      {},
+      { OH_AGENT_SERVER_VERSION: "1.18.0" },
+      { OH_AGENT_SERVER_GIT_REF: "feature-branch" },
+      { OH_AGENT_SERVER_LOCAL_PATH: "/abs/path/to/software-agent-sdk" },
+    ];
+    for (const env of variants) {
+      const { args } = buildAgentServerCommand(env);
+      const executable = args.indexOf("agent-server");
+      expect(executable).toBeGreaterThan(-1);
+      expect(args.slice(executable + 1)).toEqual([
+        "--import-modules",
+        "canvas_ui_tool",
+      ]);
+    }
+  });
+
   it("rejects relative OH_AGENT_SERVER_LOCAL_PATH", () => {
     expect(() =>
       buildAgentServerCommand({
         OH_AGENT_SERVER_LOCAL_PATH: "./software-agent-sdk",
       }),
     ).toThrow(/must be an absolute path/);
+  });
+});
+
+describe("buildUvxPythonArgs", () => {
+  const defaults = JSON.parse(
+    readFileSync(
+      path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../config/defaults.json",
+      ),
+      "utf-8",
+    ),
+  ) as { python: { uvxRequest: string } };
+
+  it("requests the Python range from config/defaults.json by default", () => {
+    // Without it uvx downloads the newest CPython on a machine that has none,
+    // which fails until the SDK's compiled dependencies ship wheels for it
+    // (#18654).
+    expect(defaults.python.uvxRequest).toBe(">=3.12,<3.15");
+    expect(buildUvxPythonArgs({})).toEqual([
+      "--python",
+      defaults.python.uvxRequest,
+    ]);
+  });
+
+  it("leaves the interpreter choice to uv when UV_PYTHON is set", () => {
+    // An explicit --python would outrank uv's own variable.
+    expect(buildUvxPythonArgs({ UV_PYTHON: "3.13" })).toEqual([]);
+    const { args } = buildAgentServerCommand({ UV_PYTHON: "3.13" });
+    expect(args).not.toContain("--python");
+    expect(args[0]).toBe("--from");
   });
 });
 
@@ -648,6 +878,20 @@ describe("validateLocalAgentServerPath", () => {
   it("throws when given a relative path", () => {
     expect(() => validateLocalAgentServerPath("./sdk")).toThrow(
       /must be an absolute path/,
+    );
+  });
+});
+
+describe("getViteSessionApiKey", () => {
+  it("only injects the key on loopback listeners", () => {
+    const config = { sessionApiKey: "local-secret" };
+
+    expect(getViteSessionApiKey(config, {})).toBe("local-secret");
+    expect(getViteSessionApiKey(config, { VITE_BIND_HOST: "127.0.0.1" })).toBe(
+      "local-secret",
+    );
+    expect(getViteSessionApiKey(config, { VITE_BIND_HOST: "0.0.0.0" })).toBe(
+      "",
     );
   });
 });
@@ -948,6 +1192,107 @@ describe("dev-safe CLI startup", () => {
     expect(output).toContain("npm run dev:mock");
     expect(output).toContain("spawn uvx ENOENT");
   });
+
+  it.skipIf(process.platform === "win32")(
+    "cleans up the detached agent-server when the launcher receives SIGHUP",
+    async () => {
+      // Services are spawned detached (getProcessTreeSpawnOptions), so killing
+      // the launcher does not kill them. Drive the real launcher with a stub
+      // agent-server, then SIGHUP the launcher and assert the stub's port is
+      // released rather than held by a survivor.
+      const stubDir = mkdtempSync(path.join(tmpdir(), "dev-safe-sighup-"));
+      const stubJs = path.join(stubDir, "stub-agent-server.mjs");
+      const uvxStub = path.join(stubDir, "uvx");
+
+      writeFileSync(
+        stubJs,
+        [
+          'import net from "node:net";',
+          'const portIndex = process.argv.indexOf("--port");',
+          "const port = Number(process.argv[portIndex + 1]);",
+          "const server = net.createServer(() => {});",
+          'server.listen(port, "127.0.0.1", () => {',
+          '  console.log("STUB_LISTENING", process.pid, port);',
+          "});",
+          "setInterval(() => {}, 1_000);",
+        ].join("\n"),
+      );
+      writeFileSync(
+        uvxStub,
+        `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(stubJs)} "$@"\n`,
+      );
+      chmodSync(uvxStub, 0o755);
+
+      const backendPort = await findFreePort(0);
+      const isPortListening = async () =>
+        new Promise<boolean>((resolve) => {
+          const socket = net
+            .connect(backendPort, "127.0.0.1")
+            .on("connect", () => {
+              socket.destroy();
+              resolve(true);
+            })
+            .on("error", () => resolve(false));
+        });
+
+      const launcher = spawn(process.execPath, ["scripts/dev-safe.mjs"], {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          PATH: `${stubDir}${path.delimiter}${process.env.PATH ?? ""}`,
+          OH_CANVAS_SAFE_BACKEND_PORT: String(backendPort),
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let output = "";
+      let stubPid: number | undefined;
+      const capture = (chunk: Buffer) => {
+        output += chunk.toString();
+        const stubMatch = output.match(/STUB_LISTENING (\d+)/);
+        if (stubMatch) stubPid = Number(stubMatch[1]);
+      };
+      launcher.stdout.on("data", capture);
+      launcher.stderr.on("data", capture);
+
+      try {
+        const readyDeadline = Date.now() + 20_000;
+        let listening = false;
+        while (!listening && Date.now() < readyDeadline) {
+          if (launcher.exitCode !== null) break;
+          listening = await isPortListening();
+          if (!listening) await delay(100);
+        }
+        expect(listening, output).toBe(true);
+
+        launcher.kill("SIGHUP");
+        await Promise.race([once(launcher, "exit"), delay(10_000)]);
+
+        // shutdown() forwards SIGTERM, then SIGKILLs after 3s.
+        const freeDeadline = Date.now() + 12_000;
+        let stillListening = true;
+        while (stillListening && Date.now() < freeDeadline) {
+          stillListening = await isPortListening();
+          if (stillListening) await delay(200);
+        }
+        expect(stillListening, output).toBe(false);
+      } finally {
+        if (launcher.exitCode === null) launcher.kill("SIGKILL");
+        // The stub is a detached process-group leader, so killing the launcher
+        // does not reap it. Without this, the regression path this test exists
+        // to catch would itself leave the stub holding its port indefinitely.
+        if (stubPid !== undefined) {
+          try {
+            process.kill(-stubPid, "SIGKILL");
+          } catch {
+            // Already gone, which is the passing path.
+          }
+        }
+        rmSync(stubDir, { recursive: true, force: true });
+      }
+    },
+    45_000,
+  );
 });
 
 interface RuntimeServiceEntry {

@@ -105,6 +105,23 @@ describe("mapServiceErrors", () => {
     });
   });
 
+  it("highlights the field behind a list entry the map has no index for", () => {
+    // Arrange: the map is derived from a payload holding one repository, so a
+    // rejection of the third one addresses a path that was never in it.
+
+    // Act
+    const { fieldErrors, formErrors } = mapServiceErrors(
+      [{ path: "repos[2].ref", message: "Unknown branch." }],
+      ERROR_MAP,
+    );
+
+    // Assert
+    expect({ fieldErrors, formErrors }).toEqual({
+      fieldErrors: { ref: "Unknown branch." },
+      formErrors: [],
+    });
+  });
+
   it("surfaces an unmappable rejection against the form rather than losing it", () => {
     // Act
     const { fieldErrors, formErrors } = mapServiceErrors(

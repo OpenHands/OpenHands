@@ -16,18 +16,27 @@ import { clientLoader as templatesLoader } from "#/routes/automation-templates";
 import type { Backend } from "#/api/backend-registry/types";
 import type { Automation } from "#/types/automation";
 
-// Pin the published data source to "no interface manifest", independent of
-// whatever the pinned package ships: the sub-page surface must stay dark.
+// Pin the published data source to a manifest that declares no sub-page
+// surface, independent of whatever the pinned package ships: the interface
+// exists, so the page renders, but the sub-page surface must stay dark.
 vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("#/manifests/manifest-sources")>();
-  return { ...actual, AUTOMATION_INTERFACE_CANDIDATE: undefined };
+  const { createInterfaceManifest } =
+    await import("../manifests/manifest-test-data");
+  return {
+    ...actual,
+    AUTOMATION_INTERFACE_CANDIDATE: createInterfaceManifest(),
+  };
 });
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
     getAutomations: vi.fn(),
     getAutomationRuns: vi.fn(),
+    listServerDrafts: vi.fn(),
+    getCapabilities: vi.fn(),
+    supportsAutomationDrafts: vi.fn(),
     checkHealth: vi.fn(),
     toggleAutomation: vi.fn(),
     updateAutomation: vi.fn(),
@@ -75,6 +84,25 @@ beforeEach(() => {
   vi.mocked(AutomationService.checkHealth).mockReset();
   vi.mocked(AutomationService.checkHealth).mockResolvedValue({ status: "ok" });
   vi.mocked(AutomationService.getAutomations).mockReset();
+  vi.mocked(AutomationService.listServerDrafts).mockReset();
+  vi.mocked(AutomationService.listServerDrafts).mockResolvedValue({
+    drafts: [],
+    total: 0,
+  });
+  vi.mocked(AutomationService.getCapabilities).mockReset();
+  vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+    ready: true,
+    features: ["automationDrafts"],
+    triggerKinds: ["cron", "event"],
+    eventSources: [],
+    eventTypes: [],
+    triggers: {},
+  });
+  vi.mocked(AutomationService.supportsAutomationDrafts).mockReset();
+  vi.mocked(AutomationService.supportsAutomationDrafts).mockImplementation(
+    (capabilities) =>
+      Boolean(capabilities?.features?.includes("automationDrafts")),
+  );
   vi.mocked(AutomationService.getAutomations).mockResolvedValue({
     automations: [automation],
     total: 1,
@@ -88,7 +116,7 @@ afterEach(() => {
   __resetActiveStoreForTests();
 });
 
-describe("the sub-page surface without a declared manifest", () => {
+describe("an interface manifest that declares no sub-page surface", () => {
   it("keeps today's plain list: launcher on the page, no dashboard chrome", async () => {
     // Arrange & Act
     renderList();
@@ -99,7 +127,7 @@ describe("the sub-page surface without a declared manifest", () => {
     expect({
       nav: screen.queryByTestId("automations-navbar-desktop"),
       tile: screen.queryByTestId("overview-tile-automations"),
-      statusFilter: screen.queryByTestId("automations-filter-status"),
+      statusFilter: screen.queryByTestId("automations-filters"),
       launcher: await screen.findByTestId("recommended-automations-section"),
     }).toMatchObject({ nav: null, tile: null, statusFilter: null });
   });

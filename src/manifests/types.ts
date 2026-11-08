@@ -18,11 +18,23 @@ export type SetupFieldType =
   | "text"
   | "textarea"
   | "select"
+  | "number"
   | "cron"
   | "timezone"
-  | "repo-picker";
+  | "repo-picker"
+  | "llm-profile"
+  | "event-source"
+  | "event-type"
+  | "plugin-sources"
+  | "tarball-upload";
 
-export type SetupGitProvider = "github" | "gitlab" | "bitbucket";
+/**
+ * The provider whose repositories a `repo-picker` lists. The hosted services
+ * and the two integrations an OpenHands Enterprise instance connects to a
+ * self-managed Bitbucket Data Center or to Azure DevOps.
+ */
+export type SetupGitProvider =
+  "github" | "gitlab" | "bitbucket" | "bitbucket_data_center" | "azure_devops";
 
 export type SetupTriggerKind = "cron" | "event";
 
@@ -37,6 +49,8 @@ export interface SetupFieldOption {
 export interface SetupFieldConstraints {
   minLength?: number;
   maxLength?: number;
+  min?: number;
+  max?: number;
   /**
    * A host-implemented check named from a closed set. Entries supply no regex
    * of their own, so they cannot hand the host a pathological pattern.
@@ -49,9 +63,15 @@ export interface SetupFormField {
   label: string;
   help: string;
   placeholder?: string;
-  default?: string;
+  default?: string | number | boolean | null;
   required: boolean;
   provider?: SetupGitProvider;
+  /**
+   * repo-picker only. The field collects several repositories rather than one,
+   * and its value is a list. A placeholder that is the whole value resolves to
+   * that list, so a payload can state one and get an array.
+   */
+  multiple?: true;
   options?: SetupFieldOption[];
   constraints?: SetupFieldConstraints;
 }
@@ -61,10 +81,84 @@ export type SetupFormFields = Record<string, SetupFormField>;
 
 export interface SetupForm {
   note?: string;
-  /** Inputs that decide when the automation runs, keyed by trigger kind. */
+  /** Inputs that decide when the automation runs, keyed by trigger kind. Multiple keys are selectable variants. */
   triggers?: Partial<Record<SetupTriggerKind, SetupFormFields>>;
   /** Every other input: the arguments to the automation itself. */
   args: SetupFormFields;
+}
+
+/** A config.json leaf: templated string, number, boolean, null, or a nesting. */
+export type SetupBundleConfigValue =
+  | string
+  | number
+  | boolean
+  | null
+  | SetupBundleConfigValue[]
+  | { [key: string]: SetupBundleConfigValue };
+
+/**
+ * The name the rendered configuration is packed under, which is therefore a
+ * name a bundle's own files may not claim. Stated here rather than beside the
+ * packing, so admission can refuse the collision without importing it.
+ */
+export const BUNDLE_CONFIG_FILENAME = "config.json";
+
+/**
+ * The script tarball a direct entry may ship instead of a prompt, for an
+ * automation that is deterministic machinery rather than judgement.
+ *
+ * `files` maps a path inside the archive to the repository path the extensions
+ * package read it from; the contents themselves come from that package's
+ * `getAutomationBundleFiles`, because this host has the package and not the
+ * repository.
+ */
+export interface SetupBundle {
+  /** Provenance recorded on the created automation, alongside the entry id. */
+  version: string;
+  /** The command the service runs inside the extracted tarball. */
+  entrypoint: string;
+  /** Script run once before the entrypoint. Absent when nothing to install. */
+  setupScript?: string;
+  /** Seconds a run may take, when the service default is not enough. */
+  timeout?: number;
+  files: Record<string, string>;
+  /** Rendered from the form and packed as config.json. */
+  config: Record<string, SetupBundleConfigValue>;
+}
+
+export type SetupActionKind = "prompt" | "plugin" | "upload";
+
+export interface SetupPromptAction {
+  label: string;
+  help: string;
+  features: string[];
+  args: SetupFormFields;
+  prompt: string;
+}
+
+export interface SetupPluginAction {
+  label: string;
+  help: string;
+  features: string[];
+  args: SetupFormFields;
+  prompt: string;
+  plugins: string;
+}
+
+export interface SetupUploadAction {
+  label: string;
+  help: string;
+  features: string[];
+  args: SetupFormFields;
+  tarballPath: string;
+  entrypoint: string;
+  setupScript?: string;
+}
+
+export interface SetupActions {
+  prompt?: SetupPromptAction;
+  plugin?: SetupPluginAction;
+  upload?: SetupUploadAction;
 }
 
 export interface SetupBlock {
@@ -73,6 +167,10 @@ export interface SetupBlock {
   form: SetupForm;
   /** direct only. What the automation is told to do. */
   prompt?: string;
+  /** direct only, and the alternative to `prompt`. Exactly one is present. */
+  bundle?: SetupBundle;
+  /** direct only, and the alternative to `prompt` or `bundle`. */
+  actions?: SetupActions;
   /** direct only, event trigger only. Which delivered events belong to it. */
   filter?: string;
   /**
@@ -105,6 +203,15 @@ export interface SetupEntry {
   id: string;
   name: string;
   description: string;
+  /** Mermaid source for a small diagram of what the automation does. */
+  diagram?: string;
+  /**
+   * Version of the template this entry publishes, sent with the create request
+   * as provenance. A bundle declares its own at `setup.bundle.version`; a
+   * prompt entry declares it here. Absent means the entry sends none, so the
+   * service records no template for what it creates.
+   */
+  version?: string;
   requires: SetupPrerequisites;
   /** The skill that owns the launch command. Defaults to `id`. */
   skill?: string;
@@ -123,8 +230,15 @@ export interface SetupRequestBody {
   [key: string]: SetupPayloadValue;
 }
 
-/** Form values are collected as strings; the payload mapping shapes them. */
-export type SetupFormValues = Record<string, string>;
+/**
+ * Form values as collected; the payload mapping shapes them.
+ *
+ * A field collecting several values holds a list. Everything else holds a
+ * string, including fields whose value is a number to the service - the
+ * payload mapping is where a value stops being what was typed.
+ */
+export type SetupFormValue = string | number | boolean | null | string[] | File;
+export type SetupFormValues = Record<string, SetupFormValue>;
 
 /** `GET /v1/capabilities` — what this deployment supports. */
 export interface DeploymentCapabilities {
@@ -139,6 +253,13 @@ export interface DeploymentCapabilities {
     event?: { filterLanguage: string; filterFunctions: string[] };
   };
   features: string[];
+  /** Providers whose repositories a run clones with the user's token; older services omit it. */
+  repoProviders?: string[];
+  /**
+   * Event type patterns per event source that has a catalog; a source missing
+   * here accepts any key. Older services omit it and list GitHub's in `eventTypes`.
+   */
+  eventTypesBySource?: Record<string, string[]>;
 }
 
 /** A single problem with a draft, addressed to the field that caused it. */
@@ -157,6 +278,60 @@ export interface ValidateDraftResponse {
 }
 
 /**
+ * The creation endpoint a server-backed draft is validated and materialized
+ * against. Mirrors the service's `DraftEndpoint` literal. `"/v1"` is the raw
+ * path an entry shipping its own tarball uses; the other two are presets.
+ */
+export type AutomationDraftEndpoint =
+  "/v1" | "/v1/preset/prompt" | "/v1/preset/plugin";
+
+/** `POST /v1/drafts` — create a server-backed automation setup draft. */
+export interface CreateAutomationDraftApiRequest {
+  endpoint: AutomationDraftEndpoint;
+  /** The request body that would be sent to that endpoint. */
+  draft: SetupRequestBody;
+  name?: string;
+  /** Catalog entry or automation the draft was derived from (logged only). */
+  sourceAutomationId?: string;
+}
+
+/** `PATCH /v1/drafts/{id}` — partially update a server-backed draft. */
+export interface UpdateAutomationDraftApiRequest {
+  endpoint?: AutomationDraftEndpoint;
+  draft?: SetupRequestBody;
+  name?: string;
+}
+
+/**
+ * `GET/PATCH/POST /v1/drafts[/{id}]` — a persisted draft record.
+ *
+ * The draft row is the source of truth while editing. `dispatchable` and
+ * `validationErrors` are refreshed by the service on every create/update, so
+ * the form can show live validity without a separate validate call.
+ */
+export interface AutomationDraftApiResponse {
+  id: string;
+  endpoint: AutomationDraftEndpoint;
+  name: string | null;
+  /** The request body that would be sent to the draft's endpoint. */
+  draft: SetupRequestBody;
+  validationErrors: DraftValidationError[] | null;
+  dispatchable: boolean;
+  sourceAutomationId: string | null;
+  /** Materialized automation row used for test dispatch, if any. */
+  materializedAutomationId: string | null;
+  lastTestRunId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `GET /v1/drafts` — paginated list of persisted drafts. */
+export interface AutomationDraftListResponse {
+  drafts: AutomationDraftApiResponse[];
+  total: number;
+}
+
+/**
  * Host-owned shape of the production Automation interface manifest, published
  * by `@openhands/extensions/automations` as `AUTOMATION_INTERFACE`.
  *
@@ -170,18 +345,10 @@ export const INTERFACE_VERSION = "1.0";
 
 /** The closed set of runtime-model properties a client may offer for setting. */
 export type AutomationAttributeName =
-  | "name"
-  | "prompt"
-  | "model"
-  | "timeout"
-  | "schedule";
+  "name" | "prompt" | "model" | "timeout" | "schedule";
 
 export type InterfaceAttributeType =
-  | "text"
-  | "textarea"
-  | "number"
-  | "llm-profile"
-  | "schedule";
+  "text" | "textarea" | "number" | "llm-profile" | "schedule";
 
 /** How one settable attribute of an existing Automation is offered. */
 export interface InterfaceAttribute {
@@ -201,6 +368,8 @@ export interface InterfaceRoutes {
   detail: string;
   /** The templates sub-page. Static: there is no parameter to substitute. */
   templates?: string;
+  /** The event sources sub-page. */
+  events?: string;
 }
 
 /**
@@ -218,6 +387,16 @@ export interface InterfaceEndpoints {
   validate: string;
   createPrompt: string;
   createPlugin: string;
+  /**
+   * The raw create endpoint, which a bundle entry is created through, and
+   * where its tarball is uploaded first. Optional: a manifest published before
+   * bundles existed declares neither, and is still admitted.
+   */
+  createBundle?: string;
+  uploads?: string;
+  /** The org's tags with counts. Optional: added after the block shipped. */
+  tags?: string;
+  webhooks?: string;
 }
 
 export type InterfaceEndpointName = keyof InterfaceEndpoints;
@@ -244,7 +423,7 @@ export interface InterfaceImportExport {
  * leaves the sub-pages unrendered.
  */
 
-export const INTERFACE_SUB_PAGE_IDS = ["list", "templates"] as const;
+export const INTERFACE_SUB_PAGE_IDS = ["list", "events", "templates"] as const;
 
 export type InterfaceSubPageId = (typeof INTERFACE_SUB_PAGE_IDS)[number];
 
@@ -252,6 +431,7 @@ export type InterfaceSubPageId = (typeof INTERFACE_SUB_PAGE_IDS)[number];
 export const INTERFACE_ICON_SLUGS = [
   "layout-dashboard",
   "sparkles",
+  "library",
   "bot",
   "circle-alert",
   "activity",
@@ -311,6 +491,7 @@ export interface InterfaceOverview {
 export const DASHBOARD_FILTER_VALUES = {
   status: ["all", "active", "failing", "disabled"],
   trigger: ["all", "schedule", "event"],
+  created_by: ["all", "me", "others"],
 } as const;
 
 export type DashboardFilterId = keyof typeof DASHBOARD_FILTER_VALUES;
@@ -324,6 +505,9 @@ export type DashboardStatusValue =
 
 export type DashboardTriggerValue =
   (typeof DASHBOARD_FILTER_VALUES.trigger)[number];
+
+export type DashboardCreatedByValue =
+  (typeof DASHBOARD_FILTER_VALUES.created_by)[number];
 
 export interface InterfaceStatusFilter {
   id: "status";
@@ -339,9 +523,32 @@ export interface InterfaceTriggerFilter {
   options: { value: DashboardTriggerValue; label: string }[];
 }
 
+export interface InterfaceCreatedByFilter {
+  id: "created_by";
+  /** The control's accessible name. */
+  label: string;
+  options: { value: DashboardCreatedByValue; label: string }[];
+}
+
+/**
+ * The tag filter's values are the org's tags, read from the service, so the
+ * manifest captions the control and its neutral option but declares no values.
+ */
+export const DASHBOARD_TAG_FILTER_ID = "tag";
+
+export interface InterfaceTagFilter {
+  id: typeof DASHBOARD_TAG_FILTER_ID;
+  /** The control's accessible name. */
+  label: string;
+  /** The neutral option, which shows automations with any tags or none. */
+  allLabel: string;
+}
+
 export type InterfaceDashboardFilter =
   | InterfaceStatusFilter
-  | InterfaceTriggerFilter;
+  | InterfaceTriggerFilter
+  | InterfaceCreatedByFilter
+  | InterfaceTagFilter;
 
 /** Sort values name comparators this host implements. */
 export const DASHBOARD_SORT_VALUES = ["last-run", "runs", "name"] as const;
@@ -405,6 +612,7 @@ export interface InterfaceManifest {
     detail: { backLabel: string };
     edit: { title: string };
     templates?: InterfaceTemplatesPage;
+    events?: { title: string; description: string };
   };
   docsUrl: string;
   /**

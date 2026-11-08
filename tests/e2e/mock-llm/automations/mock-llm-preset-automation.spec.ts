@@ -18,6 +18,7 @@
  */
 
 import { test, expect } from "@playwright/test";
+import { INTEGRATION_CATALOG } from "@openhands/extensions/integrations";
 import {
   BACKEND_URL,
   SESSION_API_KEY,
@@ -39,6 +40,20 @@ import {
 const SLASH_COMMAND = "/standup-digest:setup";
 const AUTOMATION_CARD_ID = "slack-standup-digest";
 const REPLY_TOKEN = "PRESET_AUTOMATION_REPLY_OK";
+
+// Canvas recognizes an installed stdio integration by the catalog's command
+// and leading args, so the stand-in Slack server must carry that identity.
+const SLACK_STDIO_TRANSPORT = (() => {
+  const transport = INTEGRATION_CATALOG.find(
+    (entry) => entry.id === "slack",
+  )?.connectionOptions.find(
+    (option) => option.transport?.kind === "stdio",
+  )?.transport;
+  if (transport?.kind !== "stdio") {
+    throw new Error("Slack has no stdio option in the integration catalog.");
+  }
+  return transport;
+})();
 
 // ── Shared helpers ────────────────────────────────────────────────────
 
@@ -78,14 +93,12 @@ async function assertActivatedSkills(
 
         const diag = items.map((item: unknown) => {
           const e = item as Record<string, unknown>;
-          return `${String(e.source)}:${String(e.event_type)}(skills=${JSON.stringify(e.activated_skills ?? e.activated_microagents ?? [])})`;
+          return `${String(e.source)}:${String(e.event_type)}(skills=${JSON.stringify(e.activated_skills ?? [])})`;
         });
 
         const found = items.some((item: unknown) => {
           const e = item as Record<string, unknown>;
-          const skills =
-            (e.activated_skills as string[] | undefined) ??
-            (e.activated_microagents as string[] | undefined);
+          const skills = e.activated_skills as string[] | undefined;
           return Array.isArray(skills) && skills.length > 0;
         });
 
@@ -142,7 +155,7 @@ test.describe("preset automation → slash command conversation", () => {
   //
   // Configure a dummy Slack MCP server so the frontend sees it as
   // "installed" and the card is clickable without the install modal.
-  // The dummy `echo` command can't do MCP JSON-RPC, so the agent-server
+  // The offline `npx` stand-in never starts an MCP server, so the agent-server
   // will error during tool initialization — but we only care that the
   // card click navigated to a conversation and sent the right prompt.
   // The end-to-end skill activation + agent reply is tested in test 2
@@ -165,11 +178,14 @@ test.describe("preset automation → slash command conversation", () => {
           agent_settings_diff: {
             mcp_config: {
               slack: {
-                command: "echo",
-                args: ["dummy-slack-mcp"],
+                command: SLACK_STDIO_TRANSPORT.command,
+                args: SLACK_STDIO_TRANSPORT.args,
                 env: {
                   SLACK_BOT_TOKEN: "xoxb-test-token",
                   SLACK_TEAM_ID: "T0000000000",
+                  // Keep the stand-in inert: npx fails fast instead of
+                  // downloading and starting the real server.
+                  npm_config_offline: "true",
                 },
               },
             },

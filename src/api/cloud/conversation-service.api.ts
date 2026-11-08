@@ -11,17 +11,16 @@ import type {
   AppConversationStartTask,
 } from "../conversation-service/agent-server-conversation-service.types";
 import { AGENT_CANVAS_CLIENT_HEADERS } from "../client-source";
+import type { Provider } from "#/types/settings";
 import { callCloudProxy } from "./proxy";
 
 /**
- * The cloud backend does not always echo `selected_repository` /
- * `selected_branch` / `git_provider` back from
- * `GET /api/v1/app-conversations` until its own background hydration
- * completes. We persist the selection to local storage at connect time
- * (see `AgentServerConversationService.updateConversationRepository`)
- * and overlay it here so the chat-page git control bar reflects the
- * connection immediately, instead of snapping back to the empty
- * "Connect Repo" state on every refetch.
+ * Connect Repo saves the selection on the server
+ * (`updateCloudConversationRepository`) and also caches it in local storage
+ * (see `AgentServerConversationService.updateConversationRepository`). The
+ * cache is overlaid here for each field whose server value is empty: for
+ * example older conversations connected before the server save existed, or
+ * a repository the server rejected when the conversation had none.
  *
  * Server values take precedence whenever they're populated; the
  * local-storage fallback only fills in fields the server returned as
@@ -221,6 +220,70 @@ export async function updateCloudConversationPublicFlag(
 }
 
 /**
+ * Apply a tag merge patch to a cloud v1 app-conversation:
+ * `PATCH /api/v1/app-conversations/{id}` with `{ tags: patch }`, where a
+ * `null` value deletes the key and unmentioned keys are left untouched.
+ * Server-managed keys (`acpserver`, `archiveworkspacepath`,
+ * `agentprofileid`, `agentprofilerevision`) are rejected by the app-server,
+ * so callers must only send caller-owned keys.
+ */
+export async function updateCloudConversationTags(
+  conversationId: string,
+  patch: Record<string, string | null>,
+): Promise<AppConversation> {
+  const backend = getActiveCloudBackend();
+  const data = await callCloudProxy<AppConversation>({
+    backend,
+    method: "PATCH",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    body: { tags: patch },
+  });
+  return overlayStoredRepoSelection(data) as AppConversation;
+}
+
+/**
+ * Rename a cloud v1 app-conversation. The title belongs to the Cloud
+ * app-conversation resource, so updating a runtime Agent Server would not
+ * persist it in the Cloud conversation list.
+ */
+export async function updateCloudConversationTitle(
+  conversationId: string,
+  title: string,
+): Promise<AppConversation> {
+  const backend = getActiveCloudBackend();
+  return callCloudProxy<AppConversation>({
+    backend,
+    method: "PATCH",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    body: { title },
+  });
+}
+
+/**
+ * Attach, change, or clear the repository of a cloud v1 app-conversation.
+ * `PATCH /api/v1/app-conversations/{id}`. The server stores the fields but
+ * does not clone; the caller asks the agent to clone the repository.
+ */
+export async function updateCloudConversationRepository(
+  conversationId: string,
+  repository: string | null,
+  branch: string | null,
+  gitProvider: Provider | null,
+): Promise<AppConversation> {
+  const backend = getActiveCloudBackend();
+  return callCloudProxy<AppConversation>({
+    backend,
+    method: "PATCH",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    body: {
+      selected_repository: repository,
+      selected_branch: branch,
+      git_provider: gitProvider,
+    },
+  });
+}
+
+/**
  * Pause the cloud sandbox backing a v1 app-conversation. Mirrors
  * OpenHands' `SandboxService.pauseSandbox`:
  * `POST /api/v1/sandboxes/{sandboxId}/pause` on the cloud backend, which stops
@@ -272,6 +335,29 @@ export async function readCloudConversationFile(
     path: `/api/v1/app-conversations/${conversationId}/file?${params.toString()}`,
   });
   return data ?? "";
+}
+
+/**
+ * List every file in a cloud conversation's sandbox workspace. Hits
+ * `GET /api/v1/app-conversations/{id}/files?path=...` on the cloud backend,
+ * which resolves the conversation's runtime and runs a bounded `find`
+ * server-side (see enterprise `list_conversation_files`). Unlike the
+ * git-changes source, this returns the full tree so the Files tab matches the
+ * local-backend experience. Paths come back relative to `path`.
+ */
+export async function listCloudConversationFiles(
+  conversationId: string,
+  path: string,
+): Promise<string[]> {
+  const backend = getActiveCloudBackend();
+  const params = new URLSearchParams();
+  params.append("path", path);
+  const data = await callCloudProxy<string[]>({
+    backend,
+    method: "GET",
+    path: `/api/v1/app-conversations/${conversationId}/files?${params.toString()}`,
+  });
+  return Array.isArray(data) ? data : [];
 }
 
 /**

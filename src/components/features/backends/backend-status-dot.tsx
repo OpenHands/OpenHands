@@ -21,19 +21,19 @@ export function BackendStatusDot({
   let label: string;
   let status: string;
   if (isConnected === "unavailable") {
-    color = "bg-[var(--oh-text-tertiary)]";
+    color = "bg-text-tertiary";
     label = "No Backend Available";
     status = "unavailable";
   } else if (isConnected === true) {
-    color = "bg-[var(--oh-status-success)]";
+    color = "bg-status-success";
     label = "Connected";
     status = "connected";
   } else if (isConnected === false) {
-    color = "bg-red-500";
+    color = "bg-status-error";
     label = "Disconnected";
     status = "disconnected";
   } else {
-    color = "bg-[var(--oh-interactive-selected)]";
+    color = "bg-interactive-selected";
     label = "Checking connection";
     status = "checking";
   }

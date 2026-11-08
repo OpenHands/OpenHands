@@ -1,6 +1,6 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { SuggestedTask } from "#/utils/types";
@@ -8,6 +8,8 @@ import {
   getStoredConversationMetadata,
   removeStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
+import { AGENT_PROFILES_QUERY_KEYS } from "#/hooks/query/query-keys";
+import { useModelStore } from "#/stores/model-store";
 
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
@@ -50,21 +52,63 @@ vi.mock("#/hooks/query/use-agent-profiles", () => ({
   useAgentProfiles: () => ({ data: undefined }),
 }));
 
+// Settings + meta-profiles: default to "Run on first message" OFF so the
+// existing payload-snapshot assertions are unaffected. Per-test overrides
+// flip the toggle on to exercise the route-at-start stamp / suppression.
+const { useSettingsMock, useMetaProfilesMock } = vi.hoisted(() => ({
+  useSettingsMock: vi.fn<() => { data: unknown }>(() => ({ data: undefined })),
+  useMetaProfilesMock: vi.fn<() => { data: unknown }>(() => ({
+    data: undefined,
+  })),
+}));
+vi.mock("#/hooks/query/use-settings", () => ({
+  useSettings: () => useSettingsMock(),
+}));
+vi.mock("#/hooks/query/use-meta-profiles", () => ({
+  useMetaProfiles: () => useMetaProfilesMock(),
+}));
+
 // The launch path resolves the active AgentProfile by awaiting
 // `AgentProfilesService.listProfiles` through the query cache (#3727).
-// Default: no active profile, so a plain create stays on the legacy path.
-const { listAgentProfilesMock } = vi.hoisted(() => ({
+// Default: the seeded `default` profile is active, as a server keeps it.
+const DEFAULT_PROFILE = {
+  id: "profile-default",
+  name: "default",
+  agent_kind: "openhands",
+  revision: 1,
+  llm_profile_ref: "default",
+  mcp_server_refs: null,
+};
+const { listAgentProfilesMock, getAgentProfileMock } = vi.hoisted(() => ({
   listAgentProfilesMock: vi.fn(),
+  getAgentProfileMock: vi.fn(),
 }));
 vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
   __esModule: true,
-  default: { listProfiles: listAgentProfilesMock },
+  default: {
+    listProfiles: listAgentProfilesMock,
+    getProfile: getAgentProfileMock,
+  },
   WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
 }));
 listAgentProfilesMock.mockResolvedValue({
-  profiles: [],
-  active_agent_profile_id: null,
+  profiles: [DEFAULT_PROFILE],
+  active_agent_profile_id: DEFAULT_PROFILE.id,
 });
+getAgentProfileMock.mockResolvedValue({
+  name: "default",
+  profile: DEFAULT_PROFILE,
+});
+
+vi.mock(
+  "#/hooks/use-migrate-default-agent-profile",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("#/hooks/use-migrate-default-agent-profile")
+    >()),
+    ensureDefaultAgentProfileMigrated: vi.fn().mockResolvedValue(true),
+  }),
+);
 
 // LLM-profile service: real listProfiles calls (the llmProfileExists
 // validation — see use-create-conversation.ts) so it can be asserted per-test.
@@ -79,16 +123,21 @@ listLlmProfilesMock.mockResolvedValue({ profiles: [], active_profile: null });
 
 describe("useCreateConversation", () => {
   afterEach(() => {
-    // Restore the default (no active AgentProfile) so the overrides below
-    // don't leak into the other create-call assertions.
+    // Restore the default (`default` active) so the overrides below don't
+    // leak into the other create-call assertions.
     mockUseActiveBackend.mockReturnValue({
       backend: { id: "local-1", kind: "local" as const },
       orgId: null,
     });
     listAgentProfilesMock.mockReset();
     listAgentProfilesMock.mockResolvedValue({
-      profiles: [],
-      active_agent_profile_id: null,
+      profiles: [DEFAULT_PROFILE],
+      active_agent_profile_id: DEFAULT_PROFILE.id,
+    });
+    getAgentProfileMock.mockReset();
+    getAgentProfileMock.mockResolvedValue({
+      name: "default",
+      profile: DEFAULT_PROFILE,
     });
     listLlmProfilesMock.mockReset();
     listLlmProfilesMock.mockResolvedValue({
@@ -96,8 +145,12 @@ describe("useCreateConversation", () => {
       active_profile: null,
     });
     useLlmProfilesMock.mockReturnValue({ data: { active_profile: null } });
+    useSettingsMock.mockReturnValue({ data: undefined });
+    useMetaProfilesMock.mockReturnValue({ data: undefined });
+    useModelStore.getState().setHomeManualModelPick(false);
     removeStoredConversationMetadata("conv-with-plugins");
     removeStoredConversationMetadata("conv-ref-stamp");
+    removeStoredConversationMetadata("conv-dropdown-override");
   });
 
   it("passes suggested tasks to the V1 create conversation API", async () => {
@@ -172,9 +225,178 @@ describe("useCreateConversation", () => {
         workspaceMode: undefined,
         parentConversationId: undefined,
         agentType: undefined,
+        agentProfileId: DEFAULT_PROFILE.id,
+        agentProfileKind: "openhands",
+        agentLlmProfileRef: "default",
       });
     });
   });
+
+  it("suppresses route-at-start on cloud when a home model pick was made, and clears the flag", async () => {
+    // "Run on first message" is on and a router is active, so a plain launch
+    // would stamp the suffix — but a home model pick (flag set by the UI
+    // handler) suppresses it for this one launch, then clears the flag.
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    });
+    useSettingsMock.mockReturnValue({
+      data: { run_router_at_conversation_start: true },
+    });
+    useMetaProfilesMock.mockReturnValue({
+      data: { active_meta_profile: "balanced" },
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: null,
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    useModelStore.getState().setHomeManualModelPick(true);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hi" });
+
+    const call = createConversationSpy.mock.lastCall?.[0] ?? {};
+    expect(call).not.toHaveProperty("runRouterAtConversationStart");
+    expect(call).not.toHaveProperty("hasActiveMetaProfile");
+    expect(call.suppressRouterAtStart).toBe(true);
+    // Read-and-clear: the flag is gone after the launch consumes it.
+    expect(useModelStore.getState().homeManualModelPick).toBe(false);
+  });
+
+  it("stamps route-at-start on cloud when no home pick was made", async () => {
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    });
+    useSettingsMock.mockReturnValue({
+      data: { run_router_at_conversation_start: true },
+    });
+    useMetaProfilesMock.mockReturnValue({
+      data: { active_meta_profile: "balanced" },
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: null,
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hi" });
+
+    const call = createConversationSpy.mock.lastCall?.[0] ?? {};
+    expect(call.runRouterAtConversationStart).toBe(true);
+    expect(call.hasActiveMetaProfile).toBe(true);
+  });
+
+  it("does not suppress route-at-start on a second launch after the first consumed the flag", async () => {
+    // The flag is read-and-cleared by the first launch. A second launch —
+    // even immediately after — routes as normal because the flag is gone,
+    // so a consumed pick can't leak to an unrelated launch.
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    });
+    useSettingsMock.mockReturnValue({
+      data: { run_router_at_conversation_start: true },
+    });
+    useMetaProfilesMock.mockReturnValue({
+      data: { active_meta_profile: "balanced" },
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: null,
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    // First launch consumes (and clears) the flag.
+    useModelStore.getState().setHomeManualModelPick(true);
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+    await result.current.mutateAsync({ query: "pick" });
+    createConversationSpy.mockClear();
+
+    // Second launch: no pick made, flag is already false.
+    await result.current.mutateAsync({ query: "follow-up" });
+
+    const call = createConversationSpy.mock.lastCall?.[0] ?? {};
+    expect(call.runRouterAtConversationStart).toBe(true);
+    expect(call).not.toHaveProperty("suppressRouterAtStart");
+  });
+
+  it("suppresses route-at-start on a retry after the first launch was rejected", async () => {
+    // A home pick sets the flag; the first launch rejects (e.g. agent-server
+    // 500). The retry must still suppress routing — the user's manual pick
+    // hasn't been honored by a successful launch yet, so clearing the flag
+    // before the launch resolves would lose it on rejection.
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    });
+    useSettingsMock.mockReturnValue({
+      data: { run_router_at_conversation_start: true },
+    });
+    useMetaProfilesMock.mockReturnValue({
+      data: { active_meta_profile: "balanced" },
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockRejectedValueOnce(new Error("agent-server 500"))
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: null,
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    useModelStore.getState().setHomeManualModelPick(true);
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    // First launch rejects; the flag must survive so a retry still suppresses.
+    await expect(
+      result.current.mutateAsync({ query: "pick" }),
+    ).rejects.toThrow("agent-server 500");
+    createConversationSpy.mockClear();
+
+    // Retry: no new pick, but the prior pick was never honored.
+    await result.current.mutateAsync({ query: "pick" });
+
+    const call = createConversationSpy.mock.lastCall?.[0] ?? {};
+    expect(call.suppressRouterAtStart).toBe(true);
+    expect(call).not.toHaveProperty("runRouterAtConversationStart");
+  });
+
 
   it("launches new local conversations from the active AgentProfile (#3727)", async () => {
     listAgentProfilesMock.mockResolvedValue({
@@ -200,7 +422,6 @@ describe("useCreateConversation", () => {
     await result.current.mutateAsync({ query: "hello" });
 
     await waitFor(() => {
-      // sandboxId is never passed; the active profile id rides as agentProfileId.
       const call = createConversationSpy.mock.lastCall;
       expect(call?.[0]?.sandboxId).toBeUndefined();
       expect(call?.[0]?.agentProfileId).toBe("profile-abc");
@@ -245,15 +466,14 @@ describe("useCreateConversation", () => {
     expect(call?.[0]?.agentProfileId).toBe("profile-late");
   });
 
-  it("falls back to the agent_settings launch when the profiles fetch fails", async () => {
-    listAgentProfilesMock.mockRejectedValue(new Error("not supported"));
-    const createConversationSpy = vi
-      .spyOn(AgentServerConversationService, "createConversation")
-      .mockResolvedValue({
-        id: "task-id",
-        app_conversation_id: "conv-1",
-        agent_server_url: "http://agent-server.local",
-      } as never);
+  it("does not downgrade when the profiles fetch fails", async () => {
+    const profileError = new Error("profile endpoint unavailable");
+    listAgentProfilesMock.mockRejectedValue(profileError);
+    const createConversationSpy = vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    );
+    createConversationSpy.mockClear();
 
     const { result } = renderHook(() => useCreateConversation(), {
       wrapper: ({ children }) => (
@@ -263,12 +483,10 @@ describe("useCreateConversation", () => {
       ),
     });
 
-    // Resolves without stalling: the launch-path fetch is retry: false.
-    await result.current.mutateAsync({ query: "hello" });
-
-    // No profile tail — the create stays on the legacy agent_settings path.
-    const call = createConversationSpy.mock.lastCall;
-    expect(call?.[0]?.agentProfileId).toBeUndefined();
+    await expect(result.current.mutateAsync({ query: "hello" })).rejects.toBe(
+      profileError,
+    );
+    expect(createConversationSpy).not.toHaveBeenCalled();
   });
 
   it("invalidates the conversation list and start-tasks queries on success", async () => {
@@ -378,51 +596,6 @@ describe("useCreateConversation", () => {
     );
   });
 
-  it("launches the seeded `default` profile via agent_settings so canvas enrichments survive", async () => {
-    // The active profile IS the well-known default → it's the enriched baseline
-    // (mirrors agent_settings), not a deliberate profile pick, so the launch
-    // stays on the agent_settings path (no profile tail) even though its
-    // llm_profile_ref resolves. Keeps <RUNTIME_SERVICES> and project skills,
-    // which the profile-resolution path drops.
-    listAgentProfilesMock.mockResolvedValue({
-      profiles: [
-        {
-          id: "profile-default",
-          name: "default",
-          agent_kind: "openhands",
-          revision: 1,
-          llm_profile_ref: "gpt",
-          mcp_server_refs: null,
-        },
-      ],
-      active_agent_profile_id: "profile-default",
-    });
-    listLlmProfilesMock.mockResolvedValue({
-      profiles: [{ name: "gpt" }],
-      active_profile: "gpt",
-    });
-    const createConversationSpy = vi
-      .spyOn(AgentServerConversationService, "createConversation")
-      .mockResolvedValue({
-        id: "task-id",
-        app_conversation_id: "conv-1",
-        agent_server_url: "http://agent-server.local",
-      } as never);
-
-    const { result } = renderHook(() => useCreateConversation(), {
-      wrapper: ({ children }) => (
-        <QueryClientProvider client={new QueryClient()}>
-          {children}
-        </QueryClientProvider>
-      ),
-    });
-
-    await result.current.mutateAsync({ query: "hello" });
-
-    const call = createConversationSpy.mock.lastCall;
-    expect(call?.[0]?.agentProfileId).toBeUndefined();
-  });
-
   it("keeps the profile path for an ACP `default` profile (agent_settings can't carry ACP config)", async () => {
     // The default→agent_settings shortcut is OpenHands-only: activation is
     // pointer-only, so global agent_settings is stale (still OpenHands) for an
@@ -514,9 +687,11 @@ describe("useCreateConversation", () => {
   });
 
   it("stamps the launched openhands profile's llm_profile_ref into conversation metadata (#1082)", async () => {
-    // A named (non-default) profile launches via the profile path and runs its
-    // own llm_profile_ref — which differs from the standalone active LLM
-    // profile — so the switcher pill must name the ref, not the active profile.
+    // A named (non-default) profile launches via the profile path when no
+    // dropdown selection exists (active_profile null — a differing selection
+    // would win the launch instead, #16539) and runs its own llm_profile_ref,
+    // so the switcher pill must name the ref, not the hook's stale cached
+    // active profile.
     useLlmProfilesMock.mockReturnValue({
       data: { active_profile: "standalone-active" },
     });
@@ -535,7 +710,7 @@ describe("useCreateConversation", () => {
     });
     listLlmProfilesMock.mockResolvedValue({
       profiles: [{ name: "claude" }],
-      active_profile: "standalone-active",
+      active_profile: null,
     });
     const createConversationSpy = vi
       .spyOn(AgentServerConversationService, "createConversation")
@@ -562,5 +737,271 @@ describe("useCreateConversation", () => {
         getStoredConversationMetadata("conv-ref-stamp")?.active_profile,
       ).toBe("claude"),
     );
+  });
+
+  it("keeps the named profile path when the dropdown selection matches its pinned ref (#16539)", async () => {
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [
+        {
+          id: "profile-luna",
+          name: "openhands-luna",
+          agent_kind: "openhands",
+          revision: 1,
+          llm_profile_ref: "pinned-model",
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: "profile-luna",
+    });
+    listLlmProfilesMock.mockResolvedValue({
+      profiles: [{ name: "pinned-model" }],
+      active_profile: "pinned-model",
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: "conv-1",
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hello" });
+
+    const call = createConversationSpy.mock.lastCall;
+    expect(call?.[0]?.agentProfileId).toBe("profile-luna");
+  });
+
+  it("keeps an explicitly-picked agent profile over the dropdown selection (#16539)", async () => {
+    // An explicit `agentProfileId` (the in-conversation profile picker) is a
+    // deliberate profile pick — its pinned ref stays authoritative even when
+    // the account-wide active LLM profile differs.
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [
+        {
+          id: "profile-luna",
+          name: "openhands-luna",
+          agent_kind: "openhands",
+          revision: 1,
+          llm_profile_ref: "pinned-model",
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: null,
+    });
+    listLlmProfilesMock.mockResolvedValue({
+      profiles: [{ name: "pinned-model" }, { name: "selected-model" }],
+      active_profile: "selected-model",
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: "conv-1",
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({
+      query: "hello",
+      agentProfileId: "profile-luna",
+    });
+
+    const call = createConversationSpy.mock.lastCall;
+    expect(call?.[0]?.agentProfileId).toBe("profile-luna");
+  });
+
+  it("keeps the named profile path on cloud regardless of the active LLM profile (#16539)", async () => {
+    // The dropdown override is local-only, like the other downgrades: cloud
+    // has no agent_settings payload to fall back to.
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    });
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [
+        {
+          id: "profile-luna",
+          name: "openhands-luna",
+          agent_kind: "openhands",
+          revision: 1,
+          llm_profile_ref: "pinned-model",
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: "profile-luna",
+    });
+    listLlmProfilesMock.mockResolvedValue({
+      profiles: [{ name: "pinned-model" }, { name: "selected-model" }],
+      active_profile: "selected-model",
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: "conv-1",
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hello" });
+
+    const call = createConversationSpy.mock.lastCall;
+    expect(call?.[0]?.agentProfileId).toBe("profile-luna");
+  });
+
+  describe("the home LLM selection", () => {
+    const luna = {
+      id: "profile-luna",
+      name: "openhands-luna",
+      agent_kind: "openhands",
+      revision: 1,
+      llm_profile_ref: "pinned-model",
+      mcp_server_refs: null,
+    };
+
+    async function launch(variables: { agentProfileId?: string } = {}) {
+      const createConversationSpy = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue({
+          id: "task-id",
+          app_conversation_id: "conv-dropdown-override",
+          agent_server_url: "http://agent-server.local",
+        } as never);
+      const { result } = renderHook(() => useCreateConversation(), {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={new QueryClient()}>
+            {children}
+          </QueryClientProvider>
+        ),
+      });
+      await result.current.mutateAsync({ query: "hello", ...variables });
+      return createConversationSpy.mock.lastCall?.[0];
+    }
+
+    it("runs a named profile's own LLM over the active LLM profile", async () => {
+      listAgentProfilesMock.mockResolvedValue({
+        profiles: [luna],
+        active_agent_profile_id: "profile-luna",
+      });
+      listLlmProfilesMock.mockResolvedValue({
+        profiles: [{ name: "pinned-model" }, { name: "selected-model" }],
+        active_profile: "selected-model",
+      });
+
+      const call = await launch();
+
+      expect(call?.agentProfileId).toBe("profile-luna");
+      expect(call?.agentLlmProfileOverride).toBeUndefined();
+      expect(call?.agentLlmProfileRef).toBe("pinned-model");
+      await waitFor(() =>
+        expect(
+          getStoredConversationMetadata("conv-dropdown-override")
+            ?.active_profile,
+        ).toBe("pinned-model"),
+      );
+    });
+
+    it("runs the active LLM profile when the profile's ref is missing", async () => {
+      listAgentProfilesMock.mockResolvedValue({
+        profiles: [luna],
+        active_agent_profile_id: null,
+      });
+      listLlmProfilesMock.mockResolvedValue({
+        profiles: [{ name: "selected-model" }],
+        active_profile: "selected-model",
+      });
+
+      const call = await launch({ agentProfileId: "profile-luna" });
+
+      expect(call?.agentProfileId).toBe("profile-luna");
+      expect(call?.agentLlmProfileOverride).toBe("selected-model");
+    });
+
+    it("leaves a missing ref with no LLM selected for the server to report", async () => {
+      listAgentProfilesMock.mockResolvedValue({
+        profiles: [luna],
+        active_agent_profile_id: "profile-luna",
+      });
+      listLlmProfilesMock.mockResolvedValue({
+        profiles: [],
+        active_profile: null,
+      });
+
+      const call = await launch();
+
+      expect(call?.agentProfileId).toBe("profile-luna");
+      expect(call).not.toHaveProperty("agentLlmProfileOverride");
+    });
+
+    it("keeps an explicit pick on its pinned ref", async () => {
+      listAgentProfilesMock.mockResolvedValue({
+        profiles: [luna],
+        active_agent_profile_id: null,
+      });
+      listLlmProfilesMock.mockResolvedValue({
+        profiles: [{ name: "pinned-model" }, { name: "selected-model" }],
+        active_profile: "selected-model",
+      });
+
+      const call = await launch({ agentProfileId: "profile-luna" });
+
+      expect(call?.agentProfileId).toBe("profile-luna");
+      expect(call).not.toHaveProperty("agentLlmProfileOverride");
+      expect(call?.agentLlmProfileRef).toBe("pinned-model");
+    });
+
+    it("launches the seeded `default` by id like any other profile", async () => {
+      listLlmProfilesMock.mockResolvedValue({
+        profiles: [{ name: "default" }, { name: "selected-model" }],
+        active_profile: "selected-model",
+      });
+
+      const call = await launch();
+
+      expect(call?.agentProfileId).toBe(DEFAULT_PROFILE.id);
+      expect(call?.agentLlmProfileOverride).toBe("selected-model");
+    });
+
+    it("sends no override to cloud", async () => {
+      mockUseActiveBackend.mockReturnValue({
+        backend: { id: "cloud-1", kind: "cloud" },
+        orgId: null,
+      });
+      listAgentProfilesMock.mockResolvedValue({
+        profiles: [luna],
+        active_agent_profile_id: "profile-luna",
+      });
+      listLlmProfilesMock.mockResolvedValue({
+        profiles: [{ name: "pinned-model" }, { name: "selected-model" }],
+        active_profile: "selected-model",
+      });
+
+      const call = await launch();
+
+      expect(call?.agentProfileId).toBe("profile-luna");
+      expect(call).not.toHaveProperty("agentLlmProfileOverride");
+    });
   });
 });
