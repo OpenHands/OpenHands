@@ -50,6 +50,16 @@ describe("automation agent profile selection", () => {
     });
     expect(onChange).toHaveBeenLastCalledWith(null);
   });
+  it("does not offer a default agent when selection is required", () => {
+    render(
+      <AutomationAgentProfileSelector
+        value={null}
+        required
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+  });
   it("retains a deleted profile instead of silently selecting another", () => {
     render(
       <AutomationAgentProfileSelector

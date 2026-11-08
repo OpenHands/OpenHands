@@ -59,6 +59,7 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { OptionalTag } from "#/components/features/settings/optional-tag";
+import { AutomationAgentProfileSelector } from "#/components/features/automations/agent-profile-selector";
 import {
   AutomationSetupPromptStack,
   SetupModelPill,
@@ -1334,7 +1335,8 @@ export function AutomationSetupPanel({
     if (configuredPlugins.length > 0) {
       body.plugins = configuredPlugins;
     }
-    if (model.trim()) body.model = model.trim();
+    if (agentProfileId.trim()) body.agent_profile_id = agentProfileId.trim();
+    else if (model.trim()) body.model = model.trim();
     return body;
   };
   const buildCustomBody = (tarballPath: string): SetupRequestBody =>
@@ -1344,7 +1346,11 @@ export function AutomationSetupPanel({
       tarball_path: tarballPath,
       entrypoint: entrypoint.trim(),
       setup_script_path: setupScriptPath.trim(),
-      ...(model.trim() ? { model: model.trim() } : {}),
+      ...(agentProfileId.trim()
+        ? { agent_profile_id: agentProfileId.trim() }
+        : model.trim()
+          ? { model: model.trim() }
+          : {}),
       ...(showTimeout && timeoutSeconds.trim()
         ? { timeout: Number(timeoutSeconds) }
         : {}),
@@ -1548,6 +1554,13 @@ export function AutomationSetupPanel({
     });
   };
   const validateRequiredFields = (): boolean => {
+    if (!isEditingExisting && !agentProfileId.trim()) {
+      setStatusMessage({
+        kind: "error",
+        text: t(I18nKey.SETUP$VALIDATION_REQUIRED),
+      });
+      return false;
+    }
     if (!prompt.trim() && kind !== "custom") {
       setStatusMessage({
         kind: "error",
@@ -1812,13 +1825,12 @@ export function AutomationSetupPanel({
     const body: Record<string, unknown> = {
       name: normalizedName(),
       trigger: buildTrigger(),
-      model: model.trim() || null,
+      agent_profile_id: agentProfileId.trim() || null,
+      ...(!agentProfileId.trim() ? { model: model.trim() || null } : {}),
       timeout:
         showTimeout && timeoutSeconds.trim() ? Number(timeoutSeconds) : null,
     };
-    if (kind === "custom")
-      body.agent_profile_id = agentProfileId.trim() || null;
-    else body.prompt = prompt.trim();
+    if (kind !== "custom") body.prompt = prompt.trim();
     const repositories = parseAutomationSetupRepositories(repository);
     if (
       repositoriesEditable &&
@@ -2158,6 +2170,7 @@ export function AutomationSetupPanel({
                       }
                       repositoryReadOnly={!repositoriesEditable}
                       model={model}
+                      showModel={isEditingExisting && !agentProfileId.trim()}
                       onModelChange={(value) => updateField("model", value)}
                     />
                   ) : hasExistingCustomBundle ? (
@@ -2190,12 +2203,29 @@ export function AutomationSetupPanel({
                     />
                   )}
                 </SetupKindCrossfade>
-                {kind === "custom" ? (
-                  <SetupModelPill
-                    value={model}
-                    onChange={(value) => updateField("model", value)}
-                  />
-                ) : null}
+                {isEditingExisting &&
+                  kind === "custom" &&
+                  !agentProfileId.trim() && (
+                    <SetupModelPill
+                      value={model}
+                      onChange={(value) => updateField("model", value)}
+                    />
+                  )}
+                {(deploymentCapabilities.data?.features ?? []).includes(
+                  "agentProfiles",
+                ) &&
+                  (kind === "custom" ||
+                    (deploymentCapabilities.data?.features ?? []).includes(
+                      "presetAgentProfiles",
+                    )) && (
+                    <AutomationAgentProfileSelector
+                      value={agentProfileId.trim() || null}
+                      required={!isEditingExisting}
+                      onChange={(value) =>
+                        updateField("agentProfileId", value ?? "")
+                      }
+                    />
+                  )}
               </div>
 
               <section className="flex flex-col gap-2.5">

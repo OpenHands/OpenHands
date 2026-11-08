@@ -8,55 +8,55 @@ import {
 } from "./automation-setup";
 import type { SetupEntry, SetupFormValues, SetupRequestBody } from "./types";
 import { validateSetupEntry } from "./manifest-validation";
+import { validateFormValues } from "./manifest-local-validation";
 
 const customAutomation = AUTOMATION_CATALOG.find(
   (entry) => entry.id === "custom-automation",
 ) as SetupEntry | undefined;
 
 describe("custom automation setup actions", () => {
-  it("does not send an agent profile to the prompt endpoint", () => {
+  it.each(["prompt", "plugin", "upload"] as const)(
+    "sends the selected profile to the %s endpoint without a conflicting model",
+    (action) => {
+      const scenario = customAutomationFixture.scenarios.find(
+        (candidate) => candidate.selectedAction === action,
+      );
+      expect(scenario).toBeDefined();
+      const values = {
+        ...scenario!.formValues,
+        model: "other-model",
+        agent_profile_id: "11111111-1111-4111-8111-111111111111",
+      } as unknown as SetupFormValues;
+      const payload = buildCreatePayload(
+        customAutomation!,
+        values,
+        undefined,
+        scenario!.selectedTrigger,
+        scenario!.selectedAction,
+      );
+      expect(payload?.agent_profile_id).toBe(values.agent_profile_id);
+      expect(payload).not.toHaveProperty("model");
+      expect(supportsAgentProfile(customAutomation!, action)).toBe(true);
+    },
+  );
+
+  it("requires an explicit profile before continuing from the setup form", () => {
     const scenario = customAutomationFixture.scenarios[0];
     const values = {
       ...scenario.formValues,
-      model: "other-model",
-      agent_profile_id: "11111111-1111-4111-8111-111111111111",
+      agent_profile_id: "",
     } as unknown as SetupFormValues;
-    const payload = buildCreatePayload(
-      customAutomation!,
-      values,
-      undefined,
-      scenario.selectedTrigger,
-      scenario.selectedAction,
-    );
-    expect(payload).not.toHaveProperty("agent_profile_id");
-    expect(payload?.model).toBe(values.model);
     expect(
-      supportsAgentProfile(customAutomation!, scenario.selectedAction),
-    ).toBe(false);
+      validateFormValues(
+        customAutomation!.setup,
+        values,
+        {},
+        scenario.selectedTrigger,
+        scenario.selectedAction,
+      ).agent_profile_id?.code,
+    ).toBe("required");
   });
 
-  it("uses the selected agent profile for the raw upload endpoint", () => {
-    const scenario = customAutomationFixture.scenarios.find(
-      (candidate) => candidate.selectedAction === "upload",
-    );
-    expect(scenario).toBeDefined();
-    const values = {
-      ...scenario!.formValues,
-      agent_profile_id: "11111111-1111-4111-8111-111111111111",
-    } as unknown as SetupFormValues;
-    const payload = buildCreatePayload(
-      customAutomation!,
-      values,
-      undefined,
-      scenario!.selectedTrigger,
-      scenario!.selectedAction,
-    );
-    expect(payload?.agent_profile_id).toBe(values.agent_profile_id);
-    expect(payload).not.toHaveProperty("model");
-    expect(
-      supportsAgentProfile(customAutomation!, scenario!.selectedAction),
-    ).toBe(true);
-  });
   it("admits the custom automation action manifest", () => {
     expect(customAutomation).toBeDefined();
     expect(validateSetupEntry(customAutomation).errors).toEqual([]);

@@ -186,6 +186,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const hidesConnectedProviderSecrets = deploymentMode === "self_hosted";
   const visibleFields = Object.fromEntries(
     Object.entries(fields).filter(([name, field]) => {
+      if (field.type === "agent-profile") return false;
       if (values.agent_profile_id && field.type === "llm-profile") return false;
       if (!hidesConnectedProviderSecrets) return true;
       if (!Object.hasOwn(CONNECTED_PROVIDER_SECRET_FIELDS, name)) return true;
@@ -567,19 +568,25 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                 </div>
               )}
               {canSelectAgentProfile && (
-                <AutomationAgentProfileSelector
-                  // The form stores "no profile" as "", but the selector only
-                  // reads null/undefined as Default; "" would render it blank.
-                  value={
-                    typeof values.agent_profile_id === "string" &&
-                    values.agent_profile_id !== ""
-                      ? values.agent_profile_id
-                      : null
-                  }
-                  onChange={(value) =>
-                    setFieldValue("agent_profile_id", value ?? "")
-                  }
-                />
+                <div className="flex flex-col gap-1">
+                  <AutomationAgentProfileSelector
+                    required={fields.agent_profile_id?.required}
+                    value={
+                      typeof values.agent_profile_id === "string" &&
+                      values.agent_profile_id !== ""
+                        ? values.agent_profile_id
+                        : null
+                    }
+                    onChange={(value) =>
+                      setFieldValue("agent_profile_id", value ?? "")
+                    }
+                  />
+                  {resolveFieldError("agent_profile_id") && (
+                    <p className="text-sm text-danger">
+                      {resolveFieldError("agent_profile_id")}
+                    </p>
+                  )}
+                </div>
               )}
               {Object.entries(visibleFields).map(([name, field]) => (
                 <SetupFormField

@@ -268,6 +268,7 @@ export function AutomationSetupPromptStack({
   titleAction,
   showTitle = true,
   model,
+  showModel = true,
   repositoryReadOnly = false,
   onPromptChange,
   onRepositoryChange,
@@ -284,6 +285,7 @@ export function AutomationSetupPromptStack({
   /** The setup form owns the title when the kind toggle stays outside the crossfade. */
   showTitle?: boolean;
   model: string;
+  showModel?: boolean;
   /** Show the repositories without letting them be added or removed. */
   repositoryReadOnly?: boolean;
   onPromptChange: (value: string) => void;
@@ -446,9 +448,11 @@ export function AutomationSetupPromptStack({
               rows={5}
               className="automation-setup-prompt-input w-full resize-none border-0 bg-transparent p-0 text-sm text-content outline-none placeholder:text-tertiary-alt"
             />
-            <div className="flex min-w-0 items-center gap-2 pt-2">
-              <SetupModelPill value={model} onChange={onModelChange} />
-            </div>
+            {showModel && (
+              <div className="flex min-w-0 items-center gap-2 pt-2">
+                <SetupModelPill value={model} onChange={onModelChange} />
+              </div>
+            )}
             <div
               data-testid="automation-setup-prompt-grip"
               className="group absolute bottom-0 left-0 z-20 h-3 w-full"

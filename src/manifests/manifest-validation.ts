@@ -23,7 +23,7 @@ import {
 } from "./types";
 
 const ENTRY_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-const FIELD_NAME_PATTERN = /^[a-z][A-Za-z0-9]*$/;
+const FIELD_NAME_PATTERN = /^([a-z][A-Za-z0-9]*|agent_profile_id)$/;
 /** Copy must never be able to inject markup into the host. */
 const MARKUP_PATTERN = /<[A-Za-z/!]/;
 /**
@@ -57,6 +57,7 @@ const FIELD_TYPES = [
   "cron",
   "timezone",
   "repo-picker",
+  "agent-profile",
   "llm-profile",
   "event-source",
   "event-type",
