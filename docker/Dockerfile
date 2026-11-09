@@ -41,14 +41,8 @@ COPY . .
 # production for tagged releases and staging for PR/main images.
 # VITE_BASE_PATH is baked into React Router/Vite so the Docker image serves
 # Canvas under the Cloud subpath instead of a dedicated hostname.
-# VITE_WORKING_DIR is the base directory the frontend hands to new
-# conversations. It must be absolute and live inside a volume: without it the
-# frontend falls back to the relative "workspace/project", which it anchors to
-# the agent-server's home (/home/openhands) — a directory the image does not
-# persist — so every conversation's files are lost when the container is
-# recreated (#18960). This mirrors the npm launchers, which bake
-# <state dir>/workspaces (~/.openhands/agent-canvas/workspaces) into the
-# bundle, and it lands in the persisted ~/.openhands volume declared below.
+# VITE_WORKING_DIR is the base directory for per-conversation working dirs. It
+# must be absolute and inside a volume so they outlive the container (#18960).
 ARG VITE_POSTHOG_API_KEY=""
 ARG VITE_BASE_PATH="/canvas"
 ARG VITE_WORKING_DIR="/home/openhands/.openhands/agent-canvas/workspaces"
@@ -193,9 +187,7 @@ RUN chmod +x /opt/agent-canvas/entrypoint.sh
 
 # Pre-create persistence directories with correct ownership so the
 # openhands user can write to them even when Docker creates anonymous
-# volumes (which default to root). The workspaces dir holds the per-
-# conversation working dirs the frontend bakes into the bundle, so it has to
-# be part of the persisted volume too.
+# volumes (which default to root).
 RUN mkdir -p /home/openhands/.openhands/agent-canvas/conversations \
              /home/openhands/.openhands/agent-canvas/bash_events \
              /home/openhands/.openhands/agent-canvas/workspaces \
@@ -207,7 +199,6 @@ USER openhands
 
 # Persistence volumes:
 #   /home/openhands/.openhands — settings, secrets, conversations, automation DB
-#                               and the per-conversation working dirs
 #   /projects                  — user code the agent can read/edit
 # Bind-mount these for data to survive container restarts:
 #   docker run -v ~/.openhands:/home/openhands/.openhands -v ~/projects:/projects ...

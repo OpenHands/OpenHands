@@ -103,8 +103,6 @@ docker run -it --rm \
 
 The agent will be able to access any project under `PROJECTS_PATH`.
 
-By default, the Docker-served Canvas creates per-conversation workspaces under `/home/openhands/.openhands/agent-canvas/workspaces/`. The `~/.openhands` mount above persists them on the host under `~/.openhands/agent-canvas/workspaces/`.
-
 ### Option 3: With Multiple Docker Sandboxes
 
 Run each new conversation in its own Docker container, with its own Agent Server and tools. This is useful for running several agents concurrently. Canvas and the outer Agent Server run on your host and route conversation requests to the containers.

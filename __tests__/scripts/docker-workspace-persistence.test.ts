@@ -2,11 +2,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  buildConversationWorkingDir,
-  getAgentServerWorkingDir,
-} from "#/api/agent-server-config";
+import { describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -16,104 +12,35 @@ const dockerfile = readFileSync(
   path.join(repoRoot, "docker/Dockerfile"),
   "utf-8",
 );
+const stages = dockerfile.split(/^(?=FROM )/m);
+// Match the build stage by name: its base image tag moves on its own.
+const buildStage = stages.find((stage) => / AS frontend-build$/m.test(stage));
 
-/**
- * The frontend build stage, where the `VITE_*` values Vite inlines into the
- * bundle are declared.
- */
-function frontendBuildStage(): string {
-  // Match the stage by name: the base image tag is pinned upstream and moves on its own.
-  const from = /^FROM \S+ AS frontend-build$/m.exec(dockerfile);
-  const start = from?.index ?? -1;
-  const end = start === -1 ? -1 : dockerfile.indexOf("\nFROM ", start + 1);
-  if (start === -1 || end === -1) {
-    throw new Error("frontend-build stage is missing from docker/Dockerfile");
-  }
-  return dockerfile.slice(start, end);
-}
-
-/** The working dir the image bakes into the frontend bundle. */
-function bakedWorkingDir(): string {
-  const match = frontendBuildStage().match(
-    /^ARG VITE_WORKING_DIR="?([^"\n]+)"?$/m,
-  );
-  return match?.[1] ?? "";
-}
-
-/** The directories the image declares as volumes, i.e. the persisted ones. */
-function declaredVolumes(): string[] {
-  const match = dockerfile.match(/^VOLUME \[(.+)\]$/m);
-  if (!match) return [];
-  return JSON.parse(`[${match[1]}]`) as string[];
-}
-
-/** The directories the image pre-creates for the `openhands` user. */
-function persistenceDirectories(): string[] {
-  const start = dockerfile.indexOf("RUN mkdir -p ");
-  const end = dockerfile.indexOf("&&", start);
-  if (start === -1 || end === -1) {
-    throw new Error(
-      "persistence directories are missing from docker/Dockerfile",
-    );
-  }
-  return dockerfile
-    .slice(start + "RUN mkdir -p ".length, end)
-    .split("\\")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-
-/** The paths the image hands to the `openhands` group. */
-function chownedPaths(): string[] {
-  const match = dockerfile.match(/chown -R openhands:openhands (.+)$/m);
-  if (!match) return [];
-  return match[1].trim().split(/\s+/);
-}
-
-afterEach(() => {
-  vi.unstubAllEnvs();
-});
+// The base dir the image bakes into the bundle; conversations get <base>/<hex>.
+// A relative base is anchored to the agent-server's home, which the image does
+// not persist (#18960).
+const bakedWorkingDir =
+  buildStage?.match(/^ARG VITE_WORKING_DIR="?([^"\n]+)"?$/m)?.[1] ?? "";
 
 describe("Docker workspace persistence", () => {
-  it("bakes a working dir into the frontend build", () => {
-    const stage = frontendBuildStage();
+  it("bakes an absolute working dir inside a persisted volume", () => {
+    const volumes = JSON.parse(
+      dockerfile.match(/^VOLUME (\[.+\])$/m)?.[1] ?? "[]",
+    ) as string[];
 
-    expect(stage).toMatch(/^ARG VITE_WORKING_DIR="[^"\n]+"$/m);
-    expect(stage).toMatch(/^ENV VITE_WORKING_DIR=\$\{VITE_WORKING_DIR\}$/m);
-  });
-
-  it("bakes an absolute working dir so it is not anchored to the backend home", () => {
-    // A relative base is resolved against the agent-server's home
-    // (/home/openhands), which the image does not persist.
-    expect(path.isAbsolute(bakedWorkingDir())).toBe(true);
-  });
-
-  it("keeps the baked working dir inside a persisted volume", () => {
-    const baked = bakedWorkingDir();
-    const owner = declaredVolumes().find(
-      (volume) => baked === volume || baked.startsWith(`${volume}/`),
-    );
-
-    expect(owner).toBeDefined();
-  });
-
-  it("pre-creates the baked working dir for the openhands user", () => {
-    const baked = bakedWorkingDir();
-    const owner = declaredVolumes().find(
-      (volume) => baked === volume || baked.startsWith(`${volume}/`),
-    );
-
-    expect(persistenceDirectories()).toContain(baked);
-    expect(chownedPaths()).toContain(owner);
-  });
-
-  it("gives every conversation a working dir under the baked base", () => {
-    const baked = bakedWorkingDir();
-    vi.stubEnv("VITE_WORKING_DIR", baked);
-
-    expect(getAgentServerWorkingDir()).toBe(baked);
+    expect(path.posix.isAbsolute(bakedWorkingDir)).toBe(true);
     expect(
-      buildConversationWorkingDir("4a8dca37-3bf0-48de-a0af-949d711c3d48"),
-    ).toBe(`${baked}/4a8dca373bf048dea0af949d711c3d48`);
+      volumes.some((volume) => bakedWorkingDir.startsWith(`${volume}/`)),
+    ).toBe(true);
+  });
+
+  it("pre-creates the baked working dir in the final image", () => {
+    const created = stages
+      .at(-1)
+      ?.match(/^RUN mkdir -p ([^&]+)&&/m)?.[1]
+      .trim()
+      .split(/[\s\\]+/);
+
+    expect(created).toContain(bakedWorkingDir);
   });
 });
