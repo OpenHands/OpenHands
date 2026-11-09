@@ -93,6 +93,7 @@ class EventService {
       const cloudLimit = Math.min(limit, 100);
       const hasFilterParams = !!(
         options.sortOrder ||
+        options.kind ||
         options.pageId ||
         options.timestampGte ||
         options.timestampLt
@@ -105,6 +106,7 @@ class EventService {
       if (options.timestampGte)
         params.set("timestamp__gte", options.timestampGte);
       if (options.timestampLt) params.set("timestamp__lt", options.timestampLt);
+      if (options.kind) params.set("kind__eq", options.kind);
       if (options.excludeFullState) params.set("exclude_full_state", "true");
 
       const doCloudSearch = (searchParams: URLSearchParams) =>
@@ -143,6 +145,7 @@ class EventService {
     ).search({
       limit,
       ...(options.pageId ? { page_id: options.pageId } : {}),
+      ...(options.kind ? { kind: options.kind } : {}),
       ...(options.sortOrder ? { sort_order: options.sortOrder } : {}),
       ...(options.timestampGte ? { timestamp__gte: options.timestampGte } : {}),
       ...(options.timestampLt ? { timestamp__lt: options.timestampLt } : {}),

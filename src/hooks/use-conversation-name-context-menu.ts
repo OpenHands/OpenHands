@@ -6,17 +6,13 @@ import { useDeleteConversation } from "./mutation/use-delete-conversation";
 import { useUnifiedPauseConversation } from "./mutation/use-unified-stop-conversation";
 import { useUpdateConversationPublicFlag } from "./mutation/use-update-conversation-public-flag";
 import { useActiveConversation } from "./query/use-active-conversation";
-import { useEventStore } from "#/stores/use-event-store";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import { buildAgentCanvasUrl } from "#/utils/base-path";
 
 import { useDownloadConversation } from "./use-download-conversation";
-import {
-  adaptSystemMessage,
-  SystemMessageForModal,
-} from "#/utils/system-message-adapter";
+import { useConversationSystemMessage } from "./query/use-conversation-system-message";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { canStopRuntime, isExecutionActive } from "#/utils/status";
 import { useSelectConversationTab } from "./use-select-conversation-tab";
@@ -37,7 +33,6 @@ export function useConversationNameContextMenu({
   const { t } = useTranslation();
   const { conversationId: currentConversationId, navigate } = useNavigation();
   const { backend } = useActiveBackend();
-  const events = useEventStore((state) => state.events);
   const { mutate: deleteConversation } = useDeleteConversation();
   const { mutate: stopConversation } = useUnifiedPauseConversation();
   const { mutate: updatePublicFlag } = useUpdateConversationPublicFlag();
@@ -53,8 +48,7 @@ export function useConversationNameContextMenu({
   const { mutateAsync: downloadConversation } = useDownloadConversation();
   const { navigateToTab } = useSelectConversationTab();
 
-  const systemMessage: SystemMessageForModal | null =
-    adaptSystemMessage(events);
+  const systemMessage = useConversationSystemMessage(conversationId);
 
   const handleDelete = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();

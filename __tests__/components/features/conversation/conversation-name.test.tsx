@@ -1,5 +1,5 @@
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
-import { screen, within, waitFor } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   afterEach,
@@ -8,11 +8,15 @@ import {
   describe,
   expect,
   it,
+  type MockInstance,
   vi,
 } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { ConversationName } from "#/components/features/conversation/conversation-name";
 import { ConversationNameContextMenu } from "#/components/features/conversation/conversation-name-context-menu";
+import EventService from "#/api/event-service/event-service.api";
+import { useEventStore } from "#/stores/use-event-store";
+import type { OpenHandsEvent } from "#/types/agent-server/core";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { Backend } from "#/api/backend-registry/types";
 import type { Conversation } from "#/api/open-hands.types";
@@ -781,5 +785,82 @@ describe("ConversationName public sharing", () => {
 
     expect(screen.getByText("Share Publicly")).toBeInTheDocument();
     expect(screen.queryByText("Share with Org users")).not.toBeInTheDocument();
+  });
+});
+
+describe("ConversationName agent tools on long conversations", () => {
+  const systemPromptEvent = {
+    id: "system-prompt",
+    timestamp: "2026-07-01T00:00:00Z",
+    source: "agent",
+    system_prompt: { type: "text", text: "You are OpenHands agent" },
+    tools: [],
+  } as unknown as OpenHandsEvent;
+  // The newest history page of a long conversation: the SystemPromptEvent,
+  // its first event, is not in it.
+  const tailMessage = {
+    id: "tail-message",
+    timestamp: "2026-07-01T01:00:00Z",
+    source: "agent",
+    llm_message: { role: "assistant", content: [{ type: "text", text: "hi" }] },
+    activated_skills: [],
+    extended_content: [],
+  } as unknown as OpenHandsEvent;
+  let searchEventsSpy: MockInstance<typeof EventService.searchEvents>;
+
+  beforeEach(() => {
+    useActiveBackendMock.mockReturnValue({
+      backend: localBackend,
+      orgId: null,
+    });
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        id: "test-conversation-id",
+        conversation_id: "test-conversation-id",
+        title: "Test Conversation",
+        status: "RUNNING",
+        conversation_url:
+          "http://localhost:3000/api/conversations/test-conversation-id",
+        session_api_key: "session-key",
+      } as Conversation & Partial<AppConversation>,
+    });
+    searchEventsSpy = vi
+      .spyOn(EventService, "searchEvents")
+      .mockResolvedValue({ items: [systemPromptEvent], next_page_id: null });
+  });
+
+  afterEach(() => {
+    searchEventsSpy.mockRestore();
+    useEventStore.getState().clearEvents();
+    vi.clearAllMocks();
+  });
+
+  it("fetches the SystemPromptEvent when the loaded history page lacks it", async () => {
+    useEventStore.getState().addEvents([tailMessage]);
+    const user = userEvent.setup();
+    renderConversationNameWithRouter();
+
+    await user.click(screen.getByTestId("ellipsis-button"));
+
+    expect(
+      await screen.findByTestId("show-agent-tools-button"),
+    ).toBeInTheDocument();
+    expect(searchEventsSpy).toHaveBeenCalledWith(
+      "test-conversation-id",
+      "http://localhost:3000/api/conversations/test-conversation-id",
+      "session-key",
+      { kind: "SystemPromptEvent", sortOrder: "TIMESTAMP", limit: 1 },
+    );
+  });
+
+  it("uses a loaded SystemPromptEvent without searching for it", async () => {
+    useEventStore.getState().addEvents([systemPromptEvent, tailMessage]);
+    const user = userEvent.setup();
+    renderConversationNameWithRouter();
+
+    await user.click(screen.getByTestId("ellipsis-button"));
+
+    expect(screen.getByTestId("show-agent-tools-button")).toBeInTheDocument();
+    expect(searchEventsSpy).not.toHaveBeenCalled();
   });
 });
