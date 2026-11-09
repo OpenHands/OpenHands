@@ -242,6 +242,13 @@ describe("vite library build", () => {
       expect(matches, `Single scoped recipe: ${name}`).toHaveLength(1);
       return matches[0];
     };
+    // These aliases resolve the exact public Canvas variables, including host overrides.
+    expect(declarations(recipe("bg-canvas-background"))).toEqual({
+      "background-color": "var(--oh-background)",
+    });
+    expect(declarations(recipe("text-on-accent"))).toEqual({
+      color: "var(--oh-accent-foreground)",
+    });
     // A named gradient stop retains the existing ancestor override/fallback.
     const scrollFade = recipe("from-scroll-fade");
     expect(declarations(scrollFade)["--tw-gradient-from"]).toBe(
