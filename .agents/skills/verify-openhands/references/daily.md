@@ -1,8 +1,8 @@
 # The daily pass
 
 The weekly pass in [maintenance.md](maintenance.md) proves every feature live.
-A daily pass cannot: 28 families and 700-odd sub-features take longer than one
-agent's day, and most of the map did not change since yesterday. The daily
+A daily pass cannot: the full feature map takes longer than one agent's day,
+and most of the map did not change since yesterday. The daily
 pass answers a narrower question with the same rigor: **did anything that
 merged since the last pass change what a user sees, and does the rest still
 hold where it is cheapest to look?** It is the delta pass that
@@ -89,13 +89,14 @@ cheaper than the next and catches a different kind of rot.
    sub-feature ID that bullet names. This catches a page that stopped loading
    without re-proving every row.
 4. **Rotation (depth over the week).** Drive the full recipe of about a
-   seventh of the families, four a day, so every family gets a full live pass
-   once a week between weekly maintenance passes. The day's slice comes from
-   the date, not from yesterday's notes: with `d` the UTC day of the year,
-   today's families are the ones at positions `(d mod 7) * 4` to
-   `(d mod 7) * 4 + 3` of the index table, in ID order (position 24 onwards
-   holds F25 to F28). Model-backed bullets run only inside the LLM budget;
-   without a key they are `blocked` with the missing prerequisite.
+   seventh of the families. Read the family rows from `TARGET`'s
+   [index table](feature-map/README.md), sort by numeric family ID, and number
+   their positions from zero. Let `w` be the UTC weekday recorded at the start
+   of the pass (Monday = 0 through Sunday = 6). Today's families are those
+   whose position `i` satisfies `i mod 7 = w`. Every indexed family is assigned
+   to one day of the week, including newly added families, and the rotation
+   does not reset at year boundaries. Model-backed bullets run only inside
+   the LLM budget; without a key they are `blocked` with the missing prerequisite.
 
 ## Reading the result
 

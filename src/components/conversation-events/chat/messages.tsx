@@ -8,7 +8,7 @@ import {
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
-import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
+import { OpenHandsEvent } from "#/types/agent-server/core";
 import { I18nKey } from "#/i18n/declaration";
 import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
@@ -21,6 +21,7 @@ import {
 import { EventMessage } from "./event-message";
 import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
 import { groupEvents } from "./group-events";
+import { buildActionById } from "./event-thought-helpers";
 import { getSingleToolEvent } from "./event-message-components/event-group-summary";
 import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
@@ -88,13 +89,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // Set, so every append changed every historical item's shallow props.
     // Derive the two event-specific values once and keep unchanged wrappers
     // eligible for React.memo without removing allEvents from grouping logic.
-    const actionById = React.useMemo(() => {
-      const actions = new Map<string, ActionEvent>();
-      for (const event of allEvents) {
-        if (isActionEvent(event)) actions.set(event.id, event);
-      }
-      return actions;
-    }, [allEvents]);
+    const actionById = React.useMemo(
+      () => buildActionById(allEvents),
+      [allEvents],
+    );
 
     // Set of event ids that have a /model entry anchored to them — used to
     // avoid mounting <ModelMessages> for every event (the component would
@@ -152,8 +150,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     const isAgentRunning =
       curAgentState === AgentState.RUNNING || isPlanningAgentRunning;
     const renderedItems = React.useMemo(
-      () => groupEvents(messages, 1, allEvents, 1, visibleSessions),
-      [messages, allEvents, visibleSessions],
+      () => groupEvents(messages, 1, allEvents, 1, visibleSessions, actionById),
+      [messages, allEvents, visibleSessions, actionById],
     );
     const eventIndexes = React.useMemo(
       () => new Map(messages.map((event, index) => [event, index])),
@@ -273,6 +271,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 session={item.session}
                 hasReasoning={!!item.reasoning?.length}
                 allEvents={allEvents}
+                actionById={actionById}
                 isLive={
                   isAgentRunning && itemIndex === renderedItems.length - 1
                 }

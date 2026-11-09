@@ -1,19 +1,65 @@
+## Arbitrary-value guard adoption
+
+`shadcn/no-arbitrary-values` warns globally. Thirty-five migrated owners reject new
+arbitrary classes: command-menu, backend-version, settings-nav-header,
+backend-synced-settings-badge, modal-backdrop, environment-switch-overlay,
+context-window-meter and conversation-panel-wrapper. Completed message/motion
+owners also reject new arbitrary values: custom-toast-handlers,
+form-control-classes, chat-status-indicator, context-window-ring,
+user-message-body and conversation-main. Their exact paths are in `eslint.config.js`,
+with executable probes in `__tests__/scripts/arbitrary-values-lint.test.ts`.
+Completed Markdown code/path chips, horizontal fade consumers, file-drop artwork, automation view/filter/run-phase bounds, conversation-card reserves and the hover-reveal helper also reject new arbitrary values.
+The cleaned letter-spacing and inset-shadow owners also reject new arbitrary
+values: `task-list-section.tsx`, `markdown-file-preview.tsx`,
+`skills-modal-section.tsx`, `headings.tsx`, `openai-subscription-auth-card.tsx`,
+`device-verify.tsx`, `modal-classes.ts`, `pinned-automation-card.tsx`,
+`mcp-logo-stack-badge.tsx` and `skill-icon-badge.tsx`. Plan Preview and the
+standalone MCP logo badge remain at warning severity while their remaining
+color and geometry findings are reviewed.
+Other components, routes and primitive implementations retain warnings during
+migration. Keep legitimate measured/portal geometry with its owner; do not
+expand this file list or add exemptions without auditing the remaining values.
+
 ## Raw-color class-map scanning
 
-`shadcn/no-raw-colors` warns globally. Three migrated owners reject new raw colors:
-backend-status-dot, Markdown blockquote and mcp-server-health. Start-task badge
-and indicator remain warning-only pending their separate migration. Their exact paths in `eslint.config.js` also
-enable `scanAllStrings` so literal class recipes remain
-visible when dynamic map or helper lookups hide them from class-site analysis.
-Keep this adoption scoped: scanning every string can mistake program tags for
-color utilities. Review newly included findings before extending the file list;
-the shared exact legacy-token exceptions remain unchanged.
+`shadcn/no-raw-colors` rejects raw Tailwind palette utilities, undeclared named
+color utilities and raw SVG paint throughout source, including primitive
+implementations. The seven exact legacy JS-config/plugin color exceptions stay
+valid. Backend-status-dot, Markdown blockquote and mcp-server-health additionally
+use `scanAllStrings` for literal class recipes hidden behind map/helper lookups;
+keep broad scanning away from unrelated program tags. Executable probes use the
+real flat config in `__tests__/scripts/raw-colors-lint.test.ts`.
+
+Bracketed hex/rgba color classes remain covered by the independently staged
+`shadcn/no-arbitrary-values` policy above. Do not claim that the palette guard
+finishes that migration or checks opaque runtime expressions.
+
+## Horizontal scroll fades
+
+`from-scroll-fade` resolves the existing `--oh-scroll-fade-from` ancestor override with `--oh-color-base` as fallback. The `scroll-fade-surface` utility sets that override to `--oh-surface` for Markdown artifact cards. Keep left/right edge visibility, direction, animation and scroll handling with their current owners; do not replace this override with a fixed palette color.
+
+## Inset-shadow recipes
+
+`shadow-badge-inset` retains the existing 1px inset highlight and 18% mix of
+`--oh-contrast`, including Tailwind's supports/fallback behavior. Reorder-before
+and reorder-after retain +2px/-2px inset edges in `--oh-focus`. These stay normal
+shadow utilities; register them in cn's shadow group so caller shadow geometry
+and shadow colors remain independent. Keep drag state and ordering with the
+existing pinned-card owner; do not replace fixed pixels or public color hooks.
 
 ## Inline-style rollout
 
-`shadcn/no-inline-styles` runs at warning severity across source, including UI
-primitive implementations. Numeric CSS custom properties and semantic token
-references pass; hardcoded variable colors and style elements still warn.
+`shadcn/no-inline-styles` warns globally, including UI primitive implementations.
+Four clean appearance owners reject inline styles at error severity: divider,
+toggle-switch, combobox-caret and backend-status-dot. The exact paths live in
+`eslint.config.js`, with executable probes in
+`__tests__/scripts/inline-styles-lint.test.ts`; other owners retain warnings.
+The composer ring and popover track share the context-window track color
+alias. Both progress bars pass the runtime percentage through the local
+`--context-fill-width` property. These three owners reject inline styling.
+
+Numeric CSS custom properties and semantic token references still pass in both
+scopes. Hardcoded variable colors and style elements remain findings.
 Do not add a blanket property allowance or blindly replace measured dimensions,
 portal coordinates, or renderer-library styles with static classes. Review the
 value's owner before moving it to classes or CSS variables.
@@ -29,6 +75,24 @@ Public skills are loaded from the `@openhands/extensions` npm package at build t
 Bundled catalog skills use the persisted `enabled_skills` allow-list defaulted from `DEFAULT_ENABLED_SKILL_NAMES`. User and project skills remain enabled unless listed in `disabled_skills`. Keep this logic centralized in `src/utils/skill-enablement.ts`. The Agent Server no longer clones the extensions repository or uses `EXTENSIONS_REF` for public skills.
 
 
+## Shared motion recipes
+
+`src/utils/form-control-classes.ts` uses named shell and transform recipes.
+Keep each transition's property list, timing fallback, duration fallback and
+important modifier intact; `transition-transform` includes more properties than
+the existing transform-only contract. Register custom transition and animation
+names in `cn` so later caller utilities retain Tailwind's conflict precedence.
+
+## Exact rem layout aliases
+
+Automation popover widths, run-phase limits and conversation hover-action reserves use the existing spacing scale (`min-w-40`, `min-w-64`, `max-w-112`, `max-w-48`, `min-w-15`) instead of equivalent arbitrary rem literals. Preserve each responsive hover/focus variant. Geometry is equivalent on the default spacing scale; explicit host scale overrides follow normal named-token behavior. Do not apply this substitution to fixed pixel geometry: a rem alias would change behavior when the embedding root font size differs.
+
+## Commit viewer geometry
+
+The commit and Uncommitted rows reserve the same `7ch` monospace column through
+`w-commit-sha`. The Monaco wrapper applies its measured pixel height through
+`h-(--editor-height)`. Keep these three components free of arbitrary values.
+
 ## Workspace files
 
 Local Files discovery preferences belong to `misc_settings.app_preferences.workspace_file_discovery`, keyed by working directory on the active backend. `useWorkspaceFileDiscovery` reads the settings cache and saves sparse workspace patches. Preserve default exclusions and the 2,000-file cap when no configuration exists. Fetch one extra result to distinguish truncation from an exact-size list. Cloud keeps its server-side listing contract without these controls.
@@ -42,6 +106,21 @@ Use `isOpen` for rotation on `ComboboxCaretButton` and `ComboboxCaretInline`.
 `ComboboxCaretIcon` is the generic SVG and still permits caller orientation.
 Primitive implementations remain exempt from no-restyle. The existing narrow
 static-class exceptions do not imply that opaque values are checked by no-restyle.
+
+## Markdown code spacing
+
+Inline code and workspace-path chips share `px-code-inline-x` / `py-code-inline-y`; plain code blocks use `p-code-block`. Their theme spacing entries retain em units so padding follows the element font. Register these spacing names in `cn()` so general and directional caller overrides keep normal precedence. The scoped library CSS and class-composition tests cover this contract.
+
+## Message wrapping recipes
+
+`message-word-break` retains `word-break: break-word` for chat bodies, corrective
+nudges and toast content. Toasts also use Tailwind's `wrap-anywhere` for their
+independent overflow-wrap behavior. Do not replace the former with `break-words`: it
+sets a different CSS property. Toast-library container styles remain library-owned.
+
+## File-drop illustration geometry
+
+The file-drop illustration uses `file-drop-image` and `file-drop-arrow` utilities for fixed SVG pixel offsets and rotation. Preserve pixel units in embedded roots; the shipped scoped library CSS contract covers these coordinates.
 
 ## No Magic Strings
 
@@ -134,6 +213,8 @@ When adding code that needs a new string, decide up front which rule it falls un
 - Public embedding entry points should use `AgentServerUIProviders` (scoped root on by default) or `AgentServerUIRoot` for manual control. The standalone app already renders its own scoped root in `src/root.tsx`, so `src/entry.client.tsx` must pass `withStyleRoot={false}` to avoid nesting duplicate shells. Keep `AgentServerUIRoot` and the scoping constants re-exported from `src/lib/index.ts` so library consumers can customize the host wrapper without reaching into private paths.
 - `AgentServerUIRoot`'s themed inner wrapper must set a default `color: var(--foreground)` in addition to the `dark` / `data-theme` markers; otherwise inherited text and `currentColor` SVG icons fall back to dark browser defaults after CSS scoping, causing dark-on-dark regressions on pages like the home screen.
 - Theme/customization tokens for the embedded shell are exposed as `--oh-*` CSS variables. Override them through `styleOverrides`, `style`, or host CSS targeting `[data-agent-server-ui]`; Tailwind theme tokens in `src/tailwind.css` should continue to reference those variables with `@theme inline` so host apps can restyle the UI without reworking component class names.
+- Named control radii (`rounded-pill`, `rounded-composer`, `rounded-file-action`, `rounded-facet-control`) retain the existing absolute pixel values in `src/tailwind.css`. `cn()` registers these names in tailwind-merge's radius namespace so caller and directional overrides retain normal utility precedence. Keep the theme entries and merger registration aligned; do not replace these values with rem or percentage rounding.
+
 - Small form feedback uses the `feedback-error` / `feedback-success` text roles (`--oh-feedback-error` / `--oh-feedback-success`), separately from the general danger/success control palette. Their built-in values must meet 4.5:1 on modal surfaces; host overrides remain owned by the embedding root. See `src/themes/README.md` and the theme contrast tests when migrating raw feedback colors.
 - Regression coverage for the CSS isolation work lives in `__tests__/agent-server-ui-providers.test.tsx`, `__tests__/agent-server-ui-style-scope.test.ts`, and the browser-level CSS-isolation test in `tests/e2e/mock-llm/regressions/mock-llm-ui-regressions.spec.ts`.
 - MCP credential selection: `SaveAsSecretToggle` keeps its native checkbox as the semantic control and uses `ToggleSwitchVisual` for the decorative track. Selection uses contrast/surface tokens. Keep both states' labels readable, allow long secret names to wrap with their help control, and preserve visible keyboard focus.
@@ -188,3 +269,39 @@ When adding code that needs a new string, decide up front which rule it falls un
 
 
 - ESLint config (flat, ESLint 9): the project uses `eslint.config.js` (not `.eslintrc`) and runs on `eslint@9.x`, not 10. The constraint pinning us below 10 is `eslint-plugin-react@7.37.x`, which still calls `context.getFilename()` at rule-load time — that API was removed in ESLint 10 and `@eslint/compat`'s `fixupPluginRules` does NOT shim it. Don't try to bump eslint past 9 until eslint-plugin-react ships a v10-compatible release. Import rules come from `eslint-plugin-import-x` (the maintained fork of `eslint-plugin-import`) but are registered under both `import-x/` and `import/` prefixes via `plugins: { import: importXPlugin, ... }` so existing `// eslint-disable-next-line import/...` directives keep working. `linterOptions.reportUnusedDisableDirectives` is set to `"warn"` (not "off") so stale airbnb-era disable comments still surface in lint output without failing CI. The TS-overrides block has an `ignores: ["src/hooks/query/query-keys.ts"]` so the `no-restricted-syntax` rule banning raw `["settings", ...]` query keys doesn't fire on the file that defines the helpers themselves. No `.npmrc` / `legacy-peer-deps` flag is needed — all our plugins declare ESLint 9 peer compatibility.
+
+## Letter-spacing recipes
+
+Named tracking recipes retain exact signed values: metadata 0.11px, label
+0.01em, title -0.01em, heading -0.02em, auth-code 0.08em and device-code 0.3em.
+Keep pixel metadata spacing independent of font size and the other values
+relative to their element font. Register tracking names in cn's tracking theme
+so caller overrides retain normal precedence without changing font or leading.
+Do not approximate these metrics with nearby default tracking-scale values.
+
+## Extended type scale
+
+`text-4xs`, `text-xs-plus`, `text-sm-plus` and `text-title` retain existing
+9px, 13px, 15px and 32px font sizes without setting line-height. Their names are
+registered in cn's text-size theme so color classes stay independent and later
+caller sizes or leading retain the same precedence as the former arbitrary
+sizes. Keep the compiled-CSS and class-composition contracts when changing them.
+
+## Fixed content columns
+
+Static metadata rows use `metadata-grid-columns` (auto / 1fr); automation
+summary rows use `automation-summary-columns` (auto / minmax(0, 1fr)); run-log
+details use `sm:run-log-detail-columns` (5rem / minmax(0, 1fr), from 40rem).
+These single-property utilities preserve intrinsic sizing and responsive scope.
+They are static owner recipes, not caller className overrides.
+
+- Executable plugin automations (`plugin_spec`) edit their configuration through the setup form's `pluginConfig` JSON field. The agent proposes that field through `automation_form_update`; only Save sends `config` and the trigger to the existing automation's PATCH endpoint. Preserve the plugin source, pins, and runtime fields. Gate configuration writes on the automation service's `pluginConfigUpdate` capability; older services display the configuration read-only.
+
+## Existing Canvas background and accent roles
+
+`bg-canvas-background` resolves exactly `--oh-background`; `text-on-accent`
+resolves exactly `--oh-accent-foreground`. Add Models selects and shared primary
+BrandButton/BrandBadge text retain these public roles, including host overrides.
+Do not substitute similarly colored Canvas or HeroUI roles. Caller color and
+font-size precedence stays covered by `cn` composition tests, and the scoped
+library CSS contract verifies the exact variable declarations.

@@ -15,14 +15,14 @@ function ChatStatusIndicator({
     <div
       data-testid="chat-status-indicator"
       className={cn(
-        "w-full max-w-full rounded-[100px] p-1 bg-surface flex items-center gap-1",
+        "w-full max-w-full rounded-pill p-1 bg-surface flex items-center gap-1",
       )}
     >
       <AnimatePresence mode="wait">
         {/* Dot */}
         <motion.span
           key={`dot-${status}`}
-          className="flex-shrink-0 animate-[pulse_1.2s_ease-in-out_infinite]"
+          className="flex-shrink-0 animate-chat-status-pulse"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
