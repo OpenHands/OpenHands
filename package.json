@@ -166,7 +166,7 @@
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-unused-imports": "4.4.1",
-    "globals": "17.13.0",
+    "globals": "17.14.0",
     "husky": "9.1.7",
     "jsdom": "30.1.3",
     "lint-staged": "17.6.0",

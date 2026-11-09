@@ -97,7 +97,7 @@ vi.mock("react-i18next", async () => {
           BUTTON$SHOW_AGENT_TOOLS_AND_METADATA: "Show Agent Tools",
           CONVERSATION$SHOW_SKILLS: "Show Skills",
           BUTTON$DISPLAY_COST: "Display Usage and Cost",
-          COMMON$CLOSE_CONVERSATION_STOP_RUNTIME: "Stop Conversation (Runtime)",
+          COMMON$STOP_SANDBOX: "Stop Sandbox",
           COMMON$STOP_CONVERSATION: "Stop Conversation",
           COMMON$DELETE_CONVERSATION: "Delete Conversation",
           CONVERSATION$SHARE_PUBLICLY: "Share Publicly",

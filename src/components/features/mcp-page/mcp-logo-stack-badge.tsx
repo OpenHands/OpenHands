@@ -5,7 +5,7 @@ import {
 import { cn } from "#/utils/utils";
 
 const STACK_CONTAINER_CLASS_NAME =
-  "inline-flex h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-contrast/10 bg-surface-raised shadow-[inset_0_1px_0_color-mix(in_srgb,var(--oh-contrast)_18%,transparent)]";
+  "inline-flex h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-contrast/10 bg-surface-raised shadow-badge-inset";
 
 interface McpLogoStackBadgeProps {
   entries: McpLogoEntry[];
