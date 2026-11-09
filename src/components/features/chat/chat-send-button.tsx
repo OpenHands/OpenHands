@@ -44,7 +44,7 @@ export function ChatSendButton({
       ) : (
         <ArrowUp
           className="w-4 h-4"
-          color={disabled ? "var(--oh-muted)" : "white"}
+          color={disabled ? "var(--oh-muted)" : "var(--oh-contrast)"}
         />
       )}
     </button>

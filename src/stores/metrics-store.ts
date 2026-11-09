@@ -14,7 +14,8 @@ export interface MetricsState {
 }
 
 export interface MetricsStore extends MetricsState {
-  setMetrics: (metrics: MetricsState) => void;
+  sourceConversationId: string | null;
+  setMetrics: (metrics: MetricsState, sourceConversationId: string) => void;
   resetMetrics: () => void;
 }
 
@@ -26,8 +27,10 @@ const EMPTY_METRICS: MetricsState = {
 
 const useMetricsStore = create<MetricsStore>((set) => ({
   ...EMPTY_METRICS,
-  setMetrics: (metrics) => set(metrics),
-  resetMetrics: () => set(EMPTY_METRICS),
+  sourceConversationId: null,
+  setMetrics: (metrics, sourceConversationId) =>
+    set({ ...metrics, sourceConversationId }),
+  resetMetrics: () => set({ ...EMPTY_METRICS, sourceConversationId: null }),
 }));
 
 // Dev-only console handle for inspecting the live WS metrics while
