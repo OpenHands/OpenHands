@@ -281,6 +281,10 @@ function MarkdownRendererComponent({
         h6,
       }),
       ...customComponents, // Custom components override defaults
+      // A custom link renderer still opens conversation mentions in place.
+      ...(customComponents?.a && {
+        a: withConversationMentions(customComponents.a),
+      }),
     }),
     [customComponents, includeStandard, includeHeadings],
   );

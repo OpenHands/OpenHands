@@ -49,11 +49,7 @@ export function ConversationMention({
  * Wraps a markdown `a` renderer: conversation mentions open the conversation
  * in place, every other link goes to `render` (or a plain anchor).
  */
-export function withConversationMentions(
-  render?: React.ComponentType<
-    React.AnchorHTMLAttributes<HTMLAnchorElement> & ExtraProps
-  >,
-) {
+export function withConversationMentions(render?: React.ElementType) {
   function MarkdownLink({
     node,
     ...props

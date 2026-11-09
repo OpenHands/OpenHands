@@ -1,3 +1,4 @@
+import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import { sanitize } from "hast-util-sanitize";
@@ -492,6 +493,24 @@ describe("MarkdownRenderer conversation mentions", () => {
       expect(link.getAttribute("target")).toBeNull();
     },
   );
+
+  it("keeps mentions working with a custom link renderer", () => {
+    function CustomLink({ href, children }: React.ComponentProps<"a">) {
+      return (
+        <a href={href} data-testid="custom-link">
+          {children}
+        </a>
+      );
+    }
+    render(
+      <MarkdownRenderer
+        components={{ a: CustomLink }}
+        content={`[A](conversation:${hex}) [docs](https://example.com)`}
+      />,
+    );
+    expect(screen.getByTestId("conversation-mention").textContent).toBe("A");
+    expect(screen.getByTestId("custom-link").textContent).toBe("docs");
+  });
 
   it("accepts a dashed id and keeps other links external", () => {
     render(
