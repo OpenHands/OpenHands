@@ -18,10 +18,7 @@ import {
   getContextWindowUsagePercentage,
 } from "#/utils/format-token-count";
 import { getContextFillTone } from "#/components/features/conversation/usage-panel/context-meter";
-import {
-  ContextWindowRing,
-  CONTEXT_WINDOW_TRACK_COLOR,
-} from "./context-window-ring";
+import { ContextWindowRing } from "./context-window-ring";
 
 const TONE_BAR_CLASS = {
   neutral: "bg-foreground",
@@ -118,8 +115,7 @@ export function ContextWindowMeter() {
             <button
               type="button"
               data-testid="context-window-meter-bar-button"
-              className="relative h-1.5 w-full rounded-full border bg-tertiary cursor-pointer"
-              style={{ borderColor: CONTEXT_WINDOW_TRACK_COLOR }}
+              className="relative h-1.5 w-full cursor-pointer rounded-full border border-context-window-track bg-tertiary"
               aria-label={t(I18nKey.COMMON$USAGE)}
               onClick={(event) => {
                 event.preventDefault();
@@ -129,10 +125,14 @@ export function ContextWindowMeter() {
             >
               <span
                 className={cn(
-                  "absolute inset-y-0 left-0 rounded-full transition-all duration-300",
+                  "absolute inset-y-0 left-0 w-(--context-fill-width) rounded-full transition-all duration-300",
                   TONE_BAR_CLASS[tone],
                 )}
-                style={{ width: `${Math.min(100, usagePercentage)}%` }}
+                style={
+                  {
+                    "--context-fill-width": `${Math.min(100, usagePercentage)}%`,
+                  } as React.CSSProperties
+                }
               />
             </button>
 
