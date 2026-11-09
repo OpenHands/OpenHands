@@ -3,6 +3,7 @@ import type {
   Automation,
   AutomationRun,
 } from "#/types/automation";
+import { AutomationRunStatus } from "#/types/automation";
 import {
   statusToneBadgeClassName,
   statusToneBannerClassName,
@@ -1910,6 +1911,39 @@ export function AutomationSetupPanel({
       cancelled = true;
     };
   }, [serverDraft?.materializedAutomationId]);
+
+  useEffect(() => {
+    const automationId = serverDraft?.materializedAutomationId;
+    if (!automationId) return undefined;
+
+    const hasInFlightRun = draftRuns.some(
+      (run) =>
+        run.status === AutomationRunStatus.PENDING ||
+        run.status === AutomationRunStatus.RUNNING,
+    );
+    if (!hasInFlightRun) return undefined;
+
+    let cancelled = false;
+    const intervalId = setInterval(() => {
+      AutomationService.listAutomationRuns(automationId, {
+        limit: 10,
+        offset: 0,
+      })
+        .then((response) => {
+          if (!cancelled && response.runs.length > 0) {
+            setDraftRuns(response.runs);
+          }
+        })
+        .catch(() => {
+          // Keep the current rows when a poll fails; the next tick retries.
+        });
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [serverDraft?.materializedAutomationId, draftRuns]);
 
   const saveStateLabel = () => {
     if (saveState === "saving") return t(I18nKey.AUTOMATION_SETUP$SAVING);

@@ -2466,6 +2466,80 @@ describe("AutomationSetupPanel", () => {
       );
     });
 
+    it("polls an in-flight test run until it reaches a terminal status", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        mockSavedDraftEcho({
+          validationErrors: null,
+          materializedAutomationId: "mat-auto-1",
+        });
+        vi.mocked(AutomationService.getServerDraft).mockResolvedValue({
+          ...dispatchableDraft,
+          materializedAutomationId: "mat-auto-1",
+        });
+        vi.mocked(AutomationService.dispatchServerDraft).mockResolvedValue({
+          id: "run-1",
+          status: "PENDING",
+          conversationId: null,
+          bashCommandId: null,
+          errorDetail: null,
+          startedAt: null,
+          completedAt: null,
+        } as never);
+        vi.mocked(AutomationService.listAutomationRuns).mockResolvedValue({
+          runs: [],
+          total: 0,
+        });
+
+        const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+        renderPanel();
+
+        await saveDraftAndWaitForTest(user);
+        await user.click(screen.getByTestId("automation-setup-test"));
+
+        await waitFor(() =>
+          expect(AutomationService.dispatchServerDraft).toHaveBeenCalledWith(
+            "draft-1",
+          ),
+        );
+
+        vi.mocked(AutomationService.listAutomationRuns).mockResolvedValue({
+          runs: [
+            {
+              id: "run-1",
+              status: "COMPLETED",
+              conversationId: "conv-run-1",
+              bashCommandId: null,
+              errorDetail: null,
+              startedAt: "2026-01-01T00:00:00.000Z",
+              completedAt: "2026-01-01T00:00:05.000Z",
+            },
+          ],
+          total: 1,
+        } as never);
+        vi.mocked(AutomationService.listAutomationRuns).mockClear();
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3000);
+        });
+
+        expect(AutomationService.listAutomationRuns).toHaveBeenCalledWith(
+          "mat-auto-1",
+          { limit: 10, offset: 0 },
+        );
+
+        vi.mocked(AutomationService.listAutomationRuns).mockClear();
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3000);
+        });
+
+        expect(AutomationService.listAutomationRuns).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("opens test runs from the draft status and returns to the form", async () => {
       mockSavedDraftEcho({ validationErrors: null });
       vi.mocked(AutomationService.getServerDraft).mockResolvedValue(
