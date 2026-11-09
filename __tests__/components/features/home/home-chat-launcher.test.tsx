@@ -1422,9 +1422,13 @@ describe("HomeChatLauncher", () => {
       initialUserMsg: "hello world",
       suppressRouterAtStart: true,
     });
-    expect(
-      hasPendingHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId),
-    ).toBe(false);
+    // The pick is cleared once the create resolves, after the spy records
+    // the call, so wait for it rather than reading it on the same tick.
+    await waitFor(() =>
+      expect(
+        hasPendingHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId),
+      ).toBe(false),
+    );
   });
 
   it("preserves the pending home model pick when the home launch fails so a retry still suppresses (#19138)", async () => {
@@ -1454,9 +1458,13 @@ describe("HomeChatLauncher", () => {
       initialUserMsg: "hello world",
       suppressRouterAtStart: true,
     });
-    expect(
-      hasPendingHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId),
-    ).toBe(false);
+    // The pick is cleared once the create resolves, after the spy records
+    // the call, so wait for it rather than reading it on the same tick.
+    await waitFor(() =>
+      expect(
+        hasPendingHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId),
+      ).toBe(false),
+    );
   });
 
   it("does not carry a home model pick across a backend or org switch (#19138)", async () => {
