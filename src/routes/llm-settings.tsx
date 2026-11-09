@@ -1,5 +1,4 @@
 import React from "react";
-import { Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
@@ -35,14 +34,13 @@ import {
 import { useOpenAISubscriptionModels } from "#/hooks/query/use-llm-subscription-models";
 import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useDefaultModel, useFreeModels } from "#/hooks/query/use-free-models";
 import {
-  FREE_OPENHANDS_MODEL_NOTE,
   isFreeOpenHandsModel,
   isOpenHandsProviderModel,
 } from "#/utils/format-model-name";
-
-/** Form-values key for the shared provider connection a profile links to. */
-export const LLM_PROVIDER_CONNECTION_KEY = "llm.provider_connection_id";
+import { FreeOpenHandsModelsNote } from "#/components/shared/free-models-note";
+import { LLM_PROVIDER_CONNECTION_KEY } from "#/constants/llm-provider-connection";
 
 /** Dropdown sentinel for "no provider connection" (an inline key is used). */
 const NO_PROVIDER_CONNECTION = "__none__";
@@ -121,22 +119,11 @@ function OpenHandsApiKeyHelp({ testId }: OpenHandsApiKeyHelpProps) {
   );
 }
 
-function OpenHandsFreeModelsNote() {
-  return (
-    <p
-      data-testid="openhands-free-models-note"
-      className="flex items-start gap-2 text-xs text-warning"
-    >
-      <Info className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
-      <span>{FREE_OPENHANDS_MODEL_NOTE}</span>
-    </p>
-  );
-}
-
 export function LlmSettingsScreen({
   scope = "personal",
   onSaveSuccess,
   initialValueOverrides,
+  markInitialOverridesDirty,
   embedded,
   hideSaveButton,
   suppressSuccessToast,
@@ -148,6 +135,8 @@ export function LlmSettingsScreen({
   onSaveSuccess?: () => void;
   /** Forwarded to {@link SdkSectionPage}. */
   initialValueOverrides?: SettingsFormValues;
+  /** Forwarded to {@link SdkSectionPage}. */
+  markInitialOverridesDirty?: boolean;
   /** Forwarded to {@link SdkSectionPage}. */
   embedded?: boolean;
   /** Forwarded to {@link SdkSectionPage}. */
@@ -179,8 +168,7 @@ export function LlmSettingsScreen({
     settings?.agent_settings_schema,
   );
   const persistedLlmSettings = settings?.agent_settings?.llm as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const initialAuthType = resolveLlmAuthType(
     initialValueOverrides?.[LLM_AUTH_TYPE_KEY] ??
       persistedLlmSettings?.auth_type,
@@ -205,10 +193,17 @@ export function LlmSettingsScreen({
     }
   }, [initialAuthType]);
 
-  const defaultModel = String(
-    (DEFAULT_SETTINGS.agent_settings?.llm as Record<string, unknown>)?.model ??
-      "",
-  );
+  const freeModels = useFreeModels();
+  const dbDefaultModel = useDefaultModel();
+
+  // Prefer the DB-driven default (cloud) and fall back to the bundled default
+  // when the backend exposes none (e.g. the local agent-server).
+  const defaultModel =
+    dbDefaultModel ??
+    String(
+      (DEFAULT_SETTINGS.agent_settings?.llm as Record<string, unknown>)
+        ?.model ?? "",
+    );
 
   const getInitialView = React.useCallback(
     (
@@ -508,8 +503,8 @@ export function LlmSettingsScreen({
 
                   {showOpenHandsApiKeyHelp && !isLinkedToConnection ? (
                     <>
-                      {isFreeOpenHandsModel(modelValue) ? (
-                        <OpenHandsFreeModelsNote />
+                      {isFreeOpenHandsModel(modelValue, freeModels) ? (
+                        <FreeOpenHandsModelsNote modelIds={freeModels} />
                       ) : null}
                     </>
                   ) : null}
@@ -553,6 +548,7 @@ export function LlmSettingsScreen({
       defaultModel,
       embedded,
       isCloud,
+      freeModels,
       isWaitingForSubscriptionModels,
       settings?.llm_api_key_set,
       subscriptionModels,
@@ -590,7 +586,7 @@ export function LlmSettingsScreen({
           !subscriptionModels?.includes(model) &&
           !fallbackSubscriptionModel
         ) {
-          throw new Error("Subscription models are not loaded yet.");
+          throw new Error(t(I18nKey.SETTINGS$SUBSCRIPTION_MODELS_NOT_LOADED));
         }
         llm.model = subscriptionModels?.includes(model)
           ? model
@@ -620,7 +616,7 @@ export function LlmSettingsScreen({
       agentSettings.llm = llm;
       return { agent_settings_diff: agentSettings };
     },
-    [schema, subscriptionModels, isCloud],
+    [schema, subscriptionModels, isCloud, t],
   );
 
   return (
@@ -640,6 +636,7 @@ export function LlmSettingsScreen({
       allowAllView
       onSaveSuccess={onSaveSuccess}
       initialValueOverrides={initialValueOverrides}
+      markInitialOverridesDirty={markInitialOverridesDirty}
       embedded={embedded}
       hideSaveButton={hideSaveButton}
       suppressSuccessToast={suppressSuccessToast}

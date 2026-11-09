@@ -27,9 +27,3 @@ export function mapAnyGitStatusToClientStatus(
       return "M";
   }
 }
-
-export function mapAgentServerToClientGitStatus(
-  agentServerStatus: AgentServerGitChangeStatus,
-): GitChangeStatus {
-  return mapAnyGitStatusToClientStatus(agentServerStatus);
-}

@@ -11,7 +11,6 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
-import { getErrorStatus } from "#/hooks/query/use-settings";
 import {
   useCheckGitSyncConfig,
   useUpdateGitSyncConfig,
@@ -20,6 +19,8 @@ import type {
   GitSyncConfigUpdateRequest,
   GitSyncStatus,
 } from "#/types/git-sync";
+import { statusToneBannerClassName } from "#/utils/status-tone-classes";
+import { cn } from "#/utils/utils";
 
 /**
  * Identifies the save-and-sync button in the submit event. Read from the
@@ -146,14 +147,10 @@ export function GitSyncConfigForm({
         if (thenSync) onSyncNow();
       },
       onError: (error) => {
-        displayErrorToast(
-          // 409 is the backend refusing to enable sync in a deployment that
-          // booted with it off -- a restart with the env var set, not a
-          // transient failure the operator should retry.
-          getErrorStatus(error) === 409
-            ? t(I18nKey.AUTOMATIONS$GIT_SYNC$ENABLE_BLOCKED_ERROR)
-            : getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)),
-        );
+        // The backend's detail is the message: a 409 means another
+        // organization already syncs this repository, branch and path, and
+        // it says so in words the operator can act on.
+        displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
       },
     });
   };
@@ -423,13 +420,17 @@ export function GitSyncConfigForm({
           <div
             role="alert"
             data-testid="git-sync-check-failure"
-            className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300 whitespace-pre-wrap break-words"
+            className={cn(
+              "rounded-md p-3 text-sm whitespace-pre-wrap break-words dark:border-danger/40 dark:bg-danger/5",
+              statusToneBannerClassName.danger,
+              "text-feedback-error",
+            )}
           >
             <p className="font-medium">
               {t(I18nKey.AUTOMATIONS$GIT_SYNC$CHECK_FAILED_TITLE)}
             </p>
             <p className="mt-1">{failedCheck.detail}</p>
-            <p className="mt-1 text-xs text-red-300/70">
+            <p className="mt-1 text-xs">
               {t(I18nKey.AUTOMATIONS$GIT_SYNC$CHECK_FAILED_HINT)}
             </p>
           </div>

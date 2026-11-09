@@ -1,0 +1,218 @@
+{
+  "label": "after",
+  "revision": "fdb6133617cc74a909abfd190dbc6b309d19792c",
+  "buildId": "a04e4c10de237c33-dirty",
+  "backend": {
+    "agentServer": "1.60.1",
+    "sdk": "1.60.1"
+  },
+  "fixture": {
+    "conversationId": "14bd8594-3995-44db-b5a0-815831102c2f",
+    "workspace": "/private/tmp/odie-19501-live/after/workspace/diff-lifecycle",
+    "modelExecution": "None; idle conversation with no initial message",
+    "backend": "Real local Agent Server"
+  },
+  "trigger": "Observe Monaco onDidCreateDiffEditor, then click the real Planner control in requestAnimationFrame.",
+  "results": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "raf",
+      "round": 1,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "raf",
+      "round": 2,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "raf",
+      "round": 3,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "raf",
+      "round": 4,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "raf",
+      "round": 5,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "ordinary",
+      "round": 1,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "ordinary",
+      "round": 2,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "ordinary",
+      "round": 3,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "ordinary",
+      "round": 4,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "ordinary",
+      "round": 5,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "raf",
+      "round": 1,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "raf",
+      "round": 2,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "raf",
+      "round": 3,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "raf",
+      "round": 4,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "raf",
+      "round": 5,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "ordinary",
+      "round": 1,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "ordinary",
+      "round": 2,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "ordinary",
+      "round": 3,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "ordinary",
+      "round": 4,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "ordinary",
+      "round": 5,
+      "errors": [],
+      "models": []
+    }
+  ]
+}

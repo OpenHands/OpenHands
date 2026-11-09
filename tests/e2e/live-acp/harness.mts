@@ -7,8 +7,8 @@
  * between the two scripts.
  *
  * Credentials are read from the host and never printed: Codex
- * ~/.codex/auth.json, the Claude Code OAuth token from the macOS keychain, and
- * the gcloud ADC for Gemini Vertex.
+ * ~/.codex/auth.json, the Claude Code OAuth token from the macOS keychain,
+ * the gcloud ADC for Gemini Vertex, and the optional OpenCode API key.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -21,6 +21,7 @@ import {
 } from "#/api/backend-registry/active-store";
 
 export const BASE = process.env.ACP_E2E_BASE_URL ?? "http://localhost:8010";
+const SESSION_API_KEY = process.env.ACP_E2E_SESSION_API_KEY ?? "";
 export const POLL_TIMEOUT_MS = Number(
   process.env.ACP_E2E_TIMEOUT_MS ?? 180_000,
 );
@@ -37,14 +38,14 @@ export function registerDockerBackend(): void {
       id: "acp-docker",
       name: "ACP Docker",
       host: BASE,
-      apiKey: "",
+      apiKey: SESSION_API_KEY,
       kind: "local",
     },
   ]);
   setActiveSelection({ backendId: "acp-docker", orgId: null });
 }
 
-export type ProviderId = "codex" | "claude" | "gemini";
+export type ProviderId = "codex" | "claude" | "gemini" | "opencode";
 
 export interface ProviderPlan {
   id: ProviderId;
@@ -153,6 +154,17 @@ export const PROVIDER_PLANS: ProviderPlan[] = [
     },
     sessionMode: process.env.ACP_E2E_GEMINI_SESSION_MODE,
   },
+  {
+    id: "opencode",
+    acpServer: "opencode",
+    model: process.env.ACP_E2E_OPENCODE_MODEL ?? "opencode/big-pickle",
+    expectedToken: "ACPOK-OPENCODE",
+    // The default model runs keyless; a host key still goes through LookupSecret.
+    collectSecrets: () =>
+      process.env.OPENCODE_API_KEY
+        ? { OPENCODE_API_KEY: process.env.OPENCODE_API_KEY }
+        : {},
+  },
 ];
 
 export function getProviderPlan(id: string): ProviderPlan | undefined {
@@ -162,7 +174,10 @@ export function getProviderPlan(id: string): ProviderPlan | undefined {
 export async function postJson(url: string, body: unknown): Promise<any> {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(SESSION_API_KEY ? { "X-Session-API-Key": SESSION_API_KEY } : {}),
+    },
     body: JSON.stringify(body),
   });
   const text = await res.text();
@@ -173,7 +188,11 @@ export async function postJson(url: string, body: unknown): Promise<any> {
 }
 
 export async function getJson(url: string): Promise<any> {
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: SESSION_API_KEY
+      ? { "X-Session-API-Key": SESSION_API_KEY }
+      : undefined,
+  });
   const text = await res.text();
   if (!res.ok) {
     throw new Error(`GET ${url} -> ${res.status}: ${text.slice(0, 400)}`);

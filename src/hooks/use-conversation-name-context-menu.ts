@@ -10,6 +10,7 @@ import { useEventStore } from "#/stores/use-event-store";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
+import { buildAgentCanvasUrl } from "#/utils/base-path";
 
 import { useDownloadConversation } from "./use-download-conversation";
 import {
@@ -17,7 +18,7 @@ import {
   SystemMessageForModal,
 } from "#/utils/system-message-adapter";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
-import { isExecutionActive } from "#/utils/status";
+import { canStopRuntime, isExecutionActive } from "#/utils/status";
 import { useSelectConversationTab } from "./use-select-conversation-tab";
 
 interface UseConversationNameContextMenuProps {
@@ -105,7 +106,12 @@ export function useConversationNameContextMenu({
     event.preventDefault();
     event.stopPropagation();
     if (conversationId) {
-      await downloadConversation(conversationId);
+      try {
+        await downloadConversation(conversationId);
+      } catch {
+        // useDownloadConversation already showed the error toast; close the
+        // menu as on success instead of leaking the rejection.
+      }
     }
     onContextMenuToggle?.(false);
   };
@@ -159,7 +165,13 @@ export function useConversationNameContextMenu({
       backend.kind === "cloud"
         ? backend.host.replace(/\/+$/, "")
         : window.location.origin;
-    return `${origin}/shared/conversations/${conversationId}`;
+    // The base path matters here for the same reason it does on anchors: on a
+    // host that also serves the enterprise app, a bare `/shared/conversations`
+    // link resolves against that app and reports the conversation missing.
+    return buildAgentCanvasUrl(
+      `/shared/conversations/${conversationId}`,
+      origin,
+    );
   }, [conversationId, backend.kind, backend.host]);
 
   const handleCopyShareLink = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -209,7 +221,10 @@ export function useConversationNameContextMenu({
     // Data
     systemMessage,
 
-    shouldShowStop: isExecutionActive(executionStatus),
+    shouldShowStop: canStopRuntime(
+      executionStatus,
+      conversation?.id === conversationId ? conversation?.sandbox_status : null,
+    ),
     shouldShowDownloadConversation: Boolean(conversationId && showOptions),
     shouldShowDisplayCost: showOptions,
     shouldShowAgentTools: Boolean(showOptions && systemMessage),

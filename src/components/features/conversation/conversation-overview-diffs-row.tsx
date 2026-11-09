@@ -6,10 +6,6 @@ import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useConversationOverviewGitDiffStats } from "#/hooks/use-conversation-overview-git-diff-stats";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { I18nKey } from "#/i18n/declaration";
-import {
-  OH_STATUS_ERROR_COLOR,
-  OH_STATUS_SUCCESS_COLOR,
-} from "#/constants/status-colors";
 import { cn } from "#/utils/utils";
 import { Provider } from "#/types/settings";
 import { useConversationOverviewDrawerOptional } from "./conversation-overview-drawer-context";
@@ -20,7 +16,7 @@ const CHANGES_BUTTON_CLASSNAME = cn(
   "cursor-pointer border-0 bg-transparent text-left",
 );
 
-const ROW_ICON_CLASSNAME = "size-4 shrink-0 text-[var(--oh-muted)]";
+const ROW_ICON_CLASSNAME = "size-4 shrink-0 text-muted";
 
 const GIT_ACTION_HOVER_TARGET_CLASSNAME =
   "conversation-overview-diffs-git-action";
@@ -28,14 +24,14 @@ const GIT_ACTION_HOVER_TARGET_CLASSNAME =
 const GIT_ACTION_BUTTON_CLASSNAME = cn(
   GIT_ACTION_HOVER_TARGET_CLASSNAME,
   "absolute inset-0 inline-flex items-center justify-center",
-  "rounded-md text-[var(--oh-muted)] transition-opacity",
-  "hover:bg-white/10 hover:text-[var(--oh-foreground)]",
+  "rounded-md text-muted transition-opacity",
+  "hover:bg-contrast/10 hover:text-foreground",
 );
 
 /** Full-row hover, cleared while the git commit control itself is hovered. */
 const DIFFS_ROW_CLASSNAME = cn(
   "flex items-center rounded-md transition-colors",
-  "hover:bg-white/5",
+  "hover:bg-contrast/5",
   `has-[.${GIT_ACTION_HOVER_TARGET_CLASSNAME}:hover]:bg-transparent`,
 );
 
@@ -87,14 +83,14 @@ export function ConversationOverviewDiffsRow() {
         className={CHANGES_BUTTON_CLASSNAME}
       >
         <LuFileDiff className={ROW_ICON_CLASSNAME} aria-hidden />
-        <span className="min-w-0 flex-1 truncate text-sm text-[var(--oh-foreground)]">
+        <span className="min-w-0 flex-1 truncate text-sm text-foreground">
           {t(I18nKey.COMMON$CHANGES)}
         </span>
       </button>
 
       <div className="group/diffstats relative mr-2 flex h-6 min-w-6 shrink-0 items-center justify-center">
         {isLoading ? (
-          <span className="text-sm tabular-nums text-[var(--oh-muted)]">…</span>
+          <span className="text-sm tabular-nums text-muted">…</span>
         ) : (
           <>
             <span
@@ -107,7 +103,7 @@ export function ConversationOverviewDiffsRow() {
             >
               <span
                 data-testid="conversation-overview-diffs-additions"
-                style={{ color: OH_STATUS_SUCCESS_COLOR }}
+                className="text-status-success"
               >
                 {t(I18nKey.CONVERSATION$OVERVIEW_DIFF_ADDITIONS, {
                   count: additions.toLocaleString(),
@@ -115,7 +111,7 @@ export function ConversationOverviewDiffsRow() {
               </span>
               <span
                 data-testid="conversation-overview-diffs-deletions"
-                style={{ color: OH_STATUS_ERROR_COLOR }}
+                className="text-status-error"
               >
                 {t(I18nKey.CONVERSATION$OVERVIEW_DIFF_DELETIONS, {
                   count: deletions.toLocaleString(),
@@ -137,7 +133,7 @@ export function ConversationOverviewDiffsRow() {
                 GIT_ACTION_BUTTON_CLASSNAME,
                 !isGitMenuOpen && GIT_ACTION_OVERLAY_CLASSNAME,
                 isGitMenuOpen &&
-                  "pointer-events-auto visible opacity-100 text-[var(--oh-foreground)]",
+                  "pointer-events-auto visible opacity-100 text-foreground",
               )}
             >
               <GitCommitHorizontal className="size-4" aria-hidden />

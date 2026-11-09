@@ -19,11 +19,13 @@ __pycache__
 /test-results-live/
 /test-results-mock-llm/
 /test-results-mock-llm-docker/
+/test-results-windows-install/
 /.mock-llm-markers/
 /playwright-report/
 /playwright-report-live/
 /playwright-report-mock-llm/
 /playwright-report-mock-llm-docker/
+/playwright-report-windows-install/
 /blob-report/
 /playwright/.cache/
 /.stryker-tmp/
@@ -43,3 +45,6 @@ build-fresh/
 /resources/bin/
 # Downloaded Node.js distribution (populated by `npm run download-node` before packaging)
 /resources/node/
+# Per-arch runtime downloads for macOS universal builds (ELECTRON_ARCH=universal)
+/resources/bin-*/
+/resources/node-*/

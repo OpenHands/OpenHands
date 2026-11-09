@@ -1,6 +1,7 @@
 import React from "react";
 import { Pin } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { ACPModelOption } from "#/constants/acp-providers";
 import { useTracking } from "#/hooks/use-tracking";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
@@ -21,6 +22,7 @@ import { ConversationCardHeader } from "./conversation-card-header";
 import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
 import { ConversationStatusBadges } from "./conversation-status-badges";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 import { useDownloadConversation } from "#/hooks/use-download-conversation";
 
 interface ConversationCardProps {
@@ -34,13 +36,28 @@ interface ConversationCardProps {
    */
   onUnarchive?: () => void;
   onStop?: () => void;
+  /**
+   * Starts a new conversation in this conversation's sandbox. The panel
+   * passes it only for Cloud rows whose sandbox can still be used, so the
+   * menu item disappears on Local backends and on missing/errored sandboxes.
+   */
+  onNewConversationInSandbox?: () => void;
   onChangeTitle?: (title: string) => void;
+  /**
+   * Opens the tag editor for this conversation. Local agent-server backends
+   * only — Cloud conversations don't carry server-side tags, so the panel
+   * leaves this undefined there and the menu item disappears.
+   */
+  onEditTags?: () => void;
   showOptions?: boolean;
   title: string;
+  titlePending?: boolean;
   selectedRepository: RepositorySelection | null;
   lastUpdatedAt: string;
+  timestampLabel?: string;
   createdAt?: string;
   executionStatus?: ExecutionStatus | null;
+  isStarting?: boolean;
   sandboxStatus?: SandboxStatus | null;
   conversationId?: string;
   contextMenuOpen?: boolean;
@@ -52,9 +69,16 @@ interface ConversationCardProps {
   showLlmProfiles?: boolean;
   agentKind?: "openhands" | "acp" | null;
   acpServer?: string | null;
+  acpModels?: readonly ACPModelOption[] | null;
   tags?: Record<string, string> | null;
   /** Gates the tag-chip row; wired to the panel's "Tags" metadata toggle. */
   showTags?: boolean;
+  /**
+   * The row's effective archived state. Leave undefined to let the card infer
+   * it from `sandboxStatus` (a missing, non-resumable runtime); pass it
+   * explicitly when the panel also knows about an explicit archive so the
+   * chip, dot, and dimmed title stay in agreement.
+   */
   isArchived?: boolean;
   isPinned?: boolean;
   onTogglePin?: () => void;
@@ -68,14 +92,19 @@ export function ConversationCard({
   onArchive,
   onUnarchive,
   onStop,
+  onNewConversationInSandbox,
   onChangeTitle,
+  onEditTags,
   showOptions,
   title,
+  titlePending,
   selectedRepository,
   lastUpdatedAt,
+  timestampLabel,
   createdAt,
   conversationId,
   executionStatus,
+  isStarting,
   sandboxStatus,
   contextMenuOpen = false,
   onContextMenuToggle,
@@ -86,9 +115,10 @@ export function ConversationCard({
   showLlmProfiles = false,
   agentKind = null,
   acpServer = null,
+  acpModels = null,
   tags = null,
   showTags = false,
-  isArchived = false,
+  isArchived,
   isPinned = false,
   onTogglePin,
   alwaysShowPinIcon = false,
@@ -97,6 +127,15 @@ export function ConversationCard({
   const { trackDownloadVsCodeButtonClicked } = useTracking();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
   const { mutateAsync: downloadConversation } = useDownloadConversation();
+
+  const displayTags = getDisplayConversationTags(tags);
+  const hasDisplayTags = displayTags.length > 0;
+  const showTagChipRow = showTags && hasDisplayTags;
+
+  // Effective archived state: an explicit prop (the panel passes the user's
+  // archive plus the missing-runtime inference), or the missing-runtime
+  // fallback for standalone callers that only pass `sandboxStatus`.
+  const effectiveArchived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -133,10 +172,26 @@ export function ConversationCard({
     onContextMenuToggle?.(false);
   };
 
+  const handleNewConversationInSandbox = (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onNewConversationInSandbox?.();
+    onContextMenuToggle?.(false);
+  };
+
   const handleEdit = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
     setTitleMode("edit");
+    onContextMenuToggle?.(false);
+  };
+
+  const handleEditTags = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onEditTags?.();
     onContextMenuToggle?.(false);
   };
 
@@ -154,7 +209,7 @@ export function ConversationCard({
         if (data.vscode_url) {
           const transformedUrl = transformVSCodeUrl(data.vscode_url);
           if (transformedUrl) {
-            window.open(transformedUrl, "_blank");
+            window.open(transformedUrl, "_blank", "noopener,noreferrer");
           }
         }
         // VS Code URL not available
@@ -173,7 +228,12 @@ export function ConversationCard({
     event.stopPropagation();
 
     if (conversationId) {
-      await downloadConversation(conversationId);
+      try {
+        await downloadConversation(conversationId);
+      } catch {
+        // useDownloadConversation already showed the error toast; close the
+        // menu as on success instead of leaking the rejection.
+      }
     }
     onContextMenuToggle?.(false);
   };
@@ -201,7 +261,7 @@ export function ConversationCard({
       onClick={handleTogglePin}
       className={cn(
         "flex shrink-0 cursor-pointer items-center justify-center rounded-md p-1",
-        "text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
+        "text-muted hover:bg-contrast/10 hover:text-contrast",
       )}
     >
       <Pin
@@ -216,15 +276,16 @@ export function ConversationCard({
     onArchive ||
     onUnarchive ||
     onChangeTitle ||
+    onEditTags ||
     showOptions
   );
   const hasHoverActions = hasContextMenu || !!onTogglePin;
   const showPersistentPinIcon = alwaysShowPinIcon && isPinned && !!onTogglePin;
   const shouldRenderFooter =
     showRepositoryMetadata ||
-    isArchived ||
+    effectiveArchived ||
     (showLlmProfiles && (agentKind === "acp" || !!llmModel)) ||
-    (showTags && getDisplayConversationTags(tags).length > 0);
+    (showTagChipRow && displayTags.length > 0);
 
   return (
     <div
@@ -233,24 +294,30 @@ export function ConversationCard({
       data-active={isActive ? "true" : "false"}
       onClick={onClick}
       className={cn(
-        "group relative h-auto w-full cursor-pointer rounded-md py-1 pl-2 pr-1 transition-colors",
-        !contextMenuOpen && "hover:bg-[var(--oh-surface)]",
-        (isActive || contextMenuOpen) && "bg-[var(--oh-surface)]",
+        "group relative h-auto w-full cursor-pointer rounded-md py-1 pl-2 pr-1 transition-colors max-md:flex max-md:min-h-12 max-md:flex-col max-md:justify-center",
+        !contextMenuOpen && "hover:bg-surface",
+        (isActive || contextMenuOpen) && "bg-surface",
       )}
     >
       <div className="flex items-center w-full min-w-0">
         <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
           <ConversationCardHeader
             title={title}
+            titlePending={titlePending}
             titleMode={titleMode}
             onTitleSave={onTitleSave}
             executionStatus={executionStatus}
+            isStarting={isStarting}
             sandboxStatus={sandboxStatus}
+            isArchived={effectiveArchived}
           />
-          {sandboxStatus === "ERROR" && <ConversationStatusBadges />}
+          {sandboxStatus === "ERROR" && !effectiveArchived && (
+            <ConversationStatusBadges />
+          )}
         </div>
 
         <div
+          data-testid="conversation-card-trailing-slot"
           className={cn(
             "relative ml-auto pl-2 flex items-center justify-end shrink-0",
             // The hover action overlay (pin + ellipsis) is absolutely
@@ -260,23 +327,26 @@ export function ConversationCard({
             // coarse-pointer devices also keep the reserve so the ellipsis stays
             // clickable without a hover pass.
             showPersistentPinIcon
-              ? "min-w-[3.75rem]"
+              ? "min-w-15"
               : hasHoverActions && hoverRevealReserveClassName(contextMenuOpen),
           )}
         >
           {!showPersistentPinIcon && (createdAt ?? lastUpdatedAt) && (
             <p
               className={cn(
-                "text-xs text-[var(--oh-muted)] text-right whitespace-nowrap transition-opacity -translate-x-1.5",
+                "text-xs text-muted text-right whitespace-nowrap transition-opacity -translate-x-1.5",
                 hasHoverActions && hoverRevealYieldClassName(contextMenuOpen),
               )}
             >
-              <time>{formatTimeDelta(lastUpdatedAt ?? createdAt)}</time>
+              <time>
+                {timestampLabel ?? formatTimeDelta(lastUpdatedAt ?? createdAt)}
+              </time>
             </p>
           )}
 
           {hasHoverActions ? (
             <div
+              data-testid="conversation-card-hover-actions"
               className={cn(
                 "absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-0.5 transition-opacity",
                 showPersistentPinIcon
@@ -297,10 +367,16 @@ export function ConversationCard({
                       onArchive={onArchive && handleArchive}
                       onUnarchive={onUnarchive && handleUnarchive}
                       onStop={onStop && handleStop}
+                      onNewConversationInSandbox={
+                        onNewConversationInSandbox &&
+                        handleNewConversationInSandbox
+                      }
                       onEdit={onChangeTitle && handleEdit}
+                      onEditTags={onEditTags && handleEditTags}
                       onDownloadViaVSCode={handleDownloadViaVSCode}
                       onDownloadConversation={handleDownloadConversation}
                       executionStatus={executionStatus}
+                      sandboxStatus={sandboxStatus}
                       conversationId={conversationId}
                       showOptions={showOptions}
                     />
@@ -308,11 +384,14 @@ export function ConversationCard({
                   <p
                     className={cn(
                       "pointer-events-none absolute inset-0 items-center justify-end",
-                      "text-xs text-[var(--oh-muted)] whitespace-nowrap -translate-x-1.5",
+                      "text-xs text-muted whitespace-nowrap -translate-x-1.5",
                       hoverRevealPinnedTimestampClassName(contextMenuOpen),
                     )}
                   >
-                    <time>{formatTimeDelta(lastUpdatedAt ?? createdAt)}</time>
+                    <time>
+                      {timestampLabel ??
+                        formatTimeDelta(lastUpdatedAt ?? createdAt)}
+                    </time>
                   </p>
                 </div>
               ) : null}
@@ -324,10 +403,15 @@ export function ConversationCard({
                   onArchive={onArchive && handleArchive}
                   onUnarchive={onUnarchive && handleUnarchive}
                   onStop={onStop && handleStop}
+                  onNewConversationInSandbox={
+                    onNewConversationInSandbox && handleNewConversationInSandbox
+                  }
                   onEdit={onChangeTitle && handleEdit}
+                  onEditTags={onEditTags && handleEditTags}
                   onDownloadViaVSCode={handleDownloadViaVSCode}
                   onDownloadConversation={handleDownloadConversation}
                   executionStatus={executionStatus}
+                  sandboxStatus={sandboxStatus}
                   conversationId={conversationId}
                   showOptions={showOptions}
                 />
@@ -350,9 +434,10 @@ export function ConversationCard({
           showAgentChip={showLlmProfiles}
           agentKind={agentKind}
           acpServer={acpServer}
+          acpModels={acpModels}
           tags={tags}
-          showTags={showTags}
-          isArchived={isArchived}
+          showTags={showTagChipRow}
+          isArchived={effectiveArchived}
         />
       )}
     </div>

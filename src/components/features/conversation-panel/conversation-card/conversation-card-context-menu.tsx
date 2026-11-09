@@ -7,7 +7,7 @@ import { ContextMenuListItem } from "../../context-menu/context-menu-list-item";
 import { I18nKey } from "#/i18n/declaration";
 import { ConversationNameContextMenuIconText } from "../../conversation/conversation-name-context-menu-icon-text";
 
-import { Archive, ArchiveRestore } from "lucide-react";
+import { Archive, ArchiveRestore, Gauge, SquarePlus, Tags } from "lucide-react";
 import EditIcon from "#/icons/u-edit.svg?react";
 import SkillsIcon from "#/icons/skills.svg?react";
 import ToolsIcon from "#/icons/u-tools.svg?react";
@@ -15,7 +15,6 @@ import DownloadIcon from "#/icons/u-download.svg?react";
 import CloseIcon from "#/icons/u-close.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
 import { Divider } from "#/ui/divider";
-import { Gauge } from "lucide-react";
 
 interface ConversationCardContextMenuProps {
   onClose: () => void;
@@ -23,7 +22,11 @@ interface ConversationCardContextMenuProps {
   onArchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onUnarchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onNewConversationInSandbox?: (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => void;
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onEditTags?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDisplayCost?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowAgentTools?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowSkills?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -44,7 +47,9 @@ export function ConversationCardContextMenu({
   onArchive,
   onUnarchive,
   onStop,
+  onNewConversationInSandbox,
   onEdit,
+  onEditTags,
   onDisplayCost,
   onShowAgentTools,
   onShowSkills,
@@ -62,7 +67,7 @@ export function ConversationCardContextMenu({
   );
   const stopLabelKey =
     backend.kind === "cloud"
-      ? I18nKey.COMMON$CLOSE_CONVERSATION_STOP_RUNTIME
+      ? I18nKey.COMMON$STOP_SANDBOX
       : I18nKey.COMMON$STOP_CONVERSATION;
 
   const generateSection = useCallback(
@@ -97,8 +102,8 @@ export function ConversationCardContextMenu({
       spacing={isPortaled ? "none" : "default"}
       className={
         isPortaled
-          ? "mt-0 min-w-[200px] w-max max-w-[min(280px,100vw-16px)]"
-          : "z-[200] mt-0"
+          ? "mt-0 min-w-50 w-max conversation-card-menu-width"
+          : "z-200 mt-0"
       }
     >
       {generateSection(
@@ -112,6 +117,18 @@ export function ConversationCardContextMenu({
               <ConversationNameContextMenuIconText
                 icon={<EditIcon width={16} height={16} />}
                 text={t(I18nKey.BUTTON$RENAME)}
+              />
+            </ContextMenuListItem>
+          ),
+          onEditTags && (
+            <ContextMenuListItem
+              key="edit-tags-button"
+              testId="edit-tags-button"
+              onClick={onEditTags}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<Tags className="h-4 w-4" aria-hidden />}
+                text={t(I18nKey.CONVERSATION$EDIT_TAGS)}
               />
             </ContextMenuListItem>
           ),
@@ -144,7 +161,7 @@ export function ConversationCardContextMenu({
                   <SkillsIcon
                     width={16}
                     height={16}
-                    className="stroke-[1.75]"
+                    className="context-menu-icon-stroke"
                     aria-hidden
                   />
                 }
@@ -158,6 +175,18 @@ export function ConversationCardContextMenu({
       )}
       {generateSection(
         [
+          onNewConversationInSandbox && (
+            <ContextMenuListItem
+              key="new-conversation-in-sandbox-button"
+              testId="new-conversation-in-sandbox-button"
+              onClick={onNewConversationInSandbox}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<SquarePlus className="h-4 w-4" aria-hidden />}
+                text={t(I18nKey.CONVERSATION$NEW_IN_SANDBOX)}
+              />
+            </ContextMenuListItem>
+          ),
           onStop && (
             <ContextMenuListItem
               key="stop-button"

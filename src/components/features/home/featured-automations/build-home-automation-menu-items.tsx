@@ -94,7 +94,7 @@ export function buildHomeAutomationMenuItems({
     testId: `${testIdPrefix}-view-${automation.id}`,
   });
 
-  if (canManage && canEdit && onEdit) {
+  if (canEdit && onEdit) {
     items.push({
       kind: "item",
       key: "edit",

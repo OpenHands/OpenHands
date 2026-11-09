@@ -20,7 +20,7 @@ export async function routeOnboardingLlmCatalog(page: Page) {
       body: JSON.stringify({
         models: {
           anthropic: ["claude-opus-4-8"],
-          openai: ["gpt-5.5"],
+          openai: ["gpt-5.5", "gpt-6-astra"],
           openhands: ["claude-opus-4-5-20251101", "kimi-k3", "glm-5.2"],
         },
       }),
@@ -37,6 +37,7 @@ export async function routeOnboardingLlmCatalog(page: Page) {
           "openai/gpt-5.5",
           "openhands/claude-opus-4-5-20251101",
           "openai/gpt-5.6-sol",
+          "openai/gpt-6-astra",
           "openhands/glm-5.2",
         ],
       }),
@@ -63,6 +64,19 @@ export async function showOnboarding(
   page: Page,
   { apiKey, beforeGoto }: ShowOnboardingOptions,
 ) {
+  const consentResponse = await page.request.patch("/api/settings", {
+    headers: { "X-Session-API-Key": apiKey },
+    data: {
+      misc_settings_diff: {
+        app_preferences: { user_consents_to_analytics: false },
+      },
+    },
+  });
+  expect(
+    consentResponse.ok(),
+    `failed to seed backend analytics consent: ${consentResponse.status()}`,
+  ).toBe(true);
+
   await page.addInitScript(
     ({ apiKey: initApiKey }) => {
       window.localStorage.removeItem("openhands-onboarded");

@@ -1,37 +1,33 @@
 import { ComboBox, Header, Input, ListBox, Spinner } from "@heroui/react";
-import { Info } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { mapProvider } from "#/utils/map-provider";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import { cn } from "#/utils/utils";
+import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
 import { formControlSettingsFieldClassName } from "#/utils/form-control-classes";
 import { heroUiAutocompleteSelectorButtonClassName } from "#/ui/combobox-caret";
 import { HelpLink } from "#/ui/help-link";
 import { PRODUCT_URL } from "#/utils/constants";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useProviderModels } from "#/hooks/query/use-provider-models";
-import {
-  FREE_MODEL_BADGE_LABEL,
-  FREE_OPENHANDS_MODEL_NOTE,
-  isFreeOpenHandsModel,
-} from "#/utils/format-model-name";
+import { FREE_MODEL_BADGE_LABEL } from "#/utils/format-model-name";
+import { FreeOpenHandsModelsNote } from "#/components/shared/free-models-note";
+import type { LLMProvider } from "#/api/config-service/config-service.types";
 
-const freeModelBadgeClassName =
-  "shrink-0 rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] leading-none text-warning";
+// Sorts by the label the picker shows, keeping the managed OpenHands provider
+// first as the backend does.
+const compareProviderLabels = (a: LLMProvider, b: LLMProvider) =>
+  Number(b.name === "openhands") - Number(a.name === "openhands") ||
+  mapProvider(a.name).localeCompare(mapProvider(b.name), undefined, {
+    sensitivity: "base",
+  });
 
-function FreeOpenHandsModelsNote() {
-  return (
-    <p
-      data-testid="openhands-free-models-note"
-      className="flex items-start gap-2 text-xs text-warning"
-    >
-      <Info className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
-      <span>{FREE_OPENHANDS_MODEL_NOTE}</span>
-    </p>
-  );
-}
+const freeModelBadgeClassName = cn(
+  "shrink-0 rounded-full border border-warning/40 px-1.5 py-0.5 text-3xs leading-none dark:bg-warning/10 dark:text-warning",
+  statusToneBadgeClassName.warning,
+);
 
 interface ModelSelectorProps {
   isDisabled?: boolean;
@@ -67,11 +63,11 @@ export function ModelSelector({
   } = useProviderModels(selectedProvider);
 
   const verifiedProviders = React.useMemo(
-    () => providers.filter((p) => p.verified),
+    () => providers.filter((p) => p.verified).sort(compareProviderLabels),
     [providers],
   );
   const unverifiedProviders = React.useMemo(
-    () => providers.filter((p) => !p.verified),
+    () => providers.filter((p) => !p.verified).sort(compareProviderLabels),
     [providers],
   );
 
@@ -82,6 +78,17 @@ export function ModelSelector({
   const unverifiedModels = React.useMemo(
     () => providerModels.filter((m) => !m.verified),
     [providerModels],
+  );
+
+  // DB-driven set of free model names for the selected provider. Mirrors the
+  // `verified` flag: the frontend no longer hardcodes which models are free.
+  const freeModelNames = React.useMemo(
+    () => providerModels.filter((m) => m.free).map((m) => m.name),
+    [providerModels],
+  );
+  const freeModelNameSet = React.useMemo(
+    () => new Set(freeModelNames),
+    [freeModelNames],
   );
 
   React.useEffect(() => {
@@ -114,14 +121,13 @@ export function ModelSelector({
 
   const clear = () => {
     setSelectedProvider(null);
+    setSelectedModel(null);
     setLitellmId(null);
   };
 
-  const selectedFullModel =
-    selectedProvider && selectedModel
-      ? `${selectedProvider}/${selectedModel}`
-      : null;
-  const isSelectedModelFree = isFreeOpenHandsModel(selectedFullModel);
+  const isSelectedModelFree = Boolean(
+    selectedModel && freeModelNameSet.has(selectedModel),
+  );
   const selectedModelMeasureRef = React.useRef<HTMLSpanElement>(null);
   const [selectedModelTextWidth, setSelectedModelTextWidth] = React.useState(0);
 
@@ -154,7 +160,7 @@ export function ModelSelector({
   return (
     <div
       className={cn(
-        "flex flex-col md:flex-row w-full min-w-0 justify-between gap-4 md:gap-[46px]",
+        "flex flex-col md:flex-row w-full min-w-0 justify-between gap-4 md:gap-11.5",
         wrapperClassName,
       )}
     >
@@ -166,11 +172,17 @@ export function ModelSelector({
           isRequired
           isDisabled={isDisabled}
           aria-label={t(I18nKey.LLM$PROVIDER)}
-          onSelectionChange={(e) => {
-            if (e?.toString()) handleChangeProvider(e.toString());
+          onSelectionChange={(key) => {
+            if (key?.toString()) handleChangeProvider(key.toString());
           }}
           onInputChange={(value) => !value && clear()}
-          defaultSelectedKey={selectedProvider ?? undefined}
+          // Select the current provider's label so typing replaces it and
+          // filters the list instead of appending to it.
+          onFocus={(event) => {
+            if (event.target instanceof HTMLInputElement) {
+              event.target.select();
+            }
+          }}
           selectedKey={selectedProvider}
         >
           <ComboBox.InputGroup className={formControlSettingsFieldClassName}>
@@ -179,10 +191,10 @@ export function ModelSelector({
               className={heroUiAutocompleteSelectorButtonClassName}
             />
           </ComboBox.InputGroup>
-          <ComboBox.Popover className="rounded-xl border border-[var(--oh-border)]">
+          <ComboBox.Popover className="rounded-xl border border-border">
             <ListBox>
               <ListBox.Section>
-                <Header className="text-[var(--oh-muted)]">
+                <Header className="text-muted">
                   {t(I18nKey.MODEL_SELECTOR$VERIFIED)}
                 </Header>
                 {verifiedProviders.map((provider) => (
@@ -198,7 +210,7 @@ export function ModelSelector({
               </ListBox.Section>
               {unverifiedProviders.length > 0 ? (
                 <ListBox.Section>
-                  <Header className="text-[var(--oh-muted)]">
+                  <Header className="text-muted">
                     {t(I18nKey.MODEL_SELECTOR$OTHERS)}
                   </Header>
                   {unverifiedProviders.map((provider) => (
@@ -238,12 +250,11 @@ export function ModelSelector({
           <ComboBox
             isRequired
             aria-label={t(I18nKey.LLM$MODEL)}
-            onSelectionChange={(e) => {
-              if (e?.toString()) handleChangeModel(e.toString());
+            onSelectionChange={(key) => {
+              if (key?.toString()) handleChangeModel(key.toString());
             }}
             isDisabled={isDisabled || !selectedProvider}
             selectedKey={selectedModel}
-            defaultSelectedKey={selectedModel ?? undefined}
           >
             <ComboBox.InputGroup className={formControlSettingsFieldClassName}>
               <Input data-testid="llm-model-input" name="llm-model-input" />
@@ -258,10 +269,10 @@ export function ModelSelector({
                 className={heroUiAutocompleteSelectorButtonClassName}
               />
             </ComboBox.InputGroup>
-            <ComboBox.Popover className="rounded-xl border border-[var(--oh-border)]">
+            <ComboBox.Popover className="rounded-xl border border-border">
               <ListBox>
                 <ListBox.Section>
-                  <Header className="text-[var(--oh-muted)]">
+                  <Header className="text-muted">
                     {t(I18nKey.MODEL_SELECTOR$VERIFIED)}
                   </Header>
                   {verifiedModels.map((model) => (
@@ -272,9 +283,7 @@ export function ModelSelector({
                     >
                       <span className="flex min-w-0 items-center gap-2">
                         <span className="truncate">{model.name}</span>
-                        {isFreeOpenHandsModel(
-                          `${selectedProvider}/${model.name}`,
-                        ) ? (
+                        {model.free ? (
                           <span className={freeModelBadgeClassName}>
                             {FREE_MODEL_BADGE_LABEL}
                           </span>
@@ -285,7 +294,7 @@ export function ModelSelector({
                 </ListBox.Section>
                 {unverifiedModels.length > 0 ? (
                   <ListBox.Section>
-                    <Header className="text-[var(--oh-muted)]">
+                    <Header className="text-muted">
                       {t(I18nKey.MODEL_SELECTOR$OTHERS)}
                     </Header>
                     {unverifiedModels.map((model) => (
@@ -332,7 +341,13 @@ export function ModelSelector({
             {t(I18nKey.CONFIGURATION$ERROR_FETCH_MODELS)}
           </p>
         )}
-        {selectedProvider === "openhands" ? <FreeOpenHandsModelsNote /> : null}
+        {selectedProvider === "openhands" && freeModelNames.length > 0 ? (
+          <FreeOpenHandsModelsNote
+            modelIds={freeModelNames.map(
+              (name) => `${selectedProvider}/${name}`,
+            )}
+          />
+        ) : null}
       </fieldset>
     </div>
   );

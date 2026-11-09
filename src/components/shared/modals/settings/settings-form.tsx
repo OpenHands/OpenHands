@@ -79,12 +79,12 @@ export function SettingsForm({ settings, onClose }: SettingsFormProps) {
         className="flex flex-col gap-6"
         onSubmit={handleSubmit}
       >
-        <div className="flex flex-col gap-[17px]">
+        <div className="flex flex-col gap-4.25">
           <ModelSelector
             currentModel={
               typeof currentModel === "string" ? currentModel : undefined
             }
-            wrapperClassName="!flex-col !gap-[17px]"
+            wrapperClassName="!flex-col !gap-4.25"
             labelClassName={SETTINGS_FORM.LABEL_CLASSNAME}
           />
 

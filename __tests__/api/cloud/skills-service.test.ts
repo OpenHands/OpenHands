@@ -80,3 +80,57 @@ describe("SkillsService.getSkills against cloud backend", () => {
     expect(skills[1]).toMatchObject({ triggers: ["foo"] });
   });
 });
+
+describe("SkillsService.getConversationSkills against cloud backend", () => {
+  it("reads the conversation's own skills route and maps entries to SkillInfo", async () => {
+    // Arrange
+    fetchMock.mockResolvedValueOnce(
+      mockJsonResponse({
+        skills: [
+          {
+            name: "release-notes",
+            type: "agentskills",
+            content: "# Release notes",
+            triggers: ["/release-notes"],
+          },
+          {
+            name: "repo",
+            type: "repo",
+            content: "Repository instructions",
+            triggers: [],
+          },
+        ],
+      }),
+    );
+
+    // Act
+    const skills = await SkillsService.getConversationSkills("conv-1");
+
+    // Assert
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = getFetchCall(fetchMock, 0);
+    expect(url).toBe(
+      "https://app.all-hands.dev/api/v1/app-conversations/conv-1/skills",
+    );
+    expect(init).toMatchObject({
+      method: "GET",
+      headers: { Authorization: "Bearer bearer-token" },
+    });
+    expect(skills).toEqual([
+      {
+        name: "release-notes",
+        type: "agentskills",
+        content: "# Release notes",
+        triggers: ["/release-notes"],
+        source: null,
+      },
+      {
+        name: "repo",
+        type: "repo",
+        content: "Repository instructions",
+        triggers: [],
+        source: null,
+      },
+    ]);
+  });
+});

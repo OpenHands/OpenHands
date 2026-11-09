@@ -1,7 +1,7 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useParams } from "react-router";
+import { MemoryRouter, useParams } from "react-router";
 import { useUserConversation } from "./query/use-user-conversation";
 import { useAppTitle } from "./use-app-title";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
@@ -11,7 +11,7 @@ const renderAppTitleHook = () =>
   renderHook(() => useAppTitle(), {
     wrapper: ({ children }) => (
       <QueryClientProvider client={new QueryClient()}>
-        {children}
+        <MemoryRouter>{children}</MemoryRouter>
       </QueryClientProvider>
     ),
   });
@@ -82,7 +82,7 @@ describe("useAppTitle", () => {
         // @ts-expect-error - only returning partial config for test
         data: { title: "My Conversation" },
       });
-      useConversationStateStore.getState().setExecutionStatus(status);
+      useConversationStateStore.getState().setExecutionStatus("123", status);
 
       const { result } = renderAppTitleHook();
 

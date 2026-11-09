@@ -75,8 +75,16 @@ export function ProviderConnectionModal({
     Boolean(provider?.trim()) &&
     (!isCreate || Boolean(trimmedKey));
 
-  const verifiedProviders = providers.filter((candidate) => candidate.verified);
-  const unverifiedProviders = providers.filter(
+  const selectedProviderMissing = Boolean(
+    provider && !providers.some((candidate) => candidate.name === provider),
+  );
+  const providerOptions = selectedProviderMissing
+    ? [...providers, { name: provider ?? DEFAULT_PROVIDER, verified: false }]
+    : providers;
+  const verifiedProviders = providerOptions.filter(
+    (candidate) => candidate.verified,
+  );
+  const unverifiedProviders = providerOptions.filter(
     (candidate) => !candidate.verified,
   );
 
@@ -177,37 +185,51 @@ export function ProviderConnectionModal({
           onChange={setDisplayName}
           required
         />
-        {isCreate ? (
-          <fieldset className="flex flex-col gap-2.5 w-full">
-            <label className="text-sm">
-              {t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
-            </label>
-            <ComboBox
-              isRequired
-              aria-label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
-              selectedKey={provider}
-              onSelectionChange={(key) => setProvider(key?.toString() ?? null)}
+        <fieldset className="flex flex-col gap-2.5 w-full">
+          <label className="text-sm">
+            {t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
+          </label>
+          <ComboBox
+            isRequired
+            aria-label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
+            selectedKey={provider}
+            onSelectionChange={(key) => setProvider(key?.toString() ?? null)}
+          >
+            <ComboBox.InputGroup
+              className={formControlSettingsFieldClassName}
             >
-              <ComboBox.InputGroup
-                className={formControlSettingsFieldClassName}
-              >
-                <Input
-                  data-testid="provider-connection-provider-input"
-                  name="provider-connection-provider-input"
-                />
-                <ComboBox.Trigger
-                  className={heroUiAutocompleteSelectorButtonClassName}
-                />
-              </ComboBox.InputGroup>
-              <ComboBox.Popover className="rounded-xl border border-[var(--oh-border)]">
-                <ListBox>
+              <Input
+                data-testid="provider-connection-provider-input"
+                name="provider-connection-provider-input"
+              />
+              <ComboBox.Trigger
+                className={heroUiAutocompleteSelectorButtonClassName}
+              />
+            </ComboBox.InputGroup>
+            <ComboBox.Popover className="rounded-xl border border-border">
+              <ListBox>
+                <ListBox.Section>
+                  <Header className="text-muted">
+                    {t(I18nKey.MODEL_SELECTOR$VERIFIED)}
+                  </Header>
+                  {verifiedProviders.map((candidate) => (
+                    <ListBox.Item
+                      data-testid={`provider-item-${candidate.name}`}
+                      key={candidate.name}
+                      id={candidate.name}
+                      textValue={mapProvider(candidate.name)}
+                    >
+                      {mapProvider(candidate.name)}
+                    </ListBox.Item>
+                  ))}
+                </ListBox.Section>
+                {unverifiedProviders.length > 0 ? (
                   <ListBox.Section>
-                    <Header className="text-[var(--oh-muted)]">
-                      {t(I18nKey.MODEL_SELECTOR$VERIFIED)}
+                    <Header className="text-muted">
+                      {t(I18nKey.MODEL_SELECTOR$OTHERS)}
                     </Header>
-                    {verifiedProviders.map((candidate) => (
+                    {unverifiedProviders.map((candidate) => (
                       <ListBox.Item
-                        data-testid={`provider-item-${candidate.name}`}
                         key={candidate.name}
                         id={candidate.name}
                         textValue={mapProvider(candidate.name)}
@@ -216,36 +238,11 @@ export function ProviderConnectionModal({
                       </ListBox.Item>
                     ))}
                   </ListBox.Section>
-                  {unverifiedProviders.length > 0 ? (
-                    <ListBox.Section>
-                      <Header className="text-[var(--oh-muted)]">
-                        {t(I18nKey.MODEL_SELECTOR$OTHERS)}
-                      </Header>
-                      {unverifiedProviders.map((candidate) => (
-                        <ListBox.Item
-                          key={candidate.name}
-                          id={candidate.name}
-                          textValue={mapProvider(candidate.name)}
-                        >
-                          {mapProvider(candidate.name)}
-                        </ListBox.Item>
-                      ))}
-                    </ListBox.Section>
-                  ) : null}
-                </ListBox>
-              </ComboBox.Popover>
-            </ComboBox>
-          </fieldset>
-        ) : (
-          <SettingsInput
-            testId="provider-connection-provider-input"
-            label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
-            type="text"
-            className="w-full"
-            value={provider ?? ""}
-            onChange={setProvider}
-          />
-        )}
+                ) : null}
+              </ListBox>
+            </ComboBox.Popover>
+          </ComboBox>
+        </fieldset>
         <SettingsInput
           testId="provider-connection-api-key-input"
           label={t(I18nKey.SETTINGS_FORM$API_KEY)}

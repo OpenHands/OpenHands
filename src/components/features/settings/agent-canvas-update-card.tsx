@@ -18,13 +18,20 @@ import { AGENT_CANVAS_CLIENT_VERSION } from "#/api/client-source";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { BaseModalTitle } from "#/components/shared/modals/confirmation-modals/base-modal";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
-import { ModalBody } from "#/components/shared/modals/modal-body";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  ModalBody,
+} from "#/components/shared/modals/modal-body";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { useLatestAgentCanvasVersion } from "#/hooks/query/use-latest-agent-canvas-version";
 import DockerIcon from "#/icons/docker.svg?react";
 import NpmIcon from "#/icons/npm.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import {
+  statusToneBadgeClassName,
+  statusToneBannerClassName,
+} from "#/utils/status-tone-classes";
 
 const COPY_FEEDBACK_MS = 2000;
 
@@ -95,8 +102,8 @@ function UpdateCommandTabs() {
             className={cn(
               "inline-flex items-center gap-1.5 px-3 pb-2 text-sm font-medium",
               selectedTab === tab
-                ? "border-b border-white text-white"
-                : "text-[var(--oh-muted)] hover:text-white",
+                ? "border-b border-contrast text-contrast"
+                : "text-muted hover:text-contrast",
             )}
           >
             <UpdateCommandTabIcon tab={tab} />
@@ -104,14 +111,14 @@ function UpdateCommandTabs() {
           </button>
         ))}
       </div>
-      <div className="flex items-center gap-3 rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface-deep)] px-4 py-3">
+      <div className="flex items-center gap-3 rounded-lg border border-border bg-surface-deep px-4 py-3">
         <code
           data-testid={
             selectedTab === "npm"
               ? "agent-canvas-update-command-npm"
               : "agent-canvas-update-command-docker"
           }
-          className="min-w-0 flex-1 overflow-visible whitespace-nowrap font-mono text-sm text-white"
+          className="min-w-0 flex-1 overflow-visible whitespace-nowrap font-mono text-sm text-contrast"
         >
           {command}
         </code>
@@ -125,13 +132,10 @@ function UpdateCommandTabs() {
               : I18nKey.SETTINGS$VERSION_COPY_COMMAND,
           )}
           disabled={copied}
-          className="shrink-0 text-[var(--oh-muted)] hover:text-white disabled:hover:text-[var(--oh-muted)]"
+          className="shrink-0 text-muted hover:text-contrast disabled:hover:text-muted"
         >
           {copied ? (
-            <Check
-              className="size-4 text-[var(--oh-status-success)]"
-              aria-hidden
-            />
+            <Check className="size-4 text-status-success" aria-hidden />
           ) : (
             <Copy className="size-4" aria-hidden />
           )}
@@ -166,7 +170,10 @@ function AgentCanvasUpdateModal({
     <ModalBackdrop onClose={onClose}>
       <ModalBody
         width="md"
-        className="relative flex max-h-[80vh] flex-col items-start overflow-auto border border-[var(--oh-border)]"
+        className={cn(
+          "relative flex max-h-[80vh] flex-col items-start overflow-auto border border-border",
+          MODAL_MAX_WIDTH_VIEWPORT,
+        )}
         testID="agent-canvas-update-modal"
       >
         <ModalCloseButton
@@ -176,10 +183,10 @@ function AgentCanvasUpdateModal({
         <div className="flex w-full flex-col gap-2 pr-10">
           <BaseModalTitle title={t(I18nKey.SETTINGS$APP_UPDATE_CARD_TITLE)} />
           <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-[var(--oh-text-dim)]">
+            <span className="text-text-dim">
               {t(I18nKey.SETTINGS$APP_UPDATE_VERSION_LABEL)}
             </span>
-            <span className="text-white">{AGENT_CANVAS_CLIENT_VERSION}</span>
+            <span className="text-contrast">{AGENT_CANVAS_CLIENT_VERSION}</span>
           </div>
         </div>
 
@@ -204,11 +211,16 @@ function AgentCanvasUpdateModal({
 
           <div data-testid="agent-canvas-update-status" className="w-full">
             {isPending || isFetching ? (
-              <span className="text-xs text-[var(--oh-muted)]">
+              <span className="text-xs text-muted">
                 {t(I18nKey.SETTINGS$APP_UPDATE_CHECKING)}
               </span>
             ) : updateAvailable ? (
-              <div className="flex items-start gap-2 rounded-lg border border-[#3B82F6]/30 bg-[#1E3A5F] px-3 py-2 text-xs text-[#3B82F6]">
+              <div
+                className={cn(
+                  "flex items-start gap-2 rounded-lg px-3 py-2 text-xs dark:border-[#3B82F6]/30 dark:bg-[#1E3A5F] dark:text-[#3B82F6]",
+                  statusToneBannerClassName.info,
+                )}
+              >
                 <ArrowUpCircle className="size-4 shrink-0" aria-hidden />
                 <span>
                   {t(I18nKey.SETTINGS$APP_UPDATE_AVAILABLE_MESSAGE, {
@@ -219,7 +231,7 @@ function AgentCanvasUpdateModal({
                     href={AGENT_CANVAS_RELEASE_NOTES_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-white hover:text-[var(--oh-text)]"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-contrast hover:text-[var(--oh-text)]"
                   >
                     {t(I18nKey.SETTINGS$VERSION_RELEASE_NOTES)}
                     <ExternalLink className="size-3.5 shrink-0" aria-hidden />
@@ -227,7 +239,12 @@ function AgentCanvasUpdateModal({
                 </span>
               </div>
             ) : upToDate ? (
-              <div className="flex items-start gap-2 rounded-lg border border-[var(--oh-status-success)]/30 bg-[var(--oh-status-success)]/10 px-3 py-2 text-xs text-[var(--oh-status-success)]">
+              <div
+                className={cn(
+                  "flex items-start gap-2 rounded-lg px-3 py-2 text-xs dark:border-status-success/30 dark:bg-status-success/10 dark:text-status-success",
+                  statusToneBannerClassName.success,
+                )}
+              >
                 <CircleCheck className="size-4 shrink-0" aria-hidden />
                 <span>
                   {t(I18nKey.SETTINGS$APP_UPDATE_LATEST_MESSAGE)}{" "}
@@ -236,7 +253,7 @@ function AgentCanvasUpdateModal({
                     href={AGENT_CANVAS_RELEASE_NOTES_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-white hover:text-[var(--oh-text)]"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-contrast hover:text-[var(--oh-text)]"
                   >
                     {t(I18nKey.SETTINGS$VERSION_RELEASE_NOTES)}
                     <ExternalLink className="size-3.5 shrink-0" aria-hidden />
@@ -244,18 +261,18 @@ function AgentCanvasUpdateModal({
                 </span>
               </div>
             ) : (
-              <span className="text-xs text-[var(--oh-muted)]">
+              <span className="text-xs text-muted">
                 {t(I18nKey.SETTINGS$APP_UPDATE_CHECK_FAILED)}
               </span>
             )}
           </div>
 
           {updateAvailable ? (
-            <div className="flex w-full flex-col border-t border-[var(--oh-border)] pt-3">
-              <span className="text-sm font-medium text-white">
+            <div className="flex w-full flex-col border-t border-border pt-3">
+              <span className="text-sm font-medium text-contrast">
                 {t(I18nKey.SETTINGS$APP_UPDATE_HOW_TO_UPDATE)}
               </span>
-              <span className="mt-1 mb-4 text-sm text-[var(--oh-text-dim)]">
+              <span className="mt-1 mb-4 text-sm text-text-dim">
                 {t(I18nKey.SETTINGS$APP_UPDATE_RUN_COMMANDS)}
               </span>
               <UpdateCommandTabs />
@@ -309,19 +326,22 @@ export function AgentCanvasUpdateCard({
           onClick={() => setIsModalOpen(true)}
           aria-haspopup="dialog"
           data-testid="agent-canvas-update-toggle"
-          className="flex w-full cursor-pointer flex-col gap-1 rounded-md border border-[var(--oh-border)] bg-base-secondary px-3 py-2 text-left hover:bg-[var(--oh-surface-raised)]"
+          className="flex w-full cursor-pointer flex-col gap-1 rounded-md border border-border bg-base-secondary px-3 py-2 text-left hover:bg-surface-raised"
         >
           <span className="flex w-full items-center gap-2">
-            <span className="flex-1 truncate text-sm font-semibold leading-5 text-white">
+            <span className="flex-1 truncate text-sm font-semibold leading-5 text-contrast">
               {t(I18nKey.SETTINGS$APP_UPDATE_CARD_TITLE)}
             </span>
             {comparison !== null && (
               <span
                 data-testid="agent-canvas-update-badge"
                 className={cn(
-                  "inline-flex shrink-0 items-center gap-1 text-[10px] font-medium leading-none",
+                  "inline-flex shrink-0 items-center gap-1 text-3xs font-medium leading-none",
                   updateAvailable
-                    ? "rounded-full border border-transparent bg-[#1E3A5F] px-1.5 py-0.5 text-[#3B82F6]"
+                    ? cn(
+                        "rounded-full border border-info/30 px-1.5 py-0.5 dark:border-transparent dark:bg-[#1E3A5F] dark:text-[#3B82F6]",
+                        statusToneBadgeClassName.info,
+                      )
                     : "text-success",
                 )}
               >
@@ -339,9 +359,9 @@ export function AgentCanvasUpdateCard({
             )}
           </span>
 
-          <span className="flex items-center gap-1.5 text-xs leading-5 text-[var(--oh-muted)]">
+          <span className="flex items-center gap-1.5 text-xs leading-5 text-muted">
             <span>{t(I18nKey.SETTINGS$APP_UPDATE_VERSION_LABEL)}</span>
-            <span className="text-white">{AGENT_CANVAS_CLIENT_VERSION}</span>
+            <span className="text-contrast">{AGENT_CANVAS_CLIENT_VERSION}</span>
           </span>
         </button>
       </section>

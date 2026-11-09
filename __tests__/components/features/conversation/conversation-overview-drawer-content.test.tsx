@@ -1,18 +1,21 @@
+import React from "react";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import postcss, { type Container, type Document, type Rule } from "postcss";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ConversationOverviewDrawer } from "#/components/features/conversation/conversation-overview-drawer";
+import { CONVERSATION_OVERVIEW_DRAWER_WIDTH_STORAGE_KEY } from "#/components/features/conversation/conversation-overview-drawer.constants";
 import { ConversationOverviewDrawerContent } from "#/components/features/conversation/conversation-overview-drawer-content";
 import {
   ConversationOverviewDrawerProvider,
   useConversationOverviewDrawer,
 } from "#/components/features/conversation/conversation-overview-drawer-context";
 import { CONVERSATION_OVERVIEW_DRAWER_SECTION } from "#/components/features/conversation/conversation-overview-drawer.types";
-import { ActiveBackendProvider } from "#/contexts/active-backend-context";
-import SettingsService from "#/api/settings-service/settings-service.api";
-import SkillsService from "#/api/skills-service";
-import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
-import type { SkillInfo } from "#/types/settings";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 
 vi.mock("#/hooks/use-conversation-overview-stats", () => ({
   useConversationOverviewStats: () => ({
@@ -42,68 +45,6 @@ vi.mock("#/hooks/query/use-repository-git-items", () => ({
   }),
 }));
 
-vi.mock("#/hooks/query/use-active-conversation", () => ({
-  useActiveConversation: () => ({
-    data: { selected_workspace: "/workspace/project/demo" },
-  }),
-}));
-
-vi.mock("#/hooks/query/use-automation-health", () => ({
-  useAutomationHealth: () => ({
-    data: { status: "ok" },
-    isLoading: false,
-    refetch: vi.fn(),
-  }),
-}));
-
-vi.mock("#/hooks/query/use-automations", () => ({
-  useAutomations: () => ({
-    data: { automations: [], total: 0 },
-    isLoading: false,
-    isError: false,
-    refetch: vi.fn(),
-  }),
-  useToggleAutomation: () => ({ mutate: vi.fn() }),
-  useDeleteAutomation: () => ({ mutate: vi.fn(), isPending: false }),
-  useDispatchAutomation: () => ({ mutate: vi.fn() }),
-}));
-
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
-    trackPrebuiltAutomationEnabled: vi.fn(),
-  }),
-}));
-
-vi.mock("#/hooks/use-create-automation-in-chat", () => ({
-  useCreateAutomationInChat: () => vi.fn(),
-}));
-
-vi.mock("#/hooks/use-is-creating-conversation", () => ({
-  useIsCreatingConversation: () => false,
-}));
-
-vi.mock("#/hooks/mutation/use-create-conversation", () => ({
-  useCreateConversation: () => ({ mutate: vi.fn(), isPending: false }),
-}));
-
-function buildSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
-  return {
-    name: "deno",
-    type: "knowledge",
-    source: "/Users/test/.openhands/cache/skills/public-skills/skills/deno/SKILL.md",
-    description: "Use this skill for Deno projects.",
-    triggers: ["deno"],
-    version: "1.0.0",
-    license: "Apache-2.0",
-    compatibility: null,
-    metadata: null,
-    allowed_tools: null,
-    is_agentskills_format: true,
-    disable_model_invocation: false,
-    ...overrides,
-  };
-}
-
 function OpenSection({
   section,
 }: {
@@ -121,12 +62,31 @@ function OpenSection({
   );
 }
 
+// Stands in for a menu that closes on Escape, such as the Overview ⋯ menu.
+function MenuOverDrawer() {
+  const [isOpen, setIsOpen] = React.useState(false);
+  useCloseOnEscape(isOpen, () => setIsOpen(false));
+  return (
+    <>
+      <button
+        type="button"
+        data-testid="open-menu-over-drawer"
+        onClick={() => setIsOpen(true)}
+      >
+        Menu
+      </button>
+      {isOpen ? <div data-testid="menu-over-drawer" /> : null}
+    </>
+  );
+}
+
 function renderDrawer(
   section: (typeof CONVERSATION_OVERVIEW_DRAWER_SECTION)[keyof typeof CONVERSATION_OVERVIEW_DRAWER_SECTION],
 ) {
   return render(
     <ConversationOverviewDrawerProvider>
       <OpenSection section={section} />
+      <MenuOverDrawer />
       <ConversationOverviewDrawerContent />
     </ConversationOverviewDrawerProvider>,
     {
@@ -138,7 +98,7 @@ function renderDrawer(
             })
           }
         >
-          <ActiveBackendProvider>{children}</ActiveBackendProvider>
+          {children}
         </QueryClientProvider>
       ),
     },
@@ -146,17 +106,9 @@ function renderDrawer(
 }
 
 describe("ConversationOverviewDrawerContent", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      MOCK_DEFAULT_USER_SETTINGS,
-    );
-    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([buildSkill()]);
-  });
-
-  it("places the close button left of the title and the add control on the right", async () => {
+  it("places the close button left of the title", async () => {
     const user = userEvent.setup();
-    renderDrawer(CONVERSATION_OVERVIEW_DRAWER_SECTION.skills);
+    renderDrawer(CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests);
 
     await user.click(screen.getByTestId("open-drawer-section"));
 
@@ -167,66 +119,33 @@ describe("ConversationOverviewDrawerContent", () => {
     expect(header).toHaveClass("h-10");
     expect(header).toHaveClass("min-h-10");
     expect(header).toHaveClass("pr-4");
-    expect(
-      within(header as HTMLElement).getByTestId(
-        "conversation-overview-skills-add-skill-button",
-      ),
-    ).toHaveClass("h-7");
-
-    const headerItems = within(header as HTMLElement).getAllByRole("button");
-    expect(headerItems[0]).toHaveAttribute(
-      "data-testid",
+    const closeButton = within(header as HTMLElement).getByTestId(
       "conversation-overview-drawer-close",
     );
-    expect(headerItems[1]).toHaveAttribute(
-      "data-testid",
-      "conversation-overview-skills-add-skill-button",
-    );
-  });
-
-  it("opens the add skill modal from the header add button", async () => {
-    const user = userEvent.setup();
-    renderDrawer(CONVERSATION_OVERVIEW_DRAWER_SECTION.skills);
-
-    await user.click(screen.getByTestId("open-drawer-section"));
-    await user.click(
-      await screen.findByTestId("conversation-overview-skills-add-skill-button"),
-    );
-
-    expect(await screen.findByTestId("add-skill-modal")).toBeInTheDocument();
-  });
-
-  it("shows the automations add button in the header", async () => {
-    const user = userEvent.setup();
-    renderDrawer(CONVERSATION_OVERVIEW_DRAWER_SECTION.automations);
-
-    await user.click(screen.getByTestId("open-drawer-section"));
-
+    const title = within(header as HTMLElement).getByRole("heading");
     expect(
-      await screen.findByTestId("conversation-overview-automations-add"),
+      closeButton.compareDocumentPosition(title) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("lets a menu opened over the drawer take the first Escape", async () => {
+    const user = userEvent.setup();
+    renderDrawer(CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests);
+
+    await user.click(screen.getByTestId("open-drawer-section"));
+    await user.click(screen.getByTestId("open-menu-over-drawer"));
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByTestId("menu-over-drawer")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-overview-drawer-content"),
     ).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
     expect(
-      screen.queryByTestId("conversation-overview-automations-panel")
-        ?.querySelector(
-          '[data-testid="conversation-overview-automations-add"]',
-        ),
-    ).toBeNull();
-  });
-
-  it("shows the mcp add button in the header", async () => {
-    const user = userEvent.setup();
-    renderDrawer(CONVERSATION_OVERVIEW_DRAWER_SECTION.mcp);
-
-    await user.click(screen.getByTestId("open-drawer-section"));
-
-    const header = screen
-      .getByTestId("conversation-overview-drawer-content")
-      .querySelector("header");
-    expect(
-      within(header as HTMLElement).getByTestId(
-        "conversation-overview-mcp-add-server",
-      ),
-    ).toBeInTheDocument();
+      screen.queryByTestId("conversation-overview-drawer-content"),
+    ).not.toBeInTheDocument();
   });
 
   it("places the view-on-provider link in the header for pull requests", async () => {
@@ -255,6 +174,242 @@ describe("ConversationOverviewDrawerContent", () => {
         .querySelector(
           '[data-testid="conversation-overview-pull_requests-open-external"]',
         ),
+    ).toBeNull();
+  });
+});
+
+function DrawerShell({
+  isMobile = false,
+  resizable = true,
+}: {
+  isMobile?: boolean;
+  resizable?: boolean;
+}) {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  return (
+    <div ref={containerRef} data-testid="drawer-resize-container">
+      <OpenSection
+        section={CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests}
+      />
+      <ConversationOverviewDrawer
+        isMobile={isMobile}
+        resizeContainerRef={resizable ? containerRef : undefined}
+      />
+    </div>
+  );
+}
+
+function renderShell(props: React.ComponentProps<typeof DrawerShell> = {}) {
+  return render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <ConversationOverviewDrawerProvider>
+        <DrawerShell {...props} />
+      </ConversationOverviewDrawerProvider>
+    </QueryClientProvider>,
+  );
+}
+
+// Evaluate production declarations against the real DOM, including nested state
+// selectors. This checks the CSS reader/writer contract rather than class names.
+async function compiledStyles(container: HTMLElement) {
+  const compiler = await compile(
+    await readFile(resolve("src/tailwind.css"), "utf8"),
+    { base: resolve("src"), onDependency: () => {} },
+  );
+  const css = compiler.build(
+    [...container.querySelectorAll<HTMLElement>("[class]")].flatMap(
+      (element) => [...element.classList],
+    ),
+  );
+  const root = postcss.parse(css);
+  return (element: HTMLElement) => {
+    const declarations = new Map<string, string>();
+    root.walkRules((rule) => {
+      let selector = rule.selector;
+      for (
+        let parent: Container | Document | undefined = rule.parent;
+        parent;
+        parent = parent.parent
+      ) {
+        if (parent.type === "rule") {
+          selector = selector.replaceAll("&", (parent as Rule).selector);
+        }
+      }
+      try {
+        if (!element.matches(selector)) return;
+      } catch {
+        return; // Browser-specific pseudo-elements do not select this element.
+      }
+      rule.nodes.forEach((node) => {
+        if (node.type === "decl") declarations.set(node.prop, node.value);
+      });
+    });
+    const width = declarations.get("width");
+    const widthProperty = /^var\((--[\w-]+)\)$/.exec(width ?? "")?.[1];
+    let widthValue = width;
+    if (widthProperty) {
+      let owner: HTMLElement | null = element;
+      while (owner && !owner.style.getPropertyValue(widthProperty)) {
+        owner = owner.parentElement;
+      }
+      widthValue = owner?.style.getPropertyValue(widthProperty);
+    }
+    return { declarations, widthValue, widthProperty, css };
+  };
+}
+
+describe("ConversationOverviewDrawer desktop CSS", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("keeps the inner pixel width while the outer drawer opens and closes", async () => {
+    // Arrange: real section context and the production desktop shell.
+    const user = userEvent.setup();
+    const view = renderShell();
+    const outer = screen.getByTestId("conversation-overview-drawer");
+    const inner = outer.firstElementChild as HTMLElement;
+    await user.click(screen.getByTestId("open-drawer-section"));
+    const styles = await compiledStyles(view.container);
+
+    // Act + Assert: CSS, not direct styles, owns width and motion properties.
+    expect(outer.style.width).toBe("");
+    expect(inner.style.width).toBe("");
+    expect(outer.style.transitionProperty).toBe("");
+    expect(styles(outer).widthProperty).toBeDefined();
+    expect(styles(outer).widthValue).toBe("420px");
+    expect(styles(inner).widthValue).toBe("420px");
+    expect(styles(outer).declarations.get("transition-property")).toBe(
+      "width, transform, opacity",
+    );
+    expect(styles(outer).declarations.get("transition-duration")).toBe("300ms");
+    expect(styles(outer).declarations.get("transition-timing-function")).toBe(
+      "var(--ease-in-out)",
+    );
+
+    await user.click(screen.getByTestId("conversation-overview-drawer-close"));
+    expect(outer).toHaveAttribute("aria-hidden", "true");
+    expect(styles(outer).widthValue).toBe("0px");
+    expect(styles(inner).widthValue).toBe("420px");
+    expect(
+      screen.queryByTestId("conversation-overview-drawer-content"),
+    ).toBeNull();
+    await user.click(screen.getByTestId("open-drawer-section"));
+    expect(styles(outer).widthValue).toBe("420px");
+  });
+
+  it("follows real drag bounds, excludes width transitions, and restores saved width", async () => {
+    // Arrange: right-anchored pointer coordinates are measured by the real hook.
+    const user = userEvent.setup();
+    const view = renderShell();
+    await user.click(screen.getByTestId("open-drawer-section"));
+    vi.spyOn(
+      screen.getByTestId("drawer-resize-container"),
+      "getBoundingClientRect",
+    ).mockReturnValue(DOMRect.fromRect({ x: 100, width: 1000, height: 600 }));
+    const outer = screen.getByTestId("conversation-overview-drawer");
+    const inner = outer.firstElementChild as HTMLElement;
+    const styles = await compiledStyles(view.container);
+    const handle = screen.getByTestId(
+      "conversation-overview-drawer-resize-handle",
+    );
+
+    // Act: keep the drag active while checking the CSS state and both clamps.
+    fireEvent.mouseDown(handle.querySelector(".cursor-ew-resize")!);
+    expect(document.querySelector("[data-panel-drag-shield]")).not.toBeNull();
+    expect(styles(outer).declarations.get("transition-property")).toBe(
+      "transform, opacity",
+    );
+    for (const [clientX, expectedWidth] of [
+      [600, "500px"],
+      [0, "640px"],
+      [1200, "300px"],
+      [600, "500px"],
+    ] as const) {
+      fireEvent.mouseMove(document, { clientX });
+      expect(styles(outer).widthValue).toBe(expectedWidth);
+      expect(styles(inner).widthValue).toBe(expectedWidth);
+    }
+    fireEvent.mouseUp(document);
+
+    // Assert: releasing the drag restores motion and persists the final value.
+    expect(styles(outer).declarations.get("transition-property")).toBe(
+      "width, transform, opacity",
+    );
+    expect(document.querySelector("[data-panel-drag-shield]")).toBeNull();
+    expect(document.body.style.cursor).toBe("");
+    expect(document.body.style.userSelect).toBe("");
+    expect(
+      JSON.parse(
+        localStorage.getItem(CONVERSATION_OVERVIEW_DRAWER_WIDTH_STORAGE_KEY)!,
+      ),
+    ).toBe(500);
+    await user.click(screen.getByTestId("conversation-overview-drawer-close"));
+    expect(styles(outer).widthValue).toBe("0px");
+    expect(styles(inner).widthValue).toBe("500px");
+    await user.click(screen.getByTestId("open-drawer-section"));
+    expect(styles(outer).widthValue).toBe("500px");
+    view.unmount();
+    const restored = renderShell();
+    await user.click(screen.getByTestId("open-drawer-section"));
+    expect(
+      (await compiledStyles(restored.container))(
+        screen.getByTestId("conversation-overview-drawer"),
+      ).widthValue,
+    ).toBe("500px");
+  });
+
+  it("cleans an in-progress resize when the drawer unmounts", async () => {
+    const user = userEvent.setup();
+    const view = renderShell();
+    await user.click(screen.getByTestId("open-drawer-section"));
+    const handle = screen.getByTestId(
+      "conversation-overview-drawer-resize-handle",
+    );
+    const savedWidth = localStorage.getItem(
+      CONVERSATION_OVERVIEW_DRAWER_WIDTH_STORAGE_KEY,
+    );
+    fireEvent.mouseDown(handle.querySelector(".cursor-ew-resize")!);
+    expect(document.querySelector("[data-panel-drag-shield]")).not.toBeNull();
+
+    view.unmount();
+    fireEvent.mouseMove(document, { clientX: 0 });
+    fireEvent.mouseUp(document);
+
+    expect(document.querySelector("[data-panel-drag-shield]")).toBeNull();
+    expect(document.body.style.cursor).toBe("");
+    expect(document.body.style.userSelect).toBe("");
+    expect(
+      localStorage.getItem(CONVERSATION_OVERVIEW_DRAWER_WIDTH_STORAGE_KEY),
+    ).toBe(savedWidth);
+  });
+
+  it("retains the phone content branch and ref-less desktop boundary", async () => {
+    const user = userEvent.setup();
+    const phone = renderShell({ isMobile: true });
+    await user.click(screen.getByTestId("open-drawer-section"));
+    const content = screen.getByTestId("conversation-overview-drawer-content");
+    const styles = await compiledStyles(phone.container);
+    expect(styles(content).declarations.get("max-height")).toBe(
+      "min(50vh, 420px)",
+    );
+    expect(screen.queryByTestId("conversation-overview-drawer")).toBeNull();
+    expect(
+      screen.queryByTestId("conversation-overview-drawer-resize-handle"),
+    ).toBeNull();
+    phone.unmount();
+
+    renderShell({ resizable: false });
+    await user.click(screen.getByTestId("open-drawer-section"));
+    expect(
+      screen.getByTestId("conversation-overview-drawer-content"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-overview-drawer-resize-handle"),
     ).toBeNull();
   });
 });

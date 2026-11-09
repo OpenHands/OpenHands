@@ -34,6 +34,9 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
     getAutomations: vi.fn(),
     getAutomationRuns: vi.fn(),
+    listServerDrafts: vi.fn(),
+    getCapabilities: vi.fn(),
+    supportsAutomationDrafts: vi.fn(),
     checkHealth: vi.fn(),
     toggleAutomation: vi.fn(),
     updateAutomation: vi.fn(),
@@ -81,6 +84,25 @@ beforeEach(() => {
   vi.mocked(AutomationService.checkHealth).mockReset();
   vi.mocked(AutomationService.checkHealth).mockResolvedValue({ status: "ok" });
   vi.mocked(AutomationService.getAutomations).mockReset();
+  vi.mocked(AutomationService.listServerDrafts).mockReset();
+  vi.mocked(AutomationService.listServerDrafts).mockResolvedValue({
+    drafts: [],
+    total: 0,
+  });
+  vi.mocked(AutomationService.getCapabilities).mockReset();
+  vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+    ready: true,
+    features: ["automationDrafts"],
+    triggerKinds: ["cron", "event"],
+    eventSources: [],
+    eventTypes: [],
+    triggers: {},
+  });
+  vi.mocked(AutomationService.supportsAutomationDrafts).mockReset();
+  vi.mocked(AutomationService.supportsAutomationDrafts).mockImplementation(
+    (capabilities) =>
+      Boolean(capabilities?.features?.includes("automationDrafts")),
+  );
   vi.mocked(AutomationService.getAutomations).mockResolvedValue({
     automations: [automation],
     total: 1,

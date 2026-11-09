@@ -32,9 +32,41 @@ vi.mock("#/context/navigation-context", () => ({
   useNavigation: () => ({ navigate: vi.fn(), currentPath: "/" }),
 }));
 
-vi.mock("#/hooks/use-has-permission", () => ({
-  useHasPermission: () => true,
+const permissionMocks = vi.hoisted(() => ({ canManage: true, isOwner: true }));
+vi.mock("#/hooks/use-automation-permissions", () => ({
+  useAutomationPermissions: () => ({
+    canView: true,
+    canManage: permissionMocks.canManage,
+    isLoading: false,
+  }),
+  useIsAutomationOwner: () => permissionMocks.isOwner,
 }));
+
+afterEach(() => {
+  permissionMocks.canManage = true;
+  permissionMocks.isOwner = true;
+});
+
+// The pinned package predates the `impact` field, so an entry carrying one is
+// appended to the real catalog.
+vi.mock("@openhands/extensions/automations", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@openhands/extensions/automations")>();
+  return {
+    ...actual,
+    AUTOMATION_CATALOG: [
+      ...actual.AUTOMATION_CATALOG,
+      {
+        id: "widget-checker",
+        impact: {
+          basis: "completed-runs",
+          one: "1 widget check completed",
+          other: "{{count}} widget checks completed",
+        },
+      },
+    ] as typeof actual.AUTOMATION_CATALOG,
+  };
+});
 
 const automation: Automation = {
   id: "automation-1",
@@ -87,7 +119,26 @@ describe("AutomationCard", () => {
     const card = screen.getByTestId("automation-card-automation-1");
     expect(card.className).toContain("extension-module-card-interactive");
     expect(card.className).toContain("bg-base-secondary");
-    expect(card.className).not.toContain("border-[var(--oh-border)]");
+    expect(card.className).not.toContain("border-border");
+  });
+
+  it("marks draft automations without labeling them inactive", () => {
+    render(
+      <AutomationCard
+        automation={{ ...automation, enabled: false, state: "DRAFT" }}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("active-status-badge-draft")).toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$DRAFT,
+    );
+    expect(
+      screen.queryByTestId("active-status-badge-inactive"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders title, description, and overflow pills", () => {
@@ -140,6 +191,40 @@ describe("AutomationCard", () => {
     expect(screen.getByText("AUTOMATIONS$RUN_NOW")).toBeInTheDocument();
   });
 
+  it.each([
+    { caller: "an admin or owner", canManage: true, offered: true },
+    { caller: "a member", canManage: false, offered: false },
+  ])(
+    "offers Turn on for another user's automation to $caller: $offered",
+    async ({ canManage, offered }) => {
+      // Arrange — a disabled automation the caller did not create.
+      permissionMocks.canManage = canManage;
+      permissionMocks.isOwner = false;
+      const user = userEvent.setup();
+      render(
+        <AutomationCard
+          automation={{ ...automation, enabled: false }}
+          onToggle={vi.fn()}
+          onRunNow={vi.fn()}
+          onExport={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn()}
+        />,
+      );
+
+      // Act
+      await user.click(
+        screen.getByRole("button", { name: "AUTOMATIONS$ACTIONS_MENU" }),
+      );
+
+      // Assert
+      for (const label of ["AUTOMATIONS$TURN_ON", "AUTOMATIONS$EDIT"]) {
+        if (offered) expect(screen.getByText(label)).toBeInTheDocument();
+        else expect(screen.queryByText(label)).not.toBeInTheDocument();
+      }
+    },
+  );
+
   it("shows a status strip and sparkline when insights are present", () => {
     const latestRun = createRun({
       started_at: new Date(Date.now() - 10 * 60_000).toISOString(),
@@ -158,6 +243,7 @@ describe("AutomationCard", () => {
           state: {
             summary: {
               total: 4,
+              completedTotal: 4,
               latestRun,
               recentRuns: [latestRun],
               recentSuccessRate: 1,
@@ -184,13 +270,55 @@ describe("AutomationCard", () => {
     expect(screen.getByText("4")).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
   });
+
+  it("shows the value statement for its completed runs", () => {
+    // Arrange — provenance joining back to a catalog entry with an impact
+    // declaration, and a summary carrying the lifetime completed count.
+    const latestRun = createRun();
+
+    // Act
+    render(
+      <AutomationCard
+        automation={{
+          ...automation,
+          preset_metadata: {
+            template: { id: "widget-checker", version: "1.0.0", config: {} },
+          },
+        }}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+        insights={{
+          spec: insightsSpec satisfies InterfaceListInsights,
+          state: {
+            summary: {
+              total: 5,
+              completedTotal: 4,
+              latestRun,
+              recentRuns: [latestRun],
+              recentSuccessRate: 1,
+              averageDurationMs: 120_000,
+            },
+            isLoading: false,
+            isError: false,
+          },
+        }}
+      />,
+    );
+
+    // Assert
+    expect(
+      screen.getByTestId("automation-impact-automation-1"),
+    ).toHaveTextContent("4 widget checks completed");
+  });
 });
 
 describe("AutomationCard — run phase", () => {
   const localBackend: Backend = {
     id: "local-1",
     name: "Local 1",
-    host: "http://localhost:8000",
+    host: window.location.origin,
     apiKey: "k",
     kind: "local",
   };
@@ -275,9 +403,7 @@ describe("AutomationCard — run phase", () => {
               conversation_id: null,
               bash_command_id: null,
               error_detail: null,
-              phase_code: "running_agent",
-              phase_label: null,
-              phase_updated_at: null,
+              current_phase: "Agent is working on the task",
               started_at: "2026-01-01T09:00:00Z",
               completed_at: null,
             },
@@ -291,7 +417,7 @@ describe("AutomationCard — run phase", () => {
     renderHarness();
 
     // Assert: the phase renders ...
-    await screen.findByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_RUNNING_AGENT);
+    await screen.findByText("Agent is working on the task");
     // ... and exactly one request was made — the pre-existing insights
     // fetch, not a new one just for the phase.
     expect(callCount).toBe(1);

@@ -4,4 +4,4 @@ export const ADD_SKILL_DOCS_URL =
 export const ADD_SKILL_SKILL_NAME = "add-skill";
 
 export const ADD_SKILL_EXAMPLE_COMMAND =
-  "/add-skill https://github.com/OpenHands/extensions/tree/main/skills/codereview";
+  "/add-skill https://github.com/OpenHands/extensions/tree/main/skills/code-review";

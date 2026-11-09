@@ -261,6 +261,20 @@ describe("SetupAcpSecretsStep", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders OpenCode's auth store and API key, with no base URL", () => {
+    renderStep("opencode");
+
+    expect(
+      screen.getByTestId("onboarding-acp-secret-OPENCODE_AUTH_CONTENT"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("onboarding-acp-secret-OPENCODE_API_KEY"),
+    ).toHaveAttribute("type", "password");
+    expect(
+      screen.queryByTestId("onboarding-acp-secret-OPENCODE_BASE_URL"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows no banner when the provider is not authenticated", () => {
     acpAuthStatusMock.mockReturnValue({
       status: "unauthenticated",

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import {
@@ -8,6 +8,13 @@ import {
   useUpdateGitSyncConfig,
 } from "#/hooks/query/use-git-sync";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import type { Backend } from "#/api/backend-registry/types";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import type { GitSyncStatus } from "#/types/git-sync";
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
@@ -18,12 +25,21 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
   },
 }));
 
-vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackend: () => ({
-    backend: { id: "test-backend", kind: "local" },
-    orgId: null,
-  }),
-}));
+const localBackend: Backend = {
+  id: "test-backend",
+  name: "Local",
+  host: "http://localhost:8000",
+  apiKey: "session-key",
+  kind: "local",
+};
+
+const cloudBackend: Backend = {
+  id: "cloud-1",
+  name: "Production",
+  host: "https://app.all-hands.dev",
+  apiKey: "bearer-key",
+  kind: "cloud",
+};
 
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
@@ -56,13 +72,24 @@ function createHarness() {
     defaultOptions: { queries: { retry: false, retryDelay: 0 } },
   });
   const wrapper = ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <ActiveBackendProvider>{children}</ActiveBackendProvider>
+    </QueryClientProvider>
   );
   return { queryClient, wrapper };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
+  __resetActiveStoreForTests();
+  setRegisteredBackends([localBackend, cloudBackend]);
+  setActiveSelection({ backendId: localBackend.id });
+});
+
+afterEach(() => {
+  __resetActiveStoreForTests();
+  window.localStorage.clear();
 });
 
 describe("useUpdateGitSyncConfig", () => {
@@ -138,6 +165,43 @@ describe("useTriggerGitSync", () => {
     expect(queryClient.getMutationCache().getAll()[0].options.meta).toEqual({
       disableToast: true,
     });
+  });
+});
+
+describe("useGitSyncStatus on a cloud backend", () => {
+  beforeEach(() => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+  });
+
+  it("scopes the status to the backend and org, and refreshes it after a trigger", async () => {
+    // Two orgs on the same backend must never read each other's cached
+    // status, and a trigger must invalidate the key it was cached under.
+    vi.mocked(AutomationService.getGitSyncStatus).mockResolvedValue(baseStatus);
+    vi.mocked(AutomationService.triggerGitSync).mockResolvedValue({
+      triggered: true,
+    });
+    const { queryClient, wrapper } = createHarness();
+    const { result } = renderHook(
+      () => ({ status: useGitSyncStatus(), trigger: useTriggerGitSync() }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.status.isSuccess).toBe(true));
+    expect(
+      queryClient.getQueryData([
+        ...GIT_SYNC_STATUS_QUERY_KEY,
+        "cloud-1",
+        "org-1",
+      ]),
+    ).toEqual(baseStatus);
+    expect(queryClient.getQueryData(STATUS_KEY)).toBeUndefined();
+
+    await act(async () => {
+      await result.current.trigger.mutateAsync(undefined);
+    });
+
+    await waitFor(() =>
+      expect(AutomationService.getGitSyncStatus).toHaveBeenCalledTimes(2),
+    );
   });
 });
 

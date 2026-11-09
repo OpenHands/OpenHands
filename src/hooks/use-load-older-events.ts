@@ -5,6 +5,8 @@ import { useEventStore } from "#/stores/use-event-store";
 import {
   INITIAL_HISTORY_PAGE_SIZE,
   useConversationHistory,
+  usePersistedConversationHistory,
+  getConversationHistoryScope,
 } from "#/hooks/query/use-conversation-history";
 import { isTaskConversationId } from "#/utils/conversation-local-storage";
 import { seedModelSwitchesFromHistory } from "#/hooks/chat/record-model-switch-message";
@@ -22,7 +24,10 @@ interface UseLoadOlderEventsResult {
    * returns a short page (i.e. it ran out of older events).
    */
   hasMore: boolean;
-  /** Trigger one more older-events page. Resolves when the page is merged. */
+  /**
+   * Trigger one more older-events page. Resolves after the page is merged, or
+   * without changing state if the load became stale.
+   */
   loadOlder: () => Promise<void>;
 }
 
@@ -41,19 +46,33 @@ interface UseLoadOlderEventsResult {
 export const useLoadOlderEvents = (
   conversationId?: string | null,
 ): UseLoadOlderEventsResult => {
+  const historyScope = getConversationHistoryScope();
   const isTaskConversation =
     !!conversationId && isTaskConversationId(conversationId);
   const realConversationId = isTaskConversation ? undefined : conversationId;
 
   const { data: conversation } = useUserConversation(conversationId ?? null);
-  const { data: initialHistory, isFetched: isInitialHistoryFetched } =
-    useConversationHistory(realConversationId ?? undefined);
+  const replayHistory = useConversationHistory(realConversationId ?? undefined);
+  const persistedHistory = usePersistedConversationHistory(
+    realConversationId ?? undefined,
+    false,
+  );
+  const initialHistory = replayHistory.data ?? persistedHistory.data;
+  const isInitialHistoryFetched =
+    replayHistory.isFetched || persistedHistory.isFetched;
   const addEvents = useEventStore((state) => state.addEvents);
 
   const [isLoading, setIsLoading] = React.useState(false);
   const [hasMore, setHasMore] = React.useState(true);
   const isLoadingRef = React.useRef(false);
   const hasMoreRef = React.useRef(true);
+  const activeLoadMarkerRef = React.useRef<object | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      activeLoadMarkerRef.current = null;
+    };
+  }, [conversationId, historyScope]);
 
   React.useEffect(() => {
     isLoadingRef.current = false;
@@ -67,7 +86,7 @@ export const useLoadOlderEvents = (
 
     hasMoreRef.current = true;
     setHasMore(true);
-  }, [conversationId, isTaskConversation]);
+  }, [conversationId, historyScope, isTaskConversation]);
 
   // Mirror the initial REST page: if the tail fetch already returned
   // everything, don't auto-trigger an older-events request on short chats.
@@ -75,10 +94,8 @@ export const useLoadOlderEvents = (
     if (isTaskConversation || !isInitialHistoryFetched || !initialHistory) {
       return;
     }
-    if (!initialHistory.hasMore) {
-      hasMoreRef.current = false;
-      setHasMore(false);
-    }
+    hasMoreRef.current = initialHistory.hasMore;
+    setHasMore(initialHistory.hasMore);
   }, [
     isTaskConversation,
     isInitialHistoryFetched,
@@ -121,6 +138,13 @@ export const useLoadOlderEvents = (
 
     isLoadingRef.current = true;
     setIsLoading(true);
+    const loadMarker = {};
+    activeLoadMarkerRef.current = loadMarker;
+    const isActiveLoad = () =>
+      getConversationHistoryScope() === historyScope &&
+      activeLoadMarkerRef.current === loadMarker &&
+      useEventStore.getState().loadedConversationId === conversationId;
+
     try {
       const page = await EventService.searchEvents(
         conversationId,
@@ -129,9 +153,18 @@ export const useLoadOlderEvents = (
         {
           limit: INITIAL_HISTORY_PAGE_SIZE,
           sortOrder: "TIMESTAMP_DESC",
+          excludeFullState: true,
           timestampLt: oldestTimestamp,
         },
       );
+
+      // Conversation switches atomically replace `loadedConversationId` and
+      // clear the global event store. Do not merge this page if the store now
+      // belongs to another conversation. There is no `await` below this guard,
+      // so a navigation cannot interleave between the check and `addEvents`.
+      if (!isActiveLoad()) {
+        return;
+      }
 
       if (!Array.isArray(page.items)) {
         throw new Error(
@@ -159,12 +192,24 @@ export const useLoadOlderEvents = (
         hasMoreRef.current = false;
         setHasMore(false);
       }
+    } catch (error) {
+      // Errors from an abandoned conversation are no longer relevant to the
+      // active view. Preserve the existing error behavior for current loads.
+      if (isActiveLoad()) {
+        throw error;
+      }
     } finally {
-      isLoadingRef.current = false;
-      setIsLoading(false);
+      // A newer conversation may already have its own request in flight; an
+      // older request must not clear that request's loading state.
+      if (isActiveLoad()) {
+        activeLoadMarkerRef.current = null;
+        isLoadingRef.current = false;
+        setIsLoading(false);
+      }
     }
   }, [
     conversationId,
+    historyScope,
     conversation,
     conversation?.conversation_url,
     conversation?.session_api_key,

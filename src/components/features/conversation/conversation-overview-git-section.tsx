@@ -20,9 +20,9 @@ import {
   isOverviewGitPartPinned,
 } from "./conversation-overview-sections";
 
-const ROW_ICON_CLASSNAME = "size-4 shrink-0 text-[var(--oh-muted)]";
+const ROW_ICON_CLASSNAME = "size-4 shrink-0 text-muted";
 const EXTERNAL_LINK_ICON_CLASSNAME = cn(
-  "size-3.5 shrink-0 text-[var(--oh-muted)]",
+  "size-3.5 shrink-0 text-muted",
   "opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100",
 );
 // Non-localizable empty-count glyph (zero PRs).
@@ -118,14 +118,14 @@ export function ConversationOverviewGitSection() {
               data-testid="conversation-overview-git-repo"
               className={cn(
                 "group flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5",
-                "transition-colors hover:bg-white/5",
+                "transition-colors hover:bg-contrast/5",
               )}
             >
               <GitProviderIcon
                 gitProvider={provider}
                 className={ROW_ICON_CLASSNAME}
               />
-              <span className="min-w-0 flex-1 truncate text-sm text-[var(--oh-foreground)]">
+              <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                 {repository}
               </span>
               <ExternalLink
@@ -143,15 +143,15 @@ export function ConversationOverviewGitSection() {
                 data-testid="conversation-overview-git-branch"
                 className={cn(
                   "group flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5",
-                  "transition-colors hover:bg-white/5",
+                  "transition-colors hover:bg-contrast/5",
                 )}
               >
                 <FaCodeBranch
                   size={14}
-                  className="shrink-0 text-[var(--oh-muted)]"
+                  className="shrink-0 text-muted"
                   aria-hidden
                 />
-                <span className="min-w-0 flex-1 truncate text-sm text-[var(--oh-foreground)]">
+                <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                   {branch}
                 </span>
                 <ExternalLink
@@ -165,15 +165,13 @@ export function ConversationOverviewGitSection() {
                 className="flex min-w-0 items-center gap-2 px-2 py-1.5"
               >
                 <GitBranch
-                  className="size-3.5 shrink-0 text-[var(--oh-muted)]"
+                  className="size-3.5 shrink-0 text-muted"
                   aria-hidden
                 />
                 <span
                   className={cn(
                     "text-sm",
-                    branch
-                      ? "text-[var(--oh-foreground)]"
-                      : "text-[var(--oh-muted)]",
+                    branch ? "text-foreground" : "text-muted",
                   )}
                 >
                   {branch || t(I18nKey.CONVERSATION$OVERVIEW_NONE)}
@@ -194,24 +192,22 @@ export function ConversationOverviewGitSection() {
                 onClick={openCommits}
                 className={cn(
                   "flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5",
-                  "cursor-pointer bg-transparent text-left transition-colors hover:bg-white/5",
+                  "cursor-pointer bg-transparent text-left transition-colors hover:bg-contrast/5",
                 )}
               >
                 <GitCommitHorizontal
                   className={ROW_ICON_CLASSNAME}
                   aria-hidden
                 />
-                <span className="min-w-0 flex-1 truncate text-sm text-[var(--oh-foreground)]">
+                <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                   {t(I18nKey.DIFF_VIEWER$COMMITS)}
                 </span>
                 {commitsQuery.isLoading ? (
-                  <span className="text-sm tabular-nums text-[var(--oh-muted)]">
-                    …
-                  </span>
+                  <span className="text-sm tabular-nums text-muted">…</span>
                 ) : (
                   <span
                     data-testid="conversation-overview-commits-count"
-                    className="text-sm tabular-nums text-[var(--oh-muted)]"
+                    className="text-sm tabular-nums text-muted"
                   >
                     {commitsCountLabel}
                   </span>
@@ -227,21 +223,19 @@ export function ConversationOverviewGitSection() {
                 onClick={openPullRequests}
                 className={cn(
                   "flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5",
-                  "cursor-pointer bg-transparent text-left transition-colors hover:bg-white/5",
+                  "cursor-pointer bg-transparent text-left transition-colors hover:bg-contrast/5",
                 )}
               >
                 <PrIcon className={ROW_ICON_CLASSNAME} aria-hidden />
-                <span className="min-w-0 flex-1 truncate text-sm text-[var(--oh-foreground)]">
+                <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                   {t(I18nKey.CONVERSATION$OVERVIEW_PULL_REQUESTS)}
                 </span>
                 {pullRequestsQuery.isLoading ? (
-                  <span className="text-sm tabular-nums text-[var(--oh-muted)]">
-                    …
-                  </span>
+                  <span className="text-sm tabular-nums text-muted">…</span>
                 ) : (
                   <span
                     data-testid="conversation-overview-pull-requests-count"
-                    className="text-sm tabular-nums text-[var(--oh-muted)]"
+                    className="text-sm tabular-nums text-muted"
                   >
                     {pullRequestsCount !== null && pullRequestsCount > 0
                       ? pullRequestsCount

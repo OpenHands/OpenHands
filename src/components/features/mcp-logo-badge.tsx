@@ -36,6 +36,9 @@ const LOCAL_LOGO_ICONS: Record<
   slack: SlackIcon,
 };
 
+const WHITE_SIMPLE_ICON_URL =
+  /^https:\/\/cdn\.simpleicons\.org\/[^/]+\/(fff|ffffff)$/i;
+
 export function McpLogoBadge({
   entry,
   size = "md",
@@ -44,6 +47,15 @@ export function McpLogoBadge({
   testId,
 }: McpLogoBadgeProps) {
   const LocalLogoIcon = entry ? LOCAL_LOGO_ICONS[entry.id] : undefined;
+  const hasThemeBackground = !!entry?.iconBg?.startsWith("var(--oh-");
+  // A white mark on a theme surface disappears in light themes, so paint it
+  // with the badge ink through a mask instead of loading the white raster.
+  const tintedLogoUrl =
+    hasThemeBackground &&
+    entry?.logoUrl &&
+    WHITE_SIMPLE_ICON_URL.test(entry.logoUrl)
+      ? entry.logoUrl
+      : undefined;
   return (
     <span
       aria-hidden="true"
@@ -51,17 +63,32 @@ export function McpLogoBadge({
       data-testid={testId}
       className={cn(
         "inline-flex shrink-0 items-center justify-center overflow-hidden",
-        "border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]",
+        "border border-contrast/10 shadow-badge-inset",
         sizeClassNames[size],
         className,
       )}
       style={{
         backgroundColor: entry?.iconBg ?? "var(--oh-color-tertiary)",
-        color: entry?.iconColor ?? "#FFFFFF",
+        color:
+          entry?.iconColor ??
+          (entry?.iconBg && !hasThemeBackground
+            ? "#FFFFFF"
+            : "var(--oh-contrast)"),
       }}
     >
       {LocalLogoIcon ? (
         <LocalLogoIcon />
+      ) : tintedLogoUrl ? (
+        <span
+          data-testid="mcp-logo-tinted-mark"
+          className="size-5/9 bg-current"
+          style={{
+            maskImage: `url("${tintedLogoUrl}")`,
+            maskSize: "contain",
+            maskRepeat: "no-repeat",
+            maskPosition: "center",
+          }}
+        />
       ) : entry?.logoUrl ? (
         <img
           src={entry.logoUrl}

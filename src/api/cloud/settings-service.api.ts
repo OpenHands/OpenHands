@@ -1,3 +1,4 @@
+import { HttpError } from "@openhands/typescript-client";
 import {
   type Provider,
   type Settings,
@@ -227,4 +228,106 @@ export async function fetchCloudConversationSettingsSchema(): Promise<unknown> {
     method: "GET",
     path: "/api/v1/settings/conversation-schema",
   });
+}
+
+/** What this cloud instance's Settings > Integrations page offers to connect. */
+export interface CloudIntegrationsConfig {
+  /** The git providers whose native (OAuth) integration is enabled. */
+  providersConfigured: Provider[];
+  /** Whether the built-in Jira Cloud integration is enabled. */
+  isJiraEnabled: boolean;
+  /** Whether the built-in Jira Data Center integration is enabled. */
+  isJiraDcEnabled: boolean;
+  /** Whether the built-in Linear integration is enabled. */
+  isLinearEnabled: boolean;
+  /** Whether the built-in Slack integration is enabled. */
+  isSlackEnabled: boolean;
+  /**
+   * How the instance is deployed: `cloud` for OpenHands Cloud, `self_hosted`
+   * for an OpenHands Enterprise install, or null when it reports neither.
+   */
+  deploymentMode: string | null;
+  /**
+   * Whether the instance's Settings > MCP page also lists organization MCP
+   * servers (`feature_flags.enable_org_mcp_servers`).
+   */
+  isOrgMcpServersEnabled: boolean;
+  /**
+   * Whether the instance has Agent Profiles turned on
+   * (`feature_flags.enable_agent_profiles_page`). Only meaningful on a
+   * self-hosted instance: OpenHands Cloud reports it false and still runs
+   * profiles.
+   */
+  isAgentProfilesEnabled: boolean;
+  /**
+   * Whether the instance enables service accounts, and with them automations
+   * that run as a service account.
+   */
+  isServiceAccountsEnabled: boolean;
+}
+
+export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsConfig> {
+  const backend = getActiveCloudBackend();
+  const config = await callCloudProxy<{
+    providers_configured?: Provider[];
+    slack_enabled?: boolean;
+    feature_flags?: {
+      enable_jira?: boolean;
+      enable_jira_dc?: boolean;
+      enable_linear?: boolean;
+      deployment_mode?: string;
+      enable_org_mcp_servers?: boolean;
+      enable_agent_profiles_page?: boolean;
+      enable_service_accounts?: boolean;
+    };
+  }>({
+    backend,
+    method: "GET",
+    path: "/api/v1/web-client/config",
+  });
+  return {
+    providersConfigured: config.providers_configured ?? [],
+    isJiraEnabled: config.feature_flags?.enable_jira === true,
+    isJiraDcEnabled: config.feature_flags?.enable_jira_dc === true,
+    isLinearEnabled: config.feature_flags?.enable_linear === true,
+    isSlackEnabled: config.slack_enabled === true,
+    deploymentMode: config.feature_flags?.deployment_mode ?? null,
+    isOrgMcpServersEnabled:
+      config.feature_flags?.enable_org_mcp_servers === true,
+    isAgentProfilesEnabled:
+      config.feature_flags?.enable_agent_profiles_page === true,
+    isServiceAccountsEnabled:
+      config.feature_flags?.enable_service_accounts === true,
+  };
+}
+
+/** Whether the current user has linked their Slack account on the instance. */
+export async function fetchCloudSlackStatus(): Promise<boolean> {
+  const backend = getActiveCloudBackend();
+  const status = await callCloudProxy<{ connected?: boolean }>({
+    backend,
+    method: "GET",
+    path: "/slack/status",
+  });
+  return status.connected === true;
+}
+
+/**
+ * Whether the current user has linked a Jira Cloud workspace. The instance
+ * answers 404 for a user without a link, which is the "not connected" case
+ * rather than an error.
+ */
+export async function fetchCloudJiraLinkStatus(): Promise<boolean> {
+  const backend = getActiveCloudBackend();
+  try {
+    await callCloudProxy<unknown>({
+      backend,
+      method: "GET",
+      path: "/integration/jira/workspaces/link",
+    });
+    return true;
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 404) return false;
+    throw e;
+  }
 }

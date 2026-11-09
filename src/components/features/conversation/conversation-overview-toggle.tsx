@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import ReactDOM from "react-dom";
 import { Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useConversationStore } from "#/stores/conversation-store";
@@ -17,6 +16,7 @@ import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { setConversationState } from "#/utils/conversation-local-storage";
 import { ConversationOverviewPanel } from "./conversation-overview-panel";
 import { CONVERSATION_OVERVIEW_PANEL_WIDTH_PX } from "./conversation-overview-panel.constants";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 interface ConversationOverviewToggleProps {
   className?: string;
@@ -116,26 +116,25 @@ export function ConversationOverviewToggle({
       : t(I18nKey.CONVERSATION$SHOW_OVERVIEW);
 
   const peek =
-    showPeek && peekPosition
-      ? ReactDOM.createPortal(
-          <div
-            data-testid="conversation-overview-peek"
-            className="fixed z-50"
-            style={{
-              top: peekPosition.top,
-              left: peekPosition.left,
-              width: CONVERSATION_OVERVIEW_PANEL_WIDTH_PX,
-            }}
-            onMouseEnter={openConversationOverviewPanelPeek}
-            onMouseLeave={scheduleCloseConversationOverviewPanelPeek}
-          >
-            <div className="shadow-lg">
-              <ConversationOverviewPanel />
-            </div>
-          </div>,
-          document.body,
-        )
-      : null;
+    showPeek && peekPosition ? (
+      <AppearancePortal>
+        <div
+          data-testid="conversation-overview-peek"
+          className="fixed z-50"
+          style={{
+            top: peekPosition.top,
+            left: peekPosition.left,
+            width: CONVERSATION_OVERVIEW_PANEL_WIDTH_PX,
+          }}
+          onMouseEnter={openConversationOverviewPanelPeek}
+          onMouseLeave={scheduleCloseConversationOverviewPanelPeek}
+        >
+          <div className="shadow-lg">
+            <ConversationOverviewPanel />
+          </div>
+        </div>
+      </AppearancePortal>
+    ) : null;
 
   return (
     <>
@@ -163,9 +162,9 @@ export function ConversationOverviewToggle({
               // keeping the smaller Info glyph.
               mobileTopBarIconButtonClassName,
               "size-7",
-              isOverviewVisible && "bg-white/10 text-[var(--oh-foreground)]",
+              isOverviewVisible && "bg-contrast/10 text-foreground",
               isArchivedConversation &&
-                "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-[var(--oh-muted)]",
+                "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-muted",
               className,
             )}
             aria-label={tooltipText}

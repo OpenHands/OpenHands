@@ -1,32 +1,18 @@
-import { Tooltip } from "@heroui/react";
+import { Tooltip, TooltipProps } from "#/components/shared/tooltip";
 import React, { ReactNode } from "react";
 import { cn } from "#/utils/utils";
-
-export type StyledTooltipPlacement =
-  | "top"
-  | "top start"
-  | "top end"
-  | "bottom"
-  | "bottom start"
-  | "bottom end"
-  | "left"
-  | "left top"
-  | "left bottom"
-  | "right"
-  | "right top"
-  | "right bottom"
-  | "start"
-  | "end";
 
 export interface StyledTooltipProps {
   children: ReactNode;
   content: string | ReactNode;
   tooltipClassName?: React.HTMLAttributes<HTMLDivElement>["className"];
-  placement?: StyledTooltipPlacement;
+  placement?: TooltipProps["placement"];
   showArrow?: boolean;
   closeDelay?: number;
   offset?: number;
   shouldFlip?: boolean;
+  isOpen?: TooltipProps["isOpen"];
+  isDisabled?: TooltipProps["isDisabled"];
 }
 
 function getTooltipTriggerChild(children: ReactNode) {
@@ -45,29 +31,32 @@ export function StyledTooltip({
   closeDelay = 100,
   shouldFlip,
   offset = 7,
+  isOpen,
+  isDisabled,
 }: StyledTooltipProps) {
-  const shouldSkipAnimation = import.meta.env.MODE === "test";
+  const disableAnimation = import.meta.env.MODE === "test";
 
   return (
     <Tooltip
-      delay={0}
+      content={content}
       closeDelay={closeDelay}
-      shouldSkipAnimation={shouldSkipAnimation}
-    >
-      <Tooltip.Trigger>{getTooltipTriggerChild(children)}</Tooltip.Trigger>
-      <Tooltip.Content
-        placement={placement}
-        offset={offset}
-        shouldFlip={shouldFlip}
-        showArrow={showArrow}
-        className={cn(
-          "z-[9999] rounded-md px-2 py-1 text-xs font-medium shadow-md",
-          "bg-white text-black",
+      placement={placement}
+      offset={offset}
+      shouldFlip={shouldFlip}
+      isOpen={isOpen}
+      isDisabled={isDisabled}
+      className={cn("bg-contrast text-contrast-foreground", tooltipClassName)}
+      showArrow={showArrow}
+      disableAnimation={disableAnimation}
+      classNames={{
+        content: cn(
+          "z-9999 rounded-md px-2 py-1 text-xs font-medium shadow-md",
+          "!bg-contrast !text-contrast-foreground",
           tooltipClassName,
-        )}
-      >
-        {content}
-      </Tooltip.Content>
+        ),
+      }}
+    >
+      {getTooltipTriggerChild(children)}
     </Tooltip>
   );
 }

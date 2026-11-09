@@ -1,6 +1,7 @@
 /* eslint-disable i18next/no-literal-string -- test mocks intentionally use literal labels */
 import { describe, expect, it, vi, beforeEach, type Mock } from "vitest";
 import { AxiosError } from "axios";
+import { HttpError } from "@openhands/typescript-client";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
@@ -13,6 +14,7 @@ import * as useActivateLlmProfileHook from "#/hooks/mutation/use-activate-llm-pr
 import * as useSaveLlmProfileHook from "#/hooks/mutation/use-save-llm-profile";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import * as activeBackendContext from "#/contexts/active-backend-context";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 import type { Backend } from "#/api/backend-registry/types";
 
 const mockCloudBackend: Backend = {
@@ -63,17 +65,21 @@ vi.mock("#/routes/llm-settings", async () => {
         String(initialValuesRef.current["llm.base_url"] ?? ""),
       );
       const [temperature, setTemperature] = React.useState("0.2");
+      const isDirty =
+        model !== String(initialValuesRef.current["llm.model"] ?? "") ||
+        temperature !== "0.2";
       React.useEffect(() => {
         const values = {
           ...(initialValueOverridesRef.current ?? {}),
           "llm.model": model,
           "llm.api_key": apiKey,
           "llm.base_url": baseUrl,
+          "llm.temperature": temperature,
         };
         onSaveControlChange?.({
           save: vi.fn(),
           isSaving: false,
-          isDirty: true,
+          isDirty,
           view,
           values,
           getDirtyPayload: () => {
@@ -89,7 +95,15 @@ vi.mock("#/routes/llm-settings", async () => {
             };
           },
         });
-      }, [apiKey, baseUrl, model, onSaveControlChange, temperature, view]);
+      }, [
+        apiKey,
+        baseUrl,
+        isDirty,
+        model,
+        onSaveControlChange,
+        temperature,
+        view,
+      ]);
 
       return (
         <div data-testid="mock-llm-settings-screen">
@@ -131,6 +145,10 @@ vi.mock("#/hooks/query/use-llm-profiles");
 vi.mock("#/hooks/mutation/use-activate-llm-profile");
 vi.mock("#/hooks/mutation/use-save-llm-profile");
 vi.mock("#/api/profiles-service/profiles-service.api");
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displaySuccessToast: vi.fn(),
+  displayErrorToast: vi.fn(),
+}));
 
 const mockProfiles = [
   {
@@ -201,6 +219,10 @@ describe("LlmSettingsLocalView", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(),
+      defaultModel: null,
+    });
 
     vi.mocked(useLlmProfilesHook.useLlmProfiles).mockReturnValue(
       createMockLlmProfilesReturn(),
@@ -353,6 +375,23 @@ describe("LlmSettingsLocalView", () => {
       );
     });
 
+    it("prefills the DB-selected OpenHands default when creating a new profile", async () => {
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(["openhands/gpt-5.2"]),
+        defaultModel: "openhands/gpt-5.2",
+      });
+
+      const user = userEvent.setup();
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      await user.click(screen.getByTestId("add-llm-profile"));
+
+      expect(screen.getByTestId("profile-name-input")).toHaveValue("gpt-5.2");
+      expect(screen.getByTestId("mock-basic-model-input")).toHaveValue(
+        "openhands/gpt-5.2",
+      );
+    });
+
     it("uses unique key for create mode to ensure form remounts", async () => {
       const user = userEvent.setup();
       renderWithProviders(<LlmSettingsLocalView />);
@@ -394,6 +433,144 @@ describe("LlmSettingsLocalView", () => {
 
       // The key "new-profile" should be used, ensuring a fresh form mount
       // that doesn't inherit any existing profile data
+    });
+
+    it("shows a skeleton until the DB default query settles, then mounts the form with the resolved default", async () => {
+      // Start with the flags unset (hydrator has not resolved yet), so the
+      // create form must wait instead of mounting with the static fallback.
+      useFreeModelsStore.getState().resetFlags();
+
+      const user = userEvent.setup();
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      await user.click(screen.getByTestId("add-llm-profile"));
+
+      // While the DB default is unresolved, the form is replaced by a skeleton
+      // (no model input / save control to accept yet).
+      expect(screen.getByTestId("app-settings-skeleton")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("mock-basic-model-input"),
+      ).not.toBeInTheDocument();
+
+      // The DB default resolves to a concrete model.
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(["openhands/gpt-5.2"]),
+        defaultModel: "openhands/gpt-5.2",
+      });
+
+      // The keyed form now mounts with the resolved default, not the static
+      // fallback.
+      await waitFor(() => {
+        expect(screen.getByTestId("mock-basic-model-input")).toHaveValue(
+          "openhands/gpt-5.2",
+        );
+      });
+      expect(
+        screen.queryByTestId("app-settings-skeleton"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("create mode profile name auto-fill", () => {
+    const changeModel = (model: string) =>
+      fireEvent.change(screen.getByTestId("mock-basic-model-input"), {
+        target: { value: model },
+      });
+
+    it("keeps the untouched name following the selected model", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<LlmSettingsLocalView />);
+      await user.click(screen.getByTestId("add-llm-profile"));
+      const nameInput = screen.getByTestId("profile-name-input");
+      expect(nameInput).toHaveValue("gpt-5.6-sol");
+
+      changeModel("deepseek/deepseek-chat");
+      expect(nameInput).toHaveValue("deepseek-chat");
+
+      changeModel("anthropic/claude-sonnet-5");
+      expect(nameInput).toHaveValue("claude-sonnet-5");
+    });
+
+    it("stops following the model once the user types a name, and resumes after the name is cleared", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<LlmSettingsLocalView />);
+      await user.click(screen.getByTestId("add-llm-profile"));
+      const nameInput = screen.getByTestId("profile-name-input");
+
+      fireEvent.change(nameInput, { target: { value: "my-profile" } });
+      changeModel("deepseek/deepseek-chat");
+      expect(nameInput).toHaveValue("my-profile");
+
+      fireEvent.change(nameInput, { target: { value: "" } });
+      changeModel("anthropic/claude-sonnet-5");
+      expect(nameInput).toHaveValue("claude-sonnet-5");
+    });
+
+    it("clears the auto-filled name instead of using an existing profile's name", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<LlmSettingsLocalView />);
+      await user.click(screen.getByTestId("add-llm-profile"));
+      const nameInput = screen.getByTestId("profile-name-input");
+      expect(nameInput).toHaveValue("gpt-5.6-sol");
+
+      // "gpt-4-profile" is an existing profile's name.
+      changeModel("openai/gpt-4-profile");
+      expect(nameInput).toHaveValue("");
+      expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
+    });
+  });
+
+  describe("duplicate profile name", () => {
+    it("tells the user a new profile's name is taken until it is unique", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<LlmSettingsLocalView />);
+      await user.click(screen.getByTestId("add-llm-profile"));
+      const nameInput = screen.getByTestId("profile-name-input");
+
+      await user.clear(nameInput);
+      await user.type(nameInput, "claude-profile");
+
+      expect(nameInput).toHaveAttribute("aria-invalid", "true");
+      expect(nameInput).toHaveAccessibleDescription(
+        "SETTINGS$LLM_PROFILE_NAME_TAKEN",
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "SETTINGS$LLM_PROFILE_NAME_TAKEN",
+      );
+      expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
+
+      await user.type(nameInput, "-2");
+
+      expect(nameInput).toHaveAttribute("aria-invalid", "false");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.getByTestId("save-profile-btn")).toBeEnabled();
+    });
+
+    it("flags a rename to another profile's name but not the profile's own name", async () => {
+      const user = userEvent.setup();
+      vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+        name: "gpt-4-profile",
+        api_key_set: true,
+        config: { model: "openai/gpt-4" },
+      });
+
+      renderWithProviders(<LlmSettingsLocalView />);
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+      const nameInput = await screen.findByTestId("profile-name-input");
+      await waitFor(() => expect(nameInput).toHaveValue("gpt-4-profile"));
+
+      expect(nameInput).toHaveAttribute("aria-invalid", "false");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+      await user.clear(nameInput);
+      await user.type(nameInput, "claude-profile");
+
+      expect(nameInput).toHaveAttribute("aria-invalid", "true");
+      expect(nameInput).toHaveAccessibleDescription(
+        "SETTINGS$LLM_PROFILE_NAME_TAKEN",
+      );
+      expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
     });
   });
 
@@ -486,6 +663,43 @@ describe("LlmSettingsLocalView", () => {
       // Verify we're in edit mode (back button and save button visible)
       expect(screen.getByTestId("back-to-profiles")).toBeInTheDocument();
       expect(screen.getByTestId("save-profile-btn")).toBeInTheDocument();
+      // Seeded profile values must not count as dirty — Save stays off.
+      expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
+    });
+
+    it("enables Save after an edit-mode form field changes", async () => {
+      const user = userEvent.setup();
+      vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+        name: "gpt-4-profile",
+        api_key_set: true,
+        config: {
+          model: "openai/gpt-4",
+          api_key: "encrypted-key-123",
+          base_url: "https://api.openai.com/v1",
+        },
+      });
+
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+      await waitFor(() => {
+        expect(screen.getByTestId("profile-name-input")).toHaveValue(
+          "gpt-4-profile",
+        );
+      });
+      expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
+
+      const modelInput = await screen.findByTestId("mock-basic-model-input");
+      await user.clear(modelInput);
+      await user.type(modelInput, "openai/gpt-4o");
+      await waitFor(() => {
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
+      });
+      // Changing the model never renames an existing profile.
+      expect(screen.getByTestId("profile-name-input")).toHaveValue(
+        "gpt-4-profile",
+      );
     });
   });
 
@@ -640,6 +854,15 @@ describe("LlmSettingsLocalView", () => {
       );
     }
 
+    async function makeEditDirty(user: ReturnType<typeof userEvent.setup>) {
+      const modelInput = await screen.findByTestId("mock-basic-model-input");
+      await user.clear(modelInput);
+      await user.type(modelInput, "openai/gpt-4o");
+      await waitFor(() => {
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
+      });
+    }
+
     it("blocks saving when validation returns an invalid verdict", async () => {
       const user = userEvent.setup();
       vi.mocked(ProfilesService.validateProfile).mockResolvedValue({
@@ -648,6 +871,7 @@ describe("LlmSettingsLocalView", () => {
       });
       renderWithProviders(<LlmSettingsLocalView />);
       await openEditView(user);
+      await makeEditDirty(user);
       await user.click(screen.getByTestId("save-profile-btn"));
 
       await waitFor(() =>
@@ -664,6 +888,7 @@ describe("LlmSettingsLocalView", () => {
         mockSaveMutateAsync.mockResolvedValue({ success: true });
         renderWithProviders(<LlmSettingsLocalView />);
         await openEditView(user);
+        await makeEditDirty(user);
         await user.click(screen.getByTestId("save-profile-btn"));
 
         await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
@@ -685,9 +910,7 @@ describe("LlmSettingsLocalView", () => {
       mockSaveMutateAsync.mockResolvedValue({ success: true });
       renderWithProviders(<LlmSettingsLocalView />);
       await openEditView(user);
-      await waitFor(() => {
-        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
-      });
+      await makeEditDirty(user);
       await user.click(screen.getByTestId("save-profile-btn"));
 
       await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
@@ -721,6 +944,14 @@ describe("LlmSettingsLocalView", () => {
           "gpt-4-profile",
         );
       });
+      await user.click(await screen.findByTestId("sdk-section-basic-toggle"));
+      // Touch a non-model field so Save enables without changing the model.
+      await user.click(await screen.findByTestId("sdk-section-all-toggle"));
+      const temperatureInput = await screen.findByTestId(
+        "sdk-settings-llm.temperature",
+      );
+      await user.clear(temperatureInput);
+      await user.type(temperatureInput, "0.3");
       await user.click(await screen.findByTestId("sdk-section-basic-toggle"));
       await waitFor(() => {
         expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
@@ -760,6 +991,13 @@ describe("LlmSettingsLocalView", () => {
           "gpt-4-profile",
         );
       });
+      await user.click(await screen.findByTestId("sdk-section-basic-toggle"));
+      await user.click(await screen.findByTestId("sdk-section-all-toggle"));
+      const temperatureInput = await screen.findByTestId(
+        "sdk-settings-llm.temperature",
+      );
+      await user.clear(temperatureInput);
+      await user.type(temperatureInput, "0.3");
       await user.click(await screen.findByTestId("sdk-section-basic-toggle"));
       await waitFor(() => {
         expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
@@ -813,6 +1051,40 @@ describe("LlmSettingsLocalView", () => {
     });
   });
 
+  describe("create mode save", () => {
+    it("saves a new profile with the prefilled default model even though the model was never touched", async () => {
+      // Arrange — the model is prefilled and left alone; only an unrelated
+      // field is edited, so the dirty payload carries no model at all.
+      const user = userEvent.setup();
+      mockSaveMutateAsync.mockResolvedValueOnce({ success: true });
+      renderWithProviders(<LlmSettingsLocalView />);
+      await user.click(screen.getByTestId("add-llm-profile"));
+      await waitFor(() =>
+        expect(screen.getByTestId("profile-name-input")).toHaveValue(
+          "gpt-5.6-sol",
+        ),
+      );
+
+      // Act — go to the All tab (whose dirty payload is temperature only) and save.
+      await user.click(await screen.findByTestId("sdk-section-all-toggle"));
+      const temperatureInput = await screen.findByTestId(
+        "sdk-settings-llm.temperature",
+      );
+      await user.clear(temperatureInput);
+      await user.type(temperatureInput, "0.3");
+      await waitFor(() => {
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
+      });
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      // Assert — the prefilled model rides along instead of a "Model is required" refusal.
+      await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      const savedLlm = mockSaveMutateAsync.mock.calls[0][0].request.llm;
+      expect(savedLlm.model).toBe("openai/gpt-5.6-sol");
+      expect(savedLlm.temperature).toBe(0.3);
+    });
+  });
+
   describe("All tab save", () => {
     it("persists a changed minor field without wiping untouched fields", async () => {
       // Arrange — a profile with a minor field (temperature) plus fields the
@@ -860,6 +1132,47 @@ describe("LlmSettingsLocalView", () => {
       expect(savedLlm.temperature).toBe(0.7);
       expect(savedLlm.model).toBe("anthropic/claude-opus-4-5-20251101");
       expect(savedLlm.api_key).toBe("gAAAA_encrypted_key");
+    });
+
+    it("shows the Agent Server's reason when the save is refused with a 500", async () => {
+      // Arrange — the Agent Server refuses a too-small max_input_tokens with a
+      // 500 whose `detail` is generic and whose reason is under `exception`;
+      // the shared client throws it as an HttpError.
+      const user = userEvent.setup();
+      const { displayErrorToast } =
+        await import("#/utils/custom-toast-handlers");
+      const reason =
+        "The configured model has a context window of 16,000 tokens, which is below the minimum of 16,384 tokens required for OpenHands to function properly.";
+      vi.mocked(ProfilesService.validateProfile).mockResolvedValue(null);
+      mockSaveMutateAsync.mockRejectedValueOnce(
+        new HttpError(
+          500,
+          "Internal Server Error",
+          { detail: "Internal Server Error", exception: reason },
+          `HTTP request failed (500 Internal Server Error): {"detail":"Internal Server Error"}`,
+        ),
+      );
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      // Act — edit a field on the All tab and save.
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+      await user.click(await screen.findByTestId("sdk-section-all-toggle"));
+      const temperatureInput = await screen.findByTestId(
+        "sdk-settings-llm.temperature",
+      );
+      await user.clear(temperatureInput);
+      await user.type(temperatureInput, "0.7");
+      await waitFor(() => {
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
+      });
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      // Assert — the toast carries the server's reason and the editor stays open.
+      await waitFor(() => {
+        expect(displayErrorToast).toHaveBeenCalledWith(reason);
+      });
+      expect(screen.getByTestId("save-profile-btn")).toBeInTheDocument();
     });
   });
 });
@@ -911,6 +1224,13 @@ describe("LlmSettingsLocalView - OpenHands provider on cloud", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Mark the DB default query as settled so the create-mode form mounts
+    // (the gate renders a skeleton until `defaultModelReady` is true).
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(),
+      defaultModel: null,
+    });
 
     vi.mocked(useLlmProfilesHook.useLlmProfiles).mockReturnValue(
       createMockLlmProfilesReturn({

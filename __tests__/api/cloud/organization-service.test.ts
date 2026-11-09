@@ -5,8 +5,10 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import {
+  getCloudOrganizationMember,
   getCloudOrganizations,
   getCurrentCloudApiKey,
+  listCloudServiceAccounts,
 } from "#/api/cloud/organization-service.api";
 import type { Backend } from "#/api/backend-registry/types";
 
@@ -108,5 +110,67 @@ describe("cloud organization-service", () => {
     await expect(getCurrentCloudApiKey(cloudBackend)).rejects.toBeInstanceOf(
       HttpError,
     );
+  });
+
+  it("getCloudOrganizationMember hits /api/organizations/{orgId}/members/{userId} and returns the member", async () => {
+    // Arrange
+    const member = {
+      org_id: "org-1",
+      user_id: "user-1",
+      email: "jdoe@acme.com",
+      role: "member",
+      status: "active",
+    };
+    fetchMock.mockResolvedValueOnce(mockJsonResponse(member));
+
+    // Act
+    const result = await getCloudOrganizationMember(
+      "org-1",
+      "user-1",
+      cloudBackend,
+    );
+
+    // Assert
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe(
+      `${cloudBackend.host}/api/organizations/org-1/members/user-1`,
+    );
+    expect(init).toMatchObject({
+      method: "GET",
+      headers: { Authorization: "Bearer bearer-token" },
+    });
+    expect(result).toEqual(member);
+  });
+
+  it("listCloudServiceAccounts follows next_page_id across pages", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          items: [
+            { id: "sa-1", org_id: "org-1", name: "a", is_disabled: false },
+          ],
+          next_page_id: "100",
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          items: [
+            { id: "sa-2", org_id: "org-1", name: "b", is_disabled: true },
+          ],
+          next_page_id: null,
+        }),
+      );
+
+    const result = await listCloudServiceAccounts("org-1", cloudBackend);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      `${cloudBackend.host}/api/organizations/org-1/service-accounts?limit=100`,
+    );
+    expect(fetchMock.mock.calls[1]![0]).toBe(
+      `${cloudBackend.host}/api/organizations/org-1/service-accounts?limit=100&page_id=100`,
+    );
+    expect(result.map((account) => account.id)).toEqual(["sa-1", "sa-2"]);
   });
 });

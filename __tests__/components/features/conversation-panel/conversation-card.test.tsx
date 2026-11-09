@@ -23,6 +23,9 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { useFreeModelsStore } from "#/stores/free-models-store";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import ConversationService from "#/api/conversation-service/conversation-service.api";
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -36,7 +39,6 @@ vi.mock("react-i18next", async () => {
         const translations: Record<string, string> = {
           CONVERSATION$CREATED: "Created",
           CONVERSATION$AGO: "ago",
-          CONVERSATION$UPDATED: "Updated",
           COMMON$NO_REPOSITORY: "No repository",
           CONVERSATION$ACP_AGENT_GENERIC: "ACP",
           CONVERSATION_PANEL$PIN_CONVERSATION: "Pin conversation",
@@ -51,9 +53,17 @@ vi.mock("react-i18next", async () => {
   };
 });
 
+const useRememberedAcpModels = vi.hoisted(() =>
+  vi.fn((): { id: string; label: string }[] => []),
+);
+vi.mock("#/hooks/use-remembered-acp-models", () => ({
+  useRememberedAcpModels,
+}));
+
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
     trackDownloadVsCodeButtonClicked: vi.fn(),
+    trackDownloadTrajectoryButtonClicked: vi.fn(),
   }),
 }));
 
@@ -63,12 +73,7 @@ describe("ConversationCard", () => {
   const onChangeTitle = vi.fn();
 
   beforeAll(() => {
-    vi.stubGlobal("window", {
-      open: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      location: { origin: "http://localhost:3000" },
-    });
+    vi.spyOn(window, "open").mockImplementation(() => null);
   });
 
   afterEach(() => {
@@ -76,7 +81,7 @@ describe("ConversationCard", () => {
   });
 
   afterAll(() => {
-    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("should render the conversation card", () => {
@@ -152,9 +157,9 @@ describe("ConversationCard", () => {
     const branch = screen.getByTestId("conversation-card-selected-branch");
     const tag = screen.getByTestId("conversation-card-tag-chip");
 
-    expect(repo).toHaveClass("bg-[var(--oh-surface-raised)]");
-    expect(branch).toHaveClass("bg-[var(--oh-surface-raised)]");
-    expect(tag).toHaveClass("bg-[var(--oh-surface-raised)]");
+    expect(repo).toHaveClass("bg-surface-raised");
+    expect(branch).toHaveClass("bg-surface-raised");
+    expect(tag).toHaveClass("bg-surface-raised");
 
     // Identical pill look. The one intentional difference is flex-shrink:
     // repo and branch share a single overflow-hidden row, so they must shrink
@@ -364,6 +369,29 @@ describe("ConversationCard", () => {
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
   });
 
+  it("closes the context menu with Escape and returns focus to its trigger", async () => {
+    const user = userEvent.setup();
+    const onContextMenuToggle = vi.fn();
+    renderWithProviders(
+      <ConversationCard
+        onDelete={onDelete}
+        onChangeTitle={onChangeTitle}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        contextMenuOpen
+        onContextMenuToggle={onContextMenuToggle}
+      />,
+    );
+    const menu = screen.getByTestId("context-menu");
+    within(menu).getByTestId("delete-button").focus();
+
+    await user.keyboard("{Escape}");
+
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+    expect(screen.getByTestId("ellipsis-button")).toHaveFocus();
+  });
+
   it("should call onDelete when the delete button is clicked", async () => {
     const user = userEvent.setup();
     const onContextMenuToggle = vi.fn();
@@ -410,6 +438,70 @@ describe("ConversationCard", () => {
 
     expect(onArchive).toHaveBeenCalled();
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+  });
+
+  it("closes the context menu when downloading the conversation fails", async () => {
+    const user = userEvent.setup();
+    const onContextMenuToggle = vi.fn();
+    vi.spyOn(
+      AgentServerConversationService,
+      "downloadConversation",
+    ).mockRejectedValue(new Error("HTTP request failed (502 Bad Gateway)"));
+    renderWithProviders(
+      <ConversationCard
+        conversationId="conv-1"
+        onDelete={onDelete}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        contextMenuOpen
+        onContextMenuToggle={onContextMenuToggle}
+      />,
+    );
+
+    await user.click(
+      within(screen.getByTestId("context-menu")).getByTestId(
+        "download-trajectory-button",
+      ),
+    );
+
+    await vi.waitFor(() =>
+      expect(onContextMenuToggle).toHaveBeenCalledWith(false),
+    );
+  });
+
+  it("opens the VS Code URL without an opener reference", async () => {
+    const user = userEvent.setup();
+    const vscodeUrl = "https://vscode.example.dev/?tkn=abc&folder=workspace";
+    vi.spyOn(ConversationService, "getVSCodeUrl").mockResolvedValue({
+      vscode_url: vscodeUrl,
+    });
+    renderWithProviders(
+      <ConversationCard
+        conversationId="conv-1"
+        onDelete={onDelete}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        showOptions
+        contextMenuOpen
+        onContextMenuToggle={vi.fn()}
+      />,
+    );
+
+    await user.click(
+      within(screen.getByTestId("context-menu")).getByTestId(
+        "download-vscode-button",
+      ),
+    );
+
+    await vi.waitFor(() =>
+      expect(window.open).toHaveBeenCalledWith(
+        vscodeUrl,
+        "_blank",
+        "noopener,noreferrer",
+      ),
+    );
   });
 
   test("clicking the selectedRepository should not trigger the onClick handler", async () => {
@@ -699,6 +791,20 @@ describe("ConversationCard", () => {
     },
   );
 
+  it("keeps Stop for a running cloud sandbox after the agent is interrupted", () => {
+    renderWithProviders(
+      <ConversationCardActions
+        contextMenuOpen={true}
+        onContextMenuToggle={vi.fn()}
+        onStop={vi.fn()}
+        executionStatus={ExecutionStatus.PAUSED}
+        sandboxStatus="RUNNING"
+      />,
+    );
+
+    expect(screen.getByTestId("stop-button")).toBeInTheDocument();
+  });
+
   describe("stop button label by active backend", () => {
     const cloudBackend: Backend = {
       id: "prod",
@@ -729,7 +835,7 @@ describe("ConversationCard", () => {
       );
     });
 
-    it("uses COMMON$CLOSE_CONVERSATION_STOP_RUNTIME on a cloud backend", () => {
+    it("uses COMMON$STOP_SANDBOX on a cloud backend", () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
 
@@ -745,7 +851,7 @@ describe("ConversationCard", () => {
       );
 
       expect(screen.getByTestId("stop-button")).toHaveTextContent(
-        "COMMON$CLOSE_CONVERSATION_STOP_RUNTIME",
+        "COMMON$STOP_SANDBOX",
       );
     });
   });
@@ -753,9 +859,9 @@ describe("ConversationCard", () => {
   describe("Tag chips", () => {
     // Tag chips surface the agent-server's server-side conversation tags
     // (e.g. ``origin=slack`` stamped by an automation) and are gated by the
-    // conversation panel's "Tags" toggle (``showTags``). Chip labels are
-    // value-only; the full ``key: value`` lives in the chip tooltip.
-    it("renders non-reserved tags as value-only chips when showTags is on", () => {
+    // conversation panel's "Tags" toggle (``showTags``). Chips show a friendly
+    // ``key: value`` pair, with the full pair retained in the tooltip.
+    it("renders friendly key/value chips in priority and alphabetical order", () => {
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -769,10 +875,9 @@ describe("ConversationCard", () => {
       const chips = screen.getAllByTestId("conversation-card-tag-chip");
       // ``origin`` is a priority key, so it leads; remaining keys sort A–Z.
       expect(chips).toHaveLength(2);
-      expect(chips[0]).toHaveTextContent("slack");
-      expect(chips[0].getAttribute("title")).toMatch(/: slack$/);
-      expect(chips[0].getAttribute("title")).not.toContain("origin");
-      expect(chips[1]).toHaveTextContent("alice");
+      expect(chips[0]).toHaveTextContent("Origin: slack");
+      expect(chips[0]).toHaveAttribute("title", "Origin: slack");
+      expect(chips[1]).toHaveTextContent("Owner: alice");
       expect(chips[1]).toHaveAttribute("title", "Owner: alice");
       expect(
         within(chips[0]).getByTestId("conversation-card-tag-chip-icon"),
@@ -780,6 +885,9 @@ describe("ConversationCard", () => {
       expect(
         within(chips[1]).getByTestId("conversation-card-tag-chip-icon"),
       ).toHaveAttribute("data-tag-key", "owner");
+      expect(
+        screen.queryByTestId("conversation-tags-indicator"),
+      ).not.toBeInTheDocument();
     });
 
     it("filters reserved tag keys out of the chip row", () => {
@@ -805,16 +913,16 @@ describe("ConversationCard", () => {
 
       const chips = screen.getAllByTestId("conversation-card-tag-chip");
       expect(chips).toHaveLength(1);
-      expect(chips[0]).toHaveTextContent("review");
-      expect(chips[0].getAttribute("title")).toMatch(/: review$/);
-      expect(chips[0].getAttribute("title")).not.toContain("origin");
+      expect(chips[0]).toHaveTextContent("Origin: review");
+      expect(chips[0]).toHaveAttribute("title", "Origin: review");
     });
 
-    it("keeps the automation name/trigger chips but hides the automation id chips", () => {
-      // The automation id/run-id tags are raw UUIDs consumed by the panel's
-      // automation filter — chip noise — while the human-meaningful name and
-      // trigger stay visible. Like every tag chip they render value-only,
-      // with the humanized ``key: value`` pair in the tooltip.
+    it("hides every automation provenance chip", () => {
+      // The whole automation family is reserved: the SDK stamps it at
+      // creation and the panel's automation filter is its first-class UI
+      // source. Rendering it as tag chips would double-book the user-facing
+      // tag surface — and let user-authored tags spoof automation
+      // classification.
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -830,15 +938,9 @@ describe("ConversationCard", () => {
         />,
       );
 
-      const chips = screen.getAllByTestId("conversation-card-tag-chip");
-      expect(chips).toHaveLength(2);
-      expect(chips[0]).toHaveTextContent("Nightly Audit");
-      expect(chips[0]).toHaveAttribute(
-        "title",
-        "Automationname: Nightly Audit",
-      );
-      expect(chips[1]).toHaveTextContent("cron");
-      expect(chips[1]).toHaveAttribute("title", "Automationtrigger: cron");
+      expect(
+        screen.queryByTestId("conversation-card-tag-chip"),
+      ).not.toBeInTheDocument();
     });
 
     it("hides the chips when showTags is omitted", () => {
@@ -853,6 +955,44 @@ describe("ConversationCard", () => {
 
       expect(
         screen.queryByTestId("conversation-card-tag-chip"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("renders no tag UI at all when the Tags preference is off", () => {
+      // The preference owns presence: off means nothing about tags on the
+      // card, not even the indicator. This is what keeps the preference and
+      // the card from ever disagreeing — there is no card-level control left
+      // that could put tags back on screen while the toggle reads off.
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          tags={{ origin: "slack", owner: "alice" }}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId("conversation-tags-indicator"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("conversation-card-tag-chip"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("renders no indicator when every tag is reserved", () => {
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          showTags
+          tags={{ acpserver: "claude-code" }}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId("conversation-tags-indicator"),
       ).not.toBeInTheDocument();
     });
 
@@ -885,7 +1025,7 @@ describe("ConversationCard", () => {
       );
 
       const chip = screen.getByTestId("conversation-card-tag-chip");
-      expect(chip).toHaveTextContent("abcdefghijklm…");
+      expect(chip).toHaveTextContent("Token: abcdefghijklm…");
       expect(chip).toHaveAttribute("title", `Token: ${longValue}`);
     });
 
@@ -971,10 +1111,11 @@ describe("ConversationCard", () => {
       ).toBeInTheDocument();
     });
 
-    it("shows the provider's picker label for a known model ID", () => {
-      // When ``llm_model`` is a registry-known ID, the chip renders the
-      // human label ("Claude Opus (1M)") instead of the raw ID — matching
-      // what the Settings → Agent picker shows for the same value.
+    it("labels a model with the name the agent last reported for it", () => {
+      useRememberedAcpModels.mockReturnValue([
+        { id: "opus[1m]", label: "Claude Opus (1M)" },
+      ]);
+
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -990,6 +1131,32 @@ describe("ConversationCard", () => {
       const chip = screen.getByTestId("conversation-card-agent-chip");
       expect(chip).toHaveTextContent("Claude Opus (1M)");
       expect(chip).toHaveAttribute("title", "Claude Code · Claude Opus (1M)");
+      expect(useRememberedAcpModels).toHaveBeenCalledWith("claude-code");
+      useRememberedAcpModels.mockReturnValue([]);
+    });
+
+    it("prefers the models the conversation's own session reported", () => {
+      useRememberedAcpModels.mockReturnValue([
+        { id: "opus[1m]", label: "Stale label" },
+      ]);
+
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          showLlmProfiles
+          agentKind="acp"
+          acpServer="claude-code"
+          llmModel="opus[1m]"
+          acpModels={[{ id: "opus[1m]", label: "Claude Opus (1M)" }]}
+        />,
+      );
+
+      expect(
+        screen.getByTestId("conversation-card-agent-chip"),
+      ).toHaveTextContent("Claude Opus (1M)");
+      useRememberedAcpModels.mockReturnValue([]);
     });
 
     it("falls back to the provider display name for an ACP conversation with no model", () => {
@@ -1086,7 +1253,11 @@ describe("ConversationCard", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("labels a free OpenHands route on native conversation chips", () => {
+    it("labels a DB-flagged free OpenHands route on native conversation chips", () => {
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(["openhands/glm-5.2"]),
+        defaultModel: "openhands/glm-5.2",
+      });
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -1099,8 +1270,13 @@ describe("ConversationCard", () => {
       );
 
       const chip = screen.getByTestId("conversation-card-agent-chip");
-      expect(chip).toHaveTextContent("glm-5.2");
+      expect(chip).toHaveTextContent("glm-5.2 (free)");
       expect(chip).toHaveAttribute("title", "openhands/glm-5.2");
+
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(),
+        defaultModel: null,
+      });
     });
 
     it("hides the chip for OpenHands conversations with no model", () => {
@@ -1164,5 +1340,60 @@ describe("ConversationCard", () => {
       screen.getByTestId("conversation-pin-toggle-conversation-1"),
     ).toBeVisible();
     expect(screen.getByRole("time")).toBeInTheDocument();
+  });
+
+  it("dims the title and grays the dot for an explicitly archived row with a present runtime", () => {
+    // A RUNNING conversation archived through the menu: the chip, the dimmed
+    // title, and the archive dot must agree even though the runtime is fine.
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        executionStatus={ExecutionStatus.RUNNING}
+        sandboxStatus="RUNNING"
+        isArchived
+      />,
+    );
+
+    const card = screen.getByTestId("conversation-card");
+    expect(
+      within(card).getByTestId("conversation-card-archived-chip"),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(within(card).getByTestId("conversation-card-title")).toHaveClass(
+      "opacity-60",
+    );
+  });
+
+  it("infers the archived presentation from a missing runtime when isArchived is omitted", () => {
+    // Standalone callers that only know the sandbox status must still see the
+    // archive dot, the dimmed title, and the chip — the false default used to
+    // override the header's missing-runtime fallback.
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        executionStatus={ExecutionStatus.FINISHED}
+        sandboxStatus="MISSING"
+      />,
+    );
+
+    const card = screen.getByTestId("conversation-card");
+    expect(
+      within(card).getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(
+      within(card).queryByTestId("conversation-status-check"),
+    ).not.toBeInTheDocument();
+    expect(within(card).getByTestId("conversation-card-title")).toHaveClass(
+      "opacity-60",
+    );
+    expect(
+      within(card).getByTestId("conversation-card-archived-chip"),
+    ).toBeInTheDocument();
   });
 });

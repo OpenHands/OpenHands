@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import ConfigService from "#/api/config-service/config-service.api";
 import type { LLMModel } from "#/api/config-service/config-service.types";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   VERIFIED_MODELS_GC_TIME,
   VERIFIED_MODELS_QUERY_KEY,
@@ -41,12 +42,24 @@ async function fetchPage(
   return page.items;
 }
 
-export const useProviderModels = (provider: string | null) =>
-  useQuery({
-    queryKey: ["config", "models", provider],
+export const useProviderModels = (provider: string | null) => {
+  // `ActiveBackendProvider` deliberately does not blanket-invalidate on
+  // backend/org switches, so the query key must carry the active backend
+  // identity (id, connection revision, org id). Otherwise React Query serves
+  // the previous backend/org's cached page — including DB-driven `free`/
+  // `default`/`verified` flags — for the full stale window after a switch.
+  const { backend, orgId } = useActiveBackend();
+  const backendScope = [
+    backend.id,
+    backend.connectionRevision ?? 0,
+    orgId,
+  ] as const;
+
+  return useQuery({
+    queryKey: ["config", "models", provider, ...backendScope],
     queryFn: async ({ client }) => {
       const verifiedByProvider = await client.fetchQuery({
-        queryKey: VERIFIED_MODELS_QUERY_KEY,
+        queryKey: [...VERIFIED_MODELS_QUERY_KEY, ...backendScope],
         queryFn: fetchVerifiedModelsByProvider,
         staleTime: VERIFIED_MODELS_STALE_TIME,
       });
@@ -56,3 +69,4 @@ export const useProviderModels = (provider: string | null) =>
     staleTime: VERIFIED_MODELS_STALE_TIME,
     gcTime: VERIFIED_MODELS_GC_TIME,
   });
+};

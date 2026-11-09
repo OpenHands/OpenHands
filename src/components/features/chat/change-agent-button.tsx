@@ -153,7 +153,7 @@ export function ChangeAgentButton() {
 
   const buttonIcon = useMemo(() => {
     if (isExecutionAgent) {
-      return <CodePillIcon className="h-[11px] w-[11px] shrink-0" />;
+      return <CodePillIcon className="h-2.75 w-2.75 shrink-0" />;
     }
     return <LessonPlanIcon width={18} height={18} color="currentColor" />;
   }, [isExecutionAgent]);
@@ -165,17 +165,17 @@ export function ChangeAgentButton() {
         onClick={handleButtonClick}
         disabled={isButtonDisabled}
         className={cn(
-          "flex items-center rounded-[100px]",
+          "flex items-center rounded-pill",
           formControlTransitionClassName,
           isExecutionAgent
-            ? "border border-transparent text-[var(--oh-muted)]"
-            : "border border-[#597FF4] bg-[#4A67BD]",
+            ? "border border-transparent text-muted"
+            : "border border-[#597FF4] bg-[#4A67BD] text-white",
           !isButtonDisabled &&
             isExecutionAgent &&
             cn("cursor-pointer", formControlMutedHoverClassName),
           !isButtonDisabled &&
             !isExecutionAgent &&
-            "cursor-pointer text-white hover:bg-[#597FF4]",
+            "cursor-pointer hover:bg-[#597FF4]",
           isButtonDisabled &&
             cn(
               "opacity-50 cursor-not-allowed",
@@ -185,7 +185,7 @@ export function ChangeAgentButton() {
       >
         <div className="flex items-center gap-1 pl-1.5">
           {buttonIcon}
-          <Typography.Text className="text-2.75 not-italic font-normal leading-5">
+          <Typography.Text className="text-2xs text-inherit not-italic font-normal leading-5">
             {buttonLabel}
           </Typography.Text>
         </div>

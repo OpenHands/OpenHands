@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import ReactDOM from "react-dom";
 import { Grid2x2, Rows3 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
@@ -8,6 +7,7 @@ import { ContextMenu } from "#/ui/context-menu";
 import { cn } from "#/utils/utils";
 import type { AutomationViewMode } from "./automation-view-mode";
 import { ViewMenuItemContent } from "./view-menu-item-content";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 interface AutomationViewToggleProps {
   view: AutomationViewMode;
@@ -105,7 +105,7 @@ export function AutomationViewToggle({
 
   const menu =
     open && portalStyle ? (
-      <ContextMenu ref={menuRef} theme="popover" className="min-w-[10rem]">
+      <ContextMenu ref={menuRef} theme="popover" className="min-w-40">
         {VIEW_OPTIONS.map((option) => (
           <li key={option.value}>
             <ContextMenuListItem
@@ -143,19 +143,18 @@ export function AutomationViewToggle({
           setOpen((current) => !current);
         }}
         className={cn(
-          "inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--oh-border)] bg-base-secondary text-white transition-colors hover:bg-[var(--oh-interactive-hover)] focus-visible:border-white/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20",
+          "inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-border bg-base-secondary text-contrast transition-colors hover:bg-interactive-hover focus-visible:border-contrast/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-contrast/20",
           "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-base-secondary",
         )}
       >
         <ActiveIcon className="size-4" aria-hidden />
       </button>
 
-      {open && portalStyle && typeof document !== "undefined"
-        ? ReactDOM.createPortal(
-            <div style={portalStyle}>{menu}</div>,
-            document.body,
-          )
-        : null}
+      {open && portalStyle && typeof document !== "undefined" ? (
+        <AppearancePortal>
+          <div style={portalStyle}>{menu}</div>
+        </AppearancePortal>
+      ) : null}
     </>
   );
 }

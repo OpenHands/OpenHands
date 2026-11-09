@@ -1,5 +1,4 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
-import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
 import KebabVerticalIcon from "#/icons/kebab-vertical.svg?react";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
@@ -8,6 +7,7 @@ import { ContextMenu } from "#/ui/context-menu";
 import { cn } from "#/utils/utils";
 import { automationIconActionButtonClassName } from "./automation-action-button-classes";
 import { KebabMenuItemContent } from "./kebab-menu-item-content";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 export interface KebabMenuItem {
   label: string;
@@ -36,22 +36,35 @@ export function KebabMenu({ items, triggerClassName }: KebabMenuProps) {
       if (!rect) return;
 
       const gap = 4;
+      // The real height is only measurable once the portal has painted; the
+      // first pass falls back to an items-derived estimate (~36px per row).
+      const measured = menuRef.current?.getBoundingClientRect().height ?? 0;
+      const menuHeight = measured || items.length * 36;
+      const overflowsBelow =
+        rect.bottom + gap + menuHeight > window.innerHeight;
+
       setPortalStyle({
         position: "fixed",
         zIndex: 9999,
-        top: rect.bottom + gap,
+        // Flip above the trigger when the menu would clip at the viewport
+        // bottom. Bottom-anchoring keeps it hugging the trigger at any height.
+        ...(overflowsBelow
+          ? { bottom: window.innerHeight - rect.top + gap }
+          : { top: rect.bottom + gap }),
         right: window.innerWidth - rect.right,
       });
     };
 
     updatePosition();
+    const frame = window.requestAnimationFrame(updatePosition);
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open]);
+  }, [open, items.length]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -83,7 +96,11 @@ export function KebabMenu({ items, triggerClassName }: KebabMenuProps) {
 
   const menu =
     open && portalStyle ? (
-      <ContextMenu ref={menuRef} theme="popover" className="min-w-[10rem]">
+      <ContextMenu
+        ref={menuRef}
+        theme="popover"
+        className="automation-actions-menu-width"
+      >
         {items.map((item) => (
           <li key={item.label}>
             <ContextMenuListItem
@@ -119,12 +136,11 @@ export function KebabMenu({ items, triggerClassName }: KebabMenuProps) {
         <KebabVerticalIcon className="size-4" />
       </button>
 
-      {open && portalStyle && typeof document !== "undefined"
-        ? ReactDOM.createPortal(
-            <div style={portalStyle}>{menu}</div>,
-            document.body,
-          )
-        : null}
+      {open && portalStyle && typeof document !== "undefined" ? (
+        <AppearancePortal>
+          <div style={portalStyle}>{menu}</div>
+        </AppearancePortal>
+      ) : null}
     </>
   );
 }

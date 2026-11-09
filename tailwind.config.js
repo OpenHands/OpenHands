@@ -10,7 +10,7 @@ export default {
           input: "#27272A",
           primary: "#F3CE49",
           secondary: "#737373",
-          muted: "#A3A3A3",
+          muted: "var(--oh-modal-description-foreground)",
         },
         surface: {
           DEFAULT: "#050505",
@@ -21,10 +21,6 @@ export default {
           divider: "#525252",
           button: "#737373",
           text: "#A3A3A3",
-        },
-        border: {
-          DEFAULT: "#242424",
-          hover: "#3a3a3a",
         },
         content: {
           DEFAULT: "#fafafa",

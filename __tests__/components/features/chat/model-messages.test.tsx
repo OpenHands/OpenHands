@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { ModelMessages } from "#/components/features/chat/model-messages";
 import { useModelStore } from "#/stores/model-store";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 import type { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 
 const CONVERSATION_ID = "conv-1";
@@ -31,11 +32,21 @@ describe("ModelMessages", () => {
       MODEL$NO_SAVED_PROFILES: "No saved profiles",
       MODEL$NO_PROFILES_HINT:
         "Use the LLM settings page to create a profile, then run /model <name> to switch.",
+      MODEL$USER_SWITCHED: "You switched models to <cmd>{{name}}</cmd>",
+      MODEL$AGENT_SWITCHED: "Agent switched models to <cmd>{{name}}</cmd>",
+      MODEL$ROUTER_SWITCHED:
+        "Model router switched models to <cmd>{{name}}</cmd>",
+      MODEL$AGENT_SWITCH_REASON: "Agent’s reason:",
+      MODEL$ROUTER_SWITCH_REASON: "Model router’s reason:",
       MODEL$SWITCHED_TO_PROFILE: "ℹ️ Switched to profile <cmd>{{name}}</cmd>",
     };
     i18n.addResourceBundle("en", "translation", resources, true, true);
     i18n.addResourceBundle("en", "openhands", resources, true, true);
     useModelStore.setState({ entriesByConversation: {} });
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(),
+      defaultModel: null,
+    });
   });
 
   it("renders only entries anchored to the requested event", async () => {
@@ -101,16 +112,70 @@ describe("ModelMessages", () => {
     );
 
     expect(screen.getByTestId("model-messages")).toHaveTextContent(
-      "ℹ️ Switched to profile haiku",
+      "You switched models to haiku",
     );
   });
 
-  it("labels a free OpenHands route in expanded profile diagnostics", async () => {
+  it("shows an agent's rationale immediately as plain text", () => {
+    useModelStore.getState().recordSwitch(CONVERSATION_ID, null, "astra", {
+      initiator: "agent",
+      reason: "Careful audit <script>alert(1)</script>",
+    });
+    renderWithProviders(
+      <ModelMessages conversationId={CONVERSATION_ID} anchorEventId={null} />,
+    );
+    expect(screen.getByTestId("model-messages")).toHaveTextContent(
+      "Agent switched models to astra",
+    );
+    expect(screen.getByText("Agent’s reason:")).toBeVisible();
+    expect(
+      screen.getByText("Careful audit <script>alert(1)</script>"),
+    ).toBeVisible();
+    expect(document.querySelector("script")).toBeNull();
+  });
+
+  it("distinguishes router switches and omits unavailable reasons", () => {
+    useModelStore.getState().recordSwitch(CONVERSATION_ID, null, "fast", {
+      initiator: "router",
+    });
+    renderWithProviders(
+      <ModelMessages conversationId={CONVERSATION_ID} anchorEventId={null} />,
+    );
+    expect(screen.getByTestId("model-messages")).toHaveTextContent(
+      "Model router switched models to fast",
+    );
+    expect(screen.queryByText("Agent’s reason:")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Model router’s reason:"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the router's chosen class as its reason when present", () => {
+    useModelStore.getState().recordSwitch(CONVERSATION_ID, null, "fast", {
+      initiator: "router",
+      reason: "model: fast",
+    });
+    renderWithProviders(
+      <ModelMessages conversationId={CONVERSATION_ID} anchorEventId={null} />,
+    );
+    expect(screen.getByTestId("model-messages")).toHaveTextContent(
+      "Model router switched models to fast",
+    );
+    expect(screen.getByText("Model router’s reason:")).toBeVisible();
+    expect(screen.getByText("model: fast")).toBeVisible();
+    expect(screen.queryByText("Agent’s reason:")).not.toBeInTheDocument();
+  });
+
+  it("labels a DB-flagged free OpenHands route in expanded profile diagnostics", async () => {
     const user = userEvent.setup();
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/glm-5.2"]),
+      defaultModel: "openhands/glm-5.2",
+    });
     useModelStore.getState().show(CONVERSATION_ID, "event-1", [
       {
         name: "free",
-        model: "openhands/deepseek-v4-flash",
+        model: "openhands/glm-5.2",
         base_url: null,
         api_key_set: true,
       },
@@ -129,7 +194,7 @@ describe("ModelMessages", () => {
     );
 
     expect(
-      screen.getByText(/model:\s+OpenHands DeepSeek V4 Flash \(free\)/),
+      screen.getByText(/model:\s+openhands\/glm-5\.2 \(free\)/),
     ).toBeInTheDocument();
   });
 });

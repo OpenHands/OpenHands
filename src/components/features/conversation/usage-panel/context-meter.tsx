@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
@@ -28,9 +29,8 @@ interface ContextMeterProps {
 }
 
 /**
- * Context-fill progress bar: neutral below
- * {@link CONTEXT_FILL_WARNING_PERCENT}, amber above it, red above
- * {@link CONTEXT_FILL_DANGER_PERCENT}. Shows the raw token numbers underneath.
+ * Context-fill progress bar with theme-aware warning and danger states. Shows
+ * the raw token numbers underneath.
  */
 export function ContextMeter({
   perTurnToken,
@@ -67,10 +67,10 @@ export function ContextMeter({
           className={cn(
             "shrink-0 text-xs",
             isDanger
-              ? "text-red-500"
+              ? "text-feedback-error"
               : isWarning
-                ? "text-amber-500"
-                : "text-[var(--oh-muted)]",
+                ? "text-feedback-warning"
+                : "text-muted",
           )}
         >
           {usagePercentLabel}
@@ -80,19 +80,20 @@ export function ContextMeter({
         <div
           data-testid="context-meter-bar"
           className={cn(
-            "absolute inset-y-0 left-0 rounded-full transition-all duration-300",
+            "absolute inset-y-0 left-0 w-(--context-fill-width) rounded-full transition-all duration-300",
             isDanger
-              ? "bg-red-500"
+              ? "bg-status-error"
               : isWarning
-                ? "bg-amber-500"
+                ? "bg-feedback-warning"
                 : "bg-foreground",
           )}
-          // runtime usage-percentage width
-          style={{ width: `${usagePercentage}%` }}
+          style={
+            { "--context-fill-width": `${usagePercentage}%` } as CSSProperties
+          }
         />
       </div>
       <div className="flex justify-end">
-        <span className="text-xs text-[var(--oh-muted)]">
+        <span className="text-xs text-muted">
           {isWindowUnknown
             ? perTurnToken.toLocaleString()
             : `${perTurnToken.toLocaleString()} / ${contextWindow.toLocaleString()}`}

@@ -1,6 +1,8 @@
+import { ConversationTitleText } from "#/components/features/conversation/conversation-title-text";
 import React from "react";
-import { Tooltip } from "@heroui/react";
+import { Tooltip } from "#/components/shared/tooltip";
 import { useTranslation } from "react-i18next";
+import type { ACPModelOption } from "#/constants/acp-providers";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -10,10 +12,12 @@ import { ConversationStatusDot } from "./conversation-status-dot";
 import { ConversationCardFooter } from "./conversation-card/conversation-card-footer";
 import { I18nKey } from "#/i18n/declaration";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
+import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 
 interface CompactConversationRowProps {
   conversationId: string;
   title: string;
+  titlePending?: boolean;
   selectedRepository: RepositorySelection | null;
   executionStatus?: ExecutionStatus | null;
   sandboxStatus?: SandboxStatus | null;
@@ -27,8 +31,15 @@ interface CompactConversationRowProps {
   showLlmProfiles?: boolean;
   agentKind?: "openhands" | "acp" | null;
   acpServer?: string | null;
+  acpModels?: readonly ACPModelOption[] | null;
   tags?: Record<string, string> | null;
   showTags?: boolean;
+  /**
+   * The row's effective archived state. Leave undefined to infer it from
+   * `sandboxStatus` (a missing, non-resumable runtime); the panel passes the
+   * explicit value so the chip and dot agree with the full card.
+   */
+  isArchived?: boolean;
 }
 
 /**
@@ -39,6 +50,7 @@ interface CompactConversationRowProps {
 export function CompactConversationRow({
   conversationId,
   title,
+  titlePending,
   selectedRepository,
   executionStatus,
   sandboxStatus,
@@ -52,23 +64,33 @@ export function CompactConversationRow({
   showLlmProfiles = false,
   agentKind = null,
   acpServer = null,
+  acpModels = null,
   tags = null,
   showTags = false,
+  isArchived,
 }: CompactConversationRowProps) {
   const { t } = useTranslation("openhands");
   const backendScopedPath = useBackendScopedPath();
   const disableAnimation = import.meta.env.MODE === "test";
+  const effectiveArchived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
 
   const preview = (
-    <div className="w-[260px] p-3">
+    <div className="w-65 p-3">
       <div className="flex items-center gap-2 mb-1">
         <ConversationStatusDot
           executionStatus={executionStatus}
           sandboxStatus={sandboxStatus}
+          isArchived={effectiveArchived}
           showTooltip={false}
         />
-        <span className="text-sm font-medium text-white truncate" title={title}>
-          {title || t(I18nKey.CONVERSATION$UNTITLED)}
+        <span
+          className="text-sm font-medium text-contrast truncate"
+          title={title}
+        >
+          <ConversationTitleText
+            title={title || t(I18nKey.CONVERSATION$UNTITLED)}
+            pending={titlePending}
+          />
         </span>
       </div>
       <ConversationCardFooter
@@ -82,44 +104,43 @@ export function CompactConversationRow({
         showAgentChip={showLlmProfiles}
         agentKind={agentKind}
         acpServer={acpServer}
+        acpModels={acpModels}
         tags={tags}
         showTags={showTags}
+        isArchived={effectiveArchived}
       />
     </div>
   );
 
   return (
-    <Tooltip closeDelay={100} shouldSkipAnimation={disableAnimation}>
-      <Tooltip.Trigger>
-        <NavigationLink
-          to={backendScopedPath(`/conversations/${conversationId}`)}
-          onClick={onClose}
-          data-testid="compact-conversation-row"
-          data-conversation-id={conversationId}
-          aria-label={title || conversationId}
-          className={({ isActive: navActive }) =>
-            cn(
-              "flex items-center justify-center w-10 h-9 mx-auto rounded-md",
-              "transition-colors cursor-pointer",
-              navActive || isActive
-                ? "bg-tertiary"
-                : "hover:bg-[var(--oh-surface-raised)]",
-            )
-          }
-        >
-          <ConversationStatusDot
-            executionStatus={executionStatus}
-            sandboxStatus={sandboxStatus}
-            showTooltip={false}
-          />
-        </NavigationLink>
-      </Tooltip.Trigger>
-      <Tooltip.Content
-        placement="right"
-        className="bg-[var(--oh-surface)] text-white border border-[var(--oh-border-subtle)] shadow-xl p-0"
+    <Tooltip
+      content={preview}
+      placement="right"
+      closeDelay={100}
+      className="bg-surface text-contrast border border-border-subtle shadow-xl p-0"
+      disableAnimation={disableAnimation}
+    >
+      <NavigationLink
+        to={backendScopedPath(`/conversations/${conversationId}`)}
+        onClick={onClose}
+        data-testid="compact-conversation-row"
+        data-conversation-id={conversationId}
+        aria-label={title || conversationId}
+        className={({ isActive: navActive }) =>
+          cn(
+            "flex items-center justify-center w-10 h-9 mx-auto rounded-md",
+            "transition-colors cursor-pointer",
+            navActive || isActive ? "bg-tertiary" : "hover:bg-surface-raised",
+          )
+        }
       >
-        {preview}
-      </Tooltip.Content>
+        <ConversationStatusDot
+          executionStatus={executionStatus}
+          sandboxStatus={sandboxStatus}
+          isArchived={effectiveArchived}
+          showTooltip={false}
+        />
+      </NavigationLink>
     </Tooltip>
   );
 }

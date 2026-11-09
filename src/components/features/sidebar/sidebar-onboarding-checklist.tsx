@@ -1,10 +1,11 @@
 import { Tooltip } from "@heroui/react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { useTracking } from "#/hooks/use-tracking";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { hoverRevealActionClassName } from "#/utils/hover-reveal-classes";
 import {
   getSidebarOnboardingChecklistHref,
   isExternalSidebarOnboardingChecklistItem,
@@ -17,11 +18,11 @@ import { SidebarOnboardingChecklistItemPreview } from "./sidebar-onboarding-chec
 import { useSidebarOnboardingChecklist } from "./use-sidebar-onboarding-checklist";
 
 const CHECKLIST_ITEM_TOOLTIP_CLASS =
-  "rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl";
+  "rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl";
 
 const CHECKLIST_ITEM_CLASS = cn(
   "flex min-w-0 w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm",
-  "transition-colors hover:bg-[var(--oh-surface)]",
+  "transition-colors hover:bg-surface",
 );
 
 interface SidebarOnboardingChecklistProps {
@@ -35,8 +36,8 @@ function ChecklistStatusIcon({ isComplete }: { isComplete: boolean }) {
       className={cn(
         "inline-flex size-4 shrink-0 items-center justify-center rounded-full border",
         isComplete
-          ? "border-primary bg-primary text-[var(--oh-color-base)]"
-          : "border-[var(--oh-border)] bg-transparent",
+          ? "border-primary bg-primary text-on-primary"
+          : "border-border bg-transparent",
       )}
     >
       {isComplete ? <Check className="size-2.5" strokeWidth={3} /> : null}
@@ -150,6 +151,7 @@ export function SidebarOnboardingChecklist({
     completedCount,
     isVisible,
     isMinimized,
+    dismiss,
     toggleMinimized,
     markJoinSlackComplete,
   } = useSidebarOnboardingChecklist();
@@ -163,15 +165,15 @@ export function SidebarOnboardingChecklist({
       data-testid="sidebar-onboarding-checklist"
       data-minimized={isMinimized ? "true" : "false"}
       className={cn(
-        "w-full shrink-0 overflow-hidden rounded-xl border border-[var(--oh-border)]",
-        "bg-[var(--oh-surface-raised)] shadow-sm",
+        "group w-full shrink-0 overflow-hidden rounded-xl border border-border",
+        "bg-surface-raised shadow-sm",
       )}
     >
       <div className={cn("px-1", isMinimized ? "py-1" : "pt-2 pb-1")}>
         <div
           className={cn(
             "relative flex w-full items-center gap-0.5 rounded-md px-1.5",
-            "transition-colors hover:bg-[var(--oh-surface)]",
+            "transition-colors hover:bg-surface",
             isMinimized ? "py-1" : "py-1.5",
           )}
         >
@@ -206,7 +208,7 @@ export function SidebarOnboardingChecklist({
             aria-hidden
             className={cn(
               "relative z-10 inline-flex size-7 shrink-0 items-center justify-center",
-              "pointer-events-none text-[var(--oh-muted)]",
+              "pointer-events-none text-muted",
             )}
           >
             <ChevronDown
@@ -216,6 +218,18 @@ export function SidebarOnboardingChecklist({
               )}
             />
           </span>
+          <button
+            type="button"
+            aria-label={t(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_DISMISS)}
+            onClick={dismiss}
+            className={cn(
+              "relative z-10 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted",
+              "transition-opacity motion-reduce:transition-none hover:text-content",
+              hoverRevealActionClassName(),
+            )}
+          >
+            <X className="size-4" />
+          </button>
         </div>
       </div>
 

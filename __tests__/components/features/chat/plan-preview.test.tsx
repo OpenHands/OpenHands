@@ -65,9 +65,7 @@ describe("PlanPreview", () => {
     mockSend.mockResolvedValue({ queued: false });
     // Reset store states
     localStorage.clear();
-    useOptimisticUserMessageStore.setState({
-      pendingMessages: [],
-    });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     useConversationStore.setState({
       conversationMode: "plan",
       selectedTab: null,
@@ -82,9 +80,7 @@ describe("PlanPreview", () => {
     useConversationStore.setState({
       conversationMode: "code",
     });
-    useOptimisticUserMessageStore.setState({
-      pendingMessages: [],
-    });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     localStorage.clear();
   });
 
@@ -197,7 +193,7 @@ describe("PlanPreview", () => {
 
   it("should enqueue a pending user message when Build button is clicked", async () => {
     // Arrange
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     const user = userEvent.setup();
     const expectedPrompt =
       "Execute the plan based on the .agents_tmp/PLAN.md file.";
@@ -294,7 +290,7 @@ describe("PlanPreview", () => {
     expect(container.textContent).toContain("Heading 2");
   });
 
-  it("should use planHeadings components for h1 headings", () => {
+  it("should use planComponents for h1 headings", () => {
     // Arrange
     const planContent = "# Main Title";
 
@@ -309,7 +305,7 @@ describe("PlanPreview", () => {
     expect(h1).toHaveTextContent("Main Title");
   });
 
-  it("should use planHeadings components for h2 headings", () => {
+  it("should use planComponents for h2 headings", () => {
     // Arrange
     const planContent = "## Section Title";
 
@@ -324,7 +320,7 @@ describe("PlanPreview", () => {
     expect(h2).toHaveTextContent("Section Title");
   });
 
-  it("should use planHeadings components for h3 headings", () => {
+  it("should use planComponents for h3 headings", () => {
     // Arrange
     const planContent = "### Subsection Title";
 
@@ -339,7 +335,7 @@ describe("PlanPreview", () => {
     expect(h3).toHaveTextContent("Subsection Title");
   });
 
-  it("should use planHeadings components for all heading levels", () => {
+  it("should use planComponents for all heading levels", () => {
     // Arrange
     const planContent = `# H1 Title
 ## H2 Title

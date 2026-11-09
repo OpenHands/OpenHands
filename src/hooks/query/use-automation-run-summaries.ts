@@ -39,8 +39,8 @@ interface UseAutomationRunSummariesOptions {
 }
 
 /**
- * One runs query per listed automation — a deliberate fan-out, bounded by the
- * list's page size. Summaries drive the dashboard's tiles, health badges,
+ * One runs query per automation passed in — a deliberate fan-out, bounded by
+ * the loaded rows. Summaries drive the dashboard's tiles, health badges,
  * filters, and sorts.
  */
 export function useAutomationRunSummaries(

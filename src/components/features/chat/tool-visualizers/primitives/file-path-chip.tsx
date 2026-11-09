@@ -29,7 +29,7 @@ export function FilePathChip({ path, range, onClick }: FilePathChipProps) {
     </>
   );
   const className =
-    "inline-flex max-w-full cursor-pointer items-center gap-1.5 self-start rounded bg-surface-raised px-2 py-0.5 text-left font-mono text-xs text-foreground hover:bg-[var(--oh-interactive-hover)]";
+    "inline-flex max-w-full cursor-pointer items-center gap-1.5 self-start rounded bg-surface-raised px-2 py-0.5 text-left font-mono text-xs text-foreground hover:bg-interactive-hover";
 
   return (
     <button
