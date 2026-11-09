@@ -441,6 +441,20 @@ describe("named radius composition", () => {
   );
 });
 
+describe("named inset-shadow composition", () => {
+  it.each(["badge-inset", "reorder-before", "reorder-after"])(
+    "keeps shadow geometry and caller color precedence independent for %s",
+    (name) => {
+      expect(cn("shadow-lg shadow-focus", `shadow-${name}`)).toBe(
+        `shadow-focus shadow-${name}`,
+      );
+      expect(cn(`shadow-${name}`, "shadow-none shadow-contrast")).toBe(
+        "shadow-none shadow-contrast",
+      );
+    },
+  );
+});
+
 describe("cn motion recipes", () => {
   it.each([
     "transition-control-shell",
@@ -475,6 +489,25 @@ describe("cn motion recipes", () => {
       "animate-none",
     );
   });
+});
+
+describe("named letter-spacing composition", () => {
+  it.each([
+    "metadata",
+    "label",
+    "title",
+    "heading",
+    "auth-code",
+    "device-code",
+  ])(
+    "preserves caller tracking precedence independently of font metrics for %s",
+    (name) => {
+      expect(
+        cn("text-sm leading-6 font-medium tracking-wide", `tracking-${name}`),
+      ).toBe(`text-sm leading-6 font-medium tracking-${name}`);
+      expect(cn(`tracking-${name}`, "tracking-normal")).toBe("tracking-normal");
+    },
+  );
 });
 
 describe("extended type-scale composition", () => {
