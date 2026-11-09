@@ -1,0 +1,16 @@
+{
+  "run": "/private/tmp/odie-19501-live/before",
+  "browser": {
+    "running": false
+  },
+  "launcherStopped": true,
+  "ports": {
+    "ingress": "closed",
+    "agentServer": "closed",
+    "automation": "closed",
+    "frontend": "closed",
+    "vscode": "closed"
+  },
+  "evidenceFiles": 18,
+  "ok": true
+}
