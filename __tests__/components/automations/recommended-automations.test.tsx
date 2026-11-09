@@ -448,7 +448,13 @@ describe("recommended automations", () => {
     const badge = screen.getByTestId(
       "recommended-automation-icon-github-pr-reviewer",
     );
-    expect(badge.querySelector('img[alt="GitHub logo"]')).toBeInTheDocument();
+    const githubLogoUrl = INTEGRATION_CATALOG.find(
+      (entry) => entry.id === "github",
+    )?.logoUrl;
+    // Theme-backed logos use a tintable mask with the same provider artwork.
+    expect(
+      within(badge).getByTestId("mcp-logo-tinted-mark").style.maskImage,
+    ).toBe(`url("${githubLogoUrl}")`);
   });
 
   it("shows the declared glyph instead of a logo stack when an entry names one", () => {

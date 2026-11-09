@@ -411,14 +411,13 @@ export default [
   // Canvas primitives use #/ui, not the plugin's default components/ui path.
   // require-static-classes is enabled for those consumers; imported class
   // constants remain opaque, so its documented narrow exceptions remain.
-  // no-raw-colors starts at warn while existing palette colors are migrated
-  // and checked across themes (#18004). Keep verified plugin/config tokens exempt below.
+  // The raw Tailwind palette and undeclared named color utilities now fail globally.
+  // Keep the verified plugin/config tokens exempt below (#18004).
   // no-restyle first protects divider/toggle appearances; layout remains public,
   // and ToggleSwitch callers can dim the control for disabled/pending states.
   // Carets expose layout and text color; their padding/shape stay internal.
   // Stateful carets own rotation through isOpen; generic icons retain orientation.
-  // Three audited owners below reject raw colors; finish migration before
-  // promoting globally. Define contracts
+  // Three audited owners additionally scan literal class maps. Define contracts
   // for the remaining UI primitives and audit dynamic styles for no-inline-styles.
   // 0.2.0 also improves render-prop, destructuring, barrel-export, and custom
   // animation recognition. Vue/Svelte support adds no new rule names or parsers
@@ -462,7 +461,7 @@ export default [
         },
       ],
       "shadcn/no-raw-colors": [
-        "warn",
+        "error",
         {
           allow: legacyColorClasses,
         },
@@ -505,27 +504,23 @@ export default [
       "src/components/features/chat/components/context-window-ring.tsx",
       "src/components/features/chat/user-message-body.tsx",
       "src/components/features/conversation/conversation-main/conversation-main.tsx",
+      "src/components/features/chat/drag-over.tsx",
+      "src/components/features/chat/chat-markdown-path-code.tsx",
+      "src/components/features/markdown/code.tsx",
+      "src/components/shared/horizontal-scroll-fade.tsx",
+      "src/components/features/markdown/markdown-table-scroll.tsx",
+      "src/components/features/automations/recommended-automations-rail.tsx",
+      "src/components/features/automations/automation-view-toggle.tsx",
+      "src/components/features/automations/dashboard/automations-dashboard-controls.tsx",
+      "src/components/features/automations/detail/run-phase.tsx",
+      "src/components/features/conversation-panel/conversation-card/conversation-card.tsx",
+      "src/utils/hover-reveal-classes.ts",
     ],
     rules: { "shadcn/no-arbitrary-values": "error" },
   },
   {
-    // Audit literal class recipes that dynamic map/helper lookups hide.
+    // Additionally audit literal class recipes that dynamic map/helper lookups hide.
     // Keep broad string scanning away from unrelated program tags.
-    files: [
-      "src/components/features/backends/backend-status-dot.tsx",
-      "src/components/features/markdown/blockquote.tsx",
-      "src/components/features/mcp-page/mcp-server-health.tsx",
-    ],
-    rules: {
-      "shadcn/no-raw-colors": [
-        "warn",
-        { allow: legacyColorClasses, scanAllStrings: true },
-      ],
-    },
-  },
-  {
-    // These three owners are migrated. Start-task palette findings remain
-    // warning-only above until their separate migration is complete.
     files: [
       "src/components/features/backends/backend-status-dot.tsx",
       "src/components/features/markdown/blockquote.tsx",

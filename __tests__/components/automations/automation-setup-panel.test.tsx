@@ -216,6 +216,14 @@ vi.mock("#/hooks/query/use-agent-profiles", () => ({
           llm_profile_ref: "fast",
           mcp_server_refs: null,
         },
+        {
+          id: "agent-claude",
+          name: "claude",
+          agent_kind: "acp",
+          revision: 1,
+          llm_profile_ref: null,
+          mcp_server_refs: null,
+        },
       ],
       active_agent_profile_id: "agent-default",
     },
@@ -2104,6 +2112,100 @@ describe("AutomationSetupPanel", () => {
           }),
         ),
       );
+    });
+
+    it("runs a prompt preset from the chosen agent profile", async () => {
+      withCapabilities(["agentProfiles", "presetAgentProfiles"]);
+      const user = userEvent.setup();
+      renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      await user.click(
+        screen.getByTestId(
+          "automation-setup-agent-profile-option-agent-reviewer",
+        ),
+      );
+      const modelPill = screen.getByTestId("automation-setup-model");
+      expect(modelPill).toHaveTextContent("fast");
+      expect(modelPill).toHaveAttribute("aria-disabled", "true");
+
+      await user.click(screen.getByTestId("automation-setup-create"));
+      await waitFor(() =>
+        expect(AutomationService.createAutomationDraft).toHaveBeenCalled(),
+      );
+      const [body] = vi.mocked(AutomationService.createAutomationDraft).mock
+        .calls[0];
+      expect(body).toMatchObject({
+        prompt: "Review every pull request",
+        agent_profile_id: "agent-reviewer",
+      });
+      expect(body).not.toHaveProperty("model");
+    });
+
+    it("shows that an ACP agent profile runs its own model, not an LLM profile", async () => {
+      withCapabilities(["presetAgentProfiles"]);
+      const user = userEvent.setup();
+      renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      const option = screen.getByTestId(
+        "automation-setup-agent-profile-option-agent-claude",
+      );
+      expect(option).toHaveTextContent("CONVERSATION$ACP_AGENT_GENERIC");
+      await user.click(option);
+
+      const modelPill = screen.getByTestId("automation-setup-model");
+      expect(modelPill).toHaveAccessibleName("CONVERSATION$ACP_AGENT_GENERIC");
+      expect(modelPill).toHaveAttribute("aria-disabled", "true");
+    });
+
+    it("moves an edited preset onto an agent profile", async () => {
+      withCapabilities(["presetAgentProfiles"]);
+      vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+        id: "auto-1",
+      } as never);
+      const user = userEvent.setup();
+      renderPanel({
+        prompt: "Review every pull request",
+        kind: "prompt",
+        editingAutomationId: "auto-1",
+        form: {
+          kind: "prompt",
+          name: "Daily digest",
+          prompt: "Review every pull request",
+          model: "fast",
+        },
+      });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      await user.click(
+        screen.getByTestId(
+          "automation-setup-agent-profile-option-agent-reviewer",
+        ),
+      );
+      await user.click(screen.getByTestId("automation-setup-save"));
+
+      await waitFor(() =>
+        expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+          "auto-1",
+          expect.objectContaining({
+            prompt: "Review every pull request",
+            model: null,
+            agent_profile_id: "agent-reviewer",
+          }),
+        ),
+      );
+    });
+
+    it("offers a preset only the LLM profile when the service runs only scripts from an agent profile", () => {
+      withCapabilities(["agentProfiles"]);
+
+      renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+
+      expect(
+        screen.queryByTestId("automation-setup-agent-profile"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("automation-setup-model")).toBeInTheDocument();
     });
 
     it("offers only the LLM profile when the service cannot run scripts from an agent profile", () => {

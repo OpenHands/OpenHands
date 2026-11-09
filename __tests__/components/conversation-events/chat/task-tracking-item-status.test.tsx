@@ -60,7 +60,7 @@ describe("conversation task status display", () => {
         expect(icon).toHaveClass("text-muted");
         expect(title).toHaveClass("text-muted");
       } else {
-        expect(icon).toHaveClass("text-[#ffffff]");
+        expect(icon).toHaveClass("text-contrast");
         expect(title).toHaveClass("text-contrast");
         expect(title).not.toHaveClass("text-muted");
       }
@@ -102,7 +102,7 @@ describe("conversation task status display", () => {
 
     render(<TaskItem task={task} />);
 
-    expect(screen.getByTestId("todo-icon")).toHaveClass("text-[#ffffff]");
+    expect(screen.getByTestId("todo-icon")).toHaveClass("text-contrast");
     expect(screen.getByText("Review the implementation")).not.toHaveClass(
       "text-muted",
     );
