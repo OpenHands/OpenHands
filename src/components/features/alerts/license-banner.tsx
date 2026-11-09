@@ -5,6 +5,7 @@ import { I18nKey } from "#/i18n/declaration";
 import type { LicenseStatus } from "#/api/cloud/license-service.api";
 import { useCloudLicenseStatus } from "#/hooks/query/use-cloud-license-status";
 import { formatDate } from "#/utils/format-relative-time";
+import { statusToneBannerClassName } from "#/utils/status-tone-classes";
 import { cn } from "#/utils/utils";
 
 type LicenseBannerTone = "info" | "warning" | "error";
@@ -73,9 +74,9 @@ export function getLicenseBannerMessage(
 }
 
 const TONE_CLASSES: Record<LicenseBannerTone, string> = {
-  info: "border-border bg-surface-raised text-muted",
-  warning: "border-warning/40 bg-warning/10 text-warning",
-  error: "border-danger/40 bg-danger/5 text-feedback-error",
+  info: statusToneBannerClassName.info,
+  warning: statusToneBannerClassName.warning,
+  error: statusToneBannerClassName.danger,
 };
 
 /**
@@ -100,7 +101,7 @@ export function LicenseBanner() {
       data-tone={message.tone}
       role={message.tone === "info" ? "status" : "alert"}
       className={cn(
-        "flex w-full shrink-0 items-center justify-center gap-2 border-b px-4 py-2 text-xs font-medium leading-5",
+        "flex w-full shrink-0 items-center justify-center gap-2 px-4 py-2 text-xs font-medium leading-5",
         TONE_CLASSES[message.tone],
       )}
     >
