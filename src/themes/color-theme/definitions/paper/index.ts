@@ -127,13 +127,28 @@ const PAPER_TOKENS: Partial<Record<AgentServerUICssVariableName, string>> = {
   "--oh-segment": "#ece5da",
   "--oh-segment-foreground": "#29241f",
   "--oh-border": "#cfc6b8",
-  "--oh-border-input": "#8d8172",
+  "--oh-border-input": "#8b7f70",
   "--oh-border-subtle": "#ded5c8",
   "--oh-separator": "#cfc6b8",
   "--oh-focus": "#9b4428",
   "--oh-status-success": "#52644b",
   "--oh-status-error": "#ad302e",
   "--oh-link": "#295348",
+  "--oh-info": "#295348",
+  "--oh-divider": "color-mix(in srgb, var(--oh-contrast) 24%, transparent)",
+  // Shared badges use opaque paper tints and the palette's readable status ink.
+  "--oh-success-soft":
+    "color-mix(in srgb, var(--oh-color-success) 10%, var(--oh-color-base))",
+  "--oh-success-soft-foreground": "var(--oh-color-success)",
+  "--oh-warning-soft":
+    "color-mix(in srgb, var(--oh-warning) 10%, var(--oh-color-base))",
+  "--oh-warning-soft-foreground": "var(--oh-feedback-warning)",
+  "--oh-danger-soft":
+    "color-mix(in srgb, var(--oh-color-danger) 10%, var(--oh-color-base))",
+  "--oh-danger-soft-foreground": "var(--oh-color-danger)",
+  "--oh-info-soft":
+    "color-mix(in srgb, var(--oh-info) 10%, var(--oh-color-base))",
+  "--oh-info-soft-foreground": "var(--oh-info)",
   "--oh-bg-dark": "#f4efe6",
   "--oh-bg-light": "#ece5da",
   "--oh-bg-input": "#faf7f1",

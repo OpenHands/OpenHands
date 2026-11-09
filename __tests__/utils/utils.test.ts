@@ -490,3 +490,17 @@ describe("extended type-scale composition", () => {
     },
   );
 });
+
+describe("Markdown code spacing composition", () => {
+  it("resolves inline axes and block padding through the normal spacing groups", () => {
+    expect(cn("px-4 py-3", "px-code-inline-x py-code-inline-y")).toBe(
+      "px-code-inline-x py-code-inline-y",
+    );
+    expect(cn("px-code-inline-x py-code-inline-y", "px-4")).toBe(
+      "py-code-inline-y px-4",
+    );
+    expect(cn("px-code-inline-x py-code-inline-y", "p-4")).toBe("p-4");
+    expect(cn("p-4", "p-code-block")).toBe("p-code-block");
+    expect(cn("p-code-block", "px-4")).toBe("p-code-block px-4");
+  });
+});
