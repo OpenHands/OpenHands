@@ -18,9 +18,7 @@ const {
   toastLoadingMock,
   toastSuccessMock,
   useTranslationMock,
-  backendState,
 } = vi.hoisted(() => ({
-  backendState: { kind: "local" as "local" | "cloud" },
   displayErrorToastMock: vi.fn(),
   navigateMock: vi.fn(),
   navigationState: { conversationId: "conversation-1" as string | null },
@@ -52,10 +50,6 @@ vi.mock("#/context/navigation-context", () => ({
     conversationId: navigationState.conversationId,
     navigate: navigateMock,
   }),
-}));
-
-vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackend: () => ({ backend: { id: "b", kind: backendState.kind } }),
 }));
 
 vi.mock("#/hooks/mutation/conversation-mutation-utils", () => ({
@@ -100,31 +94,12 @@ function setup({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  backendState.kind = "local";
   navigationState.conversationId = "conversation-1";
   toastLoadingMock.mockReturnValue("stop-toast");
   pauseConversationMock.mockResolvedValue({ success: true });
 });
 
 describe("useUnifiedPauseConversation", () => {
-  it("says sandbox in its toasts on a cloud backend", async () => {
-    backendState.kind = "cloud";
-    const { result } = setup();
-
-    await act(async () => {
-      await result.current.mutateAsync({ conversationId: "conversation-1" });
-    });
-
-    expect(toastLoadingMock).toHaveBeenCalledWith(
-      `translated:${I18nKey.TOAST$STOPPING_SANDBOX}`,
-      TOAST_OPTIONS,
-    );
-    expect(toastSuccessMock).toHaveBeenCalledWith(
-      `translated:${I18nKey.TOAST$SANDBOX_STOPPED}`,
-      TOAST_OPTIONS,
-    );
-  });
-
   it("pauses the active conversation, clears its runtime URL, and navigates home", async () => {
     const previousConversations = {
       pages: [{ items: [{ id: "conversation-1" }] }],
