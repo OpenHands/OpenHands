@@ -166,7 +166,7 @@ export function ConversationNameContextMenu({
   const hasControl = Boolean(onStop || onDelete);
   const stopLabelKey =
     backend.kind === "cloud"
-      ? I18nKey.COMMON$CLOSE_CONVERSATION_STOP_RUNTIME
+      ? I18nKey.COMMON$STOP_SANDBOX
       : I18nKey.COMMON$STOP_CONVERSATION;
   const shouldShowPublicSharing =
     backend.kind === "cloud" && Boolean(onTogglePublic);
