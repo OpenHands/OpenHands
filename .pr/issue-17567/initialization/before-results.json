@@ -1,0 +1,268 @@
+{
+  "label": "before",
+  "revision": "fdb6133617cc74a909abfd190dbc6b309d19792c",
+  "buildId": "3e6d476e5b3b69fd",
+  "backend": {
+    "agentServer": "1.60.1",
+    "sdk": "1.60.1"
+  },
+  "fixture": {
+    "conversationId": "a8b2a81e-2d30-4371-ad43-ed136d8caf0b",
+    "workspace": "/private/tmp/odie-19501-live/before/workspace/diff-lifecycle",
+    "modelExecution": "None; idle conversation with no initial message",
+    "backend": "Real local Agent Server"
+  },
+  "trigger": "Observe Monaco onDidCreateDiffEditor, then click the real Planner control in requestAnimationFrame.",
+  "results": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "raf",
+      "round": 1,
+      "errors": [
+        {
+          "type": "pageerror",
+          "message": "TextModel got disposed before DiffEditorWidget model got reset\n\nError: TextModel got disposed before DiffEditorWidget model got reset"
+        }
+      ],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "raf",
+      "round": 2,
+      "errors": [
+        {
+          "type": "pageerror",
+          "message": "TextModel got disposed before DiffEditorWidget model got reset\n\nError: TextModel got disposed before DiffEditorWidget model got reset"
+        }
+      ],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "raf",
+      "round": 3,
+      "errors": [
+        {
+          "type": "pageerror",
+          "message": "TextModel got disposed before DiffEditorWidget model got reset\n\nError: TextModel got disposed before DiffEditorWidget model got reset"
+        }
+      ],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "raf",
+      "round": 4,
+      "errors": [
+        {
+          "type": "pageerror",
+          "message": "TextModel got disposed before DiffEditorWidget model got reset\n\nError: TextModel got disposed before DiffEditorWidget model got reset"
+        }
+      ],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "raf",
+      "round": 5,
+      "errors": [
+        {
+          "type": "pageerror",
+          "message": "TextModel got disposed before DiffEditorWidget model got reset\n\nError: TextModel got disposed before DiffEditorWidget model got reset"
+        }
+      ],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "ordinary",
+      "round": 1,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "ordinary",
+      "round": 2,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "ordinary",
+      "round": 3,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "ordinary",
+      "round": 4,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mode": "ordinary",
+      "round": 5,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "raf",
+      "round": 1,
+      "errors": [
+        {
+          "type": "pageerror",
+          "message": "TextModel got disposed before DiffEditorWidget model got reset\n\nError: TextModel got disposed before DiffEditorWidget model got reset"
+        }
+      ],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "raf",
+      "round": 2,
+      "errors": [
+        {
+          "type": "pageerror",
+          "message": "TextModel got disposed before DiffEditorWidget model got reset\n\nError: TextModel got disposed before DiffEditorWidget model got reset"
+        }
+      ],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "raf",
+      "round": 3,
+      "errors": [
+        {
+          "type": "pageerror",
+          "message": "TextModel got disposed before DiffEditorWidget model got reset\n\nError: TextModel got disposed before DiffEditorWidget model got reset"
+        }
+      ],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "raf",
+      "round": 4,
+      "errors": [
+        {
+          "type": "pageerror",
+          "message": "TextModel got disposed before DiffEditorWidget model got reset\n\nError: TextModel got disposed before DiffEditorWidget model got reset"
+        }
+      ],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "raf",
+      "round": 5,
+      "errors": [
+        {
+          "type": "pageerror",
+          "message": "TextModel got disposed before DiffEditorWidget model got reset\n\nError: TextModel got disposed before DiffEditorWidget model got reset"
+        }
+      ],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "ordinary",
+      "round": 1,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "ordinary",
+      "round": 2,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "ordinary",
+      "round": 3,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "ordinary",
+      "round": 4,
+      "errors": [],
+      "models": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "mode": "ordinary",
+      "round": 5,
+      "errors": [],
+      "models": []
+    }
+  ]
+}
