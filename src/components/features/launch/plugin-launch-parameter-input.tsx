@@ -92,7 +92,7 @@ export function PluginLaunchParameterInput({
               resolveEnumValue(e.target.value),
             )
           }
-          className="w-full rounded-md border border-tertiary-light bg-input px-3 py-2 text-contrast focus:border-primary focus:outline-none"
+          className="w-full rounded-md border border-tertiary-light bg-tertiary px-3 py-2 text-contrast focus:border-primary focus:outline-none"
         >
           {showStaleValueOption && (
             <option value={currentValueStr} disabled>
@@ -181,7 +181,7 @@ export function PluginLaunchParameterInput({
           }
           rows={4}
           className={cn(
-            "w-full rounded-md border border-tertiary-light bg-input px-3 py-2",
+            "w-full rounded-md border border-tertiary-light bg-tertiary px-3 py-2",
             "text-contrast font-mono text-xs",
             "focus:border-primary focus:outline-none",
           )}
