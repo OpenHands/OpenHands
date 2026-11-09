@@ -480,6 +480,19 @@ describe("vite library build", () => {
       }
     }
 
+    const contextTrackMix =
+      "color-mix(in srgb,var(--oh-context-window-foreground) var(--oh-context-window-track-weight),transparent)";
+    for (const [className, property] of [
+      ["stroke-context-window-track", "stroke"],
+      ["border-context-window-track", "border-color"],
+    ] as const) {
+      const track = Object.assign({}, ...recipes(className).map(declarations));
+      expect(track[property]?.replace(/,\s*/g, ",")).toBe(contextTrackMix);
+    }
+    expect(declarations(recipe("w-(--context-fill-width)")).width).toBe(
+      "var(--context-fill-width)",
+    );
+
     // Connection chooser disclosures retain exact fractional tracks and their
     // motion override after extraction and library selector scoping.
     const transitionProperties = {

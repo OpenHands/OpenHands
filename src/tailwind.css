@@ -87,6 +87,12 @@
   --color-border-input: var(--oh-border-input);
   --color-border-subtle: var(--oh-border-subtle);
   --color-divider: var(--oh-divider);
+  /* The ring and popover bar share a readable track across palettes. */
+  --color-context-window-track: color-mix(
+    in srgb,
+    var(--oh-context-window-foreground) var(--oh-context-window-track-weight),
+    transparent
+  );
 
   /* Existing inset highlights keep their pixel geometry and public colors. */
   --shadow-badge-inset: inset 0 1px 0 color-mix(in srgb, var(--oh-contrast) 18%, transparent);
