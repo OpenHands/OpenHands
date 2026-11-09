@@ -47,6 +47,16 @@ describe("Canvas arbitrary-value guard adoption", () => {
     "src/components/features/automations/detail/run-phase.tsx",
     "src/components/features/conversation-panel/conversation-card/conversation-card.tsx",
     "src/utils/hover-reveal-classes.ts",
+    "src/components/conversation-events/chat/task-tracking/task-list-section.tsx",
+    "src/components/features/chat/tool-visualizers/primitives/markdown-file-preview.tsx",
+    "src/components/features/conversation-panel/skills-modal-section.tsx",
+    "src/components/features/home/featured-automations/pinned-automation-card.tsx",
+    "src/components/features/markdown/headings.tsx",
+    "src/components/features/mcp-page/mcp-logo-stack-badge.tsx",
+    "src/components/features/settings/llm-settings/openai-subscription-auth-card.tsx",
+    "src/components/features/skills/skill-icon-badge.tsx",
+    "src/routes/device-verify.tsx",
+    "src/ui/typography.tsx",
   ])("rejects an arbitrary value in migrated owner %s", async (filePath) => {
     const source = filePath.endsWith(".ts")
       ? 'import { cn } from "#/utils/utils"; export const probe = cn("w-[123px]");'
@@ -58,6 +68,8 @@ describe("Canvas arbitrary-value guard adoption", () => {
     "src/routes/geometry-probe.tsx",
     "src/ui/geometry-probe.tsx",
     "src/components/features/conversation/conversation-overview-panel.tsx",
+    "src/components/features/chat/plan-preview.tsx",
+    "src/components/features/mcp-logo-badge.tsx",
   ])("retains warnings in unadopted owner %s", async (filePath) => {
     expect(await severities(arbitrary, filePath)).toEqual([1]);
   });
