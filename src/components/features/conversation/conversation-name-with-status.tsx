@@ -70,7 +70,6 @@ export function ConversationNameWithStatus() {
         <StyledTooltip content={statusText} placement="bottom">
           <span
             role="status"
-            tabIndex={0}
             aria-label={statusText}
             data-testid="conversation-status"
             className="flex shrink-0 items-center justify-center rounded-md"
