@@ -1422,6 +1422,8 @@ describe("HomeChatLauncher", () => {
       initialUserMsg: "hello world",
       suppressRouterAtStart: true,
     });
+    // The pick is cleared once the create resolves, after the spy records
+    // the call, so wait for it rather than reading it on the same tick.
     await waitFor(() =>
       expect(
         hasPendingHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId),
@@ -1456,6 +1458,8 @@ describe("HomeChatLauncher", () => {
       initialUserMsg: "hello world",
       suppressRouterAtStart: true,
     });
+    // The pick is cleared once the create resolves, after the spy records
+    // the call, so wait for it rather than reading it on the same tick.
     await waitFor(() =>
       expect(
         hasPendingHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId),

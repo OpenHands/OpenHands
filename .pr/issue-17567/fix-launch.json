@@ -1,0 +1,28 @@
+{
+  "ok": true,
+  "run": "/private/tmp/odie-17567-live/fix",
+  "baseUrl": "http://127.0.0.1:21000",
+  "mode": "local",
+  "revision": "f4c08240bcb8d7f8c2793e8c4c43b949983ef206",
+  "builtThisRun": true,
+  "ports": {
+    "ingress": 21000,
+    "agentServer": 21001,
+    "automation": 21002,
+    "frontend": 21003,
+    "vscode": 22001
+  },
+  "versions": {
+    "agentServer": "1.60.1",
+    "sdk": "1.60.1"
+  },
+  "browser": {
+    "started": true,
+    "pid": 32091
+  },
+  "next": [
+    "export OH_VERIFY_RUN=/private/tmp/odie-17567-live/fix",
+    "control-openhands doctor",
+    "control-openhands onboard --skip"
+  ]
+}
