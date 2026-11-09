@@ -44,6 +44,8 @@ describe("Canvas arbitrary-value guard adoption", () => {
     "src/components/features/diff-viewer/commit-row.tsx",
     "src/components/features/diff-viewer/uncommitted-changes-row.tsx",
     "src/components/features/diff-viewer/editor-container.tsx",
+    "src/components/features/files-tab/file-quick-row.tsx",
+    "src/components/features/files-tab/workspace-file-discovery-settings.tsx",
     "src/components/features/automations/recommended-automations-rail.tsx",
     "src/components/features/automations/automation-view-toggle.tsx",
     "src/components/features/automations/dashboard/automations-dashboard-controls.tsx",
