@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  canStopRuntime,
+  canStopFromMenu,
   getStatusCode,
   getTaskStatusI18nKey,
 } from "#/utils/status";
@@ -109,19 +109,19 @@ describe("getTaskStatusI18nKey", () => {
   });
 });
 
-describe("canStopRuntime", () => {
-  it("allows stopping while the agent is active", () => {
-    expect(canStopRuntime(ExecutionStatus.RUNNING)).toBe(true);
-    expect(canStopRuntime(ExecutionStatus.IDLE, null)).toBe(true);
+describe("canStopFromMenu", () => {
+  it("offers a sandbox stop while the sandbox runs, even after the agent is paused", () => {
+    expect(canStopFromMenu(ExecutionStatus.RUNNING, "RUNNING")).toBe(true);
+    expect(canStopFromMenu(ExecutionStatus.PAUSED, "RUNNING")).toBe(true);
+    expect(canStopFromMenu(ExecutionStatus.PAUSED, "PAUSED")).toBe(false);
   });
 
-  it("allows stopping a running cloud sandbox after the agent is paused", () => {
-    expect(canStopRuntime(ExecutionStatus.PAUSED, "RUNNING")).toBe(true);
-  });
-
-  it("hides stop once the sandbox is paused or the local agent is paused", () => {
-    expect(canStopRuntime(ExecutionStatus.PAUSED, "PAUSED")).toBe(false);
-    expect(canStopRuntime(ExecutionStatus.PAUSED, null)).toBe(false);
-    expect(canStopRuntime(null, "MISSING")).toBe(false);
+  it("offers a local agent stop only while the agent is working", () => {
+    expect(canStopFromMenu(ExecutionStatus.RUNNING, null)).toBe(true);
+    expect(canStopFromMenu(ExecutionStatus.WAITING_FOR_CONFIRMATION)).toBe(
+      true,
+    );
+    expect(canStopFromMenu(ExecutionStatus.IDLE, null)).toBe(false);
+    expect(canStopFromMenu(ExecutionStatus.PAUSED, null)).toBe(false);
   });
 });

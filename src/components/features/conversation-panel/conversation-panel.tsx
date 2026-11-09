@@ -15,6 +15,7 @@ import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
 import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
 import { useUnifiedPauseConversation } from "#/hooks/mutation/use-unified-stop-conversation";
+import { usePauseConversation } from "#/hooks/mutation/use-pause-conversation";
 import { ConfirmArchiveModal } from "./confirm-archive-modal";
 import { ConfirmDeleteModal } from "./confirm-delete-modal";
 import { ConfirmStopModal } from "./confirm-stop-modal";
@@ -819,6 +820,7 @@ export function ConversationPanel({
   const { mutate: deleteConversation, mutateAsync: deleteConversationAsync } =
     useDeleteConversation();
   const { mutate: pauseConversation } = useUnifiedPauseConversation();
+  const { mutate: interruptAgent } = usePauseConversation();
   const { mutate: updateConversation } = useUpdateConversation();
   const { mutate: updateConversationTags } = useUpdateConversationTags();
 
@@ -971,10 +973,18 @@ export function ConversationPanel({
     [activeBackend.id, unpinConversation, updateConversationTagFlags],
   );
 
-  const handleStopConversation = React.useCallback((conversationId: string) => {
-    setConfirmStopModalVisible(true);
-    setSelectedConversationId(conversationId);
-  }, []);
+  const handleStopConversation = React.useCallback(
+    (conversationId: string, stopsSandbox: boolean) => {
+      // Stopping a sandbox is confirmed; stopping a local agent is immediate.
+      if (!stopsSandbox) {
+        interruptAgent({ conversationId });
+        return;
+      }
+      setConfirmStopModalVisible(true);
+      setSelectedConversationId(conversationId);
+    },
+    [interruptAgent],
+  );
 
   const handleConversationTitleChange = React.useCallback(
     (conversationId: string, newTitle: string) => {

@@ -30,6 +30,8 @@ interface ConversationNameContextMenuProps {
   onRename?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDelete?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  /** The stop entry stops the conversation's sandbox, not just its agent. */
+  stopsSandbox?: boolean;
   onDisplayCost?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowAgentTools?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowSkills?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -94,6 +96,7 @@ export function ConversationNameContextMenu({
   onRename,
   onDelete,
   onStop,
+  stopsSandbox = false,
   onDisplayCost,
   onShowAgentTools,
   onShowSkills,
@@ -164,10 +167,9 @@ export function ConversationNameContextMenu({
   const hasTools = Boolean(onShowAgentTools || onShowSkills || onShowHooks);
   const hasInfo = Boolean(onDisplayCost);
   const hasControl = Boolean(onStop || onDelete);
-  const stopLabelKey =
-    backend.kind === "cloud"
-      ? I18nKey.COMMON$STOP_SANDBOX
-      : I18nKey.COMMON$STOP_CONVERSATION;
+  const stopLabelKey = stopsSandbox
+    ? I18nKey.COMMON$STOP_SANDBOX
+    : I18nKey.COMMON$STOP_AGENT;
   const shouldShowPublicSharing =
     backend.kind === "cloud" && Boolean(onTogglePublic);
   const isPublic = conversation?.public || false;

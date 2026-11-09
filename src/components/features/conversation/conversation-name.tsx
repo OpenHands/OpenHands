@@ -61,6 +61,7 @@ export function ConversationName() {
     setConfirmStopModalVisible,
     systemMessage,
     shouldShowStop,
+    stopsSandbox,
     shouldShowDownloadConversation,
     shouldShowDisplayCost,
     shouldShowAgentTools,
@@ -198,6 +199,7 @@ export function ConversationName() {
                 onRename={handleRename}
                 onDelete={handleDelete}
                 onStop={shouldShowStop ? handleStop : undefined}
+                stopsSandbox={stopsSandbox}
                 onDisplayCost={
                   shouldShowDisplayCost ? handleDisplayCost : undefined
                 }

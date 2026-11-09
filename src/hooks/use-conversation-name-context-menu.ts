@@ -4,6 +4,7 @@ import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useDeleteConversation } from "./mutation/use-delete-conversation";
 import { useUnifiedPauseConversation } from "./mutation/use-unified-stop-conversation";
+import { usePauseConversation } from "./mutation/use-pause-conversation";
 import { useUpdateConversationPublicFlag } from "./mutation/use-update-conversation-public-flag";
 import { useActiveConversation } from "./query/use-active-conversation";
 import { useEventStore } from "#/stores/use-event-store";
@@ -18,7 +19,7 @@ import {
   SystemMessageForModal,
 } from "#/utils/system-message-adapter";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
-import { canStopRuntime, isExecutionActive } from "#/utils/status";
+import { canStopFromMenu, hasSandbox, isExecutionActive } from "#/utils/status";
 import { useSelectConversationTab } from "./use-select-conversation-tab";
 
 interface UseConversationNameContextMenuProps {
@@ -40,8 +41,12 @@ export function useConversationNameContextMenu({
   const events = useEventStore((state) => state.events);
   const { mutate: deleteConversation } = useDeleteConversation();
   const { mutate: stopConversation } = useUnifiedPauseConversation();
+  const { mutate: interruptAgent } = usePauseConversation();
   const { mutate: updatePublicFlag } = useUpdateConversationPublicFlag();
   const { data: conversation } = useActiveConversation();
+  const sandboxStatus =
+    conversation?.id === conversationId ? conversation?.sandbox_status : null;
+  const stopsSandbox = hasSandbox(sandboxStatus);
   const [systemModalVisible, setSystemModalVisible] = React.useState(false);
   const [skillsModalVisible, setSkillsModalVisible] = React.useState(false);
   const [pluginsModalVisible, setPluginsModalVisible] = React.useState(false);
@@ -66,7 +71,13 @@ export function useConversationNameContextMenu({
   const handleStop = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    setConfirmStopModalVisible(true);
+    // Stopping a sandbox is confirmed; stopping the agent is immediate and
+    // keeps the user in the conversation.
+    if (stopsSandbox) {
+      setConfirmStopModalVisible(true);
+    } else if (conversationId) {
+      interruptAgent({ conversationId });
+    }
     onContextMenuToggle?.(false);
   };
 
@@ -221,10 +232,8 @@ export function useConversationNameContextMenu({
     // Data
     systemMessage,
 
-    shouldShowStop: canStopRuntime(
-      executionStatus,
-      conversation?.id === conversationId ? conversation?.sandbox_status : null,
-    ),
+    stopsSandbox,
+    shouldShowStop: canStopFromMenu(executionStatus, sandboxStatus),
     shouldShowDownloadConversation: Boolean(conversationId && showOptions),
     shouldShowDisplayCost: showOptions,
     shouldShowAgentTools: Boolean(showOptions && systemMessage),

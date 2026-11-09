@@ -1,6 +1,5 @@
 import React, { useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "../../context-menu/context-menu-list-item";
@@ -22,6 +21,8 @@ interface ConversationCardContextMenuProps {
   onArchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onUnarchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  /** The stop entry stops the conversation's sandbox, not just its agent. */
+  stopsSandbox?: boolean;
   onNewConversationInSandbox?: (
     event: React.MouseEvent<HTMLButtonElement>,
   ) => void;
@@ -47,6 +48,7 @@ export function ConversationCardContextMenu({
   onArchive,
   onUnarchive,
   onStop,
+  stopsSandbox = false,
   onNewConversationInSandbox,
   onEdit,
   onEditTags,
@@ -60,15 +62,13 @@ export function ConversationCardContextMenu({
   ignoreOutsideClickRef,
 }: ConversationCardContextMenuProps) {
   const { t } = useTranslation("openhands");
-  const { backend } = useActiveBackend();
   const ref = useClickOutsideElement<HTMLUListElement>(
     onClose,
     ignoreOutsideClickRef,
   );
-  const stopLabelKey =
-    backend.kind === "cloud"
-      ? I18nKey.COMMON$STOP_SANDBOX
-      : I18nKey.COMMON$STOP_CONVERSATION;
+  const stopLabelKey = stopsSandbox
+    ? I18nKey.COMMON$STOP_SANDBOX
+    : I18nKey.COMMON$STOP_AGENT;
 
   const generateSection = useCallback(
     (items: React.ReactNode[], sectionKey: string, isLast?: boolean) => {

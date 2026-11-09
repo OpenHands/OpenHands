@@ -6,7 +6,6 @@ import {
   displayErrorToast,
 } from "#/utils/custom-toast-handlers";
 import { useNavigation } from "#/context/navigation-context";
-import { useActiveBackend } from "#/contexts/active-backend-context";
 import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import {
@@ -18,8 +17,6 @@ export const useUnifiedPauseConversation = () => {
   const { t } = useTranslation("openhands");
   const queryClient = useQueryClient();
   const { conversationId: currentConversationId, navigate } = useNavigation();
-  // On cloud this pauses the conversation's sandbox.
-  const isCloud = useActiveBackend().backend.kind === "cloud";
 
   return useMutation({
     mutationKey: ["stop-conversation"],
@@ -27,11 +24,7 @@ export const useUnifiedPauseConversation = () => {
       pauseConversation(variables.conversationId),
     onMutate: async () => {
       const toastId = toast.loading(
-        t(
-          isCloud
-            ? I18nKey.TOAST$STOPPING_SANDBOX
-            : I18nKey.TOAST$STOPPING_CONVERSATION,
-        ),
+        t(I18nKey.TOAST$STOPPING_SANDBOX),
         TOAST_OPTIONS,
       );
 
@@ -60,14 +53,7 @@ export const useUnifiedPauseConversation = () => {
       if (context?.toastId) {
         toast.dismiss(context.toastId);
       }
-      toast.success(
-        t(
-          isCloud
-            ? I18nKey.TOAST$SANDBOX_STOPPED
-            : I18nKey.TOAST$CONVERSATION_STOPPED,
-        ),
-        TOAST_OPTIONS,
-      );
+      toast.success(t(I18nKey.TOAST$SANDBOX_STOPPED), TOAST_OPTIONS);
 
       // Drop the runtime URL immediately so this mounted route cannot reconnect
       // to the sandbox being paused. Leave sandbox_status server-authored: the

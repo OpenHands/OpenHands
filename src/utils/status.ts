@@ -19,16 +19,28 @@ export function isExecutionActive(
   return !!status && ACTIVE_EXECUTION_STATUSES.has(status);
 }
 
+/** Whether a conversation runs in a sandbox. Local conversations have none. */
+export function hasSandbox(sandboxStatus?: SandboxStatus | null): boolean {
+  return sandboxStatus != null;
+}
+
 /**
- * Whether the conversation's runtime can be stopped. A cloud sandbox keeps
- * running after the agent is interrupted, so it stays stoppable while RUNNING.
- * Local conversations have no sandbox status and follow the agent's state.
+ * Whether the conversation menus should offer a stop. With a sandbox the menu
+ * stops the sandbox, so it is offered while the sandbox runs (including after
+ * the agent was interrupted). Without one it stops the agent, so it is offered
+ * only while the agent is working.
  */
-export function canStopRuntime(
+export function canStopFromMenu(
   executionStatus: ExecutionStatus | null | undefined,
   sandboxStatus?: SandboxStatus | null,
 ): boolean {
-  return isExecutionActive(executionStatus) || sandboxStatus === "RUNNING";
+  if (hasSandbox(sandboxStatus)) {
+    return isExecutionActive(executionStatus) || sandboxStatus === "RUNNING";
+  }
+  return (
+    executionStatus === ExecutionStatus.RUNNING ||
+    executionStatus === ExecutionStatus.WAITING_FOR_CONFIRMATION
+  );
 }
 
 export function isExecutionPaused(
