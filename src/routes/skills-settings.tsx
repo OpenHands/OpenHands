@@ -1,3 +1,4 @@
+import type { RouteTitleHandle } from "./title-handle";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
@@ -310,3 +311,8 @@ function SkillsSettingsScreen() {
 }
 
 export default SkillsSettingsScreen;
+
+// @spec AWI-001 — Localized section identity
+export const handle = {
+  titleKey: I18nKey.SETTINGS$SKILLS_TITLE,
+} satisfies RouteTitleHandle;

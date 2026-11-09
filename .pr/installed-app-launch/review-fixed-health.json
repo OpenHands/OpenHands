@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "failed": [],
+  "passed": [
+    "launcher process group alive: /private/tmp/node-v24.15.0-darwin-arm64/bin/node /Users/fangjiaxin/Documents/cs146s/OpenHands/bin/agent-canvas.mjs --por",
+    "launcher is this run's agent-canvas: /private/tmp/node-v24.15.0-darwin-arm64/bin/node /Users/fangjiaxin/Documents/cs146s/OpenHands/bin/agent-canvas.mjs --por",
+    "port ingress:19100 listening: open",
+    "port agentServer:19101 listening: open",
+    "port automation:19102 listening: open",
+    "port frontend:19103 listening: open",
+    "served build matches this checkout's build inputs: served=237b217e08aa2ee7 run=237b217e08aa2ee7 revision=320e309678ba",
+    "checkout build inputs unchanged since launch: launch=237b217e08aa2ee7 now=237b217e08aa2ee7",
+    "unauthenticated API rejected: status=401",
+    "authenticated settings readable: status=200",
+    "agent-server reachable: version=1.60.1",
+    "agent-server matches pin: server=1.60.1 pin=1.60.1",
+    "agent-server meets the UI minimum: server=1.60.1 minimum=1.59.0",
+    "automation healthy: status=200",
+    "UI loads without page errors: markers=first-run-onboarding-screen,onboarding-modal,telemetry-consent-form pageErrors=0 testidsInDom=221 (hidden included)"
+  ],
+  "warnings": [
+    "LLM configured: model=gpt-5.6 without an API key: `control-openhands llm preset deepseek`"
+  ]
+}

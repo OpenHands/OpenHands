@@ -1,3 +1,4 @@
+import type { RouteTitleHandle } from "./title-handle";
 import React from "react";
 import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -99,3 +100,6 @@ export default function CanvasExtensionPage() {
     </main>
   );
 }
+
+// @spec AWI-001 — Registered extension pages retain their own title
+export const handle = { titleSource: "extension" } satisfies RouteTitleHandle;

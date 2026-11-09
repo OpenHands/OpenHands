@@ -1,3 +1,5 @@
+import type { RouteTitleHandle } from "./title-handle";
+import { I18nKey } from "#/i18n/declaration";
 import { useMemo, useState } from "react";
 import {
   Navigate,
@@ -137,3 +139,8 @@ function SettingsScreen() {
 }
 
 export default SettingsScreen;
+
+// @spec AWI-001 — Localized section identity
+export const handle = {
+  titleKey: I18nKey.SETTINGS$TITLE,
+} satisfies RouteTitleHandle;

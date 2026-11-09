@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "failed": [],
+  "passed": [
+    "launcher process group alive: /private/tmp/node-v24.15.0-darwin-arm64/bin/node /private/tmp/oh18635-review-baseline/bin/agent-canvas.mjs --port 19000",
+    "launcher is this run's agent-canvas: /private/tmp/node-v24.15.0-darwin-arm64/bin/node /private/tmp/oh18635-review-baseline/bin/agent-canvas.mjs --port 19000",
+    "port ingress:19000 listening: open",
+    "port agentServer:19001 listening: open",
+    "port automation:19002 listening: open",
+    "port frontend:19003 listening: open",
+    "served build matches this checkout's build inputs: served=f406c3eeea622cc7 run=f406c3eeea622cc7 revision=56425e4a17a3",
+    "checkout build inputs unchanged since launch: launch=f406c3eeea622cc7 now=f406c3eeea622cc7",
+    "unauthenticated API rejected: status=401",
+    "authenticated settings readable: status=200",
+    "agent-server reachable: version=1.60.1",
+    "agent-server matches pin: server=1.60.1, chosen by OH_AGENT_SERVER_VERSION (default pin 1.55.1)",
+    "agent-server meets the UI minimum: server=1.60.1 minimum=1.51.0",
+    "automation healthy: status=200",
+    "UI loads without page errors: markers=home-chat-launcher pageErrors=0 testidsInDom=82 (hidden included)"
+  ],
+  "warnings": [
+    "LLM configured: model=gpt-5.6 without an API key: `control-openhands llm preset deepseek`"
+  ]
+}

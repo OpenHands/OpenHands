@@ -261,3 +261,7 @@ These single-property utilities preserve intrinsic sizing and responsive scope.
 They are static owner recipes, not caller className overrides.
 
 - Executable plugin automations (`plugin_spec`) edit their configuration through the setup form's `pluginConfig` JSON field. The agent proposes that field through `automation_form_update`; only Save sends `config` and the trigger to the existing automation's PATCH endpoint. Preserve the plugin source, pins, and runtime fields. Gate configuration writes on the automation service's `pluginConfigUpdate` capability; older services display the configuration read-only.
+
+## Standalone window identity
+
+`useAppTitle` owns the document title rendered by `root-layout.tsx`. Titles come from matched route handles rather than URL-prefix guesses. Both home/composer URLs use the same localized New Chat label. Automation routes use the admitted interface sidebar label and retain the app fallback when the interface is unavailable. Registered extension pages retain their contribution title; conversations retain their name, loading fallback, and execution-status emoji. Manifest shortcuts use manifest-relative route and icon URLs; their launch and scope behavior depends on the separate PWA foundation. See `specs/app-window-identity.md`.

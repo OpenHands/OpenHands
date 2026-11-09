@@ -169,3 +169,6 @@ export default function AutomationSetupNew() {
     </div>
   );
 }
+
+// @spec AWI-001 — Interface-defined automation section identity
+export { AUTOMATION_TITLE_HANDLE as handle } from "./title-handle";

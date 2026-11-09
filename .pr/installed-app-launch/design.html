@@ -1,0 +1,898 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>OpenHands app identity: review update</title><style>body{margin:0;background:#f6f8f8;color:#132e35;font:16px/1.6 system-ui}main{max-width:1100px;margin:auto;padding:40px}h1{font-size:42px;line-height:1.15}a{color:#006873}aside{border-left:5px solid #c26c22;padding:16px;background:#fff0df}nav{display:flex;flex-wrap:wrap;gap:8px;margin:28px 0}nav a{font-size:12px;background:#e6eeee;padding:4px 8px}article{border-top:1px solid #ccd8db;padding:18px 0}pre{overflow:auto;font-size:12px;background:white;padding:16px}svg{width:100%;height:auto}code{background:#e6eeee;padding:2px 4px}</style><main><p>PR #18635 · Issue #17891 · review update</p><h1>Titles follow matched pages.<br>Two shortcuts have distinct destinations.</h1><p><code>useAppTitle</code> now reads route handles, keeps conversation/status and extension titles, and takes automation titles from the admitted interface. Unknown nested pages retain the app fallback. Both composer URLs use the same localized New Chat title.</p><aside>★ Installation still depends on unmerged <a href="https://github.com/OpenHands/OpenHands/pull/17895">#17895</a>. <code>navigate-existing</code> deliberately navigates the existing window with a full document reload: unsaved form input can be lost. No navigation blocker is added.</aside><svg viewBox="0 0 900 250" role="img" aria-label="Before and after title flow"><g fill="#edf1f3" stroke="#9ba9ae"><rect x="10" y="40" width="390" height="155" rx="12"/><rect x="470" y="40" width="420" height="155" rx="12" fill="#fff0df" stroke="#c26c22" stroke-width="3"/></g><g fill="#132e35" font-size="17"><text x="30" y="70">Before: useAppTitle + useMatch</text><text x="30" y="110">URL wildcards → section translations</text><text x="30" y="150">Invalid nested routes get section titles</text><text x="490" y="70">After: useAppTitle + useMatches</text><text x="490" y="110">RouteTitleHandle → actual matched route</text><text x="490" y="150">404 → OpenHands; admitted interface copy</text><text x="490" y="178">selectCanvasExtensionPage retains app titles</text></g><path d="M410 115h45m-12-10 12 10-12 10" stroke="#c26c22" stroke-width="4" fill="none"/></svg><p>Flow source: <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/hooks/use-app-title.ts#L19">base useAppTitle</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/hooks/use-app-title.ts#L43">matched-route title selection</a>. The new <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/title-handle.ts#L1">RouteTitleHandle</a> is frontend route metadata; backend API contracts and compatibility floor are unchanged.</p><h2>Manifest before → after</h2><p>Three entries with two identical destinations → New conversation (<code>conversations</code>) and Automations (<code>automations</code>). Explicit <code>scope: "."</code> keeps both targets inside effective scope even when installing from a nested page or under a deployment base path. App names, branded icons and the manifest link remain with the prerequisite.</p><h2>Verification</h2><p>42 focused tests pass across the real router title paths, extension runtime and manifest contract. Invalid-route, automation-admission and shortcut-scope regressions failed before the corresponding fixes. Production app and library builds pass. See <a href="README.md">evidence notes</a> for full-suite and live results and historical installed-app limitations.</p><h2>Changed code</h2><p>Route modules declare their existing title translation or interface source. Settings descendants inherit their matched parent; unregistered paths do not. The cards below pin source and diffs to the verified implementation revision.</p><nav><a href="#f0">.agents/skills/frontend-development/references/guide.md</a><a href="#f1">__tests__/pwa-manifest.test.ts</a><a href="#f2">public/site.webmanifest</a><a href="#f3">specs/app-window-identity.md</a><a href="#f4">src/components/features/canvas-extensions/canvas-extensions-runtime.test.tsx</a><a href="#f5">src/hooks/use-app-title.test.tsx</a><a href="#f6">src/hooks/use-app-title.ts</a><a href="#f7">src/routes/automation-detail.tsx</a><a href="#f8">src/routes/automation-events.tsx</a><a href="#f9">src/routes/automation-git-sync.tsx</a><a href="#f10">src/routes/automation-setup-new.tsx</a><a href="#f11">src/routes/automation-setup-route.tsx</a><a href="#f12">src/routes/automation-templates.tsx</a><a href="#f13">src/routes/automations-list.tsx</a><a href="#f14">src/routes/canvas-extension-page.tsx</a><a href="#f15">src/routes/canvas-extensions.tsx</a><a href="#f16">src/routes/extensions-hub.tsx</a><a href="#f17">src/routes/home.tsx</a><a href="#f18">src/routes/index-home.tsx</a><a href="#f19">src/routes/mcp.tsx</a><a href="#f20">src/routes/settings.tsx</a><a href="#f21">src/routes/skills-plugins.tsx</a><a href="#f22">src/routes/skills-settings.tsx</a><a href="#f23">src/routes/title-handle.ts</a></nav><article id="f0"><h3>Changed: .agents/skills/frontend-development/references/guide.md</h3><p>+4 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/.agents/skills/frontend-development/references/guide.md">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/.agents/skills/frontend-development/references/guide.md">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/.agents/skills/frontend-development/references/guide.md b/.agents/skills/frontend-development/references/guide.md
+index 5de84d34b..42e32b053 100644
+--- a/.agents/skills/frontend-development/references/guide.md
++++ b/.agents/skills/frontend-development/references/guide.md
+@@ -253,3 +253,7 @@ These single-property utilities preserve intrinsic sizing and responsive scope.
+ They are static owner recipes, not caller className overrides.
+ 
+ - Executable plugin automations (`plugin_spec`) edit their configuration through the setup form&#x27;s `pluginConfig` JSON field. The agent proposes that field through `automation_form_update`; only Save sends `config` and the trigger to the existing automation&#x27;s PATCH endpoint. Preserve the plugin source, pins, and runtime fields. Gate configuration writes on the automation service&#x27;s `pluginConfigUpdate` capability; older services display the configuration read-only.
++
++## Standalone window identity
++
++`useAppTitle` owns the document title rendered by `root-layout.tsx`. Titles come from matched route handles rather than URL-prefix guesses. Both home/composer URLs use the same localized New Chat label. Automation routes use the admitted interface sidebar label and retain the app fallback when the interface is unavailable. Registered extension pages retain their contribution title; conversations retain their name, loading fallback, and execution-status emoji. Manifest shortcuts use manifest-relative route and icon URLs; their launch and scope behavior depends on the separate PWA foundation. See `specs/app-window-identity.md`.
+</pre></details></article><article id="f1"><h3>Added: __tests__/pwa-manifest.test.ts</h3><p>+80 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/__tests__/pwa-manifest.test.ts">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/__tests__/pwa-manifest.test.ts">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/__tests__/pwa-manifest.test.ts b/__tests__/pwa-manifest.test.ts
+new file mode 100644
+index 000000000..4c3c225f9
+--- /dev/null
++++ b/__tests__/pwa-manifest.test.ts
+@@ -0,0 +1,80 @@
++import { existsSync, readFileSync } from &quot;node:fs&quot;;
++import { resolve } from &quot;node:path&quot;;
++import { matchRoutes, type RouteObject } from &quot;react-router&quot;;
++import { describe, expect, it } from &quot;vitest&quot;;
++import routes from &quot;../src/routes&quot;;
++
++const publicDirectory = resolve(__dirname, &quot;../public&quot;);
++
++const manifest = JSON.parse(
++  readFileSync(resolve(publicDirectory, &quot;site.webmanifest&quot;), &quot;utf8&quot;),
++);
++
++function routeObjects(entries: typeof routes): RouteObject[] {
++  return entries.map((entry) =&gt;
++    entry.index
++      ? { index: true }
++      : {
++          path: entry.path,
++          children: entry.children ? routeObjects(entry.children) : undefined,
++        },
++  );
++}
++
++// @spec AWI-002 — Installed-app launches and shortcuts
++describe(&quot;installed-app manifest&quot;, () =&gt; {
++  it(&quot;requests navigation of the existing app window&quot;, () =&gt; {
++    expect(manifest.launch_handler?.client_mode).toBe(&quot;navigate-existing&quot;);
++    expect(manifest.handle_links).toBe(&quot;preferred&quot;);
++  });
++
++  it.each([&quot;/&quot;, &quot;/canvas/&quot;])(
++    &quot;resolves shortcuts and icons to Canvas resources mounted at %s&quot;,
++    (basePath) =&gt; {
++      const manifestUrl = new URL(
++        `${basePath}site.webmanifest`,
++        &quot;https://canvas.example&quot;,
++      );
++      const installedFrom = new URL(`${basePath}settings/llm`, manifestUrl);
++      const startUrl = manifest.start_url
++        ? new URL(manifest.start_url, manifestUrl)
++        : installedFrom;
++      const scope = manifest.scope
++        ? new URL(manifest.scope, manifestUrl)
++        : new URL(&quot;.&quot;, startUrl);
++      const shortcuts = manifest.shortcuts as {
++        name: string;
++        url: string;
++        icons: { src: string }[];
++      }[];
++      expect(shortcuts).toHaveLength(2);
++      expect(new Set(shortcuts.map(({ url }) =&gt; url)).size).toBe(
++        shortcuts.length,
++      );
++
++      for (const shortcut of shortcuts) {
++        expect(shortcut.name.trim()).not.toBe(&quot;&quot;);
++        expect(shortcut.url).not.toMatch(/^(?:\/|[a-z][a-z\d+.-]*:)/i);
++        const target = new URL(shortcut.url, manifestUrl);
++        expect(target.origin).toBe(manifestUrl.origin);
++        expect(target.pathname.startsWith(scope.pathname)).toBe(true);
++        expect(target.pathname.startsWith(basePath)).toBe(true);
++        const appPath = `/${target.pathname.slice(basePath.length)}`;
++        const matches = matchRoutes(routeObjects(routes), appPath);
++        expect(matches).not.toBeNull();
++        expect(matches?.at(-1)?.route.path).not.toBe(&quot;*&quot;);
++
++        expect(shortcut.icons.length).toBeGreaterThan(0);
++        for (const icon of shortcut.icons) {
++          const iconUrl = new URL(icon.src, manifestUrl);
++          expect(iconUrl.pathname.startsWith(basePath)).toBe(true);
++          expect(
++            existsSync(
++              resolve(publicDirectory, iconUrl.pathname.slice(basePath.length)),
++            ),
++          ).toBe(true);
++        }
++      }
++    },
++  );
++});
+</pre></details></article><article id="f2"><h3>Changed: public/site.webmanifest</h3><p>+30 / −1 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/public/site.webmanifest">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/public/site.webmanifest">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/public/site.webmanifest b/public/site.webmanifest
+index b20abb7cb..11f5bb147 100644
+--- a/public/site.webmanifest
++++ b/public/site.webmanifest
+@@ -15,5 +15,34 @@
+     ],
+     &quot;theme_color&quot;: &quot;#ffffff&quot;,
+     &quot;background_color&quot;: &quot;#ffffff&quot;,
+-    &quot;display&quot;: &quot;standalone&quot;
++    &quot;display&quot;: &quot;standalone&quot;,
++    &quot;launch_handler&quot;: {
++        &quot;client_mode&quot;: &quot;navigate-existing&quot;
++    },
++    &quot;handle_links&quot;: &quot;preferred&quot;,
++    &quot;shortcuts&quot;: [
++        {
++            &quot;name&quot;: &quot;New conversation&quot;,
++            &quot;url&quot;: &quot;conversations&quot;,
++            &quot;icons&quot;: [
++                {
++                    &quot;src&quot;: &quot;android-chrome-192x192.png&quot;,
++                    &quot;sizes&quot;: &quot;192x192&quot;,
++                    &quot;type&quot;: &quot;image/png&quot;
++                }
++            ]
++        },
++        {
++            &quot;name&quot;: &quot;Automations&quot;,
++            &quot;url&quot;: &quot;automations&quot;,
++            &quot;icons&quot;: [
++                {
++                    &quot;src&quot;: &quot;android-chrome-192x192.png&quot;,
++                    &quot;sizes&quot;: &quot;192x192&quot;,
++                    &quot;type&quot;: &quot;image/png&quot;
++                }
++            ]
++        }
++    ],
++    &quot;scope&quot;: &quot;.&quot;
+ }
+</pre></details></article><article id="f3"><h3>Added: specs/app-window-identity.md</h3><p>+14 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/specs/app-window-identity.md">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/specs/app-window-identity.md">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/specs/app-window-identity.md b/specs/app-window-identity.md
+new file mode 100644
+index 000000000..d9d2164a9
+--- /dev/null
++++ b/specs/app-window-identity.md
+@@ -0,0 +1,14 @@
++# App window identity
++
++### AWI-001: Localized section titles
++
++- [x] Matched route handles own section titles; unknown nested Settings and Automations URLs retain the `OpenHands` fallback on the not-found page.
++- [x] `/` and `/conversations` share the localized New Chat title. Settings descendants inherit their section title. Customize, MCP, Skills, Plugins, and Apps use their existing page translations.
++- [x] Automation routes use the admitted interface&#x27;s sidebar label and fall back to `OpenHands` when that interface is unavailable. Registered extension pages retain their contribution title, including nested paths.
++- [x] Conversation and panel routes retain their conversation title and execution-status emoji. Query refreshes, including renames, update the title. Loading and untitled conversations retain the stable `OpenHands` fallback.
++
++### AWI-002: Installed-app launches and shortcuts
++
++- [x] The manifest requests `navigate-existing` launches and preferred link handling. Browser support and the user&#x27;s link-capture settings determine whether the browser honors these declarations. `navigate-existing` reloads the document at the target URL; unsaved form input can be lost. This change adds no navigation blocker or client-side launch consumer.
++- [x] New conversation and Automations shortcuts have distinct destinations, resolve to real Canvas routes and existing icons relative to the manifest, and remain inside the explicit manifest scope at both the origin root and a deployment base path. The composer shortcut targets `/conversations`, avoiding the configurable redirect at `/`.
++- [ ] Installation and an installed-window transition recording depend on the separate PWA foundation (#17890 / #17895). Its manifest link, app name, branded icons, and platform installation metadata remain outside this change. The prior temporary integration run is historical manual evidence, not proof that this branch alone is installable.
+</pre></details></article><article id="f4"><h3>Changed: src/components/features/canvas-extensions/canvas-extensions-runtime.test.tsx</h3><p>+26 / −14 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/components/features/canvas-extensions/canvas-extensions-runtime.test.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/components/features/canvas-extensions/canvas-extensions-runtime.test.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/components/features/canvas-extensions/canvas-extensions-runtime.test.tsx b/src/components/features/canvas-extensions/canvas-extensions-runtime.test.tsx
+index e2ea6fcf4..17903cb05 100644
+--- a/src/components/features/canvas-extensions/canvas-extensions-runtime.test.tsx
++++ b/src/components/features/canvas-extensions/canvas-extensions-runtime.test.tsx
+@@ -1,7 +1,9 @@
+ import { QueryClient, QueryClientProvider } from &quot;@tanstack/react-query&quot;;
+ import { render, screen, waitFor } from &quot;@testing-library/react&quot;;
+-import { MemoryRouter, Route, Routes } from &quot;react-router&quot;;
+-import CanvasExtensionPage from &quot;#/routes/canvas-extension-page&quot;;
++import { createMemoryRouter, RouterProvider, Outlet } from &quot;react-router&quot;;
++import CanvasExtensionPage, {
++  handle as extensionPageHandle,
++} from &quot;#/routes/canvas-extension-page&quot;;
+ import { afterEach, beforeEach, describe, expect, it, vi } from &quot;vitest&quot;;
+ import { useAppTitle } from &quot;#/hooks/use-app-title&quot;;
+ import CanvasExtensionsService from &quot;#/api/canvas-extensions-service&quot;;
+@@ -79,21 +81,31 @@ function renderRuntime(
+   const queryClient = new QueryClient({
+     defaultOptions: { queries: { retry: false } },
+   });
+-  const rendered = render(
+-    &lt;QueryClientProvider client={queryClient}&gt;
+-      &lt;ActiveBackendProvider&gt;
+-        &lt;MemoryRouter initialEntries={[path]}&gt;
++  const router = createMemoryRouter(
++    [
++      {
++        element: (
+           &lt;CanvasExtensionsRuntimeProvider moduleLoader={moduleLoader}&gt;
+             &lt;RuntimeProbe /&gt;
+-            &lt;Routes&gt;
+-              &lt;Route
+-                path=&quot;/extensions/:extensionName/*&quot;
+-                element={&lt;CanvasExtensionPage /&gt;}
+-              /&gt;
+-              &lt;Route path=&quot;*&quot; element={null} /&gt;
+-            &lt;/Routes&gt;
++            &lt;Outlet /&gt;
+           &lt;/CanvasExtensionsRuntimeProvider&gt;
+-        &lt;/MemoryRouter&gt;
++        ),
++        children: [
++          {
++            path: &quot;/extensions/:extensionName/*&quot;,
++            handle: extensionPageHandle,
++            element: &lt;CanvasExtensionPage /&gt;,
++          },
++          { path: &quot;*&quot;, element: null },
++        ],
++      },
++    ],
++    { initialEntries: [path] },
++  );
++  const rendered = render(
++    &lt;QueryClientProvider client={queryClient}&gt;
++      &lt;ActiveBackendProvider&gt;
++        &lt;RouterProvider router={router} /&gt;
+       &lt;/ActiveBackendProvider&gt;
+     &lt;/QueryClientProvider&gt;,
+   );
+</pre></details></article><article id="f5"><h3>Changed: src/hooks/use-app-title.test.tsx</h3><p>+238 / −81 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/hooks/use-app-title.test.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/hooks/use-app-title.test.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/hooks/use-app-title.test.tsx b/src/hooks/use-app-title.test.tsx
+index 922066e3d..f033a8d96 100644
+--- a/src/hooks/use-app-title.test.tsx
++++ b/src/hooks/use-app-title.test.tsx
+@@ -1,69 +1,244 @@
+-import { renderHook, waitFor } from &quot;@testing-library/react&quot;;
++import React from &quot;react&quot;;
++import { act, renderHook, waitFor } from &quot;@testing-library/react&quot;;
+ import { beforeEach, describe, expect, it, vi } from &quot;vitest&quot;;
+ import { QueryClient, QueryClientProvider } from &quot;@tanstack/react-query&quot;;
+-import { MemoryRouter, useParams } from &quot;react-router&quot;;
+-import { useUserConversation } from &quot;./query/use-user-conversation&quot;;
++import {
++  createMemoryRouter,
++  matchRoutes,
++  RouterProvider,
++  Outlet,
++  type RouteObject,
++  useNavigate,
++} from &quot;react-router&quot;;
++import routeConfig from &quot;../routes&quot;;
++import * as automationInterface from &quot;#/manifests/automation-interface&quot;;
++import { createInstance } from &quot;i18next&quot;;
++import { I18nextProvider, initReactI18next } from &quot;react-i18next&quot;;
++import AgentServerConversationService from &quot;#/api/conversation-service/agent-server-conversation-service.api&quot;;
++import type { AppConversation } from &quot;#/api/conversation-service/agent-server-conversation-service.types&quot;;
++import { translationResources } from &quot;#/i18n/resources&quot;;
+ import { useAppTitle } from &quot;./use-app-title&quot;;
+ import { useConversationStateStore } from &quot;#/stores/conversation-state-store&quot;;
+ import { ExecutionStatus } from &quot;#/types/agent-server/core/base/common&quot;;
+ 
+-const renderAppTitleHook = () =&gt;
+-  renderHook(() =&gt; useAppTitle(), {
+-    wrapper: ({ children }) =&gt; (
+-      &lt;QueryClientProvider client={new QueryClient()}&gt;
+-        &lt;MemoryRouter&gt;{children}&lt;/MemoryRouter&gt;
+-      &lt;/QueryClientProvider&gt;
+-    ),
+-  });
++vi.unmock(&quot;react-i18next&quot;);
+ 
+-vi.mock(&quot;./query/use-user-conversation&quot;);
+-vi.mock(&quot;react-router&quot;, async () =&gt; {
+-  const actual = await vi.importActual(&quot;react-router&quot;);
++vi.mock(
++  &quot;#/api/conversation-service/agent-server-conversation-service.api&quot;,
++  () =&gt; ({
++    default: { batchGetAppConversations: vi.fn() },
++  }),
++);
++
++function makeConversation(
++  overrides: Partial&lt;AppConversation&gt; = {},
++): AppConversation {
+   return {
+-    ...actual,
+-    useParams: vi.fn(),
++    id: &quot;123&quot;,
++    created_by_user_id: null,
++    selected_repository: null,
++    selected_branch: null,
++    git_provider: null,
++    title: &quot;My Conversation&quot;,
++    trigger: null,
++    pr_number: [],
++    llm_model: null,
++    metrics: null,
++    created_at: &quot;2026-10-18T00:00:00Z&quot;,
++    updated_at: &quot;2026-10-18T00:00:00Z&quot;,
++    execution_status: null,
++    sandbox_status: null,
++    conversation_url: null,
++    session_api_key: null,
++    sandbox_id: null,
++    sub_conversation_ids: [],
++    ...overrides,
+   };
+-});
++}
++
++const routeModules = import.meta.glob&lt;{ handle?: unknown }&gt;(&quot;../routes/*.tsx&quot;);
++
++// Use the real route registrations and their exported handles, without mounting
++// each page&#x27;s unrelated UI or loaders. A catch-all therefore really is a 404.
++function titleRoutes(
++  entries: typeof routeConfig,
++  probe: React.ReactNode,
++): RouteObject[] {
++  return entries.map((entry) =&gt; {
++    const common = {
++      id: entry.file,
++      HydrateFallback: () =&gt; null,
++      lazy: async () =&gt; ({
++        handle: (await routeModules[`../${entry.file}`]()).handle,
++      }),
++      element:
++        entry.file === &quot;routes/root-layout.tsx&quot; ? (
++          &lt;&gt;
++            {probe}
++            &lt;Outlet /&gt;
++          &lt;/&gt;
++        ) : (
++          &lt;Outlet /&gt;
++        ),
++    };
++    return entry.index
++      ? { ...common, index: true }
++      : {
++          ...common,
++          path: entry.path,
++          children: entry.children
++            ? titleRoutes(entry.children, probe)
++            : undefined,
++        };
++  });
++}
++
++async function renderAppTitleHook(path = &quot;/&quot;, basename?: string) {
++  const queryClient = new QueryClient({
++    defaultOptions: { queries: { retry: false } },
++  });
++  const i18n = createInstance();
++  void i18n.use(initReactI18next).init({
++    lng: &quot;en&quot;,
++    fallbackLng: &quot;en&quot;,
++    defaultNS: &quot;openhands&quot;,
++    initAsync: false,
++    resources: Object.fromEntries(
++      Object.entries(translationResources).map(([language, translations]) =&gt; [
++        language,
++        { openhands: translations },
++      ]),
++    ),
++  });
++  // Await real route-module imports before rendering so their first-load cost
++  // is not mistaken for a failed title update by Testing Library&#x27;s 1s poll.
++  await Promise.all(
++    (matchRoutes(titleRoutes(routeConfig, null), path, basename) ?? []).map(
++      ({ route }) =&gt; routeModules[`../${route.id}`](),
++    ),
++  );
++  let router: ReturnType&lt;typeof createMemoryRouter&gt;;
++  const hook = renderHook(
++    () =&gt; ({ title: useAppTitle(), navigate: useNavigate() }),
++    {
++      wrapper: ({ children }) =&gt; {
++        router ??= createMemoryRouter(titleRoutes(routeConfig, children), {
++          basename,
++          initialEntries: [path],
++        });
++        return (
++          &lt;QueryClientProvider client={queryClient}&gt;
++            &lt;I18nextProvider i18n={i18n}&gt;
++              &lt;RouterProvider router={router} /&gt;
++            &lt;/I18nextProvider&gt;
++          &lt;/QueryClientProvider&gt;
++        );
++      },
++    },
++  );
++  await waitFor(() =&gt; expect(hook.result.current).not.toBeNull());
++  return { ...hook, queryClient, i18n };
++}
+ 
+ describe(&quot;useAppTitle&quot;, () =&gt; {
+-  const mockUseUserConversation = vi.mocked(useUserConversation);
+-  const mockUseParams = vi.mocked(useParams);
++  const getConversations = vi.mocked(
++    AgentServerConversationService.batchGetAppConversations,
++  );
+ 
+   beforeEach(() =&gt; {
+-    // @ts-expect-error - only returning partial config for test
+-    mockUseUserConversation.mockReturnValue({ data: null });
+-    mockUseParams.mockReturnValue({});
++    vi.restoreAllMocks();
++    getConversations.mockReset().mockResolvedValue([makeConversation()]);
+     useConversationStateStore.getState().reset();
+   });
+ 
+-  it(&quot;returns the OSS app title outside conversations&quot;, async () =&gt; {
+-    const { result } = renderAppTitleHook();
+-
+-    await waitFor(() =&gt; expect(result.current).toBe(&quot;OpenHands&quot;));
++  // @spec AWI-001 — Localized section titles
++  it.each([
++    [&quot;/&quot;, &quot;New Chat | OpenHands&quot;],
++    [&quot;/conversations&quot;, &quot;New Chat | OpenHands&quot;],
++    [&quot;/settings&quot;, &quot;Settings | OpenHands&quot;],
++    [&quot;/settings/llm?tab=profiles&quot;, &quot;Settings | OpenHands&quot;],
++    [&quot;/customize&quot;, &quot;Customize | OpenHands&quot;],
++    [&quot;/mcp&quot;, &quot;Model Context Protocol (MCP) | OpenHands&quot;],
++    [&quot;/skills&quot;, &quot;Skills | OpenHands&quot;],
++    [&quot;/plugins&quot;, &quot;Plugins | OpenHands&quot;],
++    [&quot;/apps&quot;, &quot;Apps for Agent Canvas | OpenHands&quot;],
++    [&quot;/settings-other&quot;, &quot;OpenHands&quot;],
++    [&quot;/settings/does-not-exist&quot;, &quot;OpenHands&quot;],
++    [&quot;/settings/llm/deeper&quot;, &quot;OpenHands&quot;],
++    [&quot;/automations/a/b&quot;, &quot;OpenHands&quot;],
++  ])(&quot;identifies the section at %s&quot;, async (path, expected) =&gt; {
++    const { result } = await renderAppTitleHook(path);
++    expect(result.current.title).toBe(expected);
++    expect(getConversations).not.toHaveBeenCalled();
+   });
+ 
+-  it(&quot;returns the conversation title with the OSS app name&quot;, async () =&gt; {
+-    mockUseParams.mockReturnValue({ conversationId: &quot;123&quot; });
+-    mockUseUserConversation.mockReturnValue({
+-      // @ts-expect-error - only returning partial config for test
+-      data: { title: &quot;My Conversation&quot; },
++  it(&quot;uses the admitted automation label and falls back when the interface is absent&quot;, async () =&gt; {
++    const copy = automationInterface.getInterfaceCopy();
++    const getCopy = vi
++      .spyOn(automationInterface, &quot;getInterfaceCopy&quot;)
++      .mockReturnValue({
++        ...copy,
++        sidebarLabel: &quot;Team workflows&quot;,
++      });
++    const gate = vi
++      .spyOn(automationInterface, &quot;hasAutomationInterface&quot;)
++      .mockReturnValue(true);
++    const { result } = await renderAppTitleHook(&quot;/automations/templates&quot;);
++    expect(result.current.title).toBe(&quot;Team workflows | OpenHands&quot;);
++
++    gate.mockReturnValue(false);
++    getCopy.mockImplementation(() =&gt; {
++      throw new Error(&quot;Unavailable interface must not be read&quot;);
+     });
++    await act(() =&gt; result.current.navigate(&quot;/automations&quot;));
++    expect(result.current.title).toBe(&quot;OpenHands&quot;);
++  });
+ 
+-    const { result } = renderAppTitleHook();
++  it(&quot;updates section titles on navigation and language changes under a base path&quot;, async () =&gt; {
++    const { result, i18n } = await renderAppTitleHook(&quot;/canvas/&quot;, &quot;/canvas&quot;);
++    expect(result.current.title).toBe(&quot;New Chat | OpenHands&quot;);
+ 
+-    await waitFor(() =&gt;
+-      expect(result.current).toBe(&quot;My Conversation | OpenHands&quot;),
+-    );
++    await act(() =&gt; result.current.navigate(&quot;/settings/llm&quot;));
++    expect(result.current.title).toBe(&quot;Settings | OpenHands&quot;);
++
++    await act(() =&gt; i18n.changeLanguage(&quot;de&quot;));
++    expect(result.current.title).toBe(&quot;Einstellungen | OpenHands&quot;);
+   });
+ 
+-  it(&quot;returns the app name while conversation data is loading&quot;, async () =&gt; {
+-    mockUseParams.mockReturnValue({ conversationId: &quot;123&quot; });
+-    // @ts-expect-error - only returning partial config for test
+-    mockUseUserConversation.mockReturnValue({ data: undefined });
++  it.each([&quot;/conversations/123&quot;, &quot;/conversations/123/panel&quot;])(
++    &quot;uses the conversation title at %s and updates it after refetch&quot;,
++    async (path) =&gt; {
++      const { result, queryClient } = await renderAppTitleHook(path);
++      await waitFor(() =&gt;
++        expect(result.current.title).toBe(&quot;My Conversation | OpenHands&quot;),
++      );
+ 
+-    const { result } = renderAppTitleHook();
++      getConversations.mockResolvedValue([
++        makeConversation({ title: &quot;Renamed conversation&quot; }),
++      ]);
++      await act(() =&gt; queryClient.invalidateQueries());
+ 
+-    await waitFor(() =&gt; expect(result.current).toBe(&quot;OpenHands&quot;));
++      await waitFor(() =&gt;
++        expect(result.current.title).toBe(&quot;Renamed conversation | OpenHands&quot;),
++      );
++    },
++  );
++
++  // @spec AWI-001 — Stable conversation titles and status
++  it(&quot;keeps a stable title while loading and when the conversation is untitled&quot;, async () =&gt; {
++    let resolveConversation!: (value: AppConversation[]) =&gt; void;
++    getConversations.mockReturnValue(
++      new Promise((resolve) =&gt; {
++        resolveConversation = resolve;
++      }),
++    );
++    const { result, queryClient } =
++      await renderAppTitleHook(&quot;/conversations/123&quot;);
++    expect(result.current.title).toBe(&quot;OpenHands&quot;);
++
++    await act(() =&gt; resolveConversation([makeConversation({ title: null })]));
++    await waitFor(() =&gt; expect(queryClient.isFetching()).toBe(0));
++    expect(result.current.title).toBe(&quot;OpenHands&quot;);
+   });
+ 
+   it.each([
+@@ -74,52 +249,34 @@ describe(&quot;useAppTitle&quot;, () =&gt; {
+     [ExecutionStatus.PAUSED, &quot;⚪&quot;],
+     [ExecutionStatus.ERROR, &quot;🔴&quot;],
+     [ExecutionStatus.STUCK, &quot;🔴&quot;],
+-  ])(
+-    &quot;prefixes the title with %s emoji for execution status %s&quot;,
+-    async (status, emoji) =&gt; {
+-      mockUseParams.mockReturnValue({ conversationId: &quot;123&quot; });
+-      mockUseUserConversation.mockReturnValue({
+-        // @ts-expect-error - only returning partial config for test
+-        data: { title: &quot;My Conversation&quot; },
+-      });
+-      useConversationStateStore.getState().setExecutionStatus(&quot;123&quot;, status);
+-
+-      const { result } = renderAppTitleHook();
+-
+-      await waitFor(() =&gt;
+-        expect(result.current).toBe(`${emoji} My Conversation | OpenHands`),
+-      );
+-    },
+-  );
+-
+-  it(&quot;falls back to the conversation&#x27;s execution_status when the live store is empty&quot;, async () =&gt; {
+-    mockUseParams.mockReturnValue({ conversationId: &quot;123&quot; });
+-    mockUseUserConversation.mockReturnValue({
+-      // @ts-expect-error - only returning partial config for test
+-      data: {
+-        title: &quot;My Conversation&quot;,
+-        execution_status: ExecutionStatus.RUNNING,
+-      },
+-    });
+-
+-    const { result } = renderAppTitleHook();
+-
++  ])(&quot;preserves the %s status emoji&quot;, async (status, emoji) =&gt; {
++    const { result } = await renderAppTitleHook(&quot;/conversations/123&quot;);
+     await waitFor(() =&gt;
+-      expect(result.current).toBe(&quot;🟢 My Conversation | OpenHands&quot;),
++      expect(result.current.title).toBe(&quot;My Conversation | OpenHands&quot;),
+     );
+-  });
+ 
+-  it(&quot;does not add an emoji when in a conversation but execution status is unknown&quot;, async () =&gt; {
+-    mockUseParams.mockReturnValue({ conversationId: &quot;123&quot; });
+-    mockUseUserConversation.mockReturnValue({
+-      // @ts-expect-error - only returning partial config for test
+-      data: { title: &quot;My Conversation&quot; },
+-    });
++    act(() =&gt;
++      useConversationStateStore.getState().setExecutionStatus(&quot;123&quot;, status),
++    );
+ 
+-    const { result } = renderAppTitleHook();
++    expect(result.current.title).toBe(`${emoji} My Conversation | OpenHands`);
++  });
+ 
++  it(&quot;uses the saved status until a live status arrives&quot;, async () =&gt; {
++    getConversations.mockResolvedValue([
++      makeConversation({ execution_status: ExecutionStatus.RUNNING }),
++    ]);
++    const { result } = await renderAppTitleHook(&quot;/conversations/123&quot;);
+     await waitFor(() =&gt;
+-      expect(result.current).toBe(&quot;My Conversation | OpenHands&quot;),
++      expect(result.current.title).toBe(&quot;🟢 My Conversation | OpenHands&quot;),
+     );
++
++    act(() =&gt;
++      useConversationStateStore
++        .getState()
++        .setExecutionStatus(&quot;123&quot;, ExecutionStatus.ERROR),
++    );
++
++    expect(result.current.title).toBe(&quot;🔴 My Conversation | OpenHands&quot;);
+   });
+ });
+</pre></details></article><article id="f6"><h3>Changed: src/hooks/use-app-title.ts</h3><p>+30 / −8 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/hooks/use-app-title.ts">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/hooks/use-app-title.ts">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/hooks/use-app-title.ts b/src/hooks/use-app-title.ts
+index e506d3f40..e0b977ee1 100644
+--- a/src/hooks/use-app-title.ts
++++ b/src/hooks/use-app-title.ts
+@@ -1,4 +1,5 @@
+-import { useMatch, useParams } from &quot;react-router&quot;;
++import { useMatches, useParams } from &quot;react-router&quot;;
++import { useTranslation } from &quot;react-i18next&quot;;
+ import { useUserConversation } from &quot;#/hooks/query/use-user-conversation&quot;;
+ import { useConversationStateStore } from &quot;#/stores/conversation-state-store&quot;;
+ import { getAgentStateEmoji } from &quot;#/utils/agent-state-emoji&quot;;
+@@ -6,17 +7,19 @@ import {
+   selectCanvasExtensionPage,
+   useCanvasExtensionsRuntime,
+ } from &quot;#/components/features/canvas-extensions/canvas-extensions-runtime&quot;;
++import {
++  getInterfaceCopy,
++  hasAutomationInterface,
++} from &quot;#/manifests/automation-interface&quot;;
++import type { RouteTitleHandle } from &quot;#/routes/title-handle&quot;;
+ 
+ const APP_TITLE = &quot;OpenHands&quot;;
+ 
++// @spec AWI-001 — Localized matched-route titles with stable conversation status
+ export const useAppTitle = () =&gt; {
+-  const appRoute = useMatch(&quot;/extensions/:extensionName/*&quot;);
++  const matches = useMatches();
++  const { t } = useTranslation(&quot;openhands&quot;);
+   const { pages } = useCanvasExtensionsRuntime();
+-  const appPage = selectCanvasExtensionPage(
+-    pages,
+-    appRoute?.params.extensionName ?? &quot;&quot;,
+-    appRoute?.params[&quot;*&quot;] ?? &quot;&quot;,
+-  );
+   const { conversationId } = useParams&lt;{ conversationId: string }&gt;();
+   const { data: conversation } = useUserConversation(conversationId ?? null);
+   const liveExecutionStatus = useConversationStateStore((state) =&gt;
+@@ -32,7 +35,26 @@ export const useAppTitle = () =&gt; {
+       : APP_TITLE;
+ 
+   if (!conversationId) {
+-    return appPage ? `${appPage.contribution.title} | ${APP_TITLE}` : baseTitle;
++    const match = [...matches].reverse().find(({ handle }) =&gt; {
++      const titleHandle = handle as RouteTitleHandle | undefined;
++      return titleHandle?.titleKey || titleHandle?.titleSource;
++    });
++    const handle = match?.handle as RouteTitleHandle | undefined;
++    let sectionTitle: string | undefined;
++    if (handle?.titleSource === &quot;automation&quot;) {
++      sectionTitle = hasAutomationInterface()
++        ? getInterfaceCopy().sidebarLabel
++        : undefined;
++    } else if (handle?.titleSource === &quot;extension&quot;) {
++      sectionTitle = selectCanvasExtensionPage(
++        pages,
++        match?.params.extensionName ?? &quot;&quot;,
++        match?.params[&quot;*&quot;] ?? &quot;&quot;,
++      )?.contribution.title;
++    } else if (handle?.titleKey) {
++      sectionTitle = t(handle.titleKey);
++    }
++    return sectionTitle ? `${sectionTitle} | ${APP_TITLE}` : APP_TITLE;
+   }
+ 
+   const executionStatus =
+</pre></details></article><article id="f7"><h3>Changed: src/routes/automation-detail.tsx</h3><p>+3 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/automation-detail.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/automation-detail.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/automation-detail.tsx b/src/routes/automation-detail.tsx
+index 3f14a26a4..5f9e439e9 100644
+--- a/src/routes/automation-detail.tsx
++++ b/src/routes/automation-detail.tsx
+@@ -437,3 +437,6 @@ export default function AutomationDetail() {
+     &lt;/div&gt;
+   );
+ }
++
++// @spec AWI-001 — Interface-defined automation section identity
++export { AUTOMATION_TITLE_HANDLE as handle } from &quot;./title-handle&quot;;
+</pre></details></article><article id="f8"><h3>Changed: src/routes/automation-events.tsx</h3><p>+3 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/automation-events.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/automation-events.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/automation-events.tsx b/src/routes/automation-events.tsx
+index faedc464e..253d95c70 100644
+--- a/src/routes/automation-events.tsx
++++ b/src/routes/automation-events.tsx
+@@ -376,3 +376,6 @@ export default function AutomationEvents() {
+     &lt;/ManifestSubpageLayout&gt;
+   );
+ }
++
++// @spec AWI-001 — Interface-defined automation section identity
++export { AUTOMATION_TITLE_HANDLE as handle } from &quot;./title-handle&quot;;
+</pre></details></article><article id="f9"><h3>Changed: src/routes/automation-git-sync.tsx</h3><p>+3 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/automation-git-sync.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/automation-git-sync.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/automation-git-sync.tsx b/src/routes/automation-git-sync.tsx
+index 2f0d85766..15a694115 100644
+--- a/src/routes/automation-git-sync.tsx
++++ b/src/routes/automation-git-sync.tsx
+@@ -231,3 +231,6 @@ export default function AutomationGitSync() {
+     &lt;/div&gt;
+   );
+ }
++
++// @spec AWI-001 — Interface-defined automation section identity
++export { AUTOMATION_TITLE_HANDLE as handle } from &quot;./title-handle&quot;;
+</pre></details></article><article id="f10"><h3>Changed: src/routes/automation-setup-new.tsx</h3><p>+3 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/automation-setup-new.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/automation-setup-new.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/automation-setup-new.tsx b/src/routes/automation-setup-new.tsx
+index d0d416195..e611b6255 100644
+--- a/src/routes/automation-setup-new.tsx
++++ b/src/routes/automation-setup-new.tsx
+@@ -173,3 +173,6 @@ export default function AutomationSetupNew() {
+     &lt;/div&gt;
+   );
+ }
++
++// @spec AWI-001 — Interface-defined automation section identity
++export { AUTOMATION_TITLE_HANDLE as handle } from &quot;./title-handle&quot;;
+</pre></details></article><article id="f11"><h3>Changed: src/routes/automation-setup-route.tsx</h3><p>+3 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/automation-setup-route.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/automation-setup-route.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/automation-setup-route.tsx b/src/routes/automation-setup-route.tsx
+index a948cf81f..bb08f7cf0 100644
+--- a/src/routes/automation-setup-route.tsx
++++ b/src/routes/automation-setup-route.tsx
+@@ -45,3 +45,6 @@ export default function AutomationSetupRoute() {
+ 
+   return &lt;SetupDialog entry={entry} onClose={handleClose} /&gt;;
+ }
++
++// @spec AWI-001 — Interface-defined automation section identity
++export { AUTOMATION_TITLE_HANDLE as handle } from &quot;./title-handle&quot;;
+</pre></details></article><article id="f12"><h3>Changed: src/routes/automation-templates.tsx</h3><p>+3 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/automation-templates.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/automation-templates.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/automation-templates.tsx b/src/routes/automation-templates.tsx
+index 5cf5a536e..2d3848fc2 100644
+--- a/src/routes/automation-templates.tsx
++++ b/src/routes/automation-templates.tsx
+@@ -53,3 +53,6 @@ export default function AutomationTemplates() {
+     &lt;/ManifestSubpageLayout&gt;
+   );
+ }
++
++// @spec AWI-001 — Interface-defined automation section identity
++export { AUTOMATION_TITLE_HANDLE as handle } from &quot;./title-handle&quot;;
+</pre></details></article><article id="f13"><h3>Changed: src/routes/automations-list.tsx</h3><p>+3 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/automations-list.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/automations-list.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/automations-list.tsx b/src/routes/automations-list.tsx
+index 106dbaba4..86a7c5c42 100644
+--- a/src/routes/automations-list.tsx
++++ b/src/routes/automations-list.tsx
+@@ -963,3 +963,6 @@ export default function AutomationsList() {
+     &lt;/&gt;,
+   );
+ }
++
++// @spec AWI-001 — Interface-defined automation section identity
++export { AUTOMATION_TITLE_HANDLE as handle } from &quot;./title-handle&quot;;
+</pre></details></article><article id="f14"><h3>Changed: src/routes/canvas-extension-page.tsx</h3><p>+4 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/canvas-extension-page.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/canvas-extension-page.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/canvas-extension-page.tsx b/src/routes/canvas-extension-page.tsx
+index 690e1a791..ccabd6e48 100644
+--- a/src/routes/canvas-extension-page.tsx
++++ b/src/routes/canvas-extension-page.tsx
+@@ -1,3 +1,4 @@
++import type { RouteTitleHandle } from &quot;./title-handle&quot;;
+ import React from &quot;react&quot;;
+ import { useNavigate, useParams } from &quot;react-router&quot;;
+ import { useTranslation } from &quot;react-i18next&quot;;
+@@ -99,3 +100,6 @@ export default function CanvasExtensionPage() {
+     &lt;/main&gt;
+   );
+ }
++
++// @spec AWI-001 — Registered extension pages retain their own title
++export const handle = { titleSource: &quot;extension&quot; } satisfies RouteTitleHandle;
+</pre></details></article><article id="f15"><h3>Changed: src/routes/canvas-extensions.tsx</h3><p>+6 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/canvas-extensions.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/canvas-extensions.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/canvas-extensions.tsx b/src/routes/canvas-extensions.tsx
+index 37b9e92ad..e7120fc1b 100644
+--- a/src/routes/canvas-extensions.tsx
++++ b/src/routes/canvas-extensions.tsx
+@@ -1,3 +1,4 @@
++import type { RouteTitleHandle } from &quot;./title-handle&quot;;
+ import React from &quot;react&quot;;
+ import { useTranslation } from &quot;react-i18next&quot;;
+ import { ExternalLink } from &quot;lucide-react&quot;;
+@@ -229,3 +230,8 @@ export default function CanvasExtensionsScreen() {
+     &lt;/div&gt;
+   );
+ }
++
++// @spec AWI-001 — Localized section identity
++export const handle = {
++  titleKey: I18nKey.SETTINGS$APPS_PAGE_TITLE,
++} satisfies RouteTitleHandle;
+</pre></details></article><article id="f16"><h3>Changed: src/routes/extensions-hub.tsx</h3><p>+7 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/extensions-hub.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/extensions-hub.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/extensions-hub.tsx b/src/routes/extensions-hub.tsx
+index 84c50c301..a319c12fa 100644
+--- a/src/routes/extensions-hub.tsx
++++ b/src/routes/extensions-hub.tsx
+@@ -1,3 +1,5 @@
++import type { RouteTitleHandle } from &quot;./title-handle&quot;;
++import { I18nKey } from &quot;#/i18n/declaration&quot;;
+ import { Navigate } from &quot;react-router&quot;;
+ import {
+   SETTINGS_COMPACT_MAX_WIDTH,
+@@ -14,3 +16,8 @@ export default function ExtensionsHub() {
+ 
+   return &lt;Navigate to=&quot;/mcp&quot; replace /&gt;;
+ }
++
++// @spec AWI-001 — Localized section identity
++export const handle = {
++  titleKey: I18nKey.NAV$CUSTOMIZE,
++} satisfies RouteTitleHandle;
+</pre></details></article><article id="f17"><h3>Changed: src/routes/home.tsx</h3><p>+7 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/home.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/home.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/home.tsx b/src/routes/home.tsx
+index 40ec74bb7..80de8da4a 100644
+--- a/src/routes/home.tsx
++++ b/src/routes/home.tsx
+@@ -1,3 +1,5 @@
++import type { RouteTitleHandle } from &quot;./title-handle&quot;;
++import { I18nKey } from &quot;#/i18n/declaration&quot;;
+ import { PrefetchPageLinks, useLocation } from &quot;react-router&quot;;
+ import { HomeChatLauncher } from &quot;#/components/features/home/home-chat-launcher&quot;;
+ import { LlmNotConfiguredBanner } from &quot;#/components/features/home/llm-not-configured-banner&quot;;
+@@ -29,3 +31,8 @@ function HomeScreen() {
+ }
+ 
+ export default HomeScreen;
++
++// @spec AWI-001 — Localized section identity
++export const handle = {
++  titleKey: I18nKey.SIDEBAR$NEW_CHAT,
++} satisfies RouteTitleHandle;
+</pre></details></article><article id="f18"><h3>Changed: src/routes/index-home.tsx</h3><p>+1 / −1 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/index-home.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/index-home.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/index-home.tsx b/src/routes/index-home.tsx
+index 085f083f0..12560d35d 100644
+--- a/src/routes/index-home.tsx
++++ b/src/routes/index-home.tsx
+@@ -14,4 +14,4 @@ export const clientLoader = () =&gt; {
+   return null;
+ };
+ 
+-export { default } from &quot;./home&quot;;
++export { default, handle } from &quot;./home&quot;;
+</pre></details></article><article id="f19"><h3>Changed: src/routes/mcp.tsx</h3><p>+6 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/mcp.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/mcp.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/mcp.tsx b/src/routes/mcp.tsx
+index 4227c6451..91cb98317 100644
+--- a/src/routes/mcp.tsx
++++ b/src/routes/mcp.tsx
+@@ -1,3 +1,4 @@
++import type { RouteTitleHandle } from &quot;./title-handle&quot;;
+ import React from &quot;react&quot;;
+ import { AxiosError } from &quot;axios&quot;;
+ import {
+@@ -214,3 +215,8 @@ export default function MCPPage() {
+     &lt;/div&gt;
+   );
+ }
++
++// @spec AWI-001 — Localized section identity
++export const handle = {
++  titleKey: I18nKey.SETTINGS$MCP_TITLE,
++} satisfies RouteTitleHandle;
+</pre></details></article><article id="f20"><h3>Changed: src/routes/settings.tsx</h3><p>+7 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/settings.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/settings.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/settings.tsx b/src/routes/settings.tsx
+index 0f32cddf9..abb57af17 100644
+--- a/src/routes/settings.tsx
++++ b/src/routes/settings.tsx
+@@ -1,3 +1,5 @@
++import type { RouteTitleHandle } from &quot;./title-handle&quot;;
++import { I18nKey } from &quot;#/i18n/declaration&quot;;
+ import { useMemo, useState } from &quot;react&quot;;
+ import {
+   Navigate,
+@@ -137,3 +139,8 @@ function SettingsScreen() {
+ }
+ 
+ export default SettingsScreen;
++
++// @spec AWI-001 — Localized section identity
++export const handle = {
++  titleKey: I18nKey.SETTINGS$TITLE,
++} satisfies RouteTitleHandle;
+</pre></details></article><article id="f21"><h3>Changed: src/routes/skills-plugins.tsx</h3><p>+6 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/skills-plugins.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/skills-plugins.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/skills-plugins.tsx b/src/routes/skills-plugins.tsx
+index 7a15cc983..037eea973 100644
+--- a/src/routes/skills-plugins.tsx
++++ b/src/routes/skills-plugins.tsx
+@@ -1,3 +1,4 @@
++import type { RouteTitleHandle } from &quot;./title-handle&quot;;
+ import React from &quot;react&quot;;
+ import { useTranslation } from &quot;react-i18next&quot;;
+ import {
+@@ -244,3 +245,8 @@ export default function SkillsPluginsScreen() {
+     &lt;/div&gt;
+   );
+ }
++
++// @spec AWI-001 — Localized section identity
++export const handle = {
++  titleKey: I18nKey.SETTINGS$PLUGINS_TITLE,
++} satisfies RouteTitleHandle;
+</pre></details></article><article id="f22"><h3>Changed: src/routes/skills-settings.tsx</h3><p>+6 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/skills-settings.tsx">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/skills-settings.tsx">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/skills-settings.tsx b/src/routes/skills-settings.tsx
+index 096b480ee..41958d6d4 100644
+--- a/src/routes/skills-settings.tsx
++++ b/src/routes/skills-settings.tsx
+@@ -1,3 +1,4 @@
++import type { RouteTitleHandle } from &quot;./title-handle&quot;;
+ import React from &quot;react&quot;;
+ import { useTranslation } from &quot;react-i18next&quot;;
+ import { useSearchParams } from &quot;react-router&quot;;
+@@ -310,3 +311,8 @@ function SkillsSettingsScreen() {
+ }
+ 
+ export default SkillsSettingsScreen;
++
++// @spec AWI-001 — Localized section identity
++export const handle = {
++  titleKey: I18nKey.SETTINGS$SKILLS_TITLE,
++} satisfies RouteTitleHandle;
+</pre></details></article><article id="f23"><h3>Added: src/routes/title-handle.ts</h3><p>+11 / −0 · <a href="https://github.com/claire-fang/OpenHands/blob/c90c6199dcf57e9208ad2adfac2aef5b41e04ec8/src/routes/title-handle.ts">Before</a> → <a href="https://github.com/claire-fang/OpenHands/blob/320e309678ba9745d8d786f8baffe4d38d500fc4/src/routes/title-handle.ts">After</a></p><details><summary>Inspect diff</summary><pre>diff --git a/src/routes/title-handle.ts b/src/routes/title-handle.ts
+new file mode 100644
+index 000000000..76652dd81
+--- /dev/null
++++ b/src/routes/title-handle.ts
+@@ -0,0 +1,11 @@
++import type { I18nKey } from &quot;#/i18n/declaration&quot;;
++
++// @spec AWI-001 — Matched routes own their section title
++export interface RouteTitleHandle {
++  titleKey?: I18nKey;
++  titleSource?: &quot;automation&quot; | &quot;extension&quot;;
++}
++
++export const AUTOMATION_TITLE_HANDLE: RouteTitleHandle = {
++  titleSource: &quot;automation&quot;,
++};
+</pre></details></article><h2>Follow-ups</h2><p>Keep draft until the PWA foundation is integrated and the requested installed-window recording is captured. F01.document-title still expects the previous generic title; verification-map maintenance must be a separate PR after this product change lands. The issue needs the enhancement label for the existing PR-description policy.</p></main></html>

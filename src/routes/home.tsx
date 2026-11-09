@@ -1,3 +1,5 @@
+import type { RouteTitleHandle } from "./title-handle";
+import { I18nKey } from "#/i18n/declaration";
 import { PrefetchPageLinks, useLocation } from "react-router";
 import { HomeChatLauncher } from "#/components/features/home/home-chat-launcher";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
@@ -29,3 +31,8 @@ function HomeScreen() {
 }
 
 export default HomeScreen;
+
+// @spec AWI-001 — Localized section identity
+export const handle = {
+  titleKey: I18nKey.SIDEBAR$NEW_CHAT,
+} satisfies RouteTitleHandle;

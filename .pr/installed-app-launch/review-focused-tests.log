@@ -1,0 +1,20 @@
+
+> @openhands/agent-canvas@1.37.0 test
+> npm run make-i18n && vitest run src/hooks/use-app-title.test.tsx __tests__/pwa-manifest.test.ts src/components/features/canvas-extensions/canvas-extensions-runtime.test.tsx
+
+
+> @openhands/agent-canvas@1.37.0 make-i18n
+> node scripts/make-i18n-translations.cjs
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./src/styles/agent-server-ui-style-scope" without a file extension (vite.config.ts:16:8). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.5 /Users/fangjiaxin/Documents/cs146s/OpenHands
+
+
+ Test Files  3 passed (3)
+      Tests  42 passed (42)
+   Start at  18:26:13
+   Duration  4.38s (tests 50%, import 19%, environment 19%, transform 6%, setup 5%)
+

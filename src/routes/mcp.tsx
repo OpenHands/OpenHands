@@ -1,3 +1,4 @@
+import type { RouteTitleHandle } from "./title-handle";
 import React from "react";
 import { AxiosError } from "axios";
 import {
@@ -214,3 +215,8 @@ export default function MCPPage() {
     </div>
   );
 }
+
+// @spec AWI-001 — Localized section identity
+export const handle = {
+  titleKey: I18nKey.SETTINGS$MCP_TITLE,
+} satisfies RouteTitleHandle;

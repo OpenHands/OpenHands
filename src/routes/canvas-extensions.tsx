@@ -1,3 +1,4 @@
+import type { RouteTitleHandle } from "./title-handle";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { ExternalLink } from "lucide-react";
@@ -229,3 +230,8 @@ export default function CanvasExtensionsScreen() {
     </div>
   );
 }
+
+// @spec AWI-001 — Localized section identity
+export const handle = {
+  titleKey: I18nKey.SETTINGS$APPS_PAGE_TITLE,
+} satisfies RouteTitleHandle;

@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
-import CanvasExtensionPage from "#/routes/canvas-extension-page";
+import { createMemoryRouter, RouterProvider, Outlet } from "react-router";
+import CanvasExtensionPage, {
+  handle as extensionPageHandle,
+} from "#/routes/canvas-extension-page";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppTitle } from "#/hooks/use-app-title";
 import CanvasExtensionsService from "#/api/canvas-extensions-service";
@@ -79,21 +81,31 @@ function renderRuntime(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  const router = createMemoryRouter(
+    [
+      {
+        element: (
+          <CanvasExtensionsRuntimeProvider moduleLoader={moduleLoader}>
+            <RuntimeProbe />
+            <Outlet />
+          </CanvasExtensionsRuntimeProvider>
+        ),
+        children: [
+          {
+            path: "/extensions/:extensionName/*",
+            handle: extensionPageHandle,
+            element: <CanvasExtensionPage />,
+          },
+          { path: "*", element: null },
+        ],
+      },
+    ],
+    { initialEntries: [path] },
+  );
   const rendered = render(
     <QueryClientProvider client={queryClient}>
       <ActiveBackendProvider>
-        <MemoryRouter initialEntries={[path]}>
-          <CanvasExtensionsRuntimeProvider moduleLoader={moduleLoader}>
-            <RuntimeProbe />
-            <Routes>
-              <Route
-                path="/extensions/:extensionName/*"
-                element={<CanvasExtensionPage />}
-              />
-              <Route path="*" element={null} />
-            </Routes>
-          </CanvasExtensionsRuntimeProvider>
-        </MemoryRouter>
+        <RouterProvider router={router} />
       </ActiveBackendProvider>
     </QueryClientProvider>,
   );
