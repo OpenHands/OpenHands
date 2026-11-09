@@ -225,7 +225,8 @@ describe("ConversationPanel filters and pagination", () => {
         createMockConversation({
           id: "1",
           title: "Tagged 1",
-          tags: { project: "vault" },
+          // Not `project`: that chip only shows while Projects is on.
+          tags: { team: "vault" },
         }),
       ],
       next_page_id: null,

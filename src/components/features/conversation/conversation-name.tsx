@@ -17,6 +17,7 @@ import { ConfirmDeleteModal } from "../conversation-panel/confirm-delete-modal";
 import { ConfirmStopModal } from "../conversation-panel/confirm-stop-modal";
 import { TranscriptExportModal } from "./transcript-export-modal";
 import { InsiderCatBadge } from "./insider-cat-badge";
+import { ProjectBadge } from "./project-badge";
 
 export function ConversationName() {
   const { t } = useTranslation("openhands");
@@ -166,6 +167,7 @@ export function ConversationName() {
           parentConversationId={conversation.parent_conversation_id}
           conversationId={conversation.id}
         />
+        <ProjectBadge tags={conversation.tags} />
         {titleMode === "edit" ? (
           <input
             ref={inputRef}

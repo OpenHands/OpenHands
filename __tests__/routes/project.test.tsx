@@ -1,0 +1,203 @@
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter, Route, Routes } from "react-router";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import ProjectPage from "#/routes/project";
+import ProjectsService, {
+  type ProjectConversation,
+} from "#/api/projects-service/projects-service.api";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
+
+const PROJECT_ID = "aa000000000040008000000000000001";
+const COORDINATOR_ID = "cc000000000040008000000000000001";
+
+const member = (
+  id: string,
+  title: string,
+  attention: ProjectConversation["attention"],
+  extra: Partial<ProjectConversation> = {},
+): ProjectConversation => ({
+  conversation_id: id,
+  title,
+  execution_status: "finished",
+  attention,
+  resolved: attention === "resolved" ? "user" : null,
+  turn: null,
+  ask: null,
+  automation_id: null,
+  parent_conversation_id: COORDINATOR_ID,
+  created_at: "2026-11-09T10:00:00Z",
+  updated_at: "2026-11-09T10:00:00Z",
+  ...extra,
+});
+
+const setProjectsFeature = (enabled: boolean) =>
+  vi
+    .spyOn(experimentalFeaturesService, "listExperimentalFeatures")
+    .mockResolvedValue([
+      {
+        key: "projects",
+        label: "Projects",
+        description: "",
+        default: false,
+        enabled,
+      },
+    ] as Awaited<
+      ReturnType<typeof experimentalFeaturesService.listExperimentalFeatures>
+    >);
+
+function renderPage() {
+  return render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <MemoryRouter initialEntries={[`/projects/${PROJECT_ID}`]}>
+        <Routes>
+          <Route path="/projects/:projectId" element={<ProjectPage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe("ProjectPage", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(ProjectsService, "getProject").mockResolvedValue({
+      id: PROJECT_ID,
+      name: "Insider 0.2",
+      description: "Get Insider ready for people to try",
+      coordinator_conversation_id: COORDINATOR_ID,
+      worker_agent_profile_id: null,
+      created_at: "2026-11-09T09:00:00Z",
+      updated_at: "2026-11-09T09:00:00Z",
+    });
+    vi.spyOn(ProjectsService, "listConversations").mockResolvedValue({
+      project_id: PROJECT_ID,
+      coordinator: member(COORDINATOR_ID, "Coordinator", "idle"),
+      conversations: [
+        member("01000000000040008000000000000001", "Changelog", "needs_input", {
+          turn: "asked",
+          ask: "Install from main or a branch?",
+        }),
+        member("02000000000040008000000000000001", "README", "working", {
+          execution_status: "running",
+        }),
+        member("03000000000040008000000000000001", "Locales", "resolved"),
+      ],
+    });
+    vi.spyOn(ProjectsService, "listArtifacts").mockResolvedValue([
+      {
+        name: "notes.md",
+        size: 5,
+        source: "user",
+        conversation_id: null,
+        created_at: "2026-11-09T10:00:00Z",
+        updated_at: "2026-11-09T10:00:00Z",
+      },
+      {
+        name: "CHANGELOG.md",
+        size: 5,
+        source: "agent",
+        conversation_id: "01000000000040008000000000000001",
+        created_at: "2026-11-09T11:00:00Z",
+        updated_at: "2026-11-09T11:00:00Z",
+      },
+    ]);
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({ items: [], next_page_id: null });
+  });
+
+  it("says how to turn Projects on while the flag is off", async () => {
+    setProjectsFeature(false);
+    renderPage();
+    expect(await screen.findByTestId("projects-off")).toBeInTheDocument();
+    expect(ProjectsService.getProject).not.toHaveBeenCalled();
+  });
+
+  it("shows the coordinator, the board grouped by what needs you, and files", async () => {
+    setProjectsFeature(true);
+    renderPage();
+
+    expect(await screen.findByTestId("project-name")).toHaveTextContent(
+      "Insider 0.2",
+    );
+    const coordinator = screen.getByTestId("project-open-coordinator");
+    expect(coordinator).toHaveAttribute(
+      "href",
+      expect.stringContaining(`/conversations/${COORDINATOR_ID}`),
+    );
+
+    const needsYou = await screen.findByTestId("project-group-needs_you");
+    expect(within(needsYou).getByText("Changelog")).toBeInTheDocument();
+    expect(needsYou).toHaveTextContent("Install from main or a branch?");
+    expect(
+      within(screen.getByTestId("project-group-working")).getByText("README"),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("project-group-resolved")).getByText("Locales"),
+    ).toBeInTheDocument();
+
+    const files = await screen.findAllByTestId("project-file");
+    expect(files.map((f) => f.getAttribute("data-source"))).toEqual([
+      "agent",
+      "user",
+    ]);
+    // An agent's file names the conversation that saved it.
+    expect(within(files[0]).getByText("Changelog")).toBeInTheDocument();
+  });
+
+  it("resolves a card by setting resolved=user and keeping its other tags", async () => {
+    setProjectsFeature(true);
+    vi.spyOn(
+      AgentServerConversationService,
+      "batchGetAppConversations",
+    ).mockResolvedValue([
+      { tags: { project: PROJECT_ID, team: "core" } } as never,
+    ]);
+    const replace = vi
+      .spyOn(AgentServerConversationService, "replaceConversationTags")
+      .mockResolvedValue({} as never);
+    renderPage();
+
+    const working = await screen.findByTestId("project-group-working");
+    await userEvent.click(within(working).getByTestId("project-card-resolve"));
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith(
+        "02000000000040008000000000000001",
+        { project: PROJECT_ID, team: "core" },
+        { project: PROJECT_ID, team: "core", resolved: "user" },
+      ),
+    );
+  });
+
+  it("reopens a resolved card by dropping the resolved tag", async () => {
+    setProjectsFeature(true);
+    vi.spyOn(
+      AgentServerConversationService,
+      "batchGetAppConversations",
+    ).mockResolvedValue([
+      { tags: { project: PROJECT_ID, resolved: "user" } } as never,
+    ]);
+    const replace = vi
+      .spyOn(AgentServerConversationService, "replaceConversationTags")
+      .mockResolvedValue({} as never);
+    renderPage();
+
+    const resolved = await screen.findByTestId("project-group-resolved");
+    await userEvent.click(within(resolved).getByTestId("project-card-resolve"));
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith(
+        "03000000000040008000000000000001",
+        { project: PROJECT_ID, resolved: "user" },
+        { project: PROJECT_ID },
+      ),
+    );
+  });
+});
