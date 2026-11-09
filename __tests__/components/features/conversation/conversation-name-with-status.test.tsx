@@ -254,7 +254,8 @@ describe("conversation name status controls", () => {
     renderSubject();
 
     openStatusMenu();
-    expect(screen.getByTestId("start-server-button")).toBeInTheDocument();
+    // The sandbox is already running, so there is nothing to start.
+    expect(screen.queryByTestId("start-server-button")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("stop-server-button"));
 
     expect(mocks.pauseConversation).toHaveBeenCalledWith({

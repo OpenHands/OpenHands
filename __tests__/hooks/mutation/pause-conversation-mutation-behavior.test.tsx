@@ -9,23 +9,16 @@ const {
   activeBackendState,
   patchConversationInCacheMock,
   interruptConversationMock,
-  suppressNextCloudAutoResumeMock,
 } = vi.hoisted(() => ({
   activeBackendState: { kind: "local" as "local" | "cloud" },
   patchConversationInCacheMock: vi.fn(),
   interruptConversationMock: vi.fn(),
-  suppressNextCloudAutoResumeMock: vi.fn(),
 }));
 
 vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => ({
     backend: { id: "backend-1", kind: activeBackendState.kind },
   }),
-}));
-
-vi.mock("#/api/cloud/cloud-sandbox-resume-suppression", () => ({
-  suppressNextCloudAutoResume: (...args: unknown[]) =>
-    suppressNextCloudAutoResumeMock(...args),
 }));
 
 vi.mock("#/hooks/mutation/conversation-mutation-utils", () => ({
@@ -157,7 +150,6 @@ describe("pause conversation mutation behavior", () => {
     expect(interruptConversationMock).toHaveBeenCalledWith(
       "conversation-cloud",
     );
-    expect(suppressNextCloudAutoResumeMock).not.toHaveBeenCalled();
     expect(patchConversationInCacheMock).not.toHaveBeenCalled();
   });
 

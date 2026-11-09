@@ -147,7 +147,9 @@ export function ConversationNameWithStatus() {
                   : undefined
               }
               onStartServer={
-                isExecutionPaused(executionStatus)
+                // A running sandbox needs no start; the composer resumes the agent.
+                isExecutionPaused(executionStatus) &&
+                conversation?.sandbox_status !== "RUNNING"
                   ? handleStartServer
                   : undefined
               }
