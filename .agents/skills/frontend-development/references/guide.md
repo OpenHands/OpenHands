@@ -9,9 +9,13 @@ form-control-classes, chat-status-indicator, context-window-ring,
 user-message-body and conversation-main. Their exact paths are in `eslint.config.js`,
 with executable probes in `__tests__/scripts/arbitrary-values-lint.test.ts`.
 Completed Markdown code/path chips, horizontal fade consumers, file-drop artwork, automation view/filter/run-phase bounds, conversation-card reserves and the hover-reveal helper also reject new arbitrary values.
-The cleaned letter-spacing and inset-shadow components also reject new arbitrary
-values. Plan Preview and the standalone MCP logo badge remain at warning severity
-while their remaining color and geometry findings are reviewed.
+The cleaned letter-spacing and inset-shadow owners also reject new arbitrary
+values: `task-list-section.tsx`, `markdown-file-preview.tsx`,
+`skills-modal-section.tsx`, `headings.tsx`, `openai-subscription-auth-card.tsx`,
+`device-verify.tsx`, `modal-classes.ts`, `pinned-automation-card.tsx`,
+`mcp-logo-stack-badge.tsx` and `skill-icon-badge.tsx`. Plan Preview and the
+standalone MCP logo badge remain at warning severity while their remaining
+color and geometry findings are reviewed.
 Other components, routes and primitive implementations retain warnings during
 migration. Keep legitimate measured/portal geometry with its owner; do not
 expand this file list or add exemptions without auditing the remaining values.

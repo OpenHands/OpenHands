@@ -524,7 +524,7 @@ export default [
       "src/components/features/settings/llm-settings/openai-subscription-auth-card.tsx",
       "src/components/features/skills/skill-icon-badge.tsx",
       "src/routes/device-verify.tsx",
-      "src/ui/typography.tsx",
+      "src/utils/modal-classes.ts",
     ],
     rules: { "shadcn/no-arbitrary-values": "error" },
   },

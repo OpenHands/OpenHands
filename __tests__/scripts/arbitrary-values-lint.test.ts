@@ -56,7 +56,7 @@ describe("Canvas arbitrary-value guard adoption", () => {
     "src/components/features/settings/llm-settings/openai-subscription-auth-card.tsx",
     "src/components/features/skills/skill-icon-badge.tsx",
     "src/routes/device-verify.tsx",
-    "src/ui/typography.tsx",
+    "src/utils/modal-classes.ts",
   ])("rejects an arbitrary value in migrated owner %s", async (filePath) => {
     const source = filePath.endsWith(".ts")
       ? 'import { cn } from "#/utils/utils"; export const probe = cn("w-[123px]");'
