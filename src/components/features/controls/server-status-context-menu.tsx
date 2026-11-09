@@ -10,7 +10,7 @@ import { ServerStatus } from "./server-status";
 import { Divider } from "#/ui/divider";
 import { cn } from "#/utils/utils";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
-import { isExecutionActive, isExecutionPaused } from "#/utils/status";
+import { isExecutionPaused } from "#/utils/status";
 
 interface ServerStatusContextMenuProps {
   onClose: () => void;
@@ -39,9 +39,11 @@ export function ServerStatusContextMenu({
     ignoreOutsideClickRef,
   );
 
-  const isActive = isExecutionActive(executionStatus);
+  // The caller decides whether the runtime can be stopped: a cloud sandbox
+  // can still be running after the agent is paused.
+  const canStop = Boolean(onStopServer);
   const isPaused = isExecutionPaused(executionStatus);
-  const shouldActionShown = isActive || isPaused;
+  const shouldActionShown = canStop || isPaused;
 
   return (
     <ContextMenu
@@ -62,7 +64,7 @@ export function ServerStatusContextMenu({
         <>
           <Divider inset="menu" />
 
-          {isActive && onStopServer && (
+          {onStopServer && (
             <ServerStatusContextMenuIconText
               icon={<StopCircleIcon width={18} height={18} />}
               text={t(I18nKey.COMMON$STOP_RUNTIME)}
