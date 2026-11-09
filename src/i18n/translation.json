@@ -19853,6 +19853,24 @@
     "ca": "Aquesta conversa no existeix o no teniu permís per accedir-hi.",
     "id": "Percakapan ini tidak ada, atau Anda tidak memiliki izin untuk mengaksesnya. Jika ini percakapan Anda, coba beralih ke ruang kerja tempat percakapan dibuat."
   },
+  "CONVERSATION$SANDBOX_RESTARTED": {
+    "en": "The sandbox restarted unexpectedly (reason: {{reason}}). Any processes running in it were stopped. This can happen when it runs out of memory or other resources.",
+    "ja": "サンドボックスが予期せず再起動しました（理由: {{reason}}）。実行中のプロセスはすべて停止しました。メモリなどのリソースが不足した場合に発生することがあります。",
+    "zh-CN": "沙盒意外重启（原因：{{reason}}）。其中运行的所有进程都已停止。内存或其他资源耗尽时可能会发生这种情况。",
+    "zh-TW": "沙盒意外重新啟動（原因：{{reason}}）。其中執行的所有程序都已停止。記憶體或其他資源耗盡時可能會發生這種情況。",
+    "ko-KR": "샌드박스가 예기치 않게 다시 시작되었습니다(원인: {{reason}}). 실행 중이던 모든 프로세스가 중지되었습니다. 메모리나 다른 리소스가 부족할 때 발생할 수 있습니다.",
+    "no": "Sandkassen startet på nytt uventet (årsak: {{reason}}). Alle prosesser som kjørte i den ble stoppet. Dette kan skje når den går tom for minne eller andre ressurser.",
+    "it": "La sandbox si è riavviata inaspettatamente (motivo: {{reason}}). Tutti i processi in esecuzione sono stati interrotti. Può accadere quando esaurisce la memoria o altre risorse.",
+    "pt": "O sandbox foi reiniciado inesperadamente (motivo: {{reason}}). Todos os processos em execução nele foram interrompidos. Isso pode acontecer quando ele fica sem memória ou outros recursos.",
+    "es": "El sandbox se reinició inesperadamente (motivo: {{reason}}). Se detuvieron todos los procesos que se estaban ejecutando en él. Esto puede ocurrir cuando se queda sin memoria u otros recursos.",
+    "ar": "أُعيد تشغيل بيئة العزل بشكل غير متوقع (السبب: {{reason}}). تم إيقاف جميع العمليات التي كانت تعمل فيها. قد يحدث هذا عند نفاد الذاكرة أو الموارد الأخرى.",
+    "fr": "Le bac à sable a redémarré de façon inattendue (raison : {{reason}}). Tous les processus qui s'y exécutaient ont été arrêtés. Cela peut se produire lorsqu'il manque de mémoire ou d'autres ressources.",
+    "tr": "Sanal ortam beklenmedik şekilde yeniden başlatıldı (neden: {{reason}}). İçinde çalışan tüm işlemler durduruldu. Bellek veya diğer kaynaklar tükendiğinde bu durum yaşanabilir.",
+    "de": "Die Sandbox wurde unerwartet neu gestartet (Grund: {{reason}}). Alle darin laufenden Prozesse wurden beendet. Das kann passieren, wenn ihr der Arbeitsspeicher oder andere Ressourcen ausgehen.",
+    "uk": "Пісочниця несподівано перезапустилася (причина: {{reason}}). Усі процеси, що працювали в ній, зупинено. Таке може статися, коли їй не вистачає пам'яті або інших ресурсів.",
+    "ca": "El sandbox s'ha reiniciat inesperadament (motiu: {{reason}}). S'han aturat tots els processos que s'hi executaven. Això pot passar quan es queda sense memòria o altres recursos.",
+    "id": "Sandbox dimulai ulang secara tak terduga (alasan: {{reason}}). Semua proses yang berjalan di dalamnya dihentikan. Hal ini dapat terjadi saat kehabisan memori atau sumber daya lain."
+  },
   "TOAST$STOPPING_CONVERSATION": {
     "en": "Stopping conversation...",
     "ja": "会話を停止しています...",

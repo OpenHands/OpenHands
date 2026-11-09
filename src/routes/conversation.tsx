@@ -35,6 +35,7 @@ import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper"
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { I18nKey } from "#/i18n/declaration";
 import { useCloudSandboxAutoResume } from "#/hooks/mutation/use-cloud-sandbox-auto-resume";
+import { SandboxRestartMonitor } from "#/components/features/conversation/sandbox-restart-monitor";
 
 function AppContent() {
   const { t } = useTranslation("openhands");
@@ -236,6 +237,7 @@ function AppContent() {
 
   const content = (
     <EventHandler>
+      {active.backend.kind === "cloud" && <SandboxRestartMonitor />}
       <ConversationOverviewDrawerProvider>
         <div data-testid="app-route" className="flex h-full flex-col">
           {showsMobilePanelPage ? (

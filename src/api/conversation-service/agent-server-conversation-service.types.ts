@@ -218,6 +218,10 @@ export interface AppConversation {
    * Absent / null for local agent-server conversations.
    */
   sandbox_status?: SandboxStatus | null;
+  /** Cloud-only: times the sandbox container has restarted; null when unknown. */
+  sandbox_restart_count?: number | null;
+  /** Cloud-only: why the sandbox container last terminated, e.g. "OOMKilled". */
+  sandbox_restart_reasons?: string[];
   conversation_url: string | null;
   session_api_key: string | null;
   sandbox_id: string | null;
