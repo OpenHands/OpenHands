@@ -46,13 +46,13 @@ async function expectModifiedDiff(row: Locator) {
   ).toContainText("Welcome.");
 }
 
-async function anonymousModelCount(page: Page) {
+async function inMemoryModelCount(page: Page) {
   return page.evaluate(() => {
     const { monaco } = window as unknown as {
       monaco: typeof import("monaco-editor");
     };
     // Monaco's language service can retain library models such as lib.dom.d.ts.
-    // FileDiffViewer creates anonymous in-memory models; those must be released.
+    // FileDiffViewer owns in-memory models; those must be released.
     return monaco.editor
       .getModels()
       .filter((model) => model.uri.scheme === "inmemory").length;
@@ -123,7 +123,7 @@ for (const viewport of [
     const added = fileRow(page, "src/utils/new-helper.ts");
     const expectReleased = async () => {
       await expect(page.locator(".monaco-diff-editor")).toHaveCount(0);
-      await expect.poll(() => anonymousModelCount(page)).toBe(0);
+      await expect.poll(() => inMemoryModelCount(page)).toBe(0);
       expect(browserErrors).toEqual([]);
     };
 
@@ -167,5 +167,47 @@ for (const viewport of [
     await expectModifiedDiff(modified);
     await openTab(page, "planner");
     await expectReleased();
+
+    if (viewport.width === 1440) {
+      // Leave during initialization, before the wrapper's onMount effect.
+      // Observe real editor creation and schedule the actual Planner control;
+      // waiting for rendered diff contents would miss this teardown window.
+      await openChanges(page);
+      await expect(page.getByTestId("conversation-tab-planner")).toBeVisible();
+      await page.evaluate(() => {
+        const { monaco } = window as unknown as {
+          monaco: typeof import("monaco-editor");
+        };
+        const subscription = monaco.editor.onDidCreateDiffEditor(() => {
+          subscription.dispose();
+          requestAnimationFrame(() => {
+            document
+              .querySelector<HTMLButtonElement>(
+                '[data-testid="conversation-tab-planner"]',
+              )!
+              .click();
+          });
+        });
+      });
+      await modified.getByTestId("collapse").click();
+      await expect(
+        page.getByRole("tabpanel", { name: "Planner" }),
+      ).toBeVisible();
+      await expect(page.locator(".monaco-diff-editor")).toHaveCount(0);
+      await expect.poll(() => inMemoryModelCount(page)).toBe(0);
+      // This deliberately timed pending-computation exit also raises Monaco's
+      // existing "no diff result available" before and after the fix. Permit
+      // only that message here; ordinary transitions and recovery reject all errors.
+      expect(
+        browserErrors
+          .splice(0)
+          .filter((message) => message !== "no diff result available"),
+      ).toEqual([]);
+      await openChanges(page);
+      await modified.getByTestId("collapse").click();
+      await expectModifiedDiff(modified);
+      await openTab(page, "planner");
+      await expectReleased();
+    }
   });
 }

@@ -1,0 +1,17 @@
+{
+  "run": "/private/tmp/odie-19501-live/after",
+  "browser": {
+    "stopped": true,
+    "pid": 92944
+  },
+  "launcherStopped": true,
+  "ports": {
+    "ingress": "closed",
+    "agentServer": "closed",
+    "automation": "closed",
+    "frontend": "closed",
+    "vscode": "closed"
+  },
+  "evidenceFiles": 17,
+  "ok": true
+}

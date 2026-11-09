@@ -169,30 +169,42 @@ const beforeMount = (monaco: Monaco) => {
 
 // Own the models for exactly the editor's lifetime, including accordion exits.
 function FileDiffEditor(props: React.ComponentProps<typeof DiffEditor>) {
-  const editorRef = React.useRef<editor_t.IStandaloneDiffEditor>(null);
+  const monacoRef = React.useRef<Monaco>(null);
+  const modelId = encodeURIComponent(React.useId());
+  const originalModelPath = `inmemory://file-diff/${modelId}/original`;
+  const modifiedModelPath = `inmemory://file-diff/${modelId}/modified`;
 
   React.useEffect(
     () => () => {
-      const editor = editorRef.current;
-      const model = editor?.getModel();
+      const monaco = monacoRef.current;
+      if (!monaco) return;
 
-      // @monaco-editor/react disposes models before its editor. Detach our
-      // anonymous models first, while the child editor is still alive, and
-      // release them here because the wrapper will now see a null model.
-      editor?.setModel(null);
-      model?.original.dispose();
-      model?.modified.dispose();
-      editorRef.current = null;
+      // Models exist before onMount runs. Capture this instance's models now,
+      // then release them after the child wrapper has disposed its editor.
+      const original = monaco.editor.getModel(
+        monaco.Uri.parse(originalModelPath),
+      );
+      const modified = monaco.editor.getModel(
+        monaco.Uri.parse(modifiedModelPath),
+      );
+      queueMicrotask(() => {
+        original?.dispose();
+        modified?.dispose();
+      });
     },
-    [],
+    [originalModelPath, modifiedModelPath],
   );
 
   return (
     <DiffEditor
       {...props}
-      onMount={(editor, monaco) => {
-        editorRef.current = editor;
-        props.onMount?.(editor, monaco);
+      originalModelPath={originalModelPath}
+      modifiedModelPath={modifiedModelPath}
+      keepCurrentOriginalModel
+      keepCurrentModifiedModel
+      beforeMount={(monaco) => {
+        monacoRef.current = monaco;
+        props.beforeMount?.(monaco);
       }}
     />
   );
