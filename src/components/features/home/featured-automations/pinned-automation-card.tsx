@@ -156,8 +156,8 @@ export function PinnedAutomationCard({
         extensionModuleCardSurfaceClassName,
         extensionModuleCardInteractiveClassName,
         isDragging && "opacity-50",
-        isDropTarget && dropPosition === "before" && "shadow-reorder-before",
-        isDropTarget && dropPosition === "after" && "shadow-reorder-after",
+        isDropTarget && dropPosition === "before" && "shadow-reorder-before!",
+        isDropTarget && dropPosition === "after" && "shadow-reorder-after!",
       )}
     >
       {/*
