@@ -18,7 +18,7 @@ import {
   SystemMessageForModal,
 } from "#/utils/system-message-adapter";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
-import { isExecutionActive } from "#/utils/status";
+import { canStopRuntime, isExecutionActive } from "#/utils/status";
 import { useSelectConversationTab } from "./use-select-conversation-tab";
 
 interface UseConversationNameContextMenuProps {
@@ -221,7 +221,10 @@ export function useConversationNameContextMenu({
     // Data
     systemMessage,
 
-    shouldShowStop: isExecutionActive(executionStatus),
+    shouldShowStop: canStopRuntime(
+      executionStatus,
+      conversation?.id === conversationId ? conversation?.sandbox_status : null,
+    ),
     shouldShowDownloadConversation: Boolean(conversationId && showOptions),
     shouldShowDisplayCost: showOptions,
     shouldShowAgentTools: Boolean(showOptions && systemMessage),
