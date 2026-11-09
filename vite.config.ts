@@ -313,6 +313,8 @@ export default defineConfig(({ mode }) => {
         "prop-types",
         "react-is",
         "@heroui/react",
+        "react-aria",
+        "react-aria-components",
         "lucide-react",
         "@microlink/react-json-view",
         // These are discovered when launching conversations:
