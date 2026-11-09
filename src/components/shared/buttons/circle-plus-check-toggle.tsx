@@ -93,7 +93,7 @@ export function CirclePlusCheckToggle({
           "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full p-0 transition-colors",
           isSelected &&
             (showRemoveIcon
-              ? "border-0 bg-feedback-error/14 text-feedback-error hover:bg-feedback-error/24"
+              ? "border-0 bg-danger-soft text-danger-soft-foreground hover:bg-danger hover:text-danger-foreground dark:bg-feedback-error/14 dark:text-feedback-error dark:hover:bg-feedback-error/24 dark:hover:text-feedback-error"
               : "border border-contrast bg-transparent text-contrast [&_path]:fill-current"),
           !isSelected &&
             "border-0 bg-surface-raised text-contrast hover:bg-interactive-hover",

@@ -21,12 +21,15 @@ const stylesheet = readFileSync(resolvePath("src/tailwind.css"), "utf-8");
 const defaultWarningColor = stylesheet.match(
   /^\s*--oh-warning:\s*([^;]+);/m,
 )?.[1];
-let catalogPaints: Array<{
-  ink: string;
-  background: string;
-  minimum: number;
-  name: string;
-}>;
+let catalogPaints: Record<
+  "light" | "dark",
+  Array<{
+    ink: string;
+    background: string;
+    minimum: number;
+    name: string;
+  }>
+>;
 let alertColors: Array<{
   type: (typeof ALERT_TYPES)[number];
   title: string | undefined;
@@ -114,64 +117,72 @@ describe("color themes", () => {
       };
     });
     const compiled = parse(css);
-    const paint = (
-      element: Element,
-      property: string,
-      hover = false,
-    ): string => {
-      const candidates = [...element.classList].filter(
-        (name) => hover === name.startsWith("hover:"),
-      );
-      let result: string | undefined;
-      for (const name of candidates) {
+    const toggle = screen.getByTestId("catalog-toggle");
+    const badge = screen.getByTestId(
+      "skill-disable-model-invocation-manual-only",
+    );
+    const readCatalogPaints = (dark: boolean) => {
+      const paint = (element: Element, property: string, hover = false) => {
+        const selectors = [...element.classList]
+          .filter((name) => dark || !name.startsWith("dark:"))
+          .filter((name) => hover || !name.includes("hover:"))
+          .map((name) => {
+            const darkSelector = name.startsWith("dark:") ? ":is(.dark *)" : "";
+            const hoverSelector = name.includes("hover:") ? ":hover" : "";
+            return `.${name}${darkSelector}${hoverSelector}`;
+          });
+        let result: string | undefined;
         compiled.walkRules((rule) => {
           const decoded = rule.selector.replace(
             /\\([0-9a-f]{1,6})\s?|\\(.)/gi,
             (_, hex, character) =>
               hex ? String.fromCodePoint(parseInt(hex, 16)) : character,
           );
-          if (decoded !== `.${name}${hover ? ":hover" : ""}`) return;
+          if (!selectors.includes(decoded)) return;
           rule.walkDecls(property, (decl) => {
             result = decl.value;
           });
         });
-      }
-      if (!result)
-        throw new Error(
-          `Missing rendered ${property} for ${element.outerHTML}`,
-        );
-      return result;
+        if (!result)
+          throw new Error(
+            `Missing rendered ${property} for ${element.outerHTML}`,
+          );
+        return result;
+      };
+      const badgeInk = paint(badge, "color");
+      const badgeBackground = paint(badge, "background-color");
+      const dotInk = paint(badge.firstElementChild!, "background-color");
+      return [
+        {
+          name: "remove",
+          ink: paint(toggle, "color"),
+          background: paint(toggle, "background-color"),
+          minimum: 3,
+        },
+        {
+          name: "remove hover",
+          ink: paint(toggle, "color", true),
+          background: paint(toggle, "background-color", true),
+          minimum: 3,
+        },
+        {
+          name: "manual-only text",
+          ink: badgeInk,
+          background: badgeBackground,
+          minimum: 4.5,
+        },
+        {
+          name: "manual-only dot",
+          ink: dotInk === "currentcolor" ? badgeInk : dotInk,
+          background: badgeBackground,
+          minimum: 3,
+        },
+      ];
     };
-    const toggle = screen.getByTestId("catalog-toggle");
-    const badge = screen.getByTestId(
-      "skill-disable-model-invocation-manual-only",
-    );
-    catalogPaints = [
-      {
-        name: "remove",
-        ink: paint(toggle, "color"),
-        background: paint(toggle, "background-color"),
-        minimum: 3,
-      },
-      {
-        name: "remove hover",
-        ink: paint(toggle, "color"),
-        background: paint(toggle, "background-color", true),
-        minimum: 3,
-      },
-      {
-        name: "manual-only text",
-        ink: paint(badge, "color"),
-        background: paint(badge, "background-color"),
-        minimum: 4.5,
-      },
-      {
-        name: "manual-only dot",
-        ink: paint(badge.firstElementChild!, "background-color"),
-        background: paint(badge, "background-color"),
-        minimum: 3,
-      },
-    ];
+    catalogPaints = {
+      light: readCatalogPaints(false),
+      dark: readCatalogPaints(true),
+    };
     unmount();
   });
 
@@ -236,10 +247,24 @@ describe("color themes", () => {
       // Resolve the paints emitted for real catalog consumers, then composite
       // their translucent backgrounds against card, detail and overflow surfaces.
       const paint = (value: string): { color: number[]; alpha: number } => {
-        const mix = /^color-mix\(in oklab, (.+) ([\d.]+)%, transparent\)$/.exec(
+        const mix = /^color-mix\(in (oklab|srgb), (.+) ([\d.]+)%, (.+)\)$/.exec(
           value,
         );
-        if (mix) return { ...paint(mix[1]), alpha: Number(mix[2]) / 100 };
+        if (mix) {
+          const foreground = paint(mix[2]);
+          const weight = Number(mix[3]) / 100;
+          if (mix[4] === "transparent") return { ...foreground, alpha: weight };
+          if (mix[1] === "srgb") {
+            const background = paint(mix[4]);
+            return {
+              color: foreground.color.map(
+                (channel, index) =>
+                  channel * weight + background.color[index] * (1 - weight),
+              ),
+              alpha: 1,
+            };
+          }
+        }
         const token = /^var\((--[\w-]+)\)$/.exec(value);
         if (token) return paint(resolve(token[1]));
         const rgba = /^rgba?\(([^)]+)\)$/.exec(value);
@@ -260,7 +285,7 @@ describe("color themes", () => {
         "--oh-color-base",
       ]) {
         const card = channels(resolve(surfaceRole));
-        for (const sample of catalogPaints) {
+        for (const sample of catalogPaints[theme.appearance]) {
           const background = paint(sample.background);
           const surface = background.color.map(
             (channel, index) =>

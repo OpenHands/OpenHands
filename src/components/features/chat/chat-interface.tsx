@@ -8,7 +8,7 @@ import {
 } from "./chat-layout";
 import { TaskStartupProgress } from "./task-startup-progress";
 import React from "react";
-import { createPortal } from "react-dom";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 import { useNavigate } from "react-router";
 import { useTracking } from "#/hooks/use-tracking";
 import { useTranslation } from "react-i18next";
@@ -669,9 +669,13 @@ export function ChatInterface({
       </ComposerDockedProvider>
     </ChatProgressContext.Provider>
   );
-  const dockedOrInlineComposer = composerDockTarget
-    ? createPortal(composer, composerDockTarget)
-    : composer;
+  const dockedOrInlineComposer = composerDockTarget ? (
+    <AppearancePortal container={composerDockTarget}>
+      {composer}
+    </AppearancePortal>
+  ) : (
+    composer
+  );
 
   return (
     <WorkspaceFilesForChatProvider>
