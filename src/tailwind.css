@@ -1124,6 +1124,11 @@ code .token {
   font-size: 10px;
 }
 
+/* Keep committed hashes and the uncommitted placeholder aligned. */
+@utility w-commit-sha {
+  width: 7ch;
+}
+
 @utility conversation-card-menu-width {
   max-width: min(280px, 100vw - 16px);
 }
