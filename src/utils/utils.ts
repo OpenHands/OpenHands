@@ -12,7 +12,34 @@ import {
 
 const mergeTailwindClasses = extendTailwindMerge({
   extend: {
-    theme: { radius: ["pill", "composer", "file-action", "facet-control"] },
+    theme: {
+      spacing: ["code-inline-x", "code-inline-y", "code-block"],
+      radius: ["pill", "composer", "file-action", "facet-control"],
+      text: ["4xs", "xs-plus", "sm-plus", "title"],
+      tracking: [
+        "metadata",
+        "label",
+        "title",
+        "heading",
+        "auth-code",
+        "device-code",
+      ],
+    },
+    classGroups: {
+      transition: [
+        "transition-control-shell",
+        "transition-control-transform",
+        "transition-context-ring",
+        "transition-panel-width",
+        "transition-sidebar-width",
+      ],
+      animate: ["animate-chat-status-pulse"],
+      shadow: [
+        "shadow-badge-inset",
+        "shadow-reorder-before",
+        "shadow-reorder-after",
+      ],
+    },
   },
 });
 

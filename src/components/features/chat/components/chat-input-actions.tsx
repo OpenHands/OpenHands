@@ -1,5 +1,4 @@
 import React from "react";
-import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Cpu } from "lucide-react";
 import { AgentStatus } from "#/components/features/controls/agent-status";
@@ -25,6 +24,7 @@ import { usePauseConversation } from "#/hooks/mutation/use-pause-conversation";
 import { useResumeConversation } from "#/hooks/mutation/use-resume-conversation";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
+import { useCloudIntegrationsConfig } from "#/hooks/query/use-cloud-integrations-config";
 import { useChatInputModelState } from "#/hooks/use-chat-input-model-state";
 import { useChatInputLlmProfileState } from "#/hooks/use-chat-input-llm-profile-state";
 import { getLockedCloudHost } from "#/api/agent-server-config";
@@ -45,6 +45,7 @@ import {
   chatInputIconButtonClassName,
   formControlTransitionClassName,
 } from "#/utils/form-control-classes";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 interface ChatInputActionsProps {
   disabled: boolean;
@@ -88,8 +89,17 @@ export function ChatInputActions({
   // limited to the pre-start window.
   const isPreStart = !conversationId || hasStartedConversation === false;
   const agentProfilesForStart = useAgentProfiles({ enabled: isPreStart });
+  // A self-hosted instance whose admin turned Agent Profiles off keeps its
+  // saved profiles out of the composer (OHE-3934). Cloud and local backends
+  // never report that state, and the gate stays open until the instance
+  // config has loaded.
+  const { data: cloudConfig } = useCloudIntegrationsConfig();
+  const agentProfilesOff =
+    cloudConfig?.deploymentMode === "self_hosted" &&
+    !cloudConfig.isAgentProfilesEnabled;
   const showAgentProfileSwitch =
     isPreStart &&
+    !agentProfilesOff &&
     !(conversationId?.startsWith("task-") ?? false) &&
     (agentProfilesForStart.data?.profiles?.length ?? 0) > 0;
   // Code/Plan mode switching is a cloud OpenHands feature — it doesn't apply
@@ -565,10 +575,10 @@ export function ChatInputActions({
 
               {isOverflowOpen &&
                 typeof document !== "undefined" &&
-                overflowPortalStyle &&
-                ReactDOM.createPortal(
-                  <div style={overflowPortalStyle}>{overflowMenu}</div>,
-                  document.body,
+                overflowPortalStyle && (
+                  <AppearancePortal>
+                    <div style={overflowPortalStyle}>{overflowMenu}</div>
+                  </AppearancePortal>
                 )}
             </div>
           )}

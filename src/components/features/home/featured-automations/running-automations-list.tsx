@@ -119,7 +119,7 @@ function RunningAutomationRow({
           aria-label={`${item.name} ${t(statusLabelKey)}`}
           className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
         >
-          <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-2">
+          <div className="grid min-w-0 flex-1 automation-summary-columns gap-x-2">
             <span className="inline-flex h-5 w-2.5 shrink-0 items-center justify-center">
               <AutomationHealthIndicator health={health} />
             </span>

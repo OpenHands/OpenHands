@@ -137,6 +137,23 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       {
+        name: "bundle-newsreader-license",
+        apply: "build",
+        async generateBundle() {
+          this.emitFile({
+            type: "asset",
+            fileName: "assets/newsreader-OFL.txt",
+            source: await readFile(
+              new URL(
+                "./src/themes/color-theme/definitions/paper/newsreader-OFL.txt",
+                import.meta.url,
+              ),
+              "utf8",
+            ),
+          });
+        },
+      },
+      {
         name: "suppress-chrome-devtools-well-known",
         apply: "serve",
         configureServer(server) {

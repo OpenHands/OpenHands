@@ -35,7 +35,7 @@ function Code({
         <code
           className={cn(
             className,
-            "bg-surface-raised text-foreground border border-surface-raised rounded px-[0.4em] py-[0.2em]",
+            "bg-surface-raised text-foreground border border-surface-raised rounded px-code-inline-x py-code-inline-y",
           )}
         >
           {children}
@@ -45,7 +45,7 @@ function Code({
 
     return (
       <CopyableContentWrapper text={codeString}>
-        <pre className="bg-surface-raised text-foreground border border-surface-raised rounded p-[1em] overflow-auto">
+        <pre className="bg-surface-raised text-foreground border border-surface-raised rounded p-code-block overflow-auto">
           <code className={className}>{codeString}</code>
         </pre>
       </CopyableContentWrapper>
