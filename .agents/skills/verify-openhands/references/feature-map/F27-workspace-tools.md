@@ -10,7 +10,7 @@ context-window ring, the chat header's Overview column (peek, pinnable rows,
 secondary drawer), and two client tools the agent can call to drive the UI:
 `canvas_ui_control` (open a tab or a file) and `launch_child_conversation`.
 
-Source: `src/components/features/terminal/`, `src/hooks/use-terminal.ts`, `src/components/features/browser/`, `src/routes/browser-tab.tsx`, `src/routes/planner-tab.tsx`, `src/components/features/conversation/conversation-tabs/conversation-planner-build-bar.tsx`, `src/hooks/use-handle-plan-click.ts`, `src/hooks/use-handle-build-plan-click.ts`, `src/routes/task-list-tab.tsx`, `src/routes/usage-tab.tsx`, `src/components/features/conversation/usage-panel/`, `src/components/features/chat/components/context-window-meter.tsx`, `src/components/features/conversation/conversation-overview-*.tsx`, `src/services/canvas-ui.ts`, `src/api/canvas-ui-client-tool.ts`, `src/services/child-conversation-launch.ts`, `src/components/features/conversation-panel/` (info modals).
+Source: `src/components/features/terminal/`, `src/hooks/use-terminal.ts`, `src/themes/terminal-themes.ts`, `src/components/features/browser/`, `src/routes/browser-tab.tsx`, `src/routes/planner-tab.tsx`, `src/components/features/conversation/conversation-tabs/conversation-planner-build-bar.tsx`, `src/hooks/use-handle-plan-click.ts`, `src/hooks/use-handle-build-plan-click.ts`, `src/routes/task-list-tab.tsx`, `src/routes/usage-tab.tsx`, `src/components/features/conversation/usage-panel/`, `src/components/features/chat/components/context-window-meter.tsx`, `src/components/features/conversation/conversation-overview-*.tsx`, `src/services/canvas-ui.ts`, `src/api/canvas-ui-client-tool.ts`, `src/services/child-conversation-launch.ts`, `src/components/features/conversation-panel/` (info modals).
 
 ## Sub-features
 
@@ -26,7 +26,7 @@ Source: `src/components/features/terminal/`, `src/hooks/use-terminal.ts`, `src/c
 - `F27.planner-plan`: when the workspace has `.agents_tmp/PLAN.md`, the Planner renders it as Markdown (links underlined in the theme's link colour) with an enabled "Build ⌘↩" bar.
 - `F27.planner-build`: "Build ⌘↩" sends "Execute the plan based on the .agents_tmp/PLAN.md file." to the agent.
 - `F27.tasklist`: the Task List tab appears only once the agent used `task_tracker`; it lists each task with its status icon and highlights the in-progress one; the drawer's tabs menu opens it too.
-- `F27.usage-metrics`: the Usage tab shows the context meter ("X% used (Y% left)", tokens / window), Token Usage (Input, Cache Hit, Cache Write, Output, Total) and Total Cost. Above 70% fill, the meter label and bar use the warning feedback role; above 90%, its label uses error feedback and its bar uses status error. Text reaches 4.5:1 against the raised Usage surface and fills reach 3:1 against the track in all five themes.
+- `F27.usage-metrics`: the Usage tab shows the context meter ("X% used (Y% left)", tokens / window), Token Usage (Input, Cache Hit, Cache Write, Output, Total) and Total Cost. Above 70% fill, the meter label and bar use the warning feedback role; above 90%, its label uses error feedback and its bar uses status error. Text reaches 4.5:1 against the raised Usage surface and fills reach 3:1 against the track in every offered theme.
 - `F27.usage-budget`: when the conversation has a cost cap (`max_budget_per_run`), the Usage tab adds a budget meter under Token Usage: `$<cost> / $<cap> (<pct>% used)` with a bar filled to that percentage (capped at 100 %) in the foreground colour, or in the error colour above 80 %; without a cap there is no budget meter.
 - `F27.usage-empty`: before any metrics arrive the Usage tab reads "No metrics data available".
 - `F27.usage-compact`: "Compact context" (agent idle) toasts "Context compaction started" then "Context compacted" (or "…freed N tokens"), and the agent server records a Condensation; the (i) tooltip explains it. Above 70% fill, "Context is filling up — compacting frees space" uses the theme warning feedback color.
@@ -136,6 +136,7 @@ control-openhands assert --field value --equals true -- browser eval 'location.p
 
 ## Gotchas
 
+- Paper terminal ANSI colours, selection highlighting and restoration after switching themes (`F27.terminal-output`) require genuine agent-produced terminal action/observation events. An idle conversation containing only user messages, or output from the direct Bash API, does not exercise this renderer. Without those events, record this part as `not-run`; do not inject history or infer a rendering pass from the palette definition.
 - At phone width the header Overview control currently reveals no content (known failure [#16792](https://github.com/OpenHands/OpenHands/issues/16792), reproduced 2026-10-17; `F07.overview-toggle`). Use the panel tabs menu to arrange a Commits check; this does not verify the missing Overview entry point.
 
 - After a reload the Task List (and tab bar entry) appears only once history has loaded; wait about 2 s before counting `[data-active="true"]` rows.

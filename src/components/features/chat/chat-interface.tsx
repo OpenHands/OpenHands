@@ -8,7 +8,7 @@ import {
 } from "./chat-layout";
 import { TaskStartupProgress } from "./task-startup-progress";
 import React from "react";
-import { createPortal } from "react-dom";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 import { useNavigate } from "react-router";
 import { useTracking } from "#/hooks/use-tracking";
 import { useTranslation } from "react-i18next";
@@ -47,6 +47,7 @@ import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-e
 import { ErrorMessageBanner } from "./error-message-banner";
 import { ConnectionRecoveryNotice } from "./connection-recovery-notice";
 import { SkillInstallRestartBanner } from "./skill-install-restart-banner";
+import { ResolvedConversationBanner } from "./resolved-conversation-banner";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { Messages } from "#/components/conversation-events/chat/messages";
@@ -685,9 +686,13 @@ export function ChatInterface({
       </ComposerDockedProvider>
     </ChatProgressContext.Provider>
   );
-  const dockedOrInlineComposer = composerDockTarget
-    ? createPortal(composer, composerDockTarget)
-    : composer;
+  const dockedOrInlineComposer = composerDockTarget ? (
+    <AppearancePortal container={composerDockTarget}>
+      {composer}
+    </AppearancePortal>
+  ) : (
+    composer
+  );
 
   return (
     <WorkspaceFilesForChatProvider>
@@ -823,6 +828,8 @@ export function ChatInterface({
             {llmBlocked && !isArchivedConversation && (
               <LlmNotConfiguredBanner />
             )}
+
+            {!isArchivedConversation && <ResolvedConversationBanner />}
 
             {isArchivedConversation ? (
               // Archived / sandbox-error: show a read-only notice in place of
