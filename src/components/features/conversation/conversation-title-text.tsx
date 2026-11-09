@@ -12,11 +12,6 @@ export function ConversationTitleText({
       {title}
     </TextShimmer>
   ) : (
-    <span
-      key={title}
-      className="motion-safe:animate-[conversation-title-reveal_160ms_ease-out]"
-    >
-      {title}
-    </span>
+    <span>{title}</span>
   );
 }

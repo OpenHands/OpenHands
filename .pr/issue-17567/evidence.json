@@ -1,0 +1,146 @@
+{
+  "issue": 17567,
+  "date": "2026-11-07",
+  "baselineCommit": "f4c08240bcb8d7f8c2793e8c4c43b949983ef206",
+  "baselineBuildId": "bffb4d9edb024359",
+  "fixedBuildId": "806111f1e0ac79f1-dirty",
+  "fixedSourceSHA256": "212577b9968bb5bac4b270c970789798bc47cf94d8d48046d981fd1b368747c7",
+  "agentServer": "1.60.1",
+  "automation": "1.30.1",
+  "canvas": "1.37.0",
+  "browser": "HeadlessChrome/156.0.8078.4 on macOS",
+  "monacoLoaded": "0.55.1 from the existing production loader CDN configuration",
+  "backend": "Real local Agent Server; real tracked-file modifications. No API interception or mocked responses.",
+  "modelExecution": "None. Real idle conversation created through Agent Server API; no initial message and no conversation events. Loopback port 1 configured as unused LLM endpoint.",
+  "recipe": [
+    "Launch isolated current-main production build with control-openhands launch --new.",
+    "Doctor, onboard --skip, then python3 .pr/issue-17567/arrange.py <run>.",
+    "python3 .pr/issue-17567/exercise.py <baseline-run> baseline desktop 2 (and phone 2).",
+    "Stop baseline, apply fix, launch fresh stack with same pins.",
+    "python3 .pr/issue-17567/exercise.py <fix-run> fix desktop 10 (and phone 10)."
+  ],
+  "results": [
+    {
+      "label": "baseline",
+      "viewport": "desktop",
+      "size": "1440x1000",
+      "roundTrips": 2,
+      "disposedModelErrors": 7,
+      "pageErrors": 7,
+      "correctContentsEachReturn": true,
+      "extraCases": [
+        "collapse then Planner",
+        "different file then Planner",
+        "diff/old/diff modes",
+        "route unmount"
+      ],
+      "modelRegistryChecks": 0,
+      "allRecordedRegistryChecksEmpty": null,
+      "video": "baseline-desktop.mp4",
+      "gif": "baseline-desktop.gif",
+      "receipts": "baseline-desktop-commands.json"
+    },
+    {
+      "label": "baseline",
+      "viewport": "phone",
+      "size": "390x844",
+      "roundTrips": 2,
+      "disposedModelErrors": 7,
+      "pageErrors": 7,
+      "correctContentsEachReturn": true,
+      "extraCases": [
+        "collapse then Planner",
+        "different file then Planner",
+        "diff/old/diff modes",
+        "route unmount"
+      ],
+      "modelRegistryChecks": 0,
+      "allRecordedRegistryChecksEmpty": null,
+      "video": "baseline-phone.mp4",
+      "gif": "baseline-phone.gif",
+      "receipts": "baseline-phone-commands.json"
+    },
+    {
+      "label": "fix",
+      "viewport": "desktop",
+      "size": "1440x1000",
+      "roundTrips": 10,
+      "disposedModelErrors": 0,
+      "pageErrors": 0,
+      "correctContentsEachReturn": true,
+      "extraCases": [
+        "collapse then Planner",
+        "different file then Planner",
+        "diff/old/diff modes",
+        "route unmount"
+      ],
+      "modelRegistryChecks": 11,
+      "allRecordedRegistryChecksEmpty": true,
+      "video": "fix-desktop.mp4",
+      "gif": "fix-desktop.gif",
+      "receipts": "fix-desktop-commands.json"
+    },
+    {
+      "label": "fix",
+      "viewport": "phone",
+      "size": "390x844",
+      "roundTrips": 10,
+      "disposedModelErrors": 0,
+      "pageErrors": 0,
+      "correctContentsEachReturn": true,
+      "extraCases": [
+        "collapse then Planner",
+        "different file then Planner",
+        "diff/old/diff modes",
+        "route unmount"
+      ],
+      "modelRegistryChecks": 11,
+      "allRecordedRegistryChecksEmpty": true,
+      "video": "fix-phone.mp4",
+      "gif": "fix-phone.gif",
+      "receipts": "fix-phone-commands.json"
+    }
+  ],
+  "review": "Screenshots inspected at both sizes; actual videos record the transitions. Browser error receipts establish the exception because Planner renders in both baseline and fix.",
+  "limitations": [
+    "Local backend only; no model execution needed for the editor lifecycle.",
+    "Baseline explored old\u2192new mode and found a preexisting empty editor shell, outside this scoped fix. The controlled before/after recipe covers diff\u2192old\u2192diff.",
+    "Existing verification driver and feature map kept read-only; no known-bug recipe for 17567 exists."
+  ],
+  "cleanup": {
+    "baseline": {
+      "run": "/private/tmp/odie-17567-live/baseline",
+      "browser": {
+        "stopped": true,
+        "pid": 26414
+      },
+      "launcherStopped": true,
+      "ports": {
+        "ingress": "closed",
+        "agentServer": "closed",
+        "automation": "closed",
+        "frontend": "closed",
+        "vscode": "closed"
+      },
+      "evidenceFiles": 22,
+      "ok": true
+    },
+    "fix": {
+      "run": "/private/tmp/odie-17567-live/fix",
+      "browser": {
+        "stopped": true,
+        "pid": 32091
+      },
+      "launcherStopped": true,
+      "ports": {
+        "ingress": "closed",
+        "agentServer": "closed",
+        "automation": "closed",
+        "frontend": "closed",
+        "vscode": "closed"
+      },
+      "evidenceFiles": 21,
+      "ok": true
+    }
+  }
+}

@@ -57,6 +57,7 @@ import { handleAutomationFormUpdateAction } from "#/services/automation-form";
 import { handleLaunchChildConversationAction } from "#/services/child-conversation-launch";
 import { handleRequestSecretAction } from "#/services/secret-request";
 import { ConversationStateUpdateEventStats } from "#/types/agent-server/core/events/conversation-state-event";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import type {
   ConversationErrorEvent,
   ServerErrorEvent,
@@ -94,10 +95,7 @@ import {
 import { isPlanFilePath } from "#/utils/plan-file";
 
 export type WebSocketConnectionState =
-  | "CONNECTING"
-  | "OPEN"
-  | "CLOSED"
-  | "CLOSING";
+  "CONNECTING" | "OPEN" | "CLOSED" | "CLOSING";
 
 /**
  * A message submitted while its cloud conversation had no runtime URL yet
@@ -129,6 +127,8 @@ interface ConversationWebSocketContextType {
   mainConnectionState: WebSocketConnectionState;
   sendMessage: (message: SendMessageRequest) => Promise<SendMessageResult>;
   isLoadingHistory: boolean;
+  /** True once the current main socket has finished its initial history replay. */
+  isHistoryReady: boolean;
   reconnect: () => void;
   /**
    * True once the main or planning socket has opened at least once for the
@@ -160,6 +160,42 @@ function extractMessageEventText(
     .join("");
 }
 
+/** The execution status a state update reports, if it reports one. */
+const reportedExecutionStatus = (
+  event: Parameters<typeof isFullStateConversationStateUpdateEvent>[0],
+): ExecutionStatus | null => {
+  if (isFullStateConversationStateUpdateEvent(event)) {
+    return event.value.execution_status;
+  }
+  if (isAgentStatusConversationStateUpdateEvent(event)) {
+    return event.value;
+  }
+  return null;
+};
+
+/**
+ * Follow the execution status through a replay: returns the newest status seen
+ * so far, and the status to apply when this frame is the replay boundary
+ * (`through_seq`). Runs for every replayed frame, including ones already in
+ * the store.
+ */
+const trackReplayStatus = (
+  event: { seq?: number } & Parameters<
+    typeof isConversationStateUpdateEvent
+  >[0],
+  throughSeq: number | null,
+  pending: ExecutionStatus | null,
+): { pending: ExecutionStatus | null; apply: ExecutionStatus | null } => {
+  const newest =
+    (isConversationStateUpdateEvent(event)
+      ? reportedExecutionStatus(event)
+      : null) ?? pending;
+  if (event.seq === undefined || event.seq !== throughSeq) {
+    return { pending: newest, apply: null };
+  }
+  return { pending: null, apply: newest };
+};
+
 /**
  * Route one frame of `/sockets/session/{id}`.
  *
@@ -177,7 +213,7 @@ const routeSessionFrame = (
   replayThroughSeq: number | null,
   onSync: (throughSeq: number | null) => void,
   slotMeta: { isFromPlanningAgent?: boolean } = {},
-): { event: unknown; isReplay: boolean } | null => {
+): { event: unknown; isReplay: boolean; isTransient: boolean } | null => {
   const frame: SessionFrame | null = asSessionFrame(raw);
   if (!frame) {
     return null;
@@ -207,9 +243,10 @@ const routeSessionFrame = (
       return {
         event: { ...frame.event, seq: frame.seq },
         isReplay: replayThroughSeq !== null && frame.seq <= replayThroughSeq,
+        isTransient: false,
       };
     case "transient":
-      return { event: frame.event, isReplay: false };
+      return { event: frame.event, isReplay: false, isTransient: true };
     case "error":
       // The server answers a rejected inbound message with an ErrorFrame and
       // keeps the socket open ("not worth dropping over"), so there is no
@@ -288,6 +325,17 @@ export function ConversationWebSocketProvider({
   const planningCursorRef = useRef<SeqCursor>(createSeqCursor());
   const mainReplayThroughSeqRef = useRef<number | null>(null);
   const planningReplayThroughSeqRef = useRef<number | null>(null);
+  // The newest status seen in the replay so far. Applied once the replay
+  // reaches its boundary: a run can start after the connect-time snapshot but
+  // before `through_seq` is taken (an ACP agent starting its subprocess), and
+  // then only the replay knows it is running.
+  const mainReplayStatusRef = useRef<ExecutionStatus | null>(null);
+  const planningReplayStatusRef = useRef<ExecutionStatus | null>(null);
+  // The server sends its connect-time snapshot (a transient full state taken
+  // before `through_seq`) after the replay, so once the replay has set the
+  // status, that snapshot is older and must not override it.
+  const mainReplayOwnsStatusRef = useRef(false);
+  const planningReplayOwnsStatusRef = useRef(false);
 
   // History loading state.
   // - Main conversation history is now loaded via REST (`useConversationHistory`),
@@ -325,7 +373,10 @@ export function ConversationWebSocketProvider({
 
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
-    (event: ConversationStateUpdateEventStats) => {
+    (
+      event: ConversationStateUpdateEventStats,
+      sourceConversationId: string,
+    ) => {
       const usageToMetrics = event.value.usage_to_metrics;
       if (!usageToMetrics) {
         return;
@@ -376,11 +427,14 @@ export function ConversationWebSocketProvider({
         { cost: 0, maxBudgetPerTask: null, usage: null },
       );
 
-      useMetricsStore.getState().setMetrics({
-        cost: combined.cost,
-        max_budget_per_task: combined.maxBudgetPerTask,
-        usage: combined.usage,
-      });
+      useMetricsStore.getState().setMetrics(
+        {
+          cost: combined.cost,
+          max_budget_per_task: combined.maxBudgetPerTask,
+          usage: combined.usage,
+        },
+        sourceConversationId,
+      );
     },
     [],
   );
@@ -394,6 +448,23 @@ export function ConversationWebSocketProvider({
     useConversationHistory(conversationId);
 
   const historyScope = getConversationHistoryScope();
+  const historyConnectionKey = JSON.stringify([
+    historyScope,
+    conversationId,
+    conversationUrl,
+    sessionApiKey,
+  ]);
+  const [readyHistoryConnectionKey, setReadyHistoryConnectionKey] = useState<
+    string | null
+  >(null);
+  // REST failure releases the socket gate, but does not prove the chat is
+  // empty. Readiness belongs to this connection's completed replay instead.
+  const isHistoryReady = readyHistoryConnectionKey === historyConnectionKey;
+  useEffect(() => {
+    // Forget the old connection even if the user switches back before the
+    // replacement socket opens and runs its lifecycle callbacks.
+    setReadyHistoryConnectionKey(null);
+  }, [historyConnectionKey]);
   const { data: persistedHistory } =
     usePersistedConversationHistory(conversationId);
   const visibleHistory = useMemo(() => {
@@ -684,14 +755,34 @@ export function ConversationWebSocketProvider({
         const routed = routeSessionFrame(
           JSON.parse(messageEvent.data),
           mainDeltaBatcherRef.current,
-          mainCursorRef.current.observe,
+          (seq) => {
+            const cursor = mainCursorRef.current;
+            const previousSeq = cursor.value ?? -1;
+            cursor.observe(seq);
+            const throughSeq = mainReplayThroughSeqRef.current;
+            if (
+              throughSeq !== null &&
+              previousSeq < throughSeq &&
+              (cursor.value ?? -1) >= throughSeq
+            ) {
+              setReadyHistoryConnectionKey(historyConnectionKey);
+            }
+          },
           mainReplayThroughSeqRef.current,
           (throughSeq) => {
             mainReplayThroughSeqRef.current = throughSeq;
+            mainReplayStatusRef.current = null;
+            mainReplayOwnsStatusRef.current = false;
+            setReadyHistoryConnectionKey(
+              throughSeq === null ||
+                (mainCursorRef.current.value ?? -1) >= throughSeq
+                ? historyConnectionKey
+                : null,
+            );
           },
         );
         if (!routed) return;
-        const { event, isReplay } = routed;
+        const { event, isReplay, isTransient } = routed;
 
         // History loading for the main conversation is REST-driven now;
         // every durable frame is a new event we add to the store.
@@ -710,6 +801,20 @@ export function ConversationWebSocketProvider({
           const classifyAndSwitchLLMObservation =
             isClassifyAndSwitchLLMObservationEvent(event) ? event : null;
           addEvent(event);
+          if (isReplay) {
+            const replay = trackReplayStatus(
+              event,
+              mainReplayThroughSeqRef.current,
+              mainReplayStatusRef.current,
+            );
+            mainReplayStatusRef.current = replay.pending;
+            if (replay.apply && conversationId) {
+              // The replay's newest status is the current one; the connect
+              // snapshot that follows it is older.
+              setExecutionStatus(conversationId, replay.apply);
+              mainReplayOwnsStatusRef.current = true;
+            }
+          }
           if (isDuplicateEvent) {
             return;
           }
@@ -718,8 +823,7 @@ export function ConversationWebSocketProvider({
           // AgentErrorEvent errors are displayed inline in the chat, not as banners
           if (isDisplayableErrorEvent(event)) {
             const errorEvent = event as
-              | ConversationErrorEvent
-              | ServerErrorEvent;
+              ConversationErrorEvent | ServerErrorEvent;
             const classification =
               "classification" in errorEvent ? errorEvent.classification : null;
             trackError({
@@ -779,24 +883,19 @@ export function ConversationWebSocketProvider({
             );
           }
 
-          // Replayed status describes past work, not the current execution.
           if (isConversationStateUpdateEvent(event)) {
-            if (
-              !isReplay &&
-              isFullStateConversationStateUpdateEvent(event) &&
-              conversationId
-            ) {
-              setExecutionStatus(conversationId, event.value.execution_status);
+            const reportedStatus = reportedExecutionStatus(event);
+            // A replayed status is applied at the replay boundary instead
+            // (trackReplayStatus); a stale connect snapshot is dropped.
+            if (reportedStatus && conversationId && !isReplay) {
+              if (isTransient && mainReplayOwnsStatusRef.current) {
+                mainReplayOwnsStatusRef.current = false;
+              } else {
+                setExecutionStatus(conversationId, reportedStatus);
+              }
             }
-            if (
-              !isReplay &&
-              isAgentStatusConversationStateUpdateEvent(event) &&
-              conversationId
-            ) {
-              setExecutionStatus(conversationId, event.value);
-            }
-            if (isStatsConversationStateUpdateEvent(event)) {
-              updateMetricsFromStats(event);
+            if (isStatsConversationStateUpdateEvent(event) && conversationId) {
+              updateMetricsFromStats(event, conversationId);
             }
             // Mirror goal status into the store. Intentionally duplicated across
             // the main and planning WebSocket handlers (like the execution_status
@@ -947,6 +1046,7 @@ export function ConversationWebSocketProvider({
       consumeMatchingPendingMessage,
       queryClient,
       conversationId,
+      historyConnectionKey,
       setExecutionStatus,
       updateMetricsFromStats,
       handleNonErrorEvent,
@@ -963,11 +1063,13 @@ export function ConversationWebSocketProvider({
           planningReplayThroughSeqRef.current,
           (throughSeq) => {
             planningReplayThroughSeqRef.current = throughSeq;
+            planningReplayStatusRef.current = null;
+            planningReplayOwnsStatusRef.current = false;
           },
           { isFromPlanningAgent: true },
         );
         if (!routed) return;
-        const { event, isReplay } = routed;
+        const { event, isReplay, isTransient } = routed;
 
         // Track received events for history loading. Only events count:
         // progress frames are not part of the replayed log.
@@ -995,6 +1097,20 @@ export function ConversationWebSocketProvider({
             isFromPlanningAgent: true,
           };
           addEvent(eventWithPlanningFlag);
+          if (isReplay) {
+            const replay = trackReplayStatus(
+              event,
+              planningReplayThroughSeqRef.current,
+              planningReplayStatusRef.current,
+            );
+            planningReplayStatusRef.current = replay.pending;
+            if (replay.apply && planningConversationId) {
+              // The replay's newest status is the current one; the connect
+              // snapshot that follows it is older.
+              setExecutionStatus(planningConversationId, replay.apply);
+              planningReplayOwnsStatusRef.current = true;
+            }
+          }
           if (isDuplicateEvent) {
             return;
           }
@@ -1003,8 +1119,7 @@ export function ConversationWebSocketProvider({
           // AgentErrorEvent errors are displayed inline in the chat, not as banners
           if (isDisplayableErrorEvent(event)) {
             const errorEvent = event as
-              | ConversationErrorEvent
-              | ServerErrorEvent;
+              ConversationErrorEvent | ServerErrorEvent;
             const classification =
               "classification" in errorEvent ? errorEvent.classification : null;
             trackError({
@@ -1068,31 +1183,26 @@ export function ConversationWebSocketProvider({
             }
           }
 
-          // Replayed status describes past work, not the current execution.
           if (isConversationStateUpdateEvent(event)) {
             // Scope to the planning agent's own conversation id, not the main
             // `conversationId` — this socket reports the planning helper
             // conversation's run/idle transitions, which must never overwrite
             // the main conversation's status in the shared store.
-            if (
-              !isReplay &&
-              isFullStateConversationStateUpdateEvent(event) &&
-              planningConversationId
-            ) {
-              setExecutionStatus(
-                planningConversationId,
-                event.value.execution_status,
-              );
+            const reportedStatus = reportedExecutionStatus(event);
+            // A replayed status is applied at the replay boundary instead
+            // (trackReplayStatus); a stale connect snapshot is dropped.
+            if (reportedStatus && planningConversationId && !isReplay) {
+              if (isTransient && planningReplayOwnsStatusRef.current) {
+                planningReplayOwnsStatusRef.current = false;
+              } else {
+                setExecutionStatus(planningConversationId, reportedStatus);
+              }
             }
             if (
-              !isReplay &&
-              isAgentStatusConversationStateUpdateEvent(event) &&
+              isStatsConversationStateUpdateEvent(event) &&
               planningConversationId
             ) {
-              setExecutionStatus(planningConversationId, event.value);
-            }
-            if (isStatsConversationStateUpdateEvent(event)) {
-              updateMetricsFromStats(event);
+              updateMetricsFromStats(event, planningConversationId);
             }
             // Mirror goal status into the store. Intentionally duplicated across
             // the main and planning WebSocket handlers (like the execution_status
@@ -1181,9 +1291,11 @@ export function ConversationWebSocketProvider({
     return {
       queryParams,
       sessionApiKey,
+      connectionKey: historyConnectionKey,
       reconnect: { enabled: true },
       onOpen: () => {
         mainReplayThroughSeqRef.current = null;
+        setReadyHistoryConnectionKey(null);
         mainConnectionError.cancel();
         setMainConnectionState("OPEN");
         hasConnectedRefMain.current = true; // Mark that we've successfully connected
@@ -1195,11 +1307,13 @@ export function ConversationWebSocketProvider({
         useEventStore.getState().clearStreamingSlots();
       },
       onClose: () => {
+        setReadyHistoryConnectionKey(null);
         setMainConnectionState("CLOSED");
         mainDeltaBatcherRef.current?.reset();
         useEventStore.getState().clearStreamingSlots();
       },
       onError: () => {
+        setReadyHistoryConnectionKey(null);
         setMainConnectionState("CLOSED");
         mainConnectionError.report();
       },
@@ -1210,6 +1324,7 @@ export function ConversationWebSocketProvider({
     mainConnectionError,
     clearConnectionError,
     sessionApiKey,
+    historyConnectionKey,
   ]);
 
   // Separate WebSocket options for planning agent connection
@@ -1609,6 +1724,7 @@ export function ConversationWebSocketProvider({
       mainConnectionState,
       sendMessage,
       isLoadingHistory,
+      isHistoryReady,
       reconnect,
       hasConnectedOnce:
         hasConnectedRefMain.current || hasConnectedRefPlanning.current,
@@ -1621,6 +1737,7 @@ export function ConversationWebSocketProvider({
       planningConnectionState,
       sendMessage,
       isLoadingHistory,
+      isHistoryReady,
       reconnect,
     ],
   );
