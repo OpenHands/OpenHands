@@ -152,6 +152,7 @@ describe("ConversationCard", () => {
       <ConversationCard
         title="Conversation 1"
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        selectedRepository={null}
         showTags
         tags={{ project: "3cd1a23c000040008000000000000001" }}
       />,
@@ -170,6 +171,7 @@ describe("ConversationCard", () => {
       <ConversationCard
         title="Conversation 1"
         lastUpdatedAt="2021-10-01T12:00:00Z"
+        selectedRepository={null}
         showTags
         tags={{ project: "3cd1a23c000040008000000000000001" }}
       />,
