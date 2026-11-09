@@ -82,6 +82,7 @@ vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
 
 vi.mock("#/hooks/mutation/conversation-mutation-utils", () => ({
   pauseConversation: vi.fn(),
+  interruptConversation: vi.fn(),
   resumeConversation: vi.fn(),
   askAgent: vi.fn(),
   updateConversationExecutionStatusInCache: vi.fn(),

@@ -45,31 +45,50 @@ const fetchConversationData = async (
   };
 };
 
+const interruptViaAgentServer = (
+  conversationId: string,
+  {
+    conversationUrl,
+    sessionApiKey,
+  }: { conversationUrl: string | null; sessionApiKey: string | null },
+) =>
+  new ConversationClient(
+    getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+  ).interruptConversation(conversationId);
+
+/**
+ * Interrupt the agent's current run (in-flight LLM request and tool call)
+ * through the agent server, on every backend. The sandbox stays alive and the
+ * conversation can accept a new message immediately.
+ */
+export const interruptConversation = async (conversationId: string) =>
+  interruptViaAgentServer(
+    conversationId,
+    await fetchConversationData(conversationId),
+  );
+
 /**
  * Stop a running conversation.
- * - Cloud mode: Pauses the sandbox (waits for current LLM call to finish).
+ * - Cloud mode: Pauses the sandbox, which stops the runtime.
  * - Local mode: Interrupts immediately (cancels in-flight requests).
  */
 export const pauseConversation = async (conversationId: string) => {
-  const { conversationUrl, sessionApiKey, sandboxId } =
-    await fetchConversationData(conversationId);
+  const conversationData = await fetchConversationData(conversationId);
 
   if (getActiveBackend().backend.kind === "cloud") {
-    if (!sandboxId) {
+    if (!conversationData.sandboxId) {
       throw new Error(
         `Cannot stop runtime: cloud conversation ${conversationId} has no sandbox_id.`,
       );
     }
-    await pauseCloudSandbox(sandboxId);
+    await pauseCloudSandbox(conversationData.sandboxId);
     return { success: true };
   }
 
   // In local mode, use /interrupt instead of /pause so in-flight LLM
   // requests are cancelled immediately rather than waiting for the
   // current call to finish.
-  return new ConversationClient(
-    getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
-  ).interruptConversation(conversationId);
+  return interruptViaAgentServer(conversationId, conversationData);
 };
 
 /**

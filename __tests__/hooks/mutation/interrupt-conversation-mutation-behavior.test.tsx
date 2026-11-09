@@ -3,18 +3,17 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { usePauseConversation } from "#/hooks/mutation/use-pause-conversation";
-import { ExecutionStatus } from "#/types/agent-server/core";
+import { useInterruptConversation } from "#/hooks/mutation/use-interrupt-conversation";
 
 const {
   activeBackendState,
   patchConversationInCacheMock,
-  pauseConversationMock,
+  interruptConversationMock,
   suppressNextCloudAutoResumeMock,
 } = vi.hoisted(() => ({
   activeBackendState: { kind: "local" as "local" | "cloud" },
   patchConversationInCacheMock: vi.fn(),
-  pauseConversationMock: vi.fn(),
+  interruptConversationMock: vi.fn(),
   suppressNextCloudAutoResumeMock: vi.fn(),
 }));
 
@@ -32,7 +31,8 @@ vi.mock("#/api/cloud/cloud-sandbox-resume-suppression", () => ({
 vi.mock("#/hooks/mutation/conversation-mutation-utils", () => ({
   patchConversationInCache: (...args: unknown[]) =>
     patchConversationInCacheMock(...args),
-  pauseConversation: (...args: unknown[]) => pauseConversationMock(...args),
+  interruptConversation: (...args: unknown[]) =>
+    interruptConversationMock(...args),
 }));
 
 const CONVERSATIONS_QUERY_KEY = ["user", "conversations"] as const;
@@ -48,7 +48,7 @@ const setup = ({
 }: SetupOptions = {}) => {
   vi.clearAllMocks();
   activeBackendState.kind = backendKind;
-  pauseConversationMock.mockResolvedValue({ success: true });
+  interruptConversationMock.mockResolvedValue({ success: true });
 
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -68,7 +68,7 @@ const setup = ({
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
-  const hook = renderHook(() => usePauseConversation(), { wrapper });
+  const hook = renderHook(() => useInterruptConversation(), { wrapper });
 
   return {
     ...hook,
@@ -98,7 +98,7 @@ const expectedInvalidations = (conversationId: string) => [
   [{ queryKey: ["v1-batch-get-app-conversations"] }],
 ];
 
-describe("pause conversation mutation behavior", () => {
+describe("interrupt conversation mutation behavior", () => {
   it("waits for cancellation, snapshots the list, forwards the id, and invalidates exact caches", async () => {
     const previousConversations = {
       pages: [{ items: [{ id: "conversation-42", title: "Before" }] }],
@@ -123,7 +123,7 @@ describe("pause conversation mutation behavior", () => {
       queryKey: ["user", "conversations"],
     });
     expect(getQueryData).not.toHaveBeenCalled();
-    expect(pauseConversationMock).not.toHaveBeenCalled();
+    expect(interruptConversationMock).not.toHaveBeenCalled();
 
     cancellation.resolve();
     await act(async () => {
@@ -132,21 +132,21 @@ describe("pause conversation mutation behavior", () => {
 
     expect(getQueryData).toHaveBeenCalledOnce();
     expect(getQueryData).toHaveBeenCalledWith(["user", "conversations"]);
-    expect(pauseConversationMock).toHaveBeenCalledOnce();
-    expect(pauseConversationMock).toHaveBeenCalledWith("conversation-42");
+    expect(interruptConversationMock).toHaveBeenCalledOnce();
+    expect(interruptConversationMock).toHaveBeenCalledWith("conversation-42");
     expect(cancelQueries.mock.invocationCallOrder[0]).toBeLessThan(
       getQueryData.mock.invocationCallOrder[0]!,
     );
     expect(getQueryData.mock.invocationCallOrder[0]).toBeLessThan(
-      pauseConversationMock.mock.invocationCallOrder[0]!,
+      interruptConversationMock.mock.invocationCallOrder[0]!,
     );
     expect(invalidateQueries.mock.calls).toEqual(
       expectedInvalidations("conversation-42"),
     );
   });
 
-  it("suppresses cloud auto-resume and clears the runtime URL after pausing", async () => {
-    const { queryClient, result } = setup({ backendKind: "cloud" });
+  it("leaves the cloud sandbox and runtime URL untouched after interrupting", async () => {
+    const { result } = setup({ backendKind: "cloud" });
 
     await act(async () => {
       await result.current.mutateAsync({
@@ -154,28 +154,22 @@ describe("pause conversation mutation behavior", () => {
       });
     });
 
-    expect(suppressNextCloudAutoResumeMock).toHaveBeenCalledWith(
+    expect(interruptConversationMock).toHaveBeenCalledWith(
       "conversation-cloud",
     );
-    expect(patchConversationInCacheMock).toHaveBeenCalledWith(
-      queryClient,
-      "conversation-cloud",
-      {
-        execution_status: ExecutionStatus.PAUSED,
-        conversation_url: null,
-      },
-    );
+    expect(suppressNextCloudAutoResumeMock).not.toHaveBeenCalled();
+    expect(patchConversationInCacheMock).not.toHaveBeenCalled();
   });
 
-  it("restores the exact conversation list snapshot when pausing fails", async () => {
+  it("restores the exact conversation list snapshot when interrupting fails", async () => {
     const previousConversations = {
       pages: [{ items: [{ id: "conversation-1", title: "Original" }] }],
     };
-    const failure = new Error("pause failed");
+    const failure = new Error("interrupt failed");
     const { queryClient, result, setQueryData } = setup({
       previousConversations,
     });
-    pauseConversationMock.mockRejectedValueOnce(failure);
+    interruptConversationMock.mockRejectedValueOnce(failure);
 
     await act(async () => {
       await expect(
@@ -194,9 +188,9 @@ describe("pause conversation mutation behavior", () => {
   });
 
   it("does not invent rollback data when no conversation list was cached", async () => {
-    const failure = new Error("pause failed without cache");
+    const failure = new Error("interrupt failed without cache");
     const { queryClient, result, setQueryData } = setup();
-    pauseConversationMock.mockRejectedValueOnce(failure);
+    interruptConversationMock.mockRejectedValueOnce(failure);
 
     await act(async () => {
       await expect(
@@ -204,7 +198,7 @@ describe("pause conversation mutation behavior", () => {
       ).rejects.toBe(failure);
     });
 
-    expect(pauseConversationMock).toHaveBeenCalledWith("conversation-2");
+    expect(interruptConversationMock).toHaveBeenCalledWith("conversation-2");
     expect(setQueryData).not.toHaveBeenCalled();
     expect(queryClient.getQueryData(CONVERSATIONS_QUERY_KEY)).toBeUndefined();
   });

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import {
   askAgent,
+  interruptConversation,
   invalidateConversationQueries,
   patchConversationInCache,
   pauseConversation,
@@ -189,6 +190,22 @@ describe("conversation runtime commands", () => {
     expect(mocks.getAgentServerClientOptions).not.toHaveBeenCalled();
     expect(ConversationClient).not.toHaveBeenCalled();
     expect(mocks.interruptConversation).not.toHaveBeenCalled();
+  });
+
+  it("interrupts a cloud conversation through its runtime client without pausing the sandbox", async () => {
+    const conversation = prepareRuntimeConversation({
+      sandbox_id: "sandbox-cloud-7",
+    });
+    const response = { success: true };
+    mocks.getActiveBackend.mockReturnValue({ backend: { kind: "cloud" } });
+    mocks.interruptConversation.mockResolvedValueOnce(response);
+
+    await expect(interruptConversation(CONV_ID)).resolves.toBe(response);
+
+    expectRuntimeClient(CONV_ID, conversation);
+    expect(mocks.interruptConversation).toHaveBeenCalledOnce();
+    expect(mocks.interruptConversation).toHaveBeenCalledWith(CONV_ID);
+    expect(mocks.pauseCloudSandbox).not.toHaveBeenCalled();
   });
 
   it("rejects a cloud pause when the conversation has no sandbox", async () => {

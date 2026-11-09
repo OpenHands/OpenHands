@@ -20,7 +20,7 @@ import ThreeDotsVerticalIcon from "#/icons/three-dots-vertical.svg?react";
 import { CodePillIcon } from "#/icons/code-pill";
 import { useUnifiedPauseConversation } from "#/hooks/mutation/use-unified-stop-conversation";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
-import { usePauseConversation } from "#/hooks/mutation/use-pause-conversation";
+import { useInterruptConversation } from "#/hooks/mutation/use-interrupt-conversation";
 import { useResumeConversation } from "#/hooks/mutation/use-resume-conversation";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
@@ -73,7 +73,7 @@ export function ChatInputActions({
   const { t } = useTranslation("openhands");
   const isComposerDockedMinimal = useComposerDockedMinimal();
   const unifiedPauseMutation = useUnifiedPauseConversation();
-  const pauseConversationMutation = usePauseConversation();
+  const interruptConversationMutation = useInterruptConversation();
   const resumeConversationMutation = useResumeConversation();
   const { conversationId } = useOptionalConversationId();
   const { backend } = useActiveBackend();
@@ -182,9 +182,9 @@ export function ChatInputActions({
     return () => observer.disconnect();
   }, [showChangeAgentButton, showAgentProfileSwitch]);
 
-  const handlePauseAgent = () => {
+  const handleInterruptAgent = () => {
     if (!conversationId) return;
-    pauseConversationMutation.mutate({ conversationId });
+    interruptConversationMutation.mutate({ conversationId });
   };
 
   const handleResumeAgentClick = () => {
@@ -193,7 +193,7 @@ export function ChatInputActions({
   };
 
   const isPausing =
-    unifiedPauseMutation.isPending || pauseConversationMutation.isPending;
+    unifiedPauseMutation.isPending || interruptConversationMutation.isPending;
 
   const OVERFLOW_BUTTON_WIDTH = 28;
   const INLINE_GAP = 12;
@@ -581,7 +581,7 @@ export function ChatInputActions({
         {conversationId && (
           <AgentStatus
             compact={!showAgentStatusLabel}
-            handleStop={handlePauseAgent}
+            handleStop={handleInterruptAgent}
             handleResumeAgent={handleResumeAgentClick}
             disabled={disabled}
             isPausing={isPausing}
