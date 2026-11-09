@@ -30,19 +30,25 @@ describe("ConfirmStopModal", () => {
       "cloud",
       "CONVERSATION$CONFIRM_STOP_SANDBOX",
       "CONVERSATION$STOP_SANDBOX_WARNING",
+      "COMMON$STOP_SANDBOX",
     ],
     [
       "local",
       "CONVERSATION$CONFIRM_CLOSE_CONVERSATION",
       "CONVERSATION$CLOSE_CONVERSATION_WARNING",
+      "ACTION$CONFIRM_CLOSE",
     ],
-  ] as const)("uses the %s backend's wording", (kind, title, description) => {
-    backendState.kind = kind;
-    renderWithProviders(
-      <ConfirmStopModal onConfirm={vi.fn()} onCancel={vi.fn()} />,
-    );
+  ] as const)(
+    "uses the %s backend's wording",
+    (kind, title, description, confirm) => {
+      backendState.kind = kind;
+      renderWithProviders(
+        <ConfirmStopModal onConfirm={vi.fn()} onCancel={vi.fn()} />,
+      );
 
-    expect(screen.getByText(title)).toBeInTheDocument();
-    expect(screen.getByText(description)).toBeInTheDocument();
-  });
+      expect(screen.getByText(title)).toBeInTheDocument();
+      expect(screen.getByText(description)).toBeInTheDocument();
+      expect(screen.getByTestId("confirm-button")).toHaveTextContent(confirm);
+    },
+  );
 });

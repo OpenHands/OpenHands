@@ -59,7 +59,11 @@ export function ConfirmStopModal({
             onClick={onConfirm}
             testId="confirm-button"
           >
-            {t(I18nKey.ACTION$CONFIRM_CLOSE)}
+            {t(
+              isCloud
+                ? I18nKey.COMMON$STOP_SANDBOX
+                : I18nKey.ACTION$CONFIRM_CLOSE,
+            )}
           </BrandButton>
         </div>
       </ModalBody>
