@@ -41,10 +41,14 @@ COPY . .
 # production for tagged releases and staging for PR/main images.
 # VITE_BASE_PATH is baked into React Router/Vite so the Docker image serves
 # Canvas under the Cloud subpath instead of a dedicated hostname.
+# VITE_WORKING_DIR is the base directory for per-conversation working dirs. It
+# must be absolute and inside a volume so they outlive the container (#18960).
 ARG VITE_POSTHOG_API_KEY=""
 ARG VITE_BASE_PATH="/canvas"
+ARG VITE_WORKING_DIR="/home/openhands/.openhands/agent-canvas/workspaces"
 ENV VITE_POSTHOG_API_KEY=${VITE_POSTHOG_API_KEY}
 ENV VITE_BASE_PATH=${VITE_BASE_PATH}
+ENV VITE_WORKING_DIR=${VITE_WORKING_DIR}
 RUN npm run build
 
 # ── Stage 1b: Generate shell-sourceable defaults from config/defaults.json ──
@@ -186,8 +190,10 @@ RUN chmod +x /opt/agent-canvas/entrypoint.sh
 # volumes (which default to root).
 RUN mkdir -p /home/openhands/.openhands/agent-canvas/conversations \
              /home/openhands/.openhands/agent-canvas/bash_events \
+             /home/openhands/.openhands/agent-canvas/workspaces \
              /home/openhands/.openhands/automation \
              /projects && \
+    chmod 755 /home/openhands && \
     chown -R openhands:openhands /home/openhands/.openhands /projects
 
 USER openhands

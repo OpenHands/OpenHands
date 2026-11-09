@@ -67,6 +67,8 @@
 #                          Override in production when the external URL differs.
 #   AUTOMATION_WORKSPACE_BASE – Directory for automation run workspaces
 #                          (default: ~/.openhands/workspaces)
+#   XDG_CONFIG_HOME     – Browser-tool configuration directory
+#                          (default: $HOME/.config; must be writable)
 #   Any agent-server or automation env vars are passed through.
 # ═══════════════════════════════════════════════════════════════════════════════
 set -uo pipefail
@@ -191,6 +193,110 @@ fi
 # <<< docker-browser-tools
 export OH_CONVERSATIONS_PATH="${OH_CONVERSATIONS_PATH:-${OPENHANDS_DIR}/${CONFIG_CONVERSATIONS:-agent-canvas/conversations}}"
 export OH_BASH_EVENTS_DIR="${OH_BASH_EVENTS_DIR:-${OPENHANDS_DIR}/${CONFIG_BASH_EVENTS:-agent-canvas/bash_events}}"
+export LOCAL_STORAGE_PATH="${LOCAL_STORAGE_PATH:-${OPENHANDS_DIR}/storage}"
+export AUTOMATION_WORKSPACE_BASE="${AUTOMATION_WORKSPACE_BASE:-${OPENHANDS_DIR}/workspaces}"
+if [ -z "${AUTOMATION_DB_URL:-}" ]; then
+  AUTOMATION_DB_FILE="${OPENHANDS_DIR}/${CONFIG_AUTOMATION_DB:-automation/automations.db}"
+fi
+
+# ── Preflight: persistence dirs must be writable ───────────────────────────
+# A host bind mount the container cannot write to leaves the backend
+# half-dead (frontend serves, APIs 502). Fail fast with an actionable message.
+# Report a preflight failure from the *actual* OS error instead of always
+# assuming a uid mismatch. The cause can also be a read-only mount, a full
+# disk, or a quota, none of which a chmod would fix.
+report_unwritable() {
+  local label="$1" dir="$2" err="$3" host_hint="$4"
+  log_error "$label is not writable: $dir"
+  if [ -n "$err" ]; then
+    log_error "Underlying error: $err"
+  fi
+  case "$err" in
+    *"Permission denied"*|*"permission denied"*|*"Operation not permitted"*|*"operation not permitted"*)
+      if [ "$label" = "Browser config directory" ]; then
+        log_error "Browser tools need a config directory writable by uid $(id -u)."
+        log_error "Set XDG_CONFIG_HOME to a writable directory, or keep the default openhands user."
+        return
+      fi
+      log_error "Grant uid $(id -u) access to the affected host path using ownership or ACLs."
+      if [ "$label" = "Workspace directory" ]; then
+        log_error "Existing project files also need read/write access."
+      else
+        log_error "Keep state and key files private; a fresh named Docker volume avoids bind-mount ownership issues."
+      fi
+      log_error "Use the actual host bind-mount path corresponding to $dir."
+      log_error "On SELinux hosts, check bind-mount labels (Docker :z or :Z)."
+      ;;
+    *"Read-only file system"*|*"read-only file system"*)
+      log_error "The mount is read-only. Drop the ':ro' suffix from its -v flag"
+      [ "$label" != "Browser config directory" ] || log_error "For a read-only root filesystem, set XDG_CONFIG_HOME to a writable mount."
+      log_error "(or remount it read-write), then retry."
+      ;;
+    *)
+      log_error "Resolve the filesystem error above, then retry."
+      ;;
+  esac
+}
+
+# Probe the effective paths (not just $OPENHANDS_DIR): OH_PERSISTENCE_DIR /
+# OH_CONVERSATIONS_PATH / OH_BASH_EVENTS_DIR can be overridden by the user,
+# and $OPENHANDS_DIR itself still hosts the persisted secret-key/api-key files.
+for dir in "$OPENHANDS_DIR" "$OH_PERSISTENCE_DIR" "$OH_CONVERSATIONS_PATH" "$OH_BASH_EVENTS_DIR" "$LOCAL_STORAGE_PATH" "$AUTOMATION_WORKSPACE_BASE" ${AUTOMATION_DB_FILE:+"$(dirname "$AUTOMATION_DB_FILE")"}; do
+  # Capture stderr from *both* commands: if `mkdir -p` fails the probe never
+  # runs, and without this its raw, unprefixed error would leak to the console.
+  if ! err=$(mkdir -p "$dir" 2>&1); then
+    report_unwritable "Persistence directory" "$dir" "$err" "~/.openhands"
+    exit 1
+  fi
+  if ! probe=$(mktemp "$dir/.agent-canvas-probe.XXXXXXXX" 2>&1); then
+    err="$probe"
+    report_unwritable "Persistence directory" "$dir" "$err" "~/.openhands"
+    exit 1
+  fi
+  rm -f "$probe"
+done
+
+# ── Preflight: /projects workspace mount must be writable ──────────────────
+# Optional — only probed when the user actually mounted a workspace dir
+# (e.g. -v "$PROJECTS_PATH:/projects"). A uid-mismatched or read-only mount
+# here breaks the agent's file access the same way, so fail fast too. We
+# deliberately don't mkdir: an absent /projects just means no workspace mount.
+if [ -d /projects ]; then
+  if ! probe=$(mktemp /projects/.agent-canvas-probe.XXXXXXXX 2>&1); then
+    err="$probe"
+    report_unwritable "Workspace directory" "/projects" "$err" "~/projects"
+    case "$err" in
+      *"Read-only file system"*|*"read-only file system"*) log "WARNING: /projects is read-only; existing files cannot be edited." ;;
+      *) exit 1 ;;
+    esac
+  fi
+  [ ! -f "${probe:-}" ] || rm -f "$probe"
+fi
+
+# Browser tools create configuration under XDG_CONFIG_HOME (or $HOME/.config).
+# Catch an inaccessible config path before the backends start with broken tools.
+BROWSER_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}"
+if ! err=$(mkdir -p "$BROWSER_CONFIG_DIR" 2>&1); then
+  report_unwritable "Browser config directory" "$BROWSER_CONFIG_DIR" "$err" "~/.config"
+  exit 1
+fi
+if ! probe=$(mktemp "$BROWSER_CONFIG_DIR/.agent-canvas-probe.XXXXXXXX" 2>&1); then
+  err="$probe"
+  report_unwritable "Browser config directory" "$BROWSER_CONFIG_DIR" "$err" "~/.config"
+  exit 1
+fi
+rm -f "$probe"
+
+# Existing databases must be writable as well as their parent directories.
+if [ -n "${AUTOMATION_DB_FILE:-}" ]; then
+  for db_file in "$AUTOMATION_DB_FILE" "${AUTOMATION_DB_FILE}-wal" "${AUTOMATION_DB_FILE}-shm" "${AUTOMATION_DB_FILE}-journal"; do
+    if [ -e "$db_file" ] && { [ ! -r "$db_file" ] || [ ! -w "$db_file" ]; }; then
+      log_error "Existing automation database is not readable and writable: $db_file"
+      log_error "Grant uid $(id -u) access to this file without exposing private state."
+      exit 1
+    fi
+  done
+fi
 
 # OH_SECRET_KEY is required for settings/secrets encryption. Without it the
 # agent-server refuses to return encrypted secrets → conversation creation
@@ -199,7 +305,10 @@ export OH_BASH_EVENTS_DIR="${OH_BASH_EVENTS_DIR:-${OPENHANDS_DIR}/${CONFIG_BASH_
 SECRET_KEY_FILE="${STATE_DIR}/secret-key.txt"
 if [ -z "${OH_SECRET_KEY:-}" ]; then
   if [ -f "$SECRET_KEY_FILE" ]; then
-    OH_SECRET_KEY="$(cat "$SECRET_KEY_FILE")"
+    if ! OH_SECRET_KEY="$(cat "$SECRET_KEY_FILE" 2>&1)"; then
+      log_error "Cannot read persisted secret key: $SECRET_KEY_FILE (uid $(id -u)). Check ownership and permissions; keep the key private."
+      exit 1
+    fi
   else
     OH_SECRET_KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
     mkdir -p "$(dirname "$SECRET_KEY_FILE")"
@@ -217,7 +326,10 @@ API_KEY_FILE="${STATE_DIR}/api-key.txt"
 
 if [ -z "${LOCAL_BACKEND_API_KEY:-}" ] && [ -z "${OH_SESSION_API_KEYS_0:-}" ]; then
   if [ -f "$API_KEY_FILE" ]; then
-    LOCAL_BACKEND_API_KEY="$(cat "$API_KEY_FILE")"
+    if ! LOCAL_BACKEND_API_KEY="$(cat "$API_KEY_FILE" 2>&1)"; then
+      log_error "Cannot read persisted session key: $API_KEY_FILE (uid $(id -u)). Check ownership and permissions; keep the key private."
+      exit 1
+    fi
   else
     LOCAL_BACKEND_API_KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
     mkdir -p "$(dirname "$API_KEY_FILE")"
