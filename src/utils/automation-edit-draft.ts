@@ -24,6 +24,7 @@ const HOURLY_CRON = "0 * * * *";
 const REPOSITORY_UPDATABLE_PRESET_TYPES = new Set(["prompt", "plugin"]);
 
 function setupKind(automation: Automation): AutomationSetupKind {
+  if (automation.plugin_spec) return "custom";
   if ((automation.plugins?.length ?? 0) > 0) return "plugin";
   if (!automation.prompt?.trim() && automation.entrypoint) return "custom";
   return "prompt";
@@ -118,6 +119,9 @@ export function setupDraftFromAutomation(
       (automation.repository ?? ""),
     model: automation.model ?? "",
     agentProfileId: automation.agent_profile_id ?? "",
+    ...(automation.plugin_spec
+      ? { pluginConfig: JSON.stringify(automation.plugin_spec.config, null, 2) }
+      : {}),
     entrypoint: automation.entrypoint ?? "",
     setupScriptPath: automation.setup_script_path ?? "",
     ...(trigger.type === "event"
@@ -145,6 +149,9 @@ export function setupDraftFromAutomation(
     prompt,
     kind,
     editingAutomationId: automation.id,
+    ...(automation.plugin_spec
+      ? { existingPluginSpec: automation.plugin_spec }
+      : {}),
     existingRepositories: automation.repositories ?? [],
     canUpdateRepositories: canUpdateRepositories(automation),
     ...(Object.keys(existingEventTrigger).length > 0

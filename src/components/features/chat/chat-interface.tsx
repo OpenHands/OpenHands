@@ -8,7 +8,7 @@ import {
 } from "./chat-layout";
 import { TaskStartupProgress } from "./task-startup-progress";
 import React from "react";
-import { createPortal } from "react-dom";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 import { useNavigate } from "react-router";
 import { useTracking } from "#/hooks/use-tracking";
 import { useTranslation } from "react-i18next";
@@ -52,6 +52,7 @@ import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-e
 import { ErrorMessageBanner } from "./error-message-banner";
 import { ConnectionRecoveryNotice } from "./connection-recovery-notice";
 import { SkillInstallRestartBanner } from "./skill-install-restart-banner";
+import { ResolvedConversationBanner } from "./resolved-conversation-banner";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { Messages } from "#/components/conversation-events/chat/messages";
@@ -372,14 +373,14 @@ export function ChatInterface({
   const session = sessions.at(-1);
   const isSessionStarting =
     session?.phase === "pending" || session?.phase === "connecting";
-  // A session group exists only in the tab that started or resumed the
-  // conversation. Until its socket is open and history has loaded, the chat
-  // cannot know whether saved events are on their way, so the empty state
-  // waits; once it is known to be empty, the suggestions show as in any tab.
+  // An open socket can still be replaying saved messages after a failed REST
+  // preload. Every tab must wait for replay completion before declaring the
+  // chat empty, including tabs without a local session activity group.
   const sessionHistoryKnown =
-    sessions.length === 0 ||
+    conversationWebSocket === null ||
     (!isSessionStarting &&
-      conversationWebSocket?.connectionState === "OPEN" &&
+      conversationWebSocket.connectionState === "OPEN" &&
+      conversationWebSocket.isHistoryReady &&
       !conversationWebSocket.isLoadingHistory);
   const hasSendingMessages = pendingMessages.some(
     (message) =>
@@ -713,9 +714,13 @@ export function ChatInterface({
       </ComposerDockedProvider>
     </ChatProgressContext.Provider>
   );
-  const dockedOrInlineComposer = composerDockTarget
-    ? createPortal(composer, composerDockTarget)
-    : composer;
+  const dockedOrInlineComposer = composerDockTarget ? (
+    <AppearancePortal container={composerDockTarget}>
+      {composer}
+    </AppearancePortal>
+  ) : (
+    composer
+  );
 
   return (
     <WorkspaceFilesForChatProvider>
@@ -852,6 +857,8 @@ export function ChatInterface({
             {llmBlocked && !isArchivedConversation && (
               <LlmNotConfiguredBanner />
             )}
+
+            {!isArchivedConversation && <ResolvedConversationBanner />}
 
             {isArchivedConversation ? (
               // Archived / sandbox-error: show a read-only notice in place of

@@ -141,7 +141,7 @@ describe("uploaded image preview", () => {
     expect(screen.getByTestId("image-loader")).toHaveClass("animate-spin");
     expect(screen.getByTestId("image-loader")).toHaveAttribute(
       "data-color",
-      "white",
+      "var(--oh-contrast)",
     );
     const toggle = screen.getByTestId("upload-image-as-file");
     expect(toggle).toHaveAttribute("aria-pressed", "true");

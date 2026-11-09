@@ -1,7 +1,10 @@
 import { useSessionActivities } from "#/hooks/use-session-activities";
 import { useSessionActivityStore } from "#/stores/session-activity-store";
 import { SessionActivityDetails } from "./event-message-components/session-activity";
-import { CollapsibleThinking } from "./event-message-components/collapsible-thinking";
+import {
+  CollapsibleThinking,
+  ThinkingContent,
+} from "./event-message-components/collapsible-thinking";
 import React from "react";
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
@@ -208,7 +211,6 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     const { isPlanningAgentRunning } = usePlanningAgentState();
     const isAgentRunning =
       curAgentState === AgentState.RUNNING || isPlanningAgentRunning;
-
     // Fold consecutive action/observation events into collapsible groups so a
     // long sequence of tool calls doesn't dominate the chat scroll. The trailing
     // run uses `minSize` 1 while the agent works, so the stage it is on is a
@@ -371,6 +373,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         item.session?.open ??
         openRows.get(`group:${groupKey}`) ??
         item.events.some((event) => openRows.get(getStepKey(event)));
+      const Reasoning =
+        item.events.length === 0 && !item.session
+          ? ThinkingContent
+          : CollapsibleThinking;
       return (
         <React.Fragment key={`group-${groupKey}`}>
           {pendingSessionId &&
@@ -381,6 +387,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             session={item.session}
             hasReasoning={!!item.reasoning?.length}
             allEvents={allEvents}
+            actionById={actionById}
             isLive={isAgentRunning && renderedItemKey(item) === tailItemKey}
             open={groupOpen}
             onOpenChange={(open) => {
@@ -412,7 +419,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 index: reasoning.index,
                 order: 0,
                 node: (
-                  <CollapsibleThinking
+                  <Reasoning
                     key={`reasoning-${reasoning.id}`}
                     content={reasoning.text}
                     expansionId={`reasoning-${reasoning.id}`}

@@ -30,12 +30,7 @@ import type {
 } from "./types";
 
 export type AutomationHealth =
-  | "healthy"
-  | "failing"
-  | "running"
-  | "disabled"
-  | "never-run"
-  | "unknown";
+  "healthy" | "failing" | "running" | "disabled" | "never-run" | "unknown";
 
 export interface AutomationRunSummary {
   /** Lifetime run count, from the response — not the sample's length. */

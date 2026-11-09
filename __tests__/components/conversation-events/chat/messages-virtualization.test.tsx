@@ -286,22 +286,21 @@ describe("Messages virtualization", () => {
       },
     };
     renderMessages(events);
-    // The agent reply and its reasoning fold into one group, so the thinking
-    // section is reachable only once the group is open.
+    // A reasoning-only reply folds into a group whose header is the "Thinking"
+    // disclosure, so its reasoning is reachable only once the group is open.
     fireEvent.click(screen.getByTestId("event-group-toggle"));
-    fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
-    expect(
-      screen.getByTestId("collapsible-thinking-content"),
-    ).toHaveTextContent("Preserved reasoning");
+    expect(screen.getByTestId("thinking-content")).toHaveTextContent(
+      "Preserved reasoning",
+    );
     const parent = screen.getByTestId("scroll-parent");
     parent.scrollTop = 12000;
     fireEvent.scroll(parent);
-    expect(screen.queryByTestId("collapsible-thinking-toggle")).toBeNull();
+    expect(screen.queryByTestId("thinking-content")).toBeNull();
     parent.scrollTop = 0;
     fireEvent.scroll(parent);
-    expect(
-      screen.getByTestId("collapsible-thinking-content"),
-    ).toHaveTextContent("Preserved reasoning");
+    expect(screen.getByTestId("thinking-content")).toHaveTextContent(
+      "Preserved reasoning",
+    );
   });
 
   it("persists a row's expansion across the virtualization threshold", () => {

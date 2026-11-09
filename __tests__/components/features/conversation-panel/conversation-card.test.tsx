@@ -39,7 +39,6 @@ vi.mock("react-i18next", async () => {
         const translations: Record<string, string> = {
           CONVERSATION$CREATED: "Created",
           CONVERSATION$AGO: "ago",
-          CONVERSATION$UPDATED: "Updated",
           COMMON$NO_REPOSITORY: "No repository",
           CONVERSATION$ACP_AGENT_GENERIC: "ACP",
           CONVERSATION_PANEL$PIN_CONVERSATION: "Pin conversation",
@@ -797,6 +796,20 @@ describe("ConversationCard", () => {
     },
   );
 
+  it("keeps Stop for a running cloud sandbox after the agent is interrupted", () => {
+    renderWithProviders(
+      <ConversationCardActions
+        contextMenuOpen={true}
+        onContextMenuToggle={vi.fn()}
+        onStop={vi.fn()}
+        executionStatus={ExecutionStatus.PAUSED}
+        sandboxStatus="RUNNING"
+      />,
+    );
+
+    expect(screen.getByTestId("stop-button")).toBeInTheDocument();
+  });
+
   describe("stop button label by active backend", () => {
     const cloudBackend: Backend = {
       id: "prod",
@@ -827,7 +840,7 @@ describe("ConversationCard", () => {
       );
     });
 
-    it("uses COMMON$CLOSE_CONVERSATION_STOP_RUNTIME on a cloud backend", () => {
+    it("uses COMMON$STOP_SANDBOX on a cloud backend", () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
 
@@ -843,7 +856,7 @@ describe("ConversationCard", () => {
       );
 
       expect(screen.getByTestId("stop-button")).toHaveTextContent(
-        "COMMON$CLOSE_CONVERSATION_STOP_RUNTIME",
+        "COMMON$STOP_SANDBOX",
       );
     });
   });

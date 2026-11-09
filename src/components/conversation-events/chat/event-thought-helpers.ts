@@ -6,6 +6,15 @@ import {
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 
+/** Index the retained history once for grouping, summaries, and event cards. */
+export const buildActionById = (events: OpenHandsEvent[]) => {
+  const actions = new Map<string, ActionEvent>();
+  for (const event of events) {
+    if (isActionEvent(event)) actions.set(event.id, event);
+  }
+  return actions;
+};
+
 /**
  * Returns the displayable thought text of an `ActionEvent`, or an empty
  * string if the event has no usable thought content.
@@ -86,21 +95,6 @@ export const splitInlineThink = (
 };
 
 /**
- * Index action events by id so observation→action lookups are O(1) instead of
- * scanning the whole history per event. Grouping a long conversation otherwise
- * degrades to quadratic (see `getThoughtSourceAction`).
- */
-export const buildActionById = (
-  allEvents: OpenHandsEvent[],
-): Map<string, ActionEvent> => {
-  const actions = new Map<string, ActionEvent>();
-  for (const event of allEvents) {
-    if (isActionEvent(event)) actions.set(event.id, event);
-  }
-  return actions;
-};
-
-/**
  * Find the `ActionEvent` whose thought should be rendered alongside the
  * given UI event. For an `ActionEvent` the thought belongs to itself; for
  * an `ObservationEvent` (or the `UserRejectObservation` of a rejected
@@ -115,7 +109,7 @@ export const buildActionById = (
 export const getThoughtSourceAction = (
   event: OpenHandsEvent,
   allEvents: OpenHandsEvent[],
-  actionById?: Map<string, ActionEvent>,
+  actionById?: ReadonlyMap<string, ActionEvent>,
 ): ActionEvent | null => {
   if (isActionEvent(event)) {
     if (event.action.kind === "ThinkAction") return null;
@@ -124,10 +118,10 @@ export const getThoughtSourceAction = (
 
   if (isObservationEvent(event) || isUserRejectObservation(event)) {
     const action = actionById
-      ? (actionById.get(event.action_id ?? "") ?? null)
-      : (allEvents.find(
+      ? actionById.get(event.action_id ?? "")
+      : allEvents.find(
           (e): e is ActionEvent => isActionEvent(e) && e.id === event.action_id,
-        ) ?? null);
+        );
     if (!action) return null;
     if (action.action.kind === "ThinkAction") return null;
     return hasNonEmptyThought(action) ? action : null;

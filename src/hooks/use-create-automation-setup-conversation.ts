@@ -1,9 +1,5 @@
-import { useCallback } from "react";
-import { useTranslation } from "react-i18next";
+import { useCallback, useRef } from "react";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
-import { I18nKey } from "#/i18n/declaration";
-import { getApiErrorMessage } from "#/utils/api-error-message";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 interface AutomationSetupConversation {
   conversation_id: string;
@@ -13,6 +9,9 @@ interface StartAutomationSetupConversationOptions {
   query: string;
   entryPoint: "automations_add" | "automation_edit" | "automation_draft_resume";
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
+  onStart: () => void;
+  onError: (error: unknown) => void;
   onSuccess: (
     conversation: AutomationSetupConversation,
   ) => void | Promise<void>;
@@ -20,40 +19,43 @@ interface StartAutomationSetupConversationOptions {
 }
 
 export function useCreateAutomationSetupConversation() {
-  const { t } = useTranslation("openhands");
-  const createConversation = useCreateConversation();
+  const createConversation = useCreateConversation({ disableToast: true });
+  const inFlight = useRef(false);
 
   const startAutomationSetupConversation = useCallback(
     ({
       query,
       entryPoint,
       automationSetupTags,
+      automationSetupContext,
+      onStart,
+      onError,
       onSuccess,
       onSettled,
     }: StartAutomationSetupConversationOptions) => {
       const text = query.trim();
-      if (!text || createConversation.isPending) return false;
+      if (!text || inFlight.current || createConversation.isPending)
+        return false;
+      inFlight.current = true;
+      onStart();
 
-      createConversation.mutate(
-        {
+      // Promise handlers survive navigation unmounting this composer.
+      void createConversation
+        .mutateAsync({
           query: text,
           automationSetup: true,
+          automationSetupContext,
           ...(automationSetupTags ? { automationSetupTags } : {}),
           entryPoint,
-        },
-        {
-          onSuccess,
-          onError: (error) => {
-            displayErrorToast(
-              getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)),
-            );
-          },
-          onSettled,
-        },
-      );
+        })
+        .then(onSuccess, onError)
+        .finally(() => {
+          inFlight.current = false;
+          onSettled?.();
+        });
       return true;
     },
-    [createConversation, t],
+    [createConversation],
   );
 
   return {
