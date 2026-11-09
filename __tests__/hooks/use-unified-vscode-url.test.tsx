@@ -11,6 +11,7 @@ import ConversationService from "#/api/conversation-service/conversation-service
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import type { ResolvedActiveBackend } from "#/api/backend-registry/types";
 import type { V1SandboxInfo } from "#/api/cloud/sandbox-service.types";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -672,6 +673,50 @@ describe("useUnifiedVSCodeUrl", () => {
     });
 
     await waitFor(() => expect(result.current.isUnavailable).toBe(true));
+    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+  });
+
+  it("probes the editor on a paused conversation and hides a stopped editor", async () => {
+    // Opening a paused conversation: the runtime is not "ready", but the
+    // agent-server is up and can still say there is no editor to open.
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(useRuntimeIsReady).mockReturnValue(false);
+    vi.mocked(useActiveConversation).mockReturnValue({
+      data: makeConversation({ execution_status: ExecutionStatus.PAUSED }),
+    } as unknown as ReturnType<typeof useActiveConversation>);
+    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockResolvedValue(
+      {
+        enabled: true,
+        running: false,
+      },
+    );
+
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isUnavailable).toBe(true));
+    expect(AgentServerConversationService.getVSCodeStatus).toHaveBeenCalled();
+    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+  });
+
+  it("keeps the control on a paused conversation whose editor is running", async () => {
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(useRuntimeIsReady).mockReturnValue(false);
+    vi.mocked(useActiveConversation).mockReturnValue({
+      data: makeConversation({ execution_status: ExecutionStatus.PAUSED }),
+    } as unknown as ReturnType<typeof useActiveConversation>);
+
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(AgentServerConversationService.getVSCodeStatus).toHaveBeenCalled(),
+    );
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.isUnavailable).toBe(false);
+    // The URL itself is still fetched on click, as before.
     expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
   });
 
