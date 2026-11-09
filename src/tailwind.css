@@ -86,6 +86,8 @@
   --color-border: var(--oh-border);
   --color-scroll-fade: var(--oh-scroll-fade-from, var(--oh-color-base));
   --color-border-input: var(--oh-border-input);
+  /* Existing dark border for informational Git chips and Workspace mode. */
+  --color-git-control: rgba(71, 74, 84, 0.5);
   --color-border-subtle: var(--oh-border-subtle);
   --color-divider: var(--oh-divider);
   /* The ring and popover bar share a readable track across palettes. */
