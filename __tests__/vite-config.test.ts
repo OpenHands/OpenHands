@@ -312,9 +312,16 @@ describe("vite library build", () => {
       ["shadow-reorder-before", "2px"],
       ["shadow-reorder-after", "-2px"],
     ]) {
-      expect(declarations(recipe(name))["--tw-shadow"]).toBe(
+      const edge = recipe(`${name}!`);
+      expect(declarations(edge)["--tw-shadow"]).toBe(
         `inset 0 ${offset} 0 0 var(--tw-shadow-color,var(--oh-focus))`,
       );
+      // The drop indicator must outrank the unlayered card and focus resets.
+      const shadows = edge.nodes.filter(
+        (node) => node.type === "decl" && node.prop === "box-shadow",
+      );
+      expect(shadows).toHaveLength(1);
+      expect(shadows[0]).toMatchObject({ important: true });
     }
     // Extension dialogs keep their viewport limits in the shipped library.
     expect(declarations(recipe("extension-dialog-viewport"))).toMatchObject({
