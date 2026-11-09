@@ -8,6 +8,7 @@ import {
   isMissingSandboxStatus,
   isRuntimeUnavailableSandboxStatus,
 } from "#/utils/conversation-archive-status";
+import { hasSandbox } from "#/utils/status";
 import { ConversationCard } from "./conversation-card/conversation-card";
 import { ConversationCardPreview } from "./conversation-card/conversation-card-preview";
 
@@ -34,7 +35,7 @@ interface ConversationPanelRowProps {
   handleDeleteProject: (id: string, title: string) => void;
   handleArchiveProject: (id: string, title: string) => void;
   handleUnarchiveProject: (id: string) => void;
-  handleStopConversation: (id: string) => void;
+  handleStopConversation: (id: string, stopsSandbox: boolean) => void;
   handleNewConversationInSandbox: (sandboxId: string) => void;
   handleEditTags: (id: string) => void;
   handleConversationTitleChange: (id: string, title: string) => void;
@@ -149,7 +150,12 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
               ? () => handleUnarchiveProject(conversation.id)
               : undefined
           }
-          onStop={() => handleStopConversation(conversation.id)}
+          onStop={() =>
+            handleStopConversation(
+              conversation.id,
+              hasSandbox(conversation.sandbox_status),
+            )
+          }
           onNewConversationInSandbox={
             sandboxId &&
             !isRuntimeUnavailableSandboxStatus(conversation.sandbox_status)

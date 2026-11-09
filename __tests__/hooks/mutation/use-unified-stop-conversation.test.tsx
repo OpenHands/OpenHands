@@ -117,7 +117,7 @@ describe("useUnifiedPauseConversation", () => {
       queryClient.getMutationCache().getAll().at(-1)?.options.mutationKey,
     ).toEqual(["stop-conversation"]);
     expect(toastLoadingMock).toHaveBeenCalledWith(
-      `translated:${I18nKey.TOAST$STOPPING_CONVERSATION}`,
+      `translated:${I18nKey.TOAST$STOPPING_SANDBOX}`,
       TOAST_OPTIONS,
     );
     expect(cancelQueries).toHaveBeenCalledWith({
@@ -129,7 +129,7 @@ describe("useUnifiedPauseConversation", () => {
     expect(pauseConversationMock).toHaveBeenCalledWith("conversation-1");
     expect(toastDismissMock).toHaveBeenCalledWith("stop-toast");
     expect(toastSuccessMock).toHaveBeenCalledWith(
-      `translated:${I18nKey.TOAST$CONVERSATION_STOPPED}`,
+      `translated:${I18nKey.TOAST$SANDBOX_STOPPED}`,
       TOAST_OPTIONS,
     );
     expect(patchConversationInCacheMock).toHaveBeenCalledWith(

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
-import { canStopRuntime, isExecutionPaused } from "#/utils/status";
+import { canStopFromMenu, hasSandbox, isExecutionPaused } from "#/utils/status";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { ConversationCardContextMenu } from "./conversation-card-context-menu";
@@ -49,7 +49,7 @@ export function ConversationCardActions({
 }: ConversationCardActionsProps) {
   const { t } = useTranslation("openhands");
   const isPaused = isExecutionPaused(executionStatus);
-  const canStop = canStopRuntime(executionStatus, sandboxStatus);
+  const canStop = canStopFromMenu(executionStatus, sandboxStatus);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const [, bumpPosition] = useReducer((i: number) => i + 1, 0);
   useCloseOnEscape(
@@ -132,6 +132,7 @@ export function ConversationCardActions({
             onArchive={onArchive}
             onUnarchive={onUnarchive}
             onStop={canStop ? onStop : undefined}
+            stopsSandbox={hasSandbox(sandboxStatus)}
             onNewConversationInSandbox={onNewConversationInSandbox}
             onEdit={onEdit}
             onEditTags={onEditTags}

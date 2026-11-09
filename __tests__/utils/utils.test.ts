@@ -8,7 +8,7 @@ const t = (key: string) => {
   const translations: { [key: string]: string } = {
     COMMON$STOPPING: "Stopping",
     COMMON$STARTING: "Starting",
-    COMMON$SERVER_STOPPED: "Server stopped",
+    AGENT_STATUS$AGENT_STOPPED: "Agent stopped",
     COMMON$RUNNING: "Running",
     CONVERSATION$READY: "Ready",
     CONVERSATION$STARTING_CONVERSATION: "Starting",
@@ -219,7 +219,7 @@ describe("getStatusText", () => {
       t,
     });
 
-    expect(result).toBe(t(I18nKey.COMMON$SERVER_STOPPED));
+    expect(result).toBe(t(I18nKey.AGENT_STATUS$AGENT_STOPPED));
   });
 
   it("falls back to the ERROR translation when no error message is given", () => {
@@ -279,7 +279,7 @@ describe("getStatusText", () => {
       t,
     });
 
-    expect(result).toBe(t(I18nKey.COMMON$SERVER_STOPPED));
+    expect(result).toBe(t(I18nKey.AGENT_STATUS$AGENT_STOPPED));
   });
 
   it("returns errorMessage when agent state is ERROR", () => {

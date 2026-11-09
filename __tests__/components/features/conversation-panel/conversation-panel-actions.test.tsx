@@ -52,6 +52,11 @@ vi.mock("react-i18next", async (importOriginal) => ({
   }),
 }));
 
+const mockInterruptAgentMutate = vi.fn();
+vi.mock("#/hooks/mutation/use-pause-conversation", () => ({
+  usePauseConversation: () => ({ mutate: mockInterruptAgentMutate }),
+}));
+
 const mockStopConversationMutate = vi.fn();
 vi.mock("#/hooks/mutation/use-unified-stop-conversation", () => ({
   useUnifiedPauseConversation: () => ({ mutate: mockStopConversationMutate }),
@@ -312,13 +317,11 @@ describe("ConversationPanel conversation actions", () => {
     await user.click(deleteButton);
 
     // Confirm the deletion
-    const confirmButton = screen.getByRole("button", { name: /confirm/i });
+    const confirmButton = screen.getByTestId("confirm-button");
     await user.click(confirmButton);
 
     // Verify modal is closed after confirmation
-    expect(
-      screen.queryByRole("button", { name: /confirm/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("confirm-button")).not.toBeInTheDocument();
   });
 
   it("should archive a conversation and remove it from the list", async () => {
@@ -826,6 +829,7 @@ describe("ConversationPanel conversation actions", () => {
         id: "1",
         title: "Running Conversation",
         execution_status: ExecutionStatus.RUNNING,
+        sandbox_status: "RUNNING",
       }),
       createMockConversation({
         id: "2",
@@ -885,6 +889,7 @@ describe("ConversationPanel conversation actions", () => {
         id: "1",
         title: "Conversation 1",
         execution_status: ExecutionStatus.RUNNING,
+        sandbox_status: "RUNNING",
       }),
       createMockConversation({
         id: "2",
@@ -923,18 +928,47 @@ describe("ConversationPanel conversation actions", () => {
     await user.click(stopButton);
 
     // Confirm the stopping action
-    const confirmButton = screen.getByRole("button", { name: /confirm/i });
+    const confirmButton = screen.getByTestId("confirm-button");
     await user.click(confirmButton);
 
-    expect(
-      screen.queryByRole("button", { name: /confirm/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("confirm-button")).not.toBeInTheDocument();
 
     // Verify the mutation was called
     expect(mockStopConversationMutate).toHaveBeenCalledWith({
       conversationId: "1",
     });
     expect(mockStopConversationMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops a local agent from the list at once, without a confirm dialog", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "local-1",
+          title: "Local Conversation",
+          execution_status: ExecutionStatus.RUNNING,
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    const [card] = await screen.findAllByTestId("conversation-card");
+    await user.click(within(card).getByTestId("ellipsis-button"));
+    await user.click(screen.getByTestId("stop-button"));
+
+    expect(mockInterruptAgentMutate).toHaveBeenCalledWith({
+      conversationId: "local-1",
+    });
+    expect(mockStopConversationMutate).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: /cancel/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("should only show stop button for STARTING or RUNNING conversations", async () => {
@@ -1344,9 +1378,7 @@ describe("ConversationPanel conversation actions", () => {
     await user.click(deleteButton);
 
     // Modal should be visible
-    expect(
-      screen.getByRole("button", { name: /confirm/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("confirm-button")).toBeInTheDocument();
 
     // Click the backdrop (the dark overlay behind the modal)
     const backdrop = document.querySelector(".bg-black.opacity-60");
@@ -1354,9 +1386,7 @@ describe("ConversationPanel conversation actions", () => {
     await user.click(backdrop!);
 
     // Modal should be closed
-    expect(
-      screen.queryByRole("button", { name: /confirm/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("confirm-button")).not.toBeInTheDocument();
   });
 
   it("should close stop modal when clicking backdrop", async () => {
@@ -1368,6 +1398,7 @@ describe("ConversationPanel conversation actions", () => {
         id: "1",
         title: "Running Conversation",
         execution_status: ExecutionStatus.RUNNING,
+        sandbox_status: "RUNNING",
       }),
       createMockConversation({
         id: "2",
@@ -1400,9 +1431,7 @@ describe("ConversationPanel conversation actions", () => {
     await user.click(stopButton);
 
     // Modal should be visible
-    expect(
-      screen.getByRole("button", { name: /confirm/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("confirm-button")).toBeInTheDocument();
 
     // Click the backdrop
     const backdrop = document.querySelector(".bg-black.opacity-60");
@@ -1410,9 +1439,7 @@ describe("ConversationPanel conversation actions", () => {
     await user.click(backdrop!);
 
     // Modal should be closed
-    expect(
-      screen.queryByRole("button", { name: /confirm/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("confirm-button")).not.toBeInTheDocument();
   });
 
   describe("New Conversation in Sandbox", () => {

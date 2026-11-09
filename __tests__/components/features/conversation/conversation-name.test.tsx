@@ -98,7 +98,7 @@ vi.mock("react-i18next", async () => {
           CONVERSATION$SHOW_SKILLS: "Show Skills",
           BUTTON$DISPLAY_COST: "Display Usage and Cost",
           COMMON$STOP_SANDBOX: "Stop Sandbox",
-          COMMON$STOP_CONVERSATION: "Stop Conversation",
+          COMMON$STOP_AGENT: "Stop Agent",
           COMMON$DELETE_CONVERSATION: "Delete Conversation",
           CONVERSATION$SHARE_PUBLICLY: "Share Publicly",
           CONVERSATION$SHARE_WITH_ORG_USERS: "Share with Org users",
@@ -593,9 +593,7 @@ describe("ConversationNameContextMenu", () => {
     expect(screen.getByTestId("delete-button")).toHaveTextContent(
       "Delete Conversation",
     );
-    expect(screen.getByTestId("stop-button")).toHaveTextContent(
-      "Stop Conversation",
-    );
+    expect(screen.getByTestId("stop-button")).toHaveTextContent("Stop Agent");
     expect(screen.getByTestId("display-cost-button")).toHaveTextContent(
       "Display Usage and Cost",
     );

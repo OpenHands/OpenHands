@@ -16,13 +16,6 @@ import { ConversationCard } from "#/components/features/conversation-panel/conve
 import { clickOnEditButton } from "./utils";
 import { ConversationCardActions } from "#/components/features/conversation-panel/conversation-card/conversation-card-actions";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
-import {
-  __resetActiveStoreForTests,
-  setActiveSelection,
-  setRegisteredBackends,
-} from "#/api/backend-registry/active-store";
-import type { Backend } from "#/api/backend-registry/types";
-import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { useFreeModelsStore } from "#/stores/free-models-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
@@ -764,18 +757,19 @@ describe("ConversationCard", () => {
     ).toBeInTheDocument();
   });
 
-  const statusTable: [ExecutionStatus, boolean][] = [
+  // Without a sandbox (local) the menu stops the agent, so only while it works.
+  const localStatusTable: [ExecutionStatus, boolean][] = [
     [ExecutionStatus.RUNNING, true],
-    [ExecutionStatus.IDLE, true],
-    [ExecutionStatus.FINISHED, true],
     [ExecutionStatus.WAITING_FOR_CONFIRMATION, true],
+    [ExecutionStatus.IDLE, false],
+    [ExecutionStatus.FINISHED, false],
     [ExecutionStatus.ERROR, false],
     [ExecutionStatus.STUCK, false],
     [ExecutionStatus.PAUSED, false],
   ];
 
-  it.each(statusTable)(
-    "should toggle stop button visibility correctly for execution status",
+  it.each(localStatusTable)(
+    "offers a local agent stop for %s: %s",
     (executionStatus, shouldShow) => {
       renderWithProviders(
         <ConversationCardActions
@@ -789,77 +783,42 @@ describe("ConversationCard", () => {
       const stopButton = screen.queryByTestId("stop-button");
 
       if (shouldShow) {
-        expect(stopButton).toBeInTheDocument();
+        expect(stopButton).toHaveTextContent("COMMON$STOP_AGENT");
       } else {
         expect(stopButton).not.toBeInTheDocument();
       }
     },
   );
 
-  it("keeps Stop for a running cloud sandbox after the agent is interrupted", () => {
-    renderWithProviders(
-      <ConversationCardActions
-        contextMenuOpen={true}
-        onContextMenuToggle={vi.fn()}
-        onStop={vi.fn()}
-        executionStatus={ExecutionStatus.PAUSED}
-        sandboxStatus="RUNNING"
-      />,
-    );
-
-    expect(screen.getByTestId("stop-button")).toBeInTheDocument();
-  });
-
-  describe("stop button label by active backend", () => {
-    const cloudBackend: Backend = {
-      id: "prod",
-      name: "Production",
-      host: "https://app.all-hands.dev",
-      apiKey: "bearer-token",
-      kind: "cloud",
-    };
-
-    afterEach(() => {
-      __resetActiveStoreForTests();
-    });
-
-    it("uses COMMON$STOP_CONVERSATION on a local backend", () => {
-      // Default active backend (no provider, no registered backends) is the
-      // bundled local backend.
+  // With a sandbox the menu stops the sandbox, so while it runs.
+  it.each([
+    [ExecutionStatus.RUNNING, "RUNNING", true],
+    [ExecutionStatus.PAUSED, "RUNNING", true],
+    [ExecutionStatus.IDLE, "RUNNING", true],
+    [null, "PAUSED", false],
+    [null, "MISSING", false],
+  ] as const)(
+    "offers a sandbox stop for %s with a %s sandbox: %s",
+    (executionStatus, sandboxStatus, shouldShow) => {
       renderWithProviders(
         <ConversationCardActions
           contextMenuOpen={true}
           onContextMenuToggle={vi.fn()}
           onStop={vi.fn()}
-          executionStatus={ExecutionStatus.RUNNING}
+          executionStatus={executionStatus}
+          sandboxStatus={sandboxStatus}
         />,
       );
 
-      expect(screen.getByTestId("stop-button")).toHaveTextContent(
-        "COMMON$STOP_CONVERSATION",
-      );
-    });
+      const stopButton = screen.queryByTestId("stop-button");
 
-    it("uses COMMON$STOP_SANDBOX on a cloud backend", () => {
-      setRegisteredBackends([cloudBackend]);
-      setActiveSelection({ backendId: cloudBackend.id });
-
-      renderWithProviders(
-        <ActiveBackendProvider>
-          <ConversationCardActions
-            contextMenuOpen={true}
-            onContextMenuToggle={vi.fn()}
-            onStop={vi.fn()}
-            executionStatus={ExecutionStatus.RUNNING}
-          />
-        </ActiveBackendProvider>,
-      );
-
-      expect(screen.getByTestId("stop-button")).toHaveTextContent(
-        "COMMON$STOP_SANDBOX",
-      );
-    });
-  });
+      if (shouldShow) {
+        expect(stopButton).toHaveTextContent("COMMON$STOP_SANDBOX");
+      } else {
+        expect(stopButton).not.toBeInTheDocument();
+      }
+    },
+  );
 
   describe("Tag chips", () => {
     // Tag chips surface the agent-server's server-side conversation tags

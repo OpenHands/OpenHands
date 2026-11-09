@@ -20,6 +20,7 @@ const harness = vi.hoisted(() => ({
   } as Backend,
   deleteConversation: vi.fn(),
   stopConversation: vi.fn(),
+  interruptAgent: vi.fn(),
   updatePublicFlag: vi.fn(),
   downloadConversation: vi.fn(),
   conversation: null as {
@@ -61,6 +62,10 @@ vi.mock("#/hooks/mutation/use-delete-conversation", () => ({
 
 vi.mock("#/hooks/mutation/use-unified-stop-conversation", () => ({
   useUnifiedPauseConversation: () => ({ mutate: harness.stopConversation }),
+}));
+
+vi.mock("#/hooks/mutation/use-pause-conversation", () => ({
+  usePauseConversation: () => ({ mutate: harness.interruptAgent }),
 }));
 
 vi.mock("#/hooks/mutation/use-update-conversation-public-flag", () => ({
@@ -169,7 +174,8 @@ describe("useConversationNameContextMenu", () => {
 
     const stopClick = clickEvent();
     act(() => result.current.handleStop(stopClick.event));
-    expect(result.current.confirmStopModalVisible).toBe(true);
+    expect(result.current.confirmStopModalVisible).toBe(false);
+    expect(harness.interruptAgent).not.toHaveBeenCalled();
     act(() => result.current.handleConfirmStop());
     expect(harness.stopConversation).not.toHaveBeenCalled();
     expect(result.current.confirmStopModalVisible).toBe(false);
@@ -419,6 +425,39 @@ describe("useConversationNameContextMenu", () => {
     };
     rerender();
     expect(result.current.shouldShowStop).toBe(false);
+  });
+
+  it("asks before stopping a sandbox, but stops a local agent at once", () => {
+    harness.conversation = {
+      id: "conv-cloud",
+      public: false,
+      sandbox_status: "RUNNING",
+    };
+    const cloud = renderHook(() =>
+      useConversationNameContextMenu({
+        conversationId: "conv-cloud",
+        executionStatus: ExecutionStatus.RUNNING,
+      }),
+    );
+    expect(cloud.result.current.stopsSandbox).toBe(true);
+    act(() => cloud.result.current.handleStop(clickEvent().event));
+    expect(cloud.result.current.confirmStopModalVisible).toBe(true);
+    expect(harness.interruptAgent).not.toHaveBeenCalled();
+
+    harness.conversation = { id: "conv-local", public: false };
+    const local = renderHook(() =>
+      useConversationNameContextMenu({
+        conversationId: "conv-local",
+        executionStatus: ExecutionStatus.RUNNING,
+      }),
+    );
+    expect(local.result.current.stopsSandbox).toBe(false);
+    act(() => local.result.current.handleStop(clickEvent().event));
+    expect(local.result.current.confirmStopModalVisible).toBe(false);
+    expect(harness.interruptAgent).toHaveBeenCalledWith({
+      conversationId: "conv-local",
+    });
+    expect(harness.stopConversation).not.toHaveBeenCalled();
   });
 
   it("closes the menu without rethrowing when the download fails", async () => {

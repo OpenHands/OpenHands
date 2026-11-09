@@ -590,7 +590,7 @@ export function getStatusText({
   }
 
   if (isStopStatus) {
-    return t(I18nKey.COMMON$SERVER_STOPPED);
+    return t(I18nKey.AGENT_STATUS$AGENT_STOPPED);
   }
 
   if (curAgentState === AgentState.ERROR) {
