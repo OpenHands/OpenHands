@@ -13,8 +13,19 @@ import {
 const mergeTailwindClasses = extendTailwindMerge({
   extend: {
     theme: {
+      spacing: ["code-inline-x", "code-inline-y", "code-block"],
       radius: ["pill", "composer", "file-action", "facet-control"],
       text: ["4xs", "xs-plus", "sm-plus", "title"],
+    },
+    classGroups: {
+      transition: [
+        "transition-control-shell",
+        "transition-control-transform",
+        "transition-context-ring",
+        "transition-panel-width",
+        "transition-sidebar-width",
+      ],
+      animate: ["animate-chat-status-pulse"],
     },
   },
 });

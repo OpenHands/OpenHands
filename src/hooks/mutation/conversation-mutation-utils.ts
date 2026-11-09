@@ -46,15 +46,26 @@ const fetchConversationData = async (
 };
 
 /**
- * Stop a running conversation.
- * - Cloud mode: Pauses the sandbox (waits for current LLM call to finish).
- * - Local mode: Interrupts immediately (cancels in-flight requests).
+ * Stop the agent's current run without touching its runtime. Uses /interrupt
+ * rather than /pause so in-flight LLM requests are cancelled immediately. On
+ * cloud the sandbox keeps running, so Resume can continue the same session.
+ */
+export const interruptConversation = async (conversationId: string) => {
+  const { conversationUrl, sessionApiKey } =
+    await fetchConversationData(conversationId);
+  return new ConversationClient(
+    getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+  ).interruptConversation(conversationId);
+};
+
+/**
+ * Stop a conversation's runtime.
+ * - Cloud mode: Pauses the sandbox.
+ * - Local mode: Interrupts the agent (the local agent server keeps running).
  */
 export const pauseConversation = async (conversationId: string) => {
-  const { conversationUrl, sessionApiKey, sandboxId } =
-    await fetchConversationData(conversationId);
-
   if (getActiveBackend().backend.kind === "cloud") {
+    const { sandboxId } = await fetchConversationData(conversationId);
     if (!sandboxId) {
       throw new Error(
         `Cannot stop runtime: cloud conversation ${conversationId} has no sandbox_id.`,
@@ -64,12 +75,7 @@ export const pauseConversation = async (conversationId: string) => {
     return { success: true };
   }
 
-  // In local mode, use /interrupt instead of /pause so in-flight LLM
-  // requests are cancelled immediately rather than waiting for the
-  // current call to finish.
-  return new ConversationClient(
-    getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
-  ).interruptConversation(conversationId);
+  return interruptConversation(conversationId);
 };
 
 /**

@@ -320,7 +320,7 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
                     isAutomationAgentHidden &&
                     "pointer-events-none opacity-0",
                   !isSecondaryDrawerOpen &&
-                    "transition-[width] duration-300 ease-in-out",
+                    "transition-panel-width duration-300 ease-in-out",
                 ),
           )}
           // panel width computed at runtime by resize hook; transition toggled by drag state

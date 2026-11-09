@@ -1,5 +1,9 @@
 import type { AutomationUpdate } from "#/types/automation";
 import {
+  statusToneBadgeClassName,
+  statusToneBannerClassName,
+} from "#/utils/status-tone-classes";
+import {
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -8,7 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -541,7 +545,10 @@ function DraftStatusBar({
     "max-w-full min-w-0 whitespace-normal rounded-full px-2.5 py-0.5 text-left text-xs leading-4",
     validationMessage
       ? "w-fit bg-feedback-error/5 text-feedback-error"
-      : "bg-semantic-success/10 text-semantic-success",
+      : cn(
+          statusToneBadgeClassName.success,
+          "dark:bg-semantic-success/10 dark:text-semantic-success",
+        ),
   );
 
   return (
@@ -2131,9 +2138,11 @@ export function AutomationSetupPanel({
 
   return (
     <>
-      {toolbarPortal
-        ? createPortal(renderToolbarActions(), toolbarPortal)
-        : null}
+      {toolbarPortal ? (
+        <AppearancePortal container={toolbarPortal}>
+          {renderToolbarActions()}
+        </AppearancePortal>
+      ) : null}
       <div
         data-testid="automation-setup-panel"
         className="flex h-full min-h-0 flex-col bg-canvas-base"
@@ -2205,7 +2214,11 @@ export function AutomationSetupPanel({
               {isTaggedDraftMissing ? (
                 <p
                   data-testid="automation-setup-draft-missing"
-                  className="rounded-2xl border border-warning/40 bg-warning/10 px-5 py-4 text-sm text-warning"
+                  className={cn(
+                    "rounded-2xl px-5 py-4 text-sm",
+                    statusToneBannerClassName.warning,
+                    "dark:border-warning/40 dark:bg-warning/10 dark:text-warning",
+                  )}
                 >
                   {t(I18nKey.AUTOMATION_SETUP$DRAFT_MISSING)}
                 </p>

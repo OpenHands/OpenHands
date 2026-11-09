@@ -16,6 +16,9 @@ import {
 } from "#/contexts/conversation-websocket-context";
 import type { WebSocketHookOptions } from "#/hooks/use-websocket";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { NavigationProvider } from "#/context/navigation-context";
+import { useLiveConversationMetrics } from "#/hooks/use-live-conversation-metrics";
 import type { MessageEvent as AgentMessageEvent } from "#/types/agent-server/core/events/message-event";
 import {
   ExecutionStatus,
@@ -73,12 +76,10 @@ const socketCapture = vi.hoisted(() => ({
 const historyCapture = vi.hoisted(() => ({
   scope: "test-scope",
   persistedData: undefined as
-    | { events: OpenHandsEvent[]; afterSeq?: number | null }
-    | undefined,
+    { events: OpenHandsEvent[]; afterSeq?: number | null } | undefined,
   result: {
     data: { events: [] as OpenHandsEvent[] } as
-      | { events: OpenHandsEvent[]; afterSeq?: number | null }
-      | undefined,
+      { events: OpenHandsEvent[]; afterSeq?: number | null } | undefined,
     isPending: false,
     isFetching: false,
     isError: false,
@@ -171,7 +172,10 @@ type ProviderProps = Omit<
   "children"
 >;
 
-function renderProvider(overrides: Partial<ProviderProps> = {}) {
+function renderProvider(
+  overrides: Partial<ProviderProps> = {},
+  children: React.ReactNode = <ContextProbe />,
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -184,7 +188,7 @@ function renderProvider(overrides: Partial<ProviderProps> = {}) {
   const view = render(
     <QueryClientProvider client={queryClient}>
       <ConversationWebSocketProvider {...props}>
-        <ContextProbe />
+        {children}
       </ConversationWebSocketProvider>
     </QueryClientProvider>,
   );
@@ -2312,6 +2316,72 @@ describe("Conversation websocket behavior", () => {
       cost: 6,
       max_budget_per_task: 10,
     });
+  });
+
+  it("keeps planning spend separate from the parent budget while parent updates stay live", async () => {
+    const parent = makeSubConversation({
+      id: "conv-main",
+      conversation_url: "http://localhost:8000/api/conversations/conv-main",
+    });
+    const stats = (cost: number) => ({
+      usage_to_metrics: {
+        agent: {
+          model_name: "test-model",
+          accumulated_cost: cost,
+          max_budget_per_task: null,
+          accumulated_token_usage: null,
+          costs: [],
+          response_latencies: [],
+          token_usages: [],
+        },
+      },
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "batchGetAppConversations",
+    ).mockResolvedValue([parent]);
+    vi.spyOn(
+      AgentServerConversationService,
+      "getRuntimeConversation",
+    ).mockResolvedValue({
+      ...parent,
+      status: ExecutionStatus.IDLE,
+      max_budget_per_run: 5,
+      stats: stats(2),
+      available_models: [],
+    });
+
+    function BudgetProbe() {
+      const { cost, maxBudget } = useLiveConversationMetrics();
+      return <output>{`${cost}/${maxBudget}`}</output>;
+    }
+
+    renderProvider(
+      {
+        subConversations: [makeSubConversation()],
+        subConversationIds: ["conv-planning"],
+      },
+      <NavigationProvider
+        value={{
+          conversationId: parent.id,
+          currentPath: `/conversations/${parent.id}`,
+          isNavigating: false,
+          navigate: vi.fn(),
+        }}
+      >
+        <BudgetProbe />
+      </NavigationProvider>,
+    );
+    await screen.findByText("2/5");
+
+    dispatchMain(makeStateEvent("parent-cost", "stats", stats(3)));
+    expect(screen.getByText("3/5")).toBeInTheDocument();
+
+    dispatchPlanning(makeStateEvent("planning-cost", "stats", stats(99)));
+    expect(screen.getByText("2/5")).toBeInTheDocument();
+
+    dispatchMain(makeStateEvent("parent-overshoot", "stats", stats(6)));
+    expect(screen.getByText("6/5")).toBeInTheDocument();
   });
 
   it("routes planning-agent events to the shared conversation experience", () => {

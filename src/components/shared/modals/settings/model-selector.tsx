@@ -9,6 +9,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { mapProvider } from "#/utils/map-provider";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import { cn } from "#/utils/utils";
+import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
 import { formControlSettingsFieldClassName } from "#/utils/form-control-classes";
 import { heroUiAutocompleteSelectorButtonClassName } from "#/ui/combobox-caret";
 import { HelpLink } from "#/ui/help-link";
@@ -27,8 +28,10 @@ const compareProviderLabels = (a: LLMProvider, b: LLMProvider) =>
     sensitivity: "base",
   });
 
-const freeModelBadgeClassName =
-  "shrink-0 rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-3xs leading-none text-warning";
+const freeModelBadgeClassName = cn(
+  "shrink-0 rounded-full border border-warning/40 px-1.5 py-0.5 text-3xs leading-none dark:bg-warning/10 dark:text-warning",
+  statusToneBadgeClassName.warning,
+);
 
 interface ModelSelectorProps {
   isDisabled?: boolean;
