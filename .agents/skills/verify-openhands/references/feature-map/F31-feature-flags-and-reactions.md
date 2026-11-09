@@ -26,6 +26,7 @@ Source: `src/routes/experimental-settings.tsx`, `src/api/experimental-features-s
 - `F31.empty`: an agent server without feature flags (older than software-agent-sdk#6609) shows "This agent server has no experimental features to turn on or off." instead of an error.
 - `F31.agent-reaction`: with the flag on, a new conversation's agent has `react` and `unreact`; when asked to react first, its 👀 chip appears on the person's message and stays after the answer (`testid=reaction-eyes`, `data-sources=agent`), and no "Reacted" tool card is shown.
 - `F31.user-reaction`: with the flag on, the `add-reaction` button under the agent's answer opens a picker of six emoji; choosing ❤️ shows a pressed `reaction-heart` chip (`data-sources=user`) that survives a reload; clicking the chip takes the reaction off.
+- `F31.agent-sees`: the agent reads the person's reaction on its next turn. After it asks a yes/no question and ends its turn, a 👍 from the picker on that question starts no run (the conversation stays `finished`); when the person then writes something neutral ("Status?"), the agent takes the 👍 as the answer and acts on it. The saved `ReactionEvent` holds the question's text in `target_text_ending`.
 - `F31.off`: with the flag off, existing chips still show but are not clickable and there is no `add-reaction`; `POST /api/conversations/<id>/reactions` answers 409 `Conversation reactions are turned off`; a conversation started afterwards has no `react`/`unreact` tools and still does ordinary work (a terminal command runs and the agent answers with its output).
 - `F31.confirm-pending`: with Confirmation Mode on and Security Analyzer **None** (always confirm), the agent's `react` call waits for approval and shows in the chat as its own row ("Add eyes reaction to …") above **Cancel** / **Continue**, so the person sees what they approve. **Continue** records the reaction: the row goes, the 👀 chip shows. **Cancel** shows the row as **Rejected**, no chip and no `ReactionEvent`. When the agent sends `react` together with another tool call, Cancel rejects both: both rows read **Rejected** inside the collapsed **Used a tool, ran a command** group. Confirmation keeps working afterwards: a later terminal action asks again, and **Continue** runs it.
 - `F31.narration`: text the agent writes with its `react` call (the action's thought) stays in the chat next to the chip after the call finishes and after a reload; only the tool row is dropped.
@@ -141,6 +142,22 @@ Preconditions:
   control-openhands browser screenshot --feature F31.narration --name kept
   ```
   If the model puts no text in the call's thought, run it again: the check needs a non-empty thought.
+- **The agent reads a 👍 (`F31.agent-sees`).** The flag is on.
+  ```sh
+  control-openhands browser goto /
+  control-openhands conversation start --prompt "QA_THUMBS I'd like a file named qa-thumbs.txt in the workspace containing the word approved. Before creating it, ask me to confirm, and end your turn so I can answer." --wait --timeout 300 --stay
+  control-openhands browser click 'testid=add-reaction' --hover-first
+  control-openhands browser click 'testid=reaction-picker-+1'
+  control-openhands browser wait 'testid=reaction-+1'
+  control-openhands conversation status <id>                      # finished: the reaction started nothing
+  control-openhands api GET "/api/conversations/<id>/events/search" --query kind=ReactionEvent   # target_text_ending holds the question
+  control-openhands browser fill 'testid=chat-input' 'Status?'
+  control-openhands browser press Enter --selector 'testid=chat-input'
+  control-openhands conversation wait <id> --until finished,idle --timeout 240
+  control-openhands browser text 'testid=chat-interface'          # the answer says the 👍 confirmed it
+  control-openhands api GET /api/conversations/<id>               # workspace.working_dir; qa-thumbs.txt there reads "approved"
+  ```
+  If the agent creates the file without asking, or asks again after the 👍, run it once more; twice in a row is a failure.
 - **Reactions through history (`F31.history`).** The flag is on.
   ```sh
   control-openhands browser goto /
