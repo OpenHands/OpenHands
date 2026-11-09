@@ -131,17 +131,18 @@ export function useChatInputModelState(): ChatInputModelState {
   let selectedEffort: string | null = null;
   let agentDefaultEffortLabel: string | null = null;
   if (isActiveAcpConversation) {
-    // Until the session reports its levels, use what the agent offers for
-    // this model.
-    effortChoices = sessionEffort.efforts.length
-      ? sessionEffort.efforts
-      : discovered.effortsFor(currentModelId);
+    effortChoices = sessionEffort.efforts;
     selectedEffort = sessionEffort.currentEffort;
   } else if (isHomeAcp) {
     effortChoices = discovered.effortsFor(selectedModelId);
-    selectedEffort = acpEffortOf(
+    const configuredEffort = acpEffortOf(
       activeAcpProfile ?? settings?.agent_settings ?? null,
     );
+    selectedEffort = effortChoices.some(
+      ({ value }) => value === configuredEffort,
+    )
+      ? configuredEffort
+      : null;
     const defaultEffort =
       selectedModelId === null || selectedModelId === discovered.defaultModelId
         ? labelForAcpEffort(discovered.defaultEffort, effortChoices)

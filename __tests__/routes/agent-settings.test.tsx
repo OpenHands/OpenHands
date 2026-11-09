@@ -330,6 +330,27 @@ describe("AgentSettingsScreen", () => {
     });
   });
 
+  it("preserves stored effort when discovery has no result for the model", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      discovery: { efforts_by_model: { haiku: [] } },
+      models: CLAUDE_MODELS,
+      source: "live",
+    });
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        acp_model: "default",
+        acp_effort: "high",
+      },
+    });
+
+    await screen.findByTestId("agent-model-selector");
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_effort: "high",
+    });
+  });
+
   it("sends no effort for a profile that never had one", async () => {
     acpModelDiscoveryMock.mockReturnValue({
       ...NO_DISCOVERY,

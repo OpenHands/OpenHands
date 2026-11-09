@@ -478,31 +478,34 @@ describe("ChatInputModel", () => {
     });
   });
 
-  it("offers the agent's levels before the session reports its own", () => {
-    discoveryMock.mockReturnValue({
-      models: CLAUDE_MODELS,
-      defaultModelId: "opus[1m]",
-      effortsFor: (model: string | null) =>
-        model === "opus[1m]" ? EFFORTS : [],
-    });
-    useActiveConversationMock.mockReturnValue({
-      data: {
-        conversation_id: "test-conversation-id",
-        agent_kind: "acp",
-        acp_server: "claude-code",
-        llm_model: "opus[1m]",
-        acp_current_effort: "low",
-        acp_available_efforts: [],
-      },
-    });
+  it.each([undefined, []])(
+    "hides effort controls when the session offers %j",
+    (efforts) => {
+      discoveryMock.mockReturnValue({
+        models: CLAUDE_MODELS,
+        defaultModelId: "opus[1m]",
+        effortsFor: (model: string | null) =>
+          model === "opus[1m]" ? EFFORTS : [],
+      });
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          conversation_id: "test-conversation-id",
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          llm_model: "opus[1m]",
+          acp_current_effort: "low",
+          acp_available_efforts: efforts,
+        },
+      });
 
-    renderWithProviders(<ChatInputModel />);
-    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+      renderWithProviders(<ChatInputModel />);
+      fireEvent.click(screen.getByTestId("chat-input-llm-model"));
 
-    expect(
-      screen.getByTestId("chat-input-acp-effort-option-low"),
-    ).toHaveAttribute("aria-pressed", "true");
-  });
+      expect(
+        screen.queryByTestId("chat-input-acp-effort-option-low"),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it("saves the home effort for the chosen model and offers the agent's own", () => {
     discoveryMock.mockReturnValue({
@@ -545,10 +548,14 @@ describe("ChatInputModel", () => {
           agent_kind: "acp",
           acp_server: "claude-code",
           acp_model: "sonnet",
+          acp_effort: "high",
         },
       },
     });
     renderWithProviders(<ChatInputModel />);
+    expect(screen.getByTestId("chat-input-llm-model")).not.toHaveTextContent(
+      "High",
+    );
     fireEvent.click(screen.getByTestId("chat-input-llm-model"));
     expect(screen.queryByTestId("chat-input-acp-effort-option-low")).toBeNull();
   });

@@ -1094,8 +1094,12 @@ export function AgentSettingsScreen({
         );
   // Before the agent reports its levels, keep the stored effort as is.
   const effortToSave =
-    !liveModels.discovery?.efforts_by_model ||
-    effortChoices.some(({ value }) => value === acpEffort)
+    !Object.hasOwn(
+      liveModels.discovery?.efforts_by_model ?? {},
+      selectedModelKey === ACP_AGENT_DEFAULT_MODEL_KEY
+        ? (liveModels.defaultModelId ?? "")
+        : selectedModelKey,
+    ) || effortChoices.some(({ value }) => value === acpEffort)
       ? acpEffort
       : "";
   const agentDefaultEffortLabel =
