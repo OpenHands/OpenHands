@@ -477,6 +477,25 @@ describe("cn motion recipes", () => {
   });
 });
 
+describe("named letter-spacing composition", () => {
+  it.each([
+    "metadata",
+    "label",
+    "title",
+    "heading",
+    "auth-code",
+    "device-code",
+  ])(
+    "preserves caller tracking precedence independently of font metrics for %s",
+    (name) => {
+      expect(
+        cn("text-sm leading-6 font-medium tracking-wide", `tracking-${name}`),
+      ).toBe(`text-sm leading-6 font-medium tracking-${name}`);
+      expect(cn(`tracking-${name}`, "tracking-normal")).toBe("tracking-normal");
+    },
+  );
+});
+
 describe("extended type-scale composition", () => {
   it.each(["4xs", "xs-plus", "sm-plus", "title"])(
     "lets callers override the %s size while preserving color and later leading",

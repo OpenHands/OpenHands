@@ -29,6 +29,14 @@
   --text-sm-plus: 15px;
   --text-title: 32px;
 
+  /* Keep signed letter spacing and its original px/em units. */
+  --tracking-metadata: 0.11px;
+  --tracking-label: 0.01em;
+  --tracking-title: -0.01em;
+  --tracking-heading: -0.02em;
+  --tracking-auth-code: 0.08em;
+  --tracking-device-code: 0.3em;
+
   --color-primary: var(--oh-color-primary);
   --color-logo: var(--oh-color-logo);
   --color-canvas-base: var(--oh-color-base);
