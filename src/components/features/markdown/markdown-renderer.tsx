@@ -1,5 +1,5 @@
 import React from "react";
-import Markdown, { Components } from "react-markdown";
+import Markdown, { Components, defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import rehypeRaw from "rehype-raw";
@@ -10,6 +10,10 @@ import { code } from "./code";
 import { ul, ol, li } from "./list";
 import { paragraph } from "./paragraph";
 import { anchor } from "./anchor";
+import {
+  markdownUrlTransform,
+  withConversationMentions,
+} from "./conversation-mention";
 import { h1, h2, h3, h4, h5, h6 } from "./headings";
 import { table, th, td } from "./table";
 import { blockquote } from "./blockquote";
@@ -89,7 +93,9 @@ export const MARKDOWN_SANITIZE_SCHEMA: Schema = {
   protocols: {
     ...defaultSchema.protocols,
     src: ["http", "https"],
-    href: ["http", "https", "mailto", "tel"],
+    // `conversation` is a conversation mention, opened in place by
+    // `withConversationMentions`; browsers do not navigate to it.
+    href: ["http", "https", "mailto", "tel", "conversation"],
   },
 };
 
@@ -148,6 +154,13 @@ const htmlRehypePlugins: PluggableList = [
   [rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
 ];
 
+const urlTransform = (url: string) =>
+  markdownUrlTransform(url, defaultUrlTransform);
+
+// Conversation mentions open in place whichever link renderer is in use.
+const standardLink = withConversationMentions(anchor);
+const plainLink = withConversationMentions();
+
 function MarkdownBlockComponent({
   source,
   components,
@@ -166,6 +179,7 @@ function MarkdownBlockComponent({
     <Markdown
       components={components}
       remarkPlugins={remarkPlugins}
+      urlTransform={urlTransform}
       rehypePlugins={
         clock
           ? [
@@ -254,8 +268,8 @@ function MarkdownRendererComponent({
       th,
       td,
       blockquote,
+      a: includeStandard ? standardLink : plainLink,
       ...(includeStandard && {
-        a: anchor,
         p: paragraph,
       }),
       ...(includeHeadings && {

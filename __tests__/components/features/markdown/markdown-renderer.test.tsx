@@ -472,3 +472,53 @@ describe("MarkdownRenderer without includeStandard", () => {
     expect(anchorEl?.getAttribute("rel")).toBe("noopener noreferrer");
   });
 });
+
+describe("MarkdownRenderer conversation mentions", () => {
+  const hex = "4f2c9e0a1b2c4d5e8f90a1b2c3d4e5f6";
+
+  it.each([true, false])(
+    "opens [Title](conversation:<id>) in place (includeStandard %s)",
+    (includeStandard) => {
+      render(
+        <MarkdownRenderer includeStandard={includeStandard}>
+          {`Ask [Fix export](conversation:${hex}) first.`}
+        </MarkdownRenderer>,
+      );
+      const link = screen.getByTestId("conversation-mention");
+      expect(link.textContent).toBe("Fix export");
+      expect(link.getAttribute("href")).toMatch(
+        new RegExp(`/conversations/${hex}$`),
+      );
+      expect(link.getAttribute("target")).toBeNull();
+    },
+  );
+
+  it("accepts a dashed id and keeps other links external", () => {
+    render(
+      <MarkdownRenderer
+        includeStandard
+        content="[A](conversation:4f2c9e0a-1b2c-4d5e-8f90-a1b2c3d4e5f6) and [docs](https://example.com)"
+      />,
+    );
+    expect(
+      screen.getByTestId("conversation-mention").getAttribute("href"),
+    ).toMatch(new RegExp(`/conversations/${hex}$`));
+    const docs = screen.getByText("docs");
+    expect(docs.getAttribute("target")).toBe("_blank");
+  });
+
+  it("does not turn other unknown schemes into links", () => {
+    const { container } = render(
+      <MarkdownRenderer
+        includeStandard
+        content="[x](conversation:not-an-id) [y](javascript:alert(1))"
+      />,
+    );
+    expect(screen.queryByTestId("conversation-mention")).toBeNull();
+    for (const a of container.querySelectorAll("a")) {
+      expect(a.getAttribute("href") ?? "").not.toMatch(
+        /^(javascript|conversation):/,
+      );
+    }
+  });
+});
