@@ -163,7 +163,7 @@ export function AutomationsDashboardControls({
           role="group"
           data-testid="automations-filters-menu"
           aria-label={filtersLabel}
-          className="absolute right-0 top-full z-50 mt-1 flex min-w-[16rem] w-max flex-col gap-3 overflow-visible rounded-md bg-tertiary p-3 context-menu-box-shadow"
+          className="absolute right-0 top-full z-50 mt-1 flex min-w-64 w-max flex-col gap-3 overflow-visible rounded-md bg-tertiary p-3 context-menu-box-shadow"
         >
           {statusFilter ? (
             <FilterField label={statusFilter.label}>

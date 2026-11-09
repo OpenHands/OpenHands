@@ -16,6 +16,44 @@ import { useSwitchLlmProfileAndLog } from "#/hooks/mutation/use-switch-llm-profi
 import { SWITCH_LLM_PROFILE_MUTATION_KEY } from "#/hooks/mutation/use-switch-llm-profile";
 import { useModelStore } from "#/stores/model-store";
 
+// Tracks the `(backendId, orgId)` for which a home-page LLM profile pick is
+// pending before the first message. Read and cleared only by `HomeChatLauncher`
+// (so non-home `useCreateConversation` callers neither consume nor are affected
+// by it), and keyed by backend + org so a pick on one environment never carries
+// over to another.
+let pendingHomePickKey: string | null = null;
+
+const toHomePickKey = (
+  backendId: string,
+  orgId: string | null | undefined,
+): string => JSON.stringify([backendId, orgId ?? null]);
+
+export function markHomeModelPick(
+  backendId: string,
+  orgId?: string | null,
+): void {
+  pendingHomePickKey = toHomePickKey(backendId, orgId);
+}
+
+export function hasPendingHomeModelPick(
+  backendId: string,
+  orgId?: string | null,
+): boolean {
+  return pendingHomePickKey === toHomePickKey(backendId, orgId);
+}
+
+export function clearPendingHomeModelPick(
+  backendId?: string,
+  orgId?: string | null,
+): void {
+  if (
+    backendId === undefined ||
+    pendingHomePickKey === toHomePickKey(backendId, orgId)
+  ) {
+    pendingHomePickKey = null;
+  }
+}
+
 export interface ChatInputLlmProfileState {
   profiles: ProfileInfo[];
   /** The LLM profile the running conversation is currently using. */
@@ -51,7 +89,7 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
   const { data: conversation } = useActiveConversation();
   const { data, isLoading } = useLlmProfiles();
   const queryClient = useQueryClient();
-  const { backend } = useActiveBackend();
+  const { backend, orgId } = useActiveBackend();
   const { data: agentProfiles } = useAgentProfiles({
     enabled: !conversationId,
   });
@@ -136,13 +174,12 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
     (profileName: string) => {
       if (!canSwitchProfile || profileName === currentProfileName) return;
       if (!conversationId) {
-        // A home-page pick is an explicit model choice made before the first
-        // message: mark it so the next home launch suppresses "Run on first
-        // message" routing for that one conversation. Set here — the single
-        // chokepoint — so every pick path is covered: a cloud member's held
-        // pick, an agent-profile-owned LLM pick, and a global activate all
-        // flow through here. `useCreateConversation` reads-and-clears it.
-        useModelStore.getState().setHomeManualModelPick(true);
+        // A home-page LLM profile pick is an explicit model choice made before
+        // the first message: mark it for this (backend, org) so the next home
+        // launch from `HomeChatLauncher` passes `suppressRouterAtStart: true`
+        // for that single conversation without affecting non-home launches or
+        // other backends/orgs.
+        markHomeModelPick(backend.id, orgId);
         // A home pick edits the org's agent profile or activates the LLM
         // profile org-wide, both of which a cloud member can only 403 on.
         // Hold a member's pick for the next home launch (sent as
@@ -164,6 +201,8 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
       switchAndLog(conversationId, profileName);
     },
     [
+      backend.id,
+      orgId,
       canManageOrgProfiles,
       canSwitchProfile,
       conversationId,

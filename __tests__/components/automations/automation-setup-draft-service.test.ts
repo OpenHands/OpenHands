@@ -118,6 +118,7 @@ const baseForm: AutomationSetupFormValues = {
   repository: "",
   pluginSource: "",
   pluginRef: "",
+  pluginConfig: "{}",
   pluginList: "",
   customCode: "",
   entrypoint: "",
