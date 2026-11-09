@@ -11,6 +11,7 @@ import { Divider } from "#/ui/divider";
 import { cn } from "#/utils/utils";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { isExecutionPaused } from "#/utils/status";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 
 interface ServerStatusContextMenuProps {
   onClose: () => void;
@@ -34,6 +35,7 @@ export function ServerStatusContextMenu({
   ignoreOutsideClickRef,
 }: ServerStatusContextMenuProps) {
   const { t } = useTranslation("openhands");
+  const isCloud = useActiveBackend().backend.kind === "cloud";
   const ref = useClickOutsideElement<HTMLUListElement>(
     onClose,
     ignoreOutsideClickRef,
@@ -67,7 +69,11 @@ export function ServerStatusContextMenu({
           {onStopServer && (
             <ServerStatusContextMenuIconText
               icon={<StopCircleIcon width={18} height={18} />}
-              text={t(I18nKey.COMMON$STOP_RUNTIME)}
+              text={t(
+                isCloud
+                  ? I18nKey.COMMON$STOP_SANDBOX
+                  : I18nKey.COMMON$STOP_RUNTIME,
+              )}
               onClick={onStopServer}
               testId="stop-server-button"
             />
@@ -76,7 +82,11 @@ export function ServerStatusContextMenu({
           {isPaused && onStartServer && (
             <ServerStatusContextMenuIconText
               icon={<PlayCircleIcon width={18} height={18} />}
-              text={t(I18nKey.COMMON$START_RUNTIME)}
+              text={t(
+                isCloud
+                  ? I18nKey.COMMON$START_SANDBOX
+                  : I18nKey.COMMON$START_RUNTIME,
+              )}
               onClick={onStartServer}
               testId="start-server-button"
             />

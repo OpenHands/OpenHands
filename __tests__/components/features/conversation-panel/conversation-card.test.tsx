@@ -840,7 +840,7 @@ describe("ConversationCard", () => {
       );
     });
 
-    it("uses COMMON$CLOSE_CONVERSATION_STOP_RUNTIME on a cloud backend", () => {
+    it("uses COMMON$STOP_SANDBOX on a cloud backend", () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
 
@@ -856,7 +856,7 @@ describe("ConversationCard", () => {
       );
 
       expect(screen.getByTestId("stop-button")).toHaveTextContent(
-        "COMMON$CLOSE_CONVERSATION_STOP_RUNTIME",
+        "COMMON$STOP_SANDBOX",
       );
     });
   });
