@@ -88,6 +88,11 @@
   --color-border-subtle: var(--oh-border-subtle);
   --color-divider: var(--oh-divider);
 
+  /* Existing inset highlights keep their pixel geometry and public colors. */
+  --shadow-badge-inset: inset 0 1px 0 color-mix(in srgb, var(--oh-contrast) 18%, transparent);
+  --shadow-reorder-before: inset 0 2px 0 0 var(--oh-focus);
+  --shadow-reorder-after: inset 0 -2px 0 0 var(--oh-focus);
+
   /* Focus / interactive state aliases */
   --color-focus: var(--oh-focus);
   --color-interactive-hover: var(--oh-interactive-hover);

@@ -31,6 +31,15 @@ finishes that migration or checks opaque runtime expressions.
 
 `from-scroll-fade` resolves the existing `--oh-scroll-fade-from` ancestor override with `--oh-color-base` as fallback. The `scroll-fade-surface` utility sets that override to `--oh-surface` for Markdown artifact cards. Keep left/right edge visibility, direction, animation and scroll handling with their current owners; do not replace this override with a fixed palette color.
 
+## Inset-shadow recipes
+
+`shadow-badge-inset` retains the existing 1px inset highlight and 18% mix of
+`--oh-contrast`, including Tailwind's supports/fallback behavior. Reorder-before
+and reorder-after retain +2px/-2px inset edges in `--oh-focus`. These stay normal
+shadow utilities; register them in cn's shadow group so caller shadow geometry
+and shadow colors remain independent. Keep drag state and ordering with the
+existing pinned-card owner; do not replace fixed pixels or public color hooks.
+
 ## Inline-style rollout
 
 `shadcn/no-inline-styles` warns globally, including UI primitive implementations.
