@@ -144,14 +144,16 @@ export function ConversationCardFooter({
   const metadataIndentClass =
     executionStatus !== undefined ? "pl-6.5" : undefined;
 
-  const projectNames = useProjectNames();
-  // A ``project`` tag holds the project's id; show its name when known.
+  const projects = useProjectNames();
+  // A ``project`` tag holds the project's id; show its name when known, and
+  // nothing while the backend has Projects turned off.
   const displayTags: Array<[string, string]> = showTags
-    ? getDisplayConversationTags(tags, parentConversationId).map(
-        ([key, value]) =>
-          key.trim().toLowerCase() === "project"
-            ? [key, projectNames.get(projectIdKey(value)) ?? value]
-            : [key, value],
+    ? getDisplayConversationTags(tags, parentConversationId).flatMap(
+        ([key, value]): Array<[string, string]> => {
+          if (key.trim().toLowerCase() !== "project") return [[key, value]];
+          if (!projects.enabled) return [];
+          return [[key, projects.names.get(projectIdKey(value)) ?? value]];
+        },
       )
     : [];
 

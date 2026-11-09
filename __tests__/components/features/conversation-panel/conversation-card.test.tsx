@@ -1,3 +1,4 @@
+import { HttpError } from "@openhands/typescript-client";
 import { screen, within } from "@testing-library/react";
 import {
   afterAll,
@@ -163,9 +164,33 @@ describe("ConversationCard", () => {
     expect(chip).not.toHaveTextContent("3cd1a23c");
   });
 
-  it("keeps a project's id when the backend has no Projects", async () => {
+  it("hides the project chip while the backend has Projects turned off", async () => {
     vi.spyOn(ProjectsService, "listProjects").mockRejectedValue(
-      new Error("404"),
+      new HttpError(404, "Not Found", { detail: "Not Found" }),
+    );
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        selectedRepository={null}
+        showTags
+        tags={{ project: "3cd1a23c000040008000000000000001", team: "core" }}
+      />,
+    );
+
+    await vi.waitFor(() =>
+      expect(screen.getAllByTestId("conversation-card-tag-chip")).toHaveLength(
+        1,
+      ),
+    );
+    expect(
+      screen.getByTestId("conversation-card-tag-chip"),
+    ).not.toHaveTextContent("3cd1a23c");
+  });
+
+  it("keeps a project's id when the project list can't be read", async () => {
+    vi.spyOn(ProjectsService, "listProjects").mockRejectedValue(
+      new Error("network down"),
     );
     renderWithProviders(
       <ConversationCard
