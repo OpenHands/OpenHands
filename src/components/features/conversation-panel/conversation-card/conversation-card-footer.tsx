@@ -22,6 +22,7 @@ import { getDisplayConversationTags } from "#/api/agent-server-adapter";
 import { ConversationRepoLink } from "./conversation-repo-link";
 import { NoRepository } from "./no-repository";
 import { ConversationTagChips } from "./conversation-tag-chips";
+import { projectIdKey, useProjectNames } from "#/hooks/query/use-project-names";
 import { CONVERSATION_CARD_META_CHIP_CLASSNAME } from "./conversation-card-meta-chip";
 
 interface ConversationCardFooterProps {
@@ -143,8 +144,15 @@ export function ConversationCardFooter({
   const metadataIndentClass =
     executionStatus !== undefined ? "pl-6.5" : undefined;
 
-  const displayTags = showTags
-    ? getDisplayConversationTags(tags, parentConversationId)
+  const projectNames = useProjectNames();
+  // A ``project`` tag holds the project's id; show its name when known.
+  const displayTags: Array<[string, string]> = showTags
+    ? getDisplayConversationTags(tags, parentConversationId).map(
+        ([key, value]) =>
+          key.trim().toLowerCase() === "project"
+            ? [key, projectNames.get(projectIdKey(value)) ?? value]
+            : [key, value],
+      )
     : [];
 
   return (

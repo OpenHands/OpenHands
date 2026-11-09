@@ -26,6 +26,7 @@ import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { useFreeModelsStore } from "#/stores/free-models-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
+import ProjectsService from "#/api/projects-service/projects-service.api";
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -141,6 +142,42 @@ describe("ConversationCard", () => {
     );
 
     screen.getByTestId("conversation-card-selected-repository");
+  });
+
+  it("names a conversation's project instead of showing its id", async () => {
+    vi.spyOn(ProjectsService, "listProjects").mockResolvedValue([
+      { id: "3cd1a23c-0000-4000-8000-000000000001", name: "Release 0.2" },
+    ]);
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        showTags
+        tags={{ project: "3cd1a23c000040008000000000000001" }}
+      />,
+    );
+
+    const chip = await screen.findByTestId("conversation-card-tag-chip");
+    await vi.waitFor(() => expect(chip).toHaveTextContent("Release 0.2"));
+    expect(chip).not.toHaveTextContent("3cd1a23c");
+  });
+
+  it("keeps a project's id when the backend has no Projects", async () => {
+    vi.spyOn(ProjectsService, "listProjects").mockRejectedValue(
+      new Error("404"),
+    );
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        showTags
+        tags={{ project: "3cd1a23c000040008000000000000001" }}
+      />,
+    );
+
+    expect(
+      await screen.findByTestId("conversation-card-tag-chip"),
+    ).toHaveTextContent("3cd1a23c");
   });
 
   it("styles repo and branch with the same raised pill chip as tags", () => {
