@@ -24,6 +24,8 @@ describe("vite optimizeDeps", () => {
         "react/jsx-runtime",
         "react-dom/client",
         "react-router/dom",
+        "react-aria",
+        "react-aria-components",
       ]),
     );
   });
