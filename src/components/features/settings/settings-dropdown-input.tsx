@@ -33,10 +33,12 @@ interface SettingsDropdownInputProps {
 
 function ClearButton({
   isClearable,
+  isDisabled,
   isLoading,
   clearLabel,
 }: {
   isClearable: boolean;
+  isDisabled: boolean | undefined;
   isLoading: boolean | undefined;
   clearLabel: string;
 }) {
@@ -52,11 +54,40 @@ function ClearButton({
     <button
       type="button"
       aria-label={clearLabel}
+      disabled={isDisabled}
       onClick={handleClear}
       className="inline-flex size-4 shrink-0 items-center justify-center text-current opacity-60 transition-opacity hover:opacity-100"
     >
       ×
     </button>
+  );
+}
+
+function OpenOnClickInput({
+  testId,
+  name,
+  className,
+  placeholder,
+  onFocus,
+}: {
+  testId: string;
+  name: string;
+  className?: string;
+  placeholder?: string;
+  onFocus?: React.FocusEventHandler<HTMLInputElement>;
+}) {
+  const state = useContext(ComboBoxStateContext);
+  return (
+    <Input
+      data-testid={testId}
+      name={name}
+      className={className}
+      placeholder={placeholder}
+      onFocus={onFocus}
+      onClick={() => {
+        if (state && !state.isOpen) state.open(null, "manual");
+      }}
+    />
   );
 }
 
@@ -95,6 +126,8 @@ export function SettingsDropdownInput({
         </div>
       )}
       <ComboBox
+        menuTrigger="focus"
+        allowsEmptyCollection
         aria-label={typeof label === "string" ? label : name}
         defaultItems={items}
         defaultSelectedKey={defaultSelectedKey}
@@ -107,16 +140,24 @@ export function SettingsDropdownInput({
         className="w-full"
         defaultFilter={defaultFilter}
       >
-        <ComboBox.InputGroup className={cn(inputWrapperClassName)}>
+        <ComboBox.InputGroup
+          className={cn(
+            formControlSettingsFieldClassName,
+            "focus-within:border-contrast/40 dark:focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
+            inputWrapperClassName,
+            inputClassName,
+          )}
+        >
           {startContent || null}
-          <Input
-            data-testid={testId}
+          <OpenOnClickInput
+            testId={testId}
             name={name}
-            className={cn(formControlSettingsFieldClassName, inputClassName)}
+            className="border-0 bg-transparent shadow-none outline-none focus:ring-0 focus-visible:ring-0 data-[focused=true]:ring-0"
             placeholder={isLoading ? t(I18nKey.HOME$LOADING) : placeholder}
           />
           <ClearButton
             isClearable={isClearable}
+            isDisabled={isDisabled}
             isLoading={isLoading}
             clearLabel={t(I18nKey.COMMON$CLEAR_SELECTION)}
           />
@@ -125,7 +166,7 @@ export function SettingsDropdownInput({
           />
         </ComboBox.InputGroup>
         <ComboBox.Popover className="rounded-xl">
-          <ListBox items={items}>
+          <ListBox<{ key: React.Key; label: string }>>
             {(item) => (
               <ListBox.Item
                 id={item.key as string | number}

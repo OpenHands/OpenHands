@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { ComboBoxStateContext } from "react-aria-components";
 import { ComboBox, Header, Input, ListBox } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -18,6 +19,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { mapProvider } from "#/utils/map-provider";
 import { formControlSettingsFieldClassName } from "#/utils/form-control-classes";
+import { cn } from "#/utils/utils";
 import { heroUiAutocompleteSelectorButtonClassName } from "#/ui/combobox-caret";
 
 const DEFAULT_PROVIDER = "custom";
@@ -39,6 +41,20 @@ interface ProviderConnectionModalProps {
  * form, so a blank key on edit is simply omitted from the request — the
  * agent-server rejects `api_key: null`, so we never send it.
  */
+function OpenOnClickInput({ testId, name }: { testId: string; name: string }) {
+  const state = useContext(ComboBoxStateContext);
+  return (
+    <Input
+      data-testid={testId}
+      name={name}
+      className="border-0 bg-transparent shadow-none outline-none focus:ring-0 focus-visible:ring-0 data-[focused=true]:ring-0"
+      onClick={() => {
+        if (state && !state.isOpen) state.open(null, "manual");
+      }}
+    />
+  );
+}
+
 export function ProviderConnectionModal({
   connection,
   isCreate,
@@ -190,16 +206,21 @@ export function ProviderConnectionModal({
             {t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
           </label>
           <ComboBox
+            menuTrigger="focus"
+            allowsEmptyCollection
             isRequired
             aria-label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
             selectedKey={provider}
             onSelectionChange={(key) => setProvider(key?.toString() ?? null)}
           >
             <ComboBox.InputGroup
-              className={formControlSettingsFieldClassName}
+              className={cn(
+                formControlSettingsFieldClassName,
+                "focus-within:border-contrast/40 dark:focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
+              )}
             >
-              <Input
-                data-testid="provider-connection-provider-input"
+              <OpenOnClickInput
+                testId="provider-connection-provider-input"
                 name="provider-connection-provider-input"
               />
               <ComboBox.Trigger

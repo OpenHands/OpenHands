@@ -1,5 +1,6 @@
 import { ComboBox, Header, Input, ListBox, Spinner } from "@heroui/react";
-import React from "react";
+import React, { useContext } from "react";
+import { ComboBoxStateContext } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { mapProvider } from "#/utils/map-provider";
@@ -39,6 +40,20 @@ interface ModelSelectorProps {
   ) => void;
   wrapperClassName?: string;
   labelClassName?: string;
+}
+
+function OpenOnClickInput({ testId, name }: { testId: string; name: string }) {
+  const state = useContext(ComboBoxStateContext);
+  return (
+    <Input
+      data-testid={testId}
+      name={name}
+      className="border-0 bg-transparent shadow-none outline-none focus:ring-0 focus-visible:ring-0 data-[focused=true]:ring-0"
+      onClick={() => {
+        if (state && !state.isOpen) state.open(null, "manual");
+      }}
+    />
+  );
 }
 
 export function ModelSelector({
@@ -169,6 +184,8 @@ export function ModelSelector({
           {t(I18nKey.LLM$PROVIDER)}
         </label>
         <ComboBox
+          menuTrigger="focus"
+          allowsEmptyCollection
           isRequired
           isDisabled={isDisabled}
           aria-label={t(I18nKey.LLM$PROVIDER)}
@@ -185,8 +202,16 @@ export function ModelSelector({
           }}
           selectedKey={selectedProvider}
         >
-          <ComboBox.InputGroup className={formControlSettingsFieldClassName}>
-            <Input data-testid="llm-provider-input" name="llm-provider-input" />
+          <ComboBox.InputGroup
+            className={cn(
+              formControlSettingsFieldClassName,
+              "focus-within:border-contrast/40 dark:focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
+            )}
+          >
+            <OpenOnClickInput
+              testId="llm-provider-input"
+              name="llm-provider-input"
+            />
             <ComboBox.Trigger
               className={heroUiAutocompleteSelectorButtonClassName}
             />
@@ -248,6 +273,8 @@ export function ModelSelector({
         </label>
         <div className="relative">
           <ComboBox
+            menuTrigger="focus"
+            allowsEmptyCollection
             isRequired
             aria-label={t(I18nKey.LLM$MODEL)}
             onSelectionChange={(key) => {
@@ -256,8 +283,16 @@ export function ModelSelector({
             isDisabled={isDisabled || !selectedProvider}
             selectedKey={selectedModel}
           >
-            <ComboBox.InputGroup className={formControlSettingsFieldClassName}>
-              <Input data-testid="llm-model-input" name="llm-model-input" />
+            <ComboBox.InputGroup
+              className={cn(
+                formControlSettingsFieldClassName,
+                "focus-within:border-contrast/40 dark:focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
+              )}
+            >
+              <OpenOnClickInput
+                testId="llm-model-input"
+                name="llm-model-input"
+              />
               {isLoadingModels ? (
                 <Spinner
                   size="sm"
