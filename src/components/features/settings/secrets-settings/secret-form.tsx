@@ -36,16 +36,32 @@ export function SecretForm({
   const { t } = useTranslation("openhands");
 
   const { data: secrets } = useSearchSecrets();
-  // `onSaved` rides the mutation itself rather than a per-call `mutate`
-  // callback: the chat can unmount this form while a save is in flight (the
-  // virtualized list remounts a secret-request card across the virtualization
-  // threshold), and TanStack Query drops per-call callbacks with the unmounted
-  // observer — the saved secret would never reach the waiting agent.
+
+  const invalidateSecrets = React.useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["secrets-search"] });
+    queryClient.invalidateQueries({ queryKey: ["secrets"] });
+  }, [queryClient]);
+
+  // Both the cache refresh and `onSaved` ride the mutation itself rather than a
+  // per-call `mutate` callback: the chat can unmount this form while a save is
+  // in flight (the virtualized list remounts a secret-request card across the
+  // virtualization threshold), and TanStack Query drops per-call callbacks with
+  // the unmounted observer — the saved secret would neither reach the waiting
+  // agent nor appear in Settings. Invalidate first, so the secrets list is
+  // refreshed even when `onSaved` completes a request that dismisses the form.
+  const handleSaved = React.useCallback(
+    (secret: CustomSecretInput) => {
+      invalidateSecrets();
+      onSaved?.(secret);
+    },
+    [invalidateSecrets, onSaved],
+  );
+
   const { mutate: createSecret, isPending: isCreating } = useCreateSecret({
-    onSuccess: onSaved,
+    onSuccess: handleSaved,
   });
   const { mutate: updateSecret, isPending: isUpdating } = useUpdateSecret({
-    onSuccess: onSaved,
+    onSuccess: handleSaved,
   });
   const isSaving = isCreating || isUpdating;
 
@@ -79,15 +95,6 @@ export function SecretForm({
     if (!error || !keepOpenOnError) onCancel();
   };
 
-  const invalidateSecrets = () => {
-    queryClient.invalidateQueries({
-      queryKey: ["secrets-search"],
-    });
-    queryClient.invalidateQueries({
-      queryKey: ["secrets"],
-    });
-  };
-
   const handleCreateSecret = (
     name: string,
     value: string,
@@ -95,10 +102,7 @@ export function SecretForm({
   ) => {
     createSecret(
       { name, value, description },
-      {
-        onSettled: closeUnlessKeptOpen,
-        onSuccess: invalidateSecrets,
-      },
+      { onSettled: closeUnlessKeptOpen },
     );
   };
 
@@ -110,10 +114,7 @@ export function SecretForm({
   ) => {
     updateSecret(
       { secretToEdit, name, description, value },
-      {
-        onSettled: closeUnlessKeptOpen,
-        onSuccess: invalidateSecrets,
-      },
+      { onSettled: closeUnlessKeptOpen },
     );
   };
 
