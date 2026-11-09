@@ -1,0 +1,26 @@
+{
+  "ok": true,
+  "run": "/private/tmp/odie-19501-live/after",
+  "baseUrl": "http://127.0.0.1:21100",
+  "failed": [],
+  "warnings": [
+    "LLM configured: model=gpt-5.6 without an API key: `control-openhands llm preset deepseek`"
+  ],
+  "passed": [
+    "launcher process group alive: /opt/homebrew/Cellar/node@24/24.22.1/bin/node /private/tmp/odie-17567-independent/bin/agent-canvas.mjs --port 21100",
+    "launcher is this run's agent-canvas: /opt/homebrew/Cellar/node@24/24.22.1/bin/node /private/tmp/odie-17567-independent/bin/agent-canvas.mjs --port 21100",
+    "port ingress:21100 listening: open",
+    "port agentServer:21101 listening: open",
+    "port automation:21102 listening: open",
+    "port frontend:21103 listening: open",
+    "served build matches this checkout's build inputs: served=a04e4c10de237c33-dirty run=a04e4c10de237c33-dirty revision=fdb6133617cc",
+    "checkout build inputs unchanged since launch: launch=a04e4c10de237c33-dirty now=a04e4c10de237c33-dirty",
+    "unauthenticated API rejected: status=401",
+    "authenticated settings readable: status=200",
+    "agent-server reachable: version=1.60.1",
+    "agent-server matches pin: server=1.60.1 pin=1.60.1",
+    "agent-server meets the UI minimum: server=1.60.1 minimum=1.59.0",
+    "automation healthy: status=200",
+    "UI loads without page errors: markers=first-run-onboarding-screen,onboarding-modal,telemetry-consent-form pageErrors=0 testidsInDom=221 (hidden included)"
+  ]
+}

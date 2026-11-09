@@ -29,9 +29,18 @@
   --text-sm-plus: 15px;
   --text-title: 32px;
 
+  /* Keep signed letter spacing and its original px/em units. */
+  --tracking-metadata: 0.11px;
+  --tracking-label: 0.01em;
+  --tracking-title: -0.01em;
+  --tracking-heading: -0.02em;
+  --tracking-auth-code: 0.08em;
+  --tracking-device-code: 0.3em;
+
   --color-primary: var(--oh-color-primary);
   --color-logo: var(--oh-color-logo);
   --color-canvas-base: var(--oh-color-base);
+  --color-canvas-background: var(--oh-background);
   /* Keep color names distinct from font sizes such as text-base. */
   --color-on-primary: var(--oh-color-base);
   --color-base-secondary: var(--oh-color-base-secondary);
@@ -79,6 +88,17 @@
   --color-border-input: var(--oh-border-input);
   --color-border-subtle: var(--oh-border-subtle);
   --color-divider: var(--oh-divider);
+  /* The ring and popover bar share a readable track across palettes. */
+  --color-context-window-track: color-mix(
+    in srgb,
+    var(--oh-context-window-foreground) var(--oh-context-window-track-weight),
+    transparent
+  );
+
+  /* Existing inset highlights keep their pixel geometry and public colors. */
+  --shadow-badge-inset: inset 0 1px 0 color-mix(in srgb, var(--oh-contrast) 18%, transparent);
+  --shadow-reorder-before: inset 0 2px 0 0 var(--oh-focus);
+  --shadow-reorder-after: inset 0 -2px 0 0 var(--oh-focus);
 
   /* Focus / interactive state aliases */
   --color-focus: var(--oh-focus);
@@ -93,6 +113,7 @@
   --color-status-success: var(--oh-status-success);
   --color-status-error: var(--oh-status-error);
   --color-accent: var(--oh-accent);
+  --color-on-accent: var(--oh-accent-foreground);
   --color-info: var(--oh-info);
   --color-warning: var(--oh-warning);
 
@@ -1109,6 +1130,11 @@ code .token {
 
 @utility conversation-meta-text {
   font-size: 10px;
+}
+
+/* Keep committed hashes and the uncommitted placeholder aligned. */
+@utility w-commit-sha {
+  width: 7ch;
 }
 
 @utility conversation-card-menu-width {
