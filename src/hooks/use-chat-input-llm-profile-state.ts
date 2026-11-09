@@ -87,7 +87,8 @@ export interface ChatInputLlmProfileState {
  */
 export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
   const { conversationId } = useOptionalConversationId();
-  const { data: conversation } = useActiveConversation();
+  const { data: conversation, isFetching: isConversationFetching } =
+    useActiveConversation();
   const { data, isLoading } = useLlmProfiles();
   const queryClient = useQueryClient();
   const { backend, orgId } = useActiveBackend();
@@ -112,6 +113,17 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
 
   const profiles = data?.profiles ?? [];
   const conversationModel = conversation?.llm_model ?? null;
+  // The conversation query serves stale cached `llm_model` during the
+  // background refetch a successful switch triggers (invalidateQueries in
+  // onSuccess). Until that refetch lands, `conversationModel` still reflects
+  // the pre-switch model, so treating it as authoritative would (a) drop the
+  // just-written optimistic entry on render and (b) make the repair effect
+  // rewrite the just-persisted stamp back to the pre-switch profile with a
+  // fresh stamped_at — which can then suppress seedModelSwitchesFromHistory's
+  // corrective re-stamp on reload. Only treat the model as confirmed when the
+  // fetch is not in flight.
+  const conversationModelConfirmed =
+    conversationModel !== null && !isConversationFetching;
   // A cloud `task-…` route has no real conversation id yet, so the
   // per-conversation /switch_profile would 404.
   const isTaskRoute = conversationId?.startsWith("task-") ?? false;
@@ -133,7 +145,7 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
   const isOptimisticConflicting =
     !isSwitching &&
     Boolean(
-      conversationModel &&
+      conversationModelConfirmed &&
       optimisticProfileObj &&
       optimisticProfileObj.model !== conversationModel,
     );
@@ -158,16 +170,20 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
     : undefined;
   const isStampConflicting = Boolean(
     stampedProfileObj &&
-    conversationModel &&
+    conversationModelConfirmed &&
     stampedProfileObj.model !== conversationModel,
   );
   const conversationProfile =
     stampedProfileObj && !isStampConflicting ? stampedProfile : null;
 
   // When a confirmed fetch disagrees with browser metadata, repair or clear the
-  // stored stamp without dropping other metadata fields.
+  // stored stamp without dropping other metadata fields. Skip while the
+  // conversation query is refetching (e.g. after a switch's invalidateQueries):
+  // the cached llm_model is stale there, so running the repair would rewrite a
+  // just-persisted stamp back to the pre-switch profile and clear the fresh
+  // optimistic entry. The effect re-runs when the refetch lands.
   useEffect(() => {
-    if (!conversationId || !conversationModel) return;
+    if (!conversationId || !conversationModelConfirmed) return;
     if (stampedProfile) {
       const stamped = profiles.find((p) => p.name === stampedProfile);
       if (stamped && stamped.model !== conversationModel) {
@@ -191,6 +207,7 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
     }
   }, [
     conversationId,
+    conversationModelConfirmed,
     conversationModel,
     stampedProfile,
     profiles,

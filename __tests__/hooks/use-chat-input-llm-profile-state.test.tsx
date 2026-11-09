@@ -286,6 +286,74 @@ describe("useChatInputLlmProfileState", () => {
     expect(result.current.currentProfileName).toBe("Smart");
   });
 
+  it("does not drop the optimistic entry or rewrite a fresh stamp while the post-switch refetch is still in flight", () => {
+    // Race window identified in review: onSuccess has run (mutation done,
+    // isSwitching=0; the new stamp + optimistic entry are written), but
+    // invalidateQueries' refetch hasn't landed, so the query still serves the
+    // stale pre-switch llm_model. The repair effect must not run against that
+    // stale model.
+    setStoredConversationMetadata("c1", {
+      selected_repository: "owner/repo",
+      selected_branch: "feat",
+      git_provider: null,
+      active_profile: "Smart",
+      stamped_at: "2026-11-09T00:00:00.000Z",
+    });
+    modelStoreState = {
+      ...freshModelStoreState(),
+      activeProfileByConversation: { c1: "Smart" },
+    };
+    // Stale cached conversation: backend already switched to Smart (claude-opus)
+    // but the refetch hasn't landed, so llm_model is still the pre-switch
+    // gpt-4o-mini (Fast). isFetching=true signals the refetch is pending.
+    useActiveConversationMock.mockReturnValue({
+      data: { active_profile: "Smart", llm_model: "gpt-4o-mini" },
+      isFetching: true,
+    });
+    useIsMutatingMock.mockReturnValue(0);
+    const { result } = renderState();
+    // The optimistic entry (Smart) survives — the pill does NOT snap back to
+    // the pre-switch profile (Fast) while the refetch is pending.
+    expect(result.current.currentProfileName).toBe("Smart");
+    // The just-persisted Smart stamp is NOT rewritten back to Fast, and its
+    // stamped_at is NOT refreshed (which would suppress
+    // seedModelSwitchesFromHistory's corrective re-stamp on reload).
+    const stored = getStoredConversationMetadata("c1");
+    expect(stored?.active_profile).toBe("Smart");
+    expect(stored?.stamped_at).toBe("2026-11-09T00:00:00.000Z");
+    expect(stored?.selected_repository).toBe("owner/repo");
+    // The optimistic entry is NOT cleared.
+    expect(
+      modelStoreState.activeProfileByConversation.c1,
+    ).toBe("Smart");
+  });
+
+  it("runs the repair once the post-switch refetch lands and the stamp still conflicts", () => {
+    // Same setup as above, but now the refetch has landed: isFetching=false and
+    // the confirmed llm_model is gpt-4o-mini (Fast) while the browser stamp is
+    // still Smart (claude-opus). This is the genuine stale-stamp case the PR
+    // targets — the repair should now run.
+    setStoredConversationMetadata("c1", {
+      selected_repository: "owner/repo",
+      selected_branch: "feat",
+      git_provider: null,
+      active_profile: "Smart",
+      stamped_at: "2026-11-09T00:00:00.000Z",
+    });
+    useActiveConversationMock.mockReturnValue({
+      data: { active_profile: "Smart", llm_model: "gpt-4o-mini" },
+      isFetching: false,
+    });
+    useIsMutatingMock.mockReturnValue(0);
+    renderState();
+    const stored = getStoredConversationMetadata("c1");
+    // Confirmed model is gpt-4o-mini (Fast); the Smart stamp is repaired to
+    // Fast with a fresh stamped_at, and other metadata fields are preserved.
+    expect(stored?.active_profile).toBe("Fast");
+    expect(stored?.stamped_at).not.toBe("2026-11-09T00:00:00.000Z");
+    expect(stored?.selected_repository).toBe("owner/repo");
+  });
+
   it("repairs conflicting stamp in conversation metadata store without dropping other fields", () => {
     setStoredConversationMetadata("c1", {
       selected_repository: "owner/repo",
