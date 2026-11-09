@@ -37,14 +37,32 @@ describe("useAutomationAccess", () => {
     });
   });
 
-  it("treats an automation without run_as_kind as running as a person", () => {
+  it("lets a manager edit and turn on another person's automation", () => {
     permissions.canManage = true;
 
-    const { result } = renderHook(() => useAutomationAccess(base));
+    const { result } = renderHook(() =>
+      useAutomationAccess({ ...base, enabled: false }),
+    );
 
-    // A manager may manage but not edit someone else's automation that runs as a person.
-    expect(result.current.canManage).toBe(true);
-    expect(result.current.canEdit).toBe(false);
+    expect(result.current).toEqual({
+      canManage: true,
+      canEdit: true,
+      canToggle: true,
+    });
+  });
+
+  it("lets the owner edit and turn on their own automation without manage permission", () => {
+    permissions.isOwner = true;
+
+    const { result } = renderHook(() =>
+      useAutomationAccess({ ...base, enabled: false }),
+    );
+
+    expect(result.current).toEqual({
+      canManage: true,
+      canEdit: true,
+      canToggle: true,
+    });
   });
 
   it("lets a manager edit and turn on a automation that runs as a service account", () => {

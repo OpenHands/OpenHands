@@ -82,7 +82,7 @@ export function CanvasExtensionCard({
         ) : null}
       </div>
 
-      <dl className="grid min-w-0 grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+      <dl className="grid min-w-0 metadata-grid-columns gap-x-3 gap-y-1 text-xs">
         {extension.resolved_ref ? (
           <>
             <dt className="text-tertiary-alt">

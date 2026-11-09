@@ -5,7 +5,8 @@ export const formControlHeightClassName = "h-9 min-h-9";
 
 export const formControlRadiusClassName = "rounded-lg";
 
-export const formControlBorderClassName = "border border-border";
+/** Interactive boundary for fields, triggers, and outlined buttons (3:1 target). */
+export const formControlBorderClassName = "border border-control";
 
 export const formControlSurfaceClassName = "bg-base-secondary";
 
@@ -18,7 +19,7 @@ export const formControlMotionReduceClassName = "motion-reduce:transition-none";
 
 /** Shell properties that animate on hover/focus; foreground color snaps instantly. */
 export const formControlTransitionPropertiesClassName =
-  "transition-[background-color,border-color,box-shadow,opacity]";
+  "transition-control-shell";
 
 /** Animate shell chrome on hover/focus; foreground color snaps instantly. */
 export const formControlTransitionClassName = cn(
@@ -29,14 +30,14 @@ export const formControlTransitionClassName = cn(
 
 /** HeroUI input wrappers ship `transition-colors`; override so caret/text hover is instant. */
 export const formControlHeroUiWrapperTransitionClassName = cn(
-  "!transition-[background-color,border-color,box-shadow,opacity]",
+  "!transition-control-shell",
   formControlHeroUiTransitionDurationClassName,
   formControlMotionReduceClassName,
 );
 
 /** Transform-only transitions (e.g. combobox carets). */
 export const formControlTransformTransitionClassName = cn(
-  "transition-[transform]",
+  "transition-control-transform",
   formControlTransitionDurationClassName,
   formControlMotionReduceClassName,
 );
@@ -61,10 +62,10 @@ export const chatInputIconButtonClassName = cn(
 );
 
 export const formControlFocusClassName =
-  "focus:border-contrast/40 focus:ring-1 focus:ring-contrast/20 focus:outline-none";
+  "focus:border-contrast/40 dark:focus:border-contrast/40 focus:ring-1 focus:ring-contrast/20 focus:outline-none";
 
 export const formControlFocusWithinClassName =
-  "focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20";
+  "focus-within:border-contrast/40 dark:focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20";
 
 export const formControlDisabledClassName =
   "disabled:cursor-not-allowed disabled:opacity-60";
