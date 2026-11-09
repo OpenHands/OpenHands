@@ -283,6 +283,8 @@ export function ConversationWebSocketProvider({
 
   // Track if we've ever successfully connected for each connection
   const hasConnectedRefMain = React.useRef(false);
+  // Whether the open main socket has delivered any frame yet (see sendMessage).
+  const mainServedRef = React.useRef(false);
   const hasConnectedRefPlanning = React.useRef(false);
 
   const queryClient = useQueryClient();
@@ -751,6 +753,7 @@ export function ConversationWebSocketProvider({
   // Separate message handlers for each connection
   const handleMainMessage = useCallback(
     (messageEvent: MessageEvent) => {
+      mainServedRef.current = true;
       try {
         const routed = routeSessionFrame(
           JSON.parse(messageEvent.data),
@@ -1294,6 +1297,7 @@ export function ConversationWebSocketProvider({
       connectionKey: historyConnectionKey,
       reconnect: { enabled: true },
       onOpen: () => {
+        mainServedRef.current = false;
         mainReplayThroughSeqRef.current = null;
         setReadyHistoryConnectionKey(null);
         mainConnectionError.cancel();
@@ -1307,6 +1311,7 @@ export function ConversationWebSocketProvider({
         useEventStore.getState().clearStreamingSlots();
       },
       onClose: () => {
+        mainServedRef.current = false;
         setReadyHistoryConnectionKey(null);
         setMainConnectionState("CLOSED");
         mainDeltaBatcherRef.current?.reset();
@@ -1550,8 +1555,16 @@ export function ConversationWebSocketProvider({
       const targetConversationId =
         currentMode === "plan" ? planningConversationId : conversationId;
 
-      if (currentSocket?.readyState !== WebSocket.OPEN) {
-        // WebSocket not connected.
+      // An open socket the server has not served yet (no frame received)
+      // may never read what we send: the agent server subscribes a new
+      // session socket only after the running step releases the
+      // conversation lock, and a frame sent before that is lost if the tab
+      // navigates away first. Until the first frame arrives, deliver over
+      // HTTP like a closed socket.
+      const socketServed =
+        currentMode === "plan" ? true : mainServedRef.current;
+      if (currentSocket?.readyState !== WebSocket.OPEN || !socketServed) {
+        // WebSocket not connected, or not yet served.
         if (!targetConversationId) {
           // Never fall back to the parent in plan mode: without a planner
           // target the message would run in the code agent, which is exactly
