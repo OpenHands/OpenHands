@@ -18,8 +18,7 @@ export const OPENAI_SUBSCRIPTION_LOGOUT_PATH =
   "/api/llm/subscription/openai/logout";
 
 export type LlmAuthType =
-  | typeof LLM_AUTH_TYPE_API_KEY
-  | typeof LLM_AUTH_TYPE_SUBSCRIPTION;
+  typeof LLM_AUTH_TYPE_API_KEY | typeof LLM_AUTH_TYPE_SUBSCRIPTION;
 
 export const LLM_AUTH_TYPE_CHOICES: SettingsChoice[] = [
   { label: "API key", value: LLM_AUTH_TYPE_API_KEY },

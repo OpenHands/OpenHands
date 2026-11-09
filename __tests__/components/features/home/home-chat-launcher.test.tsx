@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
@@ -18,6 +19,11 @@ import GitService from "#/api/git-service/git-service.api";
 import { useHomeStore } from "#/stores/home-store";
 import { useModelStore } from "#/stores/model-store";
 import { LLM_PROFILES_QUERY_KEYS } from "#/hooks/query/query-keys";
+import {
+  clearPendingHomeModelPick,
+  hasPendingHomeModelPick,
+  markHomeModelPick,
+} from "#/hooks/use-chat-input-llm-profile-state";
 import { AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES } from "#/styles/agent-server-ui-style-scope";
 import { COLOR_THEMES } from "#/themes/color-themes";
 import {
@@ -57,13 +63,23 @@ vi.mock("#/api/automation-setup-handoff-store", () => ({
 }));
 
 vi.mock("#/stores/conversation-store", () => ({
-  useConversationStore: () => ({
-    images: mockImages,
-    files: mockFiles,
-    imagesMarkedUploadAsFile: [],
-    clearAllFiles: mockClearAllFiles,
-    restoreMessageToInputIfEmpty: mockRestoreMessageToInputIfEmpty,
-  }),
+  useConversationStore: Object.assign(
+    () => ({
+      images: mockImages,
+      files: mockFiles,
+      imagesMarkedUploadAsFile: [],
+      clearAllFiles: mockClearAllFiles,
+      restoreMessageToInputIfEmpty: mockRestoreMessageToInputIfEmpty,
+    }),
+    {
+      getState: () => ({
+        imagesMarkedUploadAsFile: [] as string[],
+        addImages: vi.fn(),
+        addFiles: vi.fn(),
+        toggleImageUploadAsFile: vi.fn(),
+      }),
+    },
+  ),
 }));
 
 vi.mock("#/utils/custom-toast-handlers", async (importOriginal) => {
@@ -388,6 +404,7 @@ const cloudBackend = {
 
 describe("HomeChatLauncher", () => {
   beforeEach(() => {
+    useConversationLaunchStore.setState({ launches: {} });
     vi.restoreAllMocks();
     vi.clearAllMocks();
     mockImages = [];
@@ -434,6 +451,10 @@ describe("HomeChatLauncher", () => {
     toast.remove();
     window.localStorage.removeItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY);
     useModelStore.setState({ homeLlmProfile: null });
+    clearPendingHomeModelPick("local-id", null);
+    clearPendingHomeModelPick("cloud-id", null);
+    clearPendingHomeModelPick("cloud-id", "org-a");
+    clearPendingHomeModelPick("cloud-id", "org-b");
   });
 
   it("compiles the rendered launcher colors for every theme, including the mocked isolated-workspace notice", async () => {
@@ -954,7 +975,9 @@ describe("HomeChatLauncher", () => {
       }),
     );
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-repo"),
+      expect(
+        Object.values(useConversationLaunchStore.getState().launches),
+      ).toEqual([expect.objectContaining({ targetId: "conv-repo" })]),
     );
   });
 
@@ -1176,9 +1199,9 @@ describe("HomeChatLauncher", () => {
       }),
     );
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith(
-        "/conversations/task-start-task-1",
-      ),
+      expect(
+        Object.values(useConversationLaunchStore.getState().launches),
+      ).toEqual([expect.objectContaining({ targetId: "task-start-task-1" })]),
     );
   });
 
@@ -1240,9 +1263,9 @@ describe("HomeChatLauncher", () => {
       }),
     );
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith(
-        "/conversations/task-start-task-2",
-      ),
+      expect(
+        Object.values(useConversationLaunchStore.getState().launches),
+      ).toEqual([expect.objectContaining({ targetId: "task-start-task-2" })]),
     );
   });
 
@@ -1354,5 +1377,90 @@ describe("HomeChatLauncher", () => {
     expect(
       screen.queryByTestId("recommended-automations-rail"),
     ).not.toBeInTheDocument();
+  });
+
+  it("suppresses route-at-start on a home send after a home model pick, and clears the pending pick (#19138)", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      run_router_at_conversation_start: true,
+    });
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+
+    markHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId);
+
+    renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy.mock.lastCall?.[0]).toMatchObject({
+      initialUserMsg: "hello world",
+      suppressRouterAtStart: true,
+    });
+    await waitFor(() =>
+      expect(
+        hasPendingHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId),
+      ).toBe(false),
+    );
+  });
+
+  it("preserves the pending home model pick when the home launch fails so a retry still suppresses (#19138)", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockRejectedValueOnce(new Error("agent-server 500"))
+      .mockResolvedValueOnce(makeConversationResponse());
+
+    markHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId);
+
+    renderLauncher();
+    const user = userEvent.setup();
+
+    // First home send rejects — pending pick must remain set for the retry.
+    await user.click(screen.getByTestId("stub-chat-submit"));
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(
+      hasPendingHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId),
+    ).toBe(true);
+
+    // Return to the composer from the failed-launch view and retry.
+    await user.click(await screen.findByRole("button", { name: "BUTTON$EDIT" }));
+    await user.click(screen.getByTestId("stub-chat-submit"));
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(2));
+    expect(createSpy.mock.lastCall?.[0]).toMatchObject({
+      initialUserMsg: "hello world",
+      suppressRouterAtStart: true,
+    });
+    await waitFor(() =>
+      expect(
+        hasPendingHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId),
+      ).toBe(false),
+    );
+  });
+
+  it("does not carry a home model pick across a backend or org switch (#19138)", async () => {
+    // Pick was made under (local-id, null), then user switches to (cloud-id, org-a).
+    markHomeModelPick(localBackend.backend.id, localBackend.orgId);
+    mockUseActiveBackend.mockReturnValue({
+      ...cloudBackend,
+      orgId: "org-a",
+    });
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+
+    renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy.mock.lastCall?.[0]).not.toHaveProperty(
+      "suppressRouterAtStart",
+    );
   });
 });

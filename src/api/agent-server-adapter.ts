@@ -75,7 +75,11 @@ import {
   LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
   LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
 } from "./launch-child-conversation-client-tool";
-import { AUTOMATION_FORM_UPDATE_CLIENT_TOOL } from "./automation-form-client-tool";
+import {
+  AUTOMATION_SETUP_SYSTEM_SUFFIX,
+  buildAutomationFormUpdateClientTool,
+} from "./automation-form-client-tool";
+import type { DeploymentCapabilities } from "#/manifests/types";
 import { REQUEST_SECRET_CLIENT_TOOL } from "./request-secret-client-tool";
 import {
   buildPlanPath,
@@ -92,6 +96,7 @@ export interface DirectConversationInfo {
   created_at: string;
   updated_at: string;
   execution_status?: string | null;
+  max_budget_per_run?: number | null;
   /** Cloud-only sandbox lifecycle state. Omitted / null for local agent-server conversations. */
   sandbox_status?: string | null;
   /** Availability of the runtime that backs a local conversation. */
@@ -1064,6 +1069,13 @@ export interface StartConversationOptions {
   query?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
+  /**
+   * What the automation service reports it supports, so the setup assistant's
+   * form tool can name this deployment's event sources. Null when it could
+   * not be read; the tool then carries its generic description.
+   */
+  automationSetupCapabilities?: DeploymentCapabilities | null;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
@@ -1083,6 +1095,13 @@ export interface StartConversationOptions {
   llmProfileOverride?: string;
   /** The profile carries a Model Router, so router-at-start can apply. */
   profileHasRouter?: boolean;
+  /**
+   * A home-page model pick was made before the first message, so the
+   * route-at-start suffix is suppressed for this single launch. Threaded in
+   * by the home launch (`useCreateConversation`) so this builder stays free of
+   * UI state; callers that don't pass it (child, `/new`) route as usual.
+   */
+  suppressRouterAtStart?: boolean;
   /** The ACP profile's server, stamped as the `acpserver` tag. */
   acpServer?: string;
   titleLlmProfile?: string;
@@ -1129,10 +1148,21 @@ export function buildStartConversationRequest(
 ): ProfileStartConversationPayload {
   const launchSuffix = [
     buildRuntimeServicesSystemSuffix(options.runtimeServicesInfo),
+    // A home-page model pick made before the first message is an explicit
+    // choice the router shouldn't override on turn 1 — suppress the suffix for
+    // this single launch. The flag is threaded in by the home launch so this
+    // builder is stateless; callers that don't pass it route as usual.
     buildRouterAtStartSystemSuffix(
-      options.settings.run_router_at_conversation_start ?? false,
+      options.settings.run_router_at_conversation_start &&
+        !options.suppressRouterAtStart,
       options.profileHasRouter ?? false,
     ),
+    // Sent with the form tool below, which only OpenHands profiles get.
+    options.automationSetup && options.agentProfileKind === "openhands"
+      ? [AUTOMATION_SETUP_SYSTEM_SUFFIX, options.automationSetupContext]
+          .filter(Boolean)
+          .join("\n\n")
+      : null,
   ]
     .filter((suffix): suffix is string => Boolean(suffix))
     .join("\n\n");
@@ -1165,6 +1195,11 @@ export function buildStartConversationRequest(
 
   const conversationSettings = buildConfiguredConversationSettings({
     ...sourceConversationOptions,
+    ...(options.automationSetup &&
+    options.agentProfileKind === "acp" &&
+    options.automationSetupContext
+      ? { query: `${options.query ?? ""}\n\n${options.automationSetupContext}` }
+      : {}),
     executionRuntime: options.executionRuntime,
   });
 
@@ -1186,7 +1221,11 @@ export function buildStartConversationRequest(
             LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
             REQUEST_SECRET_CLIENT_TOOL,
             ...(options.automationSetup
-              ? [AUTOMATION_FORM_UPDATE_CLIENT_TOOL]
+              ? [
+                  buildAutomationFormUpdateClientTool(
+                    options.automationSetupCapabilities,
+                  ),
+                ]
               : []),
           ]
         : [],
@@ -1247,8 +1286,7 @@ export function buildStartConversationRequest(
 
   const toolModuleQualnames = {
     ...((conversationSettings.tool_module_qualnames as
-      | Record<string, string>
-      | undefined) ?? {}),
+      Record<string, string> | undefined) ?? {}),
   };
   delete toolModuleQualnames[LEGACY_CANVAS_UI_TOOL_NAME];
   delete toolModuleQualnames[CANVAS_UI_CLIENT_TOOL_NAME];
@@ -1582,6 +1620,8 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   query?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
+  automationSetupCapabilities?: DeploymentCapabilities | null;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
@@ -1594,6 +1634,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   agentProfileKind?: AgentKind;
   llmProfileOverride?: string;
   profileHasRouter?: boolean;
+  suppressRouterAtStart?: boolean;
   acpServer?: string;
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {

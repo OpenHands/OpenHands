@@ -19,6 +19,11 @@ import { useNativeGitIntegrations } from "#/hooks/query/use-native-git-integrati
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useSetupPreflight } from "#/hooks/use-manifest-preflight";
 import { useSetupAction } from "#/manifests/manifest-actions";
+import { MermaidDiagram } from "#/components/features/markdown/mermaid-diagram";
+import {
+  getEntryDiagram,
+  findAutomationCommand,
+} from "#/utils/automation-catalog";
 import {
   supportedActionKinds,
   supportedTriggerKinds,
@@ -48,7 +53,7 @@ import {
   type MappedManifestErrors,
 } from "#/manifests/manifest-error-map";
 import { automationDetailPath } from "#/manifests/automation-interface";
-import { findAutomationCommand } from "#/utils/automation-catalog";
+import { automationCloneProviders } from "#/utils/automation-repo-sources";
 import type { GitRepository } from "#/types/git";
 import type { Provider } from "#/types/settings";
 import type {
@@ -114,6 +119,7 @@ export interface SetupDialogProps {
  */
 export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const { t } = useTranslation("openhands");
+  const diagram = getEntryDiagram(entry);
   const navigate = useNavigate();
 
   const capabilities = useSetupCapabilities(entry);
@@ -240,6 +246,13 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     fields,
     llmProfileOptions,
   ]);
+  // A repository only reaches `repos` when the deployment's runs can clone
+  // from its provider; otherwise the entry's prompt clones it.
+  const repoProviders = capabilities.capabilities?.repoProviders;
+  const cloneProviders = useMemo(
+    () => automationCloneProviders(repoProviders),
+    [repoProviders],
+  );
   const payload = useMemo(
     () =>
       buildCreatePayload(
@@ -248,8 +261,9 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
         undefined,
         selectedTrigger,
         selectedAction,
+        cloneProviders,
       ),
-    [entry, values, selectedTrigger, selectedAction],
+    [entry, values, selectedTrigger, selectedAction, cloneProviders],
   );
   const errorMap = useMemo(
     () => deriveErrorMap(entry, selectedTrigger, selectedAction),
@@ -350,6 +364,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
         valuesRef.current,
         selectedTrigger,
         selectedAction,
+        cloneProviders,
       ).then((result) => {
         if (result) setServiceErrors(result);
       });
@@ -375,7 +390,12 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     }
     setLocalErrors({});
 
-    const result = await runPreflight(values, selectedTrigger, selectedAction);
+    const result = await runPreflight(
+      values,
+      selectedTrigger,
+      selectedAction,
+      cloneProviders,
+    );
     if (result && hasAnyError(result)) {
       setServiceErrors(result);
       return;
@@ -449,6 +469,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
 
   const isLoading = capabilities.isLoading || prerequisites.isLoading;
   const isLoadingLlmProfileOptions = hasLlmProfileField && isLoadingProfiles;
+  const agentProfileError = resolveFieldError("agent_profile_id");
 
   const title = (() => {
     if (isUnsupported) return t(I18nKey.SETUP$UNAVAILABLE_TITLE);
@@ -462,7 +483,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     <ModalBackdrop onClose={onClose} aria-label={entry.name}>
       <div
         data-testid="setup-dialog"
-        className="relative flex max-h-[85vh] w-[92vw] max-w-lg flex-col rounded-xl border border-border bg-base-secondary"
+        className="relative flex setup-dialog-height setup-dialog-width max-w-lg flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}
@@ -508,6 +529,15 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
           {!isLoading && !isUnsupported && currentStep === "form" && (
             <div className="flex flex-col gap-5">
               <p className="text-sm text-muted">{entry.description}</p>
+              {diagram && (
+                // The dialog scrolls, so the diagram keeps its full height
+                // instead of shrinking its labels to fit the default cap.
+                <MermaidDiagram
+                  source={diagram}
+                  fallback={null}
+                  className="[&_svg]:max-h-none"
+                />
+              )}
               {entry.setup.form.note && (
                 <p className="text-sm text-muted">{entry.setup.form.note}</p>
               )}
@@ -581,10 +611,8 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                       setFieldValue("agent_profile_id", value ?? "")
                     }
                   />
-                  {resolveFieldError("agent_profile_id") && (
-                    <p className="text-sm text-danger">
-                      {resolveFieldError("agent_profile_id")}
-                    </p>
+                  {agentProfileError && (
+                    <p className="text-sm text-danger">{agentProfileError}</p>
                   )}
                 </div>
               )}

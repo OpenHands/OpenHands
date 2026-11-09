@@ -44,13 +44,21 @@ const isGoalLoopReprompt = (event: MessageEvent): boolean => {
   return GOAL_REPROMPT_PREFIXES.some((prefix) => text.startsWith(prefix));
 };
 
-// SDK empty-response nudge (`_send_corrective_nudge`); keep in sync with the SDK.
-const CORRECTIVE_NUDGE_PREFIX =
-  "Your last response did not include a function call or a message.";
+// SDK steering messages injected as `environment` user turns: the
+// empty-response nudge (`_send_corrective_nudge`) and the feedback a blocked
+// Stop hook sends back (`ACP_STOP_HOOK_FEEDBACK_PREFIX`); keep in sync with
+// the SDK.
+const CORRECTIVE_NUDGE_PREFIXES = [
+  "Your last response did not include a function call or a message.",
+  "[Stop hook feedback]",
+];
 
-export const isCorrectiveNudge = (event: MessageEvent): boolean =>
-  event.source === "environment" &&
-  (userMessageText(event)?.startsWith(CORRECTIVE_NUDGE_PREFIX) ?? false);
+export const isCorrectiveNudge = (event: MessageEvent): boolean => {
+  if (event.source !== "environment") return false;
+  const text = userMessageText(event);
+  if (text === null) return false;
+  return CORRECTIVE_NUDGE_PREFIXES.some((prefix) => text.startsWith(prefix));
+};
 
 // The frontend posts the outcome of a `launch_child_conversation` or
 // `request_secret` call back as a `user` message because client tools have no

@@ -6,6 +6,7 @@ import {
   type AutomationLifecycleState,
 } from "#/utils/automation-state";
 import { cn } from "#/utils/utils";
+import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
 
 interface ActiveStatusBadgeProps {
   automation: Pick<Automation, "enabled" | "state">;
@@ -19,7 +20,10 @@ const STATUS_DISPLAY: Record<
   active: {
     testId: "active-status-badge-active",
     label: I18nKey.AUTOMATIONS$DETAIL$ACTIVE,
-    className: "bg-semantic-success/15 text-semantic-success",
+    className: cn(
+      statusToneBadgeClassName.success,
+      "dark:bg-semantic-success/15 dark:text-semantic-success",
+    ),
   },
   inactive: {
     testId: "active-status-badge-inactive",
@@ -29,7 +33,10 @@ const STATUS_DISPLAY: Record<
   draft: {
     testId: "active-status-badge-draft",
     label: I18nKey.AUTOMATIONS$DETAIL$DRAFT,
-    className: "bg-warning/15 text-warning",
+    className: cn(
+      statusToneBadgeClassName.warning,
+      "dark:bg-warning/15 dark:text-warning",
+    ),
   },
 };
 
@@ -45,7 +52,7 @@ export function ActiveStatusBadge({
       data-testid={display.testId}
       className={cn(
         "inline-flex items-center rounded-full font-medium",
-        compact ? "px-2 py-0.5 text-[10px]" : "px-3 py-1 text-xs",
+        compact ? "px-2 py-0.5 text-3xs" : "px-3 py-1 text-xs",
         display.className,
       )}
     >

@@ -5,7 +5,6 @@ import {
   useCallback,
   useState,
 } from "react";
-import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Copy } from "lucide-react";
 import { cn } from "#/utils/utils";
@@ -15,6 +14,7 @@ import EditIcon from "#/icons/u-edit.svg?react";
 import CheckCircleIcon from "#/icons/u-check-circle.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
 import { MenuItem } from "#/components/features/settings/llm-profiles/profile-actions-menu-item";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 // A natively disabled button ignores focus(), so keyboard navigation has to
 // skip it rather than stop on it.
@@ -204,9 +204,10 @@ export function AgentProfileActionsMenu({
     if (typeof document === "undefined" || !portalStyle) {
       return null;
     }
-    return ReactDOM.createPortal(
-      <div style={portalStyle}>{menu}</div>,
-      document.body,
+    return (
+      <AppearancePortal>
+        <div style={portalStyle}>{menu}</div>
+      </AppearancePortal>
     );
   }
 

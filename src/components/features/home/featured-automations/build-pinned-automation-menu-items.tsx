@@ -11,6 +11,7 @@ interface BuildPinnedAutomationMenuItemsOptions {
   automation: Automation;
   t: (key: I18nKey) => string;
   canManage: boolean;
+  canEdit: boolean;
   isRunPending: boolean;
   isCancelPending: boolean;
   canCancel: boolean;

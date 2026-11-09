@@ -10,6 +10,25 @@
 }
 
 @theme inline {
+  /* Preserve existing absolute control geometry, independent of root font size. */
+  --radius-pill: 100px;
+  --radius-composer: 15px;
+  --radius-file-action: 7px;
+  --radius-facet-control: 3px;
+
+  /* Markdown code padding follows the code's own font size, not the root. */
+  --spacing-code-inline-x: 0.4em;
+  --spacing-code-inline-y: 0.2em;
+  --spacing-code-block: 1em;
+
+  /* Compact metadata retains its original pixel sizes and inherited leading. */
+  --text-2xs: 11px;
+  --text-3xs: 10px;
+  --text-4xs: 9px;
+  --text-xs-plus: 13px;
+  --text-sm-plus: 15px;
+  --text-title: 32px;
+
   --color-primary: var(--oh-color-primary);
   --color-logo: var(--oh-color-logo);
   --color-canvas-base: var(--oh-color-base);
@@ -17,6 +36,7 @@
   --color-on-primary: var(--oh-color-base);
   --color-base-secondary: var(--oh-color-base-secondary);
   --color-danger: var(--oh-color-danger);
+  --color-danger-foreground: var(--oh-danger-foreground);
   --color-success: var(--oh-color-success);
   /* @spec MCP-004 — Form feedback follows readable theme text roles */
   --color-feedback-error: var(--oh-feedback-error);
@@ -55,8 +75,10 @@
 
   /* Semantic border aliases */
   --color-border: var(--oh-border);
+  --color-scroll-fade: var(--oh-scroll-fade-from, var(--oh-color-base));
   --color-border-input: var(--oh-border-input);
   --color-border-subtle: var(--oh-border-subtle);
+  --color-divider: var(--oh-divider);
 
   /* Focus / interactive state aliases */
   --color-focus: var(--oh-focus);
@@ -71,10 +93,21 @@
   --color-status-success: var(--oh-status-success);
   --color-status-error: var(--oh-status-error);
   --color-accent: var(--oh-accent);
+  --color-info: var(--oh-info);
   --color-warning: var(--oh-warning);
 
+  /* Status badge / banner pairs (see status-tone-classes.ts) */
+  --color-success-soft: var(--oh-success-soft);
+  --color-success-soft-foreground: var(--oh-success-soft-foreground);
+  --color-warning-soft: var(--oh-warning-soft);
+  --color-warning-soft-foreground: var(--oh-warning-soft-foreground);
+  --color-danger-soft: var(--oh-danger-soft);
+  --color-danger-soft-foreground: var(--oh-danger-soft-foreground);
+  --color-info-soft: var(--oh-info-soft);
+  --color-info-soft-foreground: var(--oh-info-soft-foreground);
+
   /* Cool Grey scale */
-  --color-cool-grey-50:  var(--cool-grey-50);
+  --color-cool-grey-50: var(--cool-grey-50);
   --color-cool-grey-100: var(--cool-grey-100);
   --color-cool-grey-200: var(--cool-grey-200);
   --color-cool-grey-300: var(--cool-grey-300);
@@ -87,6 +120,7 @@
   --color-cool-grey-925: var(--cool-grey-925);
   --color-cool-grey-950: var(--cool-grey-950);
   --color-cool-grey-975: var(--cool-grey-975);
+  --animate-chat-status-pulse: pulse 1.2s ease-in-out infinite;
 }
 
 :root {
@@ -100,11 +134,11 @@
   /* Small feedback text has its own contrast contract, separate from controls. */
   --oh-feedback-error: var(--oh-color-danger);
   --oh-feedback-success: var(--oh-color-success);
-  --oh-markdown-alert-note: #8EC5FF;
-  --oh-markdown-alert-tip: #5EE9B5;
-  --oh-markdown-alert-important: #D8B4FE;
-  --oh-markdown-alert-warning: #FFE02A;
-  --oh-markdown-alert-caution: #FFB3BF;
+  --oh-markdown-alert-note: #8ec5ff;
+  --oh-markdown-alert-tip: #5ee9b5;
+  --oh-markdown-alert-important: #d8b4fe;
+  --oh-markdown-alert-warning: #ffe02a;
+  --oh-markdown-alert-caution: #ffb3bf;
   --oh-color-basic: var(--cool-grey-400);
   --oh-color-tertiary: var(--cool-grey-800);
   --oh-color-tertiary-light: var(--cool-grey-300);
@@ -116,24 +150,38 @@
   --oh-contrast-foreground: #000000;
   --oh-surface: var(--cool-grey-925);
   --oh-surface-foreground: var(--cool-grey-100);
-  --oh-surface-raised: var(--cool-grey-900);  /* elevated within a panel */
-  --oh-surface-deep: var(--cool-grey-975);    /* deep inset, context menus */
+  --oh-surface-raised: var(--cool-grey-900); /* elevated within a panel */
+  --oh-surface-deep: var(--cool-grey-975); /* deep inset, context menus */
   --oh-overlay: var(--cool-grey-925);
   --oh-overlay-foreground: var(--cool-grey-100);
   --oh-modal-title-foreground: #ffffff;
+  --oh-modal-description-foreground: #a3a3a3;
+  --oh-font-heading: inherit;
   --oh-muted: var(--cool-grey-400);
-  --oh-text-secondary: var(--cool-grey-300);  /* readable secondary text */
-  --oh-text-tertiary: var(--cool-grey-200);   /* tertiary, slightly dimmer */
-  --oh-text-dim: var(--cool-grey-500);        /* placeholders, very muted */
-  --oh-text-subtle: var(--cool-grey-600);     /* subtle labels, breadcrumbs */
-  --oh-interactive-hover: var(--cool-grey-700);      /* hover on mid surfaces (800 bg) */
-  --oh-interactive-hover-low: var(--cool-grey-900);  /* hover on dark base (950 bg) */
-  --oh-interactive-active: var(--cool-grey-800);     /* selected/active on dark base */
-  --oh-interactive-selected: var(--cool-grey-600);   /* selected within a panel (on 800/925 bg) */
+  --oh-text-secondary: var(--cool-grey-300); /* readable secondary text */
+  --oh-text-tertiary: var(--cool-grey-200); /* tertiary, slightly dimmer */
+  --oh-text-dim: var(--cool-grey-500); /* placeholders, very muted */
+  --oh-text-subtle: var(--cool-grey-600); /* subtle labels, breadcrumbs */
+  --oh-interactive-hover: var(
+    --cool-grey-700
+  ); /* hover on mid surfaces (800 bg) */
+  --oh-interactive-hover-low: var(
+    --cool-grey-900
+  ); /* hover on dark base (950 bg) */
+  --oh-interactive-active: var(
+    --cool-grey-800
+  ); /* selected/active on dark base */
+  --oh-interactive-selected: var(
+    --cool-grey-600
+  ); /* selected within a panel (on 800/925 bg) */
   --oh-context-window-foreground: var(--oh-foreground);
   --oh-context-window-track-weight: 42%;
   --oh-scrollbar: color-mix(in srgb, var(--cool-grey-400) 30%, transparent);
-  --oh-scrollbar-hover: color-mix(in srgb, var(--cool-grey-400) 50%, transparent);
+  --oh-scrollbar-hover: color-mix(
+    in srgb,
+    var(--cool-grey-400) 50%,
+    transparent
+  );
   --oh-default: var(--cool-grey-800);
   --oh-default-foreground: var(--cool-grey-100);
   --oh-accent: #c9b974;
@@ -151,13 +199,30 @@
   --oh-border-width: 1px;
   --oh-field-border-width: 1px;
   --oh-border: var(--cool-grey-700);
-  --oh-border-input: var(--cool-grey-700);   /* unified with --oh-border; same stroke weight everywhere */
-  --oh-border-subtle: var(--cool-grey-800);  /* within-panel separators, list dividers */
+  --oh-border-input: var(
+    --cool-grey-700
+  ); /* unified with --oh-border; same stroke weight everywhere */
+  --oh-border-subtle: var(
+    --cool-grey-800
+  ); /* within-panel separators, list dividers */
   --oh-separator: rgba(113, 120, 136, 0.5);
+  --oh-divider: var(--oh-border-subtle);     /* rules between rows inside a card or panel */
   --oh-focus: #ffffff;
-  --oh-status-success: #1FBD53;
-  --oh-status-error: #FF684E;
+  --oh-status-success: #1fbd53;
+  --oh-status-error: #ff684e;
   --oh-link: var(--cool-grey-100);
+  --oh-info: oklch(62.3% 0.214 259.815); /* informational blue: content links, update notices */
+  /* Status badge fills + inks. Dark palettes keep a translucent tint, so the ink
+     is lightened until it clears 4.5:1 on the tint over every panel surface.
+     Light palettes override the fill with an opaque tint (see light-plus.ts). */
+  --oh-success-soft: color-mix(in srgb, var(--oh-color-success) 10%, transparent);
+  --oh-success-soft-foreground: color-mix(in srgb, var(--oh-color-success) 55%, #ffffff);
+  --oh-warning-soft: color-mix(in srgb, var(--oh-warning) 10%, transparent);
+  --oh-warning-soft-foreground: color-mix(in srgb, var(--oh-warning) 55%, #ffffff);
+  --oh-danger-soft: color-mix(in srgb, var(--oh-color-danger) 10%, transparent);
+  --oh-danger-soft-foreground: color-mix(in srgb, var(--oh-color-danger) 55%, #ffffff);
+  --oh-info-soft: color-mix(in srgb, var(--oh-info) 10%, transparent);
+  --oh-info-soft-foreground: color-mix(in srgb, var(--oh-info) 55%, #ffffff);
   --oh-radius: 8px;
   --oh-field-radius: 8px;
   --oh-surface-shadow: none;
@@ -276,6 +341,13 @@ button.extension-module-card-interactive {
 
 .heading {
   @apply text-[28px] leading-8 -tracking-[0.02em] font-bold text-content-2;
+}
+
+/* Display type is optional; dense controls, messages and code retain their fonts. */
+h1,
+h2,
+.heading {
+  font-family: var(--oh-font-heading);
 }
 
 /* Custom Chat Input */
@@ -627,7 +699,11 @@ code .token {
 }
 
 .git-external-link-icon {
-  background: linear-gradient(90deg, rgba(69, 69, 69, 0) 0.35%, var(--cool-grey-800) 41.39%);
+  background: linear-gradient(
+    90deg,
+    rgba(69, 69, 69, 0) 0.35%,
+    var(--cool-grey-800) 41.39%
+  );
 }
 
 .api-configuration-modal {
@@ -700,6 +776,22 @@ code .token {
     0px 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
 
+/* Fixed SVG illustration coordinates stay in pixels in embedded roots. */
+@utility file-drop-image {
+  top: -40px;
+  left: -10px;
+  rotate: -27deg;
+}
+
+@utility file-drop-arrow {
+  top: -16px;
+  left: -20px;
+}
+
+@utility message-word-break {
+  word-break: break-word;
+}
+
 /* Window drag handle for the macOS desktop app's hidden title bar. */
 @utility app-region-drag {
   -webkit-app-region: drag;
@@ -769,8 +861,9 @@ code .token {
   scrollbar-gutter: stable;
 }
 
+/* Matches the detail page's max-w-4xl, so view and edit share one column. */
 @utility automation-setup-content {
-  max-width: 800px;
+  max-width: 56rem;
 }
 
 @utility automation-setup-card {
@@ -810,7 +903,7 @@ code .token {
   --automation-setup-cron-width: 14rem;
   --automation-setup-datetime-width: 15rem;
   --automation-setup-time-width: 9.5rem;
-  --automation-setup-timezone-width: 16rem;
+  --automation-setup-timezone-width: 12.5rem;
 }
 
 @utility automation-setup-model-trigger {
@@ -871,6 +964,61 @@ code .token {
   @apply tracking-[0.12em];
 }
 
+/* Keep the resting boundary overridable by caller colors and control states.
+   Appearance changes the color without adding selector specificity. */
+@utility border-control {
+  border-color: var(--oh-border-input);
+
+  &:where(.dark *) {
+    border-color: var(--oh-border);
+  }
+}
+
+@utility transition-control-shell {
+  transition-property: background-color, border-color, box-shadow, opacity;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-control-transform {
+  transition-property: transform;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-context-ring {
+  transition-property: stroke-dashoffset, stroke;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-panel-width {
+  transition-property: width;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
+@utility transition-sidebar-width {
+  transition-property: width, min-width;
+  transition-timing-function: var(
+    --tw-ease,
+    var(--default-transition-timing-function)
+  );
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+
 /* Both chooser disclosures keep their mounted content on the same grid rail. */
 @utility backend-chooser-disclosure {
   @apply transition-[grid-template-rows];
@@ -928,4 +1076,133 @@ code .token {
 
 @utility context-menu-icon-stroke {
   stroke-width: 1.75;
+}
+
+/* Menu geometry keeps its existing pixel, rem and viewport units. */
+@utility tools-menu-offset {
+  left: -16px;
+}
+
+@utility tools-submenu-offset {
+  top: -4px;
+}
+
+@utility tools-git-submenu-offset {
+  top: -6px;
+}
+
+@utility profile-menu-height {
+  max-height: 60vh;
+}
+
+@utility new-conversation-menu-height {
+  max-height: 40vh;
+}
+
+@utility menu-caption-text {
+  font-size: 11px;
+}
+
+@utility menu-detail-text {
+  font-size: 10px;
+}
+
+@utility conversation-meta-text {
+  font-size: 10px;
+}
+
+@utility conversation-card-menu-width {
+  max-width: min(280px, 100vw - 16px);
+}
+
+@utility conversation-tag-popover-width {
+  min-width: 10rem;
+  max-width: 16rem;
+}
+
+@utility conversation-tag-popover-columns {
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+}
+
+@utility skill-pill-popover-width {
+  max-width: 20rem;
+}
+
+@utility conversation-git-actions-width {
+  min-width: 8rem;
+}
+
+@utility automation-actions-menu-width {
+  min-width: 10rem;
+}
+
+@utility dropdown-menu-width {
+  max-width: min(26rem, calc(100vw - 2rem));
+}
+
+@utility dropdown-menu-viewport-height {
+  max-height: min(60vh, calc(100dvh - 5rem));
+}
+
+@utility dialog-viewport-width {
+  max-width: 90vw;
+}
+
+@utility onboarding-viewport-height {
+  max-height: 90vh;
+}
+
+@utility dialog-content-height {
+  max-height: 80vh;
+}
+
+@utility setup-dialog-height {
+  max-height: 85vh;
+}
+
+@utility setup-dialog-width {
+  width: 92vw;
+}
+
+@utility automation-import-width {
+  width: min(36rem, calc(100vw - 2rem));
+}
+
+@utility dialog-scroll-height {
+  max-height: 60vh;
+}
+
+@utility automation-log-min-height {
+  min-height: 12rem;
+}
+
+@utility conversation-dialog-reading-height {
+  height: 60vh;
+}
+
+@utility conversation-options-bleed-width {
+  width: calc(100% + 3rem);
+}
+
+/* Fixed content columns shared by metadata and automation summaries. */
+/* Markdown artifact cards blend table edges into their existing surface. */
+@utility scroll-fade-surface {
+  --oh-scroll-fade-from: var(--oh-surface);
+}
+
+/* Message bubbles blend wide-table edges into their tertiary fill. */
+@utility scroll-fade-tertiary {
+  --oh-scroll-fade-from: var(--oh-color-tertiary);
+}
+
+@utility metadata-grid-columns {
+  grid-template-columns: auto 1fr;
+}
+
+@utility automation-summary-columns {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+@utility run-log-detail-columns {
+  grid-template-columns: 5rem minmax(0, 1fr);
 }
