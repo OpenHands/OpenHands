@@ -35,7 +35,7 @@ export function UncommittedChangesRow({
         data-testid="uncommitted-changes-row-toggle"
         className="w-full flex h-10 items-center gap-2 px-3 border-b border-border text-sm text-content text-left hover:cursor-pointer"
       >
-        <code className="w-[7ch] flex-shrink-0 text-center font-mono text-xs text-muted">
+        <code className="w-commit-sha flex-shrink-0 text-center font-mono text-xs text-muted">
           {EMPTY_COMMIT_SHA_PLACEHOLDER}
         </code>
         <strong className="flex-1 truncate font-medium">

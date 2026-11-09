@@ -330,6 +330,11 @@ describe("vite library build", () => {
     });
     expect(css).not.toMatch(/(^|[{},])\.extension-dialog-viewport\{/);
 
+    expect(declarations(recipe("w-commit-sha")).width).toBe("7ch");
+    expect(declarations(recipe("h-(--editor-height)")).height).toBe(
+      "var(--editor-height)",
+    );
+
     // Require the setup rail and editor geometry in the extracted stylesheet;
     // every recipe must remain a scoped utility even inside media conditions.
     expect(declarations(recipe("automation-setup-content"))).toMatchObject({
