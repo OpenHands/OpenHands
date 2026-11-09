@@ -1,6 +1,6 @@
 ## Arbitrary-value guard adoption
 
-`shadcn/no-arbitrary-values` warns globally. Fourteen migrated owners reject new
+`shadcn/no-arbitrary-values` warns globally. Twenty-five migrated owners reject new
 arbitrary classes: command-menu, backend-version, settings-nav-header,
 backend-synced-settings-badge, modal-backdrop, environment-switch-overlay,
 context-window-meter and conversation-panel-wrapper. Completed message/motion
@@ -8,24 +8,37 @@ owners also reject new arbitrary values: custom-toast-handlers,
 form-control-classes, chat-status-indicator, context-window-ring,
 user-message-body and conversation-main. Their exact paths are in `eslint.config.js`,
 with executable probes in `__tests__/scripts/arbitrary-values-lint.test.ts`.
+Completed Markdown code/path chips, horizontal fade consumers, file-drop artwork, automation view/filter/run-phase bounds, conversation-card reserves and the hover-reveal helper also reject new arbitrary values.
 Other components, routes and primitive implementations retain warnings during
 migration. Keep legitimate measured/portal geometry with its owner; do not
 expand this file list or add exemptions without auditing the remaining values.
 
 ## Raw-color class-map scanning
 
-`shadcn/no-raw-colors` warns globally. Three migrated owners reject new raw colors:
-backend-status-dot, Markdown blockquote and mcp-server-health. Start-task badge
-and indicator remain warning-only pending their separate migration. Their exact paths in `eslint.config.js` also
-enable `scanAllStrings` so literal class recipes remain
-visible when dynamic map or helper lookups hide them from class-site analysis.
-Keep this adoption scoped: scanning every string can mistake program tags for
-color utilities. Review newly included findings before extending the file list;
-the shared exact legacy-token exceptions remain unchanged.
+`shadcn/no-raw-colors` rejects raw Tailwind palette utilities, undeclared named
+color utilities and raw SVG paint throughout source, including primitive
+implementations. The seven exact legacy JS-config/plugin color exceptions stay
+valid. Backend-status-dot, Markdown blockquote and mcp-server-health additionally
+use `scanAllStrings` for literal class recipes hidden behind map/helper lookups;
+keep broad scanning away from unrelated program tags. Executable probes use the
+real flat config in `__tests__/scripts/raw-colors-lint.test.ts`.
+
+Bracketed hex/rgba color classes remain covered by the independently staged
+`shadcn/no-arbitrary-values` policy above. Do not claim that the palette guard
+finishes that migration or checks opaque runtime expressions.
 
 ## Horizontal scroll fades
 
 `from-scroll-fade` resolves the existing `--oh-scroll-fade-from` ancestor override with `--oh-color-base` as fallback. The `scroll-fade-surface` utility sets that override to `--oh-surface` for Markdown artifact cards. Keep left/right edge visibility, direction, animation and scroll handling with their current owners; do not replace this override with a fixed palette color.
+
+## Inset-shadow recipes
+
+`shadow-badge-inset` retains the existing 1px inset highlight and 18% mix of
+`--oh-contrast`, including Tailwind's supports/fallback behavior. Reorder-before
+and reorder-after retain +2px/-2px inset edges in `--oh-focus`. These stay normal
+shadow utilities; register them in cn's shadow group so caller shadow geometry
+and shadow colors remain independent. Keep drag state and ordering with the
+existing pinned-card owner; do not replace fixed pixels or public color hooks.
 
 ## Inline-style rollout
 
@@ -239,6 +252,15 @@ When adding code that needs a new string, decide up front which rule it falls un
 
 
 - ESLint config (flat, ESLint 9): the project uses `eslint.config.js` (not `.eslintrc`) and runs on `eslint@9.x`, not 10. The constraint pinning us below 10 is `eslint-plugin-react@7.37.x`, which still calls `context.getFilename()` at rule-load time — that API was removed in ESLint 10 and `@eslint/compat`'s `fixupPluginRules` does NOT shim it. Don't try to bump eslint past 9 until eslint-plugin-react ships a v10-compatible release. Import rules come from `eslint-plugin-import-x` (the maintained fork of `eslint-plugin-import`) but are registered under both `import-x/` and `import/` prefixes via `plugins: { import: importXPlugin, ... }` so existing `// eslint-disable-next-line import/...` directives keep working. `linterOptions.reportUnusedDisableDirectives` is set to `"warn"` (not "off") so stale airbnb-era disable comments still surface in lint output without failing CI. The TS-overrides block has an `ignores: ["src/hooks/query/query-keys.ts"]` so the `no-restricted-syntax` rule banning raw `["settings", ...]` query keys doesn't fire on the file that defines the helpers themselves. No `.npmrc` / `legacy-peer-deps` flag is needed — all our plugins declare ESLint 9 peer compatibility.
+
+## Letter-spacing recipes
+
+Named tracking recipes retain exact signed values: metadata 0.11px, label
+0.01em, title -0.01em, heading -0.02em, auth-code 0.08em and device-code 0.3em.
+Keep pixel metadata spacing independent of font size and the other values
+relative to their element font. Register tracking names in cn's tracking theme
+so caller overrides retain normal precedence without changing font or leading.
+Do not approximate these metrics with nearby default tracking-scale values.
 
 ## Extended type scale
 
