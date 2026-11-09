@@ -20,6 +20,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
 import { copyToClipboard } from "#/utils/copy-to-clipboard";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const COPY_FEEDBACK_MS = 2000;
 
@@ -84,7 +85,10 @@ export function AgentCanvasVersionModal({
   }, [selectedTab]);
 
   const copyCommand = React.useCallback(async () => {
-    if (!(await copyToClipboard(command))) return;
+    if (!(await copyToClipboard(command))) {
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
+      return;
+    }
     setCopied(true);
     if (copiedTimeoutRef.current !== null) {
       window.clearTimeout(copiedTimeoutRef.current);
@@ -93,7 +97,7 @@ export function AgentCanvasVersionModal({
       setCopied(false);
       copiedTimeoutRef.current = null;
     }, COPY_FEEDBACK_MS);
-  }, [command]);
+  }, [command, t]);
 
   return (
     <ModalBackdrop

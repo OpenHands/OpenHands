@@ -11,10 +11,17 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: toastMocks.displayErrorToast,
 }));
 
+const originalExecCommand = document.execCommand;
+
 describe("ErrorMessageBanner", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     toastMocks.displayErrorToast.mockClear();
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      writable: true,
+      value: originalExecCommand,
+    });
   });
 
   it("calls onDismiss when the close button is clicked", async () => {
@@ -141,10 +148,30 @@ describe("ErrorMessageBanner", () => {
     );
   });
 
-  it("shows an error toast when the copy button cannot write to the clipboard", async () => {
+  it("copies through the fallback when the async API rejects", async () => {
     const user = userEvent.setup();
     const writeText = vi.fn().mockRejectedValue(new Error("denied"));
     vi.spyOn(navigator.clipboard, "writeText").mockImplementation(writeText);
+    document.execCommand = vi.fn().mockReturnValue(true);
+
+    render(<ErrorMessageBanner message="fallback copy" />);
+
+    await user.click(screen.getByTestId("error-message-banner-copy"));
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("error-message-banner-copy"),
+      ).toHaveAccessibleName("BUTTON$COPIED"),
+    );
+    expect(document.execCommand).toHaveBeenCalledWith("copy");
+    expect(toastMocks.displayErrorToast).not.toHaveBeenCalled();
+  });
+
+  it("shows an error toast when every copy mechanism fails", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockRejectedValue(new Error("denied"));
+    vi.spyOn(navigator.clipboard, "writeText").mockImplementation(writeText);
+    document.execCommand = vi.fn().mockReturnValue(false);
 
     render(<ErrorMessageBanner message="copy failed" />);
 

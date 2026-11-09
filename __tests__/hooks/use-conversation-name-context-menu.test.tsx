@@ -1,5 +1,5 @@
 import type React from "react";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useConversationNameContextMenu } from "#/hooks/use-conversation-name-context-menu";
 import { I18nKey } from "#/i18n/declaration";
@@ -31,6 +31,7 @@ const harness = vi.hoisted(() => ({
   } | null,
   adaptSystemMessage: vi.fn(),
   displaySuccessToast: vi.fn(),
+  displayErrorToast: vi.fn(),
   navigateToTab: vi.fn(),
 }));
 
@@ -84,6 +85,7 @@ vi.mock("#/utils/system-message-adapter", () => ({
 
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: harness.displaySuccessToast,
+  displayErrorToast: harness.displayErrorToast,
 }));
 
 const clickEvent = () => {
@@ -546,5 +548,44 @@ describe("useConversationNameContextMenu", () => {
     expect(result.current.shouldShowDownloadConversation).toBe(false);
     expect(result.current.shouldShowSkills).toBe(false);
     expect(result.current.shouldShowPlugins).toBe(false);
+  });
+
+  it("shows an error toast and no success toast when copy fails", async () => {
+    const originalExecCommand = document.execCommand;
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockRejectedValue(new Error("Permission denied")),
+      },
+    });
+    document.execCommand = vi.fn().mockReturnValue(false);
+
+    try {
+      const onContextMenuToggle = vi.fn();
+      const { result } = renderHook(() =>
+        useConversationNameContextMenu({
+          conversationId: "conv-active",
+          onContextMenuToggle,
+        }),
+      );
+
+      const copyClick = clickEvent();
+      await act(async () => {
+        result.current.handleCopyShareLink(copyClick.event);
+      });
+
+      await waitFor(() => {
+        expect(harness.displayErrorToast).toHaveBeenCalledWith(
+          I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED,
+        );
+      });
+      expect(harness.displaySuccessToast).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(document, "execCommand", {
+        configurable: true,
+        writable: true,
+        value: originalExecCommand,
+      });
+    }
   });
 });

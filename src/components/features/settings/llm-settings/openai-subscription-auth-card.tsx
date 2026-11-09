@@ -53,7 +53,10 @@ export function OpenAISubscriptionAuthCard({
 
   const handleCopyCode = async () => {
     if (!challenge) return;
-    if (!(await copyToClipboard(challenge.userCode))) return;
+    if (!(await copyToClipboard(challenge.userCode))) {
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
+      return;
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
