@@ -3,6 +3,8 @@ import type { ColorThemeDefinition } from "../../types";
 
 // Warm paper and ink inspired by Liberty Labs. Supporting ink is darkened
 // for compact controls and tinted panels; status hues keep their meanings.
+// Warning is a dark ochre ink, as in Light+ and Solarized: `text-warning`
+// and warning dots must read on paper, so its fills carry light text.
 
 const PAPER_SCALE = {
   "--cool-grey-50": "#29241f",
@@ -59,8 +61,8 @@ const PAPER_HEROUI = {
   "--heroui-focus": "14.61 58.97% 38.24%",
   "--heroui-success": "103.20 14.29% 34.31%",
   "--heroui-success-foreground": "36.92 100.00% 97.45%",
-  "--heroui-warning": "41.54 54.74% 62.75%",
-  "--heroui-warning-foreground": "30.00 13.89% 14.12%",
+  "--heroui-warning": "42.20 68.42% 26.08%",
+  "--heroui-warning-foreground": "36.92 100.00% 97.45%",
   "--heroui-danger": "0.94 57.99% 42.94%",
   "--heroui-danger-foreground": "36.92 100.00% 97.45%",
   "--heroui-divider": "36.52 19.33% 76.67%",
@@ -100,7 +102,8 @@ const PAPER_TOKENS: Partial<Record<AgentServerUICssVariableName, string>> = {
   "--oh-overlay-foreground": "#29241f",
   "--oh-modal-title-foreground": "#29241f",
   "--oh-modal-description-foreground": "#675e54",
-  "--oh-font-heading": '"Canvas Newsreader", Georgia, serif',
+  "--oh-font-heading":
+    '"Canvas Newsreader", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif',
   "--oh-muted": "#675e54",
   "--oh-text-secondary": "#61574c",
   "--oh-text-tertiary": "#51483e",
@@ -120,14 +123,14 @@ const PAPER_TOKENS: Partial<Record<AgentServerUICssVariableName, string>> = {
   "--oh-accent-foreground": "#fffaf2",
   "--oh-success": "#52644b",
   "--oh-success-foreground": "#fffaf2",
-  "--oh-warning": "#d4b46c",
-  "--oh-warning-foreground": "#29241f",
+  "--oh-warning": "#705515",
+  "--oh-warning-foreground": "#fffaf2",
   "--oh-danger": "#ad302e",
   "--oh-danger-foreground": "#fffaf2",
   "--oh-segment": "#ece5da",
   "--oh-segment-foreground": "#29241f",
   "--oh-border": "#cfc6b8",
-  "--oh-border-input": "#8b7f70",
+  "--oh-border-input": "#857a6c",
   "--oh-border-subtle": "#ded5c8",
   "--oh-separator": "#cfc6b8",
   "--oh-focus": "#9b4428",

@@ -50,7 +50,8 @@ Both app and library builds include the full SIL OFL 1.1 license as
   when storage is unavailable or contains an obsolete key.
 - `--oh-font-heading` controls the display-heading family (`h1`, `h2`, and
   `.heading`). Its default is `inherit`, preserving existing palettes. Paper
-  selects the locally bundled Newsreader face with Georgia and serif fallbacks.
+  selects the locally bundled Newsreader face with the Liberty Labs serif
+  fallbacks (Iowan Old Style, Palatino, Georgia, serif).
   Embedding hosts can override the family through `styleOverrides`.
 - `--oh-modal-description-foreground` owns the legacy `modal-muted` text role.
   Its default stays `#a3a3a3`; Paper supplies darker supporting ink for its light

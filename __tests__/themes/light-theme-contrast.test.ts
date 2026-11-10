@@ -49,22 +49,27 @@ const CONTROL_PAGE_SURFACES = [
   "--oh-surface",
 ];
 
-// These palette choices belong to the Light+/Solarized contrast pass. Paper
-// has its own surface hierarchy and uses its light warning hue as a fill.
+describe.each(["light-plus", "solarized-light", "paper"] as const)(
+  "%s text contrast contract",
+  (theme) => {
+    it.each(BODY_TEXT)("%s meets WCAG AA on every panel surface", (text) => {
+      for (const surface of PANEL_SURFACES) {
+        expect
+          .soft(
+            contrast(surfaceColor(theme, text), surfaceColor(theme, surface)),
+            `${text} on ${surface}`,
+          )
+          .toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  },
+);
+
+// These surface choices belong to the Light+/Solarized contrast pass. Paper
+// keeps its own flatter surface hierarchy.
 const CONTRAST_PASS_THEMES = ["light-plus", "solarized-light"] as const;
 
 describe.each(CONTRAST_PASS_THEMES)("%s palette contrast contract", (theme) => {
-  it.each(BODY_TEXT)("%s meets WCAG AA on every panel surface", (text) => {
-    for (const surface of PANEL_SURFACES) {
-      expect
-        .soft(
-          contrast(surfaceColor(theme, text), surfaceColor(theme, surface)),
-          `${text} on ${surface}`,
-        )
-        .toBeGreaterThanOrEqual(4.5);
-    }
-  });
-
   it("makes hover rows visible on menus, sidebars, and cards", () => {
     const hover = surfaceColor(theme, "--oh-interactive-hover");
     for (const surface of [
