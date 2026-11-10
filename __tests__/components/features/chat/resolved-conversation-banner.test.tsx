@@ -118,6 +118,26 @@ describe("ResolvedConversationBanner", () => {
     expect(reopenButton()).toBeEnabled();
   });
 
+  it("says why the server resolved it", () => {
+    renderBanner({ resolved: "auto", resolvenote: "0.93 nothing" });
+
+    expect(
+      screen.getByTestId("resolved-conversation-auto-note"),
+    ).toHaveTextContent(I18nKey.PROJECTS$AUTO_RESOLVED);
+  });
+
+  it.each<Record<string, string>>([
+    { resolved: "auto" },
+    { resolved: "auto", resolvenote: "sure" },
+    { resolved: "user", resolvenote: "0.93 nothing" },
+  ])("gives no reason for tags %j", (tags) => {
+    renderBanner(tags);
+
+    expect(
+      screen.queryByTestId("resolved-conversation-auto-note"),
+    ).not.toBeInTheDocument();
+  });
+
   it.each<Record<string, string>>([
     {},
     { resolved: "" },
@@ -164,7 +184,7 @@ describe("ResolvedConversationBanner", () => {
     expect(updateTagFlags).toHaveBeenCalledWith(
       CONVERSATION_ID,
       { resolved: "user", project: "abc", turn: "answered" },
-      { resolved: false },
+      { resolved: false, resolvenote: false },
     );
     await waitFor(() => {
       expect(

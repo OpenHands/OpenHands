@@ -78,3 +78,31 @@ export function getConversationResolution(
   const value = tags?.[RESOLVED_CONVERSATION_TAG_KEY];
   return value === "user" || value === "auto" ? value : null;
 }
+
+/** Why the server resolved a conversation, from its `resolvenote` tag. */
+export const RESOLVE_NOTE_TAG_KEY = "resolvenote";
+
+export interface AutoResolveNote {
+  /** Rounded percent: the judge's "nothing left" probability or a critic score. */
+  percent: number;
+  source: "judge" | "critic";
+}
+
+/**
+ * Reads a `resolvenote` such as `0.93 nothing` (the resolution judge) or
+ * `0.95 critic` (a critic score). Returns null for anything else.
+ */
+export function parseAutoResolveNote(
+  note: string | null | undefined,
+): AutoResolveNote | null {
+  const match = note?.trim().match(/^([01](?:\.\d+)?) (\w+)$/);
+  if (!match) return null;
+  const probability = Number(match[1]);
+  if (!Number.isFinite(probability) || probability < 0 || probability > 1) {
+    return null;
+  }
+  return {
+    percent: Math.round(probability * 100),
+    source: match[2] === "critic" ? "critic" : "judge",
+  };
+}

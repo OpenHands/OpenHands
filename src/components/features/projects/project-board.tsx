@@ -10,7 +10,11 @@ import ProjectsService, {
 } from "#/api/projects-service/projects-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { projectsQueryRoot } from "#/hooks/query/use-projects";
-import { RESOLVED_CONVERSATION_TAG_KEY } from "#/utils/conversation-tag-flags";
+import {
+  RESOLVED_CONVERSATION_TAG_KEY,
+  RESOLVE_NOTE_TAG_KEY,
+  parseAutoResolveNote,
+} from "#/utils/conversation-tag-flags";
 import { displayApiErrorToast } from "#/utils/custom-toast-handlers";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import { cn } from "#/utils/utils";
@@ -57,6 +61,8 @@ async function setResolved(conversationId: string, resolved: boolean) {
       conversationId,
     ]);
   const tags = { ...(current?.tags ?? {}) };
+  // The server's reason for an automatic resolve goes with any change.
+  delete tags[RESOLVE_NOTE_TAG_KEY];
   if (resolved) tags[RESOLVED_CONVERSATION_TAG_KEY] = "user";
   else delete tags[RESOLVED_CONVERSATION_TAG_KEY];
   await AgentServerConversationService.replaceConversationTags(
@@ -83,6 +89,10 @@ function ProjectCard({
     ]);
 
   const isResolved = conversation.attention === "resolved";
+  const autoNote =
+    isResolved && conversation.resolved === "auto"
+      ? parseAutoResolveNote(conversation.resolve_note)
+      : null;
   const title = conversation.title || conversation.conversation_id;
 
   const resolve = useMutation({
@@ -118,6 +128,19 @@ function ProjectCard({
       >
         {title}
       </NavigationLink>
+      {autoNote ? (
+        <p
+          data-testid="project-card-auto-resolved"
+          className="text-xs text-muted"
+        >
+          {t(
+            autoNote.source === "critic"
+              ? I18nKey.PROJECTS$AUTO_RESOLVED_CRITIC
+              : I18nKey.PROJECTS$AUTO_RESOLVED,
+            { percent: autoNote.percent },
+          )}
+        </p>
+      ) : null}
       {conversation.turn === "asked" && conversation.ask ? (
         <p className="line-clamp-3 text-sm text-foreground">
           <span className="text-muted">{t(I18nKey.PROJECTS$ASKS)}</span>{" "}

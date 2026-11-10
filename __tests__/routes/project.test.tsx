@@ -9,6 +9,7 @@ import ProjectsService, {
 } from "#/api/projects-service/projects-service.api";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
+import { I18nKey } from "#/i18n/declaration";
 
 const PROJECT_ID = "aa000000000040008000000000000001";
 const COORDINATOR_ID = "cc000000000040008000000000000001";
@@ -196,6 +197,53 @@ describe("ProjectPage", () => {
       expect(replace).toHaveBeenCalledWith(
         "03000000000040008000000000000001",
         { project: PROJECT_ID, resolved: "user" },
+        { project: PROJECT_ID },
+      ),
+    );
+  });
+
+  it("says why the server resolved a card on its own", async () => {
+    setProjectsFeature(true);
+    vi.spyOn(ProjectsService, "listConversations").mockResolvedValue({
+      project_id: PROJECT_ID,
+      coordinator: member(COORDINATOR_ID, "Coordinator", "idle"),
+      conversations: [
+        member("04000000000040008000000000000001", "Answer", "resolved", {
+          resolved: "auto",
+          resolve_note: "0.93 nothing",
+        }),
+        member("05000000000040008000000000000001", "Mine", "resolved"),
+      ],
+    });
+    renderPage();
+
+    const resolved = await screen.findByTestId("project-group-resolved");
+    const notes = within(resolved).getAllByTestId("project-card-auto-resolved");
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toHaveTextContent(I18nKey.PROJECTS$AUTO_RESOLVED);
+  });
+
+  it("drops the server's reason when the person resolves or reopens", async () => {
+    setProjectsFeature(true);
+    vi.spyOn(
+      AgentServerConversationService,
+      "batchGetAppConversations",
+    ).mockResolvedValue([
+      {
+        tags: { project: PROJECT_ID, resolved: "auto", resolvenote: "0.9 x" },
+      } as never,
+    ]);
+    const replace = vi
+      .spyOn(AgentServerConversationService, "replaceConversationTags")
+      .mockResolvedValue({} as never);
+    renderPage();
+
+    const resolved = await screen.findByTestId("project-group-resolved");
+    await userEvent.click(within(resolved).getByTestId("project-card-resolve"));
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith(
+        "03000000000040008000000000000001",
+        { project: PROJECT_ID, resolved: "auto", resolvenote: "0.9 x" },
         { project: PROJECT_ID },
       ),
     );

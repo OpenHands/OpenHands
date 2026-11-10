@@ -41,6 +41,8 @@ export interface ProjectConversation {
   execution_status: string;
   attention: ProjectAttention;
   resolved: "user" | "auto" | null;
+  /** Why the server resolved it (`0.93 nothing`, `0.95 critic`); newer servers. */
+  resolve_note?: string | null;
   turn: "asked" | "answered" | null;
   ask: string | null;
   automation_id: string | null;

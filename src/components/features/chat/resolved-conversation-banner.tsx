@@ -13,7 +13,9 @@ import { isUserMessageEvent } from "#/types/agent-server/type-guards";
 import type { OHEvent } from "#/stores/use-event-store";
 import {
   RESOLVED_CONVERSATION_TAG_KEY,
+  RESOLVE_NOTE_TAG_KEY,
   getConversationResolution,
+  parseAutoResolveNote,
 } from "#/utils/conversation-tag-flags";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
@@ -78,6 +80,10 @@ export function ResolvedConversationBanner() {
   }
 
   const isPending = isReading || isUpdating;
+  const autoNote =
+    resolution === "auto"
+      ? parseAutoResolveNote(conversation.tags?.[RESOLVE_NOTE_TAG_KEY])
+      : null;
 
   const handleReopen = async () => {
     if (isPending) return;
@@ -111,7 +117,10 @@ export function ResolvedConversationBanner() {
       {
         conversationId: conversation.id,
         currentTags,
-        changes: { [RESOLVED_CONVERSATION_TAG_KEY]: false },
+        changes: {
+          [RESOLVED_CONVERSATION_TAG_KEY]: false,
+          [RESOLVE_NOTE_TAG_KEY]: false,
+        },
       },
       {
         onError: () =>
@@ -132,6 +141,19 @@ export function ResolvedConversationBanner() {
         <p className="text-sm text-foreground">
           {t(I18nKey.CHAT_INTERFACE$RESOLVED_TITLE)}
         </p>
+        {autoNote ? (
+          <p
+            className="text-xs text-muted mt-0.5"
+            data-testid="resolved-conversation-auto-note"
+          >
+            {t(
+              autoNote.source === "critic"
+                ? I18nKey.PROJECTS$AUTO_RESOLVED_CRITIC
+                : I18nKey.PROJECTS$AUTO_RESOLVED,
+              { percent: autoNote.percent },
+            )}
+          </p>
+        ) : null}
         <p className="text-xs text-muted mt-0.5">
           {t(I18nKey.CHAT_INTERFACE$RESOLVED_DESCRIPTION)}
         </p>
