@@ -75,14 +75,67 @@ describe("sending chat messages", () => {
     ["missing arguments", { action: "message" }],
     ["missing content", { action: "message", args: {} }],
     ["empty content", { action: "message", args: { content: "" } }],
-  ])("ignores a message with %s", async (_description, event) => {
-    const sendMessage = vi.fn();
+  ])(
+    "ignores a message with %s and no attachments",
+    async (_description, event) => {
+      const sendMessage = vi.fn();
+      const { result } = renderSendMessageHook({ sendMessage });
+
+      await expect(result.current.send(event)).resolves.toEqual({
+        queued: false,
+      });
+      expect(sendMessage).not.toHaveBeenCalled();
+    },
+  );
+
+  it("sends an image-only message as a single image block without an empty text block", async () => {
+    const imageUrls = ["data:image/png;base64,red-square"];
+    const sendMessage = vi.fn().mockResolvedValue({ queued: false });
     const { result } = renderSendMessageHook({ sendMessage });
 
-    await expect(result.current.send(event)).resolves.toEqual({
-      queued: false,
+    await expect(
+      result.current.send({
+        action: "message",
+        args: { content: "", image_urls: imageUrls },
+      }),
+    ).resolves.toEqual({ queued: false });
+    expect(sendMessage).toHaveBeenCalledOnce();
+    expect(sendMessage).toHaveBeenCalledWith({
+      role: "user",
+      content: [{ type: "image", image_urls: imageUrls }],
     });
-    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps every image when an image-only message has several attachments", async () => {
+    const imageUrls = [
+      "data:image/png;base64,first",
+      "data:image/png;base64,second",
+    ];
+    const sendMessage = vi.fn().mockResolvedValue({ queued: false });
+    const { result } = renderSendMessageHook({ sendMessage });
+
+    await result.current.send({
+      action: "message",
+      args: { content: "", image_urls: imageUrls },
+    });
+
+    expect(sendMessage).toHaveBeenCalledWith({
+      role: "user",
+      content: [{ type: "image", image_urls: imageUrls }],
+    });
+  });
+
+  it("propagates a WebSocket delivery failure for an image-only message", async () => {
+    const deliveryError = new Error("WebSocket closed");
+    const sendMessage = vi.fn().mockRejectedValue(deliveryError);
+    const { result } = renderSendMessageHook({ sendMessage });
+
+    await expect(
+      result.current.send({
+        action: "message",
+        args: { content: "", image_urls: ["data:image/png;base64,red"] },
+      }),
+    ).rejects.toBe(deliveryError);
   });
 
   it("converts text chat input into a user WebSocket message", async () => {

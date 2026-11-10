@@ -33,29 +33,42 @@ export function useSendMessage() {
           };
         };
 
-        if (action === "message" && args?.content) {
-          // Build agent-server message content array
-          const content: Array<MessageContent> = [
-            {
-              type: "text",
-              text: args.content,
-            },
-          ];
+        if (action === "message" && args) {
+          // Build agent-server message content array. An image-only message
+          // (empty caption) sends just the image block: an empty text block
+          // would make the model ignore the attached image.
+          const text = args.content ? args.content : null;
+          const imageUrls =
+            args.image_urls && args.image_urls.length > 0
+              ? args.image_urls
+              : null;
 
-          // Add images if present - using SDK's ImageContent format
-          if (args.image_urls && args.image_urls.length > 0) {
-            content.push({
-              type: "image",
-              image_urls: args.image_urls,
+          if (text || imageUrls) {
+            const content: Array<MessageContent> = [];
+
+            if (text) {
+              content.push({
+                type: "text",
+                text,
+              });
+            }
+
+            // Add images if present - using SDK's ImageContent format
+            if (imageUrls) {
+              content.push({
+                type: "image",
+                image_urls: imageUrls,
+              });
+            }
+
+            // Send via WebSocket context (uses correct host/port)
+            const result = await conversationContext.sendMessage({
+              role: "user",
+              content,
             });
+            return result;
           }
-
-          // Send via WebSocket context (uses correct host/port)
-          const result = await conversationContext.sendMessage({
-            role: "user",
-            content,
-          });
-          return result;
+          return { queued: false };
         }
         return { queued: false };
       }
