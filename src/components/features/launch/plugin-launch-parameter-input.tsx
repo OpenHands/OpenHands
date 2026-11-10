@@ -204,7 +204,24 @@ export function PluginLaunchParameterInput({
         label={displayLabel}
         value={String(paramValue ?? "")}
         className="w-full"
-        onChange={(value) => onParameterChange(pluginIndex, paramKey, value)}
+        onChange={(value) => {
+          if (value === "") {
+            onParameterChange(pluginIndex, paramKey, undefined);
+            return;
+          }
+          // Without a declared fieldType the widget is inferred from the
+          // runtime value. Once the user clears a number field the value
+          // becomes `undefined` and the widget degrades to text, so any
+          // re-typed input would be sent as a string and rejected by the
+          // automation service (e.g. `count: "3"` → 422). Parse numeric
+          // input back to a number so the payload type stays consistent.
+          const parsed = Number(value);
+          onParameterChange(
+            pluginIndex,
+            paramKey,
+            Number.isFinite(parsed) ? parsed : value
+          );
+        }}
       />
       {helpText && <span className="text-xs text-contrast">{helpText}</span>}
     </div>
