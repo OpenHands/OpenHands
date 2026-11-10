@@ -64,6 +64,11 @@ const appBuildConfig = {
       codeSplitting: {
         groups: [
           {
+            // Motion's top-level recipes must not capture helpers before a cyclic chunk initializes.
+            name: "vendor-motion",
+            test: /node_modules[\\/](framer-motion|motion-dom|motion-utils)[\\/]/,
+          },
+          {
             // Keep the styling core (HeroUI + tailwind-variants + its
             // tailwind-merge/clsx deps) in one un-size-split chunk. When the
             // generic size-split vendor group slices these apart, a HeroUI
@@ -308,6 +313,8 @@ export default defineConfig(({ mode }) => {
         "prop-types",
         "react-is",
         "@heroui/react",
+        "react-aria",
+        "react-aria-components",
         "lucide-react",
         "@microlink/react-json-view",
         // These are discovered when launching conversations:
