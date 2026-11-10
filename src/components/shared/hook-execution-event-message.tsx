@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { isHookExecutionEvent } from "#/types/agent-server/type-guards";
 import { OpenHandsEvent } from "#/types/agent-server/core";
 import { GenericEventMessage } from "#/components/features/chat/generic-event-message";
+import { IsInEventGroupContext } from "#/components/features/chat/is-in-event-group-context";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 
@@ -34,6 +35,7 @@ export function HookExecutionEventMessage({
   event,
 }: HookExecutionEventMessageProps) {
   const { t } = useTranslation("openhands");
+  const isInEventGroup = React.useContext(IsInEventGroupContext);
 
   if (!isHookExecutionEvent(event)) {
     return null;
@@ -131,6 +133,9 @@ export function HookExecutionEventMessage({
       title={title}
       details={details}
       success={successStatus}
+      // A hook row on its own in the transcript takes the same spacing as an
+      // event group (see EventGroup), so it lines up with the rows around it.
+      className={isInEventGroup ? undefined : "mt-2 mb-0 [&+article]:mt-2"}
     />
   );
 }
