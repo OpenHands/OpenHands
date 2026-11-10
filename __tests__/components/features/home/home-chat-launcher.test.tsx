@@ -1111,9 +1111,12 @@ describe("HomeChatLauncher", () => {
     expect(screen.getByTestId("open-repository-button")).toBeInTheDocument();
   });
 
-  it.each(["ops55", "Deleted"])(
-    "ignores a stored home LLM override (%s) when launching the selected agent",
-    async (pick) => {
+  it.each([
+    { pick: "ops55", expected: "ops55" },
+    { pick: "Deleted", expected: undefined },
+  ])(
+    "forwards only a valid home LLM choice ($pick) alongside the selected agent",
+    async ({ pick, expected }) => {
       mockUseActiveBackend.mockReturnValue(cloudBackend);
       useModelStore.setState({ homeLlmProfile: pick });
       const queryClient = new QueryClient();
@@ -1131,7 +1134,7 @@ describe("HomeChatLauncher", () => {
       await userEvent.click(screen.getByTestId("stub-chat-submit"));
 
       await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-      expect(createSpy.mock.lastCall?.[0]?.llmProfile).toBeUndefined();
+      expect(createSpy.mock.lastCall?.[0]?.llmProfile).toBe(expected);
     },
   );
 

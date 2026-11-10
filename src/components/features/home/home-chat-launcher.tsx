@@ -8,11 +8,13 @@ import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
+import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useModelInterceptor } from "#/hooks/chat/use-model-interceptor";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { HOME_PROMPT_DRAFT_KEY } from "#/hooks/chat/use-draft-persistence";
 import { useChatAttachmentUpload } from "#/hooks/chat/use-chat-attachment-upload";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useModelStore } from "#/stores/model-store";
 import {
   clearPendingHomeModelPick,
   hasPendingHomeModelPick,
@@ -140,6 +142,8 @@ export function HomeChatLauncher() {
     restoreMessageToInputIfEmpty,
   } = useConversationStore();
   const { handleUpload } = useChatAttachmentUpload();
+  const homeLlmProfile = useModelStore((s) => s.homeLlmProfile);
+  const { data: llmProfiles } = useLlmProfiles();
   const { error: workspacesError } = useLocalWorkspaces({ enabled: isLocal });
   const {
     isolated,
@@ -250,6 +254,13 @@ export function HomeChatLauncher() {
     // nothing attaches unless the user picked it.
     if (!isAutomateMode && selectedPlugins.length > 0) {
       variables = { ...variables, plugins: selectedPlugins };
+    }
+
+    if (
+      homeLlmProfile &&
+      llmProfiles?.profiles.some((profile) => profile.name === homeLlmProfile)
+    ) {
+      variables = { ...variables, llmProfile: homeLlmProfile };
     }
 
     const openAutomationSetupMode = (conversationId: string) => {

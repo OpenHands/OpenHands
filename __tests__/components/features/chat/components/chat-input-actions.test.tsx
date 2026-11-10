@@ -131,7 +131,7 @@ describe("ChatInputActions", () => {
   });
 
   it.each(["local", "cloud"])(
-    "shows only the agent-profile picker on the %s home page",
+    "offers both agent and LLM profiles on the %s home page",
     async (backend) => {
       listAgentProfilesMock.mockResolvedValue({
         profiles: [{ id: "p1", name: "default", agent_kind: "openhands" }],
@@ -151,12 +151,12 @@ describe("ChatInputActions", () => {
       expect(
         await screen.findByTestId("agent-profile-pill-stub"),
       ).toBeVisible();
-      expect(screen.queryByTestId("llm-profile-picker-stub")).toBeNull();
+      expect(screen.getByTestId("llm-profile-picker-stub")).toBeVisible();
       expect(screen.queryByTestId("chat-input-llm-model")).toBeNull();
     },
   );
 
-  it("shows only the agent picker inside a blank local OpenHands conversation", async () => {
+  it("offers both selectors inside a blank local OpenHands conversation", async () => {
     listAgentProfilesMock.mockResolvedValue({
       profiles: [{ id: "p1", name: "default", agent_kind: "openhands" }],
       active_agent_profile_id: "p1",
@@ -171,7 +171,7 @@ describe("ChatInputActions", () => {
     );
 
     expect(await screen.findByTestId("agent-profile-pill-stub")).toBeVisible();
-    expect(screen.queryByTestId("llm-profile-picker-stub")).toBeNull();
+    expect(screen.getByTestId("llm-profile-picker-stub")).toBeVisible();
     expect(screen.queryByTestId("chat-input-llm-model")).toBeNull();
   });
 
@@ -630,7 +630,7 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
     });
   };
 
-  it("keeps a narrow home menu free of model selection", () => {
+  it("keeps the LLM profile available in a narrow home menu", () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
     renderWithProviders(
@@ -645,7 +645,12 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
     expect(getTrigger()).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByTestId("chat-input-overflow-menu")).toBeInTheDocument();
     expect(screen.getByTestId("overflow-agent-button")).toBeInTheDocument();
-    expect(screen.queryByTestId("overflow-model-button")).toBeNull();
+    fireEvent.click(screen.getByTestId("overflow-model-button"));
+    expect(
+      within(screen.getByTestId("overflow-model-submenu")).getByTestId(
+        "llm-profile-menu-stub",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("closes on a second trigger click and on a click outside", () => {

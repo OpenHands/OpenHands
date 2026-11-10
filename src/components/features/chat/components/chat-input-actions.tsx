@@ -81,10 +81,7 @@ export function ChatInputActions({
   const isCloud = backend.kind === "cloud";
   const modelState = useChatInputModelState();
   const llmProfileState = useChatInputLlmProfileState();
-  // Before starting, the agent profile is the sole configuration selector.
-  // Once started, the model picker permits live LLM/model switching.
   const isPreStart = !conversationId || hasStartedConversation === false;
-  const showModelPicker = !isPreStart;
   const agentProfilesForStart = useAgentProfiles({ enabled: isPreStart });
   // A self-hosted instance whose admin turned Agent Profiles off keeps its
   // saved profiles out of the composer (OHE-3934). Cloud and local backends
@@ -141,7 +138,7 @@ export function ChatInputActions({
       !rowEl ||
       !rightEl ||
       !addEl ||
-      (showModelPicker && !modelEl) ||
+      !modelEl ||
       (showChangeAgentButton && !codeEl) ||
       typeof ResizeObserver === "undefined"
     ) {
@@ -155,10 +152,8 @@ export function ChatInputActions({
       if (nextRowWidth > 0) setActionsRowWidth(nextRowWidth);
       if (nextRightWidth > 0) setRightSectionWidth(nextRightWidth);
       if (nextAddWidth > 0) setAddFileWidth(nextAddWidth);
-      if (modelEl) {
-        const nextModelWidth = modelEl.getBoundingClientRect().width;
-        if (nextModelWidth > 0) setModelWidth(nextModelWidth);
-      }
+      const nextModelWidth = modelEl.getBoundingClientRect().width;
+      if (nextModelWidth > 0) setModelWidth(nextModelWidth);
 
       if (codeEl) {
         const nextCodeWidth = codeEl.getBoundingClientRect().width;
@@ -177,9 +172,7 @@ export function ChatInputActions({
     observer.observe(rowEl);
     observer.observe(rightEl);
     observer.observe(addEl);
-    if (modelEl) {
-      observer.observe(modelEl);
-    }
+    observer.observe(modelEl);
     if (codeEl) {
       observer.observe(codeEl);
     }
@@ -190,7 +183,7 @@ export function ChatInputActions({
     syncWidths();
 
     return () => observer.disconnect();
-  }, [showChangeAgentButton, showAgentProfileSwitch, showModelPicker]);
+  }, [showChangeAgentButton, showAgentProfileSwitch]);
 
   const handlePauseAgent = () => {
     if (!conversationId) return;
@@ -223,7 +216,7 @@ export function ChatInputActions({
         remaining -= codeWidth + INLINE_GAP;
       }
 
-      if (showModelPicker && remaining >= modelWidth) {
+      if (remaining >= modelWidth) {
         next.showModelInline = true;
         remaining -= modelWidth + INLINE_GAP;
       }
@@ -238,7 +231,6 @@ export function ChatInputActions({
       showChangeAgentButton,
       codeWidth,
       modelWidth,
-      showModelPicker,
       showAgentProfileSwitch,
       agentProfileWidth,
     ],
@@ -250,7 +242,7 @@ export function ChatInputActions({
   const fitWithoutOverflow = fitOptionalItems(leftBaseWidth);
   const allOptionalFit =
     (!showChangeAgentButton || fitWithoutOverflow.showCodeInline) &&
-    (!showModelPicker || fitWithoutOverflow.showModelInline);
+    fitWithoutOverflow.showModelInline;
 
   const fitWithOverflow = allOptionalFit
     ? fitWithoutOverflow
@@ -281,9 +273,7 @@ export function ChatInputActions({
         (!llmProfileState.canSwitchProfile &&
           Boolean(llmProfileState.currentProfileName));
   const showOverflowModel =
-    showModelPicker &&
-    !showModelInline &&
-    (getLockedCloudHost() === null || hasModelMenuRows);
+    !showModelInline && (getLockedCloudHost() === null || hasModelMenuRows);
 
   const hasOverflowItems =
     !showAddFileInline ||
@@ -543,15 +533,13 @@ export function ChatInputActions({
               <ChatInputAgentProfilePicker />
             </div>
           )}
-          {showModelPicker && (
-            <div ref={modelRef} className={cn(!showModelInline && "hidden")}>
-              {pickerKind === "model" ? (
-                <ChatInputModel />
-              ) : (
-                <ChatInputLlmProfilePicker />
-              )}
-            </div>
-          )}
+          <div ref={modelRef} className={cn(!showModelInline && "hidden")}>
+            {pickerKind === "model" ? (
+              <ChatInputModel />
+            ) : (
+              <ChatInputLlmProfilePicker />
+            )}
+          </div>
 
           {hasOverflowItems && (
             <div className="relative shrink-0">
