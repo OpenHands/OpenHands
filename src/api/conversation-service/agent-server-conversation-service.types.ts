@@ -241,6 +241,12 @@ export interface AppConversation {
   active_profile?: string | null;
   public?: boolean;
   sub_conversation_ids: string[];
+  /**
+   * The parent conversation's id when this is a delegated subagent
+   * conversation (agent-server >= 1.37.1, SDK #4188). Null/undefined for
+   * top-level conversations and older servers that omit the field.
+   */
+  parent_conversation_id?: string | null;
 }
 
 export interface AppConversationPage {

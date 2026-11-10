@@ -84,6 +84,17 @@ interface ConversationCardProps {
   onTogglePin?: () => void;
   /** When true and pinned, keep the pin icon visible without hovering. */
   alwaysShowPinIcon?: boolean;
+  /**
+   * The parent conversation's id when this is a delegated subagent
+   * conversation. Triggers the subagent chip.
+   */
+  parentConversationId?: string | null;
+  /**
+   * The parent conversation's title when known. Rendered inside the subagent
+   * chip to associate child with parent; falls back to generic subagent text
+   * when omitted.
+   */
+  parentConversationTitle?: string | null;
 }
 
 export function ConversationCard({
@@ -122,6 +133,8 @@ export function ConversationCard({
   isPinned = false,
   onTogglePin,
   alwaysShowPinIcon = false,
+  parentConversationId = null,
+  parentConversationTitle = null,
 }: ConversationCardProps) {
   const { t } = useTranslation("openhands");
   const { trackDownloadVsCodeButtonClicked } = useTracking();
@@ -285,7 +298,8 @@ export function ConversationCard({
     showRepositoryMetadata ||
     effectiveArchived ||
     (showLlmProfiles && (agentKind === "acp" || !!llmModel)) ||
-    (showTagChipRow && displayTags.length > 0);
+    (showTagChipRow && displayTags.length > 0) ||
+    !!parentConversationId;
 
   return (
     <div
@@ -438,6 +452,8 @@ export function ConversationCard({
           tags={tags}
           showTags={showTagChipRow}
           isArchived={effectiveArchived}
+          parentConversationId={parentConversationId}
+          parentConversationTitle={parentConversationTitle}
         />
       )}
     </div>

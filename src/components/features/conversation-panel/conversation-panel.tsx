@@ -318,6 +318,14 @@ export function ConversationPanel({
     return uniqueById(all);
   }, [data]);
 
+  const conversationById = React.useMemo(() => {
+    const map = new Map<string, (typeof allLoadedConversations)[number]>();
+    for (const conversation of allLoadedConversations) {
+      map.set(conversation.id, conversation);
+    }
+    return map;
+  }, [allLoadedConversations]);
+
   const listedConversationIds = React.useMemo(
     () => allLoadedConversations.map((conversation) => conversation.id),
     [allLoadedConversations],
@@ -1082,6 +1090,12 @@ export function ConversationPanel({
         conversation.id,
         conversation.title,
       );
+      const parentConversation = conversation.parent_conversation_id
+        ? conversationById.get(conversation.parent_conversation_id)
+        : null;
+      const parentConversationTitle = parentConversation
+        ? getTitle(parentConversation.id, parentConversation.title).title
+        : null;
       const isPinned = pinnedIds.includes(conversation.id);
       // Presentation: a row looks archived when the user archived it or its
       // runtime is missing and non-resumable. This single predicate drives list
@@ -1129,6 +1143,8 @@ export function ConversationPanel({
             tags={conversation.tags}
             showTags={showTagsMetadata}
             isArchived={isArchived}
+            parentConversationId={conversation.parent_conversation_id}
+            parentConversationTitle={parentConversationTitle}
           />
         );
       }
@@ -1160,6 +1176,7 @@ export function ConversationPanel({
                 ) ?? null)
               : undefined
           }
+          parentConversationTitle={parentConversationTitle}
           onClose={onClose}
           prefetchConversation={prefetchConversation}
           handleDeleteProject={handleDeleteProject}
@@ -1201,6 +1218,7 @@ export function ConversationPanel({
       showLlmProfiles,
       showTagsMetadata,
       showHoverMetadata,
+      conversationById,
     ],
   );
 

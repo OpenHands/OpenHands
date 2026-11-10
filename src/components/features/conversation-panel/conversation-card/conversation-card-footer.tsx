@@ -22,7 +22,12 @@ import { getDisplayConversationTags } from "#/api/agent-server-adapter";
 import { ConversationRepoLink } from "./conversation-repo-link";
 import { NoRepository } from "./no-repository";
 import { ConversationTagChips } from "./conversation-tag-chips";
-import { CONVERSATION_CARD_META_CHIP_CLASSNAME } from "./conversation-card-meta-chip";
+import { Bot } from "lucide-react";
+import {
+  CONVERSATION_CARD_META_CHIP_CLASSNAME,
+  CONVERSATION_CARD_META_CHIP_ICON_SLOT_CLASSNAME,
+  CONVERSATION_CARD_META_CHIP_ICON_CLASSNAME,
+} from "./conversation-card-meta-chip";
 
 interface ConversationCardFooterProps {
   selectedRepository: RepositorySelection | null;
@@ -73,6 +78,17 @@ interface ConversationCardFooterProps {
    * the user why an otherwise ordinary row is visible.
    */
   isArchived?: boolean;
+  /**
+   * The parent conversation's id when this is a delegated subagent
+   * conversation. Triggers the subagent chip.
+   */
+  parentConversationId?: string | null;
+  /**
+   * The parent conversation's title when known. Rendered inside the subagent
+   * chip to associate child with parent; falls back to generic subagent text
+   * when omitted.
+   */
+  parentConversationTitle?: string | null;
 }
 
 export function ConversationCardFooter({
@@ -91,6 +107,8 @@ export function ConversationCardFooter({
   tags = null,
   showTags = false,
   isArchived = false,
+  parentConversationId = null,
+  parentConversationTitle = null,
 }: ConversationCardFooterProps) {
   const { t } = useTranslation("openhands");
   const freeModels = useFreeModels();
@@ -187,6 +205,35 @@ export function ConversationCardFooter({
               <AgentBrandIcon kind={chip.kind} size={12} />
             </span>
             <span className="truncate leading-4">{chip.text}</span>
+          </span>
+        </div>
+      ) : null}
+      {parentConversationId ? (
+        <div className={metadataIndentClass}>
+          <span
+            data-testid="conversation-card-subagent-chip"
+            className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
+            title={
+              parentConversationTitle
+                ? t(I18nKey.CONVERSATION$SUBAGENT_OF, {
+                    parent: parentConversationTitle,
+                  })
+                : t(I18nKey.CONVERSATION$SUBAGENT)
+            }
+          >
+            <span
+              className={CONVERSATION_CARD_META_CHIP_ICON_SLOT_CLASSNAME}
+              aria-hidden
+            >
+              <Bot className={CONVERSATION_CARD_META_CHIP_ICON_CLASSNAME} />
+            </span>
+            <span className="truncate leading-4">
+              {parentConversationTitle
+                ? t(I18nKey.CONVERSATION$SUBAGENT_OF, {
+                    parent: parentConversationTitle,
+                  })
+                : t(I18nKey.CONVERSATION$SUBAGENT)}
+            </span>
           </span>
         </div>
       ) : null}

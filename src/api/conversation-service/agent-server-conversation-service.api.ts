@@ -370,6 +370,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     sub_conversation_ids: normalizeSubConversationIds(
       item.sub_conversation_ids,
     ),
+    parent_conversation_id: stringOrNull(item.parent_conversation_id),
     // SDK-runtime ACP model fields (populated when the agent-server supports
     // ``ConversationInfo.current_model_*``). Consumed by the conversation
     // adapter to drive the per-card chip's model text. Older agent-servers

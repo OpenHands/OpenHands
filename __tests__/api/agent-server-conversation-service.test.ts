@@ -1409,6 +1409,47 @@ describe("AgentServerConversationService", () => {
       expect(conversation?.sandbox_status).toBeNull();
     });
 
+    it("preserves parent_conversation_id from searchConversations response", async () => {
+      const searchSpy = vi.fn().mockResolvedValue({
+        items: [
+          {
+            id: "conv-subagent",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            parent_conversation_id: "conv-parent-1",
+          },
+        ],
+        next_page_id: null,
+      });
+      mockConversationClient.mockReturnValue({
+        searchConversations: searchSpy,
+      });
+
+      const result =
+        await AgentServerConversationService.searchConversations(10);
+
+      expect(result.items[0]?.parent_conversation_id).toBe("conv-parent-1");
+    });
+
+    it("passes parent_conversation_id null through when field is absent", async () => {
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-top-level",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+          },
+        ],
+      });
+
+      const [conversation] =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-top-level",
+        ]);
+
+      expect(conversation?.parent_conversation_id).toBeNull();
+    });
+
     it("archives a local conversation whose runtime cannot resume", async () => {
       mockHttpGet.mockResolvedValue({
         data: [

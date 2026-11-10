@@ -35,7 +35,7 @@ vi.mock("react-i18next", async () => {
   return {
     ...actual,
     useTranslation: () => ({
-      t: (key: string) => {
+      t: (key: string, options?: Record<string, unknown>) => {
         const translations: Record<string, string> = {
           CONVERSATION$CREATED: "Created",
           CONVERSATION$AGO: "ago",
@@ -43,6 +43,10 @@ vi.mock("react-i18next", async () => {
           CONVERSATION$ACP_AGENT_GENERIC: "ACP",
           CONVERSATION_PANEL$PIN_CONVERSATION: "Pin conversation",
           CONVERSATION_PANEL$UNPIN_CONVERSATION: "Unpin conversation",
+          CONVERSATION$SUBAGENT: "Subagent",
+          CONVERSATION$SUBAGENT_OF: options?.parent
+            ? `Subagent of ${options.parent as string}`
+            : "Subagent",
         };
         return translations[key] || key;
       },
@@ -1395,5 +1399,55 @@ describe("ConversationCard", () => {
     expect(
       within(card).getByTestId("conversation-card-archived-chip"),
     ).toBeInTheDocument();
+  });
+
+  it("renders subagent chip with parent title when parent conversation is provided", () => {
+    renderWithProviders(
+      <ConversationCard
+        title="Subagent Task"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        parentConversationId="parent-123"
+        parentConversationTitle="Main Investigation"
+      />,
+    );
+
+    const card = screen.getByTestId("conversation-card");
+    const chip = within(card).getByTestId("conversation-card-subagent-chip");
+    expect(chip).toBeInTheDocument();
+    expect(chip).toHaveTextContent("Subagent of Main Investigation");
+    expect(chip).toHaveAttribute("title", "Subagent of Main Investigation");
+  });
+
+  it("falls back to generic subagent text when parent title is omitted", () => {
+    renderWithProviders(
+      <ConversationCard
+        title="Subagent Task"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        parentConversationId="parent-123"
+      />,
+    );
+
+    const card = screen.getByTestId("conversation-card");
+    const chip = within(card).getByTestId("conversation-card-subagent-chip");
+    expect(chip).toBeInTheDocument();
+    expect(chip).toHaveTextContent("Subagent");
+    expect(chip).toHaveAttribute("title", "Subagent");
+  });
+
+  it("does not render subagent chip for top-level conversations", () => {
+    renderWithProviders(
+      <ConversationCard
+        title="Top Level Conversation"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+      />,
+    );
+
+    const card = screen.getByTestId("conversation-card");
+    expect(
+      within(card).queryByTestId("conversation-card-subagent-chip"),
+    ).not.toBeInTheDocument();
   });
 });

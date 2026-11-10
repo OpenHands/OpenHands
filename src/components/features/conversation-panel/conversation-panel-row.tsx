@@ -29,6 +29,7 @@ interface ConversationPanelRowProps {
   showLlmProfiles: boolean;
   showTagsMetadata: boolean;
   agentProfileName: string | null | undefined;
+  parentConversationTitle?: string | null;
   onClose?: () => void;
   prefetchConversation: (id: string) => Promise<void>;
   handleDeleteProject: (id: string, title: string) => void;
@@ -60,6 +61,7 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
   showLlmProfiles,
   showTagsMetadata,
   agentProfileName,
+  parentConversationTitle,
   onClose,
   prefetchConversation,
   handleDeleteProject,
@@ -109,6 +111,8 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
           agentProfileName={agentProfileName}
           tags={conversation.tags}
           isArchived={isArchived}
+          isSubagent={!!conversation.parent_conversation_id}
+          parentConversationTitle={parentConversationTitle}
         />
       }
     >
@@ -196,6 +200,8 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
           isPinned={isPinned}
           onTogglePin={() => handleTogglePin(conversation)}
           alwaysShowPinIcon={isPinned && !inPinnedSection}
+          parentConversationId={conversation.parent_conversation_id}
+          parentConversationTitle={parentConversationTitle}
         />
       </NavigationLink>
     </Tooltip>

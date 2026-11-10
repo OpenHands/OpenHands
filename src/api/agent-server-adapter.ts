@@ -169,6 +169,12 @@ export interface DirectConversationInfo {
    * hint. Absent on older agent-servers and on the cloud wire shape.
    */
   sub_conversation_ids?: string[] | null;
+  /**
+   * Server-owned parent conversation id for delegated subagent conversations
+   * (agent-server >= 1.37.1, SDK #4188). Null/undefined for top-level
+   * conversations.
+   */
+  parent_conversation_id?: string | null;
 }
 
 // Falls back to the same default the code agent uses when the user has not
@@ -506,6 +512,7 @@ export function toAppConversation(
     },
     public: false,
     sub_conversation_ids: info.sub_conversation_ids ?? [],
+    parent_conversation_id: info.parent_conversation_id ?? null,
   };
 }
 

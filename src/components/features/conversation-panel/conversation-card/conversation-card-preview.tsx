@@ -1,6 +1,6 @@
 import { ConversationTitleText } from "#/components/features/conversation/conversation-title-text";
 import type { ReactNode } from "react";
-import { Folder } from "lucide-react";
+import { Folder, Bot } from "lucide-react";
 import { FaBitbucket, FaGithub, FaGitlab } from "react-icons/fa6";
 import { FaCodeBranch } from "react-icons/fa";
 import type { IconType } from "react-icons/lib";
@@ -58,6 +58,10 @@ interface ConversationCardPreviewProps {
    * runtime).
    */
   isArchived?: boolean;
+  /** True when this conversation is a delegated subagent. */
+  isSubagent?: boolean;
+  /** Parent conversation title if available. */
+  parentConversationTitle?: string | null;
 }
 
 const providerIcon: Partial<Record<Provider, IconType>> = {
@@ -136,6 +140,8 @@ export function ConversationCardPreview({
   agentProfileName,
   tags = null,
   isArchived,
+  isSubagent = false,
+  parentConversationTitle = null,
 }: ConversationCardPreviewProps) {
   const { t } = useTranslation("openhands");
 
@@ -238,6 +244,21 @@ export function ConversationCardPreview({
             <span data-testid="conversation-card-preview-agent-profile">
               {agentProfileName ?? agentProfileId}
             </span>
+          </PreviewRow>
+        ) : null}
+
+        {isSubagent ? (
+          <PreviewRow label={t(I18nKey.CONVERSATION$SUBAGENT)}>
+            <PreviewValueWithIcon
+              testId="conversation-card-preview-subagent"
+              icon={<Bot size={12} />}
+            >
+              {parentConversationTitle
+                ? t(I18nKey.CONVERSATION$SUBAGENT_OF, {
+                    parent: parentConversationTitle,
+                  })
+                : t(I18nKey.CONVERSATION$SUBAGENT)}
+            </PreviewValueWithIcon>
           </PreviewRow>
         ) : null}
 

@@ -40,6 +40,8 @@ interface CompactConversationRowProps {
    * explicit value so the chip and dot agree with the full card.
    */
   isArchived?: boolean;
+  parentConversationId?: string | null;
+  parentConversationTitle?: string | null;
 }
 
 /**
@@ -68,6 +70,8 @@ export function CompactConversationRow({
   tags = null,
   showTags = false,
   isArchived,
+  parentConversationId = null,
+  parentConversationTitle = null,
 }: CompactConversationRowProps) {
   const { t } = useTranslation("openhands");
   const backendScopedPath = useBackendScopedPath();
@@ -108,6 +112,8 @@ export function CompactConversationRow({
         tags={tags}
         showTags={showTags}
         isArchived={effectiveArchived}
+        parentConversationId={parentConversationId}
+        parentConversationTitle={parentConversationTitle}
       />
     </div>
   );
