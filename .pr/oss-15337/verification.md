@@ -15,7 +15,7 @@ Disabled form reaches review. Phone dialog inside viewport, no horizontal overfl
 
 Reproduce with the checked-in verify-openhands CLI and fixture:
 1. Launch baseline/fixed checkout with `control-openhands launch --new`, doctor, browser start, onboard --skip.
-2. `node .agents/skills/verify-openhands/scripts/fixtures/profile-availability.mjs RUN [PORT]` on a loopback-only free port.
+2. `node .pr/oss-15337/profile-availability.mjs RUN [PORT]` on a loopback-only free port.
 3. Arrange a diagnostic cloud backend in this owned browser only, with dummy `diagnostic-placeholder` key and facade host, using backend-registry storage keys.
 4. Set RUN/private/profile-policy.json to {"enabled":false} or {"enabled":true}; full navigate `/automations/new/news-digest` between states to clear query caches. For missing runtime support use {"enabled":true,"automationProfiles":false}.
 5. `browser count testid=automation-agent-profile`, screenshot; enabled: choose default. Disabled: Continue → setup-review. Repeat phone.
