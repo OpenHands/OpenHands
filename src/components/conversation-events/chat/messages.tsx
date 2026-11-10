@@ -49,6 +49,7 @@ import {
   measurePlainRow,
   measuredAverage,
   shouldAnchorScroll,
+  type PendingScrollCorrection,
 } from "./scroll-anchoring";
 import type { SecretRequest } from "#/stores/secret-request-store";
 import {
@@ -775,29 +776,42 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // would clamp to the old `scrollHeight` and lose the excess. Buffer the
     // deltas, report "no correction" to the virtualizer, and re-pin once the
     // shell's total size has actually changed (the layout effect below).
-    const pendingScrollCorrectionRef = React.useRef(0);
+    const pendingScrollCorrectionRef =
+      React.useRef<PendingScrollCorrection | null>(null);
     rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = (
       item,
       delta,
       instance,
     ) => {
-      if (!shouldAnchorScroll(item, delta, instance)) return false;
-      pendingScrollCorrectionRef.current += delta;
+      const correction = shouldAnchorScroll(item, delta, instance);
+      if (!correction) return false;
+      const buffered = pendingScrollCorrectionRef.current;
+      pendingScrollCorrectionRef.current = buffered
+        ? {
+            delta: buffered.delta + correction.delta,
+            pinned: correction.pinned,
+          }
+        : correction;
       return false;
     };
 
     // Re-pin once the total size has changed, when `scrollTop + delta` is no
     // longer clamped by the old height. A batch of corrections in one commit
     // composes instead of each being lost, and any excess the new height still
-    // cannot absorb stays buffered for the next change rather than dropping.
+    // cannot absorb stays buffered for the next change rather than dropping. A
+    // pinned reader is landed on the new bottom directly (see the helper): a
+    // shrinking row at the bottom lowers the maximum, so the browser has
+    // already clamped the offset and adding the delta again would overshoot.
     const totalSize = rowVirtualizer.getTotalSize();
     React.useLayoutEffect(() => {
       const pending = pendingScrollCorrectionRef.current;
-      if (pending === 0) return;
+      if (!pending) return;
       const element = scrollParent as HTMLElement | null;
       if (!element) return;
-      const applied = applyBufferedScrollCorrection(element, pending);
-      pendingScrollCorrectionRef.current = pending - applied;
+      const consumed = applyBufferedScrollCorrection(element, pending);
+      const remaining = pending.delta - consumed;
+      pendingScrollCorrectionRef.current =
+        remaining === 0 ? null : { delta: remaining, pinned: pending.pinned };
     }, [scrollParent, totalSize]);
 
     // With a scroll container, rows can cross the virtualization threshold

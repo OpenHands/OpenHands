@@ -108,9 +108,10 @@ describe("shouldAnchorScroll", () => {
   it("corrects a row above the viewport so the content under it stays put", () => {
     const { instance } = makeInstance(500, 400, 1000);
 
-    expect(shouldAnchorScroll({ start: 100, end: 150 }, 50, instance)).toBe(
-      true,
-    );
+    expect(shouldAnchorScroll({ start: 100, end: 150 }, 50, instance)).toEqual({
+      delta: 50,
+      pinned: false,
+    });
   });
 
   it("follows a row that grows while the reader is pinned to the bottom", () => {
@@ -118,17 +119,17 @@ describe("shouldAnchorScroll", () => {
     // the reader is pinned and the row's growth must be followed.
     const { instance } = makeInstance(600, 400, 1000);
 
-    expect(shouldAnchorScroll({ start: 800, end: 1000 }, 200, instance)).toBe(
-      true,
-    );
+    expect(
+      shouldAnchorScroll({ start: 800, end: 1000 }, 200, instance),
+    ).toEqual({ delta: 200, pinned: true });
   });
 
   it("leaves a row below the viewport alone when the reader is not pinned", () => {
     const { instance } = makeInstance(0, 400, 1000);
 
-    expect(shouldAnchorScroll({ start: 800, end: 1000 }, 200, instance)).toBe(
-      false,
-    );
+    expect(
+      shouldAnchorScroll({ start: 800, end: 1000 }, 200, instance),
+    ).toBeNull();
   });
 
   it("does not treat a visible row's growth as pinned when the reader is away from the bottom", () => {
@@ -139,9 +140,9 @@ describe("shouldAnchorScroll", () => {
     // new 200px (`scrollHeight - delta` = 800) would wrongly move the offset.
     const { instance } = makeInstance(500, 400, 1000);
 
-    expect(shouldAnchorScroll({ start: 600, end: 800 }, 200, instance)).toBe(
-      false,
-    );
+    expect(
+      shouldAnchorScroll({ start: 600, end: 800 }, 200, instance),
+    ).toBeNull();
   });
 
   it("tolerates a change within the bottom threshold", () => {
@@ -149,8 +150,11 @@ describe("shouldAnchorScroll", () => {
     // bottom, which still counts as pinned.
     const { instance } = makeInstance(600 - BOTTOM_THRESHOLD_PX, 400, 1000);
 
-    expect(shouldAnchorScroll({ start: 800, end: 900 }, 100, instance)).toBe(
-      true,
+    expect(shouldAnchorScroll({ start: 800, end: 900 }, 100, instance)).toEqual(
+      {
+        delta: 100,
+        pinned: true,
+      },
     );
   });
 
@@ -161,17 +165,18 @@ describe("shouldAnchorScroll", () => {
     // top of the screen.
     const { instance } = makeInstance(100, 400, 1000);
 
-    expect(shouldAnchorScroll({ start: 85, end: 121 }, 81, instance)).toBe(
-      false,
-    );
+    expect(
+      shouldAnchorScroll({ start: 85, end: 121 }, 81, instance),
+    ).toBeNull();
   });
 
   it("still corrects a row entirely above the viewport", () => {
     const { instance } = makeInstance(200, 400, 1000);
 
-    expect(shouldAnchorScroll({ start: 100, end: 200 }, 81, instance)).toBe(
-      true,
-    );
+    expect(shouldAnchorScroll({ start: 100, end: 200 }, 81, instance)).toEqual({
+      delta: 81,
+      pinned: false,
+    });
   });
 
   it("does nothing without a scroll element or for a zero delta", () => {
@@ -179,25 +184,31 @@ describe("shouldAnchorScroll", () => {
       shouldAnchorScroll({ start: 0, end: 10 }, 10, {
         scrollElement: null,
       }),
-    ).toBe(false);
+    ).toBeNull();
 
     const { instance } = makeInstance(100, 400, 1000);
-    expect(shouldAnchorScroll({ start: 0, end: 10 }, 0, instance)).toBe(false);
+    expect(shouldAnchorScroll({ start: 0, end: 10 }, 0, instance)).toBeNull();
   });
 });
 
 describe("applyBufferedScrollCorrection", () => {
-  const elementAt = (scrollTop: number, clientHeight: number, scrollHeight: number) => {
+  const elementAt = (
+    scrollTop: number,
+    clientHeight: number,
+    scrollHeight: number,
+  ) => {
     const element = { scrollTop, clientHeight, scrollHeight };
     return element as unknown as HTMLElement;
   };
 
   it("applies the whole pending correction once the shell can absorb it", () => {
-    // The shell has already grown, so `scrollTop + pending` is inside the new
+    // The shell has already grown, so `scrollTop + delta` is inside the new
     // maximum and nothing is clamped.
     const element = elementAt(100, 400, 1000);
 
-    expect(applyBufferedScrollCorrection(element, 50)).toBe(50);
+    expect(
+      applyBufferedScrollCorrection(element, { delta: 50, pinned: false }),
+    ).toBe(50);
     expect(element.scrollTop).toBe(150);
   });
 
@@ -206,28 +217,64 @@ describe("applyBufferedScrollCorrection", () => {
     // bug was losing that 200px with nothing to retry it.
     const element = elementAt(500, 400, 1000);
 
-    expect(applyBufferedScrollCorrection(element, 300)).toBe(100);
+    expect(
+      applyBufferedScrollCorrection(element, { delta: 300, pinned: false }),
+    ).toBe(100);
     expect(element.scrollTop).toBe(600);
   });
 
   it("applies a negative correction when rows above shrink", () => {
     const element = elementAt(200, 400, 1000);
 
-    expect(applyBufferedScrollCorrection(element, -50)).toBe(-50);
+    expect(
+      applyBufferedScrollCorrection(element, { delta: -50, pinned: false }),
+    ).toBe(-50);
     expect(element.scrollTop).toBe(150);
   });
 
   it("clamps the offset to the container's top", () => {
     const element = elementAt(20, 400, 1000);
 
-    expect(applyBufferedScrollCorrection(element, -100)).toBe(-20);
+    expect(
+      applyBufferedScrollCorrection(element, { delta: -100, pinned: false }),
+    ).toBe(-20);
     expect(element.scrollTop).toBe(0);
   });
 
   it("does nothing for a zero pending", () => {
     const element = elementAt(120, 400, 1000);
 
-    expect(applyBufferedScrollCorrection(element, 0)).toBe(0);
+    expect(
+      applyBufferedScrollCorrection(element, { delta: 0, pinned: false }),
+    ).toBe(0);
     expect(element.scrollTop).toBe(120);
+  });
+
+  it("keeps a pinned reader at the bottom when a group collapses", () => {
+    // Collapsing a group at the bottom shrinks the shell, so the browser has
+    // already clamped the offset from 600 to the new maximum 400 before the
+    // correction runs. Subtracting the -200 delta again would land the reader
+    // at 200, 200px above the newest messages (and off the bottom). A pinned
+    // reader belongs at the new bottom, and the whole delta is consumed.
+    const element = elementAt(400, 400, 800);
+
+    expect(
+      applyBufferedScrollCorrection(element, { delta: -200, pinned: true }),
+    ).toBe(-200);
+    expect(element.scrollTop).toBe(400);
+    expect(
+      element.scrollHeight - element.clientHeight - element.scrollTop,
+    ).toBe(0);
+  });
+
+  it("keeps a pinned reader at the bottom when a row above grows", () => {
+    // A pinned reader belongs at the bottom for a growth too: land on the new
+    // maximum rather than adding the delta to a possibly-clamped offset.
+    const element = elementAt(600, 400, 1200);
+
+    expect(
+      applyBufferedScrollCorrection(element, { delta: 200, pinned: true }),
+    ).toBe(200);
+    expect(element.scrollTop).toBe(800);
   });
 });

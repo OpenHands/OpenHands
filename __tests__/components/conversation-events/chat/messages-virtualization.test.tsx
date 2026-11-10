@@ -1056,6 +1056,120 @@ describe("Messages virtualization", () => {
     );
   });
 
+  it("keeps a pinned reader at the bottom when a visible group collapses", async () => {
+    // Shrinking a row at the bottom lowers the maximum offset, so the browser
+    // clamps `scrollTop` down to it before the buffered correction runs. Adding
+    // the (negative) delta again would drop the reader a further `delta` above
+    // the newest messages and turn off auto-follow. The scroll container here
+    // clamps on read, like a real one.
+    const ROW_COUNT = 200;
+    const ESTIMATE = 120;
+    const VIEWPORT = 600;
+    let rowHeight = 200;
+
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const testId = this.getAttribute("data-testid");
+        const height =
+          testId === "virtualized-message-row"
+            ? rowHeight
+            : testId === "scroll-parent"
+              ? VIEWPORT
+              : 0;
+        return {
+          width: 800,
+          height,
+          top: 0,
+          left: 0,
+          right: 800,
+          bottom: height,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      },
+    );
+    const scrollTo = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      writable: true,
+      value: scrollTo,
+    });
+
+    // Capture the virtualizer's observer callback so a resize can be delivered
+    // on demand (jsdom fires none).
+    let deliverResize: ResizeObserverCallback | undefined;
+    class CapturingResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        deliverResize = callback;
+      }
+
+      observe() {}
+
+      unobserve() {}
+
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", CapturingResizeObserver);
+
+    renderMessages(buildEvents(ROW_COUNT));
+    const parent = screen.getByTestId("scroll-parent");
+    const shell = screen.getByTestId("virtualized-message-list");
+    const shellHeight = () => Number.parseInt(shell.style.height || "0", 10);
+
+    let scrollTop = 0;
+    Object.defineProperty(parent, "clientHeight", {
+      configurable: true,
+      get: () => VIEWPORT,
+    });
+    Object.defineProperty(parent, "scrollHeight", {
+      configurable: true,
+      get: () => shellHeight(),
+    });
+    // A real scroll container clamps the stored offset to the current maximum,
+    // so shrinking the shell lowers what this reads before any correction runs.
+    Object.defineProperty(parent, "scrollTop", {
+      configurable: true,
+      get: () => Math.min(scrollTop, Math.max(0, shellHeight() - VIEWPORT)),
+      set: (value: number) => {
+        scrollTop = value;
+      },
+    });
+
+    // Park the reader at the bottom, where the tail rows mount and measure tall.
+    await waitFor(() =>
+      expect(shellHeight()).toBeGreaterThan(ROW_COUNT * ESTIMATE),
+    );
+    act(() => {
+      scrollTop = shellHeight() - VIEWPORT;
+      fireEvent.scroll(parent);
+    });
+    await waitFor(() =>
+      expect(parent.scrollHeight - parent.clientHeight - parent.scrollTop).toBe(
+        0,
+      ),
+    );
+
+    // Collapse the visible rows: they shrink, lowering the shell and the max.
+    rowHeight = 80;
+    const rows = screen.getAllByTestId("virtualized-message-row");
+    act(() => {
+      deliverResize?.(
+        rows.map((target) => ({ target })) as unknown as ResizeObserverEntry[],
+        {} as ResizeObserver,
+      );
+    });
+
+    // The reader stays pinned to the new (shorter) bottom instead of being
+    // pushed above the newest messages by the already-applied clamp.
+    await waitFor(() =>
+      expect(parent.scrollHeight - parent.clientHeight - parent.scrollTop).toBe(
+        0,
+      ),
+    );
+    expect(scrollTop).toBe(shellHeight() - VIEWPORT);
+  });
+
   it("agrees with the plain list about the last group's summary", () => {
     // A group followed only by a planning observation that is not the phase's
     // PLAN.md preview renders nothing in the virtualized list. The tail must be

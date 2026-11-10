@@ -121,11 +121,19 @@ interface SizeChangeInstance {
   scrollElement: Element | null;
 }
 
+/** A row size change to apply once the shell has re-rendered at its new height. */
+export interface PendingScrollCorrection {
+  /** Signed sum of the (measured - estimated) deltas in this batch. */
+  delta: number;
+  /** The reader was pinned to the bottom before the change. */
+  pinned: boolean;
+}
+
 /**
  * Whether a row measured at a height other than its estimate needs a scroll
- * correction to keep the reader's place. A pure decision: the caller
- * accumulates the deltas and applies them once the shell has re-rendered at its
- * new total height.
+ * correction to keep the reader's place, and whether the reader was pinned to
+ * the bottom. A pure decision: the caller accumulates the deltas and applies
+ * them once the shell has re-rendered at its new total height.
  *
  * Writing `scrollTop` here instead would clamp: during the commit that measures
  * the row the shell still has the old total height, so `offset + delta` is
@@ -141,9 +149,9 @@ export const shouldAnchorScroll = (
   item: Pick<VirtualItem, "start" | "end">,
   delta: number,
   instance: SizeChangeInstance,
-): boolean => {
+): PendingScrollCorrection | null => {
   const element = instance.scrollElement as HTMLElement | null;
-  if (!element || delta === 0) return false;
+  if (!element || delta === 0) return null;
 
   const offset = element.scrollTop;
   // Pinning is judged from the geometry *before* the change: the shell has not
@@ -151,38 +159,49 @@ export const shouldAnchorScroll = (
   // pre-change total and the new size is not in it.
   const pinned =
     offset + element.clientHeight >= element.scrollHeight - BOTTOM_THRESHOLD_PX;
-  if (item.start >= offset && !pinned) return false;
+  if (item.start >= offset && !pinned) return null;
 
   // Only a row *entirely* above the viewport shifts the content under it. A row
   // that straddles the top edge (its end is below the offset) is what the
   // reader is looking at — a group they just expanded — and the plain list
   // leaves it where it is. Adding its whole growth to `scrollTop` would push
   // the thing they opened out of view.
-  if (!pinned && item.end > offset) return false;
+  if (!pinned && item.end > offset) return null;
 
-  return true;
+  return { delta, pinned };
 };
 
 /**
  * Applies a buffered size-change correction to the scroll container and returns
- * the amount applied, or `0` when there is nothing to apply.
+ * the amount consumed from the buffer (so the caller keeps any excess for the
+ * next change), or `0` when there is nothing to apply.
  *
  * The correction has to wait until the shell has re-rendered at its new total
  * height: writing it in the measuring commit would clamp `scrollTop` to the old
- * `scrollHeight` and silently lose the excess. `pending` may be negative (rows
- * above shrank). When it would push the offset above the new maximum the clamp
- * still applies, and the applied amount is reported so the caller knows how
+ * `scrollHeight` and silently lose the excess. `pending.delta` may be negative
+ * (rows shrank). When it would push the offset above the new maximum the clamp
+ * still applies, and the consumed amount is reported so the caller knows how
  * much actually landed.
+ *
+ * A pinned reader belongs at the bottom, and the shrink case is why this can't
+ * simply add the delta: shrinking a row at the bottom lowers the maximum offset,
+ * so the browser clamps `scrollTop` down to it *before* this runs. Adding the
+ * (negative) delta again would drop the reader a further `delta` above the
+ * newest messages — and off the bottom, turning off auto-follow. Landing on the
+ * new maximum absorbs that clamp as the correction and consumes the whole
+ * delta, so nothing is retried.
  */
 export const applyBufferedScrollCorrection = (
   container: Pick<HTMLElement, "scrollTop" | "scrollHeight" | "clientHeight">,
-  pending: number,
+  pending: PendingScrollCorrection,
 ): number => {
-  if (pending === 0) return 0;
+  if (pending.delta === 0) return 0;
   const element = container;
   const max = Math.max(0, element.scrollHeight - element.clientHeight);
-  const target = Math.min(Math.max(0, element.scrollTop + pending), max);
-  const applied = target - element.scrollTop;
+  const target = pending.pinned
+    ? max
+    : Math.min(Math.max(0, element.scrollTop + pending.delta), max);
+  const consumed = pending.pinned ? pending.delta : target - element.scrollTop;
   element.scrollTop = target;
-  return applied;
+  return consumed;
 };
