@@ -130,6 +130,8 @@ export default [
 
   // Base JS recommended rules.
   js.configs.recommended,
+  // Keep the existing rule set while using @eslint/js 10's recommended config.
+  { rules: { "no-useless-assignment": "off", "preserve-caught-error": "off" } },
 
   // `eslint-plugin-import-x` ships flat configs directly. The rules are
   // registered under both `import-x/*` and `import/*` aliases so existing
