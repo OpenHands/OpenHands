@@ -1,4 +1,12 @@
-import type { AutomationUpdate } from "#/types/automation";
+import type {
+  AutomationUpdate,
+  Automation,
+  AutomationRun,
+} from "#/types/automation";
+import {
+  statusToneBadgeClassName,
+  statusToneBannerClassName,
+} from "#/utils/status-tone-classes";
 import {
   useCallback,
   useEffect,
@@ -8,7 +16,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -109,7 +117,6 @@ import type {
   DeploymentCapabilities,
   SetupRequestBody,
 } from "#/manifests/types";
-import type { Automation, AutomationRun } from "#/types/automation";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { ActivityLogItem } from "../detail/activity-log-item";
 import { requestAutomationSetupAgent } from "./automation-setup-agent-request";
@@ -149,6 +156,7 @@ const DEFAULT_EVENT_SOURCE = "github";
 const REPO_UPDATE_FEATURE = "repoUpdate";
 const PLUGIN_CONFIG_UPDATE_FEATURE = "pluginConfigUpdate";
 const AGENT_PROFILES_FEATURE = "agentProfiles";
+const PRESET_AGENT_PROFILES_FEATURE = "presetAgentProfiles";
 /**
  * Used when the deployment has not advertised its event sources yet. These are
  * the automation service's built-in providers, which it reserves as source
@@ -541,7 +549,10 @@ function DraftStatusBar({
     "max-w-full min-w-0 whitespace-normal rounded-full px-2.5 py-0.5 text-left text-xs leading-4",
     validationMessage
       ? "w-fit bg-feedback-error/5 text-feedback-error"
-      : "bg-semantic-success/10 text-semantic-success",
+      : cn(
+          statusToneBadgeClassName.success,
+          "dark:bg-semantic-success/10 dark:text-semantic-success",
+        ),
   );
 
   return (
@@ -1116,13 +1127,13 @@ export function AutomationSetupPanel({
   const hasExistingCustomBundle = Boolean(
     isEditingExisting && kind === "custom" && existingCustomTarballPath.trim(),
   );
-  // Only uploaded-script automations run from an agent profile; the prompt
-  // and plugin presets reject the field (OpenHands/automation#615 tracks it).
-  const canSelectAgentProfile =
-    kind === "custom" &&
-    (deploymentCapabilities.data?.features ?? []).includes(
-      AGENT_PROFILES_FEATURE,
-    );
+  // Services that run scripts from an agent profile may still refuse one on
+  // a prompt or plugin preset; those advertise a feature of their own.
+  const canSelectAgentProfile = (
+    deploymentCapabilities.data?.features ?? []
+  ).includes(
+    kind === "custom" ? AGENT_PROFILES_FEATURE : PRESET_AGENT_PROFILES_FEATURE,
+  );
   const selectedAgentProfileId =
     (canSelectAgentProfile && agentProfileId.trim()) || null;
 
@@ -1433,7 +1444,9 @@ export function AutomationSetupPanel({
     if (configuredPlugins.length > 0) {
       body.plugins = configuredPlugins;
     }
-    if (model.trim()) body.model = model.trim();
+    // An agent profile brings its own LLM profile; the service refuses both.
+    if (selectedAgentProfileId) body.agent_profile_id = selectedAgentProfileId;
+    else if (model.trim()) body.model = model.trim();
     if (newAutomationRunAsId) body.run_as_user_id = newAutomationRunAsId;
     return body;
   };
@@ -1932,14 +1945,15 @@ export function AutomationSetupPanel({
       body.config = parsePluginConfig(form.pluginConfig);
       return body as AutomationUpdate;
     }
-    if (kind === "custom") {
+    if (kind === "custom" || canSelectAgentProfile) {
       // Without the capability the picker is hidden; keep the stored profile.
       body.agent_profile_id = canSelectAgentProfile
         ? selectedAgentProfileId
         : agentProfileId.trim() || null;
       // Clear a saved model when a profile replaces it.
       if (selectedAgentProfileId) body.model = null;
-    } else body.prompt = prompt.trim();
+    }
+    if (kind !== "custom") body.prompt = prompt.trim();
     const repositories = parseAutomationSetupRepositories(repository);
     if (
       repositoriesEditable &&
@@ -2131,9 +2145,11 @@ export function AutomationSetupPanel({
 
   return (
     <>
-      {toolbarPortal
-        ? createPortal(renderToolbarActions(), toolbarPortal)
-        : null}
+      {toolbarPortal ? (
+        <AppearancePortal container={toolbarPortal}>
+          {renderToolbarActions()}
+        </AppearancePortal>
+      ) : null}
       <div
         data-testid="automation-setup-panel"
         className="flex h-full min-h-0 flex-col bg-canvas-base"
@@ -2205,7 +2221,11 @@ export function AutomationSetupPanel({
               {isTaggedDraftMissing ? (
                 <p
                   data-testid="automation-setup-draft-missing"
-                  className="rounded-2xl border border-warning/40 bg-warning/10 px-5 py-4 text-sm text-warning"
+                  className={cn(
+                    "rounded-2xl px-5 py-4 text-sm",
+                    statusToneBannerClassName.warning,
+                    "dark:border-warning/40 dark:bg-warning/10 dark:text-warning",
+                  )}
                 >
                   {t(I18nKey.AUTOMATION_SETUP$DRAFT_MISSING)}
                 </p>
@@ -2476,6 +2496,13 @@ export function AutomationSetupPanel({
                               model={model}
                               onModelChange={(value) =>
                                 updateField("model", value)
+                              }
+                              agentProfileId={agentProfileId}
+                              onAgentProfileChange={
+                                canSelectAgentProfile
+                                  ? (value) =>
+                                      updateField("agentProfileId", value)
+                                  : undefined
                               }
                             />
                           ) : hasExistingCustomBundle ? (

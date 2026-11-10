@@ -4,27 +4,6 @@ import { getContextFillTone } from "#/components/features/conversation/usage-pan
 const CONTEXT_WINDOW_RING_SIZE = 16;
 const CONTEXT_WINDOW_RING_STROKE = 2;
 
-/**
- * Default opacity of the ring's unfilled track on dark themes.
- *
- * The track is derived from the foreground rather than pinned to a scale stop.
- * It carries information (the arc's proportion is only readable against it), so
- * it is a foreground element, and every stop in the surface family sits close
- * to the surfaces it delimits. Drawing it with `--oh-border` put it in that
- * family: it was 1.57:1 against the composer at rest, and the trigger's hover
- * fill resolves to the same stop, taking it to 1.00:1. No stop in that family
- * fixes it, and no fixed stop holds across the three palettes in
- * `color-themes.ts`, whose scales differ.
- *
- * Light palettes override the foreground and weight tokens because a single
- * translucent mix cannot preserve 3:1 contrast on both dark and light
- * surfaces. `context-window-ring.test.tsx` asserts the effective values for
- * every shipped theme.
- */
-/** Shared by the ring's track and the popover's usage bar, which had the same defect. */
-export const CONTEXT_WINDOW_TRACK_COLOR =
-  "color-mix(in srgb, var(--oh-context-window-foreground) var(--oh-context-window-track-weight), transparent)";
-
 const TONE_STROKE = {
   neutral: "var(--oh-context-window-foreground)",
   warning: "#f59e0b", // amber-500
@@ -59,7 +38,7 @@ export function ContextWindowRing({
         cy={CONTEXT_WINDOW_RING_SIZE / 2}
         r={radius}
         fill="none"
-        style={{ stroke: CONTEXT_WINDOW_TRACK_COLOR }}
+        className="stroke-context-window-track"
         strokeWidth={CONTEXT_WINDOW_RING_STROKE}
         data-testid="context-window-ring-track"
       />

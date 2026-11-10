@@ -16,10 +16,9 @@ export function EditorContainer({
     <div
       data-testid="editor-container"
       className={cn(
-        "w-full border-b border-border overflow-hidden h-[var(--editor-height)]",
+        "w-full border-b border-border overflow-hidden h-(--editor-height)",
         className,
       )}
-      // CSS custom property plumbed through for h-[var(--editor-height)] above
       style={{ "--editor-height": `${height}px` } as React.CSSProperties}
     >
       {children}

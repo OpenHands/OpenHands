@@ -56,6 +56,7 @@ import {
   useAutomationCreatorFilterUserId,
   useAutomationPermissions,
 } from "#/hooks/use-automation-permissions";
+import { useCloudIntegrationsConfig } from "#/hooks/query/use-cloud-integrations-config";
 import type {
   Automation,
   AutomationExportFile,
@@ -344,12 +345,19 @@ export default function AutomationsList() {
   // manage_automations (admins/owners) on every backend kind.
   const { canManage } = useAutomationPermissions();
   const creatorFilterUserId = useAutomationCreatorFilterUserId();
-  // The creator the server filters by; undefined while the filter is hidden
-  // or set to "all".
-  const serverCreatedBy =
+  // The owner (run-as identity) the server filters by; undefined while the
+  // filter is hidden or set to "all".
+  const serverRunAs =
     creatorFilterUserId !== null && createdByFilter !== "all"
       ? createdByFilter
       : undefined;
+  // The Service accounts option follows the instance's service accounts flag,
+  // like the run-as UI; the config is read only where the filter is shown.
+  const { data: cloudConfig } = useCloudIntegrationsConfig({
+    enabled: creatorFilterUserId !== null,
+  });
+  const canFilterByServiceAccount =
+    cloudConfig?.isServiceAccountsEnabled === true;
 
   const {
     data: healthData,
@@ -371,10 +379,10 @@ export default function AutomationsList() {
     isPlaceholderData,
   } = useAutomations({
     enabled: isBackendHealthy,
-    // The server filters by creator so pages and `total` cover only matches;
+    // The server filters by owner so pages and `total` cover only matches;
     // the client predicate in applyDashboardView stays as the fallback for
     // an automation service that ignores the param.
-    createdBy: serverCreatedBy,
+    runAs: serverRunAs,
     // Same for the tag: the server filters, the client predicate backs it up.
     tag: tagFilter ?? undefined,
   });
@@ -795,6 +803,7 @@ export default function AutomationsList() {
             trigger={triggerFilter}
             createdBy={createdByFilter}
             canFilterByCreator={creatorFilterUserId !== null}
+            canFilterByServiceAccount={canFilterByServiceAccount}
             tag={tagFilter}
             tagOptions={tagOptions}
             sort={sortValue}

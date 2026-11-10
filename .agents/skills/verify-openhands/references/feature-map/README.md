@@ -5,7 +5,7 @@ of Agent Canvas. Read this index before driving the app, then open the matching
 feature file and run its recipe with `control-openhands`. The map is not a claim
 that every row passes today; the run's evidence ledger is.
 
-Maintenance baseline: main@b8e87db15c5e204ad66a372970cbf25b2e486d31 (2026-11-08). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.
+Maintenance baseline: main@5a241d1f3d6dfa3e5840f8adb2df59259d6164a7 (2026-11-09). The next maintenance pass starts from this commit; a pass proposes the next baseline in its PR, and merging that PR accepts it.
 
 ## Baseline preconditions
 
@@ -248,7 +248,7 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F16 | [Application settings](F16-application-settings.md) | language, theme, analytics, sound, checklist, title model, voice input, git identity | `/settings/app` | LLM for title and git checks | 22 |
 | F17 | [Customize hub and MCP servers](F17-mcp-servers.md) | catalog, install, test, edit, delete, custom servers, agent use | **Customize**, `/mcp` | `uvx`/`npx`; LLM | 34 |
 | F18 | [Skills catalog](F18-skills.md) | facets, search, enable/disable, add skill, Use skill, personal and project skills | `/skills` | `fixture skill`; LLM | 23 |
-| F19 | [Plugins and plugin launch](F19-plugins.md) | catalog, install, update, uninstall, enable, launch deep links | `/plugins`, `/launch` | LLM | 25 |
+| F19 | [Plugins and plugin launch](F19-plugins.md) | catalog, install, update, uninstall, enable, launch deep links, automation install links | `/plugins`, `/launch` | LLM | 30 |
 | F20 | [Canvas apps](F20-canvas-apps.md) | install from path or git, enable, update, uninstall, extension pages | `/apps` | none | 24 |
 | F21 | [Automations dashboard and actions](F21-automations-dashboard.md) | cards and list, filters, sort, Run now, enable, export, import, delete, pin | `/automations` | LLM; automation service | 43 |
 | F22 | [Creating automations](F22-automation-creation.md) | templates, setup dialog, custom automations, import | `/automations/templates`, `/automations/new/<id>` | LLM | 32 |
@@ -262,7 +262,7 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F30 | [Insider Cat and Voice](F30-insider-cat.md) | saved Cat identity, profile capabilities, new/resume/condense, companion, voice lifecycle and saved-agent handoff | installed Projects App, Cat badges, normal conversation/panel | reviewed Insider App; compatible SDK; real LLM; Voice provider and microphone for audio branches; recipes pending live proof | 22 |
 | F32 | [Projects (default view)](F32-projects.md) | flag gate, New project with a server-started coordinator, board grouped by what needs you, Resolve/Reopen, membership, files, badge and compact headers | rail Projects and its +, `/projects`, `/projects/<id>`, project badge | `projects` experimental flag; Agent Server with #6602 (73513fdee+); real LLM for coordinator branches | 11 |
 
-31 families, 876 sub-features. `control-openhands map ids` lists every ID with its file.
+31 families, 881 sub-features. `control-openhands map ids` lists every ID with its file.
 
 ### Neighbouring families
 
