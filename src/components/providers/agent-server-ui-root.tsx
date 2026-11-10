@@ -18,6 +18,18 @@ export interface AgentServerUIRootProps extends Omit<
   contentClassName?: string;
 }
 
+const AgentServerUIAppearanceContext =
+  React.createContext<AgentServerUITheme | null>(null);
+
+/** The appearance of the nearest AgentServerUIRoot (or the active color theme). */
+export function useAgentServerUIAppearance(): AgentServerUITheme {
+  const colorTheme = useColorTheme();
+  return (
+    React.useContext(AgentServerUIAppearanceContext) ??
+    COLOR_THEMES[colorTheme].appearance
+  );
+}
+
 export function AgentServerUIRoot({
   children,
   theme,
@@ -52,7 +64,9 @@ export function AgentServerUIRoot({
         className={cn(appearance, contentClassName, "text-foreground")}
         data-theme={appearance}
       >
-        {children}
+        <AgentServerUIAppearanceContext.Provider value={appearance}>
+          {children}
+        </AgentServerUIAppearanceContext.Provider>
       </div>
     </div>
   );
