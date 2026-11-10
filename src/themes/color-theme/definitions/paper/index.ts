@@ -102,8 +102,7 @@ const PAPER_TOKENS: Partial<Record<AgentServerUICssVariableName, string>> = {
   "--oh-overlay-foreground": "#29241f",
   "--oh-modal-title-foreground": "#29241f",
   "--oh-modal-description-foreground": "#675e54",
-  "--oh-font-heading":
-    '"Canvas Newsreader", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif',
+  "--oh-font-heading": '"Canvas Newsreader", Georgia, serif',
   "--oh-muted": "#675e54",
   "--oh-text-secondary": "#61574c",
   "--oh-text-tertiary": "#51483e",
