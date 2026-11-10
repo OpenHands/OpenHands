@@ -398,4 +398,39 @@ describe("WebSocketProviderWrapper — filteredSubConversations reference stabil
       capturedSubConversationsPerRender.at(-2),
     );
   });
+
+  it("updates filteredSubConversations when planningConversationIds change but subConversations keeps its reference", () => {
+    const planner = makeConversation({
+      id: "planner-1",
+      tags: { [LOCAL_PLANNER_PARENT_TAG_KEY]: "conv-1" },
+    });
+    mockUseSubConversations.mockReturnValue({ data: [planner] });
+    mockUseActiveConversation.mockReturnValue({
+      data: makeConversation({
+        id: "conv-stale",
+        sub_conversation_ids: ["planner-1"],
+      }),
+    });
+
+    const { rerender } = render(
+      <WebSocketProviderWrapper conversationId="conv-1">
+        <div />
+      </WebSocketProviderWrapper>,
+    );
+    expect(capturedSubConversationsPerRender.at(-1)).toEqual([]);
+
+    mockUseActiveConversation.mockReturnValue({
+      data: makeConversation({
+        id: "conv-1",
+        sub_conversation_ids: ["planner-1"],
+      }),
+    });
+    rerender(
+      <WebSocketProviderWrapper conversationId="conv-1">
+        <div />
+      </WebSocketProviderWrapper>,
+    );
+
+    expect(capturedSubConversationsPerRender.at(-1)).toEqual([planner]);
+  });
 });

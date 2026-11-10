@@ -89,8 +89,7 @@ export function WebSocketProviderWrapper({
   ]);
 
   const filteredSubConversations = React.useMemo(() => {
-    if (!subConversations) return undefined;
-    return subConversations.filter(
+    return subConversations?.filter(
       (subConversation): subConversation is AppConversation =>
         subConversation !== null &&
         planningConversationIds.includes(subConversation.id),
