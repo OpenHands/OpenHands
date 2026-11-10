@@ -198,4 +198,47 @@ describe("AcpService.discoverModels", () => {
       },
     });
   });
+
+  it("sends acp_command and acp_args when provided for custom profiles", async () => {
+    discoverModels.mockResolvedValue({ current_model_id: "custom-default" });
+
+    await expect(
+      AcpService.discoverModels("custom", ["MY_SECRET"], {
+        acpCommand: ["my-agent", "--port", "8080"],
+        acpArgs: ["--verbose"],
+      }),
+    ).resolves.toEqual({ current_model_id: "custom-default" });
+
+    expect(discoverModels).toHaveBeenCalledWith({
+      agent_settings: {
+        agent_kind: "acp",
+        acp_server: "custom",
+        acp_command: ["my-agent", "--port", "8080"],
+        acp_args: ["--verbose"],
+      },
+      secrets: {
+        MY_SECRET: expect.objectContaining({
+          kind: "LookupSecret",
+          url: "/api/settings/secrets/MY_SECRET",
+        }),
+      },
+    });
+  });
+
+  it("omits acp_command and acp_args when empty arrays are provided", async () => {
+    discoverModels.mockResolvedValue({ current_model_id: "default" });
+
+    await AcpService.discoverModels("custom", [], {
+      acpCommand: [],
+      acpArgs: [],
+    });
+
+    expect(discoverModels).toHaveBeenCalledWith({
+      agent_settings: {
+        agent_kind: "acp",
+        acp_server: "custom",
+      },
+      secrets: undefined,
+    });
+  });
 });

@@ -40,6 +40,31 @@ export function acpModelScope(
   return secretRefs ? JSON.stringify([...new Set(secretRefs)].sort()) : "*";
 }
 
+/**
+ * A composite launch-configuration key for ACP model storage and queries.
+ * Built-in providers on default command keep their plain provider key.
+ * Custom profiles with commands or custom args are keyed on their exact launch configuration.
+ * A custom profile with an empty command returns null.
+ */
+export function acpLaunchKey(
+  providerKey: string | null | undefined,
+  acpCommand?: readonly string[] | null,
+  acpArgs?: readonly string[] | null,
+): string | null {
+  if (!providerKey) return null;
+  if (providerKey === "custom" && (!acpCommand || acpCommand.length === 0)) {
+    return null;
+  }
+  const parts: string[] = [providerKey];
+  if (acpCommand && acpCommand.length > 0) {
+    parts.push(`cmd:${JSON.stringify(acpCommand)}`);
+  }
+  if (acpArgs && acpArgs.length > 0) {
+    parts.push(`args:${JSON.stringify(acpArgs)}`);
+  }
+  return parts.join("|");
+}
+
 /** The stored JSON for {@link readRememberedAcpModels}, or null. */
 export function readRememberedAcpModelsRaw(
   backendId: string,

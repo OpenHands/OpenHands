@@ -558,4 +558,44 @@ describe("useChatInputModelState", () => {
     // No reported label → falls back to the raw id.
     expect(result.current.displayModel).toBe("custom-model");
   });
+
+  it("home ACP: discovers models for a custom ACP profile before any conversation starts", () => {
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isHomeAcp: true, isAcpContext: true }),
+    );
+    useActiveAcpProfileDetailMock.mockReturnValue({
+      agent_kind: "acp",
+      acp_server: "custom",
+      acp_model: null,
+      acp_command: "my-acp-agent --dev",
+      acp_args: ["--extra"],
+      secret_refs: ["MY_KEY"],
+    });
+    const discoveredCustomModels = [
+      { id: "custom-model-1", label: "Custom Model 1" },
+    ];
+    useAcpModelDiscoveryMock.mockReturnValue({
+      models: discoveredCustomModels,
+      defaultModelId: "custom-model-1",
+      discovery: {
+        current_model_id: "custom-model-1",
+        available_models: [{ model_id: "custom-model-1", name: "Custom Model 1" }],
+      },
+    });
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("custom", {
+      enabled: true,
+      secretRefs: ["MY_KEY"],
+      acpCommand: ["my-acp-agent", "--dev"],
+      acpArgs: ["--extra"],
+    });
+    expect(result.current.availableAcpModels).toEqual(discoveredCustomModels);
+    expect(result.current.showAcpPicker).toBe(true);
+    expect(result.current.displayModel).toBe("Custom Model 1");
+    expect(result.current.agentDefaultLabel).toBe(
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS",
+    );
+  });
 });

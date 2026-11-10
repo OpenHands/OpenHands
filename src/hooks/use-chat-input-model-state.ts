@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useSettings } from "#/hooks/query/use-settings";
@@ -18,6 +19,7 @@ import {
   resolveEffectiveAcpModel,
   type ACPModelOption,
 } from "#/constants/acp-providers";
+import { parseCommand } from "#/utils/acp-command";
 import { I18nKey } from "#/i18n/declaration";
 
 export interface ChatInputModelState {
@@ -66,15 +68,71 @@ export function useChatInputModelState(): ChatInputModelState {
       ? (activeAcpProfile?.acp_server ?? settingsAcpServerKey)
       : null;
   const acpProvider = isAcpContext ? getAcpProvider(acpServerKey) : undefined;
+  const isCustomHomeAcp = isHomeAcp && acpServerKey === "custom";
+
+  const effectiveAcpCommand = useMemo(() => {
+    if (!isCustomHomeAcp) return null;
+    const rawCommand =
+      activeAcpProfile?.acp_command ??
+      (typeof settings?.agent_settings?.acp_command === "string"
+        ? settings.agent_settings.acp_command
+        : Array.isArray(settings?.agent_settings?.acp_command)
+          ? settings.agent_settings.acp_command
+          : null);
+    if (!rawCommand) return null;
+    if (Array.isArray(rawCommand)) {
+      return rawCommand.filter((c): c is string => typeof c === "string");
+    }
+    return parseCommand(rawCommand);
+  }, [
+    isCustomHomeAcp,
+    activeAcpProfile?.acp_command,
+    settings?.agent_settings?.acp_command,
+  ]);
+
+  const effectiveAcpArgs = useMemo(() => {
+    if (!isCustomHomeAcp) return null;
+    const rawArgs =
+      activeAcpProfile?.acp_args ?? settings?.agent_settings?.acp_args;
+    if (Array.isArray(rawArgs)) {
+      return rawArgs.filter((a): a is string => typeof a === "string");
+    }
+    return null;
+  }, [
+    isCustomHomeAcp,
+    activeAcpProfile?.acp_args,
+    settings?.agent_settings?.acp_args,
+  ]);
+
+  const discoveryProvider = acpProvider
+    ? acpServerKey
+    : isCustomHomeAcp
+      ? "custom"
+      : null;
+
+  const discoveryOptions = useMemo(
+    () => ({
+      enabled: isActiveAcpConversation || !!activeAcpProfile || isCustomHomeAcp,
+      secretRefs:
+        (isActiveAcpConversation
+          ? conversation?.launched_agent_profile?.secret_refs
+          : activeAcpProfile?.secret_refs) ?? null,
+      ...(effectiveAcpCommand ? { acpCommand: effectiveAcpCommand } : {}),
+      ...(effectiveAcpArgs ? { acpArgs: effectiveAcpArgs } : {}),
+    }),
+    [
+      isActiveAcpConversation,
+      activeAcpProfile,
+      isCustomHomeAcp,
+      conversation?.launched_agent_profile?.secret_refs,
+      effectiveAcpCommand,
+      effectiveAcpArgs,
+    ],
+  );
+
   // The agent's models depend on the secrets it may use: the ones the
   // conversation launched with, or the next launch's from the active profile.
-  const discovered = useAcpModelDiscovery(acpProvider ? acpServerKey : null, {
-    enabled: isActiveAcpConversation || !!activeAcpProfile,
-    secretRefs:
-      (isActiveAcpConversation
-        ? conversation?.launched_agent_profile?.secret_refs
-        : activeAcpProfile?.secret_refs) ?? null,
-  });
+  const discovered = useAcpModelDiscovery(discoveryProvider, discoveryOptions);
   // The session's own list arrives only after it starts.
   const sessionModels = useAcpSessionModels(
     isActiveAcpConversation ? conversation : null,
@@ -128,7 +186,11 @@ export function useChatInputModelState(): ChatInputModelState {
   const showAcpPicker =
     isAcpContext && availableAcpModels.length > 0 && canPersistHomeAcpModel;
   let agentDefaultLabel: string | null = null;
-  if (isHomeAcp && acpProvider && !getAcpPreferredDefaultModel(acpServerKey)) {
+  if (
+    isHomeAcp &&
+    (acpProvider || isCustomHomeAcp) &&
+    !getAcpPreferredDefaultModel(acpServerKey)
+  ) {
     const defaultModelLabel = labelForAcpModel(
       discovered.defaultModelId,
       liveModels,

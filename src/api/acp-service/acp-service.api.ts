@@ -124,10 +124,22 @@ class AcpService {
   static async discoverModels(
     server: string,
     secretNames: readonly string[],
+    options?: {
+      acpCommand?: readonly string[] | null;
+      acpArgs?: readonly string[] | null;
+    },
   ): Promise<ACPModelDiscovery> {
     const { host, apiKey } = getAgentServerClientOptions();
+    const hasCommand = !!options?.acpCommand && options.acpCommand.length > 0;
+    const hasArgs = !!options?.acpArgs && options.acpArgs.length > 0;
+
     return new ACPClient({ host, apiKey }).discoverModels({
-      agent_settings: { agent_kind: "acp", acp_server: server },
+      agent_settings: {
+        agent_kind: "acp",
+        acp_server: server,
+        ...(hasCommand ? { acp_command: [...options.acpCommand!] } : {}),
+        ...(hasArgs ? { acp_args: [...options.acpArgs!] } : {}),
+      },
       secrets: buildCustomSecrets(secretNames.map((name) => ({ name }))),
     });
   }

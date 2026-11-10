@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  acpLaunchKey,
   acpModelScope,
   readRememberedAcpModels,
   rememberAcpModels,
@@ -18,6 +19,47 @@ afterEach(() => {
 });
 
 describe("remembered ACP models", () => {
+  describe("acpLaunchKey", () => {
+    it("preserves providerKey for built-in providers without command overrides", () => {
+      expect(acpLaunchKey("claude-code")).toBe("claude-code");
+      expect(acpLaunchKey("codex", null, null)).toBe("codex");
+      expect(acpLaunchKey("pi", [], [])).toBe("pi");
+    });
+
+    it("returns null for custom profile with empty or missing command", () => {
+      expect(acpLaunchKey("custom")).toBeNull();
+      expect(acpLaunchKey("custom", [])).toBeNull();
+      expect(acpLaunchKey("custom", null)).toBeNull();
+      expect(acpLaunchKey(null)).toBeNull();
+      expect(acpLaunchKey(undefined)).toBeNull();
+    });
+
+    it("generates distinct keys for distinct commands or args", () => {
+      const keyA = acpLaunchKey("custom", ["my-agent-a"]);
+      const keyB = acpLaunchKey("custom", ["my-agent-b"]);
+      const keyC = acpLaunchKey("custom", ["my-agent-a"], ["--flag"]);
+
+      expect(keyA).not.toBeNull();
+      expect(keyB).not.toBeNull();
+      expect(keyC).not.toBeNull();
+      expect(keyA).not.toBe(keyB);
+      expect(keyA).not.toBe(keyC);
+    });
+  });
+
+  it("isolates remembered models across different launch configurations", () => {
+    const keyA = acpLaunchKey("custom", ["agent-a"])!;
+    const keyB = acpLaunchKey("custom", ["agent-b"])!;
+    const modelsA = [{ id: "model-a", label: "Model A" }];
+    const modelsB = [{ id: "model-b", label: "Model B" }];
+
+    rememberAcpModels("local-1", keyA, ALL, modelsA);
+    rememberAcpModels("local-1", keyB, ALL, modelsB);
+
+    expect(readRememberedAcpModels("local-1", keyA, ALL)).toEqual(modelsA);
+    expect(readRememberedAcpModels("local-1", keyB, ALL)).toEqual(modelsB);
+  });
+
   it("notifies subscribers when a list changes, not when it is rewritten unchanged", () => {
     const listener = vi.fn();
     const unsubscribe = subscribeRememberedAcpModels(listener);

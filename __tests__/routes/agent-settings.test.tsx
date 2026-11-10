@@ -534,12 +534,28 @@ describe("AgentSettingsScreen", () => {
     });
   });
 
-  it("does not ask a custom command for its models", async () => {
+  it("discovers models for a custom ACP command", async () => {
     renderAgentSettingsScreen({
       agentSettingsOverride: {
         ...CLAUDE_PROFILE,
         acp_server: "custom",
         acp_command: ["my-acp-wrapper"],
+      },
+    });
+
+    await screen.findByTestId("agent-command-input");
+    expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith("custom", {
+      acpCommand: ["my-acp-wrapper"],
+      secretRefs: null,
+    });
+  });
+
+  it("does not ask a custom profile with an empty command for its models", async () => {
+    renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        acp_server: "custom",
+        acp_command: [],
       },
     });
 

@@ -52,6 +52,7 @@ import {
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
 import { useAcpModelDiscovery } from "#/hooks/query/use-acp-model-discovery";
+import { useDebounce } from "#/hooks/use-debounce";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
 import { enabledMcpServerRefs } from "#/hooks/mutation/sync-agent-profiles";
@@ -1012,14 +1013,52 @@ export function AgentSettingsScreen({
   const isDefaultProviderCommand =
     !!selectedProvider &&
     commandTokens.join(" ") === selectedProvider.default_command.join(" ");
-  const liveModels = useAcpModelDiscovery(
-    isAcp && isDefaultProviderCommand ? selectedPreset : null,
-    {
+
+  const isCustomCommandDirty = commandText !== loadedSnapshot.commandText;
+  const debouncedCommandText = useDebounce(commandText, 300);
+  const effectiveCustomCommandText = isCustomCommandDirty
+    ? debouncedCommandText
+    : commandText;
+  const effectiveCustomCommandTokens = React.useMemo(
+    () => parseCommand(effectiveCustomCommandText),
+    [effectiveCustomCommandText],
+  );
+  const effectiveCustomPreset = React.useMemo(
+    () => detectPreset(effectiveCustomCommandText, acpProviders),
+    [effectiveCustomCommandText, acpProviders],
+  );
+
+  const discoveryProvider =
+    isAcp &&
+    (isDefaultProviderCommand
+      ? selectedPreset
+      : effectiveCustomPreset === ACP_CUSTOM_PRESET_KEY &&
+          effectiveCustomCommandTokens.length > 0
+        ? ACP_CUSTOM_PRESET_KEY
+        : null);
+
+  const discoveryOptions = React.useMemo(
+    () => ({
       secretRefs:
         secretRefsSupportedOnProfile && secretsMode === "custom"
           ? selectedSecrets
           : null,
-    },
+      ...(discoveryProvider === ACP_CUSTOM_PRESET_KEY
+        ? { acpCommand: effectiveCustomCommandTokens }
+        : {}),
+    }),
+    [
+      secretRefsSupportedOnProfile,
+      secretsMode,
+      selectedSecrets,
+      discoveryProvider,
+      effectiveCustomCommandTokens,
+    ],
+  );
+
+  const liveModels = useAcpModelDiscovery(
+    discoveryProvider || null,
+    discoveryOptions,
   );
 
   if (isLoading) return null;
@@ -1034,10 +1073,17 @@ export function AgentSettingsScreen({
   );
   // Without a preferred model the agent picks its own, so name that choice.
   const offersAgentDefault =
-    !!selectedProvider && !getAcpPreferredDefaultModel(selectedPreset);
+    (!!selectedProvider && !getAcpPreferredDefaultModel(selectedPreset)) ||
+    (selectedPreset === ACP_CUSTOM_PRESET_KEY && commandTokens.length > 0);
   const showModelSelector = offersAgentDefault || modelSuggestions.length > 0;
   const modelListHint = (() => {
-    if (!selectedProvider || liveModels.isDiscovering) return null;
+    if (
+      (!selectedProvider &&
+        (selectedPreset !== ACP_CUSTOM_PRESET_KEY ||
+          commandTokens.length === 0)) ||
+      liveModels.isDiscovering
+    )
+      return null;
     if (liveModels.discovery?.error?.code === "ACPAuthRequired") return null;
     if (liveModels.source === "remembered") {
       return {
@@ -1779,16 +1825,19 @@ export function AgentSettingsScreen({
               }}
             />
           )}
-          {liveModels.isDiscovering && selectedProvider && (
-            <Typography.Text
-              testId="agent-model-discovering"
-              className="text-xs text-text-dim dark:text-[#717888]"
-            >
-              {t(I18nKey.SETTINGS$AGENT_MODEL_DISCOVERING, {
-                agent: selectedProvider.display_name,
-              })}
-            </Typography.Text>
-          )}
+          {liveModels.isDiscovering &&
+            (selectedProvider || selectedPreset === ACP_CUSTOM_PRESET_KEY) && (
+              <Typography.Text
+                testId="agent-model-discovering"
+                className="text-xs text-text-dim dark:text-[#717888]"
+              >
+                {t(I18nKey.SETTINGS$AGENT_MODEL_DISCOVERING, {
+                  agent:
+                    selectedProvider?.display_name ??
+                    t(I18nKey.SETTINGS$AGENT_PRESET_CUSTOM),
+                })}
+              </Typography.Text>
+            )}
           {liveModels.discovery?.error?.code === "ACPAuthRequired" &&
             selectedProvider && (
               <Typography.Text

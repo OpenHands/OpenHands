@@ -258,4 +258,42 @@ describe("useAcpModelDiscovery", () => {
 
     expect(discoverModels).not.toHaveBeenCalled();
   });
+
+  it("asks with custom command and args for custom provider", async () => {
+    discoverModels.mockResolvedValue(PI_DISCOVERY);
+
+    const { result } = renderHook(
+      () =>
+        useAcpModelDiscovery("custom", {
+          acpCommand: ["my-acp", "--mode", "fast"],
+          acpArgs: ["--extra"],
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() =>
+      expect(result.current.defaultModelId).toBe("anthropic/claude-opus-4-8"),
+    );
+    expect(discoverModels).toHaveBeenCalledWith(
+      "custom",
+      ["ANTHROPIC_API_KEY", "PI_AUTH_JSON"],
+      {
+        acpCommand: ["my-acp", "--mode", "fast"],
+        acpArgs: ["--extra"],
+      },
+    );
+  });
+
+  it("does not ask when custom provider has an empty or null command", () => {
+    renderHook(
+      () => useAcpModelDiscovery("custom", { acpCommand: [] }),
+      { wrapper },
+    );
+    renderHook(
+      () => useAcpModelDiscovery("custom", { acpCommand: null }),
+      { wrapper },
+    );
+
+    expect(discoverModels).not.toHaveBeenCalled();
+  });
 });

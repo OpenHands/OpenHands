@@ -11,6 +11,7 @@ import {
 } from "#/constants/acp-providers";
 import { useRememberedAcpModels } from "#/hooks/use-remembered-acp-models";
 import {
+  acpLaunchKey,
   acpModelScope,
   rememberAcpModels,
 } from "#/utils/remembered-acp-models";
@@ -18,8 +19,17 @@ import {
 async function discover(
   providerKey: string,
   secretNames: string[],
+  options?: {
+    acpCommand?: readonly string[] | null;
+    acpArgs?: readonly string[] | null;
+  },
 ): Promise<ACPModelDiscovery | null> {
   try {
+    const hasCommand = !!options?.acpCommand && options.acpCommand.length > 0;
+    const hasArgs = !!options?.acpArgs && options.acpArgs.length > 0;
+    if (hasCommand || hasArgs) {
+      return await AcpService.discoverModels(providerKey, secretNames, options);
+    }
     return await AcpService.discoverModels(providerKey, secretNames);
   } catch {
     // Older agent-servers lack the endpoint.
@@ -31,7 +41,7 @@ async function discover(
 export type AcpModelSource = "live" | "remembered" | "none";
 
 /**
- * The models a built-in ACP provider offers on the active backend, and the one
+ * The models an ACP provider offers on the active backend, and the one
  * it uses by default, as its own server reports them for the saved
  * credentials. Only local backends can ask before a conversation starts;
  * otherwise ``models`` is the list the agent last reported with the same
@@ -43,7 +53,14 @@ export function useAcpModelDiscovery(
   {
     enabled = true,
     secretRefs = null,
-  }: { enabled?: boolean; secretRefs?: readonly string[] | null } = {},
+    acpCommand = null,
+    acpArgs = null,
+  }: {
+    enabled?: boolean;
+    secretRefs?: readonly string[] | null;
+    acpCommand?: readonly string[] | null;
+    acpArgs?: readonly string[] | null;
+  } = {},
 ) {
   const { backend } = useActiveBackend();
   const isLocal = backend.kind === "local";
@@ -52,8 +69,16 @@ export function useAcpModelDiscovery(
     .map(({ name }) => name)
     .filter((name) => !secretRefs || secretRefs.includes(name))
     .sort();
+
+  const launchKey = acpLaunchKey(providerKey, acpCommand, acpArgs);
+  const hasValidCommand =
+    providerKey !== "custom" || (!!acpCommand && acpCommand.length > 0);
   const queryEnabled =
-    enabled && isLocal && !!providerKey && !secrets.isLoading;
+    enabled &&
+    isLocal &&
+    !!providerKey &&
+    hasValidCommand &&
+    !secrets.isLoading;
 
   const query = useQuery<ACPModelDiscovery | null, Error>({
     queryKey: [
@@ -61,8 +86,11 @@ export function useAcpModelDiscovery(
       backend.id,
       providerKey,
       secretNames,
+      acpCommand ?? null,
+      acpArgs ?? null,
     ],
-    queryFn: () => discover(providerKey as string, secretNames),
+    queryFn: () =>
+      discover(providerKey as string, secretNames, { acpCommand, acpArgs }),
     enabled: queryEnabled,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 15,
@@ -77,15 +105,12 @@ export function useAcpModelDiscovery(
     [discovery],
   );
   useEffect(() => {
-    if (providerKey) {
-      rememberAcpModels(backend.id, providerKey, scope, liveModels);
+    if (launchKey) {
+      rememberAcpModels(backend.id, launchKey, scope, liveModels);
     }
-  }, [backend.id, providerKey, scope, liveModels]);
+  }, [backend.id, launchKey, scope, liveModels]);
 
-  const remembered = useRememberedAcpModels(
-    enabled ? providerKey : null,
-    scope,
-  );
+  const remembered = useRememberedAcpModels(enabled ? launchKey : null, scope);
   let models: ACPModelOption[] = [];
   let source: AcpModelSource = "none";
   if (liveModels.length) {
