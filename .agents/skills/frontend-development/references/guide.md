@@ -102,6 +102,11 @@ The commit and Uncommitted rows reserve the same `7ch` monospace column through
 
 ## Workspace files
 
+The open-file strip hides the scrollbar through `file-strip-scrollbar-hidden`
+while retaining horizontal scrolling. File discovery uses
+`file-discovery-viewport-height` for its 90vh cap and keeps its vertical
+overflow on the dialog body. Both owners reject new arbitrary values.
+
 Local Files discovery preferences belong to `misc_settings.app_preferences.workspace_file_discovery`, keyed by working directory on the active backend. `useWorkspaceFileDiscovery` reads the settings cache and saves sparse workspace patches. Preserve default exclusions and the 2,000-file cap when no configuration exists. Fetch one extra result to distinguish truncation from an exact-size list. Cloud keeps its server-side listing contract without these controls.
 
 ## Caret appearance contracts

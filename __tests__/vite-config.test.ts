@@ -251,6 +251,19 @@ describe("vite library build", () => {
     expect(declarations(recipe("text-on-accent"))).toEqual({
       color: "var(--oh-accent-foreground)",
     });
+    expect(declarations(recipe("file-strip-scrollbar-hidden"))).toMatchObject({
+      "scrollbar-width": "none",
+      "-ms-overflow-style": "none",
+    });
+    expect(
+      declarations(
+        recipe("file-strip-scrollbar-hidden", "::-webkit-scrollbar"),
+      ),
+    ).toMatchObject({ display: "none" });
+    expect(declarations(recipe("file-discovery-viewport-height"))).toEqual({
+      "max-height": "90vh",
+    });
+
     // A named gradient stop retains the existing ancestor override/fallback.
     const scrollFade = recipe("from-scroll-fade");
     expect(declarations(scrollFade)["--tw-gradient-from"]).toBe(

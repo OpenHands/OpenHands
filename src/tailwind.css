@@ -1254,6 +1254,19 @@ code .token {
   max-height: min(60vh, calc(100dvh - 5rem));
 }
 
+@utility file-strip-scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility file-discovery-viewport-height {
+  max-height: 90vh;
+}
+
 @utility dialog-viewport-width {
   max-width: 90vw;
 }
