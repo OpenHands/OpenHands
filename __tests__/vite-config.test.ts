@@ -579,6 +579,10 @@ describe("vite library build", () => {
       disclosure.source?.start?.offset ?? Infinity,
     );
 
+    expect(
+      declarations(recipe("dark:border-git-control", ":is(.dark *)")),
+    ).toEqual({ "border-color": "#474a5480" });
+
     // Preserve relative typography/geometry and distinct Add/Edit viewport
     // semantics, including the Cloud panel's grayscale pseudo-element halo.
     expect(declarations(recipe("backend-chooser-cloud-panel"))).toMatchObject({
