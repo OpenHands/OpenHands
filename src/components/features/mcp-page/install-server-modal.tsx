@@ -15,7 +15,10 @@ import type {
   MarketplaceField,
 } from "@openhands/extensions/integrations";
 import { McpLogoBadge } from "#/components/features/mcp-logo-badge";
-import { MCPServerConfig } from "#/types/mcp-server";
+import type {
+  ExtendedMCPTestResponse,
+  MCPServerConfig,
+} from "#/types/mcp-server";
 import type { MCPAuthCredential } from "#/types/mcp-auth";
 import { seedMcpServerHealth } from "#/api/mcp-health/probe-mcp-server-health";
 import { useActiveBackend } from "#/contexts/active-backend-context";
@@ -77,6 +80,8 @@ interface InstallServerModalProps {
   existingServers: MCPServerConfig[];
   onClose: () => void;
   onSuccess?: (entry: MarketplaceEntry) => void;
+  /** Install into the active conversation rather than saving to shared Settings. */
+  onInstall?: (server: MCPServerConfig) => Promise<void>;
   /**
    * When true, an entry that has an MCP option opens on its MCP form without
    * offering the instance's native integration. Defaults to false.
@@ -174,6 +179,7 @@ export function InstallServerModal({
   existingServers,
   onClose,
   onSuccess,
+  onInstall,
   mcpOnly = false,
 }: InstallServerModalProps) {
   const { t } = useTranslation("openhands");
@@ -214,7 +220,7 @@ export function InstallServerModal({
   // MCP server alone skips the native option whenever the entry has an MCP one.
   const { getNativeIntegration, isLoading: isNativeIntegrationsLoading } =
     useNativeGitIntegrations();
-  const skipNative = mcpOnly && !!option;
+  const skipNative = (mcpOnly || !!onInstall) && !!option;
   const native = skipNative ? null : getNativeIntegration(entry.id);
   // Until the instance's providers are known, a git entry cannot say whether
   // it leads with the native option; showing the MCP form meanwhile would swap
@@ -296,6 +302,46 @@ export function InstallServerModal({
     return Promise.resolve();
   };
 
+  const completeInstall = (
+    serverToSave: MCPServerConfig,
+    result: ExtendedMCPTestResponse,
+  ) => {
+    if (onInstall) {
+      setIsFinalizingInstall(true);
+      void onInstall(serverToSave)
+        .then(() => {
+          onSuccess?.(entry);
+          onClose();
+        })
+        .catch(() =>
+          setGlobalError(t(I18nKey.CHAT$CONVERSATION_CONFIGURATION_FAILED)),
+        )
+        .finally(() => setIsFinalizingInstall(false));
+      return;
+    }
+    addMcpServer(serverToSave, {
+      onSuccess: () => {
+        if (!isSyntheticTest) {
+          seedMcpServerHealth(serverToSave, result, existingServers);
+        }
+        displaySuccessToast(t(I18nKey.MCP$INSTALL_SUCCESS));
+        setIsFinalizingInstall(true);
+        void (async () => {
+          try {
+            await saveSelectedSecrets();
+          } finally {
+            onSuccess?.(entry);
+            onClose();
+          }
+        })();
+      },
+      onError: (err: unknown) => {
+        const message = retrieveAxiosErrorMessage(err as AxiosError);
+        setGlobalError(message || t(I18nKey.ERROR$GENERIC));
+      },
+    });
+  };
+
   const submitServer = (payload: MCPServerConfig) => {
     if (payload.auth?.strategy === "oauth2") {
       setIsAuthorizingOAuth(true);
@@ -318,27 +364,7 @@ export function InstallServerModal({
                 auth: { ...payload.auth!, state: result.oauth_state },
               }
             : payload;
-          addMcpServer(serverToSave, {
-            onSuccess: () => {
-              if (!isSyntheticTest) {
-                seedMcpServerHealth(serverToSave, result, existingServers);
-              }
-              displaySuccessToast(t(I18nKey.MCP$INSTALL_SUCCESS));
-              setIsFinalizingInstall(true);
-              void (async () => {
-                try {
-                  await saveSelectedSecrets();
-                } finally {
-                  onSuccess?.(entry);
-                  onClose();
-                }
-              })();
-            },
-            onError: (err: unknown) => {
-              const message = retrieveAxiosErrorMessage(err as AxiosError);
-              setGlobalError(message || t(I18nKey.ERROR$GENERIC));
-            },
-          });
+          completeInstall(serverToSave, result);
         })
         .catch((err: unknown) => {
           const message = retrieveAxiosErrorMessage(err as AxiosError);
@@ -368,27 +394,7 @@ export function InstallServerModal({
                 auth: { ...payload.auth, state: result.oauth_state },
               }
             : payload;
-        addMcpServer(serverToSave, {
-          onSuccess: () => {
-            if (!isSyntheticTest) {
-              seedMcpServerHealth(serverToSave, result, existingServers);
-            }
-            displaySuccessToast(t(I18nKey.MCP$INSTALL_SUCCESS));
-            setIsFinalizingInstall(true);
-            void (async () => {
-              try {
-                await saveSelectedSecrets();
-              } finally {
-                onSuccess?.(entry);
-                onClose();
-              }
-            })();
-          },
-          onError: (err: unknown) => {
-            const message = retrieveAxiosErrorMessage(err as AxiosError);
-            setGlobalError(message || t(I18nKey.ERROR$GENERIC));
-          },
-        });
+        completeInstall(serverToSave, result);
       },
       onError: (err: unknown) => {
         const message = retrieveAxiosErrorMessage(err as AxiosError);
@@ -600,7 +606,7 @@ export function InstallServerModal({
                   {state.errors[field.key]}
                 </p>
               )}
-              {field.key in state.savedAsSecret && (
+              {!onInstall && field.key in state.savedAsSecret && (
                 <SaveAsSecretToggle
                   fieldKey={field.key}
                   checked={state.savedAsSecret[field.key] ?? false}
@@ -651,7 +657,7 @@ export function InstallServerModal({
                   {state.errors.api_key}
                 </p>
               )}
-              {credentialSecretName && (
+              {!onInstall && credentialSecretName && (
                 <SaveAsSecretToggle
                   fieldKey={credentialSecretName}
                   checked={state.savedAsSecret.api_key ?? false}
@@ -702,7 +708,7 @@ export function InstallServerModal({
                 {state.errors[field.key]}
               </p>
             )}
-            {field.key in state.savedAsSecret && (
+            {!onInstall && field.key in state.savedAsSecret && (
               <SaveAsSecretToggle
                 fieldKey={field.key}
                 checked={state.savedAsSecret[field.key]}

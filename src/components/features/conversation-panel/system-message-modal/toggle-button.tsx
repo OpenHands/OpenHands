@@ -7,6 +7,7 @@ interface ToggleButtonProps {
   isExpanded: boolean;
   onClick: () => void;
   className?: string;
+  badge?: React.ReactNode;
 }
 
 export function ToggleButton({
@@ -14,6 +15,7 @@ export function ToggleButton({
   isExpanded,
   onClick,
   className,
+  badge,
 }: ToggleButtonProps) {
   return (
     <button
@@ -25,10 +27,11 @@ export function ToggleButton({
         className,
       )}
     >
-      <div className="flex items-center">
+      <div className="flex items-center gap-2">
         <Typography.Text className="font-bold text-content-2">
           {title}
         </Typography.Text>
+        {badge}
       </div>
       <Typography.Text className="text-text-tertiary">
         {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}

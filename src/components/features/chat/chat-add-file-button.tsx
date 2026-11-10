@@ -13,7 +13,10 @@ import { SystemMessageModal } from "#/components/features/conversation-panel/sys
 import { SkillsModal } from "#/components/features/conversation-panel/skills-modal";
 import { PluginsModal } from "#/components/features/conversation-panel/plugins-modal";
 import { HooksModal } from "#/components/features/conversation-panel/hooks-modal";
-import { useConversationConfigurationCapability } from "#/hooks/query/use-conversation-configuration-capability";
+import {
+  useConversationConfigurationCapability,
+  useConversationMcpCapabilities,
+} from "#/hooks/query/use-conversation-configuration-capability";
 
 const ConversationConfigurationModal = React.lazy(() =>
   import("./conversation-configuration-modal").then((module) => ({
@@ -41,8 +44,13 @@ export function ChatAddFileButton({
   const { t } = useTranslation("openhands");
   const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
+  const canConfigureConversation =
+    !!conversationId && conversation?.id === conversationId && !disabled;
   const { data: canConfigure } = useConversationConfigurationCapability(
-    !!conversationId && conversation?.id === conversationId && !disabled,
+    canConfigureConversation,
+  );
+  const { canInstall, canListTools } = useConversationMcpCapabilities(
+    canConfigureConversation,
   );
   const [configurationOpen, setConfigurationOpen] = React.useState(false);
   const [menuOpen, setMenuOpen] = React.useState(false);
@@ -145,6 +153,8 @@ export function ChatAddFileButton({
               key={conversationId}
               conversationId={conversationId}
               isAcp={conversation?.agent_kind === "acp"}
+              canInstallMcp={canInstall}
+              canListTools={canListTools}
               onClose={() => setConfigurationOpen(false)}
             />
           </React.Suspense>
@@ -154,6 +164,7 @@ export function ChatAddFileButton({
         isOpen={systemModalVisible}
         onClose={() => setSystemModalVisible(false)}
         systemMessage={systemMessage || null}
+        conversationId={conversationId ?? undefined}
       />
       {skillsModalVisible && (
         <SkillsModal onClose={() => setSkillsModalVisible(false)} />

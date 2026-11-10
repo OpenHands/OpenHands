@@ -1,6 +1,8 @@
 import { ToolParameters } from "./tool-parameters";
 import { ToggleButton } from "./toggle-button";
 import { ChatCompletionToolParam } from "#/types/agent-server/core";
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "../../markdown/markdown-renderer";
 
 interface FunctionData {
@@ -22,6 +24,7 @@ interface ToolData {
   annotations?: {
     title?: string;
   };
+  source?: "conversation" | "global" | "builtin";
 }
 
 interface ToolItemProps {
@@ -32,6 +35,7 @@ interface ToolItemProps {
 }
 
 export function ToolItem({ tool, index, isExpanded, onToggle }: ToolItemProps) {
+  const { t } = useTranslation("openhands");
   // Extract function data from the nested structure
   const toolData = tool as ToolData;
   const functionData = toolData.function || toolData;
@@ -70,6 +74,17 @@ export function ToolItem({ tool, index, isExpanded, onToggle }: ToolItemProps) {
         title={String(name)}
         isExpanded={isExpanded}
         onClick={() => onToggle(index)}
+        badge={
+          toolData.source === "conversation" || toolData.source === "global" ? (
+            <span className="rounded border border-border px-2 py-0.5 text-xs font-normal text-muted">
+              {t(
+                toolData.source === "conversation"
+                  ? I18nKey.SYSTEM_MESSAGE_MODAL$CONVERSATION_ONLY_TOOL
+                  : I18nKey.SYSTEM_MESSAGE_MODAL$GLOBAL_TOOL,
+              )}
+            </span>
+          ) : undefined
+        }
       />
 
       {isExpanded && (

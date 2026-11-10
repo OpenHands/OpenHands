@@ -1,13 +1,21 @@
 import React from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, EyeOff, Puzzle } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { INTEGRATION_CATALOG } from "@openhands/extensions/integrations";
+import {
+  INTEGRATION_CATALOG,
+  type IntegrationCatalogEntry as MarketplaceEntry,
+} from "@openhands/extensions/integrations";
 import {
   changeConversationConfiguration,
+  getConversationTools,
   type ConversationConfigurationOperation,
 } from "#/api/conversation-configuration-service";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
+import { MCPServerForm } from "#/components/features/settings/mcp-settings/mcp-server-form";
+import { MarketplaceSection } from "#/components/features/mcp-page/marketplace-section";
+import { InstallServerModal } from "#/components/features/mcp-page/install-server-modal";
 import { McpLogoBadge } from "#/components/features/mcp-logo-badge";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import {
@@ -17,7 +25,15 @@ import {
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { useSettings } from "#/hooks/query/use-settings";
+import McpService from "#/api/mcp-service/mcp-service.api";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { CONVERSATION_CONFIGURATION_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { I18nKey } from "#/i18n/declaration";
+import type { MCPServerConfig } from "#/types/mcp-server";
+import {
+  toCanonicalMcpServer,
+  allocateMcpSettingsKey,
+} from "#/utils/mcp-config";
 import { formControlSettingsFieldClassName } from "#/utils/form-control-classes";
 import { getInstalledServerTitle } from "#/utils/mcp-installed-server-display";
 import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
@@ -29,6 +45,8 @@ import {
 interface ConversationConfigurationModalProps {
   conversationId: string;
   isAcp: boolean;
+  canInstallMcp?: boolean;
+  canListTools?: boolean;
   onClose: () => void;
 }
 
@@ -41,10 +59,12 @@ function SavedMcpSection({
   onAttach,
   pending,
   attached,
+  canInstallMcp,
 }: {
   onAttach: (ref: string) => void;
   pending: boolean;
   attached: Set<string>;
+  canInstallMcp: boolean;
 }) {
   const { t } = useTranslation("openhands");
   const { data: settings, isLoading, isError, refetch } = useSettings();
@@ -113,14 +133,16 @@ function SavedMcpSection({
           })}
         </ul>
       )}
-      <NavigationLink
-        to="/mcp"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-sm text-primary underline"
-      >
-        {t(I18nKey.MCP$VIEW_MARKETPLACE)}
-      </NavigationLink>
+      {!canInstallMcp && (
+        <NavigationLink
+          to="/mcp"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-primary underline"
+        >
+          {t(I18nKey.MCP$VIEW_MARKETPLACE)}
+        </NavigationLink>
+      )}
     </section>
   );
 }
@@ -128,15 +150,43 @@ function SavedMcpSection({
 export function ConversationConfigurationModal({
   conversationId,
   isAcp,
+  canInstallMcp = false,
+  canListTools = false,
   onClose,
 }: ConversationConfigurationModalProps) {
   const { t } = useTranslation("openhands");
+  const queryClient = useQueryClient();
+  const { backend } = useActiveBackend();
+  const { data: settings } = useSettings();
+  const [installEntry, setInstallEntry] =
+    React.useState<MarketplaceEntry | null>(null);
+  const [editingCustom, setEditingCustom] = React.useState(false);
+  const [marketplaceSearch, setMarketplaceSearch] = React.useState("");
   const [name, setName] = React.useState("");
   const [value, setValue] = React.useState("");
   const [showValue, setShowValue] = React.useState(false);
   const [pending, setPending] = React.useState(false);
   const [result, setResult] = React.useState<AppliedChange | null>(null);
   const [attached, setAttached] = React.useState(() => new Set<string>());
+  const { data: liveTools } = useQuery({
+    queryKey: CONVERSATION_CONFIGURATION_QUERY_KEYS.tools(
+      backend.id,
+      backend.connectionRevision,
+      conversationId,
+    ),
+    queryFn: () => getConversationTools(conversationId),
+    enabled: !isAcp && canListTools,
+    retry: false,
+    meta: { disableToast: true },
+  });
+  const attachedNames = new Set([
+    ...attached,
+    ...(liveTools?.tools.flatMap((tool) =>
+      tool.source === "conversation" && tool.server_name
+        ? [tool.server_name]
+        : [],
+    ) ?? []),
+  ]);
   const valueId = React.useId();
 
   const applyChange = async (
@@ -154,9 +204,65 @@ export function ConversationConfigurationModal({
         setValue("");
         setShowValue(false);
       } else {
-        setAttached((current) => new Set(current).add(operation.ref));
+        setAttached((current) =>
+          new Set(current).add(
+            operation.type === "mcp.attach" ? operation.ref : operation.name,
+          ),
+        );
+        void queryClient.invalidateQueries({
+          queryKey: CONVERSATION_CONFIGURATION_QUERY_KEYS.tools(
+            backend.id,
+            backend.connectionRevision,
+            conversationId,
+          ),
+        });
       }
       setResult({ type: "success", name: label });
+      return true;
+    } catch {
+      setResult({ type: "error" });
+      return false;
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const installMcp = async (server: MCPServerConfig) => {
+    const preferred = allocateMcpSettingsKey(
+      settings?.mcp_config ?? {},
+      server.name,
+      server.type,
+    );
+    let name = preferred;
+    for (let suffix = 1; attachedNames.has(name); suffix += 1) {
+      name = `${preferred}_${suffix}`;
+    }
+    const installed = await applyChange(
+      { type: "mcp.install", name, server: toCanonicalMcpServer(server) },
+      name,
+    );
+    if (!installed) throw new Error("MCP install failed");
+  };
+
+  const installCustomMcp = async (server: MCPServerConfig) => {
+    try {
+      let configured = server;
+      if (server.auth?.strategy === "oauth2") {
+        setPending(true);
+        const result = await McpService.authorizeOAuth(server);
+        if (!result.ok) {
+          setResult({ type: "error" });
+          return;
+        }
+        if (result.oauth_state) {
+          configured = {
+            ...server,
+            auth: { ...server.auth, state: result.oauth_state },
+          };
+        }
+      }
+      await installMcp(configured);
+      setEditingCustom(false);
     } catch {
       setResult({ type: "error" });
     } finally {
@@ -173,6 +279,17 @@ export function ConversationConfigurationModal({
       trimmedName,
     );
   };
+
+  if (installEntry) {
+    return (
+      <InstallServerModal
+        entry={installEntry}
+        existingServers={[]}
+        onInstall={installMcp}
+        onClose={() => setInstallEntry(null)}
+      />
+    );
+  }
 
   return (
     <ModalBackdrop
@@ -259,8 +376,47 @@ export function ConversationConfigurationModal({
               void applyChange({ type: "mcp.attach", ref }, ref)
             }
             pending={pending}
-            attached={attached}
+            attached={attachedNames}
+            canInstallMcp={canInstallMcp}
           />
+        )}
+        {!isAcp && canInstallMcp && (
+          <section className="w-full space-y-3">
+            {editingCustom ? (
+              <MCPServerForm
+                mode="add"
+                onSubmit={(server) => void installCustomMcp(server)}
+                onCancel={() => setEditingCustom(false)}
+                isActionDisabled={pending}
+              />
+            ) : (
+              <>
+                <SettingsInput
+                  testId="conversation-mcp-marketplace-search"
+                  name="marketplace-search"
+                  type="search"
+                  label={t(I18nKey.MCP$SEARCH_PLACEHOLDER)}
+                  value={marketplaceSearch}
+                  onChange={setMarketplaceSearch}
+                />
+                <div className="max-h-64 overflow-y-auto">
+                  <MarketplaceSection
+                    query={marketplaceSearch}
+                    onSelect={setInstallEntry}
+                    onAdd={setInstallEntry}
+                  />
+                </div>
+                <BrandButton
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setEditingCustom(true)}
+                  isDisabled={pending}
+                >
+                  {t(I18nKey.MCP$ADD_CUSTOM)}
+                </BrandButton>
+              </>
+            )}
+          </section>
         )}
         {result?.type === "success" && (
           <p role="status" className="w-full text-sm text-feedback-success">

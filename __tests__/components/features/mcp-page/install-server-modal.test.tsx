@@ -111,6 +111,48 @@ describe("InstallServerModal", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("sends a marketplace MCP directly to a conversation without saving global settings or secrets", async () => {
+    const slack = MCP_MARKETPLACE.find((entry) => entry.id === "slack")!;
+    const onInstall = vi.fn().mockResolvedValue(undefined);
+    const globalSave = vi.spyOn(SettingsService, "saveSettings");
+    const onClose = vi.fn();
+
+    renderWith(
+      <InstallServerModal
+        entry={slack}
+        existingServers={[]}
+        onClose={onClose}
+        onInstall={onInstall}
+      />,
+    );
+
+    await screen.findByTestId("mcp-install-modal");
+    expect(
+      screen.queryByTestId("mcp-install-tab-native"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("mcp-install-save-secret-SLACK_BOT_TOKEN"),
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_BOT_TOKEN"), {
+      target: { value: "scoped-token" },
+    });
+    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_TEAM_ID"), {
+      target: { value: "T02" },
+    });
+    fireEvent.click(screen.getByTestId("mcp-install-submit"));
+
+    await waitFor(() => expect(onInstall).toHaveBeenCalledOnce());
+    expect(onInstall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "stdio",
+        name: "slack",
+        env: { SLACK_BOT_TOKEN: "scoped-token", SLACK_TEAM_ID: "T02" },
+      }),
+    );
+    expect(globalSave).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("seeds the new card's health from the pre-save connection test", async () => {
     // Arrange: a fresh install whose pre-save test passes. Its card must
     // show a verdict immediately after install, without a second probe.

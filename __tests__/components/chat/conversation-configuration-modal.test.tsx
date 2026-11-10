@@ -138,6 +138,179 @@ describe("ConversationConfigurationModal", () => {
     );
   });
 
+  it("installs a marketplace server only into the current conversation without writing settings", async () => {
+    savedServers();
+    const user = userEvent.setup();
+    const requests: unknown[] = [];
+    let settingsWrites = 0;
+    server.use(
+      http.post("*/api/mcp/test", () =>
+        HttpResponse.json({ ok: true, tools: ["slack_post_message"] }),
+      ),
+      http.post(
+        "*/api/conversations/:id/configuration/changes",
+        async ({ request }) => {
+          requests.push(await request.json());
+          return HttpResponse.json({
+            applied: [{ type: "mcp.install", name: "slack" }],
+          });
+        },
+      ),
+      http.patch("*/api/settings", () => {
+        settingsWrites += 1;
+        return HttpResponse.json({});
+      }),
+      http.put("*/api/settings/secrets", () => {
+        settingsWrites += 1;
+        return HttpResponse.json({});
+      }),
+    );
+
+    renderWithProviders(
+      <ConversationConfigurationModal
+        conversationId={conversationId}
+        isAcp={false}
+        canInstallMcp
+        onClose={() => {}}
+      />,
+    );
+    await user.click(await screen.findByTestId("mcp-marketplace-card-slack"));
+    await user.type(
+      screen.getByTestId("mcp-install-field-SLACK_BOT_TOKEN"),
+      "scoped-token",
+    );
+    await user.type(
+      screen.getByTestId("mcp-install-field-SLACK_TEAM_ID"),
+      "T02",
+    );
+    await user.click(screen.getByTestId("mcp-install-submit"));
+
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests).toEqual([
+      {
+        operations: [
+          {
+            type: "mcp.install",
+            name: "slack",
+            server: expect.objectContaining({
+              transport: "stdio",
+              env: { SLACK_BOT_TOKEN: "scoped-token", SLACK_TEAM_ID: "T02" },
+            }),
+          },
+        ],
+      },
+    ]);
+    expect(settingsWrites).toBe(0);
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      I18nKey.CHAT$CONVERSATION_CONFIGURATION_SUCCESS,
+    );
+  });
+
+  it("installs a custom MCP server only into this conversation", async () => {
+    const user = userEvent.setup();
+    const requests: unknown[] = [];
+    let settingsWrites = 0;
+    server.use(
+      http.post(
+        "*/api/conversations/:id/configuration/changes",
+        async ({ request }) => {
+          requests.push(await request.json());
+          return HttpResponse.json({
+            applied: [{ type: "mcp.install", name: "ephemeral" }],
+          });
+        },
+      ),
+      http.patch("*/api/settings", () => {
+        settingsWrites += 1;
+        return HttpResponse.json({});
+      }),
+    );
+
+    renderWithProviders(
+      <ConversationConfigurationModal
+        conversationId={conversationId}
+        isAcp={false}
+        canInstallMcp
+        onClose={() => {}}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.MCP$ADD_CUSTOM }),
+    );
+    await user.type(screen.getByTestId("server-name-input"), "ephemeral");
+    await user.type(
+      screen.getByTestId("url-input"),
+      "https://mcp.example.com/api",
+    );
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests).toEqual([
+      {
+        operations: [
+          {
+            type: "mcp.install",
+            name: "ephemeral",
+            server: { transport: "sse", url: "https://mcp.example.com/api" },
+          },
+        ],
+      },
+    ]);
+    expect(settingsWrites).toBe(0);
+  });
+
+  it("recognizes already installed conversation MCP names after reopening", async () => {
+    const user = userEvent.setup();
+    let operationName = "";
+    server.use(
+      http.get("*/api/conversations/:id/tools", () =>
+        HttpResponse.json({
+          tools: [
+            {
+              name: "ephemeral_search",
+              description: "Search",
+              parameters: {},
+              source: "conversation",
+              server_name: "ephemeral",
+            },
+          ],
+        }),
+      ),
+      http.post(
+        "*/api/conversations/:id/configuration/changes",
+        async ({ request }) => {
+          const body = (await request.json()) as {
+            operations: { name: string }[];
+          };
+          operationName = body.operations[0].name;
+          return HttpResponse.json({
+            applied: [{ type: "mcp.install", name: operationName }],
+          });
+        },
+      ),
+    );
+    renderWithProviders(
+      <ConversationConfigurationModal
+        conversationId={conversationId}
+        isAcp={false}
+        canInstallMcp
+        canListTools
+        onClose={() => {}}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.MCP$ADD_CUSTOM }),
+    );
+    await user.type(screen.getByTestId("server-name-input"), "ephemeral");
+    await user.type(
+      screen.getByTestId("url-input"),
+      "https://mcp.example.com/api",
+    );
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() => expect(operationName).toBe("ephemeral_1"));
+  });
+
   it("keeps secret entry after an access error and permits retry without displaying the value", async () => {
     const user = userEvent.setup();
     let attempts = 0;

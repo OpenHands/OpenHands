@@ -15,6 +15,12 @@ export const QUERY_KEYS = {
 export const CONVERSATION_CONFIGURATION_QUERY_KEYS = {
   capability: (backendId: string, revision?: number) =>
     ["conversation-configuration-capability", backendId, revision] as const,
+  tools: (
+    backendId: string,
+    revision: number | undefined,
+    conversationId: string,
+  ) =>
+    ["conversation-live-tools", backendId, revision, conversationId] as const,
 } as const;
 
 export const SETTINGS_QUERY_KEYS = {

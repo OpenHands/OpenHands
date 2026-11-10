@@ -6,8 +6,10 @@ import { CONVERSATION_CONFIGURATION_QUERY_KEYS } from "./query-keys";
 
 const CONFIGURATION_ADDITIONS_CAPABILITY =
   "conversation_configuration_additions_v1";
+const MCP_INSTALL_CAPABILITY = "conversation_mcp_install_v1";
+const LIVE_TOOLS_CAPABILITY = "conversation_live_tools_v1";
 
-export function useConversationConfigurationCapability(enabled: boolean) {
+function useConfigurationCapabilities(enabled: boolean) {
   const { backend } = useActiveBackend();
   // The connection revision changes with host/credentials; keep API keys out of the cache key.
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
@@ -23,13 +25,26 @@ export function useConversationConfigurationCapability(enabled: boolean) {
           apiKey: backend.apiKey,
         }),
       ).getServerInfo();
-      return (
-        info.capabilities?.includes(CONFIGURATION_ADDITIONS_CAPABILITY) === true
-      );
+      return info.capabilities ?? [];
     },
     enabled: enabled && backend.kind === "local",
     staleTime: 5 * 60 * 1000,
     retry: false,
     meta: { disableToast: true },
   });
+}
+
+export function useConversationConfigurationCapability(enabled: boolean) {
+  const { data } = useConfigurationCapabilities(enabled);
+  return { data: data?.includes(CONFIGURATION_ADDITIONS_CAPABILITY) };
+}
+
+export function useConversationMcpCapabilities(enabled: boolean) {
+  const { backend } = useActiveBackend();
+  const { data, isError } = useConfigurationCapabilities(enabled);
+  return {
+    canInstall: data?.includes(MCP_INSTALL_CAPABILITY) === true,
+    canListTools: data?.includes(LIVE_TOOLS_CAPABILITY) === true,
+    isLoading: enabled && backend.kind === "local" && !data && !isError,
+  };
 }

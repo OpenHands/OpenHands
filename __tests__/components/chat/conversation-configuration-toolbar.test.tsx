@@ -61,6 +61,29 @@ describe("conversation configuration toolbar", () => {
     expect(screen.queryByTestId("tools-context-menu")).not.toBeInTheDocument();
   });
 
+  it("offers an inline marketplace only when the local server advertises scoped MCP installs", async () => {
+    const user = userEvent.setup();
+    let probes = 0;
+    renderToolbar(
+      [
+        "conversation_configuration_additions_v1",
+        "conversation_mcp_install_v1",
+      ],
+      () => {
+        probes += 1;
+      },
+    );
+    await user.click(await screen.findByTestId("chat-plus-button"));
+    await user.click(
+      await screen.findByTestId("conversation-configuration-button"),
+    );
+    expect(
+      await screen.findByTestId("mcp-marketplace-section"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("MCP$VIEW_MARKETPLACE")).not.toBeInTheDocument();
+    expect(probes).toBe(1);
+  });
+
   it("keeps unsupported local servers free of the new menu action", async () => {
     const user = userEvent.setup();
     let probes = 0;

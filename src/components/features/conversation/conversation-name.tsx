@@ -239,6 +239,7 @@ export function ConversationName() {
         isOpen={systemModalVisible}
         onClose={() => setSystemModalVisible(false)}
         systemMessage={systemMessage || null}
+        conversationId={conversationId ?? undefined}
       />
 
       {/* Skills Modal */}
