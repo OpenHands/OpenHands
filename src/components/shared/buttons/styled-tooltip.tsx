@@ -1,4 +1,4 @@
-import { Tooltip, TooltipProps } from "@heroui/react";
+import { Tooltip, TooltipProps } from "#/components/shared/tooltip";
 import React, { ReactNode } from "react";
 import { cn } from "#/utils/utils";
 
