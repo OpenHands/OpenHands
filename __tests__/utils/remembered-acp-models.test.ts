@@ -65,6 +65,41 @@ describe("remembered ACP models", () => {
     expect(acpModelScope([])).not.toBe(acpModelScope(null));
   });
 
+  it("adds the launch command to the scope, keeping the old value for no command", () => {
+    // Backward compatibility: a launch with no explicit command (a built-in
+    // provider's default) keeps exactly the secrets-only scope older Canvas
+    // versions wrote.
+    expect(acpModelScope(null, [])).toBe(ALL);
+    expect(acpModelScope(["A"], [])).toBe(acpModelScope(["A"]));
+    expect(acpModelScope(null, ["wrapper-a"])).not.toBe(ALL);
+    expect(acpModelScope(null, ["wrapper-a"])).not.toBe(
+      acpModelScope(null, ["wrapper-b"]),
+    );
+    // Secret scope and command scope are independent dimensions.
+    expect(acpModelScope(null, ["wrapper-a"])).not.toBe(
+      acpModelScope(["A"], ["wrapper-a"]),
+    );
+    // The scope is persisted in localStorage, so an inline credential in the
+    // command must not appear there in clear text.
+    const scope = acpModelScope(null, [
+      "my-wrapper",
+      "--api-key=sk-secret-value",
+    ]);
+    expect(scope).not.toContain("sk-secret-value");
+    expect(scope).not.toContain("my-wrapper");
+  });
+
+  it("keeps a list per launch command for the same backend and agent", () => {
+    const wrapperA = acpModelScope(null, ["my-acp-wrapper", "--flag-a"]);
+    const wrapperB = acpModelScope(null, ["my-acp-wrapper", "--flag-b"]);
+    rememberAcpModels("local-1", "custom", wrapperA, MODELS);
+
+    expect(readRememberedAcpModels("local-1", "custom", wrapperA)).toEqual(
+      MODELS,
+    );
+    expect(readRememberedAcpModels("local-1", "custom", wrapperB)).toEqual([]);
+  });
+
   it("offers every scope's models when no scope is given", () => {
     rememberAcpModels("cloud-1", "claude-code", ALL, MODELS);
     rememberAcpModels("cloud-1", "claude-code", acpModelScope([]), [

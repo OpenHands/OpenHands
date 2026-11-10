@@ -17,13 +17,13 @@ import {
 import {
   acpEffortOf,
   getAcpPreferredDefaultModel,
-  getAcpProvider,
   labelForAcpEffort,
   labelForAcpModel,
   resolveEffectiveAcpModel,
   type ACPEffortChoice,
   type ACPModelOption,
 } from "#/constants/acp-providers";
+import { acpLaunchFromProfile, type AcpLaunch } from "#/utils/acp-launch";
 import { I18nKey } from "#/i18n/declaration";
 
 export interface ChatInputModelState {
@@ -77,10 +77,21 @@ export function useChatInputModelState(): ChatInputModelState {
     : isHomeAcp
       ? (activeAcpProfile?.acp_server ?? settingsAcpServerKey)
       : null;
-  const acpProvider = isAcpContext ? getAcpProvider(acpServerKey) : undefined;
+  // The launch whose models the picker shows. A saved profile carries the full
+  // command, so a custom profile is asked with the argv it would spawn. A
+  // running conversation exposes no command on the wire (`LaunchedAgentProfile`
+  // has only its secret refs), so it can only ask a built-in provider for its
+  // default command — a custom conversation's list comes from the session.
+  const acpLaunch: AcpLaunch | null = isActiveAcpConversation
+    ? acpServerKey
+      ? { server: acpServerKey, command: [], args: [] }
+      : null
+    : isHomeAcp
+      ? acpLaunchFromProfile(activeAcpProfile)
+      : null;
   // The agent's models depend on the secrets it may use: the ones the
   // conversation launched with, or the next launch's from the active profile.
-  const discovered = useAcpModelDiscovery(acpProvider ? acpServerKey : null, {
+  const discovered = useAcpModelDiscovery(acpLaunch, {
     enabled: isActiveAcpConversation || !!activeAcpProfile,
     secretRefs:
       (isActiveAcpConversation
@@ -174,7 +185,7 @@ export function useChatInputModelState(): ChatInputModelState {
   const showAcpPicker =
     isAcpContext && availableAcpModels.length > 0 && canPersistHomeAcpModel;
   let agentDefaultLabel: string | null = null;
-  if (isHomeAcp && acpProvider && !getAcpPreferredDefaultModel(acpServerKey)) {
+  if (isHomeAcp && !getAcpPreferredDefaultModel(acpServerKey)) {
     const defaultModelLabel = labelForAcpModel(
       discovered.defaultModelId,
       liveModels,
