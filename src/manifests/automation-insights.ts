@@ -188,15 +188,24 @@ const TRIGGER_PREDICATES: Record<
   schedule: (automation) => automation.trigger.type !== "event",
 };
 
+// Who an automation runs as (`user_id`, `run_as_kind`), not who created it.
 // The caller's id is non-null whenever these run; applyDashboardView skips the
-// creator check until identity resolves, so "me" is an exact match and
-// "others" is everything else, including creator-less automations.
+// owner check until identity resolves. "me" and "others" are people only — an
+// automation without `run_as_kind` (an older service) runs as a person — so
+// "others" takes in identity-less automations, and "service" is every
+// automation that runs as a service account.
+const runsAsServiceAccount = (automation: Automation): boolean =>
+  automation.run_as_kind === "service";
+
 const CREATED_BY_PREDICATES: Record<
   Exclude<DashboardCreatedByValue, "all">,
   (automation: Automation, currentUserId: string) => boolean
 > = {
-  me: (automation, currentUserId) => automation.user_id === currentUserId,
-  others: (automation, currentUserId) => automation.user_id !== currentUserId,
+  me: (automation, currentUserId) =>
+    !runsAsServiceAccount(automation) && automation.user_id === currentUserId,
+  others: (automation, currentUserId) =>
+    !runsAsServiceAccount(automation) && automation.user_id !== currentUserId,
+  service: runsAsServiceAccount,
 };
 
 function runCount(automation: Automation, byId: Summaries): number {
@@ -257,7 +266,7 @@ export function applyDashboardView(
         return false;
       }
       // With no caller id (local backend, personal workspace, or /me
-      // loading), the creator filter is inert.
+      // loading), the owner filter is inert.
       if (
         view.currentUserId !== null &&
         view.createdBy !== "all" &&

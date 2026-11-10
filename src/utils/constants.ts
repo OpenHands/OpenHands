@@ -24,7 +24,7 @@ export const PRODUCT_URL = {
 };
 
 export const SETTINGS_FORM = {
-  LABEL_CLASSNAME: "text-2xs font-medium leading-4 tracking-[0.11px]",
+  LABEL_CLASSNAME: "text-2xs font-medium leading-4 tracking-metadata",
 };
 
 // Chat input constants

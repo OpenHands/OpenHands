@@ -16,7 +16,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTracking } from "#/hooks/use-tracking";
 import { uniqueById } from "#/utils/unique-by-id";
 import type {
-  AutomationCreatedByFilter,
+  AutomationRunAsFilter,
   AutomationSpec,
   AutomationTagCount,
   AutomationsResponse,
@@ -68,7 +68,7 @@ function joinAutomationPages(
 interface UseAutomationsOptions {
   /** Automations per request; at most 100. A count-only caller passes 1. */
   pageSize?: number;
-  createdBy?: AutomationCreatedByFilter;
+  runAs?: AutomationRunAsFilter;
   tag?: string;
   enabled?: boolean;
 }
@@ -120,7 +120,7 @@ export function useAutomationDrafts(options: UseAutomationDraftsOptions = {}) {
 export function useAutomations(options: UseAutomationsOptions = {}) {
   const {
     pageSize = AUTOMATIONS_PAGE_SIZE,
-    createdBy,
+    runAs,
     tag,
     enabled = true,
   } = options;
@@ -128,12 +128,12 @@ export function useAutomations(options: UseAutomationsOptions = {}) {
   return useInfiniteQuery({
     queryKey: [
       ...AUTOMATIONS_QUERY_KEY,
-      { pageSize, createdBy, tag },
+      { pageSize, runAs, tag },
       active.backend.id,
       active.orgId,
     ],
     queryFn: ({ pageParam }) =>
-      AutomationService.getAutomations(pageSize, pageParam, createdBy, tag),
+      AutomationService.getAutomations(pageSize, pageParam, runAs, tag),
     initialPageParam: 0,
     getNextPageParam: (lastPage, _pages, lastOffset) => {
       const nextOffset = lastOffset + lastPage.automations.length;

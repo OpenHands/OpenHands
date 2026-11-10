@@ -24,6 +24,8 @@ describe("vite optimizeDeps", () => {
         "react/jsx-runtime",
         "react-dom/client",
         "react-router/dom",
+        "react-aria",
+        "react-aria-components",
       ]),
     );
   });
@@ -242,6 +244,26 @@ describe("vite library build", () => {
       expect(matches, `Single scoped recipe: ${name}`).toHaveLength(1);
       return matches[0];
     };
+    // These aliases resolve the exact public Canvas variables, including host overrides.
+    expect(declarations(recipe("bg-canvas-background"))).toEqual({
+      "background-color": "var(--oh-background)",
+    });
+    expect(declarations(recipe("text-on-accent"))).toEqual({
+      color: "var(--oh-accent-foreground)",
+    });
+    expect(declarations(recipe("file-strip-scrollbar-hidden"))).toMatchObject({
+      "scrollbar-width": "none",
+      "-ms-overflow-style": "none",
+    });
+    expect(
+      declarations(
+        recipe("file-strip-scrollbar-hidden", "::-webkit-scrollbar"),
+      ),
+    ).toMatchObject({ display: "none" });
+    expect(declarations(recipe("file-discovery-viewport-height"))).toEqual({
+      "max-height": "90vh",
+    });
+
     // A named gradient stop retains the existing ancestor override/fallback.
     const scrollFade = recipe("from-scroll-fade");
     expect(declarations(scrollFade)["--tw-gradient-from"]).toBe(
@@ -271,6 +293,20 @@ describe("vite library build", () => {
       top: "-16px",
       left: "-20px",
     });
+    // Typography recipes retain signed values and their original units.
+    for (const [name, value] of [
+      ["tracking-metadata", ".11px"],
+      ["tracking-label", ".01em"],
+      ["tracking-title", "-.01em"],
+      ["tracking-heading", "-.02em"],
+      ["tracking-auth-code", ".08em"],
+      ["tracking-device-code", ".3em"],
+    ]) {
+      expect(declarations(recipe(name))).toEqual({
+        "--tw-tracking": value,
+        "letter-spacing": value,
+      });
+    }
     // Message wrapping must retain the legacy word-break behavior; the standard
     // overflow utility controls the independent min-content wrapping contract.
     expect(declarations(recipe("message-word-break"))).toEqual({
@@ -285,12 +321,34 @@ describe("vite library build", () => {
     expect(css).toContain("[data-agent-server-ui] .xterm");
     expect(css).toContain("fonts.googleapis.com");
 
+    // Inset recipes retain direction, absolute pixels and public color hooks.
+    expect(
+      recipes("shadow-badge-inset")
+        .map((rule) => declarations(rule)["--tw-shadow"]?.replace(/,\s+/g, ","))
+        .filter(Boolean)
+        .at(-1),
+    ).toBe(
+      "inset 0 1px 0 var(--tw-shadow-color,color-mix(in srgb,var(--oh-contrast) 18%,transparent))",
+    );
+    for (const [name, offset] of [
+      ["shadow-reorder-before", "2px"],
+      ["shadow-reorder-after", "-2px"],
+    ]) {
+      expect(declarations(recipe(name))["--tw-shadow"]).toBe(
+        `inset 0 ${offset} 0 0 var(--tw-shadow-color,var(--oh-focus))`,
+      );
+    }
     // Extension dialogs keep their viewport limits in the shipped library.
     expect(declarations(recipe("extension-dialog-viewport"))).toMatchObject({
       "max-width": "90vw",
       "max-height": "85vh",
     });
     expect(css).not.toMatch(/(^|[{},])\.extension-dialog-viewport\{/);
+
+    expect(declarations(recipe("w-commit-sha")).width).toBe("7ch");
+    expect(declarations(recipe("h-(--editor-height)")).height).toBe(
+      "var(--editor-height)",
+    );
 
     // Require the setup rail and editor geometry in the extracted stylesheet;
     // every recipe must remain a scoped utility even inside media conditions.
@@ -449,6 +507,19 @@ describe("vite library build", () => {
       }
     }
 
+    const contextTrackMix =
+      "color-mix(in srgb,var(--oh-context-window-foreground) var(--oh-context-window-track-weight),transparent)";
+    for (const [className, property] of [
+      ["stroke-context-window-track", "stroke"],
+      ["border-context-window-track", "border-color"],
+    ] as const) {
+      const track = Object.assign({}, ...recipes(className).map(declarations));
+      expect(track[property]?.replace(/,\s*/g, ",")).toBe(contextTrackMix);
+    }
+    expect(declarations(recipe("w-(--context-fill-width)")).width).toBe(
+      "var(--context-fill-width)",
+    );
+
     // Connection chooser disclosures retain exact fractional tracks and their
     // motion override after extraction and library selector scoping.
     const transitionProperties = {
@@ -520,6 +591,10 @@ describe("vite library build", () => {
     expect(reducedMotion.source?.start?.offset).toBeGreaterThan(
       disclosure.source?.start?.offset ?? Infinity,
     );
+
+    expect(
+      declarations(recipe("dark:border-git-control", ":is(.dark *)")),
+    ).toEqual({ "border-color": "#474a5480" });
 
     // Preserve relative typography/geometry and distinct Add/Edit viewport
     // semantics, including the Cloud panel's grayscale pseudo-element halo.
