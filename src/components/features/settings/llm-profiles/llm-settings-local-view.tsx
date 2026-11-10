@@ -97,10 +97,12 @@ export function shouldReapplyProfileAfterSave({
 
 export function LlmSettingsLocalView({
   createInAgent,
+  initialProfile,
   onSavedProfile,
   onCancel,
 }: {
   createInAgent?: boolean;
+  initialProfile?: ProfileInfo;
   onSavedProfile?: (name: string) => void;
   onCancel?: () => void;
 } = {}) {
@@ -162,7 +164,7 @@ export function LlmSettingsLocalView({
     backend.kind === "local" || (backend.kind === "cloud" && !!orgId);
 
   const [viewMode, setViewMode] = useState<ViewMode>(
-    createInAgent ? "create" : "list",
+    createInAgent ? (initialProfile ? "edit" : "create") : "list",
   );
   const [profileName, setProfileName] = useState("");
   // Whether the user typed the current create-mode name. Until they do (or
@@ -250,6 +252,12 @@ export function LlmSettingsLocalView({
     },
     [t],
   );
+
+  useEffect(() => {
+    if (createInAgent && initialProfile) {
+      void handleEditProfile(initialProfile);
+    }
+  }, [createInAgent, initialProfile, handleEditProfile]);
 
   const handleBackToList = useCallback(() => {
     if (createInAgent) {
@@ -467,6 +475,10 @@ export function LlmSettingsLocalView({
         onEditProfile={handleEditProfile}
       />
     );
+  }
+
+  if (createInAgent && initialProfile && !editingProfile) {
+    return <LlmSettingsInputsSkeleton />;
   }
 
   const profileEditorTitle =
