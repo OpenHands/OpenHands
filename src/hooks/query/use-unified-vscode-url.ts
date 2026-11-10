@@ -70,7 +70,14 @@ export const useUnifiedVSCodeUrl = () => {
         sessionApiKey,
       ),
     enabled:
-      !isCloud && originServesEditor && runtimeIsReady && !!conversationId,
+      !isCloud &&
+      originServesEditor &&
+      // Paused conversations are not "runtime ready", but the VSCode status
+      // probe hits the agent-server directly and does not require an active
+      // execution. Allow probing so the control hides correctly on a paused
+      // conversation instead of showing a button that opens nothing.
+      (runtimeIsReady || conversation?.execution_status === 'paused') &&
+      !!conversationId,
     refetchOnMount: true,
   });
 
@@ -107,7 +114,9 @@ export const useUnifiedVSCodeUrl = () => {
     enabled:
       !isCloud &&
       originServesEditor &&
-      runtimeIsReady &&
+      // Same rationale as the status probe above: paused conversations need
+      // the URL query to run so the button hides correctly.
+      (runtimeIsReady || conversation?.execution_status === 'paused') &&
       !!conversationId &&
       editorIsAvailable,
     refetchOnMount: true,
