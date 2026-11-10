@@ -279,4 +279,25 @@ describe("ErrorMessageBanner", () => {
     // Assert
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
+
+  it("disables the retry button when isRetrying is true", async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+
+    render(
+      <ErrorMessageBanner
+        message="Transient error"
+        onRetry={onRetry}
+        isRetrying
+      />,
+    );
+
+    const retryButton = screen.getByTestId("error-message-banner-retry");
+    expect(retryButton).toBeDisabled();
+    expect(retryButton.className).toContain("cursor-not-allowed");
+    expect(retryButton.className).toContain("opacity-50");
+
+    await user.click(retryButton);
+    expect(onRetry).not.toHaveBeenCalled();
+  });
 });
