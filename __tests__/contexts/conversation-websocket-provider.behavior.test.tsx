@@ -1259,6 +1259,7 @@ describe("Conversation websocket behavior", () => {
     await waitFor(() =>
       expect(screen.getByTestId("connection-state")).toHaveTextContent("OPEN"),
     );
+    dispatchMainFrame({ type: "sync", from_seq: null, through_seq: null });
     await expect(
       contextCapture.current?.sendMessage(makeSendRequest("new socket")),
     ).resolves.toEqual({ queued: false });
@@ -1279,6 +1280,7 @@ describe("Conversation websocket behavior", () => {
     socketCapture.mainSocket = mainSocket;
     socketCapture.planningSocket = planningSocket;
     renderProvider({ subConversations: [makeSubConversation()] });
+    dispatchMainFrame({ type: "sync", from_seq: null, through_seq: null });
 
     await expect(
       contextCapture.current?.sendMessage(makeSendRequest("code message")),
@@ -1294,6 +1296,30 @@ describe("Conversation websocket behavior", () => {
     expect(planningSocket.send).toHaveBeenCalledWith(
       JSON.stringify({ ...makeSendRequest("plan message"), run: true }),
     );
+  });
+
+  it("delivers over REST while an open socket has not been served yet", async () => {
+    const mainSocket = makeSocket();
+    socketCapture.mainSocket = mainSocket;
+    renderProvider();
+
+    // A running conversation can hold a new session socket unserved; a frame
+    // sent into it then is lost if the tab leaves first.
+    await expect(
+      contextCapture.current?.sendMessage(makeSendRequest("wait, actually")),
+    ).resolves.toEqual({ queued: true });
+    expect(mainSocket.send).not.toHaveBeenCalled();
+    expect(socketCapture.queueMessage).toHaveBeenCalledWith(
+      "conv-main",
+      { role: "user", content: makeSendRequest("wait, actually").content },
+      { run: true },
+    );
+
+    dispatchMainFrame({ type: "sync", from_seq: null, through_seq: null });
+    await expect(
+      contextCapture.current?.sendMessage(makeSendRequest("now live")),
+    ).resolves.toEqual({ queued: false });
+    expect(mainSocket.send).toHaveBeenCalledTimes(1);
   });
 
   it("queues messages over REST while the socket is unavailable", async () => {
@@ -1375,6 +1401,7 @@ describe("Conversation websocket behavior", () => {
     });
     socketCapture.mainSocket = socket;
     renderProvider();
+    dispatchMainFrame({ type: "sync", from_seq: null, through_seq: null });
 
     await expect(
       contextCapture.current?.sendMessage(makeSendRequest("hello")),

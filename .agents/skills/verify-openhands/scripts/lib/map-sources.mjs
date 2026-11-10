@@ -90,6 +90,10 @@ const NON_USER_FACING = [
   /^scripts\/[^/]+\.cjs$/,
   /^scripts\/(stryker-diff|generate-icons|brand-dev-electron|check-sdk-version-sync)\.mjs$/,
   /\.test\.[cm]?[jt]sx?$/,
+  // Lint, unit-test and Playwright configuration: CI tooling, not the build.
+  /^eslint\.config\.[cm]?js$/,
+  /^(vitest\.setup|stryker\.config)\.[cm]?[jt]s$/,
+  /^playwright(\.[a-z0-9-]+)?\.config\.ts$/,
   /^(README|CHANGELOG|AGENTS|MAINTAINERS)[^/]*\.md$/,
   /^\.[^/]+$/,
 ];
@@ -104,6 +108,8 @@ const SHARED_PREFIXES = [
   "src/index.css",
   "src/tailwind.css",
   "src/themes/",
+  "src/icons/",
+  "src/assets/",
   "src/i18n/",
   "src/api/",
   "src/hooks/",

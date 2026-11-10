@@ -80,26 +80,65 @@ agent-canvas --backend-only   # agent server + automation backend + ingress only
 
 ### Option 2: With a Docker Sandbox
 
-**Prerequisites**:
+Install Docker Desktop on macOS/Windows, or Docker Engine/Docker Desktop on Linux.
+Windows users can follow the [PowerShell quickstart](./README.windows.md).
 
-- Docker: Docker Desktop on macOS/Windows, or Docker Engine/Docker Desktop on Linux.
-- A host directory for `PROJECTS_PATH` containing the project folders you want the agent to access. Create it before starting the container.
+The steps below are for macOS and Linux. A named Docker volume stores settings,
+secrets, and conversations; projects are mounted at `/projects`.
 
-**macOS / Linux:**
+**1. Prepare a workspace**
 
 ```sh
 export PROJECTS_PATH="$HOME/projects"  # directory containing your project folders
-mkdir -p "$PROJECTS_PATH" "$HOME/.openhands"
+mkdir -p "$PROJECTS_PATH"
+```
 
+On **Linux Docker Engine**, uid 10001 inside the container must be able to read
+and write the workspace and its existing files. Grant that user access using
+appropriate ownership or ACLs for your system. For a dedicated workspace you are
+comfortable sharing with all local users, the following is another option:
+
+```sh
+find "$PROJECTS_PATH" -type d -exec chmod a+rwX {} +
+find "$PROJECTS_PATH" -type f -exec chmod a+rw {} +
+```
+
+These commands grant all host users access to the workspace. Keep it separate
+from `~/.openhands` and other sensitive data. Docker Desktop on macOS/Windows
+handles bind-mount permissions, so those commands are normally unnecessary.
+
+**2. Start Agent Canvas**
+
+```sh
 docker run -it --rm \
   -p 127.0.0.1:8000:8000 \
   -e AGENT_CANVAS_ALLOW_LAN_SESSION_KEY=true \
-  -v "$HOME/.openhands:/home/openhands/.openhands" \
+  -v openhands-state:/home/openhands/.openhands \
   -v "${PROJECTS_PATH}:/projects" \
-  ghcr.io/openhands/agent-canvas:1.37.0 # x-release-please-version
+  ghcr.io/openhands/agent-canvas:1.38.0 # x-release-please-version
 ```
 
-**Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
+Open [http://localhost:8000/canvas](http://localhost:8000/canvas). Reuse
+`openhands-state` to retain state across container removals. A fresh volume does
+not contain existing `~/.openhands` data; inspect or back it up with
+`docker volume inspect openhands-state`.
+
+<details>
+<summary>Linux permission troubleshooting and existing state</summary>
+
+If startup reports `Permission denied`, check access to the path named in the
+error. On SELinux hosts, check whether the bind mount needs a `:z` or `:Z` label.
+If you bind-mount existing `~/.openhands` state instead of the named volume,
+uid 10001 needs access to its directories, existing key files and automation
+database. Grant access using ownership or ACLs while keeping keys private.
+Making state directories writable by all users can let another local user
+replace the session key; do not use recursive world-writable permissions there.
+
+Keep the default container user. An override can make the browser configuration
+directory inaccessible. If you override the user, configure a writable
+`XDG_CONFIG_HOME` and ensure state and workspace mounts are accessible.
+
+</details>
 
 > [!NOTE]
 > The entrypoint stops the container with exit code 1 when the Agent Server stops answering

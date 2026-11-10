@@ -156,6 +156,7 @@ const DEFAULT_EVENT_SOURCE = "github";
 const REPO_UPDATE_FEATURE = "repoUpdate";
 const PLUGIN_CONFIG_UPDATE_FEATURE = "pluginConfigUpdate";
 const AGENT_PROFILES_FEATURE = "agentProfiles";
+const PRESET_AGENT_PROFILES_FEATURE = "presetAgentProfiles";
 /**
  * Used when the deployment has not advertised its event sources yet. These are
  * the automation service's built-in providers, which it reserves as source
@@ -1126,15 +1127,14 @@ export function AutomationSetupPanel({
   const hasExistingCustomBundle = Boolean(
     isEditingExisting && kind === "custom" && existingCustomTarballPath.trim(),
   );
-  const deploymentFeatures = deploymentCapabilities.data?.features ?? [];
-  const supportsAgentProfiles = deploymentFeatures.includes(
-    AGENT_PROFILES_FEATURE,
+  const supportsPresetAgentProfiles = (
+    deploymentCapabilities.data?.features ?? []
+  ).includes(PRESET_AGENT_PROFILES_FEATURE);
+  const canSelectAgentProfile = (
+    deploymentCapabilities.data?.features ?? []
+  ).includes(
+    kind === "custom" ? AGENT_PROFILES_FEATURE : PRESET_AGENT_PROFILES_FEATURE,
   );
-  const supportsPresetAgentProfiles = deploymentFeatures.includes(
-    "presetAgentProfiles",
-  );
-  const canSelectAgentProfile =
-    supportsAgentProfiles && (kind === "custom" || supportsPresetAgentProfiles);
   const selectedAgentProfileId =
     (canSelectAgentProfile && agentProfileId.trim()) || null;
 
@@ -1445,7 +1445,7 @@ export function AutomationSetupPanel({
     if (configuredPlugins.length > 0) {
       body.plugins = configuredPlugins;
     }
-
+    // An agent profile brings its own LLM profile; the service refuses both.
     if (selectedAgentProfileId) body.agent_profile_id = selectedAgentProfileId;
     else if (model.trim()) body.model = model.trim();
     if (newAutomationRunAsId) body.run_as_user_id = newAutomationRunAsId;
@@ -1678,6 +1678,7 @@ export function AutomationSetupPanel({
     if (
       !isEditingExisting &&
       supportsPresetAgentProfiles &&
+      canSelectAgentProfile &&
       !agentProfileId.trim()
     ) {
       setStatusMessage({
@@ -1961,21 +1962,15 @@ export function AutomationSetupPanel({
       body.config = parsePluginConfig(form.pluginConfig);
       return body as AutomationUpdate;
     }
-    if (kind === "custom") {
+    if (kind === "custom" || canSelectAgentProfile) {
       // Without the capability the picker is hidden; keep the stored profile.
       body.agent_profile_id = canSelectAgentProfile
         ? selectedAgentProfileId
         : agentProfileId.trim() || null;
       // Clear a saved model when a profile replaces it.
       if (selectedAgentProfileId) body.model = null;
-    } else {
-      if (selectedAgentProfileId) {
-        body.agent_profile_id = selectedAgentProfileId;
-        body.model = null;
-      }
-      body.prompt = prompt.trim();
     }
-
+    if (kind !== "custom") body.prompt = prompt.trim();
     const repositories = parseAutomationSetupRepositories(repository);
     if (
       repositoriesEditable &&
@@ -2516,9 +2511,15 @@ export function AutomationSetupPanel({
                               }
                               repositoryReadOnly={!repositoriesEditable}
                               model={model}
-                              showModel={!canSelectAgentProfile}
                               onModelChange={(value) =>
                                 updateField("model", value)
+                              }
+                              agentProfileId={agentProfileId}
+                              onAgentProfileChange={
+                                canSelectAgentProfile
+                                  ? (value) =>
+                                      updateField("agentProfileId", value)
+                                  : undefined
                               }
                             />
                           ) : hasExistingCustomBundle ? (
@@ -2554,7 +2555,7 @@ export function AutomationSetupPanel({
                             />
                           )}
                         </SetupKindCrossfade>
-                        {canSelectAgentProfile ? (
+                        {kind === "custom" && canSelectAgentProfile ? (
                           <SetupProfilePickers
                             model={model}
                             onModelChange={(value) =>

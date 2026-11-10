@@ -1,0 +1,52 @@
+{
+  "issue": "https://github.com/OpenHands/OpenHands/issues/19576",
+  "base": "e14b76cca01a71597cee242c202eed730e745ce3",
+  "source_patch": "https://github.com/jaeminbird/OpenHands/commit/5157ff29e759d545aaf965b06b8381a62191933e",
+  "baseline_regression": {
+    "file": "__tests__/components/conversation-events/chat/messages-step-disclosure.test.tsx",
+    "passed": 21,
+    "failed": 2,
+    "failures": [
+      "New York: newer completed unanchored resume wrongly hidden",
+      "Seoul: older completed unanchored resume wrongly visible"
+    ],
+    "timezone_offset_assertions": "passed"
+  },
+  "fixed_focused": {
+    "files_passed": 30,
+    "tests_passed": 372,
+    "includes": "All23 Messages disclosure cases, chat groups/events, sessions and date utilities"
+  },
+  "lint": "passed",
+  "app_build": "passed through Control OpenHands launch",
+  "library_build": "passed",
+  "changed_file_formatting": "passed",
+  "full_suite": {
+    "files_passed": 900,
+    "files_failed": 2,
+    "tests_passed": 10574,
+    "tests_failed": 15,
+    "skipped": 1,
+    "todo": 7,
+    "failures": [
+      "__tests__/scripts/docker-automation-kv-secret.test.ts",
+      "__tests__/scripts/docker-session-key-policy.test.ts"
+    ],
+    "diagnosis": "All15 failures reproduced with identical failed-test names on isolated unchanged baseline e14b76c;17 controls pass. Confined to Docker shell test environment; KV-secret cases show user .bashrc startup stderr, session-key cases exit127.",
+    "baseline_comparison": "Actual focused baseline rerun, not source-only attribution"
+  },
+  "live_cloud_bug_proof": {
+    "result": "blocked",
+    "reason": "No authenticated Cloud session or owned paused Cloud sandbox. Chrome navigated to app.all-hands.dev/login. Local sandbox does not create Cloud resume activity.",
+    "not_claimed": [
+      "Production Cloud failure before patch",
+      "Production Cloud success after patch"
+    ]
+  },
+  "verification_specs": "read-only; no changes",
+  "environment": {
+    "node": "24.22.1",
+    "npm": "11.12.1",
+    "dependency_install": "npm ci --ignore-scripts from committed lock; no dependency changes"
+  }
+}

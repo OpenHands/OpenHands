@@ -1,5 +1,5 @@
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
@@ -1401,6 +1401,8 @@ describe("HomeChatLauncher", () => {
       initialUserMsg: "hello world",
       suppressRouterAtStart: true,
     });
+    // The pick is cleared once the create resolves, after the spy records
+    // the call, so wait for it rather than reading it on the same tick.
     await waitFor(() =>
       expect(
         hasPendingHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId),
@@ -1428,13 +1430,17 @@ describe("HomeChatLauncher", () => {
     ).toBe(true);
 
     // Return to the composer from the failed-launch view and retry.
-    await user.click(await screen.findByRole("button", { name: "BUTTON$EDIT" }));
+    await user.click(
+      await screen.findByRole("button", { name: "BUTTON$EDIT" }),
+    );
     await user.click(screen.getByTestId("stub-chat-submit"));
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(2));
     expect(createSpy.mock.lastCall?.[0]).toMatchObject({
       initialUserMsg: "hello world",
       suppressRouterAtStart: true,
     });
+    // The pick is cleared once the create resolves, after the spy records
+    // the call, so wait for it rather than reading it on the same tick.
     await waitFor(() =>
       expect(
         hasPendingHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId),

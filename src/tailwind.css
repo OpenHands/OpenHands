@@ -1,8 +1,26 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-@plugin '../hero.ts';
+/* HeroUI v3: import only the component styles in use. The full
+   "@heroui/styles" entry also pulls the default theme, whose layered
+   :root/.light variables would override Canvas tokens (color-scheme: light,
+   light --background/--accent); HeroUI tokens map onto --oh-* below. */
+@import "@heroui/styles/base/base.css" layer(base);
+@import "@heroui/styles/components/label.css" layer(components);
+@import "@heroui/styles/components/header.css" layer(components);
+@import "@heroui/styles/components/input.css" layer(components);
+@import "@heroui/styles/components/input-group.css" layer(components);
+@import "@heroui/styles/components/list-box.css" layer(components);
+@import "@heroui/styles/components/list-box-item.css" layer(components);
+@import "@heroui/styles/components/list-box-section.css" layer(components);
+@import "@heroui/styles/components/popover.css" layer(components);
+@import "@heroui/styles/components/combo-box.css" layer(components);
+@import "@heroui/styles/components/tooltip.css" layer(components);
+@import "@heroui/styles/components/spinner.css" layer(components);
+@import "@heroui/styles/utilities";
+
 @config "../tailwind.config.js";
-@source '../node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}';
+@source '../node_modules/@heroui/styles/dist/**/*.{js,ts,jsx,tsx}';
 
 @plugin 'tailwind-scrollbar' {
   nocompatible: true;
@@ -10,6 +28,25 @@
 }
 
 @theme inline {
+  /* HeroUI utilities its imported component CSS applies, on Canvas tokens.
+     Radius scale stays Canvas-owned; only HeroUI's field/shadow slots map. */
+  --color-overlay: var(--overlay);
+  --color-background: var(--background);
+  --color-default: var(--default);
+  --color-default-foreground: var(--default-foreground);
+  --color-field: var(--field-background, var(--default));
+  --color-field-hover: var(--field-hover);
+  --color-field-foreground: var(--field-foreground, var(--foreground));
+  --color-field-placeholder: var(--field-placeholder, var(--muted));
+  --color-field-border-invalid: var(--oh-color-danger);
+  --shadow-overlay: var(--overlay-shadow);
+  --shadow-field: var(--field-shadow);
+  --radius-field: var(--field-radius, calc(var(--radius) * 1.5));
+  --border-width-field: var(--field-border-width, var(--border-width));
+  --ease-smooth: ease;
+  --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
+  --animate-spin-fast: spin 0.75s linear infinite;
+
   /* Preserve existing absolute control geometry, independent of root font size. */
   --radius-pill: 100px;
   --radius-composer: 15px;
@@ -29,9 +66,18 @@
   --text-sm-plus: 15px;
   --text-title: 32px;
 
+  /* Keep signed letter spacing and its original px/em units. */
+  --tracking-metadata: 0.11px;
+  --tracking-label: 0.01em;
+  --tracking-title: -0.01em;
+  --tracking-heading: -0.02em;
+  --tracking-auth-code: 0.08em;
+  --tracking-device-code: 0.3em;
+
   --color-primary: var(--oh-color-primary);
   --color-logo: var(--oh-color-logo);
   --color-canvas-base: var(--oh-color-base);
+  --color-canvas-background: var(--oh-background);
   /* Keep color names distinct from font sizes such as text-base. */
   --color-on-primary: var(--oh-color-base);
   --color-base-secondary: var(--oh-color-base-secondary);
@@ -77,8 +123,21 @@
   --color-border: var(--oh-border);
   --color-scroll-fade: var(--oh-scroll-fade-from, var(--oh-color-base));
   --color-border-input: var(--oh-border-input);
+  /* Existing dark border for informational Git chips and Workspace mode. */
+  --color-git-control: rgba(71, 74, 84, 0.5);
   --color-border-subtle: var(--oh-border-subtle);
   --color-divider: var(--oh-divider);
+  /* The ring and popover bar share a readable track across palettes. */
+  --color-context-window-track: color-mix(
+    in srgb,
+    var(--oh-context-window-foreground) var(--oh-context-window-track-weight),
+    transparent
+  );
+
+  /* Existing inset highlights keep their pixel geometry and public colors. */
+  --shadow-badge-inset: inset 0 1px 0 color-mix(in srgb, var(--oh-contrast) 18%, transparent);
+  --shadow-reorder-before: inset 0 2px 0 0 var(--oh-focus);
+  --shadow-reorder-after: inset 0 -2px 0 0 var(--oh-focus);
 
   /* Focus / interactive state aliases */
   --color-focus: var(--oh-focus);
@@ -93,6 +152,7 @@
   --color-status-success: var(--oh-status-success);
   --color-status-error: var(--oh-status-error);
   --color-accent: var(--oh-accent);
+  --color-on-accent: var(--oh-accent-foreground);
   --color-info: var(--oh-info);
   --color-warning: var(--oh-warning);
 
@@ -261,12 +321,57 @@
   --surface-shadow: var(--oh-surface-shadow);
   --overlay-shadow: var(--oh-overlay-shadow);
   --field-shadow: var(--oh-field-shadow);
+
+  /* HeroUI tokens its imported CSS reads, derived from Canvas tokens
+     (its default-theme fallbacks are light values). */
+  --disabled-opacity: 0.5;
+  --ring-offset-width: 2px;
+  --cursor-interactive: pointer;
+  --cursor-disabled: not-allowed;
+  --default-hover: color-mix(
+    in oklab,
+    var(--oh-default) 96%,
+    var(--oh-default-foreground) 4%
+  );
+  --field-background: var(--oh-surface);
+  --field-foreground: var(--oh-foreground);
+  --field-placeholder: var(--oh-muted);
+  --field-border: var(--oh-border);
+  --field-hover: color-mix(
+    in oklab,
+    var(--field-background) 90%,
+    var(--field-foreground) 2%
+  );
+  --field-focus: var(--field-background);
+  --field-border-hover: color-mix(
+    in oklab,
+    var(--oh-border) 88%,
+    var(--oh-foreground) 10%
+  );
+  --field-border-focus: color-mix(
+    in oklab,
+    var(--oh-border) 74%,
+    var(--oh-foreground) 22%
+  );
+  --scrollbar-thumb: var(--oh-scrollbar);
+  --scrollbar-track: transparent;
+  --scrollbar-gutter: auto;
+  --scrollbar-width: thin;
+  --scrollbar-color: var(--oh-scrollbar) transparent;
 }
 
 @layer base {
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]) {
     cursor: pointer;
+  }
+}
+
+@utility scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
   }
 }
 
@@ -1111,6 +1216,11 @@ code .token {
   font-size: 10px;
 }
 
+/* Keep committed hashes and the uncommitted placeholder aligned. */
+@utility w-commit-sha {
+  width: 7ch;
+}
+
 @utility conversation-card-menu-width {
   max-width: min(280px, 100vw - 16px);
 }
@@ -1142,6 +1252,19 @@ code .token {
 
 @utility dropdown-menu-viewport-height {
   max-height: min(60vh, calc(100dvh - 5rem));
+}
+
+@utility file-strip-scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility file-discovery-viewport-height {
+  max-height: 90vh;
 }
 
 @utility dialog-viewport-width {
