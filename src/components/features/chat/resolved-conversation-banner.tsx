@@ -3,10 +3,8 @@ import { useTranslation } from "react-i18next";
 import { CircleCheck } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { I18nKey } from "#/i18n/declaration";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
-import { useUpdateConversationTagFlags } from "#/hooks/mutation/use-update-conversation-tag-flags";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useEventStore } from "#/stores/use-event-store";
 import { isUserMessageEvent } from "#/types/agent-server/type-guards";
@@ -18,9 +16,7 @@ import {
   parseAutoResolveNote,
 } from "#/utils/conversation-tag-flags";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
-import ProjectsService, {
-  isProjectRouteMissing,
-} from "#/api/projects-service/projects-service.api";
+import ProjectsService from "#/api/projects-service/projects-service.api";
 import { projectsQueryRoot } from "#/hooks/query/use-projects";
 
 /** Agent Server tags a project's member with the project's id. */
@@ -55,10 +51,7 @@ function latestUserMessageId(events: OHEvent[]): string | null {
  * Notice above the composer for a project thread the Agent Server marked
  * resolved (`resolved=user|auto` tag). The composer stays usable.
  *
- * - Reopen uses the project's reopen route. On a server without it, Reopen
- *   re-reads the tags and PATCHes them without `resolved`, so tags the
- *   server wrote since the last poll are kept (the local PATCH replaces the
- *   whole map).
+ * - Reopen uses the project's reopen route; the server owns the tags.
  * - Sending a message reopens the thread on the server. When the server
  *   echoes a new user message, the conversation is refetched so the banner
  *   follows the server rather than guessing.
@@ -71,8 +64,6 @@ export function ResolvedConversationBanner() {
   const queryClient = useQueryClient();
   const { backend } = useActiveBackend();
   const { data: conversation } = useActiveConversation();
-  const { mutate: updateTagFlags, isPending: isUpdating } =
-    useUpdateConversationTagFlags();
   const [isReading, setIsReading] = useState(false);
   const bannerRef = useRef<HTMLDivElement>(null);
 
@@ -96,11 +87,13 @@ export function ResolvedConversationBanner() {
     }
   }, [userMessageId, resolution, conversationId, queryClient]);
 
-  if (!conversation || !resolution) {
+  // Resolving is a project's board state: only members carry it.
+  const projectId = conversation?.tags?.[PROJECT_TAG_KEY];
+  if (!conversation || !resolution || !projectId) {
     return null;
   }
 
-  const isPending = isReading || isUpdating;
+  const isPending = isReading;
   const autoNote =
     resolution === "auto"
       ? parseAutoResolveNote(conversation.tags?.[RESOLVE_NOTE_TAG_KEY])
@@ -115,83 +108,35 @@ export function ResolvedConversationBanner() {
       ) ?? null;
 
     setIsReading(true);
-    // A project's member reopens through the project's route, which also
-    // clears the resolve note; a server without it falls back to the tags.
-    const projectId = conversation.tags?.[PROJECT_TAG_KEY];
-    if (projectId) {
-      try {
-        await ProjectsService.setConversationResolved(
-          projectId,
-          conversation.id,
-          false,
-        );
-        // Hide at once; the refetch below confirms from the server.
-        queryClient.setQueriesData<AppConversation | null | undefined>(
-          conversationDetailFilter(conversation.id),
-          (old) => {
-            if (!old?.tags) return old;
-            const tags = { ...old.tags };
-            delete tags[RESOLVED_CONVERSATION_TAG_KEY];
-            delete tags[RESOLVE_NOTE_TAG_KEY];
-            return { ...old, tags };
-          },
-        );
-        await Promise.all([
-          queryClient.invalidateQueries(
-            conversationDetailFilter(conversation.id),
-          ),
-          queryClient.invalidateQueries({
-            queryKey: ["user", "conversations"],
-          }),
-          queryClient.invalidateQueries({
-            queryKey: projectsQueryRoot(backend),
-          }),
-        ]);
-        setIsReading(false);
-        composer?.focus();
-        return;
-      } catch (error) {
-        if (!isProjectRouteMissing(error)) {
-          setIsReading(false);
-          displayErrorToast(t(I18nKey.CHAT_INTERFACE$RESOLVED_REOPEN_FAILED));
-          return;
-        }
-      }
-    }
-    let currentTags = conversation.tags;
     try {
-      const [fresh] =
-        await AgentServerConversationService.batchGetAppConversations([
-          conversation.id,
-        ]);
-      if (fresh) {
-        currentTags = fresh.tags;
-        queryClient.setQueriesData<AppConversation | null | undefined>(
-          conversationDetailFilter(conversation.id),
-          (old) => (old ? { ...old, tags: fresh.tags } : old),
-        );
-      }
+      await ProjectsService.setConversationResolved(
+        projectId,
+        conversation.id,
+        false,
+      );
     } catch {
-      // Fall back to the cached tags; the PATCH reports any real failure.
-    } finally {
       setIsReading(false);
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$RESOLVED_REOPEN_FAILED));
+      return;
     }
-
-    updateTagFlags(
-      {
-        conversationId: conversation.id,
-        currentTags,
-        changes: {
-          [RESOLVED_CONVERSATION_TAG_KEY]: false,
-          [RESOLVE_NOTE_TAG_KEY]: false,
-        },
-      },
-      {
-        onError: () =>
-          displayErrorToast(t(I18nKey.CHAT_INTERFACE$RESOLVED_REOPEN_FAILED)),
+    // Hide at once; the refetch below confirms from the server.
+    queryClient.setQueriesData<AppConversation | null | undefined>(
+      conversationDetailFilter(conversation.id),
+      (old) => {
+        if (!old?.tags) return old;
+        const tags = { ...old.tags };
+        delete tags[RESOLVED_CONVERSATION_TAG_KEY];
+        delete tags[RESOLVE_NOTE_TAG_KEY];
+        return { ...old, tags };
       },
     );
+    setIsReading(false);
     composer?.focus();
+    await Promise.all([
+      queryClient.invalidateQueries(conversationDetailFilter(conversation.id)),
+      queryClient.invalidateQueries({ queryKey: ["user", "conversations"] }),
+      queryClient.invalidateQueries({ queryKey: projectsQueryRoot(backend) }),
+    ]);
   };
 
   return (

@@ -13,6 +13,7 @@ import {
   getEditableConversationTags,
   PROJECT_BOARD_TAG_KEYS,
   RESERVED_CONVERSATION_TAG_KEYS,
+  SERVER_OWNED_PROJECT_TAG_KEYS,
 } from "#/api/agent-server-adapter";
 
 /** Backend rule for tag keys (see `ConversationInfo.tags` in the SDK). */
@@ -29,7 +30,8 @@ interface TagRow {
  * Merges the user's edited display tags with every entry the display helper
  * drops from the current map (reserved/internal keys, whitespace-only or
  * non-string values), so the replace-all PATCH never silently discards
- * internal tags. Bare tags (empty-string values) are user-manageable and
+ * internal tags. The Projects tags the server owns are left out: the server
+ * keeps them as it has them. Bare tags (empty-string values) are user-manageable and
  * come through `editedUserTags` like any valued tag.
  */
 export function mergeConversationTagEdits(
@@ -46,7 +48,10 @@ export function mergeConversationTagEdits(
   for (const [key, value] of Object.entries(currentTags ?? {})) {
     // Preserve exactly what the editor does not surface, including identity
     // represented by a badge. Visible bare tags remain removable.
-    if (!editableKeys.has(key)) {
+    if (
+      !editableKeys.has(key) &&
+      !SERVER_OWNED_PROJECT_TAG_KEYS.has(key.trim().toLowerCase())
+    ) {
       merged[key] = value;
     }
   }

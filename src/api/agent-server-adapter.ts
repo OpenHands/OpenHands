@@ -682,6 +682,18 @@ export const PROJECT_BOARD_TAG_KEYS: ReadonlySet<string> = new Set([
   "resolved",
 ]);
 
+/**
+ * Every Projects tag the Agent Server owns. A tag PATCH keeps them as the
+ * server has them, so clients never send them.
+ */
+export const SERVER_OWNED_PROJECT_TAG_KEYS: ReadonlySet<string> = new Set([
+  "project",
+  "turn",
+  "ask",
+  "resolved",
+  "resolvenote",
+]);
+
 /** The tags a person can edit: the displayed ones minus Projects state. */
 export function getEditableConversationTags(
   tags: Record<string, string> | null | undefined,

@@ -154,53 +154,34 @@ describe("ProjectPage", () => {
     expect(within(files[0]).getByText("Changelog")).toBeInTheDocument();
   });
 
-  it("resolves a card by setting resolved=user and keeping its other tags", async () => {
-    setProjectsFeature(true);
-    vi.spyOn(
-      AgentServerConversationService,
-      "batchGetAppConversations",
-    ).mockResolvedValue([
-      { tags: { project: PROJECT_ID, team: "core" } } as never,
-    ]);
-    const replace = vi
-      .spyOn(AgentServerConversationService, "replaceConversationTags")
-      .mockResolvedValue({} as never);
-    renderPage();
+  it.each([
+    ["project-group-working", "02000000000040008000000000000001", true],
+    ["project-group-resolved", "03000000000040008000000000000001", false],
+  ])(
+    "resolves or reopens a card in %s through the project's route",
+    async (group, conversationId, resolved) => {
+      setProjectsFeature(true);
+      const route = vi
+        .spyOn(ProjectsService, "setConversationResolved")
+        .mockResolvedValue(undefined);
+      const replace = vi.spyOn(
+        AgentServerConversationService,
+        "replaceConversationTags",
+      );
+      renderPage();
 
-    const working = await screen.findByTestId("project-group-working");
-    await userEvent.click(within(working).getByTestId("project-card-resolve"));
-    await waitFor(() =>
-      expect(replace).toHaveBeenCalledWith(
-        "02000000000040008000000000000001",
-        { project: PROJECT_ID, team: "core" },
-        { project: PROJECT_ID, team: "core", resolved: "user" },
-      ),
-    );
-  });
-
-  it("reopens a resolved card by dropping the resolved tag", async () => {
-    setProjectsFeature(true);
-    vi.spyOn(
-      AgentServerConversationService,
-      "batchGetAppConversations",
-    ).mockResolvedValue([
-      { tags: { project: PROJECT_ID, resolved: "user" } } as never,
-    ]);
-    const replace = vi
-      .spyOn(AgentServerConversationService, "replaceConversationTags")
-      .mockResolvedValue({} as never);
-    renderPage();
-
-    const resolved = await screen.findByTestId("project-group-resolved");
-    await userEvent.click(within(resolved).getByTestId("project-card-resolve"));
-    await waitFor(() =>
-      expect(replace).toHaveBeenCalledWith(
-        "03000000000040008000000000000001",
-        { project: PROJECT_ID, resolved: "user" },
-        { project: PROJECT_ID },
-      ),
-    );
-  });
+      const column = await screen.findByTestId(group);
+      await userEvent.click(within(column).getByTestId("project-card-resolve"));
+      await waitFor(() =>
+        expect(route).toHaveBeenCalledWith(
+          PROJECT_ID,
+          conversationId,
+          resolved,
+        ),
+      );
+      expect(replace).not.toHaveBeenCalled();
+    },
+  );
 
   it("says why the server resolved a card on its own", async () => {
     setProjectsFeature(true);
@@ -221,31 +202,5 @@ describe("ProjectPage", () => {
     const notes = within(resolved).getAllByTestId("project-card-auto-resolved");
     expect(notes).toHaveLength(1);
     expect(notes[0]).toHaveTextContent(I18nKey.PROJECTS$AUTO_RESOLVED);
-  });
-
-  it("drops the server's reason when the person resolves or reopens", async () => {
-    setProjectsFeature(true);
-    vi.spyOn(
-      AgentServerConversationService,
-      "batchGetAppConversations",
-    ).mockResolvedValue([
-      {
-        tags: { project: PROJECT_ID, resolved: "auto", resolvenote: "0.9 x" },
-      } as never,
-    ]);
-    const replace = vi
-      .spyOn(AgentServerConversationService, "replaceConversationTags")
-      .mockResolvedValue({} as never);
-    renderPage();
-
-    const resolved = await screen.findByTestId("project-group-resolved");
-    await userEvent.click(within(resolved).getByTestId("project-card-resolve"));
-    await waitFor(() =>
-      expect(replace).toHaveBeenCalledWith(
-        "03000000000040008000000000000001",
-        { project: PROJECT_ID, resolved: "auto", resolvenote: "0.9 x" },
-        { project: PROJECT_ID },
-      ),
-    );
   });
 });

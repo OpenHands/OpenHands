@@ -27,16 +27,6 @@ vi.mock("#/hooks/use-conversation-id", () => ({
   useConversationId: () => ({ conversationId: CONVERSATION_ID }),
 }));
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (error: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
 function conversationWith(tags: Record<string, string>) {
   return {
     id: CONVERSATION_ID,
@@ -58,7 +48,11 @@ function renderBanner(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  queryClient.setQueryData(detailKey(backendId), conversationWith(tags));
+  // Only a project's members can be resolved; tests opt out with project: "".
+  const withProject = { project: "abc", ...tags };
+  if (!withProject.project)
+    delete (withProject as Record<string, string>).project;
+  queryClient.setQueryData(detailKey(backendId), conversationWith(withProject));
   render(
     <QueryClientProvider client={queryClient}>
       <ActiveBackendProvider>
@@ -87,22 +81,14 @@ const reopenButton = () =>
   screen.getByRole("button", { name: I18nKey.CHAT_INTERFACE$RESOLVED_REOPEN });
 
 describe("ResolvedConversationBanner", () => {
-  let updateTagFlags: ReturnType<typeof vi.spyOn>;
   let batchGet: ReturnType<typeof vi.spyOn>;
   let setResolved: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    // A server without the project's reopen route, unless a test says so.
     setResolved = vi
       .spyOn(ProjectsService, "setConversationResolved")
-      .mockRejectedValue(
-        new HttpError(404, "Not Found", { detail: "Not Found" }),
-      );
+      .mockResolvedValue(undefined);
     useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
-    updateTagFlags = vi.spyOn(
-      AgentServerConversationService,
-      "updateConversationTagFlags",
-    );
     batchGet = vi.spyOn(
       AgentServerConversationService,
       "batchGetAppConversations",
@@ -152,6 +138,7 @@ describe("ResolvedConversationBanner", () => {
     { resolved: "" },
     { resolved: "true" },
     { project: "abc" },
+    { resolved: "user", project: "" },
   ])("stays hidden for tags %j", (tags) => {
     renderBanner(tags);
 
@@ -179,39 +166,7 @@ describe("ResolvedConversationBanner", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("reopens from fresh tags, hides before the PATCH settles, and focuses the composer", async () => {
-    // The server added a tag since the cached copy was fetched.
-    batchGet.mockResolvedValueOnce([
-      conversationWith({ resolved: "user", project: "abc", turn: "answered" }),
-    ]);
-    const patch = deferred<AppConversation>();
-    updateTagFlags.mockReturnValue(patch.promise);
-    const queryClient = renderBanner({ resolved: "user", project: "abc" });
-
-    await userEvent.click(reopenButton());
-
-    expect(updateTagFlags).toHaveBeenCalledWith(
-      CONVERSATION_ID,
-      { resolved: "user", project: "abc", turn: "answered" },
-      { resolved: false, resolvenote: false },
-    );
-    await waitFor(() => {
-      expect(
-        screen.queryByTestId("resolved-conversation-banner"),
-      ).not.toBeInTheDocument();
-    });
-    expect(
-      queryClient.getQueryData<AppConversation>(detailKey(localBackendId))
-        ?.tags,
-    ).toEqual({ project: "abc", turn: "answered" });
-    expect(screen.getByTestId("composer")).toHaveFocus();
-
-    batchGet.mockReturnValue(new Promise(() => {}));
-    patch.resolve(conversationWith({ project: "abc", turn: "answered" }));
-  });
-
   it("reopens a project's member through the project's route", async () => {
-    setResolved.mockResolvedValue(undefined);
     batchGet.mockResolvedValue([conversationWith({ project: "abc" })]);
     renderBanner({
       resolved: "auto",
@@ -222,7 +177,6 @@ describe("ResolvedConversationBanner", () => {
     await userEvent.click(reopenButton());
 
     expect(setResolved).toHaveBeenCalledWith("abc", CONVERSATION_ID, false);
-    expect(updateTagFlags).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(
         screen.queryByTestId("resolved-conversation-banner"),
@@ -245,38 +199,9 @@ describe("ResolvedConversationBanner", () => {
         I18nKey.CHAT_INTERFACE$RESOLVED_REOPEN_FAILED,
       ),
     );
-    expect(updateTagFlags).not.toHaveBeenCalled();
     expect(
       screen.getByTestId("resolved-conversation-banner"),
     ).toBeInTheDocument();
-  });
-
-  it("rolls the banner back and shows an error when reopening fails", async () => {
-    // Keep every refetch pending so only the rollback can restore the banner.
-    batchGet.mockResolvedValueOnce([conversationWith({ resolved: "auto" })]);
-    const patch = deferred<AppConversation>();
-    updateTagFlags.mockReturnValue(patch.promise);
-    const toast = vi
-      .spyOn(toastHandlers, "displayErrorToast")
-      .mockImplementation(() => {});
-    renderBanner({ resolved: "auto" });
-
-    await userEvent.click(reopenButton());
-    await waitFor(() => {
-      expect(
-        screen.queryByTestId("resolved-conversation-banner"),
-      ).not.toBeInTheDocument();
-    });
-
-    batchGet.mockReturnValue(new Promise(() => {}));
-    await act(async () => patch.reject(new Error("boom")));
-
-    expect(
-      await screen.findByTestId("resolved-conversation-banner"),
-    ).toBeInTheDocument();
-    expect(toast).toHaveBeenCalledWith(
-      I18nKey.CHAT_INTERFACE$RESOLVED_REOPEN_FAILED,
-    );
   });
 
   it("refetches the conversation when a new user message is echoed", async () => {

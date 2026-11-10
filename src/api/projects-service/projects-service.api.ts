@@ -6,7 +6,6 @@
  * the project's id in plain hex. The whole API answers 404 while the
  * `projects` experimental feature is off, and on servers without Projects.
  */
-import { HttpError } from "@openhands/typescript-client";
 import { AgentServerClient } from "@openhands/typescript-client/clients";
 
 import { getAgentServerClientOptions } from "../agent-server-client-options";
@@ -99,13 +98,6 @@ const artifactPath = (projectId: string, name?: string) =>
     `/artifacts${name === undefined ? "" : `/${encodeURIComponent(name)}`}`,
   );
 
-/**
- * True when a project route is missing (an older server, or the
- * conversation is not a member), so a caller can fall back to tags.
- */
-export const isProjectRouteMissing = (error: unknown) =>
-  error instanceof HttpError && (error.status === 404 || error.status === 405);
-
 /** Ids compare without dashes or case: tags store the plain hex form. */
 export const projectIdKey = (id: string) => id.replace(/-/g, "").toLowerCase();
 
@@ -182,7 +174,7 @@ class ProjectsService {
   /**
    * Resolve or reopen a member through the server's own routes, which also
    * clear the resolve note. Throws an HttpError with status 404 when the
-   * conversation is not a member or the server predates the routes.
+   * conversation is not a member.
    */
   static async setConversationResolved(
     projectId: string,

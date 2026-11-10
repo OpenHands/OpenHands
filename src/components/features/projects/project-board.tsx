@@ -3,19 +3,13 @@ import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { I18nKey } from "#/i18n/declaration";
 import { NavigationLink } from "#/components/shared/navigation-link";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import ProjectsService, {
-  isProjectRouteMissing,
   type ProjectAttention,
   type ProjectConversation,
 } from "#/api/projects-service/projects-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { projectsQueryRoot } from "#/hooks/query/use-projects";
-import {
-  RESOLVED_CONVERSATION_TAG_KEY,
-  RESOLVE_NOTE_TAG_KEY,
-  parseAutoResolveNote,
-} from "#/utils/conversation-tag-flags";
+import { parseAutoResolveNote } from "#/utils/conversation-tag-flags";
 import { displayApiErrorToast } from "#/utils/custom-toast-handlers";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import { cn } from "#/utils/utils";
@@ -51,41 +45,13 @@ export const BOARD_GROUPS: Array<{
 const conversationPath = (id: string) =>
   `/conversations/${encodeURIComponent(id.replace(/-/g, ""))}`;
 
-/**
- * Resolve and Reopen use the project's own routes, which also clear the
- * server's resolve note. On a server without them, fall back to the tags:
- * re-read them first, since the local PATCH replaces the whole map.
- */
-export async function setResolved(
+/** Resolve and Reopen go through the project's routes; the server owns the tags. */
+export const setResolved = (
   projectId: string,
   conversationId: string,
   resolved: boolean,
-) {
-  try {
-    await ProjectsService.setConversationResolved(
-      projectId,
-      conversationId,
-      resolved,
-    );
-    return;
-  } catch (error) {
-    if (!isProjectRouteMissing(error)) throw error;
-  }
-  const [current] =
-    await AgentServerConversationService.batchGetAppConversations([
-      conversationId,
-    ]);
-  const tags = { ...(current?.tags ?? {}) };
-  // The server's reason for an automatic resolve goes with any change.
-  delete tags[RESOLVE_NOTE_TAG_KEY];
-  if (resolved) tags[RESOLVED_CONVERSATION_TAG_KEY] = "user";
-  else delete tags[RESOLVED_CONVERSATION_TAG_KEY];
-  await AgentServerConversationService.replaceConversationTags(
-    conversationId,
-    current?.tags,
-    tags,
-  );
-}
+) =>
+  ProjectsService.setConversationResolved(projectId, conversationId, resolved);
 
 function ProjectCard({
   projectId,

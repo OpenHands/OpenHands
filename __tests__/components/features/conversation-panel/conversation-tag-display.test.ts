@@ -14,6 +14,7 @@ import {
   getDisplayConversationTags,
   getEditableConversationTags,
 } from "#/api/agent-server-adapter";
+import { mergeConversationTagEdits } from "#/components/features/conversation-panel/edit-conversation-tags-modal";
 import { I18nKey } from "#/i18n/declaration";
 
 describe("truncateTagChipValue", () => {
@@ -289,5 +290,24 @@ describe("getDisplayConversationTags — launched agent profile tags", () => {
         owner: "alice",
       }),
     ).toEqual([["owner", "alice"]]);
+  });
+});
+
+describe("mergeConversationTagEdits", () => {
+  it("keeps internal tags but never sends the Projects tags the server owns", () => {
+    expect(
+      mergeConversationTagEdits(
+        {
+          project: "p1",
+          turn: "asked",
+          ask: "Ship it?",
+          resolved: "auto",
+          resolvenote: "0.93 nothing",
+          clientsource: "agentcanvas",
+          team: "web",
+        },
+        [["team", "api"]],
+      ),
+    ).toEqual({ clientsource: "agentcanvas", team: "api" });
   });
 });
