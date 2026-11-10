@@ -29,6 +29,7 @@ import { ProfileScopeList } from "#/components/features/settings/agent-profiles/
 import { AgentMcpSetup } from "#/components/features/settings/agent-profiles/agent-mcp-setup";
 import { AgentFormSection } from "#/components/features/settings/agent-profiles/agent-form-section";
 import { MetaLlmSettingsView } from "#/components/features/settings/meta-llm-profiles/meta-llm-settings-view";
+import { ROUTER_FIRST_KEY } from "#/components/features/settings/meta-llm-profiles/router-profiles";
 import { SecretForm } from "#/components/features/settings/secrets-settings/secret-form";
 import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { useDeleteSecret } from "#/hooks/mutation/use-delete-secret";
@@ -113,9 +114,6 @@ type AgentSettingsSnapshot = {
 };
 
 const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
-// Not valid meta-profile names, so they can't collide with one.
-const ROUTER_OFF_KEY = "__off__";
-const ROUTER_FIRST_KEY = "__first__";
 const SKILL_SEARCH_MIN_ITEMS = 10;
 const MCP_SERVER_REFS_KEY = "mcp_server_refs";
 const SECRET_REFS_KEY = "secret_refs";
@@ -1917,35 +1915,6 @@ export function AgentSettingsScreen({
             className="flex flex-col gap-2.5"
             data-testid="agent-settings-router"
           >
-            <SettingsDropdownInput
-              testId="agent-settings-router-select"
-              name="agent-router"
-              label={t(I18nKey.SETTINGS$NAV_META_LLM)}
-              items={[
-                {
-                  key: ROUTER_OFF_KEY,
-                  label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_OFF),
-                },
-                ...(initialRouter === ROUTER_FIRST_KEY
-                  ? [
-                      {
-                        key: ROUTER_FIRST_KEY,
-                        label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_FIRST),
-                      },
-                    ]
-                  : []),
-                ...[
-                  ...routerNames,
-                  ...(routerDangling && router ? [router] : []),
-                ].map((name) => ({ key: name, label: name })),
-              ]}
-              selectedKey={router ?? ROUTER_OFF_KEY}
-              isDisabled={isSaving}
-              onSelectionChange={(key) => {
-                if (key === null || key === undefined) return;
-                setRouter(key === ROUTER_OFF_KEY ? null : String(key));
-              }}
-            />
             {routerDangling ? (
               <Typography.Text
                 testId="agent-settings-router-dangling"
@@ -1963,6 +1932,9 @@ export function AgentSettingsScreen({
               <MetaLlmSettingsView
                 embedded
                 selectedRouter={router}
+                showFirstRouter={initialRouter === ROUTER_FIRST_KEY}
+                missingRouter={routerDangling ? router : null}
+                onSelected={setRouter}
                 onCreated={setRouter}
                 onDeleted={(name) =>
                   setRouter((current) => (current === name ? null : current))

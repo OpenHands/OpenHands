@@ -24,6 +24,7 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
+import { ProfileChoiceList } from "#/components/features/settings/agent-profiles/profile-choice-list";
 import { MetaProfileEditor } from "./meta-profile-editor";
 import { MetaProfileRow } from "./meta-profile-row";
 import { DeleteMetaProfileModal } from "./delete-meta-profile-modal";
@@ -36,6 +37,8 @@ import {
 import {
   buildRouterModel,
   collectRequiredRouterModelNames,
+  ROUTER_FIRST_KEY,
+  ROUTER_OFF_KEY,
 } from "./router-profiles";
 
 type ViewMode = "list" | "create" | "edit";
@@ -56,6 +59,9 @@ const CUSTOM_META_PROFILE_CONFIG: MetaProfile = {
 interface MetaLlmSettingsViewProps {
   embedded?: boolean;
   selectedRouter?: string | null;
+  showFirstRouter?: boolean;
+  missingRouter?: string | null;
+  onSelected?: (name: string | null) => void;
   onCreated?: (name: string) => void;
   onDeleted?: (name: string) => void;
   onEditingChange?: (editing: boolean) => void;
@@ -64,6 +70,9 @@ interface MetaLlmSettingsViewProps {
 export function MetaLlmSettingsView({
   embedded = false,
   selectedRouter,
+  showFirstRouter = false,
+  missingRouter,
+  onSelected,
   onCreated,
   onDeleted,
   onEditingChange,
@@ -118,10 +127,6 @@ export function MetaLlmSettingsView({
     return [...byId.values()];
   }, [providerConnections, createdProviderConnections]);
   const existingNames = metaProfiles.map((p) => p.name);
-  const selectedSavedRouter =
-    selectedRouter && existingNames.includes(selectedRouter)
-      ? selectedRouter
-      : null;
   // A 404 means the backend predates the /api/meta-profiles endpoints
   // (software-agent-sdk #3744). Surface that explicitly instead of a generic
   // error so the page isn't a dead end on older backends.
@@ -349,6 +354,45 @@ export function MetaLlmSettingsView({
           </p>
         ) : null}
 
+        {embedded && !isLoading && !error ? (
+          <ProfileChoiceList
+            testId="agent-settings-router-choices"
+            name="agent-router"
+            label={t(I18nKey.SETTINGS$NAV_META_LLM)}
+            choices={[
+              {
+                name: ROUTER_OFF_KEY,
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_OFF),
+                selectable: false,
+              },
+              ...(showFirstRouter
+                ? [
+                    {
+                      name: ROUTER_FIRST_KEY,
+                      label: t(I18nKey.SETTINGS$AGENT_PROFILE_ROUTER_FIRST),
+                      selectable: false,
+                    },
+                  ]
+                : []),
+              ...metaProfiles.map((profile) => ({
+                name: profile.name,
+                description: profile.classifier_model
+                  ? String(profile.classifier_model)
+                  : undefined,
+              })),
+              ...(missingRouter
+                ? [{ name: missingRouter, selectable: false }]
+                : []),
+            ]}
+            selected={selectedRouter ?? ROUTER_OFF_KEY}
+            onSelect={(name) =>
+              onSelected?.(name === ROUTER_OFF_KEY ? null : name)
+            }
+            onEdit={handleEdit}
+            onDelete={setNameToDelete}
+          />
+        ) : null}
+
         <div className="flex flex-wrap items-center gap-2">
           {!embedded ? (
             <h2 className="mr-auto text-base font-medium text-contrast">
@@ -363,26 +407,6 @@ export function MetaLlmSettingsView({
           >
             {t(I18nKey.SETTINGS$ADD_META_PROFILE)}
           </BrandButton>
-          {embedded && selectedSavedRouter ? (
-            <>
-              <BrandButton
-                testId="agent-settings-router-edit"
-                type="button"
-                variant="tertiary"
-                onClick={() => handleEdit(selectedSavedRouter)}
-              >
-                {t(I18nKey.BUTTON$EDIT)}
-              </BrandButton>
-              <BrandButton
-                testId="agent-settings-router-delete"
-                type="button"
-                variant="tertiary"
-                onClick={() => setNameToDelete(selectedSavedRouter)}
-              >
-                {t(I18nKey.BUTTON$DELETE)}
-              </BrandButton>
-            </>
-          ) : null}
         </div>
 
         {isLoading ? (

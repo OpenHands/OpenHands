@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -2030,24 +2030,24 @@ describe("AgentSettingsScreen — Model Router", () => {
     user: ReturnType<typeof userEvent.setup>,
     name: string,
   ) {
-    const combo = screen.getByTestId("agent-settings-router-select");
-    combo.focus();
-    await user.keyboard("{ArrowDown}");
-    await user.click(await screen.findByRole("option", { name }));
+    const section = await screen.findByTestId("agent-model-router-section");
+    if (!section.hasAttribute("open")) {
+      await user.click(section.querySelector("summary")!);
+    }
+    await user.click(await screen.findByRole("radio", { name }));
   }
 
   it("opens on the profile's router and saves a change to it", async () => {
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: WITH_ROUTER,
     });
-    await waitFor(() =>
-      expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
-        "fast-router",
-      ),
-    );
+    const user = userEvent.setup();
+    await choose(user, "fast-router");
+    expect(
+      screen.getByTestId("agent-settings-router-choices-option-fast-router"),
+    ).toBeChecked();
     expect(control().isDirty).toBe(false);
 
-    const user = userEvent.setup();
     await choose(user, "pro-router");
     await waitFor(() => expect(control().isDirty).toBe(true));
     expect(control().buildAgentProfileFields()).toMatchObject({
@@ -2062,7 +2062,7 @@ describe("AgentSettingsScreen — Model Router", () => {
     });
   });
 
-  it("offers one router picker with create and selected-router actions", async () => {
+  it("offers one router radio list with actions on every saved row", async () => {
     vi.spyOn(MetaProfilesService, "getMetaProfile").mockResolvedValue({
       name: "fast-router",
       config: {
@@ -2077,9 +2077,9 @@ describe("AgentSettingsScreen — Model Router", () => {
     const section = await screen.findByTestId("agent-model-router-section");
     await user.click(section.querySelector("summary")!);
     expect(await screen.findByTestId("add-meta-profile")).toBeInTheDocument();
-    expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
-      "fast-router",
-    );
+    expect(
+      screen.getByTestId("agent-settings-router-choices-option-fast-router"),
+    ).toBeChecked();
     expect(screen.queryByTestId("meta-profile-list")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("heading", {
@@ -2087,7 +2087,12 @@ describe("AgentSettingsScreen — Model Router", () => {
       }),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByTestId("agent-settings-router-edit"));
+    expect(
+      screen.getByTestId("agent-settings-router-choices-delete-pro-router"),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByTestId("agent-settings-router-choices-edit-fast-router"),
+    );
     expect(
       await screen.findByTestId("meta-profile-editor"),
     ).toBeInTheDocument();
@@ -2096,7 +2101,7 @@ describe("AgentSettingsScreen — Model Router", () => {
     );
   });
 
-  it("selects a new router and offers it in the same dropdown after creation", async () => {
+  it("selects a new router and offers it in the same list after creation", async () => {
     const routers = [
       { name: "fast-router", classifier_model: null, num_classes: 2 },
       { name: "pro-router", classifier_model: null, num_classes: 3 },
@@ -2129,29 +2134,29 @@ describe("AgentSettingsScreen — Model Router", () => {
     await user.click(screen.getByTestId("meta-profile-save"));
 
     await waitFor(() =>
-      expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
-        "new-router",
-      ),
+      expect(
+        screen.getByTestId("agent-settings-router-choices-option-new-router"),
+      ).toBeChecked(),
     );
     expect(control().buildAgentProfileFields()).toMatchObject({
       meta_profile_ref: "new-router",
     });
     await choose(user, "pro-router");
     await choose(user, "new-router");
-    expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
-      "new-router",
-    );
+    expect(
+      screen.getByTestId("agent-settings-router-choices-option-new-router"),
+    ).toBeChecked();
   });
 
   it("leaves the stored router alone when saving other changes", async () => {
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: WITH_ROUTER,
     });
-    await waitFor(() =>
-      expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
-        "fast-router",
-      ),
-    );
+    const user = userEvent.setup();
+    await choose(user, "fast-router");
+    expect(
+      screen.getByTestId("agent-settings-router-choices-option-fast-router"),
+    ).toBeChecked();
 
     const fields = control().buildAgentProfileFields();
     expect(fields).not.toHaveProperty("enable_classify_and_switch_llm_tool");
@@ -2162,11 +2167,11 @@ describe("AgentSettingsScreen — Model Router", () => {
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: { ...WITH_ROUTER, meta_profile_ref: null },
     });
-    await waitFor(() =>
-      expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
-        "SETTINGS$AGENT_PROFILE_ROUTER_FIRST",
-      ),
-    );
+    const user = userEvent.setup();
+    await choose(user, "SETTINGS$AGENT_PROFILE_ROUTER_FIRST");
+    expect(
+      screen.getByTestId("agent-settings-router-choices-option-__first__"),
+    ).toBeChecked();
     expect(
       screen.queryByTestId("agent-settings-router-dangling"),
     ).not.toBeInTheDocument();
@@ -2175,7 +2180,6 @@ describe("AgentSettingsScreen — Model Router", () => {
       "enable_classify_and_switch_llm_tool",
     );
 
-    const user = userEvent.setup();
     await choose(user, "SETTINGS$AGENT_PROFILE_ROUTER_OFF");
     await waitFor(() => expect(control().isDirty).toBe(true));
     expect(control().buildAgentProfileFields()).toMatchObject({

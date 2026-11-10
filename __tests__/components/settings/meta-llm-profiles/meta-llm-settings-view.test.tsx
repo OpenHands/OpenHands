@@ -754,7 +754,8 @@ describe("MetaLlmSettingsView", () => {
       expect(activateMutateAsync).not.toHaveBeenCalled();
     });
 
-    it("notifies the agent form after deleting a shared router", async () => {
+    it("deletes an unselected shared router without changing this agent's choice", async () => {
+      const onSelected = vi.fn();
       const onDeleted = vi.fn();
       const deleteAsync = vi.fn().mockResolvedValue({ name: "balanced" });
       vi.mocked(useDeleteMetaProfileHook.useDeleteMetaProfile).mockReturnValue(
@@ -763,20 +764,30 @@ describe("MetaLlmSettingsView", () => {
       const user = userEvent.setup();
       renderWithProviders(
         <MetaLlmSettingsView
+          onSelected={onSelected}
           onDeleted={onDeleted}
-          selectedRouter="balanced"
+          selectedRouter="cheap"
           embedded
         />,
       );
 
       expect(screen.queryByTestId("meta-profile-list")).not.toBeInTheDocument();
-      await user.click(screen.getByTestId("agent-settings-router-delete"));
+      expect(
+        screen.getByTestId("agent-settings-router-choices-option-cheap"),
+      ).toBeChecked();
+      await user.click(
+        screen.getByTestId("agent-settings-router-choices-delete-balanced"),
+      );
       expect(
         screen.getByText("SETTINGS$META_PROFILE_DELETE_SHARED_WARNING"),
       ).toBeInTheDocument();
       await user.click(screen.getByTestId("delete-meta-profile-confirm"));
 
       await waitFor(() => expect(onDeleted).toHaveBeenCalledWith("balanced"));
+      expect(onSelected).not.toHaveBeenCalled();
+      expect(
+        screen.getByTestId("agent-settings-router-choices-option-cheap"),
+      ).toBeChecked();
       expect(activateMutateAsync).not.toHaveBeenCalled();
     });
 
