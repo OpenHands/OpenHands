@@ -1140,6 +1140,108 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       );
       expect(executionStatusByConversation["conv-main"]).toBeUndefined();
     });
+
+    const renderPlanningCaptured = async (planningId: string) => {
+      const planningConversation = makePlanningConversation(planningId);
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ConversationWebSocketProvider
+            conversationId="conv-main"
+            conversationUrl="http://localhost/api"
+            subConversationIds={[planningConversation.id]}
+            subConversations={[planningConversation]}
+          >
+            <div />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => expect(wsCapture.planningOnMessage).not.toBeNull());
+    };
+
+    const deliverPlanning = (event: unknown) =>
+      act(() => {
+        wsCapture.planningOnMessage!({ data: durable(event) });
+      });
+
+    it("keys a planning full_state update to the planning conversation", async () => {
+      await renderPlanningCaptured("planning-state");
+
+      deliverPlanning(
+        makeStateUpdate("full_state", {
+          execution_status: ExecutionStatus.RUNNING,
+        }),
+      );
+
+      const { executionStatusByConversation } =
+        useConversationStateStore.getState();
+      expect(executionStatusByConversation["planning-state"]).toBe(
+        ExecutionStatus.RUNNING,
+      );
+      expect(executionStatusByConversation["conv-main"]).toBeUndefined();
+    });
+
+    it("updates the metrics store from a stats update on the planning socket", async () => {
+      await renderPlanningCaptured("planning-state");
+
+      deliverPlanning(
+        makeStateUpdate("stats", {
+          usage_to_metrics: {
+            default: {
+              model_name: "gpt-4o",
+              accumulated_cost: 1.25,
+              max_budget_per_task: 10,
+              accumulated_token_usage: {
+                model: "gpt-4o",
+                prompt_tokens: 100,
+                completion_tokens: 50,
+                cache_read_tokens: 10,
+                cache_write_tokens: 5,
+                reasoning_tokens: 0,
+                context_window: 128_000,
+                per_turn_token: 500,
+                response_id: "resp-1",
+              },
+              costs: [],
+              response_latencies: [],
+              token_usages: [],
+            },
+          },
+        }),
+      );
+
+      const metrics = useMetricsStore.getState();
+      expect(metrics.cost).toBe(1.25);
+      expect(metrics.max_budget_per_task).toBe(10);
+      expect(metrics.usage).toMatchObject({
+        prompt_tokens: 100,
+        completion_tokens: 50,
+        cache_read_tokens: 10,
+        cache_write_tokens: 5,
+        context_window: 128_000,
+        per_turn_token: 500,
+      });
+    });
+
+    it("mirrors goal status into the goal store from the planning socket", async () => {
+      await renderPlanningCaptured("planning-state");
+
+      const goalStatus = {
+        active: true,
+        status: "running" as const,
+        iteration: 1,
+        max_iterations: 5,
+        objective: "Fix the bug",
+        verdict: null,
+      };
+      deliverPlanning(makeStateUpdate("goal", goalStatus));
+
+      expect(
+        useGoalStore.getState().statusByConversation["conv-main"],
+      ).toEqual(goalStatus);
+      expect(
+        useGoalStore.getState().statusByConversation["planning-state"],
+      ).toBeUndefined();
+    });
   });
 
   it("clears the previous conversation's events when switching conversations", async () => {
