@@ -59,6 +59,34 @@ describe("MarkdownRenderer", () => {
     expect(container.querySelector("kbd")?.textContent).toBe("Ctrl+C");
   });
 
+  it("renders inline $...$ math as KaTeX output", () => {
+    const { container } = render(
+      <MarkdownRenderer>{"Euler's identity: $e^{i\\pi} + 1 = 0$"}</MarkdownRenderer>,
+    );
+    // KaTeX renders math into .katex spans; the raw delimiters are gone.
+    expect(container.querySelector(".katex")).not.toBeNull();
+    expect(container.textContent).not.toContain("$e^{i\\pi}");
+  });
+
+  it("renders $$...$$ block math as a centered display formula", () => {
+    const md = "$$\n\\int_0^1 x^2 \\, dx = \\frac{1}{3}\n$$";
+    const { container } = render(<MarkdownRenderer>{md}</MarkdownRenderer>);
+    expect(container.querySelector(".katex-display")).not.toBeNull();
+    expect(container.querySelector(".katex")).not.toBeNull();
+  });
+
+  it("renders invalid LaTeX as error text instead of crashing", () => {
+    const { container } = render(
+      <MarkdownRenderer>{"Bad math: $\\frac{1+$"}</MarkdownRenderer>,
+    );
+    // rehype-katex surfaces KaTeX parse errors inline (default
+    // throwOnError: false) instead of throwing through the tree walk.
+    const error = container.querySelector(".katex-error");
+    expect(error).not.toBeNull();
+    expect(error?.getAttribute("title")).toContain("ParseError");
+    expect(container.textContent).toContain("\\frac{1+");
+  });
+
   it("renders <details>/<summary> for collapsible sections", () => {
     const md = [
       "<details>",
