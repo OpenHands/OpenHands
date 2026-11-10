@@ -33,6 +33,8 @@ interface GenericEventMessageProps {
    * current row so virtualization remounting the row does not collapse it.
    */
   disclosureId?: string;
+  /** Extra classes for the row's outer element, e.g. to adjust its margins. */
+  className?: string;
 }
 
 export function GenericEventMessage({
@@ -45,6 +47,7 @@ export function GenericEventMessage({
   titleIcon,
   timestamp,
   disclosureId,
+  className,
 }: GenericEventMessageProps) {
   const { t, i18n } = useTranslation("openhands");
   const persistedDisclosureKey = useRowExpansionKey(disclosureId ?? "details");
@@ -148,7 +151,12 @@ export function GenericEventMessage({
   );
 
   return (
-    <div className="flex flex-col gap-1.5 my-1 py-1 text-sm w-full">
+    <div
+      className={cn(
+        "flex flex-col gap-1.5 my-1 py-1 text-sm w-full",
+        className,
+      )}
+    >
       {!detailsOnly && titleRow}
       {(detailsOnly || showDetails) && (
         <div
