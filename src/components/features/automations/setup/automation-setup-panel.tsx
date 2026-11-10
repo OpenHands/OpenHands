@@ -562,10 +562,10 @@ function DraftStatusBar({
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <h3 className="truncate text-sm text-content">
+          <h3 className="truncate min-w-0 text-sm text-content">
             {t(I18nKey.AUTOMATION_SETUP$DRAFT_STATUS_TITLE)}
           </h3>
-          <span className="truncate text-xs text-muted">
+          <span className="truncate min-w-0 text-xs text-muted">
             {formatRelativeTime(
               draft.updatedAt,
               i18n?.language ?? AvailableLanguages[0].value,
