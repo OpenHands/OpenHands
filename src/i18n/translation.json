@@ -6641,6 +6641,24 @@
     "ca": "Branca",
     "id": "Cabang"
   },
+  "CONVERSATION$BRANCHED": {
+    "en": "Branched this conversation",
+    "ja": "この会話を分岐しました",
+    "zh-CN": "已从此对话创建分支",
+    "zh-TW": "已從此對話建立分支",
+    "ko-KR": "이 대화를 분기했습니다",
+    "no": "Forgrenet denne samtalen",
+    "it": "Ramificato da questa conversazione",
+    "pt": "Ramificou esta conversa",
+    "es": "Ramificaste esta conversación",
+    "ar": "تم تفريع هذه المحادثة",
+    "fr": "Branche créée à partir de cette conversation",
+    "tr": "Bu sohbetten dal oluşturuldu",
+    "de": "Diese Unterhaltung verzweigt",
+    "uk": "Створено відгалуження цієї розмови",
+    "ca": "S'ha creat una branca d'aquesta conversa",
+    "id": "Membuat cabang dari percakapan ini"
+  },
   "CONVERSATION$GIT_PROVIDER": {
     "en": "Git Provider",
     "ja": "Git プロバイダー",

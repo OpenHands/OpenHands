@@ -884,6 +884,56 @@ describe("Messages virtualization", () => {
     expect(shellObserver?.observed).toContain(lateCard);
   });
 
+  it("stops watching a plain row wrapper once it leaves the list", () => {
+    // `MutationObserver` has no `unobserve`, so a wrapper dropped from the list
+    // (a collapsed history) would stay watched, pinning its detached DOM until
+    // the list virtualizes or unmounts. The component re-syncs its observed set
+    // instead of only adding.
+    const watchers: { targets: Set<Element>; disconnected: number }[] = [];
+    const Original = window.MutationObserver;
+    class Tracked extends Original {
+      readonly record = { targets: new Set<Element>(), disconnected: 0 };
+
+      constructor(callback: MutationCallback) {
+        super(callback);
+        watchers.push(this.record);
+        const originalObserve = this.observe.bind(this);
+        this.observe = (target: Node, options?: MutationObserverInit) => {
+          this.record.targets.add(target as Element);
+          originalObserve(target, options);
+        };
+        const originalDisconnect = this.disconnect.bind(this);
+        this.disconnect = () => {
+          this.record.disconnected += 1;
+          this.record.targets.clear();
+          originalDisconnect();
+        };
+      }
+    }
+    vi.stubGlobal("MutationObserver", Tracked);
+
+    const { rerender } = renderMessages(buildEvents(30));
+    const wrapper = document.querySelector('[data-row-key="single-message-0"]');
+    expect(wrapper).not.toBeNull();
+    const observing = watchers.filter((watcher) =>
+      watcher.targets.has(wrapper as Element),
+    );
+    expect(observing.length).toBeGreaterThan(0);
+    const disconnectedBefore = observing[0].disconnected;
+
+    // A rerender that keeps the same rows must not churn the observer.
+    rerender(<Harness events={buildEvents(30)} withScrollParent />);
+    expect(observing[0].disconnected).toBe(disconnectedBefore);
+
+    // Collapse the history to rows that exclude the first: it is unmounted, so
+    // it must be released from the watched set.
+    rerender(<Harness events={buildEvents(30).slice(20)} withScrollParent />);
+    expect((wrapper as Element).isConnected).toBe(false);
+    expect(
+      observing.every((watcher) => !watcher.targets.has(wrapper as Element)),
+    ).toBe(true);
+  });
+
   it("disconnects its observers when the virtualized shell unmounts", () => {
     // TanStack Virtual creates its own ResizeObserver for the scroll element, so
     // track instances and identify the one that observed the shell node — that

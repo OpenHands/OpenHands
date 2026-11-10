@@ -130,6 +130,49 @@ export interface PendingScrollCorrection {
 }
 
 /**
+ * Accumulates row size-change corrections between the measuring commit and the
+ * shell's re-render at its new total height.
+ *
+ * The buffer is drained or replaced, never left to accumulate across unrelated
+ * changes: a correction a clamp cannot absorb must not be applied to a later
+ * size change as a jump.
+ */
+export class ScrollCorrectionBuffer {
+  private pending: PendingScrollCorrection | null = null;
+
+  add(correction: PendingScrollCorrection): void {
+    this.pending = this.pending
+      ? {
+          delta: this.pending.delta + correction.delta,
+          pinned: correction.pinned,
+        }
+      : correction;
+  }
+
+  /** The accumulated correction, without clearing it. */
+  peek(): PendingScrollCorrection | null {
+    return this.pending;
+  }
+
+  /** Replaces the accumulated correction; `null` clears it. */
+  set(next: PendingScrollCorrection | null): void {
+    this.pending = next;
+  }
+
+  /** Returns the accumulated correction and clears it. */
+  drain(): PendingScrollCorrection | null {
+    const pending = this.pending;
+    this.pending = null;
+    return pending;
+  }
+
+  /** Drops any buffered correction (e.g. the reader scrolled manually). */
+  clear(): void {
+    this.pending = null;
+  }
+}
+
+/**
  * Whether a row measured at a height other than its estimate needs a scroll
  * correction to keep the reader's place, and whether the reader was pinned to
  * the bottom. A pure decision: the caller accumulates the deltas and applies

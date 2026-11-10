@@ -3,7 +3,32 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import { DirectConversationInfo } from "#/api/agent-server-adapter";
 import { useNavigation } from "#/context/navigation-context";
 import { setConversationState } from "#/utils/conversation-local-storage";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import i18n from "#/i18n";
+import { I18nKey } from "#/i18n/declaration";
+import { getAgentCanvasBasePath } from "#/utils/base-path";
+import {
+  displayErrorToast,
+  displaySuccessToastWithLink,
+} from "#/utils/custom-toast-handlers";
+
+/** The app-relative path of a conversation's route. */
+const conversationPath = (conversationId: string) =>
+  `/conversations/${conversationId}`;
+
+/**
+ * Whether the current location is the conversation the fork branched from
+ * (or a sub-route of it, e.g. its panel). The Canvas base path is stripped so
+ * the comparison holds when Canvas is mounted under a subpath.
+ */
+const isViewingConversation = (sourceConversationId: string): boolean => {
+  if (typeof window === "undefined") return false;
+  const base = getAgentCanvasBasePath();
+  const { pathname } = window.location;
+  const path =
+    base && pathname.startsWith(base) ? pathname.slice(base.length) : pathname;
+  const source = conversationPath(sourceConversationId);
+  return path === source || path.startsWith(`${source}/`);
+};
 
 /**
  * Mutation key prefix for {@link useForkConversation}. Callers read the
@@ -42,18 +67,21 @@ interface ForkConversationResult {
  * the message; otherwise it branches at the message (inclusive). Local
  * agent-server only.
  *
- * Completion side effects (navigation, draft restoration, error toast) run in
+ * Completion side effects (draft restoration, navigation, error toast) run in
  * the mutation-level callbacks, not per-call ones: a virtualized chat can
  * unmount the message row — and with it the per-call `onSuccess` — while the
  * fork request is still in flight, which would strand the user on the source
  * conversation. Mutation callbacks live on the cache entry and fire even when
  * the calling component has unmounted.
  *
- * Because the callbacks outlive the row, navigation always runs once the fork
- * lands, even if the reader has since moved to another conversation. That is
- * deliberate: the fork is the result of an explicit action, and the row can
- * unmount (virtualization) while it is in flight, so there is no reliable
- * per-row "am I still mounted?" signal to fall back on.
+ * Because the callbacks outlive the row, they must not assume the reader is
+ * still looking at the source conversation. The reader may have navigated
+ * elsewhere while the fork was in flight, and pulling them into the fork would
+ * hijack that navigation. Navigation therefore runs only when the current
+ * location is still the source conversation; otherwise the fork is announced
+ * with a success toast that links to it, and the reader stays put. The saved
+ * draft is written unconditionally, so opening the fork from the toast still
+ * restores the text.
  */
 export const useForkConversation = (sourceConversationId: string) => {
   const queryClient = useQueryClient();
@@ -109,7 +137,17 @@ export const useForkConversation = (sourceConversationId: string) => {
     onSuccess: ({ info }) => {
       // Surface the fork in the sidebar without wiping loaded pages.
       queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
-      navigate(`/conversations/${info.id}`);
+      if (isViewingConversation(sourceConversationId)) {
+        navigate(conversationPath(info.id));
+      } else {
+        // The reader moved on while the fork was in flight. Announce it with a
+        // link instead of dragging them out of where they are.
+        displaySuccessToastWithLink(
+          i18n.t(I18nKey.CONVERSATION$BRANCHED),
+          i18n.t(I18nKey.CHILD_CONVERSATION$OPEN),
+          conversationPath(info.id),
+        );
+      }
     },
     onError: (error) =>
       displayErrorToast(error instanceof Error ? error.message : null),

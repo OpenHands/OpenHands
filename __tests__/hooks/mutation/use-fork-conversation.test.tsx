@@ -4,7 +4,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useForkConversation } from "#/hooks/mutation/use-fork-conversation";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { getConversationState } from "#/utils/conversation-local-storage";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import {
+  displayErrorToast,
+  displaySuccessToastWithLink,
+} from "#/utils/custom-toast-handlers";
 
 const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }));
 
@@ -25,7 +28,18 @@ vi.mock("#/context/navigation-context", () => ({
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
   displaySuccessToast: vi.fn(),
+  displaySuccessToastWithLink: vi.fn(),
 }));
+
+// The hook reads `window.location.pathname` to decide whether the reader is
+// still on the source conversation, so each test parks the jsdom URL there.
+const setLocation = (pathname: string) => {
+  window.history.replaceState({}, "", pathname);
+};
+
+beforeEach(() => {
+  setLocation("/conversations/conv-1");
+});
 
 const createWrapper = (client?: QueryClient) => {
   const queryClient =
@@ -136,6 +150,53 @@ describe("useForkConversation", () => {
     await waitFor(() =>
       expect(navigateMock).toHaveBeenCalledWith("/conversations/fork-1"),
     );
+  });
+
+  it("does not hijack a conversation the reader switched to, linking the fork instead", async () => {
+    // The mutation callback outlives the row, so the reader may have navigated
+    // away while the fork was in flight. Dragging them into the fork would
+    // hijack that navigation; they get a toast with a link instead.
+    setLocation("/conversations/conv-2");
+    vi.mocked(
+      AgentServerConversationService.forkConversation,
+    ).mockResolvedValue({ id: "fork-1" } as never);
+
+    const { Wrapper } = createWrapper();
+    const { result } = renderHook(() => useForkConversation("conv-1"), {
+      wrapper: Wrapper,
+    });
+
+    result.current.mutate({ eventId: "evt-2" });
+
+    await waitFor(() =>
+      expect(displaySuccessToastWithLink).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        "/conversations/fork-1",
+      ),
+    );
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it("still navigates from a sub-route of the source conversation", async () => {
+    // The conversation's panel route is a sub-path of the conversation, so the
+    // reader is still "in" the source and the fork should open.
+    setLocation("/conversations/conv-1/panel");
+    vi.mocked(
+      AgentServerConversationService.forkConversation,
+    ).mockResolvedValue({ id: "fork-1" } as never);
+
+    const { Wrapper } = createWrapper();
+    const { result } = renderHook(() => useForkConversation("conv-1"), {
+      wrapper: Wrapper,
+    });
+
+    result.current.mutate({ eventId: "evt-2" });
+
+    await waitFor(() =>
+      expect(navigateMock).toHaveBeenCalledWith("/conversations/fork-1"),
+    );
+    expect(displaySuccessToastWithLink).not.toHaveBeenCalled();
   });
 
   it("surfaces a failed fork as an error toast", async () => {

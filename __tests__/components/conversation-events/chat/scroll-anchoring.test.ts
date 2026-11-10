@@ -4,6 +4,7 @@ import {
   BOTTOM_THRESHOLD_PX,
   buildInitialMeasurements,
   measurePlainRow,
+  ScrollCorrectionBuffer,
   shouldAnchorScroll,
 } from "#/components/conversation-events/chat/scroll-anchoring";
 
@@ -206,47 +207,47 @@ describe("applyBufferedScrollCorrection", () => {
     // maximum and nothing is clamped.
     const element = elementAt(100, 400, 1000);
 
-    expect(
-      applyBufferedScrollCorrection(element, { delta: 50, pinned: false }),
-    ).toBe(50);
+    applyBufferedScrollCorrection(element, { delta: 50, pinned: false });
+
     expect(element.scrollTop).toBe(150);
   });
 
-  it("reports the clamped amount so the caller can keep the excess buffered", () => {
-    // Only 100 of the 300px fits before the new maximum (600); the reviewer's
-    // bug was losing that 200px with nothing to retry it.
+  it("clamps a correction that overshoots the new maximum", () => {
+    // Only 100 of the 300px fits before the new maximum (600). The returned
+    // amount tells the caller the other 200 is unabsorbable and must be dropped,
+    // not carried onto a later, unrelated size change as a jump.
     const element = elementAt(500, 400, 1000);
 
-    expect(
-      applyBufferedScrollCorrection(element, { delta: 300, pinned: false }),
-    ).toBe(100);
+    const consumed = applyBufferedScrollCorrection(element, {
+      delta: 300,
+      pinned: false,
+    });
+
     expect(element.scrollTop).toBe(600);
+    expect(consumed).toBe(100);
   });
 
   it("applies a negative correction when rows above shrink", () => {
     const element = elementAt(200, 400, 1000);
 
-    expect(
-      applyBufferedScrollCorrection(element, { delta: -50, pinned: false }),
-    ).toBe(-50);
+    applyBufferedScrollCorrection(element, { delta: -50, pinned: false });
+
     expect(element.scrollTop).toBe(150);
   });
 
   it("clamps the offset to the container's top", () => {
     const element = elementAt(20, 400, 1000);
 
-    expect(
-      applyBufferedScrollCorrection(element, { delta: -100, pinned: false }),
-    ).toBe(-20);
+    applyBufferedScrollCorrection(element, { delta: -100, pinned: false });
+
     expect(element.scrollTop).toBe(0);
   });
 
   it("does nothing for a zero pending", () => {
     const element = elementAt(120, 400, 1000);
 
-    expect(
-      applyBufferedScrollCorrection(element, { delta: 0, pinned: false }),
-    ).toBe(0);
+    applyBufferedScrollCorrection(element, { delta: 0, pinned: false });
+
     expect(element.scrollTop).toBe(120);
   });
 
@@ -254,13 +255,11 @@ describe("applyBufferedScrollCorrection", () => {
     // Collapsing a group at the bottom shrinks the shell, so the browser has
     // already clamped the offset from 600 to the new maximum 400 before the
     // correction runs. Subtracting the -200 delta again would land the reader
-    // at 200, 200px above the newest messages (and off the bottom). A pinned
-    // reader belongs at the new bottom, and the whole delta is consumed.
+    // at 200, 200px above the newest messages (and off the bottom).
     const element = elementAt(400, 400, 800);
 
-    expect(
-      applyBufferedScrollCorrection(element, { delta: -200, pinned: true }),
-    ).toBe(-200);
+    applyBufferedScrollCorrection(element, { delta: -200, pinned: true });
+
     expect(element.scrollTop).toBe(400);
     expect(
       element.scrollHeight - element.clientHeight - element.scrollTop,
@@ -272,9 +271,40 @@ describe("applyBufferedScrollCorrection", () => {
     // maximum rather than adding the delta to a possibly-clamped offset.
     const element = elementAt(600, 400, 1200);
 
-    expect(
-      applyBufferedScrollCorrection(element, { delta: 200, pinned: true }),
-    ).toBe(200);
+    applyBufferedScrollCorrection(element, { delta: 200, pinned: true });
+
     expect(element.scrollTop).toBe(800);
+  });
+});
+
+describe("ScrollCorrectionBuffer", () => {
+  it("sums corrections added in one batch and drains them once", () => {
+    const buffer = new ScrollCorrectionBuffer();
+    buffer.add({ delta: 50, pinned: false });
+    buffer.add({ delta: -20, pinned: true });
+
+    expect(buffer.drain()).toEqual({ delta: 30, pinned: true });
+    // A second drain is empty: the correction is not re-applied.
+    expect(buffer.drain()).toBeNull();
+  });
+
+  it("drops a batch whose deltas cancel instead of carrying a stale remainder", () => {
+    // +50/-50 must not leave a residue that a later, unrelated change would
+    // apply as a jump.
+    const buffer = new ScrollCorrectionBuffer();
+    buffer.add({ delta: 50, pinned: true });
+    buffer.add({ delta: -50, pinned: true });
+
+    expect(buffer.drain()).toEqual({ delta: 0, pinned: true });
+    expect(buffer.drain()).toBeNull();
+  });
+
+  it("clears a buffered correction when the reader scrolls manually", () => {
+    const buffer = new ScrollCorrectionBuffer();
+    buffer.add({ delta: 40, pinned: false });
+
+    buffer.clear();
+
+    expect(buffer.drain()).toBeNull();
   });
 });

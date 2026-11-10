@@ -76,7 +76,9 @@ interface RenderFormOptions {
   selectedSecret?: string | null;
   onCancel?: () => void;
   onSaved?: (secret: { name: string; description?: string }) => void;
+  onDraftChange?: (draft: { value: string; showValue: boolean }) => void;
   keepOpenOnError?: boolean;
+  strict?: boolean;
 }
 
 function renderForm({
@@ -84,22 +86,28 @@ function renderForm({
   selectedSecret = null,
   onCancel = vi.fn(),
   onSaved = vi.fn(),
+  onDraftChange,
   keepOpenOnError,
+  strict = false,
 }: RenderFormOptions = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const invalidate = vi.spyOn(queryClient, "invalidateQueries");
-  const view = render(
+  const form = (
     <QueryClientProvider client={queryClient}>
       <SecretForm
         mode={mode}
         selectedSecret={selectedSecret}
         onCancel={onCancel}
         onSaved={onSaved}
+        onDraftChange={onDraftChange}
         keepOpenOnError={keepOpenOnError}
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
+  );
+  const view = render(
+    strict ? <React.StrictMode>{form}</React.StrictMode> : form,
   );
   return { ...view, invalidate, onCancel, onSaved };
 }
@@ -575,5 +583,46 @@ describe("Secret form behavior", () => {
       "type",
       "password",
     );
+  });
+
+  it("reports the toggled visibility exactly once under StrictMode", async () => {
+    // The toggle used to call `onDraftChange` from inside the `setShowValue`
+    // updater. StrictMode double-invokes updaters, so a single click reported
+    // the toggle twice; the side effect now runs once, outside the updater.
+    const onDraftChange = vi.fn();
+    renderForm({ onDraftChange, strict: true });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: I18nKey.SECRETS$SHOW_VALUE }),
+    );
+
+    expect(onDraftChange).toHaveBeenCalledTimes(1);
+    expect(onDraftChange).toHaveBeenLastCalledWith({
+      value: "",
+      showValue: true,
+    });
+  });
+
+  it("keeps the toggled visibility when the value changes in the same batch", async () => {
+    // The change handler reads `showValue` from its render closure. When the
+    // toggle and the value change land in one batch (before React re-renders),
+    // a closure read is still `false`, so the draft would revert the visibility
+    // the user just switched on. The ref read keeps it.
+    const onDraftChange = vi.fn();
+    renderForm({ onDraftChange });
+
+    act(() => {
+      fireEvent.click(
+        screen.getByRole("button", { name: I18nKey.SECRETS$SHOW_VALUE }),
+      );
+      fireEvent.change(screen.getByTestId("value-input"), {
+        target: { value: "ghp_live" },
+      });
+    });
+
+    expect(onDraftChange).toHaveBeenLastCalledWith({
+      value: "ghp_live",
+      showValue: true,
+    });
   });
 });

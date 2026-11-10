@@ -80,8 +80,22 @@ export function SecretForm({
   );
   const [value, setValue] = React.useState(initialValue ?? "");
   const [showValue, setShowValue] = React.useState(initialShowValue ?? false);
+  // The draft callback has to carry the latest value and visibility, but the
+  // input's `onChange` and the toggle read them from the render closure, which
+  // can be a render behind. Mirror them in refs updated every render and build
+  // the draft from the refs.
+  const valueRef = React.useRef(value);
+  const showValueRef = React.useRef(showValue);
+  valueRef.current = value;
+  showValueRef.current = showValue;
   const valueInputId = React.useId();
   const [description, setDescription] = React.useState("");
+  const emitDraft = React.useCallback(() => {
+    onDraftChange?.({
+      value: valueRef.current,
+      showValue: showValueRef.current,
+    });
+  }, [onDraftChange]);
 
   const secretDescription =
     (mode === "edit" &&
@@ -219,8 +233,9 @@ export function SecretForm({
             value={value}
             onChange={(event) => {
               const next = event.currentTarget.value;
+              valueRef.current = next;
               setValue(next);
-              onDraftChange?.({ value: next, showValue });
+              emitDraft();
             }}
             className={cn(
               formControlSettingsFieldClassName,
@@ -236,13 +251,12 @@ export function SecretForm({
                 : I18nKey.SECRETS$SHOW_VALUE,
             )}
             isDisabled={isSaving}
-            onClick={() =>
-              setShowValue((visible) => {
-                const next = !visible;
-                onDraftChange?.({ value, showValue: next });
-                return next;
-              })
-            }
+            onClick={() => {
+              const next = !showValueRef.current;
+              showValueRef.current = next;
+              setShowValue(next);
+              emitDraft();
+            }}
           >
             {showValue ? (
               <EyeOff size={16} aria-hidden="true" />

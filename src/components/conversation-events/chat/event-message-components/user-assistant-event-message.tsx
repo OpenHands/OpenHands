@@ -43,11 +43,16 @@ function UserAssistantEventMessageComponent({
   // before this row was virtualized out and back — unlike the row's own
   // `isPending`, which belongs to a fresh observer and reads `false` on remount.
   // The key is scoped to this conversation: an unscoped match would let a fork
-  // of another conversation block this one's `Branch` action.
+  // of another conversation block this one's `Branch` action. Without a
+  // conversation there is no Branch action, and an empty id would make every
+  // id-less view share the key `["fork-conversation", ""]`, so match nothing
+  // instead of reading that shared key.
   const isForking =
-    useIsMutating({
-      mutationKey: forkConversationMutationKey(conversationId ?? ""),
-    }) > 0;
+    useIsMutating(
+      conversationId
+        ? { mutationKey: forkConversationMutationKey(conversationId) }
+        : { predicate: () => false },
+    ) > 0;
   // Blocks a same-tick double-click, before `isForking` flips.
   const forkInFlightRef = React.useRef(false);
 

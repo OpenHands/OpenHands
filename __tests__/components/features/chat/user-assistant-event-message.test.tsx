@@ -19,6 +19,23 @@ import {
 } from "@tanstack/react-query";
 import { forkConversationMutationKey } from "#/hooks/mutation/use-fork-conversation";
 
+// Capture the filters the row passes to `useIsMutating` (while still running the
+// real hook), so a test can assert the row never subscribes to a shared key.
+const { isMutatingFilters } = vi.hoisted(() => ({
+  isMutatingFilters: [] as unknown[],
+}));
+
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-query")>();
+  return {
+    ...actual,
+    useIsMutating: (filters?: unknown) => {
+      isMutatingFilters.push(filters);
+      return (actual.useIsMutating as (f?: unknown) => number)(filters);
+    },
+  };
+});
+
 const { useActiveBackendMock, useOptionalConversationIdMock, navigateMock } =
   vi.hoisted(() => ({
     useActiveBackendMock: vi.fn(),
@@ -94,7 +111,11 @@ describe("UserAssistantEventMessage — branch action", () => {
     useActiveBackendMock.mockReset();
     useOptionalConversationIdMock.mockReset();
     navigateMock.mockReset();
+    isMutatingFilters.length = 0;
     localStorage.clear();
+    // The fork navigates only while the reader is still on the source
+    // conversation, which the hook reads from `window.location.pathname`.
+    window.history.replaceState({}, "", `/conversations/${CONVERSATION_ID}`);
 
     useActiveBackendMock.mockReturnValue({
       backend: { kind: "local" },
@@ -425,5 +446,22 @@ describe("UserAssistantEventMessage — branch action", () => {
     expect(
       screen.queryByRole("button", { name: BRANCH_LABEL }),
     ).not.toBeInTheDocument();
+  });
+
+  it("does not scope the in-flight-fork check to a shared empty conversation key", () => {
+    // Outside a conversation the id is empty. Matching `["fork-conversation",
+    // ""]` would make every id-less view share one key, so a fork started in
+    // one would read as in-flight in another. The row must not subscribe to
+    // that key at all.
+    useOptionalConversationIdMock.mockReturnValue({
+      conversationId: undefined,
+    });
+
+    renderMessage(makeEvent("agent", "evt-agent"));
+
+    expect(isMutatingFilters.length).toBeGreaterThan(0);
+    for (const filters of isMutatingFilters) {
+      expect(filters).not.toHaveProperty("mutationKey");
+    }
   });
 });

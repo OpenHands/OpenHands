@@ -48,8 +48,8 @@ import {
   buildInitialMeasurements,
   measurePlainRow,
   measuredAverage,
+  ScrollCorrectionBuffer,
   shouldAnchorScroll,
-  type PendingScrollCorrection,
 } from "./scroll-anchoring";
 import type { SecretRequest } from "#/stores/secret-request-store";
 import {
@@ -507,9 +507,13 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // ResizeObserver never fires and the row keeps its stale, shorter height
     // until the next crossing seeds the shell from it. Watch each wrapper's own
     // child list instead, which fires only when a box is added or removed.
+    // `MutationObserver` has no `unobserve`, so track the wrappers being
+    // watched; without that a wrapper dropped from the list (a collapsed
+    // history) would stay observed, pinning its detached DOM.
     const plainRowMutationObserver = React.useRef<MutationObserver | null>(
       null,
     );
+    const observedPlainWrappers = React.useRef<Set<Element>>(new Set());
 
     // Re-measure one row in place, from its `data-row-key` wrapper. The
     // observers below call this for a row whose boxes resized or whose child
@@ -551,6 +555,36 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       return plainRowMutationObserver.current;
     }, [measurePlainRowWrapper]);
 
+    // Point the child-list observer at exactly the wrappers currently in the
+    // list. `MutationObserver` cannot stop watching one node, so when the set
+    // changed we disconnect and re-observe the survivors; re-observing an
+    // already-watched node is harmless. This releases the wrappers that left
+    // (a collapsed history) instead of pinning their detached DOM until the
+    // list virtualizes or unmounts.
+    const syncPlainRowMutationObserver = React.useCallback(
+      (wrappers: Set<Element>) => {
+        const observer = getPlainRowMutationObserver();
+        if (!observer) return;
+        const watched = observedPlainWrappers.current;
+        let changed = watched.size !== wrappers.size;
+        if (!changed) {
+          for (const wrapper of wrappers) {
+            if (!watched.has(wrapper)) {
+              changed = true;
+              break;
+            }
+          }
+        }
+        if (!changed) return;
+        observer.disconnect();
+        for (const wrapper of wrappers) {
+          observer.observe(wrapper, { childList: true });
+        }
+        observedPlainWrappers.current = new Set(wrappers);
+      },
+      [getPlainRowMutationObserver],
+    );
+
     // Keep the cache current while the plain list is mounted: it seeds the
     // shell's geometry when the list later virtualizes. Only rows added since
     // the last run are measured and observed; a ResizeObserver then re-measures
@@ -572,6 +606,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         observedPlainRows.current.clear();
         plainRowMutationObserver.current?.disconnect();
         plainRowMutationObserver.current = null;
+        observedPlainWrappers.current.clear();
         return undefined;
       }
       const list = plainListRef.current;
@@ -580,13 +615,12 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       // Observe each row's boxes, not the wrapper: the wrapper is
       // `display: contents` and has no box of its own.
       const observer = getPlainRowObserver();
-      const mutationObserver = getPlainRowMutationObserver();
       const currentRows = new Set<Element>();
+      const currentWrappers = new Set<Element>();
       for (const child of Array.from(list.children)) {
         // Watch the wrapper's child list so a box added next to an existing one
-        // re-measures the row even though nothing resized. Re-observing a node
-        // is idempotent, so no bookkeeping is needed.
-        mutationObserver?.observe(child, { childList: true });
+        // re-measures the row even though nothing resized.
+        currentWrappers.add(child);
         for (const row of Array.from(child.children)) {
           currentRows.add(row);
           if (observedPlainRows.current.has(row)) continue;
@@ -596,6 +630,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           observedPlainRows.current.add(row);
         }
       }
+      // Wrappers that left the list must stop being watched; the sync
+      // disconnects and re-observes the survivors so their detached DOM is not
+      // retained.
+      syncPlainRowMutationObserver(currentWrappers);
       // Rows that left the list (collapsed history) must not keep the observer
       // alive on a detached node.
       observedPlainRows.current.forEach((row) => {
@@ -609,7 +647,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       scrollParent,
       rowKeys,
       getPlainRowObserver,
-      getPlainRowMutationObserver,
+      syncPlainRowMutationObserver,
       measurePlainRowWrapper,
     ]);
 
@@ -620,6 +658,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         observedPlainRows.current.clear();
         plainRowMutationObserver.current?.disconnect();
         plainRowMutationObserver.current = null;
+        observedPlainWrappers.current.clear();
       },
       [],
     );
@@ -776,8 +815,43 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // would clamp to the old `scrollHeight` and lose the excess. Buffer the
     // deltas, report "no correction" to the virtualizer, and re-pin once the
     // shell's total size has actually changed (the layout effect below).
-    const pendingScrollCorrectionRef =
-      React.useRef<PendingScrollCorrection | null>(null);
+    const scrollCorrectionBufferRef = React.useRef(
+      new ScrollCorrectionBuffer(),
+    );
+    // A correction that leaves the total size unchanged (a batch whose deltas
+    // cancel, or one a clamp absorbs entirely) still has to run, or the buffer
+    // is only drained on the next unrelated change. Flush on the next frame.
+    const scrollCorrectionFrameRef = React.useRef<number | null>(null);
+    const flushScrollCorrection = () => {
+      const buffer = scrollCorrectionBufferRef.current;
+      const pending = buffer.peek();
+      if (!pending) return;
+      const element = scrollParent as HTMLElement | null;
+      if (!element) return;
+      const consumed = applyBufferedScrollCorrection(element, pending);
+      const remaining = pending.delta - consumed;
+      // Keep an unabsorbed remainder for the shell's next growth; the frame
+      // flush below drops it once the shell has settled.
+      buffer.set(
+        remaining === 0 ? null : { delta: remaining, pinned: pending.pinned },
+      );
+    };
+    const scheduleScrollCorrectionFlush = () => {
+      if (
+        scrollCorrectionFrameRef.current !== null ||
+        typeof requestAnimationFrame === "undefined"
+      ) {
+        return;
+      }
+      scrollCorrectionFrameRef.current = requestAnimationFrame(() => {
+        scrollCorrectionFrameRef.current = null;
+        flushScrollCorrection();
+        // The shell has settled by the next frame: a remainder the clamp still
+        // cannot absorb is unabsorbable, so drop it rather than carry it onto a
+        // later, unrelated size change as a jump.
+        scrollCorrectionBufferRef.current.clear();
+      });
+    };
     rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = (
       item,
       delta,
@@ -785,13 +859,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     ) => {
       const correction = shouldAnchorScroll(item, delta, instance);
       if (!correction) return false;
-      const buffered = pendingScrollCorrectionRef.current;
-      pendingScrollCorrectionRef.current = buffered
-        ? {
-            delta: buffered.delta + correction.delta,
-            pinned: correction.pinned,
-          }
-        : correction;
+      scrollCorrectionBufferRef.current.add(correction);
+      scheduleScrollCorrectionFlush();
       return false;
     };
 
@@ -804,15 +873,22 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // already clamped the offset and adding the delta again would overshoot.
     const totalSize = rowVirtualizer.getTotalSize();
     React.useLayoutEffect(() => {
-      const pending = pendingScrollCorrectionRef.current;
-      if (!pending) return;
-      const element = scrollParent as HTMLElement | null;
-      if (!element) return;
-      const consumed = applyBufferedScrollCorrection(element, pending);
-      const remaining = pending.delta - consumed;
-      pendingScrollCorrectionRef.current =
-        remaining === 0 ? null : { delta: remaining, pinned: pending.pinned };
+      flushScrollCorrection();
     }, [scrollParent, totalSize]);
+
+    // A manual scroll means the reader has taken over. A correction buffered
+    // from a resize in the same frame would fight the gesture, so drop it. The
+    // clear only ever removes a *pending* correction; our own writes run
+    // through the buffer and leave nothing behind, so they do not re-trigger.
+    React.useEffect(() => {
+      const element = scrollParent as HTMLElement | null;
+      if (!element) return undefined;
+      const onScroll = () => {
+        scrollCorrectionBufferRef.current.clear();
+      };
+      element.addEventListener("scroll", onScroll, { passive: true });
+      return () => element.removeEventListener("scroll", onScroll);
+    }, [scrollParent]);
 
     // With a scroll container, rows can cross the virtualization threshold
     // and remount into the shell. Persist their expansion by row key in the
