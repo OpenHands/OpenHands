@@ -9,6 +9,10 @@ interface CloudSecretsPage {
   next_page_id: string | null;
 }
 
+interface CloudAgentProfileOptions {
+  secrets?: CustomSecretWithoutValue[];
+}
+
 const PAGE_LIMIT = 100;
 
 function getActiveCloudBackend(): Backend {
@@ -26,6 +30,17 @@ function getActiveCloudBackend(): Backend {
  */
 export async function fetchCloudSecrets(): Promise<CustomSecretWithoutValue[]> {
   const backend = getActiveCloudBackend();
+
+  try {
+    const options = await callCloudProxy<CloudAgentProfileOptions>({
+      backend,
+      method: "GET",
+      path: "/api/v1/agent-profile/options",
+    });
+    if (Array.isArray(options.secrets)) return options.secrets;
+  } catch {
+    // Older cloud backends do not expose the combined options endpoint yet.
+  }
 
   const secrets: CustomSecretWithoutValue[] = [];
   let pageId: string | null = null;

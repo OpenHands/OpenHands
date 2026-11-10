@@ -17,9 +17,9 @@ import {
 } from "@openhands/typescript-client/clients";
 import type {
   AgentProfile,
-  AgentProfileSummary,
+  AgentProfileSummary as SdkAgentProfileSummary,
   AgentProfileSaveInput,
-  AgentProfileListResponse,
+  AgentProfileListResponse as SdkAgentProfileListResponse,
   AgentProfileDetailResponse,
   AgentProfileMutationResponse,
   ActivateAgentProfileResponse,
@@ -47,12 +47,19 @@ function isCloud(): boolean {
  */
 export const WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME = "default";
 
+export type AgentProfileScope = "personal" | "org";
+export type AgentProfileSummary = SdkAgentProfileSummary & {
+  scope?: AgentProfileScope;
+};
+export type AgentProfileListResponse = Omit<
+  SdkAgentProfileListResponse,
+  "profiles"
+> & { profiles: AgentProfileSummary[] };
+
 // Re-export SDK types for consumers.
 export type {
   AgentProfile,
-  AgentProfileSummary,
   AgentProfileSaveInput,
-  AgentProfileListResponse,
   AgentProfileDetailResponse,
   AgentProfileMutationResponse,
   ActivateAgentProfileResponse,
