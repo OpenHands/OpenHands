@@ -33,6 +33,12 @@ const harness = vi.hoisted(() => ({
     openhands_version: null;
     agent_class: null;
   } | null,
+  fetchedSystemMessage: null as {
+    content: string;
+    tools: null;
+    openhands_version: null;
+    agent_class: null;
+  } | null,
   adaptSystemMessage: vi.fn(),
   displaySuccessToast: vi.fn(),
   navigateToTab: vi.fn(),
@@ -71,6 +77,10 @@ vi.mock("#/hooks/mutation/use-update-conversation-public-flag", () => ({
 
 vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => ({ data: harness.conversation }),
+}));
+
+vi.mock("#/hooks/query/use-conversation-system-prompt", () => ({
+  useConversationSystemPrompt: () => ({ data: harness.fetchedSystemMessage }),
 }));
 
 vi.mock("#/hooks/use-download-conversation", () => ({
@@ -129,6 +139,7 @@ describe("useConversationNameContextMenu", () => {
     };
     harness.conversation = null;
     harness.systemMessage = null;
+    harness.fetchedSystemMessage = null;
     harness.downloadConversation.mockResolvedValue(undefined);
     useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
     Object.defineProperty(navigator, "clipboard", {
@@ -574,5 +585,46 @@ describe("useConversationNameContextMenu", () => {
     expect(result.current.shouldShowDownloadConversation).toBe(false);
     expect(result.current.shouldShowSkills).toBe(false);
     expect(result.current.shouldShowPlugins).toBe(false);
+  });
+
+  it("offers Show Agent Tools & Metadata when older history is paged out and system prompt is fetched", () => {
+    // Event store holds only the newest page (no SystemPromptEvent loaded in store)
+    harness.systemMessage = null;
+    harness.fetchedSystemMessage = {
+      content: "fetched system prompt",
+      tools: null,
+      openhands_version: null,
+      agent_class: null,
+    };
+
+    const { result } = renderHook(() =>
+      useConversationNameContextMenu({
+        conversationId: "conv-paged-out",
+        showOptions: true,
+      }),
+    );
+
+    expect(result.current.shouldShowAgentTools).toBe(true);
+    expect(result.current.systemMessage).toEqual({
+      content: "fetched system prompt",
+      tools: null,
+      openhands_version: null,
+      agent_class: null,
+    });
+  });
+
+  it("keeps Show Agent Tools & Metadata hidden when conversation has no system prompt in store or query", () => {
+    harness.systemMessage = null;
+    harness.fetchedSystemMessage = null;
+
+    const { result } = renderHook(() =>
+      useConversationNameContextMenu({
+        conversationId: "conv-no-prompt",
+        showOptions: true,
+      }),
+    );
+
+    expect(result.current.shouldShowAgentTools).toBe(false);
+    expect(result.current.systemMessage).toBeNull();
   });
 });

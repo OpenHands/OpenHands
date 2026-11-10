@@ -6,6 +6,7 @@ import { useDeleteConversation } from "./mutation/use-delete-conversation";
 import { useUnifiedPauseConversation } from "./mutation/use-unified-stop-conversation";
 import { useUpdateConversationPublicFlag } from "./mutation/use-update-conversation-public-flag";
 import { useActiveConversation } from "./query/use-active-conversation";
+import { useConversationSystemPrompt } from "./query/use-conversation-system-prompt";
 import { useEventStore } from "#/stores/use-event-store";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
@@ -53,8 +54,14 @@ export function useConversationNameContextMenu({
   const { mutateAsync: downloadConversation } = useDownloadConversation();
   const { navigateToTab } = useSelectConversationTab();
 
-  const systemMessage: SystemMessageForModal | null =
+  const systemMessageFromStore: SystemMessageForModal | null =
     adaptSystemMessage(events);
+  const { data: fetchedSystemMessage } = useConversationSystemPrompt(
+    conversationId,
+    conversation,
+    Boolean(showOptions && conversationId && !systemMessageFromStore),
+  );
+  const systemMessage = systemMessageFromStore ?? fetchedSystemMessage ?? null;
 
   const handleDelete = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
