@@ -3,6 +3,7 @@ import { usePrefetchUserConversation } from "#/hooks/query/use-user-conversation
 import { useConversationDisplayTitleState } from "#/hooks/use-conversation-display-title";
 import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+import { useSearchJumpStore } from "#/stores/search-jump-store";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -1349,9 +1350,19 @@ export function ConversationPanel({
             error={contentSearch.error}
             capped={contentSearch.capped}
             total={contentSearch.total}
-            onSelect={(conversationId) => {
+            onSelect={(hit) => {
               contentSearch.reset();
-              navigate(`/conversations/${conversationId}`);
+              // Arm the jump before navigating so it survives the async
+              // event load of the target conversation.
+              if (hit.source !== "title") {
+                const terms = contentSearch.query
+                  .split(/\s+/)
+                  .map((t) => t.trim())
+                  .filter((t) => t.length >= 3)
+                  .slice(0, 8);
+                useSearchJumpStore.getState().startJump(hit.event_id, terms);
+              }
+              navigate(`/conversations/${hit.conversation_id}`);
             }}
           />
         </div>

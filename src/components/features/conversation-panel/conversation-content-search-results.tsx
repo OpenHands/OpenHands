@@ -10,6 +10,24 @@ import type { ContentSearchHit } from "#/api/conversation-service/content-search
 // STEP_KIND_KEYS).
 const MATCH_COUNT_KEY = "CONVERSATION_PANEL$CONTENT_SEARCH_MATCH_COUNT";
 
+/**
+ * Split a snippet on the [ ] markers the API puts around matched words and
+ * render the marked parts emphasized. Markers are unbalanced-proof: a stray
+ * opening or closing bracket simply renders literally.
+ */
+function renderSnippetWithMarks(snippet: string): React.ReactNode[] {
+  return snippet.split(/(\[[^\]]*\])/g).map((part, i) => {
+    if (part.startsWith("[") && part.endsWith("]") && part.length > 2) {
+      return (
+        <b key={i} className="font-semibold text-accent">
+          {part.slice(1, -1)}
+        </b>
+      );
+    }
+    return <React.Fragment key={i}>{part}</React.Fragment>;
+  });
+}
+
 interface ConversationContentSearchResultsProps {
   hits: ContentSearchHit[];
   /** True while the query is in flight or resolving (kept simple + honest). */
@@ -18,13 +36,13 @@ interface ConversationContentSearchResultsProps {
   error: boolean;
   capped: boolean;
   total: number;
-  onSelect: (conversationId: string) => void;
+  onSelect: (hit: ContentSearchHit) => void;
 }
 
 /**
  * Result list for conversation content search. Each row shows the matched
- * snippet (bolded by the API's [ ] markers) plus who said it and when, and
- * opens the conversation when clicked.
+ * snippet with the matched words emphasized plus who said it and when, and
+ * opens the conversation at the matched message when clicked.
  */
 export function ConversationContentSearchResults({
   hits,
@@ -75,7 +93,7 @@ export function ConversationContentSearchResults({
         <button
           key={`${hit.conversation_id}:${hit.event_id}`}
           type="button"
-          onClick={() => onSelect(hit.conversation_id)}
+          onClick={() => onSelect(hit)}
           className={cn(
             "cursor-pointer rounded-lg border border-transparent px-3 py-2 text-left",
             "transition-colors hover:border-border hover:bg-base-secondary",
@@ -83,7 +101,7 @@ export function ConversationContentSearchResults({
         >
           <div className="truncate text-sm font-medium">{hit.title}</div>
           <div className="mt-0.5 line-clamp-2 text-xs text-tertiary-alt">
-            {hit.snippet}
+            {renderSnippetWithMarks(hit.snippet)}
           </div>
           <div className="mt-0.5 text-2xs uppercase tracking-wide text-tertiary-alt">
             {hit.source === "title"
