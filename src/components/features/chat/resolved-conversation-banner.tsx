@@ -28,6 +28,21 @@ const PROJECT_TAG_KEY = "project";
 
 const COMPOSER_INPUT_SELECTOR = "[contenteditable='true']";
 
+/**
+ * Matches this conversation's cached detail whichever id form keyed it: the
+ * route uses the plain hex id, the server's `id` has dashes.
+ */
+const conversationDetailFilter = (id: string) => {
+  const key = id.replace(/-/g, "").toLowerCase();
+  return {
+    queryKey: ["user", "conversation"],
+    predicate: (query: { queryKey: readonly unknown[] }) =>
+      String(query.queryKey[2] ?? "")
+        .replace(/-/g, "")
+        .toLowerCase() === key,
+  };
+};
+
 function latestUserMessageId(events: OHEvent[]): string | null {
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i];
@@ -75,9 +90,7 @@ export function ResolvedConversationBanner() {
     if (userMessageId === seenUserMessageId.current) return;
     seenUserMessageId.current = userMessageId;
     if (resolution && conversationId) {
-      queryClient.invalidateQueries({
-        queryKey: ["user", "conversation", conversationId],
-      });
+      queryClient.invalidateQueries(conversationDetailFilter(conversationId));
       // The sidebar list shows the tag too.
       queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
     }
@@ -112,10 +125,21 @@ export function ResolvedConversationBanner() {
           conversation.id,
           false,
         );
+        // Hide at once; the refetch below confirms from the server.
+        queryClient.setQueriesData<AppConversation | null | undefined>(
+          conversationDetailFilter(conversation.id),
+          (old) => {
+            if (!old?.tags) return old;
+            const tags = { ...old.tags };
+            delete tags[RESOLVED_CONVERSATION_TAG_KEY];
+            delete tags[RESOLVE_NOTE_TAG_KEY];
+            return { ...old, tags };
+          },
+        );
         await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: ["user", "conversation", conversation.id],
-          }),
+          queryClient.invalidateQueries(
+            conversationDetailFilter(conversation.id),
+          ),
           queryClient.invalidateQueries({
             queryKey: ["user", "conversations"],
           }),
@@ -143,7 +167,7 @@ export function ResolvedConversationBanner() {
       if (fresh) {
         currentTags = fresh.tags;
         queryClient.setQueriesData<AppConversation | null | undefined>(
-          { queryKey: ["user", "conversation", conversation.id] },
+          conversationDetailFilter(conversation.id),
           (old) => (old ? { ...old, tags: fresh.tags } : old),
         );
       }
