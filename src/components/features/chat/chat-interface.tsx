@@ -57,6 +57,7 @@ import { validateFiles } from "#/utils/file-validation";
 import { useConversationStore } from "#/stores/conversation-store";
 import ConfirmationModeEnabled from "./confirmation-mode-enabled";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
+import { useUnifiedResumeConversation } from "#/hooks/mutation/use-unified-start-conversation";
 import { matchesPendingConversationId } from "#/utils/pending-task-message-link";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import ChatStatusIndicator from "./chat-status-indicator";
@@ -231,6 +232,38 @@ export function ChatInterface({
   ]);
 
   const { conversationId } = useOptionalConversationId();
+  const { mutate: resumeConversation, isPending: isResumingConversation } =
+    useUnifiedResumeConversation();
+
+  const handleRetry = React.useCallback(() => {
+    if (
+      !conversationId ||
+      isResumingConversation ||
+      isAgentRunning ||
+      recoveryAgentState === AgentState.RUNNING
+    ) {
+      return;
+    }
+    resumeConversation(
+      { conversationId },
+      {
+        onError: (error) => {
+          const message =
+            error instanceof Error
+              ? error.message
+              : t(I18nKey.CONVERSATION$ERROR_STARTING_CONVERSATION);
+          displayErrorToast(message);
+        },
+      },
+    );
+  }, [
+    conversationId,
+    isResumingConversation,
+    isAgentRunning,
+    recoveryAgentState,
+    resumeConversation,
+    t,
+  ]);
 
   // The live goal banner renders in the scroll stream but advances via store
   // updates (in-progress goal events are filtered out of `renderableEvents`),
@@ -796,8 +829,14 @@ export function ChatInterface({
                 onRetry={
                   errorMessage === SERVER_CONNECTION_ERROR_MESSAGE
                     ? () => conversationWebSocket?.reconnect()
-                    : undefined
+                    : errorClassification?.retryable &&
+                        conversationId &&
+                        !isAgentRunning &&
+                        recoveryAgentState !== AgentState.RUNNING
+                      ? handleRetry
+                      : undefined
                 }
+                isRetrying={isResumingConversation}
                 // Locked-to-Cloud blocks the Canvas agent settings page
                 // (OHE-3457).
                 onReauth={
