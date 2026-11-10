@@ -1920,7 +1920,7 @@ export function AgentSettingsScreen({
             <SettingsDropdownInput
               testId="agent-settings-router-select"
               name="agent-router"
-              label=""
+              label={t(I18nKey.SETTINGS$NAV_META_LLM)}
               items={[
                 {
                   key: ROUTER_OFF_KEY,
@@ -1962,6 +1962,7 @@ export function AgentSettingsScreen({
             {routerSectionVisited ? (
               <MetaLlmSettingsView
                 embedded
+                selectedRouter={router}
                 onCreated={setRouter}
                 onDeleted={(name) =>
                   setRouter((current) => (current === name ? null : current))

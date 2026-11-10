@@ -762,13 +762,15 @@ describe("MetaLlmSettingsView", () => {
       );
       const user = userEvent.setup();
       renderWithProviders(
-        <MetaLlmSettingsView onDeleted={onDeleted} embedded />,
+        <MetaLlmSettingsView
+          onDeleted={onDeleted}
+          selectedRouter="balanced"
+          embedded
+        />,
       );
 
-      await user.click(
-        screen.getByTestId("meta-profile-menu-trigger-balanced"),
-      );
-      await user.click(screen.getByTestId("meta-profile-delete"));
+      expect(screen.queryByTestId("meta-profile-list")).not.toBeInTheDocument();
+      await user.click(screen.getByTestId("agent-settings-router-delete"));
       expect(
         screen.getByText("SETTINGS$META_PROFILE_DELETE_SHARED_WARNING"),
       ).toBeInTheDocument();

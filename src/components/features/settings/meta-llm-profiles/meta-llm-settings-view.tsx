@@ -55,6 +55,7 @@ const CUSTOM_META_PROFILE_CONFIG: MetaProfile = {
 
 interface MetaLlmSettingsViewProps {
   embedded?: boolean;
+  selectedRouter?: string | null;
   onCreated?: (name: string) => void;
   onDeleted?: (name: string) => void;
   onEditingChange?: (editing: boolean) => void;
@@ -62,6 +63,7 @@ interface MetaLlmSettingsViewProps {
 
 export function MetaLlmSettingsView({
   embedded = false,
+  selectedRouter,
   onCreated,
   onDeleted,
   onEditingChange,
@@ -116,6 +118,10 @@ export function MetaLlmSettingsView({
     return [...byId.values()];
   }, [providerConnections, createdProviderConnections]);
   const existingNames = metaProfiles.map((p) => p.name);
+  const selectedSavedRouter =
+    selectedRouter && existingNames.includes(selectedRouter)
+      ? selectedRouter
+      : null;
   // A 404 means the backend predates the /api/meta-profiles endpoints
   // (software-agent-sdk #3744). Surface that explicitly instead of a generic
   // error so the page isn't a dead end on older backends.
@@ -343,27 +349,40 @@ export function MetaLlmSettingsView({
           </p>
         ) : null}
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {embedded ? (
-            <h3 className="text-base font-medium text-contrast">
-              {t(I18nKey.SETTINGS$META_PROFILES_AVAILABLE)}
-            </h3>
-          ) : (
-            <h2 className="text-base font-medium text-contrast">
+        <div className="flex flex-wrap items-center gap-2">
+          {!embedded ? (
+            <h2 className="mr-auto text-base font-medium text-contrast">
               {t(I18nKey.SETTINGS$META_PROFILES_AVAILABLE)}
             </h2>
-          )}
+          ) : null}
           <BrandButton
             testId="add-meta-profile"
             type="button"
             variant="secondary"
-            className="ml-auto"
-            onClick={() => {
-              setIsTemplateModalOpen(true);
-            }}
+            onClick={() => setIsTemplateModalOpen(true)}
           >
             {t(I18nKey.SETTINGS$ADD_META_PROFILE)}
           </BrandButton>
+          {embedded && selectedSavedRouter ? (
+            <>
+              <BrandButton
+                testId="agent-settings-router-edit"
+                type="button"
+                variant="tertiary"
+                onClick={() => handleEdit(selectedSavedRouter)}
+              >
+                {t(I18nKey.BUTTON$EDIT)}
+              </BrandButton>
+              <BrandButton
+                testId="agent-settings-router-delete"
+                type="button"
+                variant="tertiary"
+                onClick={() => setNameToDelete(selectedSavedRouter)}
+              >
+                {t(I18nKey.BUTTON$DELETE)}
+              </BrandButton>
+            </>
+          ) : null}
         </div>
 
         {isLoading ? (
@@ -378,13 +397,13 @@ export function MetaLlmSettingsView({
           </p>
         ) : null}
 
-        {!isLoading && !error && metaProfiles.length === 0 ? (
+        {!embedded && !isLoading && !error && metaProfiles.length === 0 ? (
           <p data-testid="meta-profile-empty" className="text-sm text-muted">
             {t(I18nKey.SETTINGS$META_PROFILE_NO_PROFILES)}
           </p>
         ) : null}
 
-        {metaProfiles.length > 0 ? (
+        {!embedded && metaProfiles.length > 0 ? (
           <div className="flex flex-col gap-2" data-testid="meta-profile-list">
             {metaProfiles.map((info) => (
               <MetaProfileRow

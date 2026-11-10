@@ -2062,19 +2062,84 @@ describe("AgentSettingsScreen — Model Router", () => {
     });
   });
 
-  it("manages shared routers from an optional section of the agent form", async () => {
+  it("offers one router picker with create and selected-router actions", async () => {
+    vi.spyOn(MetaProfilesService, "getMetaProfile").mockResolvedValue({
+      name: "fast-router",
+      config: {
+        classifier_model: "fast",
+        prompt_template: "{{ instance_text }}",
+        model_table: "",
+      },
+    } as never);
     renderAgentSettingsScreen({ agentSettingsOverride: WITH_ROUTER });
     const user = userEvent.setup();
 
     const section = await screen.findByTestId("agent-model-router-section");
-    expect(section).toBeInTheDocument();
-    await user.click(within(section).getByText("SETTINGS$NAV_META_LLM"));
-    expect(
-      await screen.findByTestId("meta-profile-row-fast-router"),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("add-meta-profile")).toBeInTheDocument();
+    await user.click(section.querySelector("summary")!);
+    expect(await screen.findByTestId("add-meta-profile")).toBeInTheDocument();
     expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
       "fast-router",
+    );
+    expect(screen.queryByTestId("meta-profile-list")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", {
+        name: "SETTINGS$META_PROFILES_AVAILABLE",
+      }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("agent-settings-router-edit"));
+    expect(
+      await screen.findByTestId("meta-profile-editor"),
+    ).toBeInTheDocument();
+    expect(MetaProfilesService.getMetaProfile).toHaveBeenCalledWith(
+      "fast-router",
+    );
+  });
+
+  it("selects a new router and offers it in the same dropdown after creation", async () => {
+    const routers = [
+      { name: "fast-router", classifier_model: null, num_classes: 2 },
+      { name: "pro-router", classifier_model: null, num_classes: 3 },
+    ];
+    vi.spyOn(MetaProfilesService, "listMetaProfiles").mockImplementation(
+      async () => ({ meta_profiles: [...routers], active_meta_profile: null }),
+    );
+    vi.spyOn(MetaProfilesService, "saveMetaProfile").mockImplementation(
+      async (name) => {
+        routers.push({ name, classifier_model: null, num_classes: 0 });
+        return { name } as never;
+      },
+    );
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: WITH_ROUTER,
+    });
+    const user = userEvent.setup();
+    await user.click(
+      (await screen.findByTestId("agent-model-router-section")).querySelector(
+        "summary",
+      )!,
+    );
+    await user.click(await screen.findByTestId("add-meta-profile"));
+    await user.click(screen.getByTestId("meta-profile-template-router-pro"));
+    await user.clear(screen.getByTestId("meta-profile-name-input"));
+    await user.type(
+      screen.getByTestId("meta-profile-name-input"),
+      "new-router",
+    );
+    await user.click(screen.getByTestId("meta-profile-save"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
+        "new-router",
+      ),
+    );
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      meta_profile_ref: "new-router",
+    });
+    await choose(user, "pro-router");
+    await choose(user, "new-router");
+    expect(screen.getByTestId("agent-settings-router-select")).toHaveValue(
+      "new-router",
     );
   });
 
