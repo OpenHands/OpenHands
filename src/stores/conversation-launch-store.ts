@@ -4,6 +4,7 @@ import {
 } from "./session-activity-store";
 import type { PendingTaskAttachments } from "./pending-task-attachments-store";
 import { create } from "zustand";
+import type { AutomationSetupDraft } from "#/api/automation-setup-types";
 
 export const CONVERSATION_LAUNCH_PREFIX = "launch-";
 
@@ -15,6 +16,7 @@ export interface ConversationLaunch {
   message: string;
   files: File[];
   attachments?: PendingTaskAttachments;
+  automationSetupDraft?: AutomationSetupDraft;
   targetId?: string;
   conversationId?: string;
   listed?: boolean;
@@ -89,7 +91,11 @@ export const useConversationLaunchStore = create<LaunchState>((set, get) => ({
                 ...state.launches[id],
                 ...update,
                 ...(update.targetId
-                  ? { files: [], attachments: undefined }
+                  ? {
+                      files: [],
+                      attachments: undefined,
+                      automationSetupDraft: undefined,
+                    }
                   : {}),
               },
             },

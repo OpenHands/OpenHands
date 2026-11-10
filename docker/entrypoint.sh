@@ -67,6 +67,8 @@
 #                          Override in production when the external URL differs.
 #   AUTOMATION_WORKSPACE_BASE – Directory for automation run workspaces
 #                          (default: ~/.openhands/workspaces)
+#   XDG_CONFIG_HOME     – Browser-tool configuration directory
+#                          (default: $HOME/.config; must be writable)
 #   Any agent-server or automation env vars are passed through.
 # ═══════════════════════════════════════════════════════════════════════════════
 set -uo pipefail
@@ -191,6 +193,110 @@ fi
 # <<< docker-browser-tools
 export OH_CONVERSATIONS_PATH="${OH_CONVERSATIONS_PATH:-${OPENHANDS_DIR}/${CONFIG_CONVERSATIONS:-agent-canvas/conversations}}"
 export OH_BASH_EVENTS_DIR="${OH_BASH_EVENTS_DIR:-${OPENHANDS_DIR}/${CONFIG_BASH_EVENTS:-agent-canvas/bash_events}}"
+export LOCAL_STORAGE_PATH="${LOCAL_STORAGE_PATH:-${OPENHANDS_DIR}/storage}"
+export AUTOMATION_WORKSPACE_BASE="${AUTOMATION_WORKSPACE_BASE:-${OPENHANDS_DIR}/workspaces}"
+if [ -z "${AUTOMATION_DB_URL:-}" ]; then
+  AUTOMATION_DB_FILE="${OPENHANDS_DIR}/${CONFIG_AUTOMATION_DB:-automation/automations.db}"
+fi
+
+# ── Preflight: persistence dirs must be writable ───────────────────────────
+# A host bind mount the container cannot write to leaves the backend
+# half-dead (frontend serves, APIs 502). Fail fast with an actionable message.
+# Report a preflight failure from the *actual* OS error instead of always
+# assuming a uid mismatch. The cause can also be a read-only mount, a full
+# disk, or a quota, none of which a chmod would fix.
+report_unwritable() {
+  local label="$1" dir="$2" err="$3" host_hint="$4"
+  log_error "$label is not writable: $dir"
+  if [ -n "$err" ]; then
+    log_error "Underlying error: $err"
+  fi
+  case "$err" in
+    *"Permission denied"*|*"permission denied"*|*"Operation not permitted"*|*"operation not permitted"*)
+      if [ "$label" = "Browser config directory" ]; then
+        log_error "Browser tools need a config directory writable by uid $(id -u)."
+        log_error "Set XDG_CONFIG_HOME to a writable directory, or keep the default openhands user."
+        return
+      fi
+      log_error "Grant uid $(id -u) access to the affected host path using ownership or ACLs."
+      if [ "$label" = "Workspace directory" ]; then
+        log_error "Existing project files also need read/write access."
+      else
+        log_error "Keep state and key files private; a fresh named Docker volume avoids bind-mount ownership issues."
+      fi
+      log_error "Use the actual host bind-mount path corresponding to $dir."
+      log_error "On SELinux hosts, check bind-mount labels (Docker :z or :Z)."
+      ;;
+    *"Read-only file system"*|*"read-only file system"*)
+      log_error "The mount is read-only. Drop the ':ro' suffix from its -v flag"
+      [ "$label" != "Browser config directory" ] || log_error "For a read-only root filesystem, set XDG_CONFIG_HOME to a writable mount."
+      log_error "(or remount it read-write), then retry."
+      ;;
+    *)
+      log_error "Resolve the filesystem error above, then retry."
+      ;;
+  esac
+}
+
+# Probe the effective paths (not just $OPENHANDS_DIR): OH_PERSISTENCE_DIR /
+# OH_CONVERSATIONS_PATH / OH_BASH_EVENTS_DIR can be overridden by the user,
+# and $OPENHANDS_DIR itself still hosts the persisted secret-key/api-key files.
+for dir in "$OPENHANDS_DIR" "$OH_PERSISTENCE_DIR" "$OH_CONVERSATIONS_PATH" "$OH_BASH_EVENTS_DIR" "$LOCAL_STORAGE_PATH" "$AUTOMATION_WORKSPACE_BASE" ${AUTOMATION_DB_FILE:+"$(dirname "$AUTOMATION_DB_FILE")"}; do
+  # Capture stderr from *both* commands: if `mkdir -p` fails the probe never
+  # runs, and without this its raw, unprefixed error would leak to the console.
+  if ! err=$(mkdir -p "$dir" 2>&1); then
+    report_unwritable "Persistence directory" "$dir" "$err" "~/.openhands"
+    exit 1
+  fi
+  if ! probe=$(mktemp "$dir/.agent-canvas-probe.XXXXXXXX" 2>&1); then
+    err="$probe"
+    report_unwritable "Persistence directory" "$dir" "$err" "~/.openhands"
+    exit 1
+  fi
+  rm -f "$probe"
+done
+
+# ── Preflight: /projects workspace mount must be writable ──────────────────
+# Optional — only probed when the user actually mounted a workspace dir
+# (e.g. -v "$PROJECTS_PATH:/projects"). A uid-mismatched or read-only mount
+# here breaks the agent's file access the same way, so fail fast too. We
+# deliberately don't mkdir: an absent /projects just means no workspace mount.
+if [ -d /projects ]; then
+  if ! probe=$(mktemp /projects/.agent-canvas-probe.XXXXXXXX 2>&1); then
+    err="$probe"
+    report_unwritable "Workspace directory" "/projects" "$err" "~/projects"
+    case "$err" in
+      *"Read-only file system"*|*"read-only file system"*) log "WARNING: /projects is read-only; existing files cannot be edited." ;;
+      *) exit 1 ;;
+    esac
+  fi
+  [ ! -f "${probe:-}" ] || rm -f "$probe"
+fi
+
+# Browser tools create configuration under XDG_CONFIG_HOME (or $HOME/.config).
+# Catch an inaccessible config path before the backends start with broken tools.
+BROWSER_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}"
+if ! err=$(mkdir -p "$BROWSER_CONFIG_DIR" 2>&1); then
+  report_unwritable "Browser config directory" "$BROWSER_CONFIG_DIR" "$err" "~/.config"
+  exit 1
+fi
+if ! probe=$(mktemp "$BROWSER_CONFIG_DIR/.agent-canvas-probe.XXXXXXXX" 2>&1); then
+  err="$probe"
+  report_unwritable "Browser config directory" "$BROWSER_CONFIG_DIR" "$err" "~/.config"
+  exit 1
+fi
+rm -f "$probe"
+
+# Existing databases must be writable as well as their parent directories.
+if [ -n "${AUTOMATION_DB_FILE:-}" ]; then
+  for db_file in "$AUTOMATION_DB_FILE" "${AUTOMATION_DB_FILE}-wal" "${AUTOMATION_DB_FILE}-shm" "${AUTOMATION_DB_FILE}-journal"; do
+    if [ -e "$db_file" ] && { [ ! -r "$db_file" ] || [ ! -w "$db_file" ]; }; then
+      log_error "Existing automation database is not readable and writable: $db_file"
+      log_error "Grant uid $(id -u) access to this file without exposing private state."
+      exit 1
+    fi
+  done
+fi
 
 # OH_SECRET_KEY is required for settings/secrets encryption. Without it the
 # agent-server refuses to return encrypted secrets → conversation creation
@@ -199,7 +305,10 @@ export OH_BASH_EVENTS_DIR="${OH_BASH_EVENTS_DIR:-${OPENHANDS_DIR}/${CONFIG_BASH_
 SECRET_KEY_FILE="${STATE_DIR}/secret-key.txt"
 if [ -z "${OH_SECRET_KEY:-}" ]; then
   if [ -f "$SECRET_KEY_FILE" ]; then
-    OH_SECRET_KEY="$(cat "$SECRET_KEY_FILE")"
+    if ! OH_SECRET_KEY="$(cat "$SECRET_KEY_FILE" 2>&1)"; then
+      log_error "Cannot read persisted secret key: $SECRET_KEY_FILE (uid $(id -u)). Check ownership and permissions; keep the key private."
+      exit 1
+    fi
   else
     OH_SECRET_KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
     mkdir -p "$(dirname "$SECRET_KEY_FILE")"
@@ -217,7 +326,10 @@ API_KEY_FILE="${STATE_DIR}/api-key.txt"
 
 if [ -z "${LOCAL_BACKEND_API_KEY:-}" ] && [ -z "${OH_SESSION_API_KEYS_0:-}" ]; then
   if [ -f "$API_KEY_FILE" ]; then
-    LOCAL_BACKEND_API_KEY="$(cat "$API_KEY_FILE")"
+    if ! LOCAL_BACKEND_API_KEY="$(cat "$API_KEY_FILE" 2>&1)"; then
+      log_error "Cannot read persisted session key: $API_KEY_FILE (uid $(id -u)). Check ownership and permissions; keep the key private."
+      exit 1
+    fi
   else
     LOCAL_BACKEND_API_KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
     mkdir -p "$(dirname "$API_KEY_FILE")"
@@ -454,15 +566,41 @@ uvicorn_log_level() {
 # Track child PIDs so we can clean up on exit.
 PIDS=()
 
+# >>> docker-exit-status
 cleanup() {
+  # cleanup() runs from the EXIT trap, so it has to carry the status it was
+  # reached with: a hard-coded `exit 0` here rewrites every failure below into
+  # a clean stop, and `restart: on-failure` never fires.
+  local status=$?
+  # Ignore further SIGINT/SIGTERM while shutting down: the `exit 0` trap below
+  # would otherwise fire during the wait and report a failure as a clean stop.
+  trap '' SIGINT SIGTERM
   log "Shutting down..."
-  for pid in "${PIDS[@]}"; do
-    kill "$pid" 2>/dev/null || true
-  done
-  wait 2>/dev/null || true
-  exit 0
+  if [ "${#PIDS[@]}" -gt 0 ]; then
+    for pid in "${PIDS[@]}"; do
+      kill "$pid" 2>/dev/null || true
+    done
+    # A hung service may never act on SIGTERM, which would leave the container
+    # stuck here; force whatever is still running once the timeout passes. The
+    # default stays inside `docker stop`'s 10 s grace.
+    (
+      sleep "$SERVICE_STOP_TIMEOUT"
+      kill -KILL "${PIDS[@]}" 2>/dev/null
+    ) >/dev/null 2>&1 &
+    local watchdog=$!
+    # Wait for the services only. A bare `wait` would also sit out the
+    # keep-alive loop's pending `sleep 10`.
+    wait "${PIDS[@]}" 2>/dev/null || true
+    kill -KILL "$watchdog" 2>/dev/null || true
+  fi
+  exit "$status"
 }
-trap cleanup EXIT SIGINT SIGTERM
+SERVICE_STOP_TIMEOUT="${SERVICE_STOP_TIMEOUT:-8}"
+trap cleanup EXIT
+# A trapped signal is a requested shutdown rather than a crash, so it keeps
+# today's exit 0 through the EXIT trap above.
+trap 'exit 0' SIGINT SIGTERM
+# <<< docker-exit-status
 
 # ── 1. Start Agent Server ────────────────────────────────────────────────────
 log "Starting agent-server on port $AGENT_SERVER_PORT..."
@@ -543,11 +681,53 @@ wait_for_port() {
   log "$name is ready on port $port"
 }
 
+# >>> agent-server-liveness
+# The agent-server is launched through a launcher process that can outlive the
+# server it started, so watching the PID cannot tell whether the backend is
+# still serving. Ask its /alive endpoint instead. An open port is not enough:
+# a hung server still completes the TCP handshake, so the probe needs an HTTP
+# answer within a short timeout. Misses only count once the server has come up
+# (its port opened during startup, or /alive answered later), so a first start
+# slower than the startup wait is not mistaken for a crash. Three consecutive
+# misses at the keep-alive loop's 10 s cadence is roughly the 30 s the issue
+# asks for.
+AGENT_SERVER_MAX_MISSES=3
+AGENT_SERVER_PROBE_TIMEOUT="${AGENT_SERVER_PROBE_TIMEOUT:-2}"
+AGENT_SERVER_MISSES=0
+AGENT_SERVER_UP=0
+
+mark_agent_server_up() {
+  AGENT_SERVER_UP=1
+}
+
+agent_server_responding() {
+  curl -fs -o /dev/null --noproxy '*' --max-time "$AGENT_SERVER_PROBE_TIMEOUT" \
+    "http://127.0.0.1:${AGENT_SERVER_PORT}/alive"
+}
+
+# Returns 0 while the backend answers (or has not come up yet), and 1 once the
+# miss budget runs out.
+track_agent_server_liveness() {
+  if agent_server_responding; then
+    mark_agent_server_up
+    AGENT_SERVER_MISSES=0
+    return 0
+  fi
+  [ "$AGENT_SERVER_UP" -eq 1 ] || return 0
+  AGENT_SERVER_MISSES=$((AGENT_SERVER_MISSES + 1))
+  log "WARNING: agent-server on port $AGENT_SERVER_PORT is not responding ($AGENT_SERVER_MISSES/$AGENT_SERVER_MAX_MISSES)"
+  [ "$AGENT_SERVER_MISSES" -lt "$AGENT_SERVER_MAX_MISSES" ]
+}
+# <<< agent-server-liveness
+
 wait_for_port "$AGENT_SERVER_PORT" "Agent Server" 60 &
 WAIT_PID1=$!
 wait_for_port "$AUTOMATION_PORT" "Automation Server" 60 &
 WAIT_PID2=$!
-wait "$WAIT_PID1" "$WAIT_PID2"
+if wait "$WAIT_PID1"; then
+  mark_agent_server_up
+fi
+wait "$WAIT_PID2"
 
 # ── 4. Start static server (frontend + proxy) ────────────────────────────────
 log "Starting frontend + proxy on port $PORT..."
@@ -664,18 +844,22 @@ fi
 log "All services started. Unified entry point: http://0.0.0.0:${PORT}/"
 
 # Keep the container alive while the static-server (ingress) is running.
-# Backend crashes (agent-server, automation) are tolerated — the proxy
-# returns 502 for downed routes, matching the non-Docker path where each
-# service is an independent host process.
+# Automation-backend crashes are tolerated — the proxy returns 502 for downed
+# routes, matching the non-Docker path where each service is an independent
+# host process.  A dead agent-server is not: every proxied route depends on it,
+# so the container would stay up while serving nothing.
 #
 # Pattern: `sleep & wait $!` makes `wait` (a bash builtin) the foreground
 # operation.  Unlike a bare `sleep`, the builtin `wait` is interrupted
 # immediately when a trapped signal (SIGTERM/SIGINT) arrives, so cleanup()
-# fires without delay.  cleanup() calls `exit 0` to terminate after the
-# trap returns.  The loop re-checks the static-server PID every 10 s so the
-# container exits promptly if the ingress process dies on its own.
+# fires without delay.  The loop re-checks the static-server PID every 10 s so
+# the container exits promptly if the ingress process dies on its own.
 while kill -0 "$STATIC_PID" 2>/dev/null; do
   sleep 10 & wait $!
+  if ! track_agent_server_liveness; then
+    log_error "Agent server on port $AGENT_SERVER_PORT stopped responding — exiting so the restart policy can recover the stack"
+    exit 1
+  fi
 done
 log_error "Static server (PID $STATIC_PID) exited"
 exit 1

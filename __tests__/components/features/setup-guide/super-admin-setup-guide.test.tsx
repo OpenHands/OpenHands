@@ -73,6 +73,7 @@ function guideState(steps: Partial<CloudSetupGuideSteps> = {}) {
     guide_dismissed: false,
     guide_steps: {
       org_llm: false,
+      git_provider: false,
       mcp_server: false,
       automation: false,
       invite: false,
@@ -191,10 +192,10 @@ describe("SuperAdminSetupGuide", () => {
     expect(
       await screen.findByTestId("super-admin-setup-guide-panel"),
     ).toBeInTheDocument();
-    expect(screen.getByText("1/4")).toBeInTheDocument();
+    expect(screen.getByText("1/5")).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute(
       "aria-valuenow",
-      "25",
+      "20",
     );
   });
 
@@ -211,6 +212,9 @@ describe("SuperAdminSetupGuide", () => {
       "href",
       `${CLOUD_HOST}/settings/org-defaults?org=${GUIDE_ORG_ID}`,
     );
+    expect(
+      screen.getByTestId("super-admin-setup-guide-step-connect-git"),
+    ).toHaveAttribute("href", "/mcp");
     expect(
       screen.getByTestId("super-admin-setup-guide-step-add-integration"),
     ).toHaveAttribute("href", "/mcp");
@@ -235,7 +239,8 @@ describe("SuperAdminSetupGuide", () => {
   it("opens the next step from Start", async () => {
     activateBackend(cloudBackend);
     serveSetupGuide({
-      setupState: () => HttpResponse.json(guideState({ org_llm: true })),
+      setupState: () =>
+        HttpResponse.json(guideState({ org_llm: true, git_provider: true })),
     });
 
     renderGuide();
@@ -245,11 +250,26 @@ describe("SuperAdminSetupGuide", () => {
     ).toHaveAttribute("href", "/automations/templates");
   });
 
+  it("opens the Canvas MCP page from Start for the Git step", async () => {
+    activateBackend(cloudBackend);
+    serveSetupGuide({
+      setupState: () => HttpResponse.json(guideState({ org_llm: true })),
+    });
+
+    renderGuide();
+
+    expect(
+      await screen.findByTestId("super-admin-setup-guide-start"),
+    ).toHaveAttribute("href", "/mcp");
+  });
+
   it("opens the Canvas MCP page from Start for the integration step", async () => {
     activateBackend(cloudBackend);
     serveSetupGuide({
       setupState: () =>
-        HttpResponse.json(guideState({ org_llm: true, automation: true })),
+        HttpResponse.json(
+          guideState({ org_llm: true, git_provider: true, automation: true }),
+        ),
     });
 
     renderGuide();
@@ -264,7 +284,12 @@ describe("SuperAdminSetupGuide", () => {
     serveSetupGuide({
       setupState: () =>
         HttpResponse.json(
-          guideState({ org_llm: true, automation: true, mcp_server: true }),
+          guideState({
+            org_llm: true,
+            git_provider: true,
+            automation: true,
+            mcp_server: true,
+          }),
         ),
     });
 
@@ -278,12 +303,16 @@ describe("SuperAdminSetupGuide", () => {
   describe("when the guide's next step is done", () => {
     it("opens the Canvas MCP page with its tour after an automation is created", async () => {
       activateBackend(cloudBackend);
-      let state = guideState({ org_llm: true });
+      let state = guideState({ org_llm: true, git_provider: true });
       serveSetupGuide({ setupState: () => HttpResponse.json(state) });
       const { navigate } = renderGuide("/automations/new/widget");
-      expect(await screen.findByText("1/4")).toBeInTheDocument();
+      expect(await screen.findByText("2/5")).toBeInTheDocument();
 
-      state = guideState({ org_llm: true, automation: true });
+      state = guideState({
+        org_llm: true,
+        git_provider: true,
+        automation: true,
+      });
       act(() => notifySuperAdminSetupStep("first-automation"));
 
       // The tour opens the page itself.
@@ -302,12 +331,21 @@ describe("SuperAdminSetupGuide", () => {
       const assign = vi.fn();
       vi.stubGlobal("location", { ...window.location, assign });
       activateBackend(cloudBackend);
-      let state = guideState({ org_llm: true, automation: true });
+      let state = guideState({
+        org_llm: true,
+        git_provider: true,
+        automation: true,
+      });
       serveSetupGuide({ setupState: () => HttpResponse.json(state) });
       renderGuide("/mcp");
-      expect(await screen.findByText("2/4")).toBeInTheDocument();
+      expect(await screen.findByText("3/5")).toBeInTheDocument();
 
-      state = guideState({ org_llm: true, automation: true, mcp_server: true });
+      state = guideState({
+        org_llm: true,
+        git_provider: true,
+        automation: true,
+        mcp_server: true,
+      });
       act(() => notifySuperAdminSetupStep("add-integration"));
 
       await waitFor(() => expect(assign).toHaveBeenCalledWith(INVITE_TOUR_URL));
@@ -318,15 +356,24 @@ describe("SuperAdminSetupGuide", () => {
       vi.stubGlobal("location", { ...window.location, assign });
       const user = userEvent.setup();
       activateBackend(cloudBackend);
-      let state = guideState({ org_llm: true, automation: true });
+      let state = guideState({
+        org_llm: true,
+        git_provider: true,
+        automation: true,
+      });
       serveSetupGuide({ setupState: () => HttpResponse.json(state) });
       renderGuide("/mcp");
-      expect(await screen.findByText("2/4")).toBeInTheDocument();
+      expect(await screen.findByText("3/5")).toBeInTheDocument();
       await user.click(
         screen.getByRole("button", { name: I18nKey.BUTTON$CLOSE }),
       );
 
-      state = guideState({ org_llm: true, automation: true, mcp_server: true });
+      state = guideState({
+        org_llm: true,
+        git_provider: true,
+        automation: true,
+        mcp_server: true,
+      });
       act(() => notifySuperAdminSetupStep("add-integration"));
 
       expect(
@@ -348,7 +395,7 @@ describe("SuperAdminSetupGuide", () => {
       setupState: () => HttpResponse.json(state),
     });
     const { navigate } = renderGuide("/automations/templates");
-    expect(await screen.findByText("1/4")).toBeInTheDocument();
+    expect(await screen.findByText("1/5")).toBeInTheDocument();
     const before = requests.setupState;
 
     state = guideState({ org_llm: true, ...after });
@@ -383,7 +430,8 @@ describe("SuperAdminSetupGuide", () => {
   it("starts a Canvas step's tour from Start, which opens the page itself", async () => {
     activateBackend(cloudBackend);
     serveSetupGuide({
-      setupState: () => HttpResponse.json(guideState({ org_llm: true })),
+      setupState: () =>
+        HttpResponse.json(guideState({ org_llm: true, git_provider: true })),
     });
     const user = userEvent.setup();
     const { navigate } = renderGuide();
@@ -401,6 +449,26 @@ describe("SuperAdminSetupGuide", () => {
     expect(
       screen.getByTestId("super-admin-setup-guide-toggle"),
     ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("starts the Git step's tour from Start once the LLM is set", async () => {
+    activateBackend(cloudBackend);
+    serveSetupGuide({
+      setupState: () => HttpResponse.json(guideState({ org_llm: true })),
+    });
+    const user = userEvent.setup();
+    const { navigate } = renderGuide();
+
+    await user.click(
+      await screen.findByTestId("super-admin-setup-guide-start"),
+    );
+
+    expect(startSetupGuideTour).toHaveBeenCalledWith(
+      "connect-git",
+      expect.objectContaining({ navigate }),
+      expect.any(Function),
+    );
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it("starts a Canvas step's tour from its row, even when another step is next", async () => {
@@ -479,12 +547,12 @@ describe("SuperAdminSetupGuide", () => {
     let state = guideState({ org_llm: true });
     serveSetupGuide({ setupState: () => HttpResponse.json(state) });
     const { navigateTo } = renderGuide("/automations/templates");
-    expect(await screen.findByText("1/4")).toBeInTheDocument();
+    expect(await screen.findByText("1/5")).toBeInTheDocument();
 
     state = guideState({ org_llm: true, automation: true });
     navigateTo("/automations/automation-1");
 
-    expect(await screen.findByText("2/4")).toBeInTheDocument();
+    expect(await screen.findByText("2/5")).toBeInTheDocument();
   });
 
   it("closes to the pill and opens again from it", async () => {
@@ -579,6 +647,7 @@ describe("SuperAdminSetupGuide", () => {
         HttpResponse.json(
           guideState({
             org_llm: true,
+            git_provider: true,
             mcp_server: true,
             automation: true,
             invite: true,

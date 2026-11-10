@@ -225,6 +225,7 @@ describe("recommended automations", () => {
       data: settingsWithMcpConfig({}),
     });
     vi.spyOn(SecretsService, "getSecretsOrThrow").mockResolvedValue([]);
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
     mockCreateSecret.mockResolvedValue(undefined);
     // Pre-flight connectivity test must pass so save mutations are reached.
     vi.spyOn(McpService, "testServer").mockResolvedValue({
@@ -271,8 +272,10 @@ describe("recommended automations", () => {
       "linear-issue-to-bitbucket-pr",
       "jira-issue-to-pr",
       "qa-changes",
+      "jira-data-center-issue-to-bitbucket-data-center-pr",
       "jira-issue-to-gitlab-mr",
       "research-brief-writer",
+      "bitbucket-data-center-pr-reviewer",
       "jira-issue-to-bitbucket-pr",
       "github-delivery-watchdog",
       "github-issue-triage",
@@ -306,7 +309,7 @@ describe("recommended automations", () => {
     expect(moreHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$MORE_TITLE,
     );
-    expect(within(moreHeading).getByText("18")).toBeInTheDocument();
+    expect(within(moreHeading).getByText("20")).toBeInTheDocument();
 
     const moreSection = screen.getByTestId(
       "recommended-automations-beta-section",
@@ -409,6 +412,29 @@ describe("recommended automations", () => {
     expect(screen.getByTestId("template-filters")).toBe(filterRail);
   });
 
+  it("names a built-in provider's filter chip after the product, with the logo it stands for", () => {
+    render(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        filters={{ integrationId: null, trigger: null }}
+        onFiltersChange={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    // The Data Center templates are Bitbucket Data Center's only through
+    // their repository picker; the integration catalog has no such entry.
+    const chip = screen.getByTestId(
+      "template-filter-integration-bitbucket_data_center",
+    );
+    expect(chip).toHaveTextContent(/^Bitbucket Data Center$/);
+    expect(chip.querySelector('img[alt="Bitbucket logo"]')).toBeInTheDocument();
+    expect(
+      screen.getByTestId("template-filter-integration-bitbucket"),
+    ).toHaveTextContent(/^Bitbucket$/);
+  });
+
   it("shows a left-aligned MCP icon stack on each card", () => {
     render(
       <RecommendedAutomationsSection
@@ -429,6 +455,29 @@ describe("recommended automations", () => {
         "recommended-automation-icon-incident-retrospective-drafter",
       ),
     ).toHaveAttribute("data-layout", "quadrants");
+  });
+
+  it("shows the repository provider's logo for a template that declares no integration", () => {
+    render(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    // The GitHub workers use the connected account's token, so they declare
+    // no integration; their repository picker is what makes them GitHub's.
+    const badge = screen.getByTestId(
+      "recommended-automation-icon-github-pr-reviewer",
+    );
+    const githubLogoUrl = INTEGRATION_CATALOG.find(
+      (entry) => entry.id === "github",
+    )?.logoUrl;
+    // Theme-backed logos use a tintable mask with the same provider artwork.
+    expect(
+      within(badge).getByTestId("mcp-logo-tinted-mark").style.maskImage,
+    ).toBe(`url("${githubLogoUrl}")`);
   });
 
   it("shows the declared glyph instead of a logo stack when an entry names one", () => {
@@ -1324,6 +1373,50 @@ describe("recommended automations", () => {
     );
   });
 
+  it("suggests the proven templates on an Enterprise instance with nothing set up", async () => {
+    // Arrange — sign-up by password, no git provider or integration.
+    await activateCloudBackend({ deploymentMode: "self_hosted" });
+
+    // Act
+    renderLauncher({ withBackendProvider: true });
+
+    // Assert
+    await screen.findByTestId("recommended-automation-card-github-pr-reviewer");
+    const more = screen.getByTestId("recommended-automations-beta-section");
+    for (const id of [
+      "github-pr-reviewer",
+      "github-issue-to-pr",
+      "news-digest",
+    ]) {
+      expect(
+        within(more).queryByTestId(`recommended-automation-card-${id}`),
+      ).not.toBeInTheDocument();
+    }
+  });
+
+  it("suggests a template using an MCP server the user installed", async () => {
+    // Arrange
+    await activateCloudBackend({
+      settings: settingsWithMcpConfig({
+        linear: { url: "https://mcp.linear.app/mcp" },
+      }),
+    });
+
+    // Act
+    renderLauncher({ withBackendProvider: true });
+
+    // Assert
+    await screen.findByTestId(
+      "recommended-automation-card-linear-triage-assistant",
+    );
+    expect(cardOrder()[0]).toBe("linear-triage-assistant");
+    expect(
+      within(
+        screen.getByTestId("recommended-automations-beta-section"),
+      ).queryByTestId("recommended-automation-card-linear-triage-assistant"),
+    ).not.toBeInTheDocument();
+  });
+
   it("suggests first the templates using an integration an Enterprise instance reports", async () => {
     await withBuiltInRequirement(["bitbucket_data_center"], async () => {
       // Arrange
@@ -1336,9 +1429,13 @@ describe("recommended automations", () => {
       // Act
       renderLauncher({ withBackendProvider: true });
 
-      // Assert
+      // Assert — ahead of the proven templates; the catalog's own Data Center
+      // templates use the reported integrations too.
       await screen.findByTestId("recommended-automation-card-news-digest");
-      expect(cardOrder()[0]).toBe("news-digest");
+      const order = cardOrder();
+      expect(order.indexOf("news-digest")).toBeLessThan(
+        order.indexOf("slack-channel-monitor"),
+      );
       expect(
         within(
           screen.getByTestId("recommended-automations-beta-section"),
@@ -1347,34 +1444,90 @@ describe("recommended automations", () => {
     });
   });
 
-  it("explains what the instance does not report before setting such a template up, and lets the user continue", async () => {
+  it("tells a self-hosted instance with GitHub set up no way what the template needs", async () => {
+    // Arrange
+    await activateCloudBackend({ deploymentMode: "self_hosted" });
+    renderLauncher({ withBackendProvider: true });
+
+    // Act
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-github-pr-reviewer",
+      ),
+    );
+
+    // Assert
+    const notice = await screen.findByTestId("provider-setup-notice");
+    expect(notice).toHaveTextContent("GitHub code review");
+    expect(notice).toHaveTextContent(
+      "RECOMMENDED_AUTOMATIONS$PROVIDER_NOT_CONFIGURED",
+    );
+    expect(notice).toHaveTextContent(
+      "RECOMMENDED_AUTOMATIONS$PROVIDER_ALTERNATIVE",
+    );
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("continues from the notice into installing the GitHub MCP server", async () => {
+    // Arrange
+    await activateCloudBackend({ deploymentMode: "self_hosted" });
+    renderLauncher({ withBackendProvider: true });
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-github-pr-reviewer",
+      ),
+    );
+    await screen.findByTestId("provider-setup-notice");
+
+    // Act
+    fireEvent.click(screen.getByTestId("provider-setup-notice-continue"));
+
+    // Assert
+    const modal = await screen.findByTestId("mcp-install-modal");
+    expect(modal).toHaveTextContent("GitHub");
+    expect(screen.getByTestId("mcp-install-field-api_key")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("provider-setup-notice"),
+    ).not.toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("closes the notice without setting up the template", async () => {
+    // Arrange
+    await activateCloudBackend({ deploymentMode: "self_hosted" });
+    renderLauncher({ withBackendProvider: true });
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-github-pr-reviewer",
+      ),
+    );
+    await screen.findByTestId("provider-setup-notice");
+
+    // Act
+    fireEvent.click(screen.getByTestId("provider-setup-notice-cancel"));
+
+    // Assert
+    expect(
+      screen.queryByTestId("provider-setup-notice"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mcp-install-modal")).not.toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("sets up a template without a notice when its GitHub MCP server is installed", async () => {
     // Arrange
     await activateCloudBackend({
       deploymentMode: "self_hosted",
-      providersConfigured: ["bitbucket_data_center"],
-      jiraDcEnabled: true,
+      settings: settingsWithGithubMcp(),
     });
     renderLauncher({ withBackendProvider: true });
-    const card = await screen.findByTestId(
-      "recommended-automation-card-github-pr-reviewer",
+
+    // Act
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-github-pr-reviewer",
+      ),
     );
-
-    // Act — open it and cancel.
-    fireEvent.click(card);
-
-    // Assert
-    expect(screen.getByTestId("unlikely-integration-notice")).toHaveTextContent(
-      "GitHub",
-    );
-    fireEvent.click(screen.getByTestId("unlikely-integration-notice-cancel"));
-    expect(
-      screen.queryByTestId("unlikely-integration-notice"),
-    ).not.toBeInTheDocument();
-    expect(mockNavigate).not.toHaveBeenCalled();
-
-    // Act — open it again and continue.
-    fireEvent.click(card);
-    fireEvent.click(screen.getByTestId("unlikely-integration-notice-continue"));
 
     // Assert
     await waitFor(() =>
@@ -1382,9 +1535,38 @@ describe("recommended automations", () => {
         "/automations/new/github-pr-reviewer",
       ),
     );
+    expect(
+      screen.queryByTestId("provider-setup-notice"),
+    ).not.toBeInTheDocument();
   });
 
-  it("sets up a template the instance looks ready for without the notice", async () => {
+  it("sets up a template without a notice when its GitHub token secret is saved", async () => {
+    // Arrange
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([
+      { name: "GITHUB_PERSONAL_ACCESS_TOKEN" },
+    ]);
+    await activateCloudBackend({ deploymentMode: "self_hosted" });
+    renderLauncher({ withBackendProvider: true });
+
+    // Act
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-github-pr-reviewer",
+      ),
+    );
+
+    // Assert
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        "/automations/new/github-pr-reviewer",
+      ),
+    );
+    expect(
+      screen.queryByTestId("provider-setup-notice"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("sets up a template the instance looks ready for", async () => {
     // Arrange
     await activateCloudBackend({
       deploymentMode: "self_hosted",
@@ -1400,9 +1582,6 @@ describe("recommended automations", () => {
     );
 
     // Assert
-    expect(
-      screen.queryByTestId("unlikely-integration-notice"),
-    ).not.toBeInTheDocument();
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith(
         "/automations/new/github-pr-reviewer",
@@ -1410,7 +1589,7 @@ describe("recommended automations", () => {
     );
   });
 
-  it("does not offer Data Center templates on OpenHands Cloud", async () => {
+  it("offers Data Center templates on OpenHands Cloud too", async () => {
     await withBuiltInRequirement(["bitbucket_data_center"], async () => {
       // Arrange
       await activateCloudBackend({
@@ -1429,8 +1608,8 @@ describe("recommended automations", () => {
         ),
       ).toBeInTheDocument();
       expect(
-        screen.queryByTestId("recommended-automation-card-news-digest"),
-      ).not.toBeInTheDocument();
+        screen.getByTestId("recommended-automation-card-news-digest"),
+      ).toBeInTheDocument();
     });
   });
 

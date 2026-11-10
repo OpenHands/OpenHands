@@ -16,11 +16,15 @@ import { useNavigation } from "#/context/navigation-context";
 import { useConversationStore } from "#/stores/conversation-store";
 import { I18nKey } from "#/i18n/declaration";
 import { ConversationStartupProgress } from "./conversation-startup-progress";
+import {
+  initializeAutomationFormSession,
+  PENDING_AUTOMATION_SETUP_ID,
+} from "#/api/automation-form-session";
 
 export function ConversationLaunchView({ launchId }: { launchId: string }) {
   const { t } = useTranslation("openhands");
   const { backend, orgId } = useActiveBackend();
-  const { navigate } = useNavigation();
+  const { navigate, currentPath } = useNavigation();
   const entry = useConversationLaunchStore((state) => state.launches[launchId]);
   const launch =
     entry?.backendId === backend.id && entry.orgId === orgId ? entry : null;
@@ -32,11 +36,18 @@ export function ConversationLaunchView({ launchId }: { launchId: string }) {
     },
     [launchId],
   );
+  // The launch view is the source of truth for its own URL, but the user can
+  // switch to another conversation in the sidebar while the create request is
+  // still in flight. When the launch resolves and `targetId` lands, the store
+  // update re-renders this component before React processes the unmount from
+  // the user's click — so the effect below can fire a `navigate(replace:)`
+  // that overwrites the conversation the user just moved to. Guard against
+  // that by only following the launch when the user is still on it.
   useEffect(() => {
-    if (launch?.targetId) {
-      navigate(`/conversations/${launch.targetId}`, { replace: true });
-    }
-  }, [launch?.targetId, navigate]);
+    if (!launch?.targetId) return;
+    if (currentPath !== `/conversations/${launchId}`) return;
+    navigate(`/conversations/${launch.targetId}`, { replace: true });
+  }, [launch?.targetId, launchId, navigate, currentPath]);
 
   return (
     <ConversationOverviewDrawerProvider>
@@ -65,6 +76,15 @@ export function ConversationLaunchView({ launchId }: { launchId: string }) {
                       onEdit={() => {
                         const composer = useConversationStore.getState();
                         composer.setMessageToSend(launch.message, "home");
+                        if (launch.automationSetupDraft) {
+                          initializeAutomationFormSession(
+                            PENDING_AUTOMATION_SETUP_ID,
+                            launch.automationSetupDraft,
+                          );
+                          editing.current = true;
+                          navigate("/automations/setup");
+                          return;
+                        }
                         if (launch.attachments) {
                           composer.addImages(
                             launch.attachments.images.filter(

@@ -4,8 +4,10 @@ import {
   AutomationFileValidationError,
   parseAutomationFile,
   serializeAutomation,
+  serializeScriptAutomation,
 } from "./automation-export";
 import { withPresetSources } from "./automation-preset-sources";
+import { base64ToBytes, bytesToBase64 } from "./base64";
 
 const cronAutomation: Automation = {
   id: "automation-1",
@@ -27,6 +29,22 @@ const cronAutomation: Automation = {
   updated_at: "2026-07-02T00:00:00Z",
   last_triggered_at: "2026-07-03T00:00:00Z",
 };
+
+const scriptAutomation: Automation = {
+  id: "automation-2",
+  name: "Socials monitor",
+  trigger: { type: "cron", schedule: "0,30 9-17 * * 1-5", timezone: "UTC" },
+  enabled: true,
+  prompt: null,
+  entrypoint: "python3 main.py",
+  setup_script_path: "setup.sh",
+  tarball_path: "oh-internal://uploads/socials-monitor",
+  model: "fast",
+  created_at: "2026-10-05T00:00:00Z",
+  updated_at: "2026-10-06T00:00:00Z",
+};
+
+const bundle = new Uint8Array([0x1f, 0x8b, 8, 0, 1, 2, 3, 250, 255, 0]);
 
 describe("automation export files", () => {
   it("round-trips a cron automation without server-assigned fields", () => {
@@ -145,6 +163,57 @@ describe("automation export files", () => {
         ]),
       );
     }
+  });
+
+  it("round-trips a script automation with its bundle", () => {
+    const exported = serializeScriptAutomation(scriptAutomation, bundle);
+
+    expect(exported.spec).toMatchObject({
+      prompt: null,
+      script: {
+        entrypoint: "python3 main.py",
+        setup_script_path: "setup.sh",
+        tarball_base64: bytesToBase64(bundle),
+      },
+    });
+    expect(exported.spec).not.toHaveProperty("tarball_path");
+    const parsed = parseAutomationFile(JSON.parse(JSON.stringify(exported)));
+    expect(parsed).toEqual(exported.spec);
+    expect(base64ToBytes(parsed.script!.tarball_base64)).toEqual(bundle);
+  });
+
+  it("reports malformed script fields with their paths", () => {
+    const exported = serializeScriptAutomation(scriptAutomation, bundle);
+    const malformed = {
+      ...exported,
+      spec: {
+        ...exported.spec,
+        prompt: "Also a prompt",
+        script: { setup_script_path: 7, tarball_base64: "not base64!" },
+      },
+    };
+
+    expect(() => parseAutomationFile(malformed)).toThrow(
+      AutomationFileValidationError,
+    );
+    try {
+      parseAutomationFile(malformed);
+    } catch (error) {
+      expect((error as AutomationFileValidationError).issues).toEqual(
+        expect.arrayContaining([
+          "spec.script.entrypoint: expected a non-empty string",
+          "spec.script.setup_script_path: expected a string",
+          "spec.script.tarball_base64: expected base64",
+          "spec.prompt: must be omitted for a script automation",
+        ]),
+      );
+    }
+    expect(() =>
+      parseAutomationFile({
+        ...exported,
+        spec: { ...exported.spec, script: 5 },
+      }),
+    ).toThrow("spec.script: expected an object");
   });
 
   it("rejects non-object files and missing specs", () => {

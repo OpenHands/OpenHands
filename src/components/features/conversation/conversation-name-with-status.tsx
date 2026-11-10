@@ -19,7 +19,7 @@ import { ConversationGitActionsToggle } from "./conversation-git-actions-toggle"
 import { ConversationOverviewToggle } from "./conversation-overview-toggle";
 import { RightPanelToggle } from "./right-panel-toggle";
 import {
-  isExecutionActive,
+  canStopRuntime,
   isExecutionErrored,
   isExecutionPaused,
 } from "#/utils/status";
@@ -142,12 +142,14 @@ export function ConversationNameWithStatus() {
               onClose={closeMenu}
               ignoreOutsideClickRef={triggerRef}
               onStopServer={
-                isExecutionActive(executionStatus)
+                canStopRuntime(executionStatus, conversation?.sandbox_status)
                   ? handleStopServer
                   : undefined
               }
               onStartServer={
-                isExecutionPaused(executionStatus)
+                // A running sandbox needs no start; the composer resumes the agent.
+                isExecutionPaused(executionStatus) &&
+                conversation?.sandbox_status !== "RUNNING"
                   ? handleStartServer
                   : undefined
               }
