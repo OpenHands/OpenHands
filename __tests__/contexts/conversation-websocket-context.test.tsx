@@ -65,6 +65,7 @@ const wsCapture = vi.hoisted(() => ({
   mainOptions: null as CapturedWebSocketOptions | null,
   planningOnMessage: null as null | ((event: { data: string }) => void),
   planningOptions: null as CapturedWebSocketOptions | null,
+  mockSocket: null as unknown,
   calls: [] as Array<{
     url: string;
     options?: CapturedWebSocketOptions;
@@ -97,7 +98,11 @@ vi.mock("#/hooks/use-websocket", () => ({
         wsCapture.planningOptions = options;
       }
     }
-    return { socket: null, reconnect: vi.fn(), disconnect: vi.fn() };
+    return {
+      socket: wsCapture.mockSocket,
+      reconnect: vi.fn(),
+      disconnect: vi.fn(),
+    };
   }),
 }));
 vi.mock("#/hooks/query/use-user-conversation", () => ({
@@ -593,6 +598,125 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       // Falling back to `conv-parent` here would run a planning prompt in the
       // code agent — the boundary plan mode exists to enforce.
       expect(sendEventMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("running conversation message delivery fallback", () => {
+    function SendMessageProbe({
+      onReady,
+    }: {
+      onReady: (send: ReturnType<typeof useConversationWebSocket>) => void;
+    }) {
+      const context = useConversationWebSocket();
+      React.useEffect(() => onReady(context), [context, onReady]);
+      return null;
+    }
+
+    const renderCodeMode = () => {
+      let context: ReturnType<typeof useConversationWebSocket> | null = null;
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ConversationWebSocketProvider
+            conversationId="conv-running"
+            conversationUrl="http://localhost/api"
+            subConversationIds={undefined}
+            subConversations={undefined}
+          >
+            <SendMessageProbe
+              onReady={(value) => {
+                context = value;
+              }}
+            />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+      return () => context!;
+    };
+
+    beforeEach(() => {
+      sendEventMock.mockReset().mockResolvedValue(undefined);
+      useConversationStore.setState({ conversationMode: "code" });
+    });
+
+    afterEach(() => {
+      wsCapture.mockSocket = null;
+    });
+
+    it("falls back to REST sendEvent when socket is OPEN but has delivered no frames yet", async () => {
+      const socketSend = vi.fn();
+      wsCapture.mockSocket = {
+        readyState: WebSocket.OPEN,
+        send: socketSend,
+      };
+
+      const getContext = renderCodeMode();
+      await waitFor(() => expect(getContext()).not.toBeNull());
+
+      let result: { queued: boolean } | undefined;
+      await act(async () => {
+        result = await getContext().sendMessage({
+          role: "user",
+          content: [{ type: "text", text: "hello while running" }],
+        });
+      });
+
+      // Socket has delivered 0 frames, so socket.send must NOT be called.
+      expect(socketSend).not.toHaveBeenCalled();
+      // Falls back to direct REST sendEvent with run: true.
+      expect(sendEventMock).toHaveBeenCalledWith(
+        "conv-running",
+        {
+          role: "user",
+          content: [{ type: "text", text: "hello while running" }],
+        },
+        { run: true },
+      );
+      expect(result).toEqual({ queued: true });
+    });
+
+    it("sends over WebSocket when socket is OPEN and has delivered at least one frame", async () => {
+      const socketSend = vi.fn();
+      wsCapture.mockSocket = {
+        readyState: WebSocket.OPEN,
+        send: socketSend,
+      };
+
+      const getContext = renderCodeMode();
+      await waitFor(() => expect(getContext()).not.toBeNull());
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+
+      // Simulate a frame delivered over the session socket.
+      act(() => {
+        wsCapture.mainOnMessage?.({
+          data: durable({
+            id: "msg-1",
+            source: "agent",
+            llm_message: {
+              role: "assistant",
+              content: [{ type: "text", text: "ready" }],
+            },
+          }),
+        });
+      });
+
+      let result: { queued: boolean } | undefined;
+      await act(async () => {
+        result = await getContext().sendMessage({
+          role: "user",
+          content: [{ type: "text", text: "hello while idle" }],
+        });
+      });
+
+      // Socket has delivered frames, so it sends over WebSocket directly.
+      expect(socketSend).toHaveBeenCalledWith(
+        JSON.stringify({
+          role: "user",
+          content: [{ type: "text", text: "hello while idle" }],
+          run: true,
+        }),
+      );
+      expect(sendEventMock).not.toHaveBeenCalled();
+      expect(result).toEqual({ queued: false });
     });
   });
 

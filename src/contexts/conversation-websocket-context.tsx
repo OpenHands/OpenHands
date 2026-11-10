@@ -284,6 +284,8 @@ export function ConversationWebSocketProvider({
   // Track if we've ever successfully connected for each connection
   const hasConnectedRefMain = React.useRef(false);
   const hasConnectedRefPlanning = React.useRef(false);
+  const hasDeliveredFrameRefMain = React.useRef(false);
+  const hasDeliveredFrameRefPlanning = React.useRef(false);
 
   const queryClient = useQueryClient();
   const addEvent = useEventStore((state) => state.addEvent);
@@ -724,6 +726,8 @@ export function ConversationWebSocketProvider({
   useEffect(() => {
     hasConnectedRefMain.current = false;
     hasConnectedRefPlanning.current = false;
+    hasDeliveredFrameRefMain.current = false;
+    hasDeliveredFrameRefPlanning.current = false;
     // A cursor is a position in one conversation's log; carrying it into the
     // next would skip that conversation's events below it.
     mainCursorRef.current.clear();
@@ -751,6 +755,7 @@ export function ConversationWebSocketProvider({
   // Separate message handlers for each connection
   const handleMainMessage = useCallback(
     (messageEvent: MessageEvent) => {
+      hasDeliveredFrameRefMain.current = true;
       try {
         const routed = routeSessionFrame(
           JSON.parse(messageEvent.data),
@@ -1055,6 +1060,7 @@ export function ConversationWebSocketProvider({
 
   const handlePlanningMessage = useCallback(
     (messageEvent: MessageEvent) => {
+      hasDeliveredFrameRefPlanning.current = true;
       try {
         const routed = routeSessionFrame(
           JSON.parse(messageEvent.data),
@@ -1307,12 +1313,14 @@ export function ConversationWebSocketProvider({
         useEventStore.getState().clearStreamingSlots();
       },
       onClose: () => {
+        hasDeliveredFrameRefMain.current = false;
         setReadyHistoryConnectionKey(null);
         setMainConnectionState("CLOSED");
         mainDeltaBatcherRef.current?.reset();
         useEventStore.getState().clearStreamingSlots();
       },
       onError: () => {
+        hasDeliveredFrameRefMain.current = false;
         setReadyHistoryConnectionKey(null);
         setMainConnectionState("CLOSED");
         mainConnectionError.report();
@@ -1379,11 +1387,13 @@ export function ConversationWebSocketProvider({
         }
       },
       onClose: () => {
+        hasDeliveredFrameRefPlanning.current = false;
         setPlanningConnectionState("CLOSED");
         planningDeltaBatcherRef.current?.reset();
         useEventStore.getState().clearStreamingSlots(true);
       },
       onError: () => {
+        hasDeliveredFrameRefPlanning.current = false;
         setPlanningConnectionState("CLOSED");
         planningConnectionError.report();
       },
@@ -1539,9 +1549,11 @@ export function ConversationWebSocketProvider({
   });
 
   // V1 send message function via WebSocket.
-  // When the socket is not connected: on a cloud backend whose runtime has
-  // no URL yet, hold the message until the socket opens; otherwise post it
-  // straight to the runtime.
+  // When the socket is not connected or has not yet delivered any frame
+  // (e.g. agent server is holding the conversation state lock during a running
+  // step and has not subscribed inbound frames): on a cloud backend whose
+  // runtime has no URL yet, hold the message until the socket opens; otherwise
+  // post it straight to the runtime via direct-send fallback (ConversationClient.sendEvent).
   const sendMessage = useCallback(
     async (message: SendMessageRequest): Promise<SendMessageResult> => {
       const currentMode = useConversationStore.getState().conversationMode;
@@ -1549,9 +1561,13 @@ export function ConversationWebSocketProvider({
         currentMode === "plan" ? planningAgentSocket : mainSocket;
       const targetConversationId =
         currentMode === "plan" ? planningConversationId : conversationId;
+      const hasDeliveredFrame =
+        currentMode === "plan"
+          ? hasDeliveredFrameRefPlanning.current
+          : hasDeliveredFrameRefMain.current;
 
-      if (currentSocket?.readyState !== WebSocket.OPEN) {
-        // WebSocket not connected.
+      if (currentSocket?.readyState !== WebSocket.OPEN || !hasDeliveredFrame) {
+        // WebSocket not connected or has not delivered any frame yet.
         if (!targetConversationId) {
           // Never fall back to the parent in plan mode: without a planner
           // target the message would run in the code agent, which is exactly
