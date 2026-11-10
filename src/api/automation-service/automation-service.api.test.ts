@@ -6,6 +6,7 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import type { GitSyncStatus } from "#/types/git-sync";
+import { bytesToBase64 } from "#/utils/base64";
 import AutomationService from "./automation-service.api";
 
 const {
@@ -366,6 +367,56 @@ describe("AutomationService.createAutomation", () => {
       expect.any(Object),
     );
   });
+
+  it("uploads the bundle and creates a script automation disabled in one request", async () => {
+    const bundle = new Uint8Array([0x1f, 0x8b, 8, 0, 1, 2, 3]);
+    const scriptSpec: AutomationSpec = {
+      name: "Socials monitor",
+      prompt: null,
+      trigger: { type: "cron", schedule: "0,30 9-17 * * 1-5", timezone: "UTC" },
+      enabled: false,
+      model: "fast",
+      timeout: 900,
+      script: {
+        entrypoint: "python3 main.py",
+        setup_script_path: "setup.sh",
+        tarball_base64: bytesToBase64(bundle),
+      },
+    };
+    localAxios.post.mockResolvedValueOnce({
+      data: { tarball_path: "oh-internal://uploads/socials-monitor" },
+    });
+
+    const created = await AutomationService.createAutomation(scriptSpec);
+
+    expect(localAxios.post).toHaveBeenNthCalledWith(
+      1,
+      "/api/automation/v1/uploads?name=Socials%20monitor",
+      bundle,
+      { headers: { "Content-Type": "application/gzip" } },
+    );
+    expect(localAxios.post).toHaveBeenNthCalledWith(
+      2,
+      "/api/automation/v1",
+      {
+        name: "Socials monitor",
+        trigger: {
+          type: "cron",
+          schedule: "0,30 9-17 * * 1-5",
+          timezone: "UTC",
+        },
+        enabled: false,
+        tarball_path: "oh-internal://uploads/socials-monitor",
+        entrypoint: "python3 main.py",
+        setup_script_path: "setup.sh",
+        model: "fast",
+        timeout: 900,
+      },
+      expect.objectContaining({ baseURL: localBackend.host }),
+    );
+    expect(localAxios.patch).not.toHaveBeenCalled();
+    expect(created).toEqual(createdAutomation);
+  });
 });
 
 const gitSyncStatus: GitSyncStatus = {
@@ -381,6 +432,86 @@ const gitSyncStatus: GitSyncStatus = {
   last_error_at: null,
   dirty_count: 0,
 };
+
+describe("AutomationService.createPluginSpecAutomation", () => {
+  const pluginSpecAutomation: Automation = {
+    ...createdAutomation,
+    id: "plugin-spec-automation",
+    name: "recipe (org)",
+  };
+
+  const pluginSpecRequest = {
+    name: "recipe (org)",
+    plugin: {
+      source: "github:org/recipe",
+      ref: "main",
+      repo_path: "plugins/recipe",
+    },
+    config: { repository: "org/repo" },
+    enabled: true,
+  };
+
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    localAxios.post.mockResolvedValue({
+      data: pluginSpecAutomation,
+      status: 201,
+    });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("creates an automation from the plugin spec on the local backend", async () => {
+    const { automation, created } =
+      await AutomationService.createPluginSpecAutomation(pluginSpecRequest);
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/plugin-spec",
+      pluginSpecRequest,
+    );
+    expect(automation.id).toBe("plugin-spec-automation");
+    expect(created).toBe(true);
+  });
+
+  it("reports created=false when the service returns an existing automation (HTTP 200)", async () => {
+    localAxios.post.mockResolvedValueOnce({
+      data: pluginSpecAutomation,
+      status: 200,
+    });
+
+    const { automation, created } =
+      await AutomationService.createPluginSpecAutomation(pluginSpecRequest);
+
+    expect(automation.id).toBe("plugin-spec-automation");
+    expect(created).toBe(false);
+  });
+
+  it("routes cloud creates through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    callCloudProxy.mockResolvedValueOnce(pluginSpecAutomation);
+
+    const { automation, created } =
+      await AutomationService.createPluginSpecAutomation(pluginSpecRequest);
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "POST",
+        path: "/api/automation/v1/plugin-spec",
+        body: pluginSpecRequest,
+      }),
+    );
+    expect(localAxios.post).not.toHaveBeenCalled();
+    expect(automation.id).toBe("plugin-spec-automation");
+    expect(created).toBe(true);
+  });
+});
 
 describe("AutomationService git sync", () => {
   beforeEach(() => {
@@ -493,5 +624,77 @@ describe("AutomationService git sync", () => {
     expect(localAxios.post).toHaveBeenCalledWith(
       "/api/automation/v1/git-sync/sync",
     );
+  });
+});
+
+describe("AutomationService.pluginSpecPreflight", () => {
+  const preflightResponse = {
+    manifest: {
+      name: "recipe",
+      description: "A recipe automation",
+      config_schema: {
+        type: "object",
+        properties: { repo: { type: "string" } },
+      },
+      runtime: { agent_profile: { required: true } },
+    },
+    resolved_ref: "main",
+    suggested_trigger: { type: "cron", schedule: "0 9 * * *", timezone: "UTC" },
+  };
+
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    localAxios.get.mockResolvedValue({ data: preflightResponse });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("preflights the plugin spec on the local backend", async () => {
+    const result = await AutomationService.pluginSpecPreflight({
+      source: "github:org/recipe",
+      ref: "main",
+      repo_path: "plugins/recipe",
+    });
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1/plugin-spec/preflight?source=github%3Aorg%2Frecipe&ref=main&repo_path=plugins%2Frecipe",
+    );
+    expect(result.manifest.name).toBe("recipe");
+    expect(result.suggested_trigger?.schedule).toBe("0 9 * * *");
+  });
+
+  it("omits absent query params", async () => {
+    await AutomationService.pluginSpecPreflight({
+      source: "github:org/recipe",
+    });
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1/plugin-spec/preflight?source=github%3Aorg%2Frecipe",
+    );
+  });
+
+  it("routes cloud preflights through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    callCloudProxy.mockResolvedValueOnce(preflightResponse);
+
+    const result = await AutomationService.pluginSpecPreflight({
+      source: "github:org/recipe",
+    });
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/automation/v1/plugin-spec/preflight?source=github%3Aorg%2Frecipe",
+      }),
+    );
+    expect(localAxios.get).not.toHaveBeenCalled();
+    expect(result.manifest.name).toBe("recipe");
   });
 });

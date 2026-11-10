@@ -45,16 +45,6 @@ export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
 /** The service generates this bundle at dispatch time, so it cannot be downloaded. */
 export const PLUGIN_SPEC_RUNTIME_TARBALL_PATH = "plugin-spec://runtime";
 
-/** Definition returned by the automation service for a plugin-spec automation. */
-export interface AutomationPluginSpec {
-  plugin: {
-    source: string;
-    ref?: string | null;
-    repo_path?: string | null;
-  };
-  config?: Record<string, unknown> | null;
-}
-
 /**
  * `POST /v1/{id}/run-as` body: hand the automation to a service account of
  * the org, or back to the caller (managers only).
@@ -65,7 +55,17 @@ export type ChangeRunAsRequest =
 /** What kind of identity an automation runs as. */
 export type AutomationRunAsKind = "user" | "service";
 
+export interface AutomationPluginSpec {
+  plugin: { source: string; ref?: string; repo_path?: string };
+  config: Record<string, unknown>;
+}
+
+export type AutomationUpdate = Partial<Automation> & {
+  config?: Record<string, unknown>;
+};
+
 export interface Automation {
+  plugin_spec?: AutomationPluginSpec | null;
   id: string;
   name: string;
   trigger: AutomationTrigger;
@@ -180,8 +180,6 @@ export interface Automation {
    * `#/utils/automation-preset-sources`.
    */
   preset_metadata?: Record<string, unknown> | null;
-  /** Existing, non-secret plugin definition; absent on older services. */
-  plugin_spec?: AutomationPluginSpec | null;
   /**
    * Labels the creator groups automations by, normalized by the automation
    * service. Absent from an automation service older than tag support.
@@ -195,6 +193,19 @@ export interface AutomationTagCount {
   count: number;
 }
 
+/**
+ * The bundle an export file carries for an automation that runs a script
+ * instead of a prompt, so an import can upload it again.
+ */
+export interface AutomationScriptBundle {
+  /** Shell command the service runs in the unpacked bundle's root. */
+  entrypoint: string;
+  /** Optional setup script path inside the bundle. */
+  setup_script_path?: string;
+  /** The bundle exactly as the service stores it (a gzipped tar), base64-encoded. */
+  tarball_base64: string;
+}
+
 export type AutomationSpec = Omit<
   Automation,
   | "id"
@@ -202,13 +213,15 @@ export type AutomationSpec = Omit<
   | "updated_at"
   | "last_triggered_at"
   | "preset_metadata"
-  | "plugin_spec"
   | "repositories"
   | "entrypoint"
   | "disabled_reason"
   | "disabled_detail"
   | "disabled_at"
->;
+> & {
+  /** Present for a script automation, whose `prompt` is null. */
+  script?: AutomationScriptBundle;
+};
 
 /** The envelope constants come from the interface manifest's import/export spec. */
 export interface AutomationExportFile {

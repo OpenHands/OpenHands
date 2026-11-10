@@ -216,6 +216,14 @@ vi.mock("#/hooks/query/use-agent-profiles", () => ({
           llm_profile_ref: "fast",
           mcp_server_refs: null,
         },
+        {
+          id: "agent-claude",
+          name: "claude",
+          agent_kind: "acp",
+          revision: 1,
+          llm_profile_ref: null,
+          mcp_server_refs: null,
+        },
       ],
       active_agent_profile_id: "agent-default",
     },
@@ -2106,6 +2114,100 @@ describe("AutomationSetupPanel", () => {
       );
     });
 
+    it("runs a prompt preset from the chosen agent profile", async () => {
+      withCapabilities(["agentProfiles", "presetAgentProfiles"]);
+      const user = userEvent.setup();
+      renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      await user.click(
+        screen.getByTestId(
+          "automation-setup-agent-profile-option-agent-reviewer",
+        ),
+      );
+      const modelPill = screen.getByTestId("automation-setup-model");
+      expect(modelPill).toHaveTextContent("fast");
+      expect(modelPill).toHaveAttribute("aria-disabled", "true");
+
+      await user.click(screen.getByTestId("automation-setup-create"));
+      await waitFor(() =>
+        expect(AutomationService.createAutomationDraft).toHaveBeenCalled(),
+      );
+      const [body] = vi.mocked(AutomationService.createAutomationDraft).mock
+        .calls[0];
+      expect(body).toMatchObject({
+        prompt: "Review every pull request",
+        agent_profile_id: "agent-reviewer",
+      });
+      expect(body).not.toHaveProperty("model");
+    });
+
+    it("shows that an ACP agent profile runs its own model, not an LLM profile", async () => {
+      withCapabilities(["presetAgentProfiles"]);
+      const user = userEvent.setup();
+      renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      const option = screen.getByTestId(
+        "automation-setup-agent-profile-option-agent-claude",
+      );
+      expect(option).toHaveTextContent("CONVERSATION$ACP_AGENT_GENERIC");
+      await user.click(option);
+
+      const modelPill = screen.getByTestId("automation-setup-model");
+      expect(modelPill).toHaveAccessibleName("CONVERSATION$ACP_AGENT_GENERIC");
+      expect(modelPill).toHaveAttribute("aria-disabled", "true");
+    });
+
+    it("moves an edited preset onto an agent profile", async () => {
+      withCapabilities(["presetAgentProfiles"]);
+      vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+        id: "auto-1",
+      } as never);
+      const user = userEvent.setup();
+      renderPanel({
+        prompt: "Review every pull request",
+        kind: "prompt",
+        editingAutomationId: "auto-1",
+        form: {
+          kind: "prompt",
+          name: "Daily digest",
+          prompt: "Review every pull request",
+          model: "fast",
+        },
+      });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      await user.click(
+        screen.getByTestId(
+          "automation-setup-agent-profile-option-agent-reviewer",
+        ),
+      );
+      await user.click(screen.getByTestId("automation-setup-save"));
+
+      await waitFor(() =>
+        expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+          "auto-1",
+          expect.objectContaining({
+            prompt: "Review every pull request",
+            model: null,
+            agent_profile_id: "agent-reviewer",
+          }),
+        ),
+      );
+    });
+
+    it("offers a preset only the LLM profile when the service runs only scripts from an agent profile", () => {
+      withCapabilities(["agentProfiles"]);
+
+      renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+
+      expect(
+        screen.queryByTestId("automation-setup-agent-profile"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("automation-setup-model")).toBeInTheDocument();
+    });
+
     it("offers only the LLM profile when the service cannot run scripts from an agent profile", () => {
       withCapabilities([]);
 
@@ -3534,6 +3636,98 @@ describe("AutomationSetupPanel", () => {
       ),
     );
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("lets the agent propose plugin config, validates JSON, and saves the same automation", async () => {
+    vi.mocked(useDeploymentCapabilities).mockReturnValue({
+      data: { ready: true, features: ["pluginConfigUpdate"] },
+      isLoading: false,
+    } as never);
+    const saved: Automation = {
+      id: "plugin-reviewer",
+      name: "Reviewer",
+      enabled: false,
+      prompt: null,
+      created_at: "2026-01-01",
+      updated_at: "2026-01-01",
+      trigger: { type: "cron", schedule: "0 * * * *" },
+      entrypoint: "python3 worker.py",
+      tarball_path: "plugin-spec://runtime",
+      plugin_spec: {
+        plugin: { source: "github:acme/reviewer", ref: "pinned" },
+        config: { repos: ["acme/app"], reviewer: "bot" },
+      },
+    };
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue(saved);
+    initializeAutomationFormSession(
+      "plugin-edit",
+      setupDraftFromAutomation(saved),
+    );
+    const rendered = renderSessionBoundPanel("plugin-edit");
+    const config = screen.getByTestId("automation-setup-plugin-config");
+    expect(config).toHaveValue(
+      JSON.stringify(saved.plugin_spec!.config, null, 2),
+    );
+    expect(
+      screen.queryByTestId("automation-setup-kind-prompt"),
+    ).not.toBeInTheDocument();
+    const nextConfig = { repos: ["acme/app", "acme/docs"], reviewer: "bot" };
+    act(() => {
+      handleAutomationFormUpdateAction(
+        {
+          kind: AUTOMATION_FORM_UPDATE_ACTION_KIND,
+          fields: { pluginConfig: JSON.stringify(nextConfig), kind: "prompt" },
+        },
+        "plugin-edit",
+        "proposal",
+      );
+    });
+    await waitFor(() => expect(config).toHaveValue(JSON.stringify(nextConfig)));
+    expect(AutomationService.updateAutomation).not.toHaveBeenCalled();
+    fireEvent.change(config, { target: { value: "[]" } });
+    expect(screen.getByTestId("automation-setup-save")).toBeDisabled();
+    fireEvent.change(config, { target: { value: JSON.stringify(nextConfig) } });
+    await userEvent.click(screen.getByTestId("automation-setup-save"));
+    await waitFor(() =>
+      expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+        "plugin-reviewer",
+        {
+          name: "Reviewer",
+          trigger: expect.objectContaining({
+            type: "cron",
+            schedule: "0 * * * *",
+          }),
+          timeout: null,
+          config: nextConfig,
+        },
+      ),
+    );
+    expect(getAutomationFormSession("plugin-edit")?.form?.pluginConfig).toBe(
+      JSON.stringify(nextConfig),
+    );
+    rendered.unmount();
+    clearAutomationFormSession("plugin-edit");
+  });
+
+  it("keeps plugin config read-only when the backend does not support updates", () => {
+    renderPanel(
+      setupDraftFromAutomation({
+        id: "old-backend",
+        name: "Reviewer",
+        enabled: false,
+        prompt: null,
+        created_at: "2026-01-01",
+        updated_at: "2026-01-01",
+        trigger: { type: "cron", schedule: "0 * * * *" },
+        entrypoint: "python3 worker.py",
+        tarball_path: "plugin-spec://runtime",
+        plugin_spec: { plugin: { source: "github:acme/reviewer" }, config: {} },
+      }),
+    );
+    expect(
+      screen.getByTestId("automation-setup-plugin-config"),
+    ).toHaveAttribute("readonly");
+    expect(screen.getByTestId("automation-setup-save")).toBeDisabled();
   });
 
   it("preserves multi-event trigger keys when saving an existing automation", async () => {
