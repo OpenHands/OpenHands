@@ -93,7 +93,7 @@ Preconditions:
 - **Files (`F32.files`).** `control-openhands browser upload 'testid=project-file-input' <plan.md>`:
   a `testid=project-file` row with `data-source=user` and "Added by you", and
   `testid=project-file-preview` shows the text. Ask the coordinator to save a
-  file to the project (`save_project_artifact`); its row has
+  file to the project (`write_artifact`); its row has
   `data-source=agent` and names the worker that saved it.
 
 - **Badge and headers (`F32.badge`, `F32.headers`).** In a worker,
@@ -111,6 +111,11 @@ on #19495 cover `F32.off`, `F32.entry`, `F32.create`, `F32.coordinator`,
 `F32.headers`. `F32.membership` and agent-saved files were not driven.
 
 ## Gotchas
+
+- Since #6602 `3404420ea`, `GET /api/projects/<id>/artifacts/<name>` answers
+  `application/octet-stream` with `Content-Disposition: attachment`; the
+  preview fetches it as text and renders it itself. Opening that URL in a tab
+  downloads the file, which is expected.
 
 - The board polls every 5 s and the files every 15 s; wait for them rather
   than reloading, which would hide a refresh bug.
