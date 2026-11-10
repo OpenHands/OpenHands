@@ -194,6 +194,27 @@ Local (`npx` / `npm run dev`) listeners bind **loopback only** (`127.0.0.1`) so 
 
 Docker listens on all container interfaces so port publishing works, but does not inject its session key into HTML by default. The quickstart above explicitly enables injection while publishing the host port on `127.0.0.1` only. If you publish Docker on a LAN or public interface, omit `AGENT_CANVAS_ALLOW_LAN_SESSION_KEY` and enter the API key in the UI. Set `LOCAL_BACKEND_API_KEY` to a strong value, or retrieve the generated value with `docker exec <container> sh -c 'cat "$STATE_DIR/api-key.txt"'`. For internet-facing installs, follow [self-hosting](./docs/SELF_HOSTING.md).
 
+## Connecting to OpenHands Cloud (optional)
+
+Instead of (or alongside) a local Agent Server, Agent Canvas can run agents on [OpenHands Cloud](https://app.all-hands.dev). Two different keys are involved, both managed in OpenHands Cloud under **Settings → API Keys** ([app.all-hands.dev/settings/api-keys](https://app.all-hands.dev/settings/api-keys)):
+
+| Key                                          | What it does                                                                                                                                           |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **OpenHands API Key** (the session key)      | Authenticates Agent Canvas to your Cloud account's Agent Server — it proves _who is talking to the backend_.                                           |
+| **OpenHands LLM Key** (the Provider LLM Key) | Authenticates the **OpenHands** model provider (Cloud's LLM inference proxy) in Canvas **Settings → LLM** — it proves _who is paying for model calls_. |
+
+**Via the UI (recommended):** launch Canvas, open **Manage Backends → Add Backend**, and choose **OpenHands Cloud**. The one-click OAuth login creates the Cloud backend without pasting the session key; sign in with the account whose API Keys page you took the keys from. (Self-hosted OpenHands Cloud/Enterprise instances use the same dialog's API-key auth instead: enter the instance host and its session key.)
+
+**Via environment variables:** when building or running from source, point Canvas at Cloud and bake the session key in:
+
+```sh
+VITE_BACKEND_BASE_URL=https://app.all-hands.dev
+VITE_SESSION_API_KEY=<your OpenHands API key>
+npm run dev
+```
+
+`VITE_SESSION_API_KEY` is read at build/dev time (the published `agent-canvas` binary instead injects a generated key for the local backend it launches). To use Cloud's models, additionally create an LLM profile in **Settings → LLM** with the **OpenHands** provider and your **OpenHands LLM Key**.
+
 # Architecture
 
 Agent Canvas is powered by the [OpenHands Agent Server](https://github.com/OpenHands/software-agent-sdk/tree/main/openhands-agent-server/openhands/agent_server), a REST API for running multiple agents on a single machine. Each Agent Server runs on a single host/port; the Agent Canvas can connect to multiple Agent Servers and easily flip between them.
