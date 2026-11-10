@@ -243,7 +243,12 @@ function createConversationResponse(
     agent: conversation.agent ?? null,
     workspace: conversation.workspace ?? null,
     tags: conversation.tags ?? null,
-    parent_conversation_id: conversation.parent_conversation_id ?? null,
+    // Sent only when a parent link exists, mirroring agent-servers that
+    // omit the field for top-level conversations; the adapter normalizes
+    // both wire shapes to `null`.
+    ...(conversation.parent_conversation_id
+      ? { parent_conversation_id: conversation.parent_conversation_id }
+      : {}),
   };
 }
 
