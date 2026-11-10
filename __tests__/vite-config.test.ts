@@ -242,6 +242,13 @@ describe("vite library build", () => {
       expect(matches, `Single scoped recipe: ${name}`).toHaveLength(1);
       return matches[0];
     };
+    // These aliases resolve the exact public Canvas variables, including host overrides.
+    expect(declarations(recipe("bg-canvas-background"))).toEqual({
+      "background-color": "var(--oh-background)",
+    });
+    expect(declarations(recipe("text-on-accent"))).toEqual({
+      color: "var(--oh-accent-foreground)",
+    });
     // A named gradient stop retains the existing ancestor override/fallback.
     const scrollFade = recipe("from-scroll-fade");
     expect(declarations(scrollFade)["--tw-gradient-from"]).toBe(
@@ -322,6 +329,11 @@ describe("vite library build", () => {
       "max-height": "85vh",
     });
     expect(css).not.toMatch(/(^|[{},])\.extension-dialog-viewport\{/);
+
+    expect(declarations(recipe("w-commit-sha")).width).toBe("7ch");
+    expect(declarations(recipe("h-(--editor-height)")).height).toBe(
+      "var(--editor-height)",
+    );
 
     // Require the setup rail and editor geometry in the extracted stylesheet;
     // every recipe must remain a scoped utility even inside media conditions.

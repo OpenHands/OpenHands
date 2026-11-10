@@ -1,6 +1,6 @@
 ## Arbitrary-value guard adoption
 
-`shadcn/no-arbitrary-values` warns globally. Twenty-five migrated owners reject new
+`shadcn/no-arbitrary-values` warns globally. Thirty-five migrated owners reject new
 arbitrary classes: command-menu, backend-version, settings-nav-header,
 backend-synced-settings-badge, modal-backdrop, environment-switch-overlay,
 context-window-meter and conversation-panel-wrapper. Completed message/motion
@@ -9,6 +9,13 @@ form-control-classes, chat-status-indicator, context-window-ring,
 user-message-body and conversation-main. Their exact paths are in `eslint.config.js`,
 with executable probes in `__tests__/scripts/arbitrary-values-lint.test.ts`.
 Completed Markdown code/path chips, horizontal fade consumers, file-drop artwork, automation view/filter/run-phase bounds, conversation-card reserves and the hover-reveal helper also reject new arbitrary values.
+The cleaned letter-spacing and inset-shadow owners also reject new arbitrary
+values: `task-list-section.tsx`, `markdown-file-preview.tsx`,
+`skills-modal-section.tsx`, `headings.tsx`, `openai-subscription-auth-card.tsx`,
+`device-verify.tsx`, `modal-classes.ts`, `pinned-automation-card.tsx`,
+`mcp-logo-stack-badge.tsx` and `skill-icon-badge.tsx`. Plan Preview and the
+standalone MCP logo badge remain at warning severity while their remaining
+color and geometry findings are reviewed.
 Other components, routes and primitive implementations retain warnings during
 migration. Keep legitimate measured/portal geometry with its owner; do not
 expand this file list or add exemptions without auditing the remaining values.
@@ -79,6 +86,12 @@ names in `cn` so later caller utilities retain Tailwind's conflict precedence.
 ## Exact rem layout aliases
 
 Automation popover widths, run-phase limits and conversation hover-action reserves use the existing spacing scale (`min-w-40`, `min-w-64`, `max-w-112`, `max-w-48`, `min-w-15`) instead of equivalent arbitrary rem literals. Preserve each responsive hover/focus variant. Geometry is equivalent on the default spacing scale; explicit host scale overrides follow normal named-token behavior. Do not apply this substitution to fixed pixel geometry: a rem alias would change behavior when the embedding root font size differs.
+
+## Commit viewer geometry
+
+The commit and Uncommitted rows reserve the same `7ch` monospace column through
+`w-commit-sha`. The Monaco wrapper applies its measured pixel height through
+`h-(--editor-height)`. Keep these three components free of arbitrary values.
 
 ## Workspace files
 
@@ -283,3 +296,12 @@ These single-property utilities preserve intrinsic sizing and responsive scope.
 They are static owner recipes, not caller className overrides.
 
 - Executable plugin automations (`plugin_spec`) edit their configuration through the setup form's `pluginConfig` JSON field. The agent proposes that field through `automation_form_update`; only Save sends `config` and the trigger to the existing automation's PATCH endpoint. Preserve the plugin source, pins, and runtime fields. Gate configuration writes on the automation service's `pluginConfigUpdate` capability; older services display the configuration read-only.
+
+## Existing Canvas background and accent roles
+
+`bg-canvas-background` resolves exactly `--oh-background`; `text-on-accent`
+resolves exactly `--oh-accent-foreground`. Add Models selects and shared primary
+BrandButton/BrandBadge text retain these public roles, including host overrides.
+Do not substitute similarly colored Canvas or HeroUI roles. Caller color and
+font-size precedence stays covered by `cn` composition tests, and the scoped
+library CSS contract verifies the exact variable declarations.
