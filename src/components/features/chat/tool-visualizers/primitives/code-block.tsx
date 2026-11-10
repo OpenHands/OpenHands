@@ -21,12 +21,6 @@ interface CodeBlockProps {
   expandable?: boolean;
   /** Wrap long lines instead of horizontal-only scrolling. Defaults to false. */
   wrapLongLines?: boolean;
-  /**
-   * Distinguishes this block's inline expand control from a sibling block in
-   * the same event card when its state is persisted across virtualized
-   * remounts. Defaults to `"code-block"`.
-   */
-  expansionId?: string;
 }
 
 /**
@@ -42,11 +36,10 @@ export function CodeBlock({
   placeholder,
   expandable = false,
   wrapLongLines = false,
-  expansionId = "code-block",
 }: CodeBlockProps) {
   const { t } = useTranslation("openhands");
   const colorTheme = useColorTheme();
-  const expansionKey = useEventExpansionKey(expansionId);
+  const expansionKey = useEventExpansionKey("code-block");
   const [isExpanded, toggleExpanded] = usePersistentExpansion(
     expansionKey,
     false,

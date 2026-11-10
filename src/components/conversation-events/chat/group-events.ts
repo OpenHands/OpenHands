@@ -9,6 +9,7 @@ import {
   isPlanningFileEditorObservationEvent,
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
+import { getStepKey } from "./step-disclosure-context";
 import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
 import type { SessionActivity } from "#/stores/session-activity-store";
 import { parseDateAsUTC } from "#/utils/format-time-delta";
@@ -119,9 +120,13 @@ export const getGroupKey = (
 /**
  * Stable identity for a rendered item. Shared by the plain and virtualized
  * lists so React keys and virtualizer item keys agree.
+ *
+ * A `single` row is keyed by `getStepKey`, which resolves an action and the
+ * observation or rejection that replaces it to the same tool call — otherwise
+ * the swap renames the row, remounting it and dropping its expansion state.
  */
 export const renderedItemKey = (item: RenderedItem): string => {
-  if (item.kind === "single") return `single-${item.event.id}`;
+  if (item.kind === "single") return `single-${getStepKey(item.event)}`;
   if (item.kind === "thought") return `thought-${item.action.id}`;
   return `group-${getGroupKey(item)}`;
 };

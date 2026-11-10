@@ -60,12 +60,11 @@ describe("useForkConversation", () => {
     } as never);
 
     const { Wrapper } = createWrapper();
-    const { result } = renderHook(() => useForkConversation(), {
+    const { result } = renderHook(() => useForkConversation("conv-1"), {
       wrapper: Wrapper,
     });
 
     result.current.mutate({
-      sourceConversationId: "conv-1",
       eventId: "evt-2",
       editText: "original text",
     });
@@ -93,12 +92,11 @@ describe("useForkConversation", () => {
     } as never);
 
     const { Wrapper } = createWrapper();
-    const { result } = renderHook(() => useForkConversation(), {
+    const { result } = renderHook(() => useForkConversation("conv-1"), {
       wrapper: Wrapper,
     });
 
     result.current.mutate({
-      sourceConversationId: "conv-1",
       eventId: "evt-2",
       editText: "original text",
     });
@@ -121,12 +119,14 @@ describe("useForkConversation", () => {
     );
 
     const { Wrapper } = createWrapper();
-    const { result, unmount } = renderHook(() => useForkConversation(), {
-      wrapper: Wrapper,
-    });
+    const { result, unmount } = renderHook(
+      () => useForkConversation("conv-1"),
+      {
+        wrapper: Wrapper,
+      },
+    );
 
     result.current.mutate({
-      sourceConversationId: "conv-1",
       eventId: "evt-2",
     });
     unmount();
@@ -144,11 +144,11 @@ describe("useForkConversation", () => {
     ).mockRejectedValue(new Error("fork failed"));
 
     const { Wrapper } = createWrapper();
-    const { result } = renderHook(() => useForkConversation(), {
+    const { result } = renderHook(() => useForkConversation("conv-1"), {
       wrapper: Wrapper,
     });
 
-    result.current.mutate({ sourceConversationId: "conv-1", eventId: "evt-2" });
+    result.current.mutate({ eventId: "evt-2" });
 
     await waitFor(() =>
       expect(displayErrorToast).toHaveBeenCalledWith("fork failed"),

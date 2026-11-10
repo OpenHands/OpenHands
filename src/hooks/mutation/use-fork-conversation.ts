@@ -6,15 +6,24 @@ import { setConversationState } from "#/utils/conversation-local-storage";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 /**
- * Mutation key for {@link useForkConversation}. Shared so callers can read the
+ * Mutation key prefix for {@link useForkConversation}. Callers read the
  * in-flight state with `useIsMutating`, which lives on the cache entry and
  * therefore survives a caller unmounting (a virtualized row scrolling out).
  */
 export const FORK_CONVERSATION_MUTATION_KEY = ["fork-conversation"];
 
+/**
+ * Mutation key for a fork of one specific conversation. The key must be scoped
+ * to the source conversation: an unscoped `useIsMutating` matches a fork of
+ * *any* conversation, so while a fork from conversation A is in flight a
+ * `Branch` click in conversation B would read as "already forking" and silently
+ * do nothing.
+ */
+export const forkConversationMutationKey = (
+  sourceConversationId: string,
+): string[] => [...FORK_CONVERSATION_MUTATION_KEY, sourceConversationId];
+
 interface ForkConversationVariables {
-  /** The conversation being branched from. */
-  sourceConversationId: string;
   /** The message the action was invoked on. */
   eventId: string;
   /** Set for an "edit message" branch: exclude the message and restore this text. */
@@ -46,14 +55,13 @@ interface ForkConversationResult {
  * unmount (virtualization) while it is in flight, so there is no reliable
  * per-row "am I still mounted?" signal to fall back on.
  */
-export const useForkConversation = () => {
+export const useForkConversation = (sourceConversationId: string) => {
   const queryClient = useQueryClient();
   const { navigate } = useNavigation();
 
   return useMutation({
-    mutationKey: FORK_CONVERSATION_MUTATION_KEY,
+    mutationKey: forkConversationMutationKey(sourceConversationId),
     mutationFn: async ({
-      sourceConversationId,
       eventId,
       editText,
       title,

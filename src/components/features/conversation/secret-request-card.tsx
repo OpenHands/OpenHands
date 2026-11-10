@@ -27,6 +27,8 @@ export function usePendingSecretRequests(): SecretRequest[] {
  */
 export function SecretRequestCard({ request }: { request: SecretRequest }) {
   const { t } = useTranslation("openhands");
+  const draft = useSecretRequestStore((s) => s.drafts[request.toolCallId]);
+  const setDraft = useSecretRequestStore((s) => s.setDraft);
 
   return (
     <section
@@ -43,12 +45,17 @@ export function SecretRequestCard({ request }: { request: SecretRequest }) {
         ) : null}
       </div>
       {/* SecretForm also calls onCancel after a successful save; the request
-          is already complete by then, so that call is a no-op. */}
+          is already complete by then, so that call is a no-op. The draft is
+          held in the store so a remount across the virtualization threshold
+          (the card moving to the trailing list) keeps what the user typed. */}
       <SecretForm
         mode="add"
         selectedSecret={null}
         defaultName={request.name}
         keepOpenOnError
+        initialValue={draft?.value}
+        initialShowValue={draft?.showValue}
+        onDraftChange={(next) => setDraft(request.toolCallId, next)}
         onSaved={(secret) => void completeSecretRequest(request, secret)}
         onCancel={() => void completeSecretRequest(request, null)}
       />

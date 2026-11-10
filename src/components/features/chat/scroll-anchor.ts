@@ -23,46 +23,79 @@
 
 import { occupiedRowTop } from "#/components/conversation-events/chat/scroll-anchoring";
 
-export interface ScrollAnchor {
+export interface ScrollAnchorCandidate {
   /** The row's `data-row-key`. */
   key: string;
   /** The row's top edge relative to the scroll container's top edge. */
   offset: number;
 }
 
+export interface ScrollAnchor {
+  /**
+   * Rows to re-anchor to, in preference order: the row at the top edge first,
+   * then a few rows below it as fallbacks. The top edge row is the one most
+   * likely to change key when a page prepends — if it is a tool group and the
+   * page boundary falls inside the group's run, the older events merge in and
+   * its key moves — so a stable row just below keeps the restore working.
+   */
+  candidates: ScrollAnchorCandidate[];
+}
+
+/** Rows below the top edge to record as fallbacks. */
+const ANCHOR_FALLBACK_ROWS = 3;
+
 /**
- * The first `[data-row-key]` row whose top is at or below the container's top
- * edge, with its offset from that edge, or `null` when no row is mounted.
+ * The `[data-row-key]` rows at or below the container's top edge, with their
+ * offsets from that edge, in document order. Empty when no row is mounted.
  */
-export function captureScrollAnchor(element: HTMLElement): ScrollAnchor | null {
+function mountedRowsFromTop(element: HTMLElement): ScrollAnchorCandidate[] {
   const containerTop = element.getBoundingClientRect().top;
   const rows = Array.from(
     element.querySelectorAll<HTMLElement>("[data-row-key]"),
   );
+  const candidates: ScrollAnchorCandidate[] = [];
   for (const row of rows) {
     const key = row.getAttribute("data-row-key");
     if (!key) continue;
     const offset = occupiedRowTop(row) - containerTop;
-    if (offset >= 0) return { key, offset };
+    if (offset >= 0) candidates.push({ key, offset });
+    if (candidates.length >= ANCHOR_FALLBACK_ROWS + 1) break;
   }
-  return null;
+  return candidates;
 }
 
 /**
- * The `scrollTop` that puts the anchored row back at its recorded offset, or
- * `null` when the row is not mounted — the caller then keeps whatever position
- * it already applied.
+ * The row at the container's top edge plus a few rows below it, or `null` when
+ * no row is mounted.
+ */
+export function captureScrollAnchor(element: HTMLElement): ScrollAnchor | null {
+  const candidates = mountedRowsFromTop(element);
+  return candidates.length > 0 ? { candidates } : null;
+}
+
+/**
+ * The `scrollTop` that puts the first still-mounted candidate back at its
+ * recorded offset, or `null` when none of them is mounted — the caller then
+ * keeps whatever position it already applied.
  */
 export function scrollAnchorOffset(
   element: HTMLElement,
   anchor: ScrollAnchor,
 ): number | null {
-  const row = Array.from(
+  const byKey = new Map<string, HTMLElement>();
+  for (const row of Array.from(
     element.querySelectorAll<HTMLElement>("[data-row-key]"),
-  ).find((candidate) => candidate.getAttribute("data-row-key") === anchor.key);
-  if (!row) return null;
+  )) {
+    const key = row.getAttribute("data-row-key");
+    if (key) byKey.set(key, row);
+  }
 
   const containerTop = element.getBoundingClientRect().top;
-  const offset = occupiedRowTop(row) - containerTop;
-  return element.scrollTop + (offset - anchor.offset);
+  for (const candidate of anchor.candidates) {
+    const row = byKey.get(candidate.key);
+    if (!row) continue;
+    const offset = occupiedRowTop(row) - containerTop;
+    return element.scrollTop + (offset - candidate.offset);
+  }
+  return null;
 }

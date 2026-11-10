@@ -44,9 +44,11 @@ import {
 } from "#/components/features/chat/row-expansion-context";
 import { useMessageExpansionStore } from "#/stores/message-expansion-store";
 import {
+  applyBufferedScrollCorrection,
   buildInitialMeasurements,
   measurePlainRow,
-  anchorScrollOnItemSizeChange,
+  measuredAverage,
+  shouldAnchorScroll,
 } from "./scroll-anchoring";
 import type { SecretRequest } from "#/stores/secret-request-store";
 import {
@@ -264,12 +266,18 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       () => new Map(messages.map((event, index) => [event, index])),
       [messages],
     );
-    const groupedReasoningIds = new Set(
-      renderedItems.flatMap((item) =>
-        item.kind === "group"
-          ? (item.reasoning ?? []).map((reasoning) => reasoning.id)
-          : [],
-      ),
+    // Rebuilt on every virtualizer scroll re-render, so memoize it on the rows
+    // it is derived from (the PR bounds per-scroll work).
+    const groupedReasoningIds = React.useMemo(
+      () =>
+        new Set(
+          renderedItems.flatMap((item) =>
+            item.kind === "group"
+              ? (item.reasoning ?? []).map((reasoning) => reasoning.id)
+              : [],
+          ),
+        ),
+      [renderedItems],
     );
     // Whether a group is still the live tail is decided from the last row the
     // user can actually see, in both modes. A hidden planning observation
@@ -632,13 +640,9 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         const heights = rowKeys.map(
           (key) => plainItemHeights.current.get(key) ?? 0,
         );
-        const measured = heights.filter((height) => height > 0);
-        measuredAverageRef.current = measured.length
-          ? Math.round(
-              measured.reduce((total, height) => total + height, 0) /
-                measured.length,
-            )
-          : null;
+        const average = measuredAverage(heights);
+        measuredAverageRef.current =
+          average === null ? null : Math.round(average);
         initialMeasurementsCacheRef.current = buildInitialMeasurements(
           rowKeys,
           heights,
@@ -766,11 +770,35 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         Math.round(element.getBoundingClientRect().height) + ROW_GAP_PX,
     });
 
-    // Keep the reader's place when a row is measured at a height other than its
-    // estimate (see `anchorScrollOnItemSizeChange`). This is an instance
-    // property, not a constructor option.
-    rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange =
-      anchorScrollOnItemSizeChange;
+    // Rows are measured before the shell re-renders at its new total height, so
+    // writing the correction inside `shouldAdjustScrollPositionOnItemSizeChange`
+    // would clamp to the old `scrollHeight` and lose the excess. Buffer the
+    // deltas, report "no correction" to the virtualizer, and re-pin once the
+    // shell's total size has actually changed (the layout effect below).
+    const pendingScrollCorrectionRef = React.useRef(0);
+    rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = (
+      item,
+      delta,
+      instance,
+    ) => {
+      if (!shouldAnchorScroll(item, delta, instance)) return false;
+      pendingScrollCorrectionRef.current += delta;
+      return false;
+    };
+
+    // Re-pin once the total size has changed, when `scrollTop + delta` is no
+    // longer clamped by the old height. A batch of corrections in one commit
+    // composes instead of each being lost, and any excess the new height still
+    // cannot absorb stays buffered for the next change rather than dropping.
+    const totalSize = rowVirtualizer.getTotalSize();
+    React.useLayoutEffect(() => {
+      const pending = pendingScrollCorrectionRef.current;
+      if (pending === 0) return;
+      const element = scrollParent as HTMLElement | null;
+      if (!element) return;
+      const applied = applyBufferedScrollCorrection(element, pending);
+      pendingScrollCorrectionRef.current = pending - applied;
+    }, [scrollParent, totalSize]);
 
     // With a scroll container, rows can cross the virtualization threshold
     // and remount into the shell. Persist their expansion by row key in the

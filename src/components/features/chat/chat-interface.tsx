@@ -293,6 +293,13 @@ export function ChatInterface({
   // the rows' (measured - estimate) sum. A second pass puts the anchored row
   // back once the rows have settled (see the effect below).
   const preserveScrollAnchor = React.useRef<ScrollAnchor | null>(null);
+  // The oldest event id when a load started. The older page is known to have
+  // landed once this changes; an event arriving mid-fetch leaves it untouched,
+  // so the restore is not run (and its anchor not cleared) against the position
+  // captured before the page, which would leave the page with no second pass.
+  const oldestEventIdRef = React.useRef<string | undefined>(undefined);
+  oldestEventIdRef.current = allConversationEvents[0]?.id;
+  const oldestEventIdAtLoadRef = React.useRef<string | undefined>(undefined);
   const restoreScrollAnchor = React.useCallback(() => {
     const anchor = preserveScrollAnchor.current;
     const element = scrollRef.current;
@@ -325,9 +332,13 @@ export function ChatInterface({
         scrollHeight: target.scrollHeight,
         scrollTop: target.scrollTop,
       };
+      // Captured for both list shapes: the plain path restores from the height
+      // delta, the virtualized path also uses it for the settling second pass.
       preserveScrollAnchor.current = captureScrollAnchor(target);
+      oldestEventIdAtLoadRef.current = oldestEventIdRef.current;
       loadOlder().catch((error) => {
         preserveScrollPosition.current = null;
+        preserveScrollAnchor.current = null;
         const message =
           error instanceof Error && error.message
             ? error.message
@@ -574,8 +585,15 @@ export function ChatInterface({
   // bottom in that case.
   React.useEffect(() => {
     // If a "load older" was just triggered, restore the scroll position so
-    // the conversation appears to extend upward instead of jumping.
-    if (preserveScrollPosition.current && scrollRef.current) {
+    // the conversation appears to extend upward instead of jumping. Gate on the
+    // older page having landed (the oldest id changed): an event arriving during
+    // the fetch must not consume the restore against the pre-page position, or
+    // the page then lands with nothing left to run the second pass.
+    if (
+      preserveScrollPosition.current &&
+      scrollRef.current &&
+      oldestEventIdRef.current !== oldestEventIdAtLoadRef.current
+    ) {
       const { scrollHeight: prevHeight, scrollTop: prevTop } =
         preserveScrollPosition.current;
       const dom = scrollRef.current;
@@ -604,11 +622,14 @@ export function ChatInterface({
   // rows are still at the estimate in that commit, so the reader lands off by
   // their (measured - estimate) sum. Once the prepended rows have reported
   // their sizes (the virtualizer's total height settles), put the anchored row
-  // back at its recorded offset. `restoreScrollAnchor` clears the anchor on the
-  // first run, so this fires once per load and only when one is pending; the
-  // plain path leaves the anchor unset, so it stays a no-op there.
+  // back at its recorded offset. Gated on the older page having landed, and
+  // `restoreScrollAnchor` clears the anchor on the first run, so this fires once
+  // per load. The anchor is captured for both list shapes, but the plain path
+  // already restored from the height delta and holds no drift, so re-applying it
+  // is a no-op.
   React.useLayoutEffect(() => {
     if (!preserveScrollAnchor.current) return;
+    if (oldestEventIdRef.current === oldestEventIdAtLoadRef.current) return;
     const id = requestAnimationFrame(restoreScrollAnchor);
     return () => cancelAnimationFrame(id);
   }, [renderableEvents.length, hasPendingUserMessages, restoreScrollAnchor]);

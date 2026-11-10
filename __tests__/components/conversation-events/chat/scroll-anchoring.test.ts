@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  applyBufferedScrollCorrection,
   BOTTOM_THRESHOLD_PX,
   buildInitialMeasurements,
   measurePlainRow,
-  anchorScrollOnItemSizeChange,
+  shouldAnchorScroll,
 } from "#/components/conversation-events/chat/scroll-anchoring";
 
 const rectAt = (top: number, bottom: number): DOMRect =>
@@ -87,9 +88,10 @@ describe("measurePlainRow", () => {
   });
 });
 
-describe("anchorScrollOnItemSizeChange", () => {
-  // A mutable element standing in for the scroll container: the helper must
-  // read `scrollTop` live (not a cached offset) and write it back.
+describe("shouldAnchorScroll", () => {
+  // A plain object standing in for the scroll container: the decision reads
+  // `scrollTop`/`clientHeight`/`scrollHeight` live and only reports whether a
+  // correction is needed (the caller applies it after the shell re-renders).
   const makeInstance = (
     scrollTop: number,
     clientHeight: number,
@@ -103,35 +105,30 @@ describe("anchorScrollOnItemSizeChange", () => {
     return { element, instance: { scrollElement: element } };
   };
 
-  it("moves a row above the viewport so the content under it stays put", () => {
-    const { element, instance } = makeInstance(500, 400, 1000);
+  it("corrects a row above the viewport so the content under it stays put", () => {
+    const { instance } = makeInstance(500, 400, 1000);
 
-    // Always false: the helper applies the correction itself, so the virtualizer
-    // must not add its own on top.
-    expect(
-      anchorScrollOnItemSizeChange({ start: 100, end: 150 }, 50, instance),
-    ).toBe(false);
-    expect(element.scrollTop).toBe(550);
+    expect(shouldAnchorScroll({ start: 100, end: 150 }, 50, instance)).toBe(
+      true,
+    );
   });
 
   it("follows a row that grows while the reader is pinned to the bottom", () => {
     // The viewport bottom (1000) is already at the pre-change content bottom, so
     // the reader is pinned and the row's growth must be followed.
-    const { element, instance } = makeInstance(600, 400, 1000);
+    const { instance } = makeInstance(600, 400, 1000);
 
-    expect(
-      anchorScrollOnItemSizeChange({ start: 800, end: 1000 }, 200, instance),
-    ).toBe(false);
-    expect(element.scrollTop).toBe(800);
+    expect(shouldAnchorScroll({ start: 800, end: 1000 }, 200, instance)).toBe(
+      true,
+    );
   });
 
   it("leaves a row below the viewport alone when the reader is not pinned", () => {
-    const { element, instance } = makeInstance(0, 400, 1000);
+    const { instance } = makeInstance(0, 400, 1000);
 
-    expect(
-      anchorScrollOnItemSizeChange({ start: 800, end: 1000 }, 200, instance),
-    ).toBe(false);
-    expect(element.scrollTop).toBe(0);
+    expect(shouldAnchorScroll({ start: 800, end: 1000 }, 200, instance)).toBe(
+      false,
+    );
   });
 
   it("does not treat a visible row's growth as pinned when the reader is away from the bottom", () => {
@@ -140,48 +137,21 @@ describe("anchorScrollOnItemSizeChange", () => {
     // reader is scrolling history. A visible row at 600 growing by 200 must not
     // be read as pinned — comparing against a height that already includes the
     // new 200px (`scrollHeight - delta` = 800) would wrongly move the offset.
-    const { element, instance } = makeInstance(500, 400, 1000);
+    const { instance } = makeInstance(500, 400, 1000);
 
-    expect(
-      anchorScrollOnItemSizeChange({ start: 600, end: 800 }, 200, instance),
-    ).toBe(false);
-    expect(element.scrollTop).toBe(500);
+    expect(shouldAnchorScroll({ start: 600, end: 800 }, 200, instance)).toBe(
+      false,
+    );
   });
 
   it("tolerates a change within the bottom threshold", () => {
     // Bottom is exactly BOTTOM_THRESHOLD_PX short of the pre-change content
     // bottom, which still counts as pinned.
-    const { element, instance } = makeInstance(
-      600 - BOTTOM_THRESHOLD_PX,
-      400,
-      1000,
+    const { instance } = makeInstance(600 - BOTTOM_THRESHOLD_PX, 400, 1000);
+
+    expect(shouldAnchorScroll({ start: 800, end: 900 }, 100, instance)).toBe(
+      true,
     );
-
-    expect(
-      anchorScrollOnItemSizeChange({ start: 800, end: 900 }, 100, instance),
-    ).toBe(false);
-    expect(element.scrollTop).toBe(600 - BOTTOM_THRESHOLD_PX + 100);
-  });
-
-  it("corrects from the live position, not a stale cached offset", () => {
-    // The chat writes `scrollTop` directly (stick-to-bottom) in the same frame
-    // as these corrections. TanStack's default applies the delta to the offset
-    // cached at the last `scroll` event, which predates that jump, so the list
-    // is dragged back to it and ends up short of the bottom. The helper must
-    // read the element's live position instead.
-    const element = {
-      scrollTop: 1000,
-      clientHeight: 400,
-      scrollHeight: 1400,
-    } as unknown as HTMLElement;
-    // A stale cached offset that is 16px behind the live position.
-    const instance = { scrollElement: element, scrollOffset: 984 };
-
-    expect(
-      anchorScrollOnItemSizeChange({ start: 900, end: 1000 }, 16, instance),
-    ).toBe(false);
-    // Live position (1000) plus the delta — not the cached 984.
-    expect(element.scrollTop).toBe(1016);
   });
 
   it("leaves a row straddling the top edge alone, even while scrolling history", () => {
@@ -189,34 +159,75 @@ describe("anchorScrollOnItemSizeChange", () => {
     // plain list keeps it there via the browser's own scroll anchoring. Adding
     // its whole growth to `scrollTop` would move the thing they opened off the
     // top of the screen.
-    const { element, instance } = makeInstance(100, 400, 1000);
+    const { instance } = makeInstance(100, 400, 1000);
 
-    expect(
-      anchorScrollOnItemSizeChange({ start: 85, end: 121 }, 81, instance),
-    ).toBe(false);
-    expect(element.scrollTop).toBe(100);
+    expect(shouldAnchorScroll({ start: 85, end: 121 }, 81, instance)).toBe(
+      false,
+    );
   });
 
   it("still corrects a row entirely above the viewport", () => {
-    const { element, instance } = makeInstance(200, 400, 1000);
+    const { instance } = makeInstance(200, 400, 1000);
 
-    expect(
-      anchorScrollOnItemSizeChange({ start: 100, end: 200 }, 81, instance),
-    ).toBe(false);
-    expect(element.scrollTop).toBe(281);
+    expect(shouldAnchorScroll({ start: 100, end: 200 }, 81, instance)).toBe(
+      true,
+    );
   });
 
   it("does nothing without a scroll element or for a zero delta", () => {
     expect(
-      anchorScrollOnItemSizeChange({ start: 0, end: 10 }, 10, {
+      shouldAnchorScroll({ start: 0, end: 10 }, 10, {
         scrollElement: null,
       }),
     ).toBe(false);
 
-    const { element, instance } = makeInstance(100, 400, 1000);
-    expect(
-      anchorScrollOnItemSizeChange({ start: 0, end: 10 }, 0, instance),
-    ).toBe(false);
-    expect(element.scrollTop).toBe(100);
+    const { instance } = makeInstance(100, 400, 1000);
+    expect(shouldAnchorScroll({ start: 0, end: 10 }, 0, instance)).toBe(false);
+  });
+});
+
+describe("applyBufferedScrollCorrection", () => {
+  const elementAt = (scrollTop: number, clientHeight: number, scrollHeight: number) => {
+    const element = { scrollTop, clientHeight, scrollHeight };
+    return element as unknown as HTMLElement;
+  };
+
+  it("applies the whole pending correction once the shell can absorb it", () => {
+    // The shell has already grown, so `scrollTop + pending` is inside the new
+    // maximum and nothing is clamped.
+    const element = elementAt(100, 400, 1000);
+
+    expect(applyBufferedScrollCorrection(element, 50)).toBe(50);
+    expect(element.scrollTop).toBe(150);
+  });
+
+  it("reports the clamped amount so the caller can keep the excess buffered", () => {
+    // Only 100 of the 300px fits before the new maximum (600); the reviewer's
+    // bug was losing that 200px with nothing to retry it.
+    const element = elementAt(500, 400, 1000);
+
+    expect(applyBufferedScrollCorrection(element, 300)).toBe(100);
+    expect(element.scrollTop).toBe(600);
+  });
+
+  it("applies a negative correction when rows above shrink", () => {
+    const element = elementAt(200, 400, 1000);
+
+    expect(applyBufferedScrollCorrection(element, -50)).toBe(-50);
+    expect(element.scrollTop).toBe(150);
+  });
+
+  it("clamps the offset to the container's top", () => {
+    const element = elementAt(20, 400, 1000);
+
+    expect(applyBufferedScrollCorrection(element, -100)).toBe(-20);
+    expect(element.scrollTop).toBe(0);
+  });
+
+  it("does nothing for a zero pending", () => {
+    const element = elementAt(120, 400, 1000);
+
+    expect(applyBufferedScrollCorrection(element, 0)).toBe(0);
+    expect(element.scrollTop).toBe(120);
   });
 });

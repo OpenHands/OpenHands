@@ -54,7 +54,12 @@ describe("captureScrollAnchor", () => {
       { key: "below", top: 120 },
     ]);
 
-    expect(captureScrollAnchor(element)).toEqual({ key: "edge", offset: 12 });
+    expect(captureScrollAnchor(element)).toEqual({
+      candidates: [
+        { key: "edge", offset: 12 },
+        { key: "below", offset: 120 },
+      ],
+    });
   });
 
   it("returns null when no row is mounted", () => {
@@ -71,7 +76,30 @@ describe("captureScrollAnchor", () => {
       marginBottom: "0px",
     } as CSSStyleDeclaration);
 
-    expect(captureScrollAnchor(element)).toEqual({ key: "edge", offset: 12 });
+    expect(captureScrollAnchor(element)).toEqual({
+      candidates: [{ key: "edge", offset: 12 }],
+    });
+  });
+
+  it("records a few rows below the top edge as fallback anchors", () => {
+    // The top edge row can change key when a page prepends into a tool group;
+    // the rows below it stay stable and let the restore still find a row.
+    const element = buildContainer([
+      { key: "edge", top: 12 },
+      { key: "second", top: 120 },
+      { key: "third", top: 230 },
+      { key: "fourth", top: 340 },
+      { key: "fifth", top: 450 },
+    ]);
+
+    expect(captureScrollAnchor(element)).toEqual({
+      candidates: [
+        { key: "edge", offset: 12 },
+        { key: "second", offset: 120 },
+        { key: "third", offset: 230 },
+        { key: "fourth", offset: 340 },
+      ],
+    });
   });
 });
 
@@ -80,14 +108,38 @@ describe("scrollAnchorOffset", () => {
     const element = buildContainer([{ key: "edge", top: 112 }]);
     element.scrollTop = 1000;
 
-    expect(scrollAnchorOffset(element, { key: "edge", offset: 12 })).toBe(1100);
+    expect(
+      scrollAnchorOffset(element, {
+        candidates: [{ key: "edge", offset: 12 }],
+      }),
+    ).toBe(1100);
   });
 
-  it("returns null when the row is no longer mounted", () => {
+  it("falls back to a lower candidate when the top row's key is gone", () => {
+    // The anchored group row changed key (older events merged into it); the
+    // second candidate is still mounted and takes over.
+    const element = buildContainer([{ key: "second", top: 212 }]);
+    element.scrollTop = 1000;
+
+    expect(
+      scrollAnchorOffset(element, {
+        candidates: [
+          { key: "edge", offset: 12 },
+          { key: "second", offset: 120 },
+        ],
+      }),
+    ).toBe(1092);
+  });
+
+  it("returns null when no candidate row is mounted", () => {
     const element = buildContainer([{ key: "other", top: 12 }]);
     element.scrollTop = 1000;
 
-    expect(scrollAnchorOffset(element, { key: "gone", offset: 12 })).toBe(null);
+    expect(
+      scrollAnchorOffset(element, {
+        candidates: [{ key: "gone", offset: 12 }],
+      }),
+    ).toBe(null);
   });
 
   it("corrects from the child box when the wrapper has no box of its own", () => {
@@ -102,6 +154,10 @@ describe("scrollAnchorOffset", () => {
 
     // Child box 112 minus the 24px top margin is the row's occupied top (88),
     // so the correction is 88 - 12 = 76, not 112 - 12.
-    expect(scrollAnchorOffset(element, { key: "edge", offset: 12 })).toBe(1076);
+    expect(
+      scrollAnchorOffset(element, {
+        candidates: [{ key: "edge", offset: 12 }],
+      }),
+    ).toBe(1076);
   });
 });

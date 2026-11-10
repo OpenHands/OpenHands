@@ -51,7 +51,11 @@ interface PaginationEvent {
 
 type CriticEvent = MessageEvent | ActionEvent<FinishAction>;
 
-function createPaginationEvent(index: number, prefix: string): PaginationEvent {
+function createPaginationEvent(
+  index: number,
+  prefix: string,
+  varyHeight = false,
+): PaginationEvent {
   return {
     id: `${prefix.toLowerCase().replaceAll(" ", "-")}-${index}`,
     timestamp: timestampForEvent(index),
@@ -59,7 +63,17 @@ function createPaginationEvent(index: number, prefix: string): PaginationEvent {
     kind: "MessageEvent",
     llm_message: {
       role: "assistant",
-      content: [{ type: "text", text: `${prefix} ${index}` }],
+      // When `varyHeight` is set the bubble is padded with a variable number of
+      // lines, so each row measures away from the flat estimate and the
+      // virtualizer has real size corrections to apply.
+      content: [
+        {
+          type: "text",
+          text: varyHeight
+            ? `${prefix} ${index}\n\n${"filler line\n\n".repeat(index % 12)}`
+            : `${prefix} ${index}`,
+        },
+      ],
     },
   };
 }
@@ -67,9 +81,10 @@ function createPaginationEvent(index: number, prefix: string): PaginationEvent {
 function createAllPaginationEvents(
   prefix: string,
   count = PAGINATION_EVENT_COUNT,
+  varyHeight = false,
 ): PaginationEvent[] {
   return Array.from({ length: count }, (_, i) =>
-    createPaginationEvent(i + 1, prefix),
+    createPaginationEvent(i + 1, prefix, varyHeight),
   );
 }
 
@@ -247,9 +262,19 @@ async function routePaginationConversation(
     id = PAGINATION_CONVERSATION_ID,
     count = PAGINATION_EVENT_COUNT,
     title = "Pagination test",
-  }: { id?: string; count?: number; title?: string } = {},
+    varyHeight = false,
+  }: {
+    id?: string;
+    count?: number;
+    title?: string;
+    varyHeight?: boolean;
+  } = {},
 ) {
-  const allEvents = createAllPaginationEvents("Pagination message", count);
+  const allEvents = createAllPaginationEvents(
+    "Pagination message",
+    count,
+    varyHeight,
+  );
 
   // The app fetches conversations via the batch endpoint:
   //   GET /api/conversations?ids=<id>
@@ -371,7 +396,7 @@ async function waitForScrollableConversation(page: Page) {
 async function triggerOlderEventLoad(page: Page) {
   const scroller = await waitForScrollableConversation(page);
   await scroller.evaluate((el) => {
-    el.scrollTop = 0;
+    el.scrollTo({ top: 0 });
     el.dispatchEvent(new Event("scroll", { bubbles: true }));
   });
 }
@@ -691,10 +716,93 @@ test.describe("UI regressions", () => {
     // the fourth page) as a real agent bubble. scrollTop stays above the
     // load-older threshold so this does not trigger yet another fetch.
     await scroller.evaluate((el) => {
-      el.scrollTop = 100;
+      el.scrollTo({ top: 100 });
       el.dispatchEvent(new Event("scroll", { bubbles: true }));
     });
     await expect(agentBubble(151)).toBeAttached({ timeout: 15_000 });
+  });
+
+  // ── scroll-to-bottom lands at the bottom in a virtualized list ───
+
+  /**
+   * The PR's goal for the "jump to latest" control: with hundreds of rows the
+   * list is virtualized and its tail rows mount as the jump lands on them, so
+   * the reader must end at the true bottom with the newest message visible. The
+   * row-size clamp itself is pinned down in
+   * `messages-virtualization.test.tsx` ("re-pins the bottom once the shell
+   * grows"); this is the end-to-end guard that the button still reaches the
+   * bottom over the real browser layout.
+   */
+  test("scroll-to-bottom reaches the newest message in a virtualized list", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const VIRTUALIZED_CONVERSATION_ID = "scroll-bottom-e2e";
+    const EVENT_COUNT = 400;
+    await routeSessionApiKey(page);
+    await routePaginationConversation(page, {
+      id: VIRTUALIZED_CONVERSATION_ID,
+      count: EVENT_COUNT,
+      title: "Scroll bottom test",
+      varyHeight: true,
+    });
+
+    const shell = page.getByTestId("virtualized-message-list");
+    const olderPageRequest = () =>
+      page.waitForRequest(
+        (req) =>
+          req.method() === "GET" &&
+          req
+            .url()
+            .includes(
+              `/api/conversations/${VIRTUALIZED_CONVERSATION_ID}/events/search`,
+            ) &&
+          new URL(req.url()).searchParams.has("timestamp__lt"),
+      );
+
+    await page.goto(`/conversations/${VIRTUALIZED_CONVERSATION_ID}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page
+        .getByTestId("agent-message")
+        .filter({ hasText: `Pagination message ${EVENT_COUNT}` }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // Backfill past the virtualization threshold, then leave the reader up in
+    // the history so the newest rows are unmounted and still at the estimate.
+    for (let page_ = 0; page_ < 3; page_ += 1) {
+      const request = olderPageRequest();
+      await triggerOlderEventLoad(page);
+      await request;
+      await expect(page.getByTestId("loading-older-events")).toHaveCount(0);
+    }
+    await expect(shell).toBeVisible({ timeout: 15_000 });
+
+    const scroller = await getChatScroller(page);
+    const bottomDistance = () =>
+      scroller.evaluate(
+        (el) => el.scrollHeight - el.clientHeight - el.scrollTop,
+      );
+
+    // Start well away from the bottom so the jump has real work to do.
+    await scroller.evaluate((el) => {
+      el.scrollTo({ top: 0 });
+      el.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    await page.waitForTimeout(300);
+    expect(await bottomDistance()).toBeGreaterThan(1_000);
+
+    await page.getByTestId("scroll-to-bottom").click();
+
+    // The button's own jump must land at the bottom and stay there as the
+    // newly mounted tail rows report their real sizes.
+    await expect.poll(bottomDistance, { timeout: 15_000 }).toBeLessThan(50);
+    await expect(
+      page
+        .getByTestId("agent-message")
+        .filter({ hasText: `Pagination message ${EVENT_COUNT}` }),
+    ).toBeVisible();
   });
 
   // ── Drag-selection stays inside the message feed ─────────────────

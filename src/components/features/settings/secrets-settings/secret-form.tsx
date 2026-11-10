@@ -22,6 +22,12 @@ interface SecretFormProps {
   defaultName?: string;
   /** Keep the form open after a failed save so the user can retry. */
   keepOpenOnError?: boolean;
+  /** Draft value to restore (a secret-request card that remounted mid-typing). */
+  initialValue?: string;
+  /** Draft show-value toggle to restore. */
+  initialShowValue?: boolean;
+  /** Reports value/show-value edits so the caller can hold them across remounts. */
+  onDraftChange?: (draft: { value: string; showValue: boolean }) => void;
 }
 
 export function SecretForm({
@@ -31,6 +37,9 @@ export function SecretForm({
   onSaved,
   defaultName = "",
   keepOpenOnError = false,
+  initialValue,
+  initialShowValue,
+  onDraftChange,
 }: SecretFormProps) {
   const queryClient = useQueryClient();
   const { t } = useTranslation("openhands");
@@ -69,8 +78,8 @@ export function SecretForm({
   const [name, setName] = React.useState(
     mode === "edit" && selectedSecret ? selectedSecret : defaultName,
   );
-  const [value, setValue] = React.useState("");
-  const [showValue, setShowValue] = React.useState(false);
+  const [value, setValue] = React.useState(initialValue ?? "");
+  const [showValue, setShowValue] = React.useState(initialShowValue ?? false);
   const valueInputId = React.useId();
   const [description, setDescription] = React.useState("");
 
@@ -85,10 +94,12 @@ export function SecretForm({
 
   React.useEffect(() => {
     setName(mode === "edit" && selectedSecret ? selectedSecret : defaultName);
-    setValue("");
-    setShowValue(false);
+    setValue(initialValue ?? "");
+    setShowValue(initialShowValue ?? false);
     setDescription(secretDescription);
     setError(null);
+    // `initialValue`/`initialShowValue` are seed values for a remount, not
+    // live inputs, so they are intentionally excluded from the deps.
   }, [mode, selectedSecret, secretDescription, defaultName]);
 
   const closeUnlessKeptOpen = (_data: unknown, error: Error | null) => {
@@ -206,7 +217,11 @@ export function SecretForm({
             autoComplete="new-password"
             required={mode === "add"}
             value={value}
-            onChange={(event) => setValue(event.currentTarget.value)}
+            onChange={(event) => {
+              const next = event.currentTarget.value;
+              setValue(next);
+              onDraftChange?.({ value: next, showValue });
+            }}
             className={cn(
               formControlSettingsFieldClassName,
               "disabled:bg-surface-raised disabled:border-border-subtle disabled:cursor-not-allowed",
@@ -221,7 +236,13 @@ export function SecretForm({
                 : I18nKey.SECRETS$SHOW_VALUE,
             )}
             isDisabled={isSaving}
-            onClick={() => setShowValue((visible) => !visible)}
+            onClick={() =>
+              setShowValue((visible) => {
+                const next = !visible;
+                onDraftChange?.({ value, showValue: next });
+                return next;
+              })
+            }
           >
             {showValue ? (
               <EyeOff size={16} aria-hidden="true" />

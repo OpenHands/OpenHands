@@ -35,11 +35,12 @@ function PendingSecretRequestCards() {
 }
 
 const renderCards = async (requests: SecretRequest[] = [request]) => {
-  useSecretRequestStore.setState({ requests });
-  renderWithProviders(<PendingSecretRequestCards />);
+  useSecretRequestStore.setState({ requests, drafts: {} });
+  const result = renderWithProviders(<PendingSecretRequestCards />);
   if (requests.some((r) => r.conversationId === request.conversationId)) {
     await screen.findAllByTestId("secret-request-card");
   }
+  return result;
 };
 
 describe("SecretRequestCard", () => {
@@ -132,5 +133,40 @@ describe("SecretRequestCard", () => {
       request,
       null,
     );
+  });
+
+  it("keeps a typed value when the card remounts (virtualization threshold)", async () => {
+    // The card moves from its row into the trailing list at 150 rows, which
+    // remounts the form. The value typed before the remount must survive, or an
+    // append while the agent is working would silently drop it.
+    const user = userEvent.setup();
+    const { unmount } = await renderCards();
+
+    await user.type(screen.getByTestId("value-input"), "ghp_example");
+    expect(useSecretRequestStore.getState().drafts[request.toolCallId]).toEqual(
+      {
+        value: "ghp_example",
+        showValue: false,
+      },
+    );
+
+    // Simulate the remount by tearing the tree down and mounting a fresh one
+    // from the same store state.
+    unmount();
+    renderWithProviders(<PendingSecretRequestCards />);
+
+    expect(await screen.findByTestId("value-input")).toHaveValue("ghp_example");
+  });
+
+  it("drops the held draft once the request completes", async () => {
+    const user = userEvent.setup();
+    await renderCards();
+
+    await user.type(screen.getByTestId("value-input"), "ghp_example");
+    await user.click(screen.getByTestId("cancel-button"));
+
+    expect(
+      useSecretRequestStore.getState().drafts[request.toolCallId],
+    ).toBeUndefined();
   });
 });

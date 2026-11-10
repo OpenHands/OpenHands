@@ -739,9 +739,16 @@ describe("Messages virtualization", () => {
       set: () => {},
     });
 
-    // Row 6 is the first at or below the top edge: 600 - 550 = 50.
+    // Row 6 is the first at or below the top edge: 600 - 550 = 50. Rows 7-8
+    // follow as fallback anchors (only a few rows are mounted at the top).
     const anchorBefore = captureScrollAnchor(parent);
-    expect(anchorBefore).toEqual({ key: "single-message-6", offset: 50 });
+    expect(anchorBefore).toEqual({
+      candidates: [
+        { key: "single-message-6", offset: 50 },
+        { key: "single-message-7", offset: 150 },
+        { key: "single-message-8", offset: 250 },
+      ],
+    });
 
     // An older page prepends: the two older rows measure taller than their
     // estimate, pushing the anchored row 30px down.
@@ -955,6 +962,98 @@ describe("Messages virtualization", () => {
     );
     expect(topOffsets).toContain(4200);
     expect(topOffsets).not.toContain(0);
+  });
+
+  it("re-pins the bottom once the shell grows instead of losing clamped corrections", async () => {
+    // A row measured taller than its estimate must not write `scrollTop` while
+    // the shell still has its old total height: the browser clamps
+    // `offset + delta` to the old maximum and the excess is lost, with nothing
+    // to retry it (the reviewer's scroll-to-bottom ended thousands of px
+    // short). The correction is buffered and applied once the shell has
+    // re-rendered at its new total.
+    //
+    // jsdom has no layout, so the scroll geometry is modelled by hand:
+    // `scrollHeight` follows the shell's own total (which grows as the mounted
+    // rows report their real sizes — the clamp's cause), and the virtualizer's
+    // own writer (`scrollTo`) is a no-op. Only the fix's direct `scrollTop`
+    // write can move the reader to the new bottom.
+    const ROW_HEIGHT = 200;
+    const VIEWPORT = 600;
+    const ROW_COUNT = 200;
+    const ESTIMATE = 120;
+
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const testId = this.getAttribute("data-testid");
+        const height =
+          testId === "virtualized-message-row"
+            ? ROW_HEIGHT
+            : testId === "scroll-parent"
+              ? VIEWPORT
+              : 0;
+        return {
+          width: 800,
+          height,
+          top: 0,
+          left: 0,
+          right: 800,
+          bottom: height,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      },
+    );
+    const scrollTo = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      writable: true,
+      value: scrollTo,
+    });
+
+    renderMessages(buildEvents(ROW_COUNT));
+    const parent = screen.getByTestId("scroll-parent");
+    const shell = screen.getByTestId("virtualized-message-list");
+    const shellHeight = () => Number.parseInt(shell.style.height || "0", 10);
+
+    let scrollTop = 0;
+    Object.defineProperty(parent, "clientHeight", {
+      configurable: true,
+      get: () => VIEWPORT,
+    });
+    Object.defineProperty(parent, "scrollHeight", {
+      configurable: true,
+      get: () => shellHeight(),
+    });
+    Object.defineProperty(parent, "scrollTop", {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => {
+        scrollTop = value;
+      },
+    });
+
+    // Let the first window measure so the shell settles above the flat
+    // estimate; otherwise the later measurement is indistinguishable from it.
+    await waitFor(() =>
+      expect(shellHeight()).toBeGreaterThan(ROW_COUNT * ESTIMATE),
+    );
+
+    // Park the reader at the bottom, where the tail rows mount and measure
+    // taller than the flat estimate.
+    act(() => {
+      scrollTop = shellHeight() - VIEWPORT;
+      fireEvent.scroll(parent);
+    });
+
+    // The fix re-pins to the grown bottom; the virtualizer's own (stubbed)
+    // correction path cannot, so a short position means the clamp lost the
+    // excess.
+    await waitFor(() =>
+      expect(parent.scrollHeight - parent.clientHeight - parent.scrollTop).toBe(
+        0,
+      ),
+    );
   });
 
   it("agrees with the plain list about the last group's summary", () => {

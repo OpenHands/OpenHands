@@ -15,7 +15,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
-  FORK_CONVERSATION_MUTATION_KEY,
+  forkConversationMutationKey,
   useForkConversation,
 } from "#/hooks/mutation/use-fork-conversation";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
@@ -36,12 +36,18 @@ function UserAssistantEventMessageComponent({
   const { t } = useTranslation("openhands");
   const { conversationId } = useOptionalConversationId();
   const isCloud = useActiveBackend().backend.kind === "cloud";
-  const { mutate: forkConversation } = useForkConversation();
+  const { mutate: forkConversation } = useForkConversation(
+    conversationId ?? "",
+  );
   // `useIsMutating` reads the cache entry, so it still reports a fork started
   // before this row was virtualized out and back — unlike the row's own
   // `isPending`, which belongs to a fresh observer and reads `false` on remount.
+  // The key is scoped to this conversation: an unscoped match would let a fork
+  // of another conversation block this one's `Branch` action.
   const isForking =
-    useIsMutating({ mutationKey: FORK_CONVERSATION_MUTATION_KEY }) > 0;
+    useIsMutating({
+      mutationKey: forkConversationMutationKey(conversationId ?? ""),
+    }) > 0;
   // Blocks a same-tick double-click, before `isForking` flips.
   const forkInFlightRef = React.useRef(false);
 
@@ -93,7 +99,6 @@ function UserAssistantEventMessageComponent({
 
     forkConversation(
       {
-        sourceConversationId: conversationId,
         eventId: event.id,
         ...(isEdit ? { editText: message } : {}),
         ...(branchTitle ? { title: branchTitle } : {}),

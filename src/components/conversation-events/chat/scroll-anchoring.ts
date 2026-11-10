@@ -24,15 +24,11 @@ export const buildInitialMeasurements = (
   gapPx: number,
 ): VirtualItem[] => {
   if (keys.length === 0) return [];
-  if (!heights.some((height) => height > 0)) return [];
+  const fallback = measuredAverage(heights);
+  if (fallback === null) return [];
 
   // Rows whose height was not captured fall back to the average of the ones
   // that were, so a single unmeasured row cannot distort the total.
-  const measured = heights.filter((height) => height > 0);
-  const fallback = measured.length
-    ? measured.reduce((total, height) => total + height, 0) / measured.length
-    : 0;
-
   let start = 0;
   return keys.map((key, index) => {
     const size = Math.max(1, Math.round(heights[index] || fallback)) + gapPx;
@@ -47,6 +43,19 @@ export const buildInitialMeasurements = (
     start += size;
     return item;
   });
+};
+
+/**
+ * Average of the captured row heights that are usable (positive), or `null`
+ * when none were captured. Shared by the seed's fallback and the post-switch
+ * estimate so the two agree.
+ */
+export const measuredAverage = (heights: number[]): number | null => {
+  const measured = heights.filter((height) => height > 0);
+  if (measured.length === 0) return null;
+  return (
+    measured.reduce((total, height) => total + height, 0) / measured.length
+  );
 };
 
 /** Vertical margins of an element, in px (0 when there is no CSSOM). */
@@ -113,28 +122,22 @@ interface SizeChangeInstance {
 }
 
 /**
- * Restores the reader's place when a row is measured at a height other than its
- * estimate, then reports `false` so the virtualizer does not add its own
- * correction on top.
+ * Whether a row measured at a height other than its estimate needs a scroll
+ * correction to keep the reader's place. A pure decision: the caller
+ * accumulates the deltas and applies them once the shell has re-rendered at its
+ * new total height.
+ *
+ * Writing `scrollTop` here instead would clamp: during the commit that measures
+ * the row the shell still has the old total height, so `offset + delta` is
+ * capped at the old maximum and the excess is lost, with nothing to re-apply
+ * it. Several rows correcting in one commit compound the loss.
  *
  * Two cases need a correction: a row above the viewport (`item.start` < the
  * current offset) changing height shifts the content under the viewport, and a
  * row at or below the viewport growing while the reader is pinned to the bottom
  * pushes the bottom away.
- *
- * TanStack's default decides both from `getScrollOffset()` — the position cached
- * from the last `scroll` event — and applies the delta to that same cached
- * position. The chat also writes `scrollTop` directly (stick-to-bottom), in the
- * same frame as these corrections, so the cache is stale by exactly that jump
- * and the correction drags the list back to it: a pinned reader lands short of
- * the bottom and autoscroll is then switched off.
- *
- * Reading the element's live position and adding the row's own `delta` once
- * keeps every correction relative to where the reader actually is, and several
- * rows correcting in one frame compose because each reads the position the
- * previous one wrote.
  */
-export const anchorScrollOnItemSizeChange = (
+export const shouldAnchorScroll = (
   item: Pick<VirtualItem, "start" | "end">,
   delta: number,
   instance: SizeChangeInstance,
@@ -157,6 +160,29 @@ export const anchorScrollOnItemSizeChange = (
   // the thing they opened out of view.
   if (!pinned && item.end > offset) return false;
 
-  element.scrollTop = offset + delta;
-  return false;
+  return true;
+};
+
+/**
+ * Applies a buffered size-change correction to the scroll container and returns
+ * the amount applied, or `0` when there is nothing to apply.
+ *
+ * The correction has to wait until the shell has re-rendered at its new total
+ * height: writing it in the measuring commit would clamp `scrollTop` to the old
+ * `scrollHeight` and silently lose the excess. `pending` may be negative (rows
+ * above shrank). When it would push the offset above the new maximum the clamp
+ * still applies, and the applied amount is reported so the caller knows how
+ * much actually landed.
+ */
+export const applyBufferedScrollCorrection = (
+  container: Pick<HTMLElement, "scrollTop" | "scrollHeight" | "clientHeight">,
+  pending: number,
+): number => {
+  if (pending === 0) return 0;
+  const element = container;
+  const max = Math.max(0, element.scrollHeight - element.clientHeight);
+  const target = Math.min(Math.max(0, element.scrollTop + pending), max);
+  const applied = target - element.scrollTop;
+  element.scrollTop = target;
+  return applied;
 };
