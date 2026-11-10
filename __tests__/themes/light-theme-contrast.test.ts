@@ -42,11 +42,16 @@ const OUTLINED_CONTROLS = {
 /** Fills that outlined controls take on hover (secondary buttons, back nav). */
 const CONTROL_HOVER_FILLS = ["--oh-surface-raised", "--oh-color-tertiary"];
 
-/** Page backgrounds controls are placed on. */
+/**
+ * Page backgrounds controls are placed on, including the deepest panel and the
+ * selected-row fill, where an input edge has the least room above 3:1.
+ */
 const CONTROL_PAGE_SURFACES = [
   "--oh-color-base",
   "--oh-color-base-secondary",
   "--oh-surface",
+  "--oh-surface-deep",
+  "--oh-interactive-selected",
 ];
 
 describe.each(["light-plus", "solarized-light", "paper"] as const)(
