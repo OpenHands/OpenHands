@@ -87,6 +87,13 @@ names in `cn` so later caller utilities retain Tailwind's conflict precedence.
 
 Automation popover widths, run-phase limits and conversation hover-action reserves use the existing spacing scale (`min-w-40`, `min-w-64`, `max-w-112`, `max-w-48`, `min-w-15`) instead of equivalent arbitrary rem literals. Preserve each responsive hover/focus variant. Geometry is equivalent on the default spacing scale; explicit host scale overrides follow normal named-token behavior. Do not apply this substitution to fixed pixel geometry: a rem alias would change behavior when the embedding root font size differs.
 
+## Git control borders
+
+The repository button, unlinked branch chip, and Workspace mode button use
+`dark:border-git-control` for their shared 50% dark border. These owners reject
+new arbitrary values. Preserve their light borders, hover states, and the
+separate styling for linked Git controls.
+
 ## Commit viewer geometry
 
 The commit and Uncommitted rows reserve the same `7ch` monospace column through
@@ -94,6 +101,11 @@ The commit and Uncommitted rows reserve the same `7ch` monospace column through
 `h-(--editor-height)`. Keep these three components free of arbitrary values.
 
 ## Workspace files
+
+The open-file strip hides the scrollbar through `file-strip-scrollbar-hidden`
+while retaining horizontal scrolling. File discovery uses
+`file-discovery-viewport-height` for its 90vh cap and keeps its vertical
+overflow on the dialog body. Both owners reject new arbitrary values.
 
 Local Files discovery preferences belong to `misc_settings.app_preferences.workspace_file_discovery`, keyed by working directory on the active backend. `useWorkspaceFileDiscovery` reads the settings cache and saves sparse workspace patches. Preserve default exclusions and the 2,000-file cap when no configuration exists. Fetch one extra result to distinguish truncation from an exact-size list. Cloud keeps its server-side listing contract without these controls.
 

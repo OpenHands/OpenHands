@@ -123,6 +123,8 @@
   --color-border: var(--oh-border);
   --color-scroll-fade: var(--oh-scroll-fade-from, var(--oh-color-base));
   --color-border-input: var(--oh-border-input);
+  /* Existing dark border for informational Git chips and Workspace mode. */
+  --color-git-control: rgba(71, 74, 84, 0.5);
   --color-border-subtle: var(--oh-border-subtle);
   --color-divider: var(--oh-divider);
   /* The ring and popover bar share a readable track across palettes. */
@@ -1250,6 +1252,19 @@ code .token {
 
 @utility dropdown-menu-viewport-height {
   max-height: min(60vh, calc(100dvh - 5rem));
+}
+
+@utility file-strip-scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility file-discovery-viewport-height {
+  max-height: 90vh;
 }
 
 @utility dialog-viewport-width {

@@ -251,6 +251,19 @@ describe("vite library build", () => {
     expect(declarations(recipe("text-on-accent"))).toEqual({
       color: "var(--oh-accent-foreground)",
     });
+    expect(declarations(recipe("file-strip-scrollbar-hidden"))).toMatchObject({
+      "scrollbar-width": "none",
+      "-ms-overflow-style": "none",
+    });
+    expect(
+      declarations(
+        recipe("file-strip-scrollbar-hidden", "::-webkit-scrollbar"),
+      ),
+    ).toMatchObject({ display: "none" });
+    expect(declarations(recipe("file-discovery-viewport-height"))).toEqual({
+      "max-height": "90vh",
+    });
+
     // A named gradient stop retains the existing ancestor override/fallback.
     const scrollFade = recipe("from-scroll-fade");
     expect(declarations(scrollFade)["--tw-gradient-from"]).toBe(
@@ -578,6 +591,10 @@ describe("vite library build", () => {
     expect(reducedMotion.source?.start?.offset).toBeGreaterThan(
       disclosure.source?.start?.offset ?? Infinity,
     );
+
+    expect(
+      declarations(recipe("dark:border-git-control", ":is(.dark *)")),
+    ).toEqual({ "border-color": "#474a5480" });
 
     // Preserve relative typography/geometry and distinct Add/Edit viewport
     // semantics, including the Cloud panel's grayscale pseudo-element halo.
