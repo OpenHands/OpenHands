@@ -1259,6 +1259,7 @@ describe("Conversation websocket behavior", () => {
     await waitFor(() =>
       expect(screen.getByTestId("connection-state")).toHaveTextContent("OPEN"),
     );
+    dispatchMain({ id: "evt-1", source: "agent" });
     await expect(
       contextCapture.current?.sendMessage(makeSendRequest("new socket")),
     ).resolves.toEqual({ queued: false });
@@ -1279,6 +1280,8 @@ describe("Conversation websocket behavior", () => {
     socketCapture.mainSocket = mainSocket;
     socketCapture.planningSocket = planningSocket;
     renderProvider({ subConversations: [makeSubConversation()] });
+    dispatchMain({ id: "evt-1", source: "agent" });
+    dispatchPlanning({ id: "evt-plan-1", source: "agent" });
 
     await expect(
       contextCapture.current?.sendMessage(makeSendRequest("code message")),
@@ -1375,6 +1378,7 @@ describe("Conversation websocket behavior", () => {
     });
     socketCapture.mainSocket = socket;
     renderProvider();
+    dispatchMain({ id: "evt-1", source: "agent" });
 
     await expect(
       contextCapture.current?.sendMessage(makeSendRequest("hello")),
