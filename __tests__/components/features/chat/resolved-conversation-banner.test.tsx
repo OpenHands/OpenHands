@@ -3,7 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ResolvedConversationBanner } from "#/components/features/chat/resolved-conversation-banner";
+import { HttpError } from "@openhands/typescript-client";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import ProjectsService from "#/api/projects-service/projects-service.api";
 import { makeDefaultLocalBackend } from "#/api/backend-registry/default-backend";
 import {
   NO_BACKEND,
@@ -87,8 +89,15 @@ const reopenButton = () =>
 describe("ResolvedConversationBanner", () => {
   let updateTagFlags: ReturnType<typeof vi.spyOn>;
   let batchGet: ReturnType<typeof vi.spyOn>;
+  let setResolved: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    // A server without the project's reopen route, unless a test says so.
+    setResolved = vi
+      .spyOn(ProjectsService, "setConversationResolved")
+      .mockRejectedValue(
+        new HttpError(404, "Not Found", { detail: "Not Found" }),
+      );
     useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
     updateTagFlags = vi.spyOn(
       AgentServerConversationService,
@@ -199,6 +208,47 @@ describe("ResolvedConversationBanner", () => {
 
     batchGet.mockReturnValue(new Promise(() => {}));
     patch.resolve(conversationWith({ project: "abc", turn: "answered" }));
+  });
+
+  it("reopens a project's member through the project's route", async () => {
+    setResolved.mockResolvedValue(undefined);
+    batchGet.mockResolvedValue([conversationWith({ project: "abc" })]);
+    renderBanner({
+      resolved: "auto",
+      project: "abc",
+      resolvenote: "0.9 critic",
+    });
+
+    await userEvent.click(reopenButton());
+
+    expect(setResolved).toHaveBeenCalledWith("abc", CONVERSATION_ID, false);
+    expect(updateTagFlags).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("resolved-conversation-banner"),
+      ).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("composer")).toHaveFocus();
+  });
+
+  it("shows an error when the project's route refuses the reopen", async () => {
+    setResolved.mockRejectedValue(new HttpError(500, "Server Error", {}));
+    const toast = vi
+      .spyOn(toastHandlers, "displayErrorToast")
+      .mockImplementation(() => {});
+    renderBanner({ resolved: "user", project: "abc" });
+
+    await userEvent.click(reopenButton());
+
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith(
+        I18nKey.CHAT_INTERFACE$RESOLVED_REOPEN_FAILED,
+      ),
+    );
+    expect(updateTagFlags).not.toHaveBeenCalled();
+    expect(
+      screen.getByTestId("resolved-conversation-banner"),
+    ).toBeInTheDocument();
   });
 
   it("rolls the banner back and shows an error when reopening fails", async () => {

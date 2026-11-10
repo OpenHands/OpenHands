@@ -10,7 +10,8 @@ import { ModalBody } from "#/components/shared/modals/modal-body";
 import { BrandButton } from "../settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
 import {
-  getDisplayConversationTags,
+  getEditableConversationTags,
+  PROJECT_BOARD_TAG_KEYS,
   RESERVED_CONVERSATION_TAG_KEYS,
 } from "#/api/agent-server-adapter";
 
@@ -38,7 +39,7 @@ export function mergeConversationTagEdits(
 ): Record<string, string> {
   const merged: Record<string, string> = {};
   const editableKeys = new Set(
-    getDisplayConversationTags(currentTags, parentConversationId).map(
+    getEditableConversationTags(currentTags, parentConversationId).map(
       ([key]) => key,
     ),
   );
@@ -72,7 +73,7 @@ export function EditConversationTagsModal({
 }: EditConversationTagsModalProps) {
   const { t } = useTranslation("openhands");
   const [rows, setRows] = React.useState<TagRow[]>(() =>
-    getDisplayConversationTags(tags, parentConversationId).map(
+    getEditableConversationTags(tags, parentConversationId).map(
       ([key, value]) => ({ key, value }),
     ),
   );
@@ -92,7 +93,10 @@ export function EditConversationTagsModal({
     if (!CONVERSATION_TAG_KEY_PATTERN.test(key)) {
       return { errorKey: I18nKey.CONVERSATION$TAG_KEY_INVALID };
     }
-    if (RESERVED_CONVERSATION_TAG_KEYS.has(key)) {
+    if (
+      RESERVED_CONVERSATION_TAG_KEYS.has(key) ||
+      PROJECT_BOARD_TAG_KEYS.has(key)
+    ) {
       return { errorKey: I18nKey.CONVERSATION$TAG_KEY_RESERVED };
     }
     if (rows.some((row) => row.key === key)) {

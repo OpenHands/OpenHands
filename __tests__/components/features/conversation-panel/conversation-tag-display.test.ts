@@ -10,7 +10,10 @@ import {
   TAG_CHIP_VALUE_MAX_LENGTH,
   truncateTagChipValue,
 } from "#/components/features/conversation-panel/conversation-card/conversation-tag-display";
-import { getDisplayConversationTags } from "#/api/agent-server-adapter";
+import {
+  getDisplayConversationTags,
+  getEditableConversationTags,
+} from "#/api/agent-server-adapter";
 import { I18nKey } from "#/i18n/declaration";
 
 describe("truncateTagChipValue", () => {
@@ -150,6 +153,23 @@ describe("getDisplayConversationTags", () => {
       ["Origin", "slack"],
       ["env", "prod"],
     ]);
+  });
+
+  it("hides the Projects board state and keeps project and resolved as chips, not editable", () => {
+    const tags = {
+      project: "p1",
+      resolved: "auto",
+      resolvenote: "0.93 nothing",
+      turn: "asked",
+      ask: "Ship it?",
+      team: "web",
+    };
+    expect(getDisplayConversationTags(tags).map(([key]) => key)).toEqual([
+      "project",
+      "resolved",
+      "team",
+    ]);
+    expect(getEditableConversationTags(tags)).toEqual([["team", "web"]]);
   });
 
   it("returns an empty list for nullish tags", () => {

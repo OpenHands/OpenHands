@@ -18,6 +18,13 @@ import {
   parseAutoResolveNote,
 } from "#/utils/conversation-tag-flags";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import ProjectsService, {
+  isProjectRouteMissing,
+} from "#/api/projects-service/projects-service.api";
+import { projectsQueryRoot } from "#/hooks/query/use-projects";
+
+/** Agent Server tags a project's member with the project's id. */
+const PROJECT_TAG_KEY = "project";
 
 const COMPOSER_INPUT_SELECTOR = "[contenteditable='true']";
 
@@ -33,9 +40,10 @@ function latestUserMessageId(events: OHEvent[]): string | null {
  * Notice above the composer for a project thread the Agent Server marked
  * resolved (`resolved=user|auto` tag). The composer stays usable.
  *
- * - Reopen re-reads the tags and PATCHes them without `resolved`, so tags
- *   the server wrote since the last poll are kept (the local PATCH replaces
- *   the whole map).
+ * - Reopen uses the project's reopen route. On a server without it, Reopen
+ *   re-reads the tags and PATCHes them without `resolved`, so tags the
+ *   server wrote since the last poll are kept (the local PATCH replaces the
+ *   whole map).
  * - Sending a message reopens the thread on the server. When the server
  *   echoes a new user message, the conversation is refetched so the banner
  *   follows the server rather than guessing.
@@ -94,6 +102,38 @@ export function ResolvedConversationBanner() {
       ) ?? null;
 
     setIsReading(true);
+    // A project's member reopens through the project's route, which also
+    // clears the resolve note; a server without it falls back to the tags.
+    const projectId = conversation.tags?.[PROJECT_TAG_KEY];
+    if (projectId) {
+      try {
+        await ProjectsService.setConversationResolved(
+          projectId,
+          conversation.id,
+          false,
+        );
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: ["user", "conversation", conversation.id],
+          }),
+          queryClient.invalidateQueries({
+            queryKey: ["user", "conversations"],
+          }),
+          queryClient.invalidateQueries({
+            queryKey: projectsQueryRoot(backend),
+          }),
+        ]);
+        setIsReading(false);
+        composer?.focus();
+        return;
+      } catch (error) {
+        if (!isProjectRouteMissing(error)) {
+          setIsReading(false);
+          displayErrorToast(t(I18nKey.CHAT_INTERFACE$RESOLVED_REOPEN_FAILED));
+          return;
+        }
+      }
+    }
     let currentTags = conversation.tags;
     try {
       const [fresh] =

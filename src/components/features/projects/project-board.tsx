@@ -5,6 +5,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import ProjectsService, {
+  isProjectRouteMissing,
   type ProjectAttention,
   type ProjectConversation,
 } from "#/api/projects-service/projects-service.api";
@@ -51,11 +52,25 @@ const conversationPath = (id: string) =>
   `/conversations/${encodeURIComponent(id.replace(/-/g, ""))}`;
 
 /**
- * Resolve sets `resolved=user`; Reopen drops the tag. Both re-read the tags
- * first, since the local PATCH replaces the whole map (as the resolved
- * banner does).
+ * Resolve and Reopen use the project's own routes, which also clear the
+ * server's resolve note. On a server without them, fall back to the tags:
+ * re-read them first, since the local PATCH replaces the whole map.
  */
-async function setResolved(conversationId: string, resolved: boolean) {
+export async function setResolved(
+  projectId: string,
+  conversationId: string,
+  resolved: boolean,
+) {
+  try {
+    await ProjectsService.setConversationResolved(
+      projectId,
+      conversationId,
+      resolved,
+    );
+    return;
+  } catch (error) {
+    if (!isProjectRouteMissing(error)) throw error;
+  }
   const [current] =
     await AgentServerConversationService.batchGetAppConversations([
       conversationId,
@@ -96,7 +111,8 @@ function ProjectCard({
   const title = conversation.title || conversation.conversation_id;
 
   const resolve = useMutation({
-    mutationFn: () => setResolved(conversation.conversation_id, !isResolved),
+    mutationFn: () =>
+      setResolved(projectId, conversation.conversation_id, !isResolved),
     meta: { disableToast: true },
     onSettled: refresh,
     onError: (error) =>
