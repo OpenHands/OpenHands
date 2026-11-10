@@ -241,6 +241,15 @@ export interface AppConversation {
   active_profile?: string | null;
   public?: boolean;
   sub_conversation_ids: string[];
+  /**
+   * Server-owned parent link for conversations the agent delegated to via
+   * `launch_child_conversation` (agent-server >= 1.37.1, SDK #4188). `null`
+   * for top-level conversations, for agent-servers older than the link, and
+   * on the cloud wire shape (Cloud excludes child conversations from the
+   * list server-side). Drives the subagent marking in the conversations
+   * list — see `ConversationSubagentBadge`.
+   */
+  parent_conversation_id?: string | null;
 }
 
 export interface AppConversationPage {

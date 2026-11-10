@@ -84,6 +84,19 @@ interface ConversationCardProps {
   onTogglePin?: () => void;
   /** When true and pinned, keep the pin icon visible without hovering. */
   alwaysShowPinIcon?: boolean;
+  /**
+   * Server-owned parent link of a delegated subagent conversation. The card
+   * renders the subagent marking only when this is set; rows without a link
+   * (top-level conversations, cloud rows, older agent-servers) render no
+   * marking.
+   */
+  parentConversationId?: string | null;
+  /**
+   * Best-effort display title of the parent conversation, resolved by the
+   * panel from the loaded list. `null` when the parent is not loaded or was
+   * deleted — the badge still renders, without the parent association.
+   */
+  subagentParentTitle?: string | null;
 }
 
 export function ConversationCard({
@@ -122,6 +135,8 @@ export function ConversationCard({
   isPinned = false,
   onTogglePin,
   alwaysShowPinIcon = false,
+  parentConversationId = null,
+  subagentParentTitle = null,
 }: ConversationCardProps) {
   const { t } = useTranslation("openhands");
   const { trackDownloadVsCodeButtonClicked } = useTracking();
@@ -285,7 +300,8 @@ export function ConversationCard({
     showRepositoryMetadata ||
     effectiveArchived ||
     (showLlmProfiles && (agentKind === "acp" || !!llmModel)) ||
-    (showTagChipRow && displayTags.length > 0);
+    (showTagChipRow && displayTags.length > 0) ||
+    !!parentConversationId;
 
   return (
     <div
@@ -438,6 +454,8 @@ export function ConversationCard({
           tags={tags}
           showTags={showTagChipRow}
           isArchived={effectiveArchived}
+          parentConversationId={parentConversationId}
+          subagentParentTitle={subagentParentTitle}
         />
       )}
     </div>

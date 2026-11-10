@@ -330,6 +330,22 @@ export function ConversationPanel({
   } = useStartTasks(10, listedConversationIds);
   const getTitle = useConversationDisplayTitleState();
 
+  // Display titles for every loaded conversation, so a delegated subagent
+  // row can name its parent even when the parent sits in a collapsed group
+  // or a different loaded page. A parent outside the loaded pages (or a
+  // deleted one — the agent-server orphans children rather than cascading)
+  // resolves no title, and the subagent marking renders without it.
+  const loadedConversationTitles = React.useMemo(() => {
+    const titles = new Map<string, string>();
+    for (const conversation of allLoadedConversations) {
+      titles.set(
+        conversation.id,
+        getTitle(conversation.id, conversation.title).title,
+      );
+    }
+    return titles;
+  }, [allLoadedConversations, getTitle]);
+
   // Grouped pagination is folder-oriented. Record the first backend page for
   // every conversation so later pages can introduce new folders without
   // mutating the contents of folders that are already visible.
@@ -1153,6 +1169,14 @@ export function ConversationPanel({
           showRepoBranchMetadata={showRepoBranchMetadata}
           showLlmProfiles={showLlmProfiles}
           showTagsMetadata={showTagsMetadata}
+          parentConversationId={conversation.parent_conversation_id ?? null}
+          subagentParentTitle={
+            conversation.parent_conversation_id
+              ? (loadedConversationTitles.get(
+                  conversation.parent_conversation_id,
+                ) ?? null)
+              : null
+          }
           agentProfileName={
             agentProfilesData
               ? (agentProfileNames.get(
