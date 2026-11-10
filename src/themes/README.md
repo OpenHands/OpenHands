@@ -6,11 +6,16 @@ them; changing the page background alone is not a complete theme.
 
 ## Paper
 
-Paper (`paper`) is an optional light palette inspired by newsletter style: warm
-paper surfaces, brown ink, rust actions, and restrained green, ochre, and red
-status colors. Select it in Settings → Application → Color Theme. It uses the
-existing `setColorTheme` and browser preference; OpenHands-Neutral remains the
-default. Paper stays light regardless of the operating system's appearance.
+Paper (`paper`) is an optional light palette set like an old newspaper or a
+printed journal: grey newsprint rather than cream, carbon-black ink, and panels
+drawn as halftone screens of that ink rather than other paper colors. Primary
+actions print in reverse (paper on solid ink). Red is the single spot color,
+kept for the logo and for danger and errors; links, focus and notes use a
+blue-black writing ink, and success and warning stay ink-dark. Code listings
+set reserved words in bold ink. Select it in Settings → Application → Color
+Theme. It uses the existing `setColorTheme` and browser preference;
+OpenHands-Neutral remains the default. Paper stays light regardless of the
+operating system's appearance.
 
 Newsreader is used only for `h1`, `h2`, and `.heading`. Dense controls, message
 body text, and smaller supporting headings retain their existing fonts; code and
