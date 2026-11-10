@@ -7,6 +7,7 @@ import {
 import { InvokeSkillObservation } from "#/types/agent-server/core/base/observation";
 import { I18nKey } from "#/i18n/declaration";
 import { GenericEventMessage } from "../../../features/chat/generic-event-message";
+import { useStandaloneEventRowClass } from "../../../features/chat/is-in-event-group-context";
 import { getEventContent } from "../event-content-helpers/get-event-content";
 import {
   getACPToolCallResult,
@@ -76,6 +77,7 @@ export function GenericEventMessageWrapper({
   reasoning = "",
 }: GenericEventMessageWrapperProps) {
   const { t } = useTranslation("openhands");
+  const standaloneRowClass = useStandaloneEventRowClass();
   const { title, details } = getEventContent(event, correspondingAction);
 
   // TaskTrackerObservation has its own rendering
@@ -134,29 +136,28 @@ export function GenericEventMessageWrapper({
     isMarkdownFileEditorEvent(event, correspondingAction);
 
   return (
-    <div>
-      <GenericEventMessage
-        title={title}
-        details={bodyDetails}
-        success={success}
-        initiallyExpanded={initiallyExpanded}
-        timestamp={event.timestamp}
-        titleTrailing={
-          !isSkillReadyEvent(event) && isUserRejectObservation(event) ? (
-            <span
-              data-testid="rejected-indicator"
-              className="ml-2 flex-shrink-0 text-danger"
-            >
-              {t(I18nKey.EVENT$REJECTED)}
-            </span>
-          ) : undefined
-        }
-        titleIcon={
-          skillKnowledge ? (
-            <SkillsIcon className="h-4 w-4 stroke-muted flex-shrink-0 mr-2" />
-          ) : undefined
-        }
-      />
-    </div>
+    <GenericEventMessage
+      title={title}
+      details={bodyDetails}
+      success={success}
+      initiallyExpanded={initiallyExpanded}
+      timestamp={event.timestamp}
+      className={standaloneRowClass}
+      titleTrailing={
+        !isSkillReadyEvent(event) && isUserRejectObservation(event) ? (
+          <span
+            data-testid="rejected-indicator"
+            className="ml-2 flex-shrink-0 text-danger"
+          >
+            {t(I18nKey.EVENT$REJECTED)}
+          </span>
+        ) : undefined
+      }
+      titleIcon={
+        skillKnowledge ? (
+          <SkillsIcon className="h-4 w-4 stroke-muted flex-shrink-0 mr-2" />
+        ) : undefined
+      }
+    />
   );
 }

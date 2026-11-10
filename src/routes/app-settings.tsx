@@ -272,7 +272,7 @@ function AppSettingsForm() {
             {getLockedCloudHost() === null && (
               <NavigationLink
                 to="/agents"
-                className="mt-3 inline-block text-sm text-primary hover:underline"
+                className="mt-3 inline-block text-sm text-link hover:underline"
               >
                 {t(I18nKey.SETTINGS$MANAGE_LLM_PROFILES)}
               </NavigationLink>
