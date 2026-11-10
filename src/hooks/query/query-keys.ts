@@ -12,6 +12,11 @@ export const QUERY_KEYS = {
   MAIN_APP_COOKIE_AUTH: ["main-app-cookie-auth"] as const,
 } as const;
 
+export const CONVERSATION_CONFIGURATION_QUERY_KEYS = {
+  capability: (backendId: string, revision?: number) =>
+    ["conversation-configuration-capability", backendId, revision] as const,
+} as const;
+
 export const SETTINGS_QUERY_KEYS = {
   all: ["settings"] as const,
   byScope: (scope: SettingsScope) => ["settings", scope] as const,

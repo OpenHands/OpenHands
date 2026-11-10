@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { renderWithProviders } from "test-utils";
 import { describe, expect, it, vi } from "vitest";
 import { ChatAddFileButton } from "#/components/features/chat/chat-add-file-button";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
@@ -49,7 +50,7 @@ function LayerOverMenu({
 
 describe("ChatAddFileButton", () => {
   it("uses the translated aria-label for the plus menu trigger", () => {
-    render(<ChatAddFileButton handleFileIconClick={vi.fn()} />);
+    renderWithProviders(<ChatAddFileButton handleFileIconClick={vi.fn()} />);
 
     const button = screen.getByTestId("chat-plus-button");
     expect(button).toHaveAttribute(
@@ -63,7 +64,9 @@ describe("ChatAddFileButton", () => {
     const user = userEvent.setup();
     const handleFileIconClick = vi.fn();
 
-    render(<ChatAddFileButton handleFileIconClick={handleFileIconClick} />);
+    renderWithProviders(
+      <ChatAddFileButton handleFileIconClick={handleFileIconClick} />,
+    );
 
     await user.click(screen.getByTestId("chat-plus-button"));
     expect(screen.getByTestId("tools-context-menu")).toBeInTheDocument();
@@ -76,7 +79,7 @@ describe("ChatAddFileButton", () => {
     "closes the tools menu with Escape from %s and returns focus to the + button",
     async (focusedTestId) => {
       const user = userEvent.setup();
-      render(<ChatAddFileButton handleFileIconClick={vi.fn()} />);
+      renderWithProviders(<ChatAddFileButton handleFileIconClick={vi.fn()} />);
       const trigger = screen.getByTestId("chat-plus-button");
 
       await user.click(trigger);
@@ -100,7 +103,7 @@ describe("ChatAddFileButton", () => {
         <LayerOverMenu isOpen={isLayerOpen} onClose={closeLayer} />
       </>
     );
-    const { rerender } = render(renderWithLayer(false));
+    const { rerender } = renderWithProviders(renderWithLayer(false));
     await user.click(screen.getByTestId("chat-plus-button"));
     rerender(renderWithLayer(true));
 
@@ -118,7 +121,7 @@ describe("ChatAddFileButton", () => {
     const user = userEvent.setup();
     const handleFileIconClick = vi.fn();
 
-    render(
+    renderWithProviders(
       <ChatAddFileButton handleFileIconClick={handleFileIconClick} disabled />,
     );
 

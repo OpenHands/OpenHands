@@ -13,6 +13,13 @@ import { SystemMessageModal } from "#/components/features/conversation-panel/sys
 import { SkillsModal } from "#/components/features/conversation-panel/skills-modal";
 import { PluginsModal } from "#/components/features/conversation-panel/plugins-modal";
 import { HooksModal } from "#/components/features/conversation-panel/hooks-modal";
+import { useConversationConfigurationCapability } from "#/hooks/query/use-conversation-configuration-capability";
+
+const ConversationConfigurationModal = React.lazy(() =>
+  import("./conversation-configuration-modal").then((module) => ({
+    default: module.ConversationConfigurationModal,
+  })),
+);
 
 export interface ChatAddFileButtonProps {
   handleFileIconClick: () => void;
@@ -34,6 +41,10 @@ export function ChatAddFileButton({
   const { t } = useTranslation("openhands");
   const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
+  const { data: canConfigure } = useConversationConfigurationCapability(
+    !!conversationId && conversation?.id === conversationId && !disabled,
+  );
+  const [configurationOpen, setConfigurationOpen] = React.useState(false);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   useCloseOnEscape(menuOpen, () => setMenuOpen(false), triggerRef);
@@ -103,6 +114,14 @@ export function ChatAddFileButton({
           shouldShowAgentTools={shouldShowAgentTools}
           shouldShowHooks={shouldShowHooks}
           shouldShowPlugins={shouldShowPlugins}
+          configurationAction={
+            canConfigure && !disabled
+              ? {
+                  label: t(I18nKey.CHAT$CONVERSATION_CONFIGURATION),
+                  onClick: () => setConfigurationOpen(true),
+                }
+              : undefined
+          }
           footerAction={{
             testId: "add-files-and-images-button",
             icon: (
@@ -117,6 +136,19 @@ export function ChatAddFileButton({
           }}
         />
       )}
+
+      {configurationOpen &&
+        canConfigure &&
+        conversationId === conversation?.id && (
+          <React.Suspense fallback={null}>
+            <ConversationConfigurationModal
+              key={conversationId}
+              conversationId={conversationId}
+              isAcp={conversation?.agent_kind === "acp"}
+              onClose={() => setConfigurationOpen(false)}
+            />
+          </React.Suspense>
+        )}
 
       <SystemMessageModal
         isOpen={systemModalVisible}
