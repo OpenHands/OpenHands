@@ -38,11 +38,24 @@ interface LaunchState {
   remove: (id: string) => void;
 }
 
+// `crypto.randomUUID` is a [SecureContext]-only API and is unavailable on
+// plain-HTTP non-loopback origins (VMs, LAN addresses, Tailscale IPs, …).
+// Fall back to a timestamp + random suffix so conversation launch still works.
+function generateLaunchId(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+  return `launch-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 // In-memory handoff only: a client launch ID is never sent to the server.
 export const useConversationLaunchStore = create<LaunchState>((set, get) => ({
   launches: {},
   begin: (launch) => {
-    const id = `${CONVERSATION_LAUNCH_PREFIX}${crypto.randomUUID()}`;
+    const id = `${CONVERSATION_LAUNCH_PREFIX}${generateLaunchId()}`;
     useSessionActivityStore
       .getState()
       .begin(
