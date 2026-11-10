@@ -141,12 +141,13 @@ export function selectedActionKind(
   return "prompt";
 }
 
-/** Whether the selected setup declares an agent profile field. */
+/** 判断当前创建端点是否接受 Agent profile。 */
 export function supportsAgentProfile(
   entry: SetupEntry,
   selectedAction?: string | null,
 ): boolean {
-  return "agent_profile_id" in collectFields(entry.setup, null, selectedAction);
+  const kind = selectedActionKind(entry, selectedAction);
+  return kind === "upload" || kind === "bundle";
 }
 
 /**
@@ -280,10 +281,12 @@ function optionalCreateProperties(
   setup: SetupBlock,
   values: SetupFormValues,
   selectedAction?: string | null,
+  includeAgentProfile = false,
 ): SetupRequestBody {
   return Object.fromEntries(
     OPTIONAL_CREATE_PROPERTIES.flatMap((name) => {
-      if (name === "model" && values.agent_profile_id) {
+      if (name === "agent_profile_id" && !includeAgentProfile) return [];
+      if (name === "model" && includeAgentProfile && values.agent_profile_id) {
         return [];
       }
       const field = collectFields(setup, null, selectedAction)[name];
@@ -439,7 +442,12 @@ function buildActionPayload(
 
   Object.assign(
     payload,
-    optionalCreateProperties(setup, values, selectedActionKey),
+    optionalCreateProperties(
+      setup,
+      values,
+      selectedActionKey,
+      kind === "upload",
+    ),
   );
 
   if (kind === "upload") {
@@ -583,7 +591,7 @@ function buildBundlePayload(
 
   const payload: SetupRequestBody = {
     name: deriveName(entry, values),
-    ...optionalCreateProperties(entry.setup, values),
+    ...optionalCreateProperties(entry.setup, values, undefined, true),
   };
 
   const trigger = buildTrigger(entry, values, selectedTrigger);

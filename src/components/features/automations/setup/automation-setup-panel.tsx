@@ -1127,9 +1127,8 @@ export function AutomationSetupPanel({
   const hasExistingCustomBundle = Boolean(
     isEditingExisting && kind === "custom" && existingCustomTarballPath.trim(),
   );
-  const supportsPresetAgentProfiles = (
-    deploymentCapabilities.data?.features ?? []
-  ).includes(PRESET_AGENT_PROFILES_FEATURE);
+  // Services that run scripts from an agent profile may still refuse one on
+  // a prompt or plugin preset; those advertise a feature of their own.
   const canSelectAgentProfile = (
     deploymentCapabilities.data?.features ?? []
   ).includes(
@@ -1449,7 +1448,6 @@ export function AutomationSetupPanel({
     if (selectedAgentProfileId) body.agent_profile_id = selectedAgentProfileId;
     else if (model.trim()) body.model = model.trim();
     if (newAutomationRunAsId) body.run_as_user_id = newAutomationRunAsId;
-
     return body;
   };
   const buildCustomBody = (tarballPath: string): SetupRequestBody =>
@@ -1459,7 +1457,6 @@ export function AutomationSetupPanel({
       tarball_path: tarballPath,
       entrypoint: entrypoint.trim(),
       setup_script_path: setupScriptPath.trim(),
-
       // An agent profile brings its own LLM profile; the service refuses both.
       ...(selectedAgentProfileId
         ? { agent_profile_id: selectedAgentProfileId }
@@ -1675,19 +1672,6 @@ export function AutomationSetupPanel({
       return (
         pluginConfigEditable && parsePluginConfig(form.pluginConfig) !== null
       );
-    if (
-      !isEditingExisting &&
-      supportsPresetAgentProfiles &&
-      canSelectAgentProfile &&
-      !agentProfileId.trim()
-    ) {
-      setStatusMessage({
-        kind: "error",
-        text: t(I18nKey.SETUP$VALIDATION_REQUIRED),
-      });
-      return false;
-    }
-
     if (!prompt.trim() && kind !== "custom") {
       setStatusMessage({
         kind: "error",
@@ -1956,7 +1940,6 @@ export function AutomationSetupPanel({
       timeout:
         showTimeout && timeoutSeconds.trim() ? Number(timeoutSeconds) : null,
     };
-
     if (existingPluginSpec) {
       delete body.model;
       body.config = parsePluginConfig(form.pluginConfig);

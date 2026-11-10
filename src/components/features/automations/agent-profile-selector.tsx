@@ -6,15 +6,10 @@ import { SettingsDropdownInput } from "#/components/features/settings/settings-d
 interface Props {
   value: string | null;
   onChange: (value: string | null) => void;
-  required?: boolean;
 }
 
 /** One selector for automation setup and editing, backed by the profile library. */
-export function AutomationAgentProfileSelector({
-  value,
-  onChange,
-  required = false,
-}: Props) {
+export function AutomationAgentProfileSelector({ value, onChange }: Props) {
   const { t } = useTranslation("openhands");
   const { data, isLoading, isError } = useAgentProfiles();
   const profiles = data?.profiles ?? [];
@@ -28,7 +23,7 @@ export function AutomationAgentProfileSelector({
       ? t(I18nKey.AUTOMATIONS$UNAVAILABLE_AGENT_PROFILE, { id: value })
       : defaultLabel);
   const items = [
-    ...(required ? [] : [{ key: "__default__", label: defaultLabel }]),
+    { key: "__default__", label: defaultLabel },
     ...profiles.flatMap((profile) =>
       profile.id ? [{ key: profile.id, label: profile.name }] : [],
     ),
@@ -40,9 +35,8 @@ export function AutomationAgentProfileSelector({
       name="agent_profile_id"
       label={t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER)}
       items={items}
-      selectedKey={value ?? (required ? undefined : "__default__")}
-      isClearable={!required}
-      required={required}
+      selectedKey={value ?? "__default__"}
+      isClearable
       isLoading={isLoading}
       isDisabled={isError}
       onSelectionChange={(key) =>

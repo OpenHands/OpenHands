@@ -2142,30 +2142,6 @@ describe("AutomationSetupPanel", () => {
       expect(body).not.toHaveProperty("model");
     });
 
-    it("requires an agent profile for new presets when the service supports preset profiles", async () => {
-      withCapabilities(["presetAgentProfiles"]);
-      const user = userEvent.setup();
-      renderPanel({ prompt: "Review every pull request", kind: "prompt" });
-
-      await user.click(screen.getByTestId("automation-setup-create"));
-      expect(AutomationService.createAutomationDraft).not.toHaveBeenCalled();
-      expect(screen.getByText("SETUP$VALIDATION_REQUIRED")).toBeInTheDocument();
-
-      await user.click(screen.getByTestId("automation-setup-agent-profile"));
-      await user.click(
-        screen.getByTestId(
-          "automation-setup-agent-profile-option-agent-reviewer",
-        ),
-      );
-      await user.click(screen.getByTestId("automation-setup-create"));
-      await waitFor(() =>
-        expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
-          expect.objectContaining({ agent_profile_id: "agent-reviewer" }),
-          "prompt",
-        ),
-      );
-    });
-
     it("shows that an ACP agent profile runs its own model, not an LLM profile", async () => {
       withCapabilities(["presetAgentProfiles"]);
       const user = userEvent.setup();

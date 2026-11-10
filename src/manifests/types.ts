@@ -22,7 +22,6 @@ export type SetupFieldType =
   | "cron"
   | "timezone"
   | "repo-picker"
-  | "agent-profile"
   | "llm-profile"
   | "event-source"
   | "event-type"
