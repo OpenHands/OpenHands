@@ -167,6 +167,49 @@ const beforeMount = (monaco: Monaco) => {
   });
 };
 
+// Own the models for exactly the editor's lifetime, including accordion exits.
+function FileDiffEditor(props: React.ComponentProps<typeof DiffEditor>) {
+  const monacoRef = React.useRef<Monaco>(null);
+  const modelId = encodeURIComponent(React.useId());
+  const originalModelPath = `inmemory://file-diff/${modelId}/original`;
+  const modifiedModelPath = `inmemory://file-diff/${modelId}/modified`;
+
+  React.useEffect(
+    () => () => {
+      const monaco = monacoRef.current;
+      if (!monaco) return;
+
+      // Models exist before onMount runs. Capture this instance's models now,
+      // then release them after the child wrapper has disposed its editor.
+      const original = monaco.editor.getModel(
+        monaco.Uri.parse(originalModelPath),
+      );
+      const modified = monaco.editor.getModel(
+        monaco.Uri.parse(modifiedModelPath),
+      );
+      queueMicrotask(() => {
+        original?.dispose();
+        modified?.dispose();
+      });
+    },
+    [originalModelPath, modifiedModelPath],
+  );
+
+  return (
+    <DiffEditor
+      {...props}
+      originalModelPath={originalModelPath}
+      modifiedModelPath={modifiedModelPath}
+      keepCurrentOriginalModel
+      keepCurrentModifiedModel
+      beforeMount={(monaco) => {
+        monacoRef.current = monaco;
+        props.beforeMount?.(monaco);
+      }}
+    />
+  );
+}
+
 export interface FileDiffViewerProps {
   path: string;
   type: GitChangeStatus;
@@ -325,7 +368,7 @@ export function FileDiffViewer({
   const renderContent = () => {
     if (viewMode === "diff") {
       return renderEditorShell(
-        <DiffEditor
+        <FileDiffEditor
           data-testid="file-diff-viewer"
           className="w-full h-full"
           language={language}

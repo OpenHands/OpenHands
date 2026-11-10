@@ -894,6 +894,10 @@ test("changed paths map to the families whose Source: lines own them", () => {
     "src/components/features/brand-new/page.tsx",
     "src/mocks/conversation-handlers.ts",
     ".agents/skills/verify-openhands/SKILL.md",
+    "src/icons/close.svg",
+    "eslint.config.js",
+    "vitest.setup.ts",
+    "playwright.live.config.ts",
   ]);
   assert.deepEqual(
     result.families.map((f) => [f.id, f.paths]),
@@ -909,6 +913,7 @@ test("changed paths map to the families whose Source: lines own them", () => {
   assert.deepEqual(result.shared, [
     "src/hooks/query/use-get-secrets.ts",
     "src/i18n/translation.json",
+    "src/icons/close.svg",
   ]);
   // A src/ path no family owns is a map gap.
   assert.deepEqual(result.unmapped, [
@@ -921,6 +926,9 @@ test("changed paths map to the families whose Source: lines own them", () => {
     "__tests__/components/secrets.test.tsx",
     "src/mocks/conversation-handlers.ts",
     ".agents/skills/verify-openhands/SKILL.md",
+    "eslint.config.js",
+    "vitest.setup.ts",
+    "playwright.live.config.ts",
   ]);
 });
 

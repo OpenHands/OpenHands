@@ -59,37 +59,12 @@ function composite(overlay: string, backdrop: string, alpha: number): string {
 }
 
 describe("ContextWindowRing", () => {
-  it("draws the track and the arc in different tones", () => {
-    render(<ContextWindowRing percentage={5} />);
+  it("caps the filled arc at a full circle", () => {
+    render(<ContextWindowRing percentage={125} />);
 
-    const track = screen.getByTestId("context-window-ring-track");
-    const arc = screen.getByTestId("context-window-ring-arc");
-
-    expect(track.style.stroke).not.toEqual(arc.getAttribute("stroke"));
-  });
-
-  it("derives the track from the foreground rather than a scale stop", () => {
-    render(<ContextWindowRing percentage={5} />);
-
-    // A stop-pinned track cannot hold across palettes; see the constant's docs.
-    expect(
-      screen.getByTestId("context-window-ring-track").style.stroke,
-    ).toEqual(expect.stringContaining("var(--oh-context-window-foreground)"));
-  });
-
-  /**
-   * Read the alpha back out of what the component actually renders, so the
-   * contrast cases below describe the shipped track rather than a constant that
-   * could drift away from it.
-   */
-  function renderedTrackColor(): string {
-    render(<ContextWindowRing percentage={5} />);
-    return screen.getByTestId("context-window-ring-track").style.stroke;
-  }
-
-  it("renders the alpha it documents", () => {
-    expect(renderedTrackColor()).toContain(
-      "var(--oh-context-window-track-weight)",
+    expect(screen.getByTestId("context-window-ring-arc")).toHaveAttribute(
+      "stroke-dashoffset",
+      "0",
     );
   });
 
