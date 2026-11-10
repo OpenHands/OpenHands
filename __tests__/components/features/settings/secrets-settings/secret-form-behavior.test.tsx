@@ -12,6 +12,11 @@ const mocks = vi.hoisted(() => ({
   secrets: undefined as CustomSecretWithoutValue[] | undefined,
   create: vi.fn(),
   update: vi.fn(),
+  // The options the form hands the mutation hook, captured so a test can fire
+  // the mutation-level `onSuccess` after the form has unmounted (TanStack runs
+  // it even when the observer — and its per-call callbacks — are gone).
+  createOptions: undefined as
+    { onSuccess?: (secret: { name: string }) => void } | undefined,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -32,22 +37,25 @@ vi.mock("#/hooks/query/use-get-secrets", () => ({
 vi.mock("#/hooks/mutation/use-create-secret", () => ({
   useCreateSecret: (options?: {
     onSuccess?: (secret: { name: string; description?: string }) => void;
-  }) => ({
-    mutate: (
-      variables: { name: string; description?: string },
-      callbacks?: { onSuccess?: () => void },
-    ) =>
-      mocks.create(variables, {
-        ...callbacks,
-        onSuccess: () => {
-          options?.onSuccess?.({
-            name: variables.name,
-            description: variables.description,
-          });
-          callbacks?.onSuccess?.();
-        },
-      }),
-  }),
+  }) => {
+    mocks.createOptions = options;
+    return {
+      mutate: (
+        variables: { name: string; description?: string },
+        callbacks?: { onSuccess?: () => void },
+      ) =>
+        mocks.create(variables, {
+          ...callbacks,
+          onSuccess: () => {
+            options?.onSuccess?.({
+              name: variables.name,
+              description: variables.description,
+            });
+            callbacks?.onSuccess?.();
+          },
+        }),
+    };
+  },
 }));
 
 vi.mock("#/hooks/mutation/use-update-secret", () => ({
@@ -115,6 +123,7 @@ function renderForm({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.secrets = undefined;
+  mocks.createOptions = undefined;
 });
 
 describe("Secret form behavior", () => {
@@ -624,5 +633,30 @@ describe("Secret form behavior", () => {
       value: "ghp_live",
       showValue: true,
     });
+  });
+
+  it("invalidates the secrets cache when the save lands after the form unmounts", async () => {
+    // A virtualized chat can unmount the secret-request card while its save is
+    // in flight. TanStack drops the per-call `onSuccess` with the observer, so
+    // the invalidation has to ride the mutation-level callback or Settings keeps
+    // serving the cached list (it lives for five minutes).
+    const user = userEvent.setup();
+    const { invalidate, unmount } = renderForm();
+
+    await user.type(screen.getByTestId("name-input"), "GITHUB_TOKEN");
+    await user.type(screen.getByTestId("value-input"), "ghp_live");
+    await user.click(screen.getByTestId("submit-button"));
+    expect(mocks.create).toHaveBeenCalled();
+
+    unmount();
+
+    // The mutation settles with the form gone; only the mutation-level callback
+    // remains, and it must still refresh both secret lists.
+    await act(async () => {
+      mocks.createOptions?.onSuccess?.({ name: "GITHUB_TOKEN" });
+    });
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["secrets-search"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["secrets"] });
   });
 });
