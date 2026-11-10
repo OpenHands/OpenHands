@@ -55,6 +55,11 @@ import type { AutomationDraftApiResponse } from "#/manifests/types";
 import type { Automation } from "#/types/automation";
 import type { Provider } from "#/types/settings";
 
+const mockInstanceConfig = vi.hoisted(() => vi.fn());
+vi.mock("#/hooks/query/use-cloud-integrations-config", () => ({
+  useCloudIntegrationsConfig: () => mockInstanceConfig(),
+}));
+
 const mockNavigate = vi.fn();
 const mockToastSuccess = vi.fn();
 const createGitRepositoriesQueryResult = () => ({
@@ -368,6 +373,7 @@ function renderSessionBoundPanel(conversationId: string) {
 
 describe("AutomationSetupPanel", () => {
   beforeEach(() => {
+    mockInstanceConfig.mockReturnValue({ data: undefined });
     serviceAccountMocks.enabled = false;
     window.sessionStorage.clear();
     vi.clearAllMocks();
@@ -2084,6 +2090,18 @@ describe("AutomationSetupPanel", () => {
       vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
         id: "automation-custom",
       });
+    });
+
+    it("hides profile selection when the backend disables it despite automation support", () => {
+      withCapabilities(["agentProfiles", "presetAgentProfiles"]);
+      mockInstanceConfig.mockReturnValue({
+        data: { deploymentMode: "self_hosted", isAgentProfilesEnabled: false },
+      });
+      renderPanel({ prompt: "Run a custom security check", kind: "custom" });
+      expect(
+        screen.queryByTestId("automation-setup-agent-profile"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("automation-setup-model")).toBeInTheDocument();
     });
 
     it("locks the LLM profile to the agent profile's and sends only the agent profile", async () => {

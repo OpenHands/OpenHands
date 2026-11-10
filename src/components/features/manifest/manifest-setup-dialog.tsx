@@ -1,3 +1,4 @@
+import { useAgentProfileAvailability } from "#/hooks/use-agent-profile-availability";
 import { AutomationAgentProfileSelector } from "#/components/features/automations/agent-profile-selector";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -189,10 +190,21 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     () => collectFields(entry.setup, selectedTrigger, selectedAction),
     [entry, selectedTrigger, selectedAction],
   );
+  const agentProfilesAvailable = useAgentProfileAvailability();
+  const canSelectAgentProfile =
+    agentProfilesAvailable &&
+    capabilities.capabilities?.features.includes("agentProfiles") === true &&
+    supportsAgentProfile(entry, selectedAction);
+  const effectiveValues = useMemo(
+    () =>
+      canSelectAgentProfile ? values : { ...values, agent_profile_id: "" },
+    [canSelectAgentProfile, values],
+  );
   const hidesConnectedProviderSecrets = deploymentMode === "self_hosted";
   const visibleFields = Object.fromEntries(
     Object.entries(fields).filter(([name, field]) => {
-      if (values.agent_profile_id && field.type === "llm-profile") return false;
+      if (effectiveValues.agent_profile_id && field.type === "llm-profile")
+        return false;
       if (!hidesConnectedProviderSecrets) return true;
       if (!Object.hasOwn(CONNECTED_PROVIDER_SECRET_FIELDS, name)) return true;
       return (
@@ -201,9 +213,6 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
       );
     }),
   );
-  const canSelectAgentProfile =
-    capabilities.capabilities?.features.includes("agentProfiles") === true &&
-    supportsAgentProfile(entry, selectedAction);
   const hasLlmProfileField = useMemo(
     () => Object.values(fields).some((field) => field.type === "llm-profile"),
     [fields],
@@ -256,13 +265,13 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     () =>
       buildCreatePayload(
         entry,
-        values,
+        effectiveValues,
         undefined,
         selectedTrigger,
         selectedAction,
         cloneProviders,
       ),
-    [entry, values, selectedTrigger, selectedAction, cloneProviders],
+    [entry, effectiveValues, selectedTrigger, selectedAction, cloneProviders],
   );
   const errorMap = useMemo(
     () => deriveErrorMap(entry, selectedTrigger, selectedAction),
@@ -360,7 +369,9 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     if (blurTimerRef.current) window.clearTimeout(blurTimerRef.current);
     blurTimerRef.current = window.setTimeout(() => {
       void runPreflight(
-        valuesRef.current,
+        canSelectAgentProfile
+          ? valuesRef.current
+          : { ...valuesRef.current, agent_profile_id: "" },
         selectedTrigger,
         selectedAction,
         cloneProviders,
@@ -378,7 +389,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
 
     const failures = validateFormValues(
       entry.setup,
-      values,
+      effectiveValues,
       overrides,
       selectedTrigger,
       selectedAction,
@@ -390,7 +401,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     setLocalErrors({});
 
     const result = await runPreflight(
-      values,
+      effectiveValues,
       selectedTrigger,
       selectedAction,
       cloneProviders,
@@ -413,7 +424,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     try {
       const { response } = await runAction(
         entry,
-        values,
+        effectiveValues,
         actionPayload,
         selectedTrigger,
         selectedAction,
