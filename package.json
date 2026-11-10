@@ -160,7 +160,7 @@
     "@vitest/coverage-v8": "5.0.5",
     "cross-env": "10.1.0",
     "electron": "45.2.1",
-    "electron-builder": "26.15.3",
+    "electron-builder": "26.18.0",
     "eslint": "9.39.5",
     "eslint-config-prettier": "10.1.8",
     "eslint-import-resolver-typescript": "4.4.5",
