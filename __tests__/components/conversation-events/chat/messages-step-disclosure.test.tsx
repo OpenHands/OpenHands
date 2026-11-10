@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Messages } from "#/components/conversation-events/chat/messages";
@@ -15,6 +15,11 @@ import {
 import { ExecuteBashAction } from "#/types/agent-server/core/base/action";
 import { ExecuteBashObservation } from "#/types/agent-server/core/base/observation";
 import { createUserMessageEvent, renderWithProviders } from "test-utils";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
+import {
+  sessionActivityKey,
+  useSessionActivityStore,
+} from "#/stores/session-activity-store";
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({ data: {} }),
@@ -318,10 +323,6 @@ it("preserves a failed ACP command's revealed output outside the group", async (
 });
 
 it("keeps commands collapsed in a pre-opened session until explicitly opened", async () => {
-  const { getActiveBackend } =
-    await import("#/api/backend-registry/active-store");
-  const { sessionActivityKey, useSessionActivityStore } =
-    await import("#/stores/session-activity-store");
   const { backend, orgId } = getActiveBackend();
   const key = sessionActivityKey(backend.id, orgId, "test-conversation-id");
   const store = useSessionActivityStore.getState();
@@ -356,6 +357,105 @@ it("keeps commands collapsed in a pre-opened session until explicitly opened", a
   await userEvent.click(header);
   expect(document.body.textContent).toContain("output of ls");
   act(() => useSessionActivityStore.setState({ entries: {} }));
+});
+
+describe("Messages: completed resumes in paginated history", () => {
+  beforeEach(() => {
+    agent.state = AgentState.AWAITING_USER_INPUT;
+  });
+
+  afterEach(() => {
+    act(() => useSessionActivityStore.setState({ entries: {} }));
+    vi.unstubAllEnvs();
+  });
+
+  const renderCompletedResume = (
+    timestamp: string,
+    startedAt: string,
+    afterEventId?: string,
+  ) => {
+    const { backend, orgId } = getActiveBackend();
+    const key = sessionActivityKey(backend.id, orgId, "test-conversation-id");
+    useSessionActivityStore.setState({
+      entries: {
+        [key]: [
+          {
+            id: "resume",
+            kind: "resume",
+            startedAt: Date.parse(startedAt),
+            afterEventId,
+            phase: "complete",
+            steps: [],
+            open: false,
+          },
+        ],
+      },
+    });
+    const message = { ...createUserMessageEvent("loaded-user"), timestamp };
+    renderWithProviders(
+      <Messages messages={[message]} allEvents={[message]} hasOlderEvents />,
+    );
+  };
+
+  it.each([
+    {
+      name: "shows a newer resume west of UTC with suffixless history",
+      zone: "America/New_York",
+      offset: 300,
+      timestamp: "2026-11-05T18:32:35.376752",
+      startedAt: "2026-11-05T23:20:00Z",
+      visible: true,
+    },
+    {
+      name: "hides an older resume east of UTC with suffixless history",
+      zone: "Asia/Seoul",
+      offset: -540,
+      timestamp: "2026-11-05T15:00:00.000000",
+      startedAt: "2026-11-05T10:00:00Z",
+      visible: false,
+    },
+    {
+      name: "includes the exact boundary with an explicit negative offset",
+      zone: "Asia/Seoul",
+      offset: -540,
+      timestamp: "2026-11-05T18:32:35.376-05:00",
+      startedAt: "2026-11-05T23:32:35.376Z",
+      visible: true,
+    },
+    {
+      name: "excludes one millisecond before an explicit positive offset",
+      zone: "America/New_York",
+      offset: 300,
+      timestamp: "2026-11-05T15:00:00.000+09:00",
+      startedAt: "2026-11-05T05:59:59.999Z",
+      visible: false,
+    },
+  ])("$name", ({ zone, offset, timestamp, startedAt, visible }) => {
+    vi.stubEnv("TZ", zone);
+    // Changing TZ must affect native Date parsing, not just process.env.
+    expect(new Date("2026-11-05T12:00:00Z").getTimezoneOffset()).toBe(offset);
+
+    renderCompletedResume(timestamp, startedAt);
+
+    const header = screen.queryByTestId("event-group-toggle");
+    if (visible) {
+      expect(header).toHaveTextContent("EVENT_GROUP$SESSION_RESUMED");
+    } else {
+      expect(header).not.toBeInTheDocument();
+    }
+  });
+
+  it("keeps a loaded event anchor authoritative over the timestamp boundary", () => {
+    renderCompletedResume(
+      "2026-11-05T12:00:00Z",
+      "2026-11-05T11:00:00Z",
+      "loaded-user",
+    );
+
+    expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+      "EVENT_GROUP$SESSION_RESUMED",
+    );
+  });
 });
 
 it("keeps a single tool's timeout visible on its group heading", async () => {
