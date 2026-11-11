@@ -23,6 +23,13 @@ const CONVERSATION_EVENTS: Record<string, unknown[]> = {
   [CANVAS_DEMO_CONVERSATION_ID]: CANVAS_DEMO_EVENTS,
 };
 
+/**
+ * Mock content search is opt-in: `npm run dev:mock` should mirror a backend
+ * without the local-only content-search feature by default. Flip to true to
+ * demo the search UI against the fixture conversations.
+ */
+export const MOCK_CONTENT_SEARCH_ENABLED = false;
+
 const now = Date.now();
 const PAGINATION_LOCAL_CONVERSATION_ID = "pagination-local";
 const PAGINATION_CLOUD_CONVERSATION_ID = "pagination-cloud";
@@ -266,6 +273,66 @@ export const CONVERSATION_HANDLERS = [
       .map(createConversationResponse);
 
     return HttpResponse.json({ items, next_page_id: null });
+  }),
+
+  // Content search (local-only backend feature, disabled in mock mode by
+  // default so the conversation panel matches a backend without the feature).
+  http.get("*/api/conversations/search-content", async ({ request }) => {
+    if (!MOCK_CONTENT_SEARCH_ENABLED) {
+      return passthrough();
+    }
+    const url = new URL(request.url);
+    const query = (url.searchParams.get("query") ?? "").toLowerCase();
+    const limit = Number(url.searchParams.get("limit") ?? "50");
+    const hits = Array.from(CONVERSATIONS.values())
+      .flatMap((conversation) => {
+        const title = conversation.title ?? "";
+        const matchInTitle = title.toLowerCase().includes(query);
+        const titleHits = matchInTitle
+          ? [
+              {
+                conversation_id: conversation.id,
+                title,
+                event_id: `${conversation.id}:__title__`,
+                source: "title",
+                timestamp: null as string | null,
+                snippet: title,
+              },
+            ]
+          : [];
+        const eventHits = (CONVERSATION_EVENTS[conversation.id] ?? [])
+          .map((event, index) => {
+            const openHandsEvent = event as {
+              _type?: string;
+              message?: string;
+            };
+            const text = openHandsEvent.message ?? "";
+            if (!query || !text.toLowerCase().includes(query)) return null;
+            const at = text.toLowerCase().indexOf(query);
+            const from = Math.max(0, at - 30);
+            const snippet = `[${text.slice(from, at + query.length)}]${text.slice(
+              at + query.length,
+              at + query.length + 40,
+            )}`;
+            return {
+              conversation_id: conversation.id,
+              title,
+              event_id: `event-${index}`,
+              source: openHandsEvent._type === "action" ? "assistant" : "user",
+              timestamp: conversation.updated_at,
+              snippet,
+            };
+          })
+          .filter((hit): hit is NonNullable<typeof hit> => hit !== null);
+        return [...titleHits, ...eventHits];
+      })
+      .slice(0, limit);
+    const capped = hits.length === limit;
+    return HttpResponse.json({
+      results: hits,
+      total: hits.length,
+      capped,
+    });
   }),
 
   http.get("*/api/conversations", async ({ request }) => {
