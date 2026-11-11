@@ -17,7 +17,6 @@ const reactions = (enabled: boolean) => ({
   key: "conversation_reactions",
   label: "Conversation reactions",
   description: "The agent can put an emoji reaction on your messages.",
-  default: false,
   enabled,
 });
 

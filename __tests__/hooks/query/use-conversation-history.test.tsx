@@ -1,6 +1,7 @@
 import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
 import { useEventStore } from "#/stores/use-event-store";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { HttpError } from "@openhands/typescript-client";
 import React from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import {
@@ -584,6 +585,35 @@ describe("useConversationHistory cache key stability", () => {
       expect(result.current.data?.afterSeq).toBeNull();
     });
 
+    // What an Agent Server up to 1.61 answers for a conversation with an
+    // empty event file.
+    const unreadableEventFile = () =>
+      new HttpError(500, "Internal Server Error", {
+        detail: "Internal Server Error",
+        exception: "Missing event file: events/event-00041-88ff0339.json",
+      });
+
+    it("fails once with the server's reason when the count hits an unreadable event file", async () => {
+      withUrl();
+      const error = unreadableEventFile();
+      const countSpy = vi
+        .spyOn(EventService, "getEventCount")
+        .mockRejectedValue(error);
+      const searchSpy = vi.spyOn(EventService, "searchEvents");
+
+      const { result } = renderHook(
+        () => useConversationHistory("conv-unreadable"),
+        { wrapper },
+      );
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      // No page request (through the ingress it would only return a bare
+      // 502) and no retry: the failure is the same every time.
+      expect(result.current.error).toBe(error);
+      expect(countSpy).toHaveBeenCalledTimes(1);
+      expect(searchSpy).not.toHaveBeenCalled();
+    });
+
     describe("on a Cloud backend", () => {
       // The count is the runtime's log, but the page comes from the App
       // API's webhook-fed copy of it, which can lag the runtime.
@@ -650,6 +680,25 @@ describe("useConversationHistory cache key stability", () => {
         expect(result.current.data?.afterSeq).toBe(
           119 - INITIAL_HISTORY_PAGE_SIZE,
         );
+      });
+
+      it("still loads the App API page when the runtime count hits an unreadable event file", async () => {
+        withUrl();
+        vi.spyOn(EventService, "getEventCount").mockRejectedValue(
+          unreadableEventFile(),
+        );
+        vi.spyOn(EventService, "searchEvents").mockResolvedValue(
+          makePage([makeEvent("evt-a")]),
+        );
+
+        const { result } = renderHook(
+          () => useConversationHistory("conv-cloud-unreadable"),
+          { wrapper },
+        );
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+        expect(result.current.data?.events).toHaveLength(1);
+        expect(result.current.data?.afterSeq).toBeNull();
       });
     });
   });

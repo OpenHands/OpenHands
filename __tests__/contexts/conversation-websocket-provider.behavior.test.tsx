@@ -41,6 +41,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
+import { HttpError } from "@openhands/typescript-client";
 import EventService from "#/api/event-service/event-service.api";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
@@ -698,6 +699,38 @@ describe("Conversation websocket behavior", () => {
 
     expect(socketCapture.mainUrl).toContain("/sockets/session/conv-main");
     expect(queryParamsOf(mainOptions())).toEqual({ after_seq: "-1" });
+  });
+
+  it("explains a history load that failed on an unreadable event file", () => {
+    const reason = "Missing event file: events/event-00552-15c60853.json";
+    Object.assign(historyCapture.result, {
+      isError: true,
+      error: new HttpError(500, "Internal Server Error", {
+        detail: "Internal Server Error",
+        exception: reason,
+      }),
+    });
+
+    renderProvider();
+
+    expect(useErrorMessageStore.getState()).toMatchObject({
+      errorMessage: reason,
+      errorType: "conversation",
+    });
+  });
+
+  it("leaves other history load failures to socket recovery", () => {
+    Object.assign(historyCapture.result, {
+      isError: true,
+      error: new HttpError(500, "Internal Server Error", {
+        detail: "Internal Server Error",
+        exception: "disk is full",
+      }),
+    });
+
+    renderProvider();
+
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
   });
 
   it("waits for contiguous durable replay despite transient and out-of-order frames", () => {
