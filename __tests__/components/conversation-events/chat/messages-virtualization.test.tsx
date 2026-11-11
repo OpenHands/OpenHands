@@ -2,6 +2,7 @@ import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { Messages } from "#/components/conversation-events/chat/messages";
+import type { MessagesHandle } from "#/components/conversation-events/chat/messages";
 import {
   captureScrollAnchor,
   scrollAnchorOffset,
@@ -70,9 +71,11 @@ const buildEvents = (count: number): OpenHandsEvent[] =>
 function Harness({
   events,
   withScrollParent,
+  messagesRef,
 }: {
   events: OpenHandsEvent[];
   withScrollParent: boolean;
+  messagesRef?: React.Ref<MessagesHandle>;
 }) {
   const [scrollElement, setScrollElement] =
     React.useState<HTMLDivElement | null>(null);
@@ -83,6 +86,7 @@ function Harness({
       style={{ height: 600, overflowY: "auto" }}
     >
       <Messages
+        ref={messagesRef}
         messages={events}
         allEvents={events}
         scrollParent={withScrollParent ? scrollElement : undefined}
@@ -661,14 +665,33 @@ describe("Messages virtualization", () => {
     expect(plainObserver?.disconnected).toBe(true);
     expect(plainObserver?.observed.size).toBe(0);
 
-    rerender(<Harness events={buildEvents(149)} withScrollParent />);
+    // Returning to the plain list needs a drop below the *exit* threshold (130),
+    // not just below the enter threshold: a count between the two keeps the
+    // virtualized shape (see the hysteresis case below).
+    rerender(<Harness events={buildEvents(129)} withScrollParent />);
     expect(screen.queryByTestId("virtualized-message-list")).toBeNull();
     // A fresh observer tracks the rows that mounted again.
     const revived = observers.find(
-      (o) => o !== plainObserver && o.observed.size === 149,
+      (o) => o !== plainObserver && o.observed.size === 129,
     );
     expect(revived).toBeDefined();
     expect(revived?.disconnected).toBe(false);
+  });
+
+  it("stays virtualized while the row count sits between the two thresholds", () => {
+    // Hysteresis: entering and leaving virtualization each remount the whole
+    // list, so a count hovering at the enter threshold (a streamed append, a
+    // collapse) must not thrash between the two shapes. 150 → 149 → 150 stays
+    // virtual the whole way and never re-mounts the plain shell.
+    const { rerender } = renderMessages(buildEvents(150));
+    const shell = screen.getByTestId("virtualized-message-list");
+
+    rerender(<Harness events={buildEvents(149)} withScrollParent />);
+    // 149 is above the exit threshold, so the shell is kept, not swapped out.
+    expect(screen.getByTestId("virtualized-message-list")).toBe(shell);
+
+    rerender(<Harness events={buildEvents(150)} withScrollParent />);
+    expect(screen.getByTestId("virtualized-message-list")).toBe(shell);
   });
 
   it("lays out each virtualized row as a flex column, like the scroll container", () => {
@@ -1104,6 +1127,132 @@ describe("Messages virtualization", () => {
         0,
       ),
     );
+  });
+
+  it("drops a buffered measurement correction before it moves the reader", async () => {
+    // The "load older" restore (chat-interface) re-pins the reader from the
+    // anchored row's offset, which already accounts for the prepended rows'
+    // real heights. A scroll correction still buffered from measuring those
+    // same rows describes the shift the restore just undid, so letting the
+    // next-frame flush apply it moves the reader a second time. The restore is
+    // authoritative and drops the pending correction through the handle.
+    const ROW_HEIGHT = 200;
+    // A small growth keeps the mounted window unchanged (the range's shift is
+    // far below the overscan), so no row mounts and re-queues a correction
+    // after the clear — the clear is the last word on the pending correction.
+    const GROWN_ROW_HEIGHT = 202;
+    const VIEWPORT = 600;
+    const ROW_COUNT = 200;
+    const ESTIMATE = 120;
+    let rowHeight = ROW_HEIGHT;
+
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const testId = this.getAttribute("data-testid");
+        const height =
+          testId === "virtualized-message-row"
+            ? rowHeight
+            : testId === "scroll-parent"
+              ? VIEWPORT
+              : 0;
+        return {
+          width: 800,
+          height,
+          top: 0,
+          left: 0,
+          right: 800,
+          bottom: height,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      },
+    );
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(),
+    });
+
+    // Capture the virtualizer's observer callback so a resize can be delivered
+    // on demand (jsdom fires none).
+    let deliverResize: ResizeObserverCallback | undefined;
+    class CapturingResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        deliverResize = callback;
+      }
+
+      observe() {}
+
+      unobserve() {}
+
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", CapturingResizeObserver);
+
+    const messagesRef = React.createRef<MessagesHandle>();
+    renderWithProviders(
+      <Harness
+        events={buildEvents(ROW_COUNT)}
+        withScrollParent
+        messagesRef={messagesRef}
+      />,
+    );
+    const parent = screen.getByTestId("scroll-parent");
+    const shell = screen.getByTestId("virtualized-message-list");
+    const shellHeight = () => Number.parseInt(shell.style.height || "0", 10);
+
+    let scrollTop = 0;
+    Object.defineProperty(parent, "clientHeight", {
+      configurable: true,
+      get: () => VIEWPORT,
+    });
+    Object.defineProperty(parent, "scrollHeight", {
+      configurable: true,
+      get: () => shellHeight(),
+    });
+    Object.defineProperty(parent, "scrollTop", {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => {
+        scrollTop = value;
+      },
+    });
+
+    // Let the first window measure so the shell is at its real total, not the
+    // flat estimate.
+    await waitFor(() =>
+      expect(shellHeight()).toBeGreaterThan(ROW_COUNT * ESTIMATE),
+    );
+    // Pin the reader to the bottom so the mounted rows' growth queues a
+    // correction, then record where the reader is before that correction lands.
+    act(() => {
+      scrollTop = shellHeight() - VIEWPORT;
+      fireEvent.scroll(parent);
+    });
+    const pinnedBottom = scrollTop;
+
+    // The prepended page's rows measure taller than their estimate: the
+    // virtualizer queues a scroll correction for the next frame. The restore
+    // runs in the same frame and drops the correction it duplicates.
+    rowHeight = GROWN_ROW_HEIGHT;
+    const rows = screen.getAllByTestId("virtualized-message-row");
+    act(() => {
+      deliverResize?.(
+        rows.map((target) => ({ target })) as unknown as ResizeObserverEntry[],
+        {} as ResizeObserver,
+      );
+      messagesRef.current?.clearPendingScrollCorrection();
+    });
+
+    // Give the frame flush its chance; the dropped correction must not run.
+    await act(async () => {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 60);
+      });
+    });
+
+    expect(scrollTop).toBe(pinnedBottom);
   });
 
   it("keeps a pinned reader at the bottom when a visible group collapses", async () => {

@@ -320,4 +320,27 @@ describe("useForkConversation", () => {
     );
     expect(navigateMock).not.toHaveBeenCalled();
   });
+
+  it("refuses to fork without a source conversation", async () => {
+    // The Branch action is gated on a conversation, so an empty source only
+    // happens on a stale render. Forking would register the mutation under the
+    // shared `["fork-conversation", ""]` key and navigate to a fork with no
+    // source, so the hook fails fast instead.
+    const { Wrapper } = createWrapper();
+    const { result } = renderHook(() => useForkConversation(""), {
+      wrapper: Wrapper,
+    });
+
+    result.current.mutate({ eventId: "evt-1" });
+
+    await waitFor(() =>
+      expect(displayErrorToast).toHaveBeenCalledWith(
+        "Cannot branch without a source conversation",
+      ),
+    );
+    expect(
+      AgentServerConversationService.forkConversation,
+    ).not.toHaveBeenCalled();
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
 });

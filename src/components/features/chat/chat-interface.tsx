@@ -55,7 +55,10 @@ import { SkillInstallRestartBanner } from "./skill-install-restart-banner";
 import { ResolvedConversationBanner } from "./resolved-conversation-banner";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
-import { Messages } from "#/components/conversation-events/chat/messages";
+import {
+  Messages,
+  type MessagesHandle,
+} from "#/components/conversation-events/chat/messages";
 import { PendingUserMessages } from "./pending-user-messages";
 import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files";
 import { validateFiles } from "#/utils/file-validation";
@@ -155,6 +158,10 @@ export function ChatInterface({
     scrollRef.current = node;
     setScrollElement(node);
   }, []);
+  // The list's imperative handle: the "load older" anchor restore uses it to
+  // drop a scroll correction still buffered from the prepended rows'
+  // measurement, which would otherwise apply the same shift a second time.
+  const messagesRef = React.useRef<MessagesHandle>(null);
   // A streamed reply grows inside one event as it is revealed, so follow it
   // frame by frame while it does.
   const isRevealingStreamedText = useIsRevealingStreamedText();
@@ -306,7 +313,13 @@ export function ChatInterface({
     preserveScrollAnchor.current = null;
     if (!anchor || !element) return;
     const next = scrollAnchorOffset(element, anchor);
-    if (next !== null) element.scrollTop = next;
+    if (next === null) return;
+    element.scrollTop = next;
+    // The anchor restore already accounts for the prepended rows' real heights.
+    // A correction still buffered from measuring those same rows describes the
+    // very shift just undone, so applying it on the next frame would move the
+    // reader a second time. The restore is authoritative.
+    messagesRef.current?.clearPendingScrollCorrection();
   }, []);
 
   React.useEffect(() => {
@@ -821,6 +834,7 @@ export function ChatInterface({
 
             {!isTask && showConversationMessages && (
               <Messages
+                ref={messagesRef}
                 hasOlderEvents={hasMoreOlderEvents}
                 messages={renderableEvents}
                 allEvents={allConversationEvents}

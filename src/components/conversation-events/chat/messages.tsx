@@ -77,6 +77,33 @@ interface MessagesProps {
    * the full plain list, so a long conversation never pays for a full render.
    */
   scrollParent?: HTMLDivElement | null;
+  /**
+   * Imperative handle for the caller that owns the "load older" restore (the
+   * chat interface). It re-pins the reader from a row anchor after a prepend;
+   * a scroll correction still buffered from those prepended rows' measurement
+   * would apply the same delta a second time (see
+   * {@link MessagesHandle.clearPendingScrollCorrection}).
+   */
+  ref?: React.Ref<MessagesHandle>;
+}
+
+/**
+ * Imperative surface of the virtualized list, for the caller that restores the
+ * scroll position after loading older events.
+ */
+export interface MessagesHandle {
+  /**
+   * Drop any scroll correction still buffered from a row measurement and cancel
+   * the frame flush scheduled for it.
+   *
+   * The "load older" second pass re-pins the reader from the anchored row's
+   * recorded offset, which already accounts for the prepended rows' real
+   * heights. A correction buffered from measuring those same rows — their
+   * (measured - estimate) delta — describes the very shift the anchor restore
+   * just undid, so applying it afterwards shifts the reader twice. The anchor
+   * restore is authoritative once it has run.
+   */
+  clearPendingScrollCorrection: () => void;
 }
 
 /**
@@ -91,6 +118,16 @@ interface MessagesProps {
  * earlier; above it the mounted window is bounded regardless of history.
  */
 const VIRTUALIZATION_THRESHOLD = 150;
+/**
+ * Row count at which a virtualized list drops back to the plain list.
+ *
+ * Hysteresis: entering virtualization costs a full remount (the plain rows
+ * detach and the shell's rows mount) and leaving it costs another, so a row
+ * count hovering at exactly {@link VIRTUALIZATION_THRESHOLD} — a streamed
+ * append, a collapse — would otherwise thrash between the two shapes. Enter at
+ * 150, leave only below 130.
+ */
+const VIRTUALIZATION_EXIT_THRESHOLD = 130;
 /** Rows to keep mounted beyond the viewport on each side. */
 const OVERSCAN = 8;
 /** Pre-measurement row height guess, corrected once rows mount. */
@@ -113,6 +150,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     pendingMessages,
     pendingSessionId,
     scrollParent,
+    ref,
   }) => {
     const { conversationId } = useOptionalConversationId();
     const { key: sessionKey, sessions } = useSessionActivities(conversationId);
@@ -230,9 +268,24 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // `null` (not `undefined`) means the caller has a scroll container but the
     // element is not mounted yet: virtualize the shell rather than rendering
     // every row for a frame.
+    //
+    // The mode is remembered in a ref so a row count that lands between the two
+    // thresholds keeps the shape it already had: enter at
+    // {@link VIRTUALIZATION_THRESHOLD}, leave only below
+    // {@link VIRTUALIZATION_EXIT_THRESHOLD}. Without it, a count oscillating at
+    // the enter threshold would remount the whole list every frame. A ref (not
+    // state) is correct because the decision has to be made in the same render
+    // that would flip it — a `setState` there would add a remount of its own.
+    const virtualizedRef = React.useRef(false);
+    if (scrollParent === undefined) {
+      virtualizedRef.current = false;
+    } else if (plainItems.length >= VIRTUALIZATION_THRESHOLD) {
+      virtualizedRef.current = true;
+    } else if (plainItems.length < VIRTUALIZATION_EXIT_THRESHOLD) {
+      virtualizedRef.current = false;
+    }
     const shouldVirtualize = Boolean(
-      scrollParent !== undefined &&
-      plainItems.length >= VIRTUALIZATION_THRESHOLD,
+      scrollParent !== undefined && virtualizedRef.current,
     );
 
     // A planning observation that is not the designated preview for its phase
@@ -863,6 +916,29 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       scheduleScrollCorrectionFlush();
       return false;
     };
+
+    // The "load older" restore (chat-interface) re-pins the reader from the
+    // anchored row's offset, which already accounts for the prepended rows'
+    // real heights. A correction still buffered from measuring those same rows
+    // would then apply their (measured - estimate) delta on top, moving the
+    // reader twice. The restore is authoritative, so drop the pending
+    // correction and cancel its scheduled flush before it can fire.
+    React.useImperativeHandle(
+      ref,
+      () => ({
+        clearPendingScrollCorrection: () => {
+          scrollCorrectionBufferRef.current.clear();
+          if (
+            scrollCorrectionFrameRef.current !== null &&
+            typeof cancelAnimationFrame !== "undefined"
+          ) {
+            cancelAnimationFrame(scrollCorrectionFrameRef.current);
+            scrollCorrectionFrameRef.current = null;
+          }
+        },
+      }),
+      [],
+    );
 
     // Re-pin once the total size has changed, when `scrollTop + delta` is no
     // longer clamped by the old height. A batch of corrections in one commit

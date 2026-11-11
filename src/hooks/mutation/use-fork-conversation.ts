@@ -115,6 +115,14 @@ export const useForkConversation = (sourceConversationId: string) => {
       editText,
       title,
     }: ForkConversationVariables): Promise<ForkConversationResult> => {
+      if (!sourceConversationId) {
+        // A fork needs a source to branch from and a route to open. The caller's
+        // Branch action is already gated on a conversation, so this only guards
+        // a stale render; fail fast rather than registering a fork under the
+        // shared `["fork-conversation", ""]` key, which every id-less view would
+        // then match.
+        throw new Error("Cannot branch without a source conversation");
+      }
       let fromEventId = eventId;
       let excluded = false;
 
@@ -156,6 +164,9 @@ export const useForkConversation = (sourceConversationId: string) => {
       return { info };
     },
     onSuccess: ({ info }) => {
+      // Guard a stale settle: with no source there is no route to compare
+      // against and no conversation to branch from (mutationFn already throws).
+      if (!sourceConversationId) return;
       // Surface the fork in the sidebar without wiping loaded pages.
       queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
       const forkPath = conversationPath(info.id);

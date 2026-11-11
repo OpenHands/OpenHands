@@ -61,7 +61,7 @@ export function ChatMessage({
   // A long user prompt's "view more" expansion survives a virtualized row
   // unmounting and remounting, like the other row controls.
   const truncationKey = useEventExpansionKey("truncation");
-  const [isExpanded, , setExpanded] = usePersistentExpansion(
+  const [isExpanded, , setExpanded, clearExpanded] = usePersistentExpansion(
     truncationKey,
     false,
   );
@@ -73,12 +73,17 @@ export function ChatMessage({
   // Collapse again only when the text itself changes (a streaming reply growing
   // in place). Resetting on mount would clobber the state a remounted row just
   // restored from the store, defeating the persistence above.
+  //
+  // `clear`, not `setExpanded(false)`: in the virtualized list this runs on
+  // every streaming tick, and writing `false` would create a store entry for a
+  // message nobody expanded (and notify every subscriber each tick). Clearing
+  // is a no-op until there is an entry to drop.
   const previousMessageRef = React.useRef(message);
   React.useEffect(() => {
     if (previousMessageRef.current === message) return;
     previousMessageRef.current = message;
-    setExpanded(false);
-  }, [message, setExpanded]);
+    clearExpanded();
+  }, [message, clearExpanded]);
 
   const handleCopyToClipboard = async () => {
     await navigator.clipboard.writeText(message);

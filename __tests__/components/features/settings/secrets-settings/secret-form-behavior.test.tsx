@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   // it even when the observer — and its per-call callbacks — are gone).
   createOptions: undefined as
     { onSuccess?: (secret: { name: string }) => void } | undefined,
+  updateOptions: undefined as
+    { onSuccess?: (secret: { name: string }) => void } | undefined,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -61,22 +63,25 @@ vi.mock("#/hooks/mutation/use-create-secret", () => ({
 vi.mock("#/hooks/mutation/use-update-secret", () => ({
   useUpdateSecret: (options?: {
     onSuccess?: (secret: { name: string; description?: string }) => void;
-  }) => ({
-    mutate: (
-      variables: { name: string; description?: string },
-      callbacks?: { onSuccess?: () => void },
-    ) =>
-      mocks.update(variables, {
-        ...callbacks,
-        onSuccess: () => {
-          options?.onSuccess?.({
-            name: variables.name,
-            description: variables.description,
-          });
-          callbacks?.onSuccess?.();
-        },
-      }),
-  }),
+  }) => {
+    mocks.updateOptions = options;
+    return {
+      mutate: (
+        variables: { name: string; description?: string },
+        callbacks?: { onSuccess?: () => void },
+      ) =>
+        mocks.update(variables, {
+          ...callbacks,
+          onSuccess: () => {
+            options?.onSuccess?.({
+              name: variables.name,
+              description: variables.description,
+            });
+            callbacks?.onSuccess?.();
+          },
+        }),
+    };
+  },
 }));
 
 interface RenderFormOptions {
@@ -124,6 +129,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.secrets = undefined;
   mocks.createOptions = undefined;
+  mocks.updateOptions = undefined;
 });
 
 describe("Secret form behavior", () => {
@@ -654,6 +660,31 @@ describe("Secret form behavior", () => {
     // remains, and it must still refresh both secret lists.
     await act(async () => {
       mocks.createOptions?.onSuccess?.({ name: "GITHUB_TOKEN" });
+    });
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["secrets-search"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["secrets"] });
+  });
+
+  it("invalidates the secrets cache when an edit lands after the form unmounts", async () => {
+    // The same unmount-mid-save path applies to an edit; both hooks must carry
+    // the invalidation or an edit that lands after the form goes would leave
+    // Settings showing the stale list.
+    const user = userEvent.setup();
+    mocks.secrets = [{ name: "EDIT_ME", description: "old" }];
+    const { invalidate, unmount } = renderForm({
+      mode: "edit",
+      selectedSecret: "EDIT_ME",
+    });
+
+    await user.type(screen.getByTestId("description-input"), " updated");
+    await user.click(screen.getByTestId("submit-button"));
+    expect(mocks.update).toHaveBeenCalled();
+
+    unmount();
+
+    await act(async () => {
+      mocks.updateOptions?.onSuccess?.({ name: "EDIT_ME" });
     });
 
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["secrets-search"] });

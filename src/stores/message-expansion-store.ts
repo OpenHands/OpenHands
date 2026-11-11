@@ -15,6 +15,14 @@ interface MessageExpansionState {
   expanded: Record<string, boolean>;
   setExpanded: (key: string, value: boolean) => void;
   /**
+   * Drop a single entry, for a control that resets itself (a streamed reply
+   * collapsing its "view more"). Writing `false` instead would leave a
+   * meaningless entry behind — one per streaming message — that the prune only
+   * clears when the row leaves the history, and it would notify every
+   * subscriber for a value nobody reads.
+   */
+  clear: (key: string) => void;
+  /**
    * Drop entries whose row is no longer in `rowKeys` so a shrinking history
    * does not leak entries. Membership is decided on the row part of the key,
    * never on the whole key: a key also carries the nested control's identity
@@ -33,6 +41,13 @@ export const useMessageExpansionStore = create<MessageExpansionState>(
           ? state
           : { expanded: { ...state.expanded, [key]: value } },
       ),
+    clear: (key) =>
+      set((state) => {
+        if (!(key in state.expanded)) return state;
+        const next = { ...state.expanded };
+        delete next[key];
+        return { expanded: next };
+      }),
     prune: (rowKeys) =>
       set((state) => {
         const next: Record<string, boolean> = {};
@@ -65,14 +80,15 @@ export const expandedRowKey = (key: string): string => {
  * (the plain, non-virtualized list) it degrades to ordinary component state, so
  * the plain list's behavior is unchanged.
  *
- * Returns `[expanded, toggle, setExpanded]`; the setter writes to whichever
- * backing store is in use, for the rare caller that must reset (not toggle)
- * the flag.
+ * Returns `[expanded, toggle, setExpanded, clear]`. The setter writes to
+ * whichever backing store is in use, for the rare caller that must reset (not
+ * toggle) the flag; `clear` removes the stored entry outright, for a reset that
+ * should not leave a `false` entry behind.
  */
 export function usePersistentExpansion(
   key: string | undefined,
   initiallyExpanded: boolean,
-): readonly [boolean, () => void, (value: boolean) => void] {
+): readonly [boolean, () => void, (value: boolean) => void, () => void] {
   const [localExpanded, setLocalExpanded] = React.useState(initiallyExpanded);
   const stored = useMessageExpansionStore((state) =>
     key === undefined ? undefined : state.expanded[key],
@@ -80,6 +96,7 @@ export function usePersistentExpansion(
   const setStoredExpanded = useMessageExpansionStore(
     (state) => state.setExpanded,
   );
+  const clearStoredExpanded = useMessageExpansionStore((state) => state.clear);
 
   const expanded =
     key === undefined ? localExpanded : (stored ?? initiallyExpanded);
@@ -93,9 +110,16 @@ export function usePersistentExpansion(
     },
     [key, setStoredExpanded],
   );
+  const clear = React.useCallback(() => {
+    if (key === undefined) {
+      setLocalExpanded(initiallyExpanded);
+    } else {
+      clearStoredExpanded(key);
+    }
+  }, [key, clearStoredExpanded, initiallyExpanded]);
   const toggle = React.useCallback(() => {
     setExpanded(!expanded);
   }, [expanded, setExpanded]);
 
-  return [expanded, toggle, setExpanded] as const;
+  return [expanded, toggle, setExpanded, clear] as const;
 }

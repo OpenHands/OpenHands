@@ -64,3 +64,36 @@ describe("message expansion store setExpanded", () => {
     });
   });
 });
+
+describe("message expansion store clear", () => {
+  it("drops a stored entry", () => {
+    // A streamed reply collapses its "view more" on every text change. Writing
+    // `false` would leave a meaningless entry behind for each message; clearing
+    // removes it.
+    useMessageExpansionStore.setState({ expanded: {} });
+    const { setExpanded, clear } = useMessageExpansionStore.getState();
+    setExpanded("single-row::evt::truncation", true);
+
+    clear("single-row::evt::truncation");
+
+    expect(useMessageExpansionStore.getState().expanded).toEqual({});
+  });
+
+  it("does not notify subscribers when there is nothing to drop", () => {
+    // The streamed reply calls `clear` on every reveal tick, but only the first
+    // (a no-op) has anything to remove; the rest must not notify subscribers.
+    useMessageExpansionStore.setState({ expanded: {} });
+    let notifications = 0;
+    const unsubscribe = useMessageExpansionStore.subscribe(() => {
+      notifications += 1;
+    });
+
+    const { clear } = useMessageExpansionStore.getState();
+    clear("single-row::evt::truncation");
+    clear("single-row::evt::truncation");
+    unsubscribe();
+
+    expect(notifications).toBe(0);
+    expect(useMessageExpansionStore.getState().expanded).toEqual({});
+  });
+});
