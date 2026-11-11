@@ -28,6 +28,28 @@ export interface TooltipProps {
   classNames?: { content?: string };
 }
 
+type AriaPlacement = React.ComponentProps<
+  typeof HeroTooltip.Content
+>["placement"];
+
+// React Aria aligns a left or right tooltip along the vertical axis, so its
+// placements are "right top" and "right bottom"; "right start" is not one and
+// falls back to centering on the trigger.
+const SIDE_ALIGNMENT: Record<string, string> = {
+  "left-start": "left top",
+  "left-end": "left bottom",
+  "right-start": "right top",
+  "right-end": "right bottom",
+};
+
+export function toAriaPlacement(
+  placement: TooltipProps["placement"],
+): AriaPlacement {
+  if (!placement) return undefined;
+  return (SIDE_ALIGNMENT[placement] ??
+    placement.replace("-", " ")) as AriaPlacement;
+}
+
 export function Tooltip({
   children,
   content,
@@ -73,11 +95,7 @@ export function Tooltip({
         }
       />
       <HeroTooltip.Content
-        placement={
-          placement?.replace("-", " ") as React.ComponentProps<
-            typeof HeroTooltip.Content
-          >["placement"]
-        }
+        placement={toAriaPlacement(placement)}
         offset={offset}
         shouldFlip={shouldFlip}
         showArrow={showArrow}

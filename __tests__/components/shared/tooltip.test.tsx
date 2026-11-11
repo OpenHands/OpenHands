@@ -2,7 +2,7 @@ import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { Tooltip } from "#/components/shared/tooltip";
+import { Tooltip, toAriaPlacement } from "#/components/shared/tooltip";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 
 const actionLabel = "Action";
@@ -56,5 +56,21 @@ describe("tooltip trigger semantics", () => {
     expect(link).toHaveFocus();
     await user.tab();
     expect(document.body).toHaveFocus();
+  });
+});
+
+describe("toAriaPlacement", () => {
+  it("aligns side tooltips to the trigger's top or bottom edge", () => {
+    expect(toAriaPlacement("right-start")).toBe("right top");
+    expect(toAriaPlacement("right-end")).toBe("right bottom");
+    expect(toAriaPlacement("left-start")).toBe("left top");
+    expect(toAriaPlacement("left-end")).toBe("left bottom");
+  });
+
+  it("keeps top and bottom alignments and plain sides", () => {
+    expect(toAriaPlacement("top-start")).toBe("top start");
+    expect(toAriaPlacement("bottom-end")).toBe("bottom end");
+    expect(toAriaPlacement("right")).toBe("right");
+    expect(toAriaPlacement(undefined)).toBeUndefined();
   });
 });
