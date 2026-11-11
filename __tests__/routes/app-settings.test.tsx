@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import AppSettingsScreen from "#/routes/app-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
@@ -361,5 +361,119 @@ describe("AppSettingsScreen", () => {
         expect.objectContaining({ git_user_name: "openhands" }),
       ),
     );
+  });
+});
+
+class MockNotification {
+  static permission: NotificationPermission = "default";
+  static requestPermission: Mock<() => Promise<NotificationPermission>> =
+    vi.fn(async () => "default" as NotificationPermission);
+
+  constructor(
+    public title: string,
+    public options?: NotificationOptions,
+  ) {}
+  close() {}
+}
+
+describe("AppSettingsScreen desktop notifications", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    activeBackendState.id = "local";
+    activeBackendState.kind = "local";
+    MockNotification.permission = "default";
+    MockNotification.requestPermission = vi.fn(
+      async () => "default" as NotificationPermission,
+    );
+    vi.stubGlobal("Notification", MockNotification);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function mockSettings(overrides: Partial<Settings> = {}) {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings(overrides),
+    );
+  }
+
+  it("does not request permission on load and shows the blocked message with a disabled toggle when permission is denied", async () => {
+    MockNotification.permission = "denied";
+    mockSettings();
+
+    renderAppSettingsScreen();
+
+    const desktop = await screen.findByTestId(
+      "enable-desktop-notifications-switch",
+    );
+    expect(desktop).toBeDisabled();
+    expect(desktop).not.toBeChecked();
+    expect(
+      screen.getByText("SETTINGS$DESKTOP_NOTIFICATIONS_UNAVAILABLE"),
+    ).toBeInTheDocument();
+    expect(MockNotification.requestPermission).not.toHaveBeenCalled();
+  });
+
+  it("treats a browser without the Notification API as blocked", async () => {
+    vi.unstubAllGlobals();
+    mockSettings();
+
+    renderAppSettingsScreen();
+
+    const desktop = await screen.findByTestId(
+      "enable-desktop-notifications-switch",
+    );
+    expect(desktop).toBeDisabled();
+    expect(desktop).not.toBeChecked();
+    expect(
+      screen.getByText("SETTINGS$DESKTOP_NOTIFICATIONS_UNAVAILABLE"),
+    ).toBeInTheDocument();
+  });
+
+  it("requests permission only from the enabling toggle and saves the granted value", async () => {
+    MockNotification.requestPermission.mockResolvedValue("granted");
+    mockSettings();
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    const user = userEvent.setup();
+
+    renderAppSettingsScreen();
+    const desktop = await screen.findByTestId(
+      "enable-desktop-notifications-switch",
+    );
+    expect(MockNotification.requestPermission).not.toHaveBeenCalled();
+
+    await user.click(desktop);
+
+    expect(MockNotification.requestPermission).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(desktop).toBeChecked());
+
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() =>
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ enable_desktop_notifications: true }),
+      ),
+    );
+  });
+
+  it("keeps the toggle off and disabled when the permission request is denied", async () => {
+    MockNotification.requestPermission.mockResolvedValue("denied");
+    mockSettings();
+    const user = userEvent.setup();
+
+    renderAppSettingsScreen();
+    const desktop = await screen.findByTestId(
+      "enable-desktop-notifications-switch",
+    );
+
+    await user.click(desktop);
+    await waitFor(() => expect(desktop).toBeDisabled());
+    expect(desktop).not.toBeChecked();
+    expect(
+      screen.getByText("SETTINGS$DESKTOP_NOTIFICATIONS_UNAVAILABLE"),
+    ).toBeInTheDocument();
   });
 });
