@@ -15,6 +15,8 @@ that loads it.
 
 Source: `src/routes/skills-settings.tsx`, `src/components/features/skills/`, `src/constants/skills-docs.ts`, `src/hooks/use-skill-enablement.ts`, `src/utils/skill-enablement.ts`, `src/utils/skill-key.ts`, `src/hooks/use-launch-skill-in-chat.ts`, `src/api/skills-service.ts`, `src/hooks/query/use-skill-catalog.ts`, `src/components/features/chat/skill-install-restart-banner.tsx`, `src/utils/skill-install-events.ts`.
 
+Server: F25.
+
 ## Sub-features
 
 - `F18.page`: the page shows the title, description, a notice (locally "These are the default agent profile's skills, and new agent profiles start from this list. Other profiles keep their own list."; on a Cloud backend "Skill changes apply to new conversations only."), an **Add skill** button, a result count, the facet rail and the card grid. (Empty state "No skills found." and loading skeletons are not reachable on a local backend.)

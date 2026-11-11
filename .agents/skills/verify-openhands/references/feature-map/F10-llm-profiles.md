@@ -11,6 +11,8 @@ on. Provider connections themselves (add, edit, delete) are F11.
 
 Source: `src/routes/llm-settings.tsx`, `src/components/features/settings/llm-profiles/`, `src/components/shared/modals/settings/model-selector.tsx`, `src/components/features/settings/settings-input.tsx`, `src/components/features/settings/llm-settings/openai-subscription-auth-card.tsx`, `src/components/features/settings/sdk-settings/`, `src/constants/llm-provider-connection.ts`, `src/api/profiles-service/profiles-service.api.ts`.
 
+Server: F20, F23, F24.
+
 ## Sub-features
 
 - `F10.list`: the "Available Profiles" list shows each row's name, model, a `Default` badge on the active profile and a `...` menu, sorted by name; reachable from the sidebar, the direct URL and the command menu.

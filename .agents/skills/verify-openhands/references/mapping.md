@@ -97,8 +97,37 @@ checks and `map affected`; keep other implementation detail out). Every path
 must exist (`map check` verifies it); a directory ends with `/`, names in
 parentheses after a directory are relative to it, and `name-*.tsx` matches by
 prefix. For a family spread over many files, list the route modules and
-top-level component directories, not every file. Then exactly four H2
-sections, in this order:
+top-level component directories, not every file.
+
+When the family calls the Agent Server, add one `Server:` line after `Source:`
+naming the server features it uses, as IDs of the verify-agent-server map
+(OpenHands/software-agent-sdk, `.agents/skills/verify-agent-server/`): a whole
+family (`F15`) or one sub-feature (`F15.changes`), comma-separated and not
+backticked, so they never read as this map's own IDs:
+`Server: F13, F14, F15, F16.` Read them from the code the `Source:` paths
+reach (the `src/api/` clients and the routes they request), not from memory,
+and name only the server features the family's own behaviors rest on.
+
+The line is an index, not a check. A Canvas behavior that passes already
+proves the server path under it, so a `Server:` line never adds server
+checks or recipes here. It answers one question: a server change, or an
+Agent Server bump in Canvas, touches `F15`; which Canvas families should a
+run drive? (`grep -l 'Server:.*F15' references/feature-map/`). The consumer
+declares the link because only its code knows what it calls; the server
+map keeps only its prose "Agent Canvas (context only)" notes and never
+lists Canvas IDs, which change with every map pass here. `map check`
+rejects an ID that is not shaped like one; `map check --server-map
+<software-agent-sdk checkout>` also rejects one the server map does not
+declare.
+
+Name a server feature on a single bullet or Gotcha only where Canvas hides
+or only partly shows the server's behavior, so a reader would otherwise
+blame Canvas or miss the server's part (F08's empty `.git` comes from the
+Agent Server's F04 start). A server bug that a `Server:` family shows to
+users gets a known-bug block here, citing the software-agent-sdk issue; one
+that no Canvas path reaches stays in the server map only.
+
+Then exactly four H2 sections, in this order:
 
 1. `## Sub-features`: one bullet per ID: `` - `F14.create`: add a dummy secret; it persists after reload. ``
 2. `## How to get to it (user POV)`: every entry point, in user language: the
