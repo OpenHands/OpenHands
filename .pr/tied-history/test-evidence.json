@@ -1,0 +1,180 @@
+{
+  "issue": "https://github.com/OpenHands/OpenHands/issues/19643",
+  "baseline_commit": "7b5aa9eb60bdef7d832743c12cabd537b44b8a41",
+  "implementation_commit": "68446c9adb4baad65a134f2db40eaab0ca8792f1",
+  "environment": {
+    "platform": "macOS",
+    "npm": "11.12.1",
+    "dependencies": "Committed package-lock.json replayed with npm ci"
+  },
+  "tdd": {
+    "core_baseline": {
+      "failed": 2,
+      "passed": 25,
+      "failures": [
+        "useLoadOlderEvents: retained cursor does not recover the tied boundary row",
+        "useEventStore: newly loaded equal-timestamp rows sort after the existing tail"
+      ]
+    },
+    "saved_callback_regression": {
+      "failed_before_guard_fix": 1,
+      "observed": "A saved loadOlder callback requested a third page after exhaustion.",
+      "fixed": "Read current store hasMore before requesting; a null retained cursor does not reuse initial history metadata."
+    },
+    "mock_cursor_fixture_baseline": {
+      "failed": 2,
+      "local_and_cloud": "Following the sentinel cursor repeated the first 50 rows instead of reaching 100 unique rows."
+    }
+  },
+  "focused_tests": {
+    "result": "passed",
+    "unique_tests": 216,
+    "unique_files": 8,
+    "deduplication": "122 tests in seven files plus 112 tests in two files minus the 18 repeated use-load-older-events tests = 216 unique tests.",
+    "runs": [
+      {
+        "passed": 122,
+        "files": [
+          "__tests__/hooks/use-load-older-events.test.tsx",
+          "__tests__/stores/use-event-store.test.ts",
+          "__tests__/api/mock-conversation-handlers.test.ts",
+          "__tests__/hooks/query/use-conversation-history.test.tsx",
+          "__tests__/hooks/query/use-conversation-history-cloud.test.tsx",
+          "__tests__/contexts/conversation-websocket-context.test.tsx",
+          "__tests__/api/event-service.test.ts"
+        ]
+      },
+      {
+        "passed": 112,
+        "files": [
+          "__tests__/hooks/use-load-older-events.test.tsx",
+          "__tests__/contexts/conversation-websocket-provider.behavior.test.tsx"
+        ],
+        "purpose": "Validate explicit string timestamps and update the existing known-empty-page assertion to check no rows plus retained exhaustion; absent-history still does not ingest."
+      }
+    ]
+  },
+  "configured_playwright": {
+    "command": "npm run test:e2e:mock-llm -- tests/e2e/mock-llm/regressions/mock-llm-ui-regressions.spec.ts -g \"loads older events when scrolling up\"",
+    "passed": 1,
+    "duration_seconds": 28.8,
+    "browser": "Configured Chromium",
+    "setup": "Repository mock-LLM configuration; production static build and launcher; isolated ports and temporary state. The pagination endpoint is intercepted by the existing test fixture.",
+    "assertions": [
+      "Older request forwards page_id without timestamp__lt",
+      "Previously absent row 50 appears",
+      "Rows 49, 50 and 51 render once each in order"
+    ],
+    "cleanup": "All test-specific listener ports closed after runner completion."
+  },
+  "installed_sdk_cursor_check": {
+    "version": "1.61.0",
+    "source": "openhands-agent-server/openhands/agent_server/event_service.py:616-695",
+    "method": "Executed installed EventService._search_events_sync with real SDK MessageEvents and an in-memory append-only sequence; no mocked pagination method.",
+    "initial_events": 100,
+    "shared_timestamp": true,
+    "initial_page_size": 50,
+    "initial_oldest": "row-051",
+    "next_page_id": "row-050",
+    "appended_between_requests": "row-101",
+    "second_page_size": 50,
+    "second_page_first": "row-050",
+    "original_rows_recovered_once_in_order": 100,
+    "terminal_cursor": null,
+    "conclusion": "The continuation anchors the next unseen event ID rather than an offset from the growing tail."
+  },
+  "full_suite": {
+    "passed": 10612,
+    "failed": 16,
+    "skipped": 1,
+    "todo": 7,
+    "total": 10636,
+    "file_counts": {
+      "passed": 900,
+      "failed": 3,
+      "total": 903
+    },
+    "status": "Not green. Run completed before the provider behavior expectation was corrected; its focused follow-up passes. The remaining 15 Docker failures reproduce exactly on unchanged baseline.",
+    "provider_behavior_failure": "accepts absent history and history without a selected conversation",
+    "provider_behavior_followup": "94 provider behavior tests passed within the 112-test follow-up above."
+  },
+  "baseline_docker_comparison": {
+    "command": "npm test -- __tests__/scripts/docker-automation-kv-secret.test.ts __tests__/scripts/docker-session-key-policy.test.ts",
+    "clean_baseline_commit": "7b5aa9eb60bdef7d832743c12cabd537b44b8a41",
+    "baseline_passed": 17,
+    "baseline_failed": 15,
+    "matching_failure_names": true,
+    "unchanged_test_files": true,
+    "test_file_blobs": {
+      "__tests__/scripts/docker-automation-kv-secret.test.ts": {
+        "baseline": "c2e1af83ca0c8646c1bd2b98939dc8cc6211b3ac",
+        "fixed": "c2e1af83ca0c8646c1bd2b98939dc8cc6211b3ac"
+      },
+      "__tests__/scripts/docker-session-key-policy.test.ts": {
+        "baseline": "4398e1f03f4ad7c93cc85d3afa456a59a0f8f86b",
+        "fixed": "4398e1f03f4ad7c93cc85d3afa456a59a0f8f86b"
+      }
+    },
+    "failures_by_file": {
+      "__tests__/scripts/docker-automation-kv-secret.test.ts": [
+        "Docker automation KV secret > keeps the first session key as the KV secret after the session key rotates",
+        "Docker automation KV secret > prefers an explicit AUTOMATION_KV_SECRET",
+        "Docker automation KV secret > reads a hand-edited pin with a trailing newline the same way as the npm launcher",
+        "Docker automation KV secret > reads a hand-edited pin with a Windows line ending the same way as the npm launcher",
+        "Docker automation KV secret > reads a hand-edited pin with several trailing newlines the same way as the npm launcher",
+        "Docker automation KV secret > reads a hand-edited pin with only a newline the same way as the npm launcher",
+        "Docker automation KV secret > reads a hand-edited pin with only spaces the same way as the npm launcher",
+        "Docker automation KV secret > shares the pinned secret with the npm launcher",
+        "Docker automation KV secret > pin file contract (docker launcher) > creates the pin with mode 0600",
+        "Docker automation KV secret > pin file contract (docker launcher) > makes a permissive pin private before using it",
+        "Docker automation KV secret > pin file contract (docker launcher) > makes a permissive blank pin private when it receives the key",
+        "Docker automation KV secret > pin file contract (docker launcher) > gives every concurrent first launch the one pinned key",
+        "Docker automation KV secret > pin file contract (docker launcher) > gives every concurrent launch on a blank pin the one pinned key"
+      ],
+      "__tests__/scripts/docker-session-key-policy.test.ts": [
+        "Docker session-key injection policy > does not inject the key by default",
+        "Docker session-key injection policy > requires an explicit true value and warns when enabled"
+      ]
+    },
+    "diagnostics": {
+      "docker_automation_kv_secret": "13 failures with shell startup stderr: <user-shell-rc>: line 7: /.local/bin/env: No such file or directory",
+      "docker_session_key_policy": "2 failures with subprocess exit status 127 instead of 0"
+    },
+    "attribution": "Observed host baseline failures on this Mac; not caused by the history-pagination changes. Linux CI results are separate."
+  },
+  "scope_limits": [
+    "No history payload eviction or bounded DOM rendering.",
+    "No change to legacy cursorless timestamp fallback or Cloud graceful-error fallback.",
+    "The pre-existing disjoint refreshed-tail gap after more than one page of unseen events is not addressed."
+  ],
+  "static_msw_build_check": {
+    "result": "passed",
+    "build": "npm run build:mock (VITE_MOCK_API=true)",
+    "browser": "Repository Playwright Chromium / Desktop Chrome settings",
+    "fixture": "pagination-local from shipped MSW handlers",
+    "setup": "Static production build; only onboarding and opt-out localStorage seeded. No route interception, response mocks, or event-store injection added by the verification script.",
+    "initial_visible_events": 50,
+    "initial_missing_boundary": 50,
+    "final_visible_events": 100,
+    "final_unique_events": 100,
+    "final_order": "1..100",
+    "tied_boundary_order": [
+      49,
+      50,
+      51
+    ],
+    "request_queries": [
+      {
+        "limit": "50",
+        "sort_order": "TIMESTAMP_DESC"
+      },
+      {
+        "limit": "50",
+        "page_id": "local-pagination-message-50",
+        "sort_order": "TIMESTAMP_DESC"
+      }
+    ],
+    "page_errors": [],
+    "cleanup": "Isolated static server stopped; browser context and Chromium closed."
+  }
+}
