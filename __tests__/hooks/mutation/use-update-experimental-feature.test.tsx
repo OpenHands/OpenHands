@@ -20,7 +20,6 @@ const reactions = (enabled: boolean) => ({
   key: "conversation_reactions",
   label: "Conversation reactions",
   description: "Reactions.",
-  default: false,
   enabled,
 });
 
