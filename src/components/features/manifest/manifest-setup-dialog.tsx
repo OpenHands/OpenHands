@@ -200,6 +200,13 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
       canSelectAgentProfile ? values : { ...values, agent_profile_id: "" },
     [canSelectAgentProfile, values],
   );
+  const effectiveValuesRef = useRef(effectiveValues);
+  effectiveValuesRef.current = effectiveValues;
+  const reviewedValuesRef = useRef<SetupFormValues | null>(null);
+  useEffect(() => {
+    if (blurTimerRef.current) window.clearTimeout(blurTimerRef.current);
+    if (reviewedValuesRef.current) setStep("form");
+  }, [canSelectAgentProfile]);
   const hidesConnectedProviderSecrets = deploymentMode === "self_hosted";
   const visibleFields = Object.fromEntries(
     Object.entries(fields).filter(([name, field]) => {
@@ -369,9 +376,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     if (blurTimerRef.current) window.clearTimeout(blurTimerRef.current);
     blurTimerRef.current = window.setTimeout(() => {
       void runPreflight(
-        canSelectAgentProfile
-          ? valuesRef.current
-          : { ...valuesRef.current, agent_profile_id: "" },
+        effectiveValuesRef.current,
         selectedTrigger,
         selectedAction,
         cloneProviders,
@@ -406,6 +411,8 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
       selectedAction,
       cloneProviders,
     );
+    // A policy response can change the execution inputs while preflight runs.
+    if (effectiveValuesRef.current !== effectiveValues) return;
     if (result && hasAnyError(result)) {
       setServiceErrors(result);
       return;
@@ -413,6 +420,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
 
     setServiceErrors(NO_SERVICE_ERRORS);
     trackAutomationSetupValidated({ automationId: entry.id });
+    reviewedValuesRef.current = effectiveValues;
     setStep("review");
   };
 
@@ -461,7 +469,13 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     }
   };
 
-  const handleConfirm = () => submitAction(payload, entry.setup.mode);
+  const handleConfirm = () => {
+    if (reviewedValuesRef.current !== effectiveValues) {
+      setStep("form");
+      return;
+    }
+    void submitAction(payload, entry.setup.mode);
+  };
 
   // A direct entry whose deployment cannot run the direct path degrades to the
   // assisted outcome: the skill command and the entry's fallback message seed

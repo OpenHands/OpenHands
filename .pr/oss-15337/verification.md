@@ -21,3 +21,7 @@ Reproduce with the checked-in verify-openhands CLI and fixture:
 5. `browser count testid=automation-agent-profile`, screenshot; enabled: choose default. Disabled: Continue → setup-review. Repeat phone.
 
 Affected suites: 151 passing tests across template dialog, setup panel, composer and shared availability hook. New disabled-policy regression fails on baseline (expected absent, actual visible). Build, typegen+tsc and scoped ESLint pass. Test mocks control only external configuration/service boundaries; production availability and form paths execute.
+
+## Independent-review timing follow-up
+
+Two additional regressions failed before the follow-up: pending blur preflight retained old eligibility, and reviewed values remained confirmable after policy changed. The dialog now cancels queued blur checks on eligibility changes, reads current effective values in delayed validation, discards stale Continue results, and binds confirmation to the exact reviewed values. Eligibility changes send reviewed forms back for validation. 153 affected tests pass; final template suite 28/28, typecheck/build passed. Disabled and enabled-options captures refreshed from the rebuilt private `reviewed2` run; other captures describe unchanged visual behavior from the earlier run. Configuration facade remains explicitly synthetic. No actual OHE policy refresh or automation execution is claimed.

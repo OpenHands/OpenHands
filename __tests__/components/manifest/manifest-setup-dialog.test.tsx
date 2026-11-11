@@ -152,16 +152,16 @@ const CUSTOM_AUTOMATION_ENTRY = AUTOMATION_CATALOG.find(
 
 function renderDialog(entry: SetupEntry = ENTRY) {
   const user = userEvent.setup();
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const view = () => (
+    <QueryClientProvider client={client}>
       <SetupDialog entry={entry} onClose={vi.fn()} />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return { user };
+  const rendered = render(view());
+  return { user, rerender: () => rendered.rerender(view()) };
 }
 
 /** Answer the two required fields the entry ships without a default. */
@@ -959,4 +959,47 @@ it("drops a selected profile from review and submission when backend availabilit
   expect(mocks.runAction.mock.calls[0][2]).not.toHaveProperty(
     "agent_profile_id",
   );
+});
+
+it("cancels queued profile preflight when eligibility changes", async () => {
+  mocks.capabilities.mockReturnValue({
+    capabilities: ACTION_CAPABILITIES,
+    supported: true,
+    unmet: [],
+    isLoading: false,
+  });
+  const { user, rerender } = renderDialog(BUNDLE_ENTRY);
+  await fillForm(user);
+  await user.click(screen.getByTestId("automation-agent-profile"));
+  await user.click(await screen.findByRole("option", { name: "Reviewer" }));
+  await user.click(screen.getByTestId("setup-field-widgetName"));
+  await user.tab();
+  vi.mocked(AutomationService.validateDraft).mockClear();
+  mocks.instanceConfig.mockReturnValue({
+    data: { deploymentMode: "self_hosted", isAgentProfilesEnabled: false },
+  });
+  rerender();
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  expect(AutomationService.validateDraft).not.toHaveBeenCalled();
+});
+
+it("returns to form when reviewed execution inputs change", async () => {
+  mocks.capabilities.mockReturnValue({
+    capabilities: ACTION_CAPABILITIES,
+    supported: true,
+    unmet: [],
+    isLoading: false,
+  });
+  const { user, rerender } = renderDialog(BUNDLE_ENTRY);
+  await fillForm(user);
+  await user.click(screen.getByTestId("automation-agent-profile"));
+  await user.click(await screen.findByRole("option", { name: "Reviewer" }));
+  await user.click(screen.getByTestId("setup-continue-button"));
+  await screen.findByTestId("setup-review");
+  mocks.instanceConfig.mockReturnValue({
+    data: { deploymentMode: "self_hosted", isAgentProfilesEnabled: false },
+  });
+  rerender();
+  expect(screen.queryByTestId("setup-review")).not.toBeInTheDocument();
+  expect(mocks.runAction).not.toHaveBeenCalled();
 });
