@@ -79,7 +79,11 @@ import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
 import { toAcpModelOptions } from "#/constants/acp-providers";
 import { isPlannerConversationOf } from "#/utils/plan-file";
 import { buildAutomationSetupModeTags } from "#/utils/automation-draft-tags";
-import { AUTOMATION_FORM_UPDATE_CLIENT_TOOL } from "../automation-form-client-tool";
+import {
+  AUTOMATION_SETUP_SYSTEM_SUFFIX,
+  buildAutomationFormUpdateClientTool,
+} from "../automation-form-client-tool";
+import type { DeploymentCapabilities } from "#/manifests/types";
 import { CANVAS_UI_CLIENT_TOOL } from "../canvas-ui-client-tool";
 import { LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL } from "../launch-child-conversation-client-tool";
 import type {
@@ -295,10 +299,23 @@ function normalizeLaunchedAgentProfile(
 }
 
 function normalizeAbsolutePath(path: string): string | null {
-  if (!path.startsWith("/")) return null;
+  const normalizedPath = path.replace(/\\/g, "/");
+
+  let root: string;
+  let remainder: string;
+
+  if (/^[A-Za-z]:\//.test(normalizedPath)) {
+    root = normalizedPath.slice(0, 3);
+    remainder = normalizedPath.slice(3);
+  } else if (normalizedPath.startsWith("/")) {
+    root = "/";
+    remainder = normalizedPath.slice(1);
+  } else {
+    return null;
+  }
 
   const segments: string[] = [];
-  for (const segment of path.split("/")) {
+  for (const segment of remainder.split("/")) {
     if (segment && segment !== ".") {
       if (segment === "..") {
         if (!segments.length) return null;
@@ -309,7 +326,7 @@ function normalizeAbsolutePath(path: string): string | null {
     }
   }
 
-  return `/${segments.join("/")}`;
+  return `${root}${segments.join("/")}`;
 }
 
 function requirePathInsideDirectory(path: string, directory: string): string {
@@ -339,6 +356,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     created_at: readTimestamp(item, "created_at", "createdAt"),
     updated_at: readTimestamp(item, "updated_at", "updatedAt"),
     execution_status: stringOrNull(item.execution_status),
+    max_budget_per_run: numberOrNull(item.max_budget_per_run),
     sandbox_status: stringOrNull(item.sandbox_status),
     runtime_info: normalizeRuntimeInfo(item.runtime_info),
     metrics: normalizeMetrics(item.metrics),
@@ -445,6 +463,9 @@ export interface CreateConversationOptions {
   initialUserMsg?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
+  /** The automation service's capabilities, for the setup assistant's form tool. */
+  automationSetupCapabilities?: DeploymentCapabilities | null;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   metadata?: ConversationMetadata | null;
@@ -475,6 +496,13 @@ export interface CreateConversationOptions {
   hasActiveMetaProfile?: boolean;
   /** Local only: the launched profile carries a Model Router. */
   profileHasRouter?: boolean;
+  /**
+   * A home-page model pick was made before the first message, so the
+   * route-at-start suffix should be suppressed for this single launch. The
+   * home launch decides this once and threads it down so the local builder
+   * needn't read UI state — child/`/new` launches omit it and route as usual.
+   */
+  suppressRouterAtStart?: boolean;
   /** Local only: the launched ACP profile's server, for the conversation tag. */
   acpServer?: string;
   // The LLM profile the launched agent profile runs. When set and no explicit
@@ -532,6 +560,8 @@ class AgentServerConversationService {
       initialUserMsg,
       automationSetup,
       automationSetupTags,
+      automationSetupContext,
+      automationSetupCapabilities,
       conversationInstructions,
       plugins,
       metadata,
@@ -565,10 +595,21 @@ class AgentServerConversationService {
         options.hasActiveMetaProfile ?? false,
       );
       const request: AppConversationStartRequest = {
+        generate_title_on_submit: true,
         initial_message: initialUserMsg
           ? {
               role: "user",
-              content: [{ type: "text", text: initialUserMsg }],
+              content: [
+                {
+                  type: "text",
+                  text:
+                    automationSetup &&
+                    agentProfileKind === "acp" &&
+                    automationSetupContext
+                      ? `${initialUserMsg}\n\n${automationSetupContext}`
+                      : initialUserMsg,
+                },
+              ],
             }
           : null,
         title: conversationInstructions ?? null,
@@ -597,8 +638,16 @@ class AgentServerConversationService {
               client_tools: [
                 CANVAS_UI_CLIENT_TOOL,
                 LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
-                AUTOMATION_FORM_UPDATE_CLIENT_TOOL,
+                buildAutomationFormUpdateClientTool(
+                  automationSetupCapabilities,
+                ),
               ],
+              system_message_suffix: [
+                AUTOMATION_SETUP_SYSTEM_SUFFIX,
+                automationSetupContext,
+              ]
+                .filter(Boolean)
+                .join("\n\n"),
             }
           : {}),
       };
@@ -643,6 +692,8 @@ class AgentServerConversationService {
       query: initialUserMsg,
       automationSetup,
       automationSetupTags,
+      automationSetupContext,
+      automationSetupCapabilities,
       conversationInstructions,
       plugins,
       conversationId,
@@ -658,6 +709,7 @@ class AgentServerConversationService {
       agentProfileKind,
       llmProfileOverride: agentLlmProfileOverride,
       profileHasRouter,
+      suppressRouterAtStart: options.suppressRouterAtStart,
       acpServer,
       titleLlmProfile,
     });
@@ -729,8 +781,7 @@ class AgentServerConversationService {
       agent_server_url: localBackend.host,
       request: {
         initial_message: payload.initial_message as
-          | AppConversationStartRequest["initial_message"]
-          | undefined,
+          AppConversationStartRequest["initial_message"] | undefined,
         plugins: plugins ?? null,
       },
       created_at: data.created_at,
@@ -1059,6 +1110,7 @@ class AgentServerConversationService {
       created_at: data.created_at,
       updated_at: data.updated_at,
       status: toRuntimeStatus(data.execution_status),
+      max_budget_per_run: data.max_budget_per_run,
       stats: data.stats ?? { usage_to_metrics: {} },
       available_models: toAcpModelOptions(data.available_models),
     };
@@ -1171,8 +1223,9 @@ class AgentServerConversationService {
    * agent-server PATCH is replace-all, so callers must merge user edits with
    * any reserved/internal keys before calling). Mirrors
    * `updateConversationTitle`; local agent-server conversations only — Cloud
-   * callers go through {@link updateConversationTagFlags}, which uses the
-   * app-server's merge patch instead.
+   * callers go through {@link updateConversationTagFlags} or
+   * {@link replaceConversationTags}, which use the app-server's merge patch
+   * instead.
    */
   static async updateConversationTags(
     conversationId: string,
@@ -1187,6 +1240,31 @@ class AgentServerConversationService {
       conversationId,
     ]);
     return requireAppConversation(conversation, conversationId);
+  }
+
+  /**
+   * Replaces the tag map `currentTags` with `nextTags` on either backend. The
+   * local agent-server receives `nextTags` (its PATCH is replace-all). The
+   * Cloud app-server's PATCH is a merge patch that rejects server-managed keys
+   * even when unchanged, so it receives only the keys that differ: their new
+   * value, or `null` for a key `nextTags` drops.
+   */
+  static async replaceConversationTags(
+    conversationId: string,
+    currentTags: Record<string, string> | null | undefined,
+    nextTags: Record<string, string>,
+  ): Promise<AppConversation> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      const patch: Record<string, string | null> = {};
+      for (const [key, value] of Object.entries(nextTags)) {
+        if (currentTags?.[key] !== value) patch[key] = value;
+      }
+      for (const key of Object.keys(currentTags ?? {})) {
+        if (!(key in nextTags)) patch[key] = null;
+      }
+      return updateCloudConversationTags(conversationId, patch);
+    }
+    return this.updateConversationTags(conversationId, nextTags);
   }
 
   /**

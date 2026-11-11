@@ -15,6 +15,7 @@ import {
   readFileSync,
   readdirSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   unlinkSync,
@@ -35,7 +36,11 @@ import {
   runPorts,
 } from "./lib/launcher-env.mjs";
 import { baselineLines, parseBaseline, withBaseline } from "./lib/baseline.mjs";
-import { affectedFamilies, familyHead } from "./lib/map-sources.mjs";
+import {
+  affectedFamilies,
+  familyHead,
+  serverMapIds,
+} from "./lib/map-sources.mjs";
 import {
   classifyAttempt,
   judgeAssertion,
@@ -819,17 +824,12 @@ async function cmdLaunch({ flags }) {
   };
   spawnLauncher(run);
   saveRun(run);
-  try {
-    if (
-      existsSync(join(verifyHome, "current")) ||
-      lstatSync(join(verifyHome, "current"), { throwIfNoEntry: false })
-    ) {
-      unlinkSync(join(verifyHome, "current"));
-    }
-  } catch {
-    // no previous pointer
-  }
-  symlinkSync(dir, join(verifyHome, "current"));
+  // Swap the pointer atomically: concurrent `launch --new` calls each write a
+  // private temporary link and rename it over `current`, so none of them
+  // races another's unlink/symlink pair (EEXIST).
+  const pointerTmp = join(verifyHome, `.current-${process.pid}-${randomBytes(4).toString("hex")}`);
+  symlinkSync(dir, pointerTmp);
+  renameSync(pointerTmp, join(verifyHome, "current"));
 
   // 6. Wait for readiness: authenticated settings, automation health and SPA.
   await waitForStack(run, intFlag(flags.timeout, 600));
@@ -2163,11 +2163,13 @@ async function cmdConversation({ positional, flags }) {
       value: prompt,
     });
     await browserCall(run, "click", { selector: "testid=submit-button" });
+    // Some launches (the automation setup page) show a temporary
+    // /conversations/launch-<id> page first; wait for the real id.
     const { url } = await browserCall(run, "wait-url", {
-      pattern: "/conversations/[^/?#]+",
+      pattern: "/conversations/(?!launch-)[^/?#]+",
       timeout: 60_000,
     });
-    const conversationId = /\/conversations\/([^/?#]+)/.exec(url)[1];
+    const conversationId = /\/conversations\/((?!launch-)[^/?#]+)/.exec(url)[1];
     const result = {
       ok: true,
       id: conversationId,
@@ -4132,7 +4134,7 @@ function featureFiles() {
     .sort();
 }
 
-function mapCheck({ only } = {}) {
+function mapCheck({ only, serverIds } = {}) {
   const problems = [];
   const ids = new Map();
   const index = existsSync(join(mapDir, "README.md"))
@@ -4228,6 +4230,22 @@ function mapCheck({ only } = {}) {
       if (!sourcePathExists(s))
         problems.push(`${file}: Source: path ${s.path} does not exist`);
     }
+    // The Server: line names verify-agent-server IDs; with --server-map each
+    // one must exist in that map.
+    for (const token of head.server.invalid)
+      problems.push(
+        `${file}: Server: ${token} is not an Agent Server ID like F15 or F15.changes`,
+      );
+    const serverSeen = new Set();
+    for (const id of head.server.ids) {
+      if (serverSeen.has(id))
+        problems.push(`${file}: Server: ${id} is listed twice`);
+      serverSeen.add(id);
+      if (serverIds && !serverIds.has(id))
+        problems.push(
+          `${file}: Server: ${id} is not in the verify-agent-server map`,
+        );
+    }
   }
   // References (`Fnn.slug` in prose, --feature Fnn.slug in recipes) must name
   // a declared ID once that family's file exists.
@@ -4316,6 +4334,30 @@ function sourcePathExists(s) {
   return readdirSync(dir).some(
     (name) => name.startsWith(head) && name.endsWith(tail),
   );
+}
+
+// A software-agent-sdk checkout, or the verify-agent-server feature-map
+// directory itself.
+function resolveServerMap(dir) {
+  const root = resolve(dir);
+  for (const candidate of [
+    join(
+      root,
+      ".agents",
+      "skills",
+      "verify-agent-server",
+      "references",
+      "feature-map",
+    ),
+    root,
+  ]) {
+    if (
+      existsSync(candidate) &&
+      readdirSync(candidate).some((f) => /^F\d{2}-.*\.md$/.test(f))
+    )
+      return candidate;
+  }
+  return null;
 }
 
 // Families with their parsed Source: lines.
@@ -4568,7 +4610,26 @@ async function cmdMap({ positional, flags }) {
         ? basename(String(flags.file))
         : undefined;
     if (flags["fix-counts"] && !only) fixIndexCounts();
-    const result = mapCheck({ only });
+    let serverIds;
+    let serverMap;
+    if (flags["server-map"]) {
+      serverMap = resolveServerMap(String(flags["server-map"]));
+      if (!serverMap)
+        usage(
+          `No verify-agent-server feature map under ${flags["server-map"]}`,
+          "control-openhands map check --server-map ../software-agent-sdk",
+        );
+      serverIds = serverMapIds(
+        readdirSync(serverMap)
+          .filter((f) => /^F\d{2}-.*\.md$/.test(f))
+          .map((file) => ({
+            file,
+            text: readFileSync(join(serverMap, file), "utf8"),
+          })),
+      );
+    }
+    const result = mapCheck({ only, serverIds });
+    if (serverMap) result.serverMap = serverMap;
     if (only) {
       result.problems = result.problems.filter(
         (p) => p.startsWith(`${only}:`) || p.includes(`(also in ${only})`),
@@ -5104,6 +5165,7 @@ to a release before the fix).
 `,
   map: `control-openhands map check [--file Fnn-name.md]   lint the map (or one entry, skipping index links): four H2s, unique IDs, links, known commands, index counts
 control-openhands map check --fix-counts   rewrite the index's sub-feature counts and total from the files, then lint
+control-openhands map check --server-map ../software-agent-sdk   also check every Server: ID against that checkout's verify-agent-server map
 control-openhands map coverage   routes in src/routes.ts and src/components/features/* dirs not yet mapped
 control-openhands map ids        every sub-feature ID with its file
 control-openhands map routes     the route registry as path → route module

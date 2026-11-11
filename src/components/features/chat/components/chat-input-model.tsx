@@ -58,6 +58,10 @@ export function ChatInputModelMenuContent({
 
   const handleSelectAcpModel = (modelId: string | null) => {
     if (modelId !== model.selectedModelId) {
+      // Neither the "Agent default" row (`null`) nor an ACP model pick sets a
+      // home route-at-start suppression flag: local ACP launches never carry
+      // the route-at-start suffix (`profileHasRouter` is OpenHands-only), so
+      // setting a flag here would only leak into a later OpenHands launch.
       switchAcpModel.mutate({
         conversationId: model.switchConversationId,
         model: modelId,
@@ -74,7 +78,7 @@ export function ChatInputModelMenuContent({
               ContextMenu <ul> without exposing the section label as a
               selectable menu item (the label text is still announced). */}
           <li role="presentation" className="px-2 pt-1 pb-0.5">
-            <Typography.Text className="text-[11px] font-medium text-text-dim uppercase tracking-wide leading-4">
+            <Typography.Text className="text-2xs font-medium text-text-dim uppercase tracking-wide leading-4">
               {t(I18nKey.MODEL$AVAILABLE_MODELS)}
             </Typography.Text>
           </li>
@@ -194,7 +198,7 @@ export function ChatInputModel() {
           position="top"
           alignment="left"
           spacing="none"
-          className="z-[60] mb-2 min-w-50 max-w-80 max-h-[60vh] overflow-y-auto"
+          className="z-60 mb-2 min-w-50 max-w-80 max-h-[60vh] overflow-y-auto"
         >
           <ChatInputModelMenuContent
             model={model}

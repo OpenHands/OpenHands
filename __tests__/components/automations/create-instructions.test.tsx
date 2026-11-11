@@ -40,7 +40,6 @@ vi.mock("react-i18next", () => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
         [I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON]: "Create Automation",
-        [I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT]: "Create an automation",
         [I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE]:
           "Include what the automation should do, when it should run, and where to send the results.",
       };

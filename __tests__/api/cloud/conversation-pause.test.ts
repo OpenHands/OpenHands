@@ -7,7 +7,10 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
-import { pauseConversation } from "#/hooks/mutation/conversation-mutation-utils";
+import {
+  interruptConversation,
+  pauseConversation,
+} from "#/hooks/mutation/conversation-mutation-utils";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { getFetchCall, mockJsonResponse } from "./fetch-test-utils";
 
@@ -89,5 +92,30 @@ describe("pauseConversation cloud branch", () => {
 
     await expect(pauseConversation("conv-abc")).rejects.toThrow(/sandbox_id/);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("interruptConversation cloud branch", () => {
+  it("interrupts the agent through the runtime and leaves the sandbox running", async () => {
+    vi.spyOn(
+      AgentServerConversationService,
+      "batchGetAppConversations",
+    ).mockResolvedValue([
+      buildConversation({
+        conversation_url:
+          "https://runtime-abc.example.com/api/conversations/conv-abc",
+        session_api_key: "sess-key",
+      }),
+    ]);
+
+    await interruptConversation("conv-abc");
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = getFetchCall(fetchMock);
+    expect(url).toBe(
+      "https://runtime-abc.example.com/api/conversations/conv-abc/interrupt",
+    );
+    expect(init).toMatchObject({ method: "POST" });
+    expect(url).not.toContain("/sandboxes/");
   });
 });

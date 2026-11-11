@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { constructBranchUrl, getStatusText } from "#/utils/utils";
+import { cn, constructBranchUrl, getStatusText } from "#/utils/utils";
 import { AgentState } from "#/types/agent-state";
 import { Provider } from "#/types/settings";
 import { I18nKey } from "#/i18n/declaration";
@@ -415,4 +415,141 @@ describe("constructBranchUrl", () => {
       });
     },
   );
+});
+
+describe("compact font-size composition", () => {
+  it.each(["text-2xs", "text-3xs"])(
+    "%s replaces a Typography size while preserving color and explicit leading",
+    (size) => {
+      expect(cn("text-sm text-contrast", size, "leading-4")).toBe(
+        `text-contrast ${size} leading-4`,
+      );
+      expect(cn(size, "text-lg leading-6")).toBe("text-lg leading-6");
+    },
+  );
+});
+
+describe("named radius composition", () => {
+  it.each(["pill", "composer", "file-action", "facet-control"])(
+    "lets callers override the %s radius while preserving directional overrides",
+    (name) => {
+      const radius = `rounded-${name}`;
+      expect(cn("rounded-xl", radius)).toBe(radius);
+      expect(cn(radius, "rounded-lg")).toBe("rounded-lg");
+      expect(cn(radius, "rounded-t-none")).toBe(`${radius} rounded-t-none`);
+    },
+  );
+});
+
+describe("named inset-shadow composition", () => {
+  it.each(["badge-inset", "reorder-before", "reorder-after"])(
+    "keeps shadow geometry and caller color precedence independent for %s",
+    (name) => {
+      expect(cn("shadow-lg shadow-focus", `shadow-${name}`)).toBe(
+        `shadow-focus shadow-${name}`,
+      );
+      expect(cn(`shadow-${name}`, "shadow-none shadow-contrast")).toBe(
+        "shadow-none shadow-contrast",
+      );
+    },
+  );
+});
+
+describe("cn motion recipes", () => {
+  it.each([
+    "transition-control-shell",
+    "transition-control-transform",
+    "transition-context-ring",
+    "transition-panel-width",
+    "transition-sidebar-width",
+  ])("preserves last-writer transition precedence for %s", (recipe) => {
+    expect(
+      cn(
+        "transition-all duration-200 ease-out motion-reduce:transition-none",
+        recipe,
+      ),
+    ).toBe(`duration-200 ease-out motion-reduce:transition-none ${recipe}`);
+    expect(cn(recipe, "transition-none")).toBe("transition-none");
+  });
+
+  it("keeps HeroUI's important transition override separate from normal transitions", () => {
+    expect(
+      cn(
+        "!transition-colors !duration-75 transition-none",
+        "!transition-control-shell",
+      ),
+    ).toBe("!duration-75 transition-none !transition-control-shell");
+  });
+
+  it("resolves the status pulse against other animation utilities", () => {
+    expect(cn("animate-ping", "animate-chat-status-pulse")).toBe(
+      "animate-chat-status-pulse",
+    );
+    expect(cn("animate-chat-status-pulse", "animate-none")).toBe(
+      "animate-none",
+    );
+  });
+});
+
+describe("named letter-spacing composition", () => {
+  it.each([
+    "metadata",
+    "label",
+    "title",
+    "heading",
+    "auth-code",
+    "device-code",
+  ])(
+    "preserves caller tracking precedence independently of font metrics for %s",
+    (name) => {
+      expect(
+        cn("text-sm leading-6 font-medium tracking-wide", `tracking-${name}`),
+      ).toBe(`text-sm leading-6 font-medium tracking-${name}`);
+      expect(cn(`tracking-${name}`, "tracking-normal")).toBe("tracking-normal");
+    },
+  );
+});
+
+describe("extended type-scale composition", () => {
+  it.each(["4xs", "xs-plus", "sm-plus", "title"])(
+    "lets callers override the %s size while preserving color and later leading",
+    (name) => {
+      const size = `text-${name}`;
+      expect(cn("text-red-500 text-xs", size)).toBe(`text-red-500 ${size}`);
+      expect(cn(size, "text-lg text-blue-500")).toBe("text-lg text-blue-500");
+      expect(cn(size, "text-blue-500 leading-7")).toBe(
+        `${size} text-blue-500 leading-7`,
+      );
+    },
+  );
+});
+
+describe("Markdown code spacing composition", () => {
+  it("resolves inline axes and block padding through the normal spacing groups", () => {
+    expect(cn("px-4 py-3", "px-code-inline-x py-code-inline-y")).toBe(
+      "px-code-inline-x py-code-inline-y",
+    );
+    expect(cn("px-code-inline-x py-code-inline-y", "px-4")).toBe(
+      "py-code-inline-y px-4",
+    );
+    expect(cn("px-code-inline-x py-code-inline-y", "p-4")).toBe("p-4");
+    expect(cn("p-4", "p-code-block")).toBe("p-code-block");
+    expect(cn("p-code-block", "px-4")).toBe("p-code-block px-4");
+  });
+});
+
+describe("Canvas public color role composition", () => {
+  it("keeps color roles independent from typography and respects later caller colors", () => {
+    expect(cn("text-sm leading-4", "text-on-accent")).toBe(
+      "text-sm leading-4 text-on-accent",
+    );
+    expect(cn("text-sm text-on-accent", "text-feedback-error")).toBe(
+      "text-sm text-feedback-error",
+    );
+    expect(cn("text-feedback-error", "text-on-accent")).toBe("text-on-accent");
+    expect(cn("bg-surface", "bg-canvas-background")).toBe(
+      "bg-canvas-background",
+    );
+    expect(cn("bg-canvas-background", "bg-surface")).toBe("bg-surface");
+  });
 });

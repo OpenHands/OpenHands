@@ -19,11 +19,12 @@ describe("color themes", () => {
   });
   afterEach(cleanup);
 
-  it("offers both light palettes", () => {
+  it("offers the built-in light palettes", () => {
     expect(AVAILABLE_COLOR_THEMES).toEqual(
       expect.arrayContaining([
         { key: "light-plus", label: "Light+" },
         { key: "solarized-light", label: "Solarized Light" },
+        { key: "paper", label: "Paper" },
       ]),
     );
   });
@@ -68,48 +69,53 @@ describe("color themes", () => {
     ).not.toContain("--oh-background: #FFFFFF");
   });
 
-  it("persists selection and notifies only after CSS is applied", () => {
-    const listener = vi.fn(() => {
-      expect(
-        document.getElementById("oh-color-theme-override")?.textContent,
-      ).toBe(getColorThemeCss("solarized-light"));
-    });
-    const unsubscribe = subscribeColorTheme(listener);
-    setColorTheme("solarized-light");
-    expect(readPersistedColorTheme()).toBe("solarized-light");
-    expect(listener).toHaveBeenCalledOnce();
-    unsubscribe();
-  });
-
-  it.each(["light-plus", "solarized-light", "openhands-neutral"] as const)(
-    "bootstraps %s before React mounts",
+  it.each(["solarized-light", "paper"] as const)(
+    "persists %s and notifies only after CSS is applied",
     (key) => {
-      // Reproduce the prerendered dark wrapper while app initialization waits.
-      render(<AgentServerUIRoot data-testid="shell">Canvas</AgentServerUIRoot>);
-      const wrapper = screen.getByTestId("shell").firstElementChild!;
-      expect(wrapper).toHaveAttribute("data-theme", "dark");
-      localStorage.setItem("openhands-color-theme", key);
-      document.getElementById("oh-color-theme-override")?.remove();
-      window.eval(COLOR_THEME_BOOTSTRAP_SCRIPT);
-      expect(
-        document.getElementById("oh-color-theme-override")?.textContent,
-      ).toBe(getColorThemeCss(key));
-      expect(document.documentElement.style.colorScheme).toBe(
-        key === "openhands-neutral" ? "dark" : "light",
-      );
-      // A later base sheet must not restore HeroUI's dark native controls.
-      const heroSheet = document.createElement("style");
-      heroSheet.textContent = ".dark { color-scheme: dark; }";
-      document.head.appendChild(heroSheet);
-      try {
-        expect(getComputedStyle(wrapper).colorScheme).toBe(
-          key === "openhands-neutral" ? "dark" : "light",
-        );
-      } finally {
-        heroSheet.remove();
-      }
+      const listener = vi.fn(() => {
+        expect(
+          document.getElementById("oh-color-theme-override")?.textContent,
+        ).toBe(getColorThemeCss(key));
+      });
+      const unsubscribe = subscribeColorTheme(listener);
+      setColorTheme(key);
+      expect(readPersistedColorTheme()).toBe(key);
+      expect(listener).toHaveBeenCalledOnce();
+      unsubscribe();
     },
   );
+
+  it.each([
+    "light-plus",
+    "solarized-light",
+    "paper",
+    "openhands-neutral",
+  ] as const)("bootstraps %s before React mounts", (key) => {
+    // Reproduce the prerendered dark wrapper while app initialization waits.
+    render(<AgentServerUIRoot data-testid="shell">Canvas</AgentServerUIRoot>);
+    const wrapper = screen.getByTestId("shell").firstElementChild!;
+    expect(wrapper).toHaveAttribute("data-theme", "dark");
+    localStorage.setItem("openhands-color-theme", key);
+    document.getElementById("oh-color-theme-override")?.remove();
+    window.eval(COLOR_THEME_BOOTSTRAP_SCRIPT);
+    expect(
+      document.getElementById("oh-color-theme-override")?.textContent,
+    ).toBe(getColorThemeCss(key));
+    expect(document.documentElement.style.colorScheme).toBe(
+      key === "openhands-neutral" ? "dark" : "light",
+    );
+    // A later base sheet must not restore HeroUI's dark native controls.
+    const heroSheet = document.createElement("style");
+    heroSheet.textContent = ".dark { color-scheme: dark; }";
+    document.head.appendChild(heroSheet);
+    try {
+      expect(getComputedStyle(wrapper).colorScheme).toBe(
+        key === "openhands-neutral" ? "dark" : "light",
+      );
+    } finally {
+      heroSheet.remove();
+    }
+  });
 
   it.each(["missing-theme", "constructor", "__proto__"])(
     "rejects invalid stored key %s",

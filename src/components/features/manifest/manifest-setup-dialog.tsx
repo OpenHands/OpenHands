@@ -1,3 +1,4 @@
+import { useAgentProfileAvailability } from "#/hooks/use-agent-profile-availability";
 import { AutomationAgentProfileSelector } from "#/components/features/automations/agent-profile-selector";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -19,6 +20,11 @@ import { useNativeGitIntegrations } from "#/hooks/query/use-native-git-integrati
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useSetupPreflight } from "#/hooks/use-manifest-preflight";
 import { useSetupAction } from "#/manifests/manifest-actions";
+import { MermaidDiagram } from "#/components/features/markdown/mermaid-diagram";
+import {
+  getEntryDiagram,
+  findAutomationCommand,
+} from "#/utils/automation-catalog";
 import {
   supportedActionKinds,
   supportedTriggerKinds,
@@ -48,7 +54,7 @@ import {
   type MappedManifestErrors,
 } from "#/manifests/manifest-error-map";
 import { automationDetailPath } from "#/manifests/automation-interface";
-import { findAutomationCommand } from "#/utils/automation-catalog";
+import { automationCloneProviders } from "#/utils/automation-repo-sources";
 import type { GitRepository } from "#/types/git";
 import type { Provider } from "#/types/settings";
 import type {
@@ -114,6 +120,7 @@ export interface SetupDialogProps {
  */
 export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const { t } = useTranslation("openhands");
+  const diagram = getEntryDiagram(entry);
   const navigate = useNavigate();
 
   const capabilities = useSetupCapabilities(entry);
@@ -183,10 +190,28 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     () => collectFields(entry.setup, selectedTrigger, selectedAction),
     [entry, selectedTrigger, selectedAction],
   );
+  const agentProfilesAvailable = useAgentProfileAvailability();
+  const canSelectAgentProfile =
+    agentProfilesAvailable &&
+    capabilities.capabilities?.features.includes("agentProfiles") === true &&
+    supportsAgentProfile(entry, selectedAction);
+  const effectiveValues = useMemo(
+    () =>
+      canSelectAgentProfile ? values : { ...values, agent_profile_id: "" },
+    [canSelectAgentProfile, values],
+  );
+  const effectiveValuesRef = useRef(effectiveValues);
+  effectiveValuesRef.current = effectiveValues;
+  const reviewedValuesRef = useRef<SetupFormValues | null>(null);
+  useEffect(() => {
+    if (blurTimerRef.current) window.clearTimeout(blurTimerRef.current);
+    if (reviewedValuesRef.current) setStep("form");
+  }, [canSelectAgentProfile]);
   const hidesConnectedProviderSecrets = deploymentMode === "self_hosted";
   const visibleFields = Object.fromEntries(
     Object.entries(fields).filter(([name, field]) => {
-      if (values.agent_profile_id && field.type === "llm-profile") return false;
+      if (effectiveValues.agent_profile_id && field.type === "llm-profile")
+        return false;
       if (!hidesConnectedProviderSecrets) return true;
       if (!Object.hasOwn(CONNECTED_PROVIDER_SECRET_FIELDS, name)) return true;
       return (
@@ -195,9 +220,6 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
       );
     }),
   );
-  const canSelectAgentProfile =
-    capabilities.capabilities?.features.includes("agentProfiles") === true &&
-    supportsAgentProfile(entry, selectedAction);
   const hasLlmProfileField = useMemo(
     () => Object.values(fields).some((field) => field.type === "llm-profile"),
     [fields],
@@ -239,16 +261,24 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     fields,
     llmProfileOptions,
   ]);
+  // A repository only reaches `repos` when the deployment's runs can clone
+  // from its provider; otherwise the entry's prompt clones it.
+  const repoProviders = capabilities.capabilities?.repoProviders;
+  const cloneProviders = useMemo(
+    () => automationCloneProviders(repoProviders),
+    [repoProviders],
+  );
   const payload = useMemo(
     () =>
       buildCreatePayload(
         entry,
-        values,
+        effectiveValues,
         undefined,
         selectedTrigger,
         selectedAction,
+        cloneProviders,
       ),
-    [entry, values, selectedTrigger, selectedAction],
+    [entry, effectiveValues, selectedTrigger, selectedAction, cloneProviders],
   );
   const errorMap = useMemo(
     () => deriveErrorMap(entry, selectedTrigger, selectedAction),
@@ -346,9 +376,10 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     if (blurTimerRef.current) window.clearTimeout(blurTimerRef.current);
     blurTimerRef.current = window.setTimeout(() => {
       void runPreflight(
-        valuesRef.current,
+        effectiveValuesRef.current,
         selectedTrigger,
         selectedAction,
+        cloneProviders,
       ).then((result) => {
         if (result) setServiceErrors(result);
       });
@@ -363,7 +394,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
 
     const failures = validateFormValues(
       entry.setup,
-      values,
+      effectiveValues,
       overrides,
       selectedTrigger,
       selectedAction,
@@ -374,7 +405,14 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     }
     setLocalErrors({});
 
-    const result = await runPreflight(values, selectedTrigger, selectedAction);
+    const result = await runPreflight(
+      effectiveValues,
+      selectedTrigger,
+      selectedAction,
+      cloneProviders,
+    );
+    // A policy response can change the execution inputs while preflight runs.
+    if (effectiveValuesRef.current !== effectiveValues) return;
     if (result && hasAnyError(result)) {
       setServiceErrors(result);
       return;
@@ -382,6 +420,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
 
     setServiceErrors(NO_SERVICE_ERRORS);
     trackAutomationSetupValidated({ automationId: entry.id });
+    reviewedValuesRef.current = effectiveValues;
     setStep("review");
   };
 
@@ -393,7 +432,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     try {
       const { response } = await runAction(
         entry,
-        values,
+        effectiveValues,
         actionPayload,
         selectedTrigger,
         selectedAction,
@@ -430,7 +469,13 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     }
   };
 
-  const handleConfirm = () => submitAction(payload, entry.setup.mode);
+  const handleConfirm = () => {
+    if (reviewedValuesRef.current !== effectiveValues) {
+      setStep("form");
+      return;
+    }
+    void submitAction(payload, entry.setup.mode);
+  };
 
   // A direct entry whose deployment cannot run the direct path degrades to the
   // assisted outcome: the skill command and the entry's fallback message seed
@@ -461,7 +506,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     <ModalBackdrop onClose={onClose} aria-label={entry.name}>
       <div
         data-testid="setup-dialog"
-        className="relative flex max-h-[85vh] w-[92vw] max-w-lg flex-col rounded-xl border border-border bg-base-secondary"
+        className="relative flex setup-dialog-height setup-dialog-width max-w-lg flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}
@@ -507,6 +552,15 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
           {!isLoading && !isUnsupported && currentStep === "form" && (
             <div className="flex flex-col gap-5">
               <p className="text-sm text-muted">{entry.description}</p>
+              {diagram && (
+                // The dialog scrolls, so the diagram keeps its full height
+                // instead of shrinking its labels to fit the default cap.
+                <MermaidDiagram
+                  source={diagram}
+                  fallback={null}
+                  className="[&_svg]:max-h-none"
+                />
+              )}
               {entry.setup.form.note && (
                 <p className="text-sm text-muted">{entry.setup.form.note}</p>
               )}
