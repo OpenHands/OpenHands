@@ -550,10 +550,13 @@ export function ConversationWebSocketProvider({
   ]);
 
   useLayoutEffect(() => {
-    if (!visibleHistory || visibleHistory.events.length === 0) {
+    if (!visibleHistory) {
       return;
     }
-    addEvents(visibleHistory.events);
+    addEvents(visibleHistory.events, {
+      nextPageId: visibleHistory.nextPageId,
+      hasMore: visibleHistory.hasMore,
+    });
 
     // The first user message of a cloud start-task conversation is persisted
     // server-side and reaches us via this REST preload, not over the WebSocket
