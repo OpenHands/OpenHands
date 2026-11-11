@@ -4,7 +4,6 @@ import {
   type ChatInputModelState,
 } from "#/hooks/use-chat-input-model-state";
 import { useSwitchAcpModel } from "#/hooks/mutation/use-switch-acp-model";
-import { useModelStore } from "#/stores/model-store";
 import { ComboboxCaretInline } from "#/ui/combobox-caret";
 import SettingsGearIcon from "#/icons/settings-gear.svg?react";
 import CheckIcon from "#/icons/checkmark.svg?react";
@@ -59,13 +58,10 @@ export function ChatInputModelMenuContent({
 
   const handleSelectAcpModel = (modelId: string | null) => {
     if (modelId !== model.selectedModelId) {
-      // A home-page ACP model pick (no conversation) is an explicit model
-      // choice made before the first message: mark it so the next home launch
-      // suppresses "Run on first message" routing for that one conversation.
-      // `useCreateConversation` reads-and-clears it.
-      if (!model.switchConversationId) {
-        useModelStore.getState().setHomeManualModelPick(true);
-      }
+      // Neither the "Agent default" row (`null`) nor an ACP model pick sets a
+      // home route-at-start suppression flag: local ACP launches never carry
+      // the route-at-start suffix (`profileHasRouter` is OpenHands-only), so
+      // setting a flag here would only leak into a later OpenHands launch.
       switchAcpModel.mutate({
         conversationId: model.switchConversationId,
         model: modelId,

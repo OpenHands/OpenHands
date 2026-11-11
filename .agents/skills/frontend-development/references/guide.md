@@ -1,6 +1,6 @@
 ## Arbitrary-value guard adoption
 
-`shadcn/no-arbitrary-values` warns globally. Fourteen migrated owners reject new
+`shadcn/no-arbitrary-values` warns globally. Thirty-five migrated owners reject new
 arbitrary classes: command-menu, backend-version, settings-nav-header,
 backend-synced-settings-badge, modal-backdrop, environment-switch-overlay,
 context-window-meter and conversation-panel-wrapper. Completed message/motion
@@ -8,24 +8,44 @@ owners also reject new arbitrary values: custom-toast-handlers,
 form-control-classes, chat-status-indicator, context-window-ring,
 user-message-body and conversation-main. Their exact paths are in `eslint.config.js`,
 with executable probes in `__tests__/scripts/arbitrary-values-lint.test.ts`.
+Completed Markdown code/path chips, horizontal fade consumers, file-drop artwork, automation view/filter/run-phase bounds, conversation-card reserves and the hover-reveal helper also reject new arbitrary values.
+The cleaned letter-spacing and inset-shadow owners also reject new arbitrary
+values: `task-list-section.tsx`, `markdown-file-preview.tsx`,
+`skills-modal-section.tsx`, `headings.tsx`, `openai-subscription-auth-card.tsx`,
+`device-verify.tsx`, `modal-classes.ts`, `pinned-automation-card.tsx`,
+`mcp-logo-stack-badge.tsx` and `skill-icon-badge.tsx`. Plan Preview and the
+standalone MCP logo badge remain at warning severity while their remaining
+color and geometry findings are reviewed.
 Other components, routes and primitive implementations retain warnings during
 migration. Keep legitimate measured/portal geometry with its owner; do not
 expand this file list or add exemptions without auditing the remaining values.
 
 ## Raw-color class-map scanning
 
-`shadcn/no-raw-colors` warns globally. Three migrated owners reject new raw colors:
-backend-status-dot, Markdown blockquote and mcp-server-health. Start-task badge
-and indicator remain warning-only pending their separate migration. Their exact paths in `eslint.config.js` also
-enable `scanAllStrings` so literal class recipes remain
-visible when dynamic map or helper lookups hide them from class-site analysis.
-Keep this adoption scoped: scanning every string can mistake program tags for
-color utilities. Review newly included findings before extending the file list;
-the shared exact legacy-token exceptions remain unchanged.
+`shadcn/no-raw-colors` rejects raw Tailwind palette utilities, undeclared named
+color utilities and raw SVG paint throughout source, including primitive
+implementations. The seven exact legacy JS-config/plugin color exceptions stay
+valid. Backend-status-dot, Markdown blockquote and mcp-server-health additionally
+use `scanAllStrings` for literal class recipes hidden behind map/helper lookups;
+keep broad scanning away from unrelated program tags. Executable probes use the
+real flat config in `__tests__/scripts/raw-colors-lint.test.ts`.
+
+Bracketed hex/rgba color classes remain covered by the independently staged
+`shadcn/no-arbitrary-values` policy above. Do not claim that the palette guard
+finishes that migration or checks opaque runtime expressions.
 
 ## Horizontal scroll fades
 
 `from-scroll-fade` resolves the existing `--oh-scroll-fade-from` ancestor override with `--oh-color-base` as fallback. The `scroll-fade-surface` utility sets that override to `--oh-surface` for Markdown artifact cards. Keep left/right edge visibility, direction, animation and scroll handling with their current owners; do not replace this override with a fixed palette color.
+
+## Inset-shadow recipes
+
+`shadow-badge-inset` retains the existing 1px inset highlight and 18% mix of
+`--oh-contrast`, including Tailwind's supports/fallback behavior. Reorder-before
+and reorder-after retain +2px/-2px inset edges in `--oh-focus`. These stay normal
+shadow utilities; register them in cn's shadow group so caller shadow geometry
+and shadow colors remain independent. Keep drag state and ordering with the
+existing pinned-card owner; do not replace fixed pixels or public color hooks.
 
 ## Inline-style rollout
 
@@ -34,6 +54,10 @@ Four clean appearance owners reject inline styles at error severity: divider,
 toggle-switch, combobox-caret and backend-status-dot. The exact paths live in
 `eslint.config.js`, with executable probes in
 `__tests__/scripts/inline-styles-lint.test.ts`; other owners retain warnings.
+The composer ring and popover track share the context-window track color
+alias. Both progress bars pass the runtime percentage through the local
+`--context-fill-width` property. These three owners reject inline styling.
+
 Numeric CSS custom properties and semantic token references still pass in both
 scopes. Hardcoded variable colors and style elements remain findings.
 Do not add a blanket property allowance or blindly replace measured dimensions,
@@ -63,7 +87,25 @@ names in `cn` so later caller utilities retain Tailwind's conflict precedence.
 
 Automation popover widths, run-phase limits and conversation hover-action reserves use the existing spacing scale (`min-w-40`, `min-w-64`, `max-w-112`, `max-w-48`, `min-w-15`) instead of equivalent arbitrary rem literals. Preserve each responsive hover/focus variant. Geometry is equivalent on the default spacing scale; explicit host scale overrides follow normal named-token behavior. Do not apply this substitution to fixed pixel geometry: a rem alias would change behavior when the embedding root font size differs.
 
+## Git control borders
+
+The repository button, unlinked branch chip, and Workspace mode button use
+`dark:border-git-control` for their shared 50% dark border. These owners reject
+new arbitrary values. Preserve their light borders, hover states, and the
+separate styling for linked Git controls.
+
+## Commit viewer geometry
+
+The commit and Uncommitted rows reserve the same `7ch` monospace column through
+`w-commit-sha`. The Monaco wrapper applies its measured pixel height through
+`h-(--editor-height)`. Keep these three components free of arbitrary values.
+
 ## Workspace files
+
+The open-file strip hides the scrollbar through `file-strip-scrollbar-hidden`
+while retaining horizontal scrolling. File discovery uses
+`file-discovery-viewport-height` for its 90vh cap and keeps its vertical
+overflow on the dialog body. Both owners reject new arbitrary values.
 
 Local Files discovery preferences belong to `misc_settings.app_preferences.workspace_file_discovery`, keyed by working directory on the active backend. `useWorkspaceFileDiscovery` reads the settings cache and saves sparse workspace patches. Preserve default exclusions and the 2,000-file cap when no configuration exists. Fetch one extra result to distinguish truncation from an exact-size list. Cloud keeps its server-side listing contract without these controls.
 
@@ -193,7 +235,7 @@ When adding code that needs a new string, decide up front which rule it falls un
   - `useConversationHistory` (in `src/hooks/query/use-conversation-history.ts`) fetches only the most recent `INITIAL_HISTORY_PAGE_SIZE` (default 50) events using `sort_order='TIMESTAMP_DESC'`, then reverses to chronological order. Older pages are paginated in via `useLoadOlderEvents` when the user scrolls near the top of the chat.
   - `EventService.searchEvents(conversationId, conversationUrl, sessionApiKey, options)` returns the raw `EventSearchPage` (`{ items, next_page_id }`); options support `limit`, `pageId`, `sortOrder`, `timestampGte`, `timestampLt`. Both the local and cloud-proxy code paths forward the new params.
   - The main `ConversationWebSocketProvider` waits for the REST query to settle before opening its socket, then connects with `resend_mode='since'` and `after_timestamp=<latest preloaded event ts>` (falling back to `'all'` when the REST result is empty or errored). The legacy `resend_all=true` flag is removed for the main connection; the planning-agent sub-conversation still uses `resend_all` until it is migrated to the same REST-then-WS pattern.
-  - The event store gained a bulk `addEvents(events)` action (used for the initial REST seed and for "scroll-up" pagination) that re-sorts by timestamp once at the end so older pages can be merged in cheaply. Per-event dedup still works via the existing `eventIds` set.
+  - The event store owns the main history continuation alongside its loaded conversation/scope. `addEvents(events, { nextPageId, hasMore, prepend? })` atomically merges a REST page and its pagination metadata. Initial metadata may refresh until older-page loading progresses; subsequent tail refetches and remounts preserve that continuation, and conversation/scope clears reset it. `useLoadOlderEvents` forwards the retained `pageId` without a timestamp filter; only cursorless history uses the legacy timestamp fallback. Bulk merges sort once, placing newly prepended rows before existing equal-timestamp rows in server page order while retaining existing row/streaming-slot order. Live/planner `addEvent` calls leave history pagination untouched and keep their existing append fast path and `eventIds` dedup.
   - `ChatInterface` wires `useLoadOlderEvents` into its scroll handler (threshold 80px from the top), shows a `data-testid="loading-older-events"` spinner during pagination, and preserves the visible scroll offset by storing the previous `scrollHeight` and adding the height delta after the older page renders.
 
   - `useLoadOlderEvents` intentionally distinguishes between "no anchor yet" (empty store before the initial REST seed, so `loadOlder()` should no-op) and "malformed oldest event" (store has an oldest event with no timestamp, so the hook throws, flips `hasMore` false, and `ChatInterface` surfaces the failure via the shared error banner instead of failing silently).
@@ -240,6 +282,15 @@ When adding code that needs a new string, decide up front which rule it falls un
 
 - ESLint config (flat, ESLint 9): the project uses `eslint.config.js` (not `.eslintrc`) and runs on `eslint@9.x`, not 10. The constraint pinning us below 10 is `eslint-plugin-react@7.37.x`, which still calls `context.getFilename()` at rule-load time — that API was removed in ESLint 10 and `@eslint/compat`'s `fixupPluginRules` does NOT shim it. Don't try to bump eslint past 9 until eslint-plugin-react ships a v10-compatible release. Import rules come from `eslint-plugin-import-x` (the maintained fork of `eslint-plugin-import`) but are registered under both `import-x/` and `import/` prefixes via `plugins: { import: importXPlugin, ... }` so existing `// eslint-disable-next-line import/...` directives keep working. `linterOptions.reportUnusedDisableDirectives` is set to `"warn"` (not "off") so stale airbnb-era disable comments still surface in lint output without failing CI. The TS-overrides block has an `ignores: ["src/hooks/query/query-keys.ts"]` so the `no-restricted-syntax` rule banning raw `["settings", ...]` query keys doesn't fire on the file that defines the helpers themselves. No `.npmrc` / `legacy-peer-deps` flag is needed — all our plugins declare ESLint 9 peer compatibility.
 
+## Letter-spacing recipes
+
+Named tracking recipes retain exact signed values: metadata 0.11px, label
+0.01em, title -0.01em, heading -0.02em, auth-code 0.08em and device-code 0.3em.
+Keep pixel metadata spacing independent of font size and the other values
+relative to their element font. Register tracking names in cn's tracking theme
+so caller overrides retain normal precedence without changing font or leading.
+Do not approximate these metrics with nearby default tracking-scale values.
+
 ## Extended type scale
 
 `text-4xs`, `text-xs-plus`, `text-sm-plus` and `text-title` retain existing
@@ -257,3 +308,12 @@ These single-property utilities preserve intrinsic sizing and responsive scope.
 They are static owner recipes, not caller className overrides.
 
 - Executable plugin automations (`plugin_spec`) edit their configuration through the setup form's `pluginConfig` JSON field. The agent proposes that field through `automation_form_update`; only Save sends `config` and the trigger to the existing automation's PATCH endpoint. Preserve the plugin source, pins, and runtime fields. Gate configuration writes on the automation service's `pluginConfigUpdate` capability; older services display the configuration read-only.
+
+## Existing Canvas background and accent roles
+
+`bg-canvas-background` resolves exactly `--oh-background`; `text-on-accent`
+resolves exactly `--oh-accent-foreground`. Add Models selects and shared primary
+BrandButton/BrandBadge text retain these public roles, including host overrides.
+Do not substitute similarly colored Canvas or HeroUI roles. Caller color and
+font-size precedence stays covered by `cn` composition tests, and the scoped
+library CSS contract verifies the exact variable declarations.

@@ -1,5 +1,4 @@
 import React from "react";
-import ReactDOM from "react-dom";
 import { ExternalLink, Gauge, Share2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useActiveBackend } from "#/contexts/active-backend-context";
@@ -24,6 +23,7 @@ import CopyIcon from "#/icons/copy.svg?react";
 import { ConversationNameContextMenuIconText } from "./conversation-name-context-menu-icon-text";
 import { ArchivedDisabledTooltip } from "../context-menu/archived-disabled-tooltip";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 interface ConversationNameContextMenuProps {
   onClose: () => void;
@@ -166,7 +166,7 @@ export function ConversationNameContextMenu({
   const hasControl = Boolean(onStop || onDelete);
   const stopLabelKey =
     backend.kind === "cloud"
-      ? I18nKey.COMMON$CLOSE_CONVERSATION_STOP_RUNTIME
+      ? I18nKey.COMMON$STOP_SANDBOX
       : I18nKey.COMMON$STOP_CONVERSATION;
   const shouldShowPublicSharing =
     backend.kind === "cloud" && Boolean(onTogglePublic);
@@ -374,9 +374,10 @@ export function ConversationNameContextMenu({
     if (typeof document === "undefined" || !portalStyle) {
       return null;
     }
-    return ReactDOM.createPortal(
-      <div style={portalStyle}>{menu}</div>,
-      document.body,
+    return (
+      <AppearancePortal>
+        <div style={portalStyle}>{menu}</div>
+      </AppearancePortal>
     );
   }
 

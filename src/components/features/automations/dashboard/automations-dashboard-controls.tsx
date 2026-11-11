@@ -44,6 +44,8 @@ interface AutomationsDashboardControlsProps {
   trigger: DashboardTriggerValue;
   createdBy: DashboardCreatedByValue;
   canFilterByCreator: boolean;
+  /** Whether the owner filter may offer its Service accounts option. */
+  canFilterByServiceAccount: boolean;
   /** The selected tag, or null for any. */
   tag: string | null;
   /** The org's tags; the tag filter is hidden while this is empty. */
@@ -72,6 +74,7 @@ export function AutomationsDashboardControls({
   trigger,
   createdBy,
   canFilterByCreator,
+  canFilterByServiceAccount,
   tag,
   tagOptions,
   sort,
@@ -197,7 +200,14 @@ export function AutomationsDashboardControls({
                 testId="automations-filter-created-by"
                 value={createdBy}
                 onChange={onCreatedByChange}
-                options={createdByFilter.options.map((option) => option.value)}
+                // The Service accounts option is offered only where service
+                // accounts are on; the rest and every caption stay the manifest's.
+                options={createdByFilter.options
+                  .filter(
+                    (option) =>
+                      canFilterByServiceAccount || option.value !== "service",
+                  )
+                  .map((option) => option.value)}
                 labelByValue={toLabelMap(createdByFilter.options)}
                 ariaLabel={createdByFilter.label}
                 fullWidth

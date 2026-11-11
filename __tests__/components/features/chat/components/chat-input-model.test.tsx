@@ -46,6 +46,10 @@ const CLAUDE_MODELS = [
 ];
 
 import { ChatInputModel } from "#/components/features/chat/components/chat-input-model";
+import {
+  clearPendingHomeModelPick,
+  hasPendingHomeModelPick,
+} from "#/hooks/use-chat-input-llm-profile-state";
 
 describe("ChatInputModel", () => {
   beforeEach(() => {
@@ -55,10 +59,14 @@ describe("ChatInputModel", () => {
     useActiveBackendMock.mockReset();
     // Default to a local backend (mirrors useActiveBackend's standalone
     // fallback): live ACP model switching is local-only.
-    useActiveBackendMock.mockReturnValue({ backend: { kind: "local" } });
+    useActiveBackendMock.mockReturnValue({
+      backend: { id: "local-1", kind: "local" },
+      orgId: null,
+    });
     switchAcpModelMutate.mockReset();
     sessionModelsMock.mockReturnValue([]);
     discoveryMock.mockReturnValue({ models: [], defaultModelId: null });
+    clearPendingHomeModelPick("local-1", null);
   });
 
   it("renders the active conversation's llm_model when present", () => {
@@ -496,5 +504,34 @@ describe("ChatInputModel", () => {
       "href",
       "/settings/agents",
     );
+  });
+
+  it("does not mark a home LLM pick when selecting an ACP model or Agent default on the home page (#19138)", () => {
+    discoveryMock.mockReturnValue({
+      models: CLAUDE_MODELS,
+      defaultModelId: null,
+    });
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_model: "sonnet",
+        },
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    fireEvent.click(screen.getByTestId("chat-input-acp-model-option-sonnet"));
+    expect(hasPendingHomeModelPick("local-1", null)).toBe(false);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    fireEvent.click(
+      screen.getByTestId("chat-input-acp-model-option-agent-default"),
+    );
+    expect(hasPendingHomeModelPick("local-1", null)).toBe(false);
   });
 });

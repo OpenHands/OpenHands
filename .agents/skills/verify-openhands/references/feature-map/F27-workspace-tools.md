@@ -12,6 +12,8 @@ secondary drawer), and two client tools the agent can call to drive the UI:
 
 Source: `src/components/features/terminal/`, `src/hooks/use-terminal.ts`, `src/themes/terminal-themes.ts`, `src/components/features/browser/`, `src/routes/browser-tab.tsx`, `src/routes/planner-tab.tsx`, `src/components/features/conversation/conversation-tabs/conversation-planner-build-bar.tsx`, `src/hooks/use-handle-plan-click.ts`, `src/hooks/use-handle-build-plan-click.ts`, `src/routes/task-list-tab.tsx`, `src/routes/usage-tab.tsx`, `src/components/features/conversation/usage-panel/`, `src/components/features/chat/components/context-window-meter.tsx`, `src/components/features/conversation/conversation-overview-*.tsx`, `src/services/canvas-ui.ts`, `src/api/canvas-ui-client-tool.ts`, `src/services/child-conversation-launch.ts`, `src/components/features/conversation-panel/` (info modals).
 
+Server: F06, F14.
+
 ## Sub-features
 
 - `F27.terminal-empty`: with the runtime active and no command run yet, the Terminal tab reads "No terminal output yet. Commands run by the agent will appear here."
@@ -153,7 +155,7 @@ control-openhands assert --field value --equals true -- browser eval 'location.p
 - At phone width (and in a narrow drawer) the tab row shows only the tabs that fit; the rest are reachable only through the tabs menu (`conversation-tabs-menu-open-<tab>`), and which tabs fit depends on the active tab's label width.
 - Each instance's agent server keeps its terminal sessions' tmux sockets (one `openhands-<random hex>` per terminal session) in its own `TMUX_TMPDIR` (`launch`: `/tmp/ohv-tmux-<hash>`; a plain `agent-canvas`: `<state>/tmux`, which the launcher creates), so another instance stopping cannot reset this one's terminal. After this run's own `restart`, `echo QA_TERM_MARK_2` ran once with its output and no reset (2026-10-17); a reset row is a finding.
 - Agent Tools & Metadata remembers the last tab (it reopens on Available Tools).
-- The Overview menu opens only Pull Requests (`conversation-overview-menu-open-git-pull_requests`); its testids are `conversation-overview-menu-open-*` and `-pin-*` for `workspace` and the Git rows only.
+- The Overview menu's openable rows are the `Changes`, `Commits` and `Pull Requests` buttons (`conversation-overview-menu-open-git-changes`, `-git-commits`, `-git-pull_requests`); `Workspace`, `Git`, `Repository` and `Branch` carry the same `conversation-overview-menu-open-*` test id on a plain label. Pin buttons are `conversation-overview-menu-pin-*`, for `workspace` and the Git rows only.
 - Info modals at phone width (#17562) pass.
 - Agent tab requests (`open_tab`, `navigate_to_file`, chat file links) are saved per conversation like a user tab click (#18045): after the agent opens Terminal or a file and the page reloads, the drawer starts closed and the panel toggle reopens it on that tab; clicking that tab then closes the drawer. At phone width they navigate to `/conversations/<id>/panel`.
 - Known issue [#19325](https://github.com/OpenHands/OpenHands/issues/19325) (`F27.terminal-output`): on Windows, Ctrl+C after a foreground command timed out hangs the agent forever. Live prerequisite: a native Windows local Agent Server and a model-driven command that exceeds the terminal timeout; this run is Linux.

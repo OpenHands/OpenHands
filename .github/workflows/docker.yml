@@ -208,12 +208,23 @@ jobs:
           provenance: true
           sbom: true
 
+      # A browser for the smoke test's Canvas page check. The page is the same
+      # on both arches, so only amd64 pays for the install.
+      - name: Install Playwright for the page check
+        if: matrix.arch == 'amd64'
+        run: |
+          PLAYWRIGHT_VERSION=$(node -p "require('./package.json').devDependencies['@playwright/test']")
+          npm install --prefix "$RUNNER_TEMP/playwright" --no-save --no-package-lock "playwright@${PLAYWRIGHT_VERSION}"
+          "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install --with-deps chromium
+          echo "NODE_PATH=$RUNNER_TEMP/playwright/node_modules" >> "$GITHUB_ENV"
+
       # Boot the image before merge-manifests publishes the multi-arch tags
       # (including `latest`): a missing COPY only shows up at runtime (#18342).
       - name: Smoke test (${{ matrix.arch }})
         env:
           # An explicit agent_server_image override may ship another version.
           EXPECTED_AGENT_SERVER_VERSION: ${{ inputs.agent_server_image == '' && steps.config.outputs.agent_server_version || '' }}
+          SMOKE_CANVAS_BASE_PATH: ${{ matrix.arch == 'amd64' && steps.config.outputs.canvas_base_path || '' }}
         run: docker/smoke-test.sh "${IMAGE}@${{ steps.build.outputs.digest }}"
 
       - name: Summary (${{ matrix.arch }})
