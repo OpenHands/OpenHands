@@ -569,8 +569,10 @@ describe("CommandMenu", () => {
     expect(declarations(surface)["max-height"]).toBe("min(720px, 78vh)");
     const blur = declarations(backdrop);
     expect(blur["--tw-backdrop-blur"]).toBe("blur(2px)");
-    expect(blur["backdrop-filter"]).toContain("var(--tw-backdrop-blur,)");
-    expect(blur["backdrop-filter"]).toContain("var(--tw-backdrop-brightness,)");
+    expect(blur["backdrop-filter"]).toMatch(/var\(--tw-backdrop-blur,\s*\)/);
+    expect(blur["backdrop-filter"]).toMatch(
+      /var\(--tw-backdrop-brightness,\s*\)/,
+    );
     expect(blur["-webkit-backdrop-filter"]).toBe(blur["backdrop-filter"]);
     const panelShadow = declarations(surface);
     expect(panelShadow["--tw-shadow"]).toContain("0 24px 90px");

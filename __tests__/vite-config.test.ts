@@ -480,11 +480,11 @@ describe("vite library build", () => {
     }
     const commandBackdrop = declarations(recipe("command-menu-backdrop"));
     expect(commandBackdrop["--tw-backdrop-blur"]).toBe("blur(2px)");
-    expect(commandBackdrop["backdrop-filter"]).toContain(
-      "var(--tw-backdrop-blur,)",
+    expect(commandBackdrop["backdrop-filter"]).toMatch(
+      /var\(--tw-backdrop-blur,\s*\)/,
     );
-    expect(commandBackdrop["backdrop-filter"]).toContain(
-      "var(--tw-backdrop-brightness,)",
+    expect(commandBackdrop["backdrop-filter"]).toMatch(
+      /var\(--tw-backdrop-brightness,\s*\)/,
     );
     expect(commandBackdrop["-webkit-backdrop-filter"]).toBe(
       commandBackdrop["backdrop-filter"],
