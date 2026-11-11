@@ -1,6 +1,6 @@
-import { useContext, useEffect, useRef, useState } from "react";
-import { ComboBoxStateContext } from "react-aria-components";
-import { ComboBox, Header, Input, ListBox } from "@heroui/react";
+import { useEffect, useRef, useState } from "react";
+import { ComboBoxOpenOnClickInput } from "#/ui/combobox-open-on-click-input";
+import { ComboBox, Header, ListBox } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
@@ -41,20 +41,6 @@ interface ProviderConnectionModalProps {
  * form, so a blank key on edit is simply omitted from the request — the
  * agent-server rejects `api_key: null`, so we never send it.
  */
-function OpenOnClickInput({ testId, name }: { testId: string; name: string }) {
-  const state = useContext(ComboBoxStateContext);
-  return (
-    <Input
-      data-testid={testId}
-      name={name}
-      className="border-0 bg-transparent shadow-none outline-none focus:ring-0 focus-visible:ring-0 data-[focused=true]:ring-0"
-      onClick={() => {
-        if (state && !state.isOpen) state.open(null, "manual");
-      }}
-    />
-  );
-}
-
 export function ProviderConnectionModal({
   connection,
   isCreate,
@@ -219,7 +205,7 @@ export function ProviderConnectionModal({
                 "focus-within:border-contrast/40 dark:focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
               )}
             >
-              <OpenOnClickInput
+              <ComboBoxOpenOnClickInput
                 testId="provider-connection-provider-input"
                 name="provider-connection-provider-input"
               />

@@ -1,4 +1,4 @@
-import { ComboBox, Input, ListBox } from "@heroui/react";
+import { ComboBox, ListBox } from "@heroui/react";
 import { ComboBoxStateContext } from "react-aria-components";
 import React, { ReactNode, useCallback, useContext } from "react";
 import { useTranslation } from "react-i18next";
@@ -6,6 +6,7 @@ import { OptionalTag } from "./optional-tag";
 import { cn } from "#/utils/utils";
 import { formControlSettingsFieldClassName } from "#/utils/form-control-classes";
 import { heroUiAutocompleteSelectorButtonClassName } from "#/ui/combobox-caret";
+import { ComboBoxOpenOnClickInput } from "#/ui/combobox-open-on-click-input";
 import { I18nKey } from "#/i18n/declaration";
 
 interface SettingsDropdownInputProps {
@@ -60,34 +61,6 @@ function ClearButton({
     >
       ×
     </button>
-  );
-}
-
-function OpenOnClickInput({
-  testId,
-  name,
-  className,
-  placeholder,
-  onFocus,
-}: {
-  testId: string;
-  name: string;
-  className?: string;
-  placeholder?: string;
-  onFocus?: React.FocusEventHandler<HTMLInputElement>;
-}) {
-  const state = useContext(ComboBoxStateContext);
-  return (
-    <Input
-      data-testid={testId}
-      name={name}
-      className={className}
-      placeholder={placeholder}
-      onFocus={onFocus}
-      onClick={() => {
-        if (state && !state.isOpen) state.open(null, "manual");
-      }}
-    />
   );
 }
 
@@ -149,10 +122,9 @@ export function SettingsDropdownInput({
           )}
         >
           {startContent || null}
-          <OpenOnClickInput
+          <ComboBoxOpenOnClickInput
             testId={testId}
             name={name}
-            className="border-0 bg-transparent shadow-none outline-none focus:ring-0 focus-visible:ring-0 data-[focused=true]:ring-0"
             placeholder={isLoading ? t(I18nKey.HOME$LOADING) : placeholder}
           />
           <ClearButton

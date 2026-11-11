@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
+import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -293,5 +294,34 @@ describe("SettingsDropdownInput", () => {
     expect(group?.className).toContain("border");
     expect(group?.className).toContain("border-control");
     expect(group?.className).toContain("focus-within:ring-1");
+  });
+
+  it("closes only its listbox on Escape inside a modal, then the modal", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    render(
+      <ModalBackdrop onClose={onClose} aria-label="Setup">
+        <SettingsDropdownInput
+          defaultSelectedKey="english"
+          items={items}
+          label="Language"
+          name="language"
+          testId="language-input"
+        />
+      </ModalBackdrop>,
+    );
+
+    await user.click(screen.getByLabelText("Language"));
+    expect(await screen.findByRole("listbox")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    await user.keyboard("{Escape}");
+
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
