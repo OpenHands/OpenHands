@@ -400,4 +400,82 @@ describe("useWebSocket", () => {
       MockWebSocket.instances.length = 0;
     }
   });
+
+  it("ignores message events from a socket that was replaced", async () => {
+    // Regression for cross-conversation pollution (OHE-3562): a frame still
+    // buffered on the previous conversation's socket must not be delivered to
+    // the current conversation's handler after the socket is replaced, or it
+    // leaks into the on-screen conversation's (global) event store.
+    class MockWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+      static readonly instances: MockWebSocket[] = [];
+
+      readonly url: string;
+      readyState = MockWebSocket.CONNECTING;
+      onopen: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+
+      constructor(url: string) {
+        this.url = url;
+        MockWebSocket.instances.push(this);
+      }
+
+      send() {}
+
+      close() {
+        this.readyState = MockWebSocket.CLOSED;
+      }
+
+      emitOpen() {
+        this.readyState = MockWebSocket.OPEN;
+        this.onopen?.(new Event("open"));
+      }
+
+      emitMessage(data: string) {
+        this.onmessage?.(new MessageEvent("message", { data }));
+      }
+    }
+
+    const originalWebSocket = globalThis.WebSocket;
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const onMessageSpy = vi.fn();
+
+    try {
+      const { result, unmount } = renderHook(() =>
+        useWebSocket("ws://acme.com/ws", { onMessage: onMessageSpy }),
+      );
+      const staleSocket = MockWebSocket.instances[0];
+      act(() => staleSocket.emitOpen());
+
+      // Act: replace the socket, open the replacement, then let a frame from
+      // the stale socket land late.
+      act(() => {
+        result.current.reconnect();
+      });
+      const currentSocket = MockWebSocket.instances[1];
+      act(() => currentSocket.emitOpen());
+      act(() => staleSocket.emitMessage("stale-frame"));
+
+      // Assert: the stale socket's frame reaches no handler...
+      expect(onMessageSpy).not.toHaveBeenCalled();
+
+      // ...while the current socket's frame is still delivered as before.
+      act(() => currentSocket.emitMessage("live-frame"));
+      expect(onMessageSpy).toHaveBeenCalledOnce();
+      expect(onMessageSpy.mock.calls[0][0]).toMatchObject({
+        data: "live-frame",
+      });
+
+      unmount();
+    } finally {
+      globalThis.WebSocket = originalWebSocket;
+      MockWebSocket.instances.length = 0;
+    }
+  });
 });
