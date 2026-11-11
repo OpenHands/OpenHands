@@ -28,6 +28,7 @@ import { insiderUserMessageForDisplay } from "#/utils/insider-message";
 import { parseProjectMessageHeader } from "#/utils/project-message-header";
 import { ProjectMessageHeaderLine } from "../../../features/chat/project-message-header-line";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
+import { useProjectsEnabled } from "#/hooks/query/use-projects";
 
 interface UserAssistantEventMessageProps {
   event: MessageEvent;
@@ -71,8 +72,9 @@ function UserAssistantEventMessageComponent({
   );
   // A message another project conversation sent opens with the Agent
   // Server's header for the agent; show a compact line in its place.
+  const projectsEnabled = useProjectsEnabled();
   const projectHeader =
-    event.source === "user"
+    projectsEnabled && event.source === "user"
       ? parseProjectMessageHeader(
           message,
           (event as { sender?: unknown }).sender,

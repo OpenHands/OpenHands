@@ -1,6 +1,6 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { sanitize } from "hast-util-sanitize";
 import type { Element, Root } from "hast";
 
@@ -8,6 +8,13 @@ import {
   MarkdownRenderer,
   MARKDOWN_SANITIZE_SCHEMA,
 } from "#/components/features/markdown/markdown-renderer";
+
+const projectsFlag = vi.hoisted(() => ({ enabled: true }));
+
+vi.mock("#/hooks/query/use-projects", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/hooks/query/use-projects")>()),
+  useProjectsEnabled: () => projectsFlag.enabled,
+}));
 
 describe("MarkdownRenderer", () => {
   it("renders GFM tables (a GFM-only feature)", () => {
@@ -476,6 +483,23 @@ describe("MarkdownRenderer without includeStandard", () => {
 
 describe("MarkdownRenderer conversation mentions", () => {
   const hex = "4f2c9e0a1b2c4d5e8f90a1b2c3d4e5f6";
+
+  afterEach(() => {
+    projectsFlag.enabled = true;
+  });
+
+  it("shows a mention as plain text while Projects is off", () => {
+    projectsFlag.enabled = false;
+    render(
+      <MarkdownRenderer>
+        {`Ask [Fix export](conversation:${hex}) first.`}
+      </MarkdownRenderer>,
+    );
+    expect(screen.queryByTestId("conversation-mention")).toBeNull();
+    expect(screen.getByTestId("conversation-mention-text").textContent).toBe(
+      "Fix export",
+    );
+  });
 
   it.each([true, false])(
     "opens [Title](conversation:<id>) in place (includeStandard %s)",

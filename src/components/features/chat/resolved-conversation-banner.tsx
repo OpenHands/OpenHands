@@ -18,7 +18,10 @@ import {
 } from "#/utils/conversation-tag-flags";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import ProjectsService from "#/api/projects-service/projects-service.api";
-import { projectsQueryRoot } from "#/hooks/query/use-projects";
+import {
+  projectsQueryRoot,
+  useProjectsEnabled,
+} from "#/hooks/query/use-projects";
 
 /** Agent Server tags a project's member with the project's id. */
 const PROJECT_TAG_KEY = "project";
@@ -65,6 +68,7 @@ export function ResolvedConversationBanner() {
   const queryClient = useQueryClient();
   const { backend } = useActiveBackend();
   const { data: conversation } = useActiveConversation();
+  const projectsEnabled = useProjectsEnabled();
   const [isReading, setIsReading] = useState(false);
   const bannerRef = useRef<HTMLDivElement>(null);
 
@@ -90,7 +94,7 @@ export function ResolvedConversationBanner() {
 
   // Resolving is a project's board state: only members carry it.
   const projectId = conversation?.tags?.[PROJECT_TAG_KEY];
-  if (!conversation || !resolution || !projectId) {
+  if (!projectsEnabled || !conversation || !resolution || !projectId) {
     return null;
   }
 

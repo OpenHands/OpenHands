@@ -20,6 +20,13 @@ import * as toastHandlers from "#/utils/custom-toast-handlers";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { MessageEvent } from "#/types/agent-server/core";
 
+const projectsFlag = vi.hoisted(() => ({ enabled: true }));
+
+vi.mock("#/hooks/query/use-projects", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/hooks/query/use-projects")>()),
+  useProjectsEnabled: () => projectsFlag.enabled,
+}));
+
 const CONVERSATION_ID = "test-conversation-id";
 
 vi.mock("#/hooks/use-conversation-id", () => ({
@@ -99,6 +106,14 @@ describe("ResolvedConversationBanner", () => {
     vi.restoreAllMocks();
     localStorage.clear();
     __resetActiveStoreForTests();
+    projectsFlag.enabled = true;
+  });
+
+  it("stays hidden while Projects is off", () => {
+    projectsFlag.enabled = false;
+    renderBanner({ resolved: "user" });
+
+    expect(screen.queryByTestId("resolved-conversation-banner")).toBeNull();
   });
 
   it.each(["user", "auto"])("shows for resolved=%s", (resolution) => {

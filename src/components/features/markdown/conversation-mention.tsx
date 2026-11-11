@@ -1,6 +1,7 @@
 import React from "react";
 import { ExtraProps } from "react-markdown";
 import { NavigationLink } from "#/components/shared/navigation-link";
+import { useProjectsEnabled } from "#/hooks/query/use-projects";
 
 /**
  * A conversation mention, as Agent Server and agents write it:
@@ -33,6 +34,11 @@ export function ConversationMention({
   id: string;
   children: React.ReactNode;
 }) {
+  // Mentions come with Projects; while it is off they read as plain text.
+  const projectsEnabled = useProjectsEnabled();
+  if (!projectsEnabled) {
+    return <span data-testid="conversation-mention-text">{children}</span>;
+  }
   return (
     <NavigationLink
       to={`/conversations/${id}`}
