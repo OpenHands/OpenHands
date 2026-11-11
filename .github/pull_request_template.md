@@ -65,8 +65,8 @@ before/after of your change, then link it here via htmlpreview at the commit tha
 
   https://htmlpreview.github.io/?https://github.com/<your-fork>/<repo>/blob/<commit-sha>/.pr/design.html
 
-Use the commit SHA, not the branch name: `.pr/` is removed automatically through
-a cleanup PR after this PR merges to `main`, and branch links may stop working.
+Use the commit SHA, not the branch name: `.pr/` is removed automatically from this
+branch once the PR is approved, and branch links stop working.
 See docs/DEVELOPMENT.md ("Design doc for non-trivial PRs") for details.
 -->
 

@@ -41,15 +41,16 @@ non-trivial PR easy to review.
 
 Use the temporary **`.pr/`** directory for PR-only artifacts. Before relying on automatic
 cleanup, verify that the target repository has an enabled
-`.github/workflows/pr-artifacts.yml` workflow that opens or updates a cleanup PR after
-artifacts reach `main`.
+`.github/workflows/pr-artifacts-before-merge.yml` workflow (OpenHands/release-actions
+`pr-artifacts.yml`), which removes `.pr/` from the PR branch once the PR is approved.
 
-- Same-repository or fork PR with a verified cleanup workflow: `.pr/` is removed
-  automatically through a cleanup PR after the PR merges to `main`.
-- Repository without a verified cleanup workflow: remove `.pr/` manually before merge.
+- Same-repository PR, or fork PR with **Allow edits by maintainers** on: `.pr/` is removed
+  automatically by a commit on the PR branch at approval, so it never reaches `main`.
+- Fork PR without maintainer edits, or a repository without that workflow: remove `.pr/`
+  manually before merge.
 
-The design doc is a temporary review aid. In repositories with verified post-merge cleanup,
-it remains available throughout review and is removed from `main` after merge. Keep the
+The design doc is a temporary review aid. In repositories with that workflow, it remains
+available throughout review, through links pinned to the commit SHA that contains it. Keep the
 essential design summary in the PR description: intent, important before/after behavior or
 API shape, compatibility, risk, and code references. Use commit-pinned document links so
 cleanup or branch deletion does not break access.
@@ -157,8 +158,8 @@ cleanup or branch deletion does not break access.
 5. **Self-contained & offline.** One HTML file, inline CSS/SVG, no external scripts or
    assets, opens by double-click, and survives being copied to another machine.
 6. **`.pr/` only, and temporary.** The doc is a review aid, not project docs. Keep it in
-   `.pr/` and rely on post-merge cleanup only when the repository's workflow has been
-   verified; otherwise remove it manually before merge. Do not move design HTML into
+   `.pr/` and rely on automatic removal at approval only when the repository's workflow
+   has been verified; otherwise remove it manually before merge. Do not move design HTML into
    `docs/` or keep it permanently in the merged tree.
 
 ## Anti-patterns
@@ -169,7 +170,7 @@ cleanup or branch deletion does not break access.
   location.
 - ❌ Only the after-state when something changed - reviewers want the *contrast*.
 - ❌ A design doc on a trivial PR - noise. Skip it.
-- ❌ Committing the HTML outside `.pr/` (e.g. `docs/`), where post-merge cleanup will not remove it.
+- ❌ Committing the HTML outside `.pr/` (e.g. `docs/`), where automatic removal will not reach it.
 - ❌ Publishing a private-repository design doc through htmlpreview, GitHub Pages, or another
   public host. Use the private/local preview path in the craft reference. Use GitHub Pages
   only with explicit user authorization after verifying private Pages access control.

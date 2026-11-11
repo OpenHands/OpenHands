@@ -1,0 +1,19 @@
+name: PR artifacts review relay
+
+# Does nothing itself. A review on a fork PR runs without secrets, so this only
+# exists to start pr-artifacts-before-merge.yml through `workflow_run`, which
+# runs in this repository with them and re-reads everything from the API.
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions: {}
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Relay the review
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: echo "Review on PR $PR_NUMBER relayed to PR artifacts before merge."

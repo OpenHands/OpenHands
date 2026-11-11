@@ -46,11 +46,26 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare-test-matrix.outputs.matrix) }}
 
     steps:
+      # The pr-artifacts workflow removes `.pr/` from approved PRs with a commit
+      # that changes nothing else. When this head is exactly its parent minus
+      # `.pr` and this job already passed on the parent, report success without
+      # re-running the suite. Any doubt leaves skip=false.
+      - name: Skip a commit that only removes .pr review evidence
+        id: fast-path
+        if: github.event_name == 'pull_request'
+        uses: OpenHands/release-actions/scripts/pr-artifacts@main
+        with:
+          mode: fast-path
+          github-token: ${{ github.token }}
+          check-name: test-and-build (${{ matrix.name }})
+
       - name: Check out repository
+        if: steps.fast-path.outputs.skip != 'true'
         uses: actions/checkout@v7
 
       - name: Reject temporary artifacts in release PRs
         if: >-
+          steps.fast-path.outputs.skip != 'true' &&
           matrix.full_checks &&
           github.event_name == 'pull_request' &&
           startsWith(github.head_ref, 'release-please--')
@@ -64,34 +79,38 @@ jobs:
           fi
 
       - name: Set up Node.js with npm cache
+        if: steps.fast-path.outputs.skip != 'true'
         uses: actions/setup-node@v7
         with:
           node-version: "24.22.1"
           cache: npm
 
       - name: Use pinned npm
+        if: steps.fast-path.outputs.skip != 'true'
         run: npm install --global npm@11.12.1 --ignore-scripts --no-audit --no-fund
 
       - name: Install dependencies
+        if: steps.fast-path.outputs.skip != 'true'
         run: npm ci
 
       - name: Lint
-        if: matrix.full_checks
+        if: steps.fast-path.outputs.skip != 'true' && matrix.full_checks
         run: npm run lint
 
       - name: Test
-        if: matrix.full_checks
+        if: steps.fast-path.outputs.skip != 'true' && matrix.full_checks
         run: npm test
 
       - name: Build app
+        if: steps.fast-path.outputs.skip != 'true'
         run: npm run build
 
       - name: Build library
-        if: matrix.full_checks
+        if: steps.fast-path.outputs.skip != 'true' && matrix.full_checks
         run: npm run build:lib
 
       - name: Verify package contents
-        if: matrix.full_checks
+        if: steps.fast-path.outputs.skip != 'true' && matrix.full_checks
         run: npm pack --dry-run
 
   live-e2e:

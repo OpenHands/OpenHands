@@ -1,0 +1,40 @@
+name: PR artifacts before merge
+
+# Keeps root `.pr/` review evidence off `main` (OpenHands/release-actions
+# pr-artifacts.yml). The `pr-artifacts` commit status is pending while a PR adds
+# `.pr/` files and fails for forks that disallow maintainer edits. Once the PR is
+# approved, one commit removing `.pr` is pushed to its branch and the status
+# turns green. Safe under pull_request_target: no PR code is checked out or run.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review, auto_merge_enabled]
+  # Approvals, relayed by pr-artifacts-review.yml: a review on a fork PR gets no
+  # secrets, a workflow_run in this repository does.
+  workflow_run:
+    workflows: [PR artifacts review relay]
+    types: [completed]
+  # Backstop: sweeps approved open PRs.
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      pull-number:
+        description: PR to check now (empty sweeps approved open PRs).
+        required: false
+        default: ""
+
+jobs:
+  pr-artifacts:
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+    uses: OpenHands/release-actions/.github/workflows/pr-artifacts.yml@main
+    with:
+      pull-number: ${{ inputs.pull-number || '' }}
+      committer-name: allhands-bot
+      committer-email: allhands-bot@users.noreply.github.com
+    secrets:
+      # Not GITHUB_TOKEN: its pushes start no workflows. The bot account has
+      # write access, which also lets it push to forks that allow maintainer edits.
+      PUSH_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC }}

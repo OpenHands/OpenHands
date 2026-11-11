@@ -69,7 +69,7 @@ jobs:
               return;
             }
 
-            const cleanup = 'The directory will be **automatically removed after this PR merges to `main`**, through a cleanup PR opened or updated by this workflow.';
+            const cleanup = 'The directory is **removed automatically once this PR is approved**, by a commit on this branch from the `PR artifacts before merge` workflow. Until then the required `pr-artifacts` status stays pending. Link evidence by commit SHA so the links keep working.';
             const body = [
               marker,
               '**PR Artifacts Notice**',
