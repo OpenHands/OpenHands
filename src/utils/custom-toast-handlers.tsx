@@ -147,7 +147,7 @@ export const displaySuccessToastWithLink = (
   onOpen?: () => void,
 ) => {
   const duration = calculateToastDuration(`${message} ${linkLabel}`, 5000);
-  toast.success(
+  const toastId = toast.success(
     <span className="message-word-break wrap-anywhere">
       {message}{" "}
       {onOpen ? (
@@ -155,7 +155,9 @@ export const displaySuccessToastWithLink = (
           type="button"
           className="underline hover:no-underline"
           onClick={() => {
-            toast.dismiss();
+            // Dismiss only this toast; a bare `toast.dismiss()` clears every
+            // active toast, including unrelated ones.
+            toast.dismiss(toastId);
             onOpen();
           }}
         >

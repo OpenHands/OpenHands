@@ -11,7 +11,7 @@ import {
 
 const { toastMock } = vi.hoisted(() => ({
   toastMock: Object.assign(vi.fn(), {
-    success: vi.fn(),
+    success: vi.fn(() => "toast-id"),
     error: vi.fn(),
     loading: vi.fn(),
     dismiss: vi.fn(),
@@ -159,6 +159,22 @@ describe("custom-toast-handlers", () => {
       expect(screen.queryByRole("link", { name: "Open" })).toBeNull();
       await userEvent.click(screen.getByRole("button", { name: "Open" }));
       expect(onOpen).toHaveBeenCalledTimes(1);
+    });
+
+    it("dismisses only its own toast when the link is followed", async () => {
+      // `toast.dismiss()` with no id clears every active toast, including
+      // unrelated ones; the dismiss must be scoped to this toast.
+      displaySuccessToastWithLink(
+        "Branched",
+        "Open",
+        "/conversations/fork-1",
+        vi.fn(),
+      );
+
+      render(toastNode());
+      await userEvent.click(screen.getByRole("button", { name: "Open" }));
+
+      expect(toast.dismiss).toHaveBeenCalledWith("toast-id");
     });
   });
 });
