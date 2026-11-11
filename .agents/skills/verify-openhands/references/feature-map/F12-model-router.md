@@ -16,6 +16,8 @@ page.
 
 Source: `src/routes/meta-llm-settings.tsx`, `src/components/features/settings/meta-llm-profiles/`, `src/api/meta-profiles-service/meta-profiles-service.api.ts`, `src/api/agent-server-adapter.ts` (`buildRouterAtStartSystemSuffix`), `src/constants/settings-nav.tsx`, `src/hooks/mutation/use-delete-meta-profile.ts`, `src/hooks/use-chat-input-llm-profile-state.ts` (`markHomeModelPick`), `src/components/features/home/home-chat-launcher.tsx` (`suppressRouterAtStart`).
 
+Server: F22.
+
 ## Sub-features
 
 - `F12.page`: Settings → **Model Router** opens `/settings/meta-llm` with the subtitle `Meta-profiles that route each task to the right LLM profile.`; the command menu offers a **Model Router** command that opens it, like the other settings pages.

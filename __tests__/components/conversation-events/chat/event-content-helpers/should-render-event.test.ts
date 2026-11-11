@@ -292,6 +292,33 @@ describe("shouldRenderEvent - /goal loop re-prompts", () => {
   });
 });
 
+describe("shouldRenderEvent - Stop hook feedback", () => {
+  // Emitted by the SDK when a Stop hook blocks the agent from finishing
+  // (`ACP_STOP_HOOK_FEEDBACK_PREFIX` in local_conversation.py).
+  const STOP_HOOK_FEEDBACK_TEXT =
+    "[Stop hook feedback] Run the tests before finishing.";
+
+  const makeMessage = (source: "environment" | "user"): OpenHandsEvent =>
+    ({
+      id: "m1",
+      kind: "MessageEvent",
+      source,
+      timestamp: "2024-01-01T00:00:00Z",
+      llm_message: {
+        role: "user",
+        content: [{ type: "text", text: STOP_HOOK_FEEDBACK_TEXT }],
+      },
+    }) as unknown as OpenHandsEvent;
+
+  it("hides the feedback message the SDK sends to the agent", () => {
+    expect(shouldRenderEvent(makeMessage("environment"))).toBe(false);
+  });
+
+  it("still renders a user message that starts with the same text", () => {
+    expect(shouldRenderEvent(makeMessage("user"))).toBe(true);
+  });
+});
+
 describe("shouldRenderEvent - reactions", () => {
   it("shows a pending react / unreact call; its result keeps only the narration", () => {
     const react = createOtherActionEvent("react-1");

@@ -25,6 +25,8 @@ shows a **Draft** badge and no on/off switch.
 
 Source: `src/routes/automation-detail.tsx`, `src/components/features/automations/detail/`, `src/components/features/automations/automation-page-header.tsx`, `src/components/features/markdown/mermaid-diagram.tsx`, `src/utils/automation-flow-diagram.ts`, `src/utils/automation-trigger-description.ts`, `src/hooks/use-open-automation-editor.ts`, `src/components/features/automations/detail/automation-tags-editor.tsx`, `src/components/features/automations/automation-tag-pill.tsx`, `src/utils/automation-tags.ts`, `src/hooks/query/use-automations.ts` (`useUpdateAutomationTags`, `useUpdateAutomationKeepAlive`), `src/utils/automation-edit-draft.ts`, `src/utils/automation-state.ts` (`isKeepAliveForced`), `src/types/automation.ts` (`keep_alive`, `trigger.destination`), `src/components/features/automations/setup/automation-setup-panel.tsx` (edit mode), `src/components/features/automations/delete-confirmation-modal.tsx`, `src/hooks/query/use-automation-detail.ts`, `src/utils/automation-preset-sources.ts`, `src/hooks/query/use-bash-command-logs.ts`, `src/hooks/query/use-automation-tarball-files.ts`, `src/utils/automation-schedule.ts`, `src/utils/automation-disabled-reason.ts`, `src/utils/automation-activity-log-export.ts`.
 
+Server: F13.
+
 ## Sub-features
 
 - `F23.open-detail`: a dashboard card, a list row, the kebab **View** and a direct URL open `/automations/<id>`; browser Back from a run's conversation returns to it.

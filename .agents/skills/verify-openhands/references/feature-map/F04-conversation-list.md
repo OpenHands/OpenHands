@@ -16,6 +16,8 @@ pins, archives, folder grouping and repo labels hold in any browser.
 
 Source: `src/components/features/sidebar/sidebar-conversation-list.tsx`, `src/components/features/conversation-panel/` (panel, layouts menu, advanced options modal, new-thread picker, folder list/row, pinned section, active filter chips, confirm and tags modals, `conversation-card/`), `src/stores/conversation-panel-preferences-store.ts`, `src/hooks/mutation/use-update-conversation-tag-flags.ts`, `src/utils/conversation-tag-flags.ts`, `src/stores/pinned-conversations-store.ts`, `src/stores/archived-conversations-store.ts` (legacy pins and archives, migrated into tags), `src/hooks/query/use-paginated-conversations.ts`, `src/hooks/use-download-conversation.ts`, `src/api/conversation-metadata-store.ts`.
 
+Server: F04, F05.
+
 ## Sub-features
 
 - `F04.empty-state`: with no conversations (By date) the list shows `No conversations found`.

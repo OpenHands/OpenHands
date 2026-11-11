@@ -41,6 +41,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
+import { HttpError } from "@openhands/typescript-client";
 import EventService from "#/api/event-service/event-service.api";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
@@ -700,6 +701,38 @@ describe("Conversation websocket behavior", () => {
     expect(queryParamsOf(mainOptions())).toEqual({ after_seq: "-1" });
   });
 
+  it("explains a history load that failed on an unreadable event file", () => {
+    const reason = "Missing event file: events/event-00552-15c60853.json";
+    Object.assign(historyCapture.result, {
+      isError: true,
+      error: new HttpError(500, "Internal Server Error", {
+        detail: "Internal Server Error",
+        exception: reason,
+      }),
+    });
+
+    renderProvider();
+
+    expect(useErrorMessageStore.getState()).toMatchObject({
+      errorMessage: reason,
+      errorType: "conversation",
+    });
+  });
+
+  it("leaves other history load failures to socket recovery", () => {
+    Object.assign(historyCapture.result, {
+      isError: true,
+      error: new HttpError(500, "Internal Server Error", {
+        detail: "Internal Server Error",
+        exception: "disk is full",
+      }),
+    });
+
+    renderProvider();
+
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+  });
+
   it("waits for contiguous durable replay despite transient and out-of-order frames", () => {
     socketCapture.mainSocket = makeSocket();
     renderProvider();
@@ -1259,6 +1292,7 @@ describe("Conversation websocket behavior", () => {
     await waitFor(() =>
       expect(screen.getByTestId("connection-state")).toHaveTextContent("OPEN"),
     );
+    dispatchMainFrame({ type: "sync", from_seq: null, through_seq: null });
     await expect(
       contextCapture.current?.sendMessage(makeSendRequest("new socket")),
     ).resolves.toEqual({ queued: false });
@@ -1279,6 +1313,7 @@ describe("Conversation websocket behavior", () => {
     socketCapture.mainSocket = mainSocket;
     socketCapture.planningSocket = planningSocket;
     renderProvider({ subConversations: [makeSubConversation()] });
+    dispatchMainFrame({ type: "sync", from_seq: null, through_seq: null });
 
     await expect(
       contextCapture.current?.sendMessage(makeSendRequest("code message")),
@@ -1294,6 +1329,30 @@ describe("Conversation websocket behavior", () => {
     expect(planningSocket.send).toHaveBeenCalledWith(
       JSON.stringify({ ...makeSendRequest("plan message"), run: true }),
     );
+  });
+
+  it("delivers over REST while an open socket has not been served yet", async () => {
+    const mainSocket = makeSocket();
+    socketCapture.mainSocket = mainSocket;
+    renderProvider();
+
+    // A running conversation can hold a new session socket unserved; a frame
+    // sent into it then is lost if the tab leaves first.
+    await expect(
+      contextCapture.current?.sendMessage(makeSendRequest("wait, actually")),
+    ).resolves.toEqual({ queued: true });
+    expect(mainSocket.send).not.toHaveBeenCalled();
+    expect(socketCapture.queueMessage).toHaveBeenCalledWith(
+      "conv-main",
+      { role: "user", content: makeSendRequest("wait, actually").content },
+      { run: true },
+    );
+
+    dispatchMainFrame({ type: "sync", from_seq: null, through_seq: null });
+    await expect(
+      contextCapture.current?.sendMessage(makeSendRequest("now live")),
+    ).resolves.toEqual({ queued: false });
+    expect(mainSocket.send).toHaveBeenCalledTimes(1);
   });
 
   it("queues messages over REST while the socket is unavailable", async () => {
@@ -1375,6 +1434,7 @@ describe("Conversation websocket behavior", () => {
     });
     socketCapture.mainSocket = socket;
     renderProvider();
+    dispatchMainFrame({ type: "sync", from_seq: null, through_seq: null });
 
     await expect(
       contextCapture.current?.sendMessage(makeSendRequest("hello")),
