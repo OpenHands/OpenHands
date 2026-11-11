@@ -54,4 +54,15 @@ describe("HeroUI v3 CSS integration", () => {
     expect(css).toMatch(/--field-border:\s*var\(--oh-border\)/);
     expect(css).toMatch(/--overlay:\s*var\(--oh-overlay\)/);
   });
+
+  it("wraps tooltip prose between words", () => {
+    const tooltipRules = [...css.matchAll(/\.tooltip\s*\{([^}]*)\}/g)].map(
+      (match) => match[1],
+    );
+    const lastWordBreak = tooltipRules
+      .flatMap((rule) => [...rule.matchAll(/word-break:\s*([\w-]+)/g)])
+      .map((match) => match[1])
+      .at(-1);
+    expect(lastWordBreak).toBe("normal");
+  });
 });

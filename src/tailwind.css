@@ -19,6 +19,15 @@
 @import "@heroui/styles/components/spinner.css" layer(components);
 @import "@heroui/styles/utilities";
 
+/* HeroUI's .tooltip sets word-break: break-all, which splits prose mid-word.
+   Wrap between words; break a long unspaced token only when it cannot fit. */
+@layer components {
+  .tooltip {
+    word-break: normal;
+    overflow-wrap: break-word;
+  }
+}
+
 @config "../tailwind.config.js";
 @source '../node_modules/@heroui/styles/dist/**/*.{js,ts,jsx,tsx}';
 
