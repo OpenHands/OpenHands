@@ -6659,6 +6659,24 @@
     "ca": "S'ha creat una branca d'aquesta conversa",
     "id": "Membuat cabang dari percakapan ini"
   },
+  "CONVERSATION$BRANCH_MISSING_SOURCE": {
+    "en": "Cannot branch without a source conversation",
+    "ja": "分岐元の会話がないため、ブランチを作成できません",
+    "zh-CN": "没有源对话，无法创建分支",
+    "zh-TW": "沒有來源對話，無法建立分支",
+    "ko-KR": "원본 대화가 없어 분기할 수 없습니다",
+    "no": "Kan ikke forgrene uten en kildekonversasjon",
+    "it": "Impossibile creare un ramo senza una conversazione di origine",
+    "pt": "Não é possível ramificar sem uma conversa de origem",
+    "es": "No se puede crear una rama sin una conversación de origen",
+    "ar": "لا يمكن إنشاء فرع بدون محادثة مصدر",
+    "fr": "Impossible de créer une branche sans conversation source",
+    "tr": "Kaynak bir sohbet olmadan dallandırılamaz",
+    "de": "Ohne eine Quellunterhaltung kann kein Zweig erstellt werden",
+    "uk": "Неможливо створити відгалуження без вихідної розмови",
+    "ca": "No es pot crear una branca sense una conversa d'origen",
+    "id": "Tidak dapat membuat cabang tanpa percakapan sumber"
+  },
   "CONVERSATION$GIT_PROVIDER": {
     "en": "Git Provider",
     "ja": "Git プロバイダー",

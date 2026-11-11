@@ -120,8 +120,9 @@ export const useForkConversation = (sourceConversationId: string) => {
         // Branch action is already gated on a conversation, so this only guards
         // a stale render; fail fast rather than registering a fork under the
         // shared `["fork-conversation", ""]` key, which every id-less view would
-        // then match.
-        throw new Error("Cannot branch without a source conversation");
+        // then match. `onError` forwards the message straight to the toast, so
+        // it has to be translated copy, not an English literal.
+        throw new Error(i18n.t(I18nKey.CONVERSATION$BRANCH_MISSING_SOURCE));
       }
       let fromEventId = eventId;
       let excluded = false;

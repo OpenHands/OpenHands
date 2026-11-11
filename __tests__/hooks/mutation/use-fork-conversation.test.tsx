@@ -4,6 +4,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useForkConversation } from "#/hooks/mutation/use-fork-conversation";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { getConversationState } from "#/utils/conversation-local-storage";
+import i18n from "#/i18n";
+import { I18nKey } from "#/i18n/declaration";
 import {
   displayErrorToast,
   displaySuccessToastWithLink,
@@ -325,7 +327,9 @@ describe("useForkConversation", () => {
     // The Branch action is gated on a conversation, so an empty source only
     // happens on a stale render. Forking would register the mutation under the
     // shared `["fork-conversation", ""]` key and navigate to a fork with no
-    // source, so the hook fails fast instead.
+    // source, so the hook fails fast instead. The toast forwards the error
+    // message verbatim, so it must carry translated copy (the I18nKey) rather
+    // than an English literal.
     const { Wrapper } = createWrapper();
     const { result } = renderHook(() => useForkConversation(""), {
       wrapper: Wrapper,
@@ -335,7 +339,7 @@ describe("useForkConversation", () => {
 
     await waitFor(() =>
       expect(displayErrorToast).toHaveBeenCalledWith(
-        "Cannot branch without a source conversation",
+        i18n.t(I18nKey.CONVERSATION$BRANCH_MISSING_SOURCE),
       ),
     );
     expect(
