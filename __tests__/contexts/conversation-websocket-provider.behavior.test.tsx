@@ -76,10 +76,22 @@ const socketCapture = vi.hoisted(() => ({
 const historyCapture = vi.hoisted(() => ({
   scope: "test-scope",
   persistedData: undefined as
-    { events: OpenHandsEvent[]; afterSeq?: number | null } | undefined,
+    | {
+        events: OpenHandsEvent[];
+        afterSeq?: number | null;
+        nextPageId?: string | null;
+        hasMore?: boolean;
+      }
+    | undefined,
   result: {
     data: { events: [] as OpenHandsEvent[] } as
-      { events: OpenHandsEvent[]; afterSeq?: number | null } | undefined,
+      | {
+          events: OpenHandsEvent[];
+          afterSeq?: number | null;
+          nextPageId?: string | null;
+          hasMore?: boolean;
+        }
+      | undefined,
     isPending: false,
     isFetching: false,
     isError: false,
@@ -860,9 +872,16 @@ describe("Conversation websocket behavior", () => {
 
   it("accepts absent history and history without a selected conversation", () => {
     const addEvents = vi.spyOn(useEventStore.getState(), "addEvents");
+    historyCapture.result.data = {
+      events: [],
+      nextPageId: null,
+      hasMore: false,
+    };
     const empty = renderProvider();
-    expect(addEvents).not.toHaveBeenCalled();
+    expect(useEventStore.getState().events).toEqual([]);
+    expect(useEventStore.getState().historyPagination?.hasMore).toBe(false);
     empty.unmount();
+    addEvents.mockClear();
 
     socketCapture.callIndex = 0;
     historyCapture.result.data = undefined;
