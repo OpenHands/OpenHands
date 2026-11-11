@@ -256,11 +256,9 @@ export function HomeChatLauncher() {
       variables = { ...variables, plugins: selectedPlugins };
     }
 
-    // A cloud member's home LLM pick (see useChatInputLlmProfileState), unless
-    // that profile has since gone.
     if (
       homeLlmProfile &&
-      llmProfiles?.profiles.some((p) => p.name === homeLlmProfile)
+      llmProfiles?.profiles.some((profile) => profile.name === homeLlmProfile)
     ) {
       variables = { ...variables, llmProfile: homeLlmProfile };
     }

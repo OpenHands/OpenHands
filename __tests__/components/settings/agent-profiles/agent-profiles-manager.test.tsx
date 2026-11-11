@@ -1,11 +1,16 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AgentProfilesManager } from "#/components/features/settings/agent-profiles/agent-profiles-manager";
 import AgentProfilesService, {
+  type AgentProfile,
   type AgentProfileSummary,
 } from "#/api/agent-profiles-service/agent-profiles-service.api";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -28,6 +33,10 @@ vi.mock("react-i18next", () => ({
         SETTINGS$PROFILE_ACTIVATED: params?.name
           ? `Profile "${params.name}" activated`
           : "Profile activated",
+        SETTINGS$PROFILE_DUPLICATED: params?.name
+          ? `Profile "${params.name}" duplicated`
+          : "Profile duplicated",
+        BUTTON$DUPLICATE: "Duplicate",
         BUTTON$DELETE: "Delete",
         BUTTON$CANCEL: "Cancel",
         ERROR$GENERIC: "An error occurred",
@@ -146,6 +155,7 @@ describe("AgentProfilesManager", () => {
       "title",
       "SETTINGS$AGENT_PROFILE_DEFAULT_LOCKED",
     );
+    expect(screen.getByTestId("agent-profile-duplicate")).toBeEnabled();
   });
 
   it("shows the Add button and fires onAddProfile", async () => {
@@ -217,6 +227,140 @@ describe("AgentProfilesManager", () => {
     await user.click(screen.getByText("Edit"));
 
     expect(onEditProfile).toHaveBeenCalledWith(mockProfiles[0]);
+  });
+
+  it("duplicates an OpenHands agent's full configuration with a unique name and new identity", async () => {
+    const source = {
+      id: "id-oh",
+      name: "my-openhands",
+      revision: 7,
+      schema_version: 1,
+      agent_kind: "openhands",
+      llm_profile_ref: "fast-llm",
+      mcp_server_refs: ["github"],
+      secret_refs: ["GITHUB_TOKEN"],
+      disabled_skills: ["unused-skill"],
+      tools: [{ name: "terminal", params: {} }],
+      persona: "Careful reviewer",
+    } as unknown as AgentProfile;
+    let summaries = [
+      ...mockProfiles,
+      { ...mockProfiles[0], id: "id-copy", name: "my-openhands-copy" },
+    ];
+    vi.mocked(AgentProfilesService.listProfiles).mockImplementation(
+      async () => ({ profiles: summaries, active_agent_profile_id: "id-oh" }),
+    );
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      name: source.name,
+      profile: source,
+    });
+    vi.mocked(AgentProfilesService.saveProfile).mockImplementation(
+      async (name) => {
+        summaries = [...summaries, { ...mockProfiles[0], id: "new-id", name }];
+        return { name, message: "ok" } as never;
+      },
+    );
+
+    renderManager();
+    await screen.findByText("my-openhands");
+    const user = userEvent.setup();
+    await user.click(screen.getAllByTestId("agent-profile-menu-trigger")[0]);
+    await user.click(screen.getByTestId("agent-profile-duplicate"));
+
+    await waitFor(() =>
+      expect(AgentProfilesService.saveProfile).toHaveBeenCalledWith(
+        "my-openhands-copy-1",
+        expect.objectContaining({
+          agent_kind: "openhands",
+          llm_profile_ref: "fast-llm",
+          mcp_server_refs: ["github"],
+          secret_refs: ["GITHUB_TOKEN"],
+          disabled_skills: ["unused-skill"],
+          tools: [{ name: "terminal", params: {} }],
+          persona: "Careful reviewer",
+        }),
+      ),
+    );
+    expect(AgentProfilesService.getProfile).toHaveBeenCalledWith(
+      "my-openhands",
+      "encrypted",
+    );
+    const cloned = vi.mocked(AgentProfilesService.saveProfile).mock
+      .lastCall?.[1];
+    expect(cloned).not.toHaveProperty("id");
+    expect(cloned).not.toHaveProperty("name");
+    expect(cloned).not.toHaveProperty("revision");
+    expect(cloned).not.toHaveProperty("schema_version");
+    expect(await screen.findByText("my-openhands-copy-1")).toBeInTheDocument();
+    expect(displaySuccessToast).toHaveBeenCalledWith(
+      'Profile "my-openhands-copy-1" duplicated',
+    );
+    expect(AgentProfilesService.activateProfile).not.toHaveBeenCalled();
+  });
+
+  it("duplicates ACP agents without injecting OpenHands fields and truncates long names", async () => {
+    const longName = "a".repeat(62);
+    vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
+      profiles: [{ ...mockProfiles[1], name: longName }],
+      active_agent_profile_id: "id-acp",
+    });
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      name: longName,
+      profile: {
+        id: "id-acp",
+        name: longName,
+        revision: 2,
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        acp_command: "claude",
+        acp_args: ["--verbose"],
+        secret_refs: ["ANTHROPIC_API_KEY"],
+        mcp_server_refs: ["github"],
+      } as AgentProfile,
+    });
+    vi.mocked(AgentProfilesService.saveProfile).mockResolvedValue({
+      name: `${"a".repeat(59)}-copy`,
+      message: "ok",
+    } as never);
+
+    renderManager();
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId("agent-profile-menu-trigger"));
+    await user.click(screen.getByTestId("agent-profile-duplicate"));
+
+    await waitFor(() =>
+      expect(AgentProfilesService.saveProfile).toHaveBeenCalledWith(
+        `${"a".repeat(59)}-copy`,
+        expect.objectContaining({
+          agent_kind: "acp",
+          acp_command: "claude",
+          acp_args: ["--verbose"],
+          secret_refs: ["ANTHROPIC_API_KEY"],
+        }),
+      ),
+    );
+    expect(
+      vi.mocked(AgentProfilesService.saveProfile).mock.lastCall?.[1],
+    ).not.toHaveProperty("llm_profile_ref");
+  });
+
+  it("does not create a duplicate if loading the agent fails", async () => {
+    vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
+      profiles: mockProfiles,
+      active_agent_profile_id: "id-oh",
+    });
+    vi.mocked(AgentProfilesService.getProfile).mockRejectedValue(
+      new Error("Not found"),
+    );
+
+    renderManager();
+    await screen.findByText("my-openhands");
+    const user = userEvent.setup();
+    await user.click(screen.getAllByTestId("agent-profile-menu-trigger")[0]);
+    await user.click(screen.getByTestId("agent-profile-duplicate"));
+
+    await waitFor(() => expect(displayErrorToast).toHaveBeenCalled());
+    expect(AgentProfilesService.saveProfile).not.toHaveBeenCalled();
   });
 
   it("activates a profile by id from the row menu", async () => {

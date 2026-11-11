@@ -1,9 +1,8 @@
-// The MCP page now lives at the top-level /mcp route. This file is
-// kept for backward-compatibility so the published `MCPSettings`
-// library export (see `src/components/settings/index.ts`) and any
-// remaining `routes/mcp-settings` import paths keep working.
+// The /mcp route redirects to /agents, but the standalone MCP screen
+// remains available through the published `MCPSettings` library export and
+// existing `routes/mcp-settings` imports.
 
-import MCPPage from "./mcp";
+import { MCPPage } from "./mcp";
 
 export const MCPSettingsScreen = MCPPage;
 

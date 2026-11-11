@@ -3,6 +3,8 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRoutesStub } from "react-router";
 import SettingsScreen, { clientLoader } from "#/routes/settings";
+import AgentProfilesRedirect from "#/routes/agent-profiles-redirect";
+import MetaLlmSettingsRoute from "#/routes/meta-llm-settings";
 import OptionService from "#/api/option-service/option-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import {
@@ -38,25 +40,72 @@ describe("settings route", () => {
     __resetActiveStoreForTests();
     queryClient.clear();
   });
+  it("redirects legacy settings/agents to the standalone Agent page", async () => {
+    const RouterStub = createRoutesStub([
+      {
+        path: "/settings",
+        Component: SettingsScreen,
+        children: [{ path: "agents", Component: AgentProfilesRedirect }],
+      },
+      {
+        path: "/agents",
+        Component: () => <main data-testid="standalone-agents" />,
+      },
+    ]);
 
-  it("prefers /settings/agents when LLM settings are hidden", () => {
-    // /settings/agents is the unconditional first fallback — always
-    // available and the single place to switch agent kinds.
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ActiveBackendProvider>
+          <RouterStub initialEntries={["/settings/agents"]} />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByTestId("standalone-agents")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-navbar-desktop")).toBeNull();
+  });
+
+  it("redirects the old local Model Router page to standalone Agents", async () => {
+    const RouterStub = createRoutesStub([
+      {
+        path: "/settings",
+        Component: SettingsScreen,
+        children: [{ path: "meta-llm", Component: MetaLlmSettingsRoute }],
+      },
+      {
+        path: "/agents",
+        Component: () => <main data-testid="standalone-agents" />,
+      },
+    ]);
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ActiveBackendProvider>
+          <RouterStub initialEntries={["/settings/meta-llm"]} />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByTestId("standalone-agents")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-navbar-desktop")).toBeNull();
+  });
+
+  it("keeps the settings fallback in Application when LLM settings are hidden", () => {
     expect(
       getFirstAvailablePath({
         hide_llm_settings: true,
         hide_users_page: true,
       }),
-    ).toBe("/settings/agents");
+    ).toBe("/settings/app");
   });
 
-  it("prefers /settings/agents when LLM settings are visible", () => {
+  it("keeps the settings fallback in Application when LLM settings are visible", () => {
     expect(
       getFirstAvailablePath({
         hide_llm_settings: false,
         hide_users_page: true,
       }),
-    ).toBe("/settings/agents");
+    ).toBe("/settings/app");
   });
 
   it("redirects hidden OSS settings pages to the first available route", async () => {
@@ -80,7 +129,7 @@ describe("settings route", () => {
     } as never)) as Response;
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("Location")).toBe("/settings/agents");
+    expect(response.headers.get("Location")).toBe("/settings/app");
   });
 
   it("does not redirect unrelated removed nested paths through the settings loader", async () => {
@@ -169,37 +218,31 @@ describe("settings route", () => {
     );
   });
 
-  it("keeps the section title of a page that is not in the listed navigation", () => {
-    // Arrange — the nav mock above lists only LLM + Application, mirroring a
-    // locked-to-Cloud deployment where deep-linked pages stay routable but are
-    // unlisted; the header must still describe the visited page.
+  it("keeps the section title of an unlisted settings page", () => {
     const RouterStub = createRoutesStub([
       {
         path: "/settings",
         Component: SettingsScreen,
         children: [
           {
-            path: "/settings/agents",
-            Component: () => <div data-testid="agent-profiles-screen" />,
+            path: "/settings/meta-llm",
+            Component: () => <div data-testid="model-router-screen" />,
           },
         ],
       },
     ]);
 
-    // Act
     render(
       <QueryClientProvider client={new QueryClient()}>
         <ActiveBackendProvider>
-          <RouterStub initialEntries={["/settings/agents"]} />
+          <RouterStub initialEntries={["/settings/meta-llm"]} />
         </ActiveBackendProvider>
       </QueryClientProvider>,
     );
 
-    // Assert — "Agent" is absent from the nav mock, so its only occurrence is
-    // the page header.
-    expect(screen.getByText("SETTINGS$NAV_AGENT")).toBeInTheDocument();
+    expect(screen.getByText("SETTINGS$NAV_META_LLM")).toBeInTheDocument();
     expect(screen.getByTestId("settings-page-subtitle")).toHaveTextContent(
-      "SETTINGS$PAGE_AGENT_PROFILES_SUBLINE",
+      "SETTINGS$PAGE_META_LLM_SUBLINE",
     );
   });
 

@@ -802,7 +802,7 @@ export function ChatInterface({
                 // (OHE-3457).
                 onReauth={
                   isAcpAuthErrorCode(errorCode) && getLockedCloudHost() === null
-                    ? () => navigate("/settings/agents")
+                    ? () => navigate("/agents")
                     : undefined
                 }
               />

@@ -22,6 +22,7 @@ interface AgentProfileRowProps {
   canManage: boolean;
   onActivate: (profile: AgentProfileSummary) => void;
   onEdit: (profile: AgentProfileSummary) => void;
+  onDuplicate: (profile: AgentProfileSummary) => void;
   onDelete: (profile: AgentProfileSummary) => void;
   isActivating: boolean;
 }
@@ -32,6 +33,7 @@ export function AgentProfileRow({
   canManage,
   onActivate,
   onEdit,
+  onDuplicate,
   onDelete,
   isActivating,
 }: AgentProfileRowProps) {
@@ -93,6 +95,7 @@ export function AgentProfileRow({
             <AgentProfileActionsMenu
               anchorRef={triggerRef}
               onEdit={() => onEdit(profile)}
+              onDuplicate={() => onDuplicate(profile)}
               onSetActive={() => onActivate(profile)}
               onDelete={() => onDelete(profile)}
               deleteDisabledReason={

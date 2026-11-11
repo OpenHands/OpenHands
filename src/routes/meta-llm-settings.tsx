@@ -1,3 +1,4 @@
+import { Navigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { MetaLlmSettingsView } from "#/components/features/settings/meta-llm-profiles";
 import { useActiveBackend } from "#/contexts/active-backend-context";
@@ -16,6 +17,8 @@ import { I18nKey } from "#/i18n/declaration";
 export default function MetaLlmSettingsRoute() {
   const { t } = useTranslation("openhands");
   const { backend, orgId } = useActiveBackend();
+
+  if (backend.kind === "local") return <Navigate to="/agents" replace />;
 
   if (backend.kind === "cloud" && !orgId) {
     return (

@@ -31,6 +31,7 @@ interface CustomServerEditorProps {
   server: MCPServerConfig;
   existingServers: MCPServerConfig[];
   onClose: () => void;
+  onDeleted?: (serverId: string) => void;
 }
 
 /**
@@ -42,6 +43,7 @@ export function CustomServerEditor({
   server,
   existingServers,
   onClose,
+  onDeleted,
 }: CustomServerEditorProps) {
   const { t } = useTranslation("openhands");
   const { mutate: addMcpServer, isPending: isAdding } = useAddMcpServer();
@@ -213,6 +215,7 @@ export function CustomServerEditor({
     deleteMcpServer(server, {
       onSuccess: () => {
         displaySuccessToast(t(I18nKey.MCP$REMOVE_SUCCESS));
+        onDeleted?.(server.id);
         setShowDeleteConfirm(false);
         onClose();
       },
@@ -269,9 +272,11 @@ export function CustomServerEditor({
 
       {showDeleteConfirm ? (
         <ConfirmationModal
-          text={t(I18nKey.SETTINGS$MCP_CONFIRM_DELETE)}
+          text={`${t(I18nKey.SETTINGS$MCP_CONFIRM_DELETE)} ${t(I18nKey.SETTINGS$SHARED_RESOURCE_DELETE_WARNING)}`}
           onCancel={() => setShowDeleteConfirm(false)}
           onConfirm={handleConfirmDelete}
+          confirmText={t(I18nKey.BUTTON$DELETE)}
+          isDestructive
           isConfirming={isDeleting}
         />
       ) : null}

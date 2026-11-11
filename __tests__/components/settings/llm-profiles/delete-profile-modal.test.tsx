@@ -12,16 +12,16 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, string>) => {
       const translations: Record<string, string> = {
-        "SETTINGS$PROFILE_DELETE_TITLE": "Delete Profile",
-        "SETTINGS$PROFILE_DELETE_CONFIRMATION": params?.name
+        SETTINGS$PROFILE_DELETE_TITLE: "Delete Profile",
+        SETTINGS$PROFILE_DELETE_CONFIRMATION: params?.name
           ? `Are you sure you want to delete "${params.name}"?`
           : "Are you sure you want to delete this profile?",
-        "SETTINGS$PROFILE_DELETED": params?.name
+        SETTINGS$PROFILE_DELETED: params?.name
           ? `Profile "${params.name}" deleted`
           : "Profile deleted",
-        "BUTTON$DELETE": "Delete",
-        "BUTTON$CANCEL": "Cancel",
-        "ERROR$GENERIC": "An error occurred",
+        BUTTON$DELETE: "Delete",
+        BUTTON$CANCEL: "Cancel",
+        ERROR$GENERIC: "An error occurred",
       };
       return translations[key] || key;
     },
@@ -44,10 +44,15 @@ describe("DeleteProfileModal", () => {
   const renderModal = (
     profile: ProfileInfo | null,
     onClose = vi.fn(),
+    onDeleted = vi.fn(),
   ) => {
     return render(
       <QueryClientProvider client={queryClient}>
-        <DeleteProfileModal profile={profile} onClose={onClose} />
+        <DeleteProfileModal
+          profile={profile}
+          onClose={onClose}
+          onDeleted={onDeleted}
+        />
       </QueryClientProvider>,
     );
   };
@@ -76,6 +81,9 @@ describe("DeleteProfileModal", () => {
     expect(
       screen.getByText('Are you sure you want to delete "profile-to-delete"?'),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText("SETTINGS$LLM_PROFILE_DELETE_WARNING"),
+    ).toBeInTheDocument();
   });
 
   it("shows Delete and Cancel buttons", () => {
@@ -97,8 +105,7 @@ describe("DeleteProfileModal", () => {
     // Assert: Cancel precedes the dominant Delete action in DOM order.
     // eslint-disable-next-line no-bitwise
     expect(
-      cancel.compareDocumentPosition(danger) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      cancel.compareDocumentPosition(danger) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
@@ -116,12 +123,13 @@ describe("DeleteProfileModal", () => {
   it("calls deleteProfile and shows success toast on successful delete", async () => {
     const user = userEvent.setup();
     const handleClose = vi.fn();
+    const onDeleted = vi.fn();
     vi.mocked(ProfilesService.deleteProfile).mockResolvedValue({
       name: "profile-to-delete",
       message: "Profile deleted",
     });
 
-    renderModal(mockProfile, handleClose);
+    renderModal(mockProfile, handleClose, onDeleted);
 
     await user.click(screen.getByTestId("delete-profile-confirm"));
 
@@ -134,6 +142,7 @@ describe("DeleteProfileModal", () => {
       expect(toastHandlers.displaySuccessToast).toHaveBeenCalledWith(
         'Profile "profile-to-delete" deleted',
       );
+      expect(onDeleted).toHaveBeenCalledWith("profile-to-delete");
       expect(handleClose).toHaveBeenCalled();
     });
   });
@@ -141,11 +150,12 @@ describe("DeleteProfileModal", () => {
   it("shows error toast on delete failure", async () => {
     const user = userEvent.setup();
     const handleClose = vi.fn();
+    const onDeleted = vi.fn();
     vi.mocked(ProfilesService.deleteProfile).mockRejectedValue(
       new Error("Delete failed"),
     );
 
-    renderModal(mockProfile, handleClose);
+    renderModal(mockProfile, handleClose, onDeleted);
 
     await user.click(screen.getByTestId("delete-profile-confirm"));
 
@@ -156,6 +166,7 @@ describe("DeleteProfileModal", () => {
     });
 
     expect(handleClose).not.toHaveBeenCalled();
+    expect(onDeleted).not.toHaveBeenCalled();
   });
 
   it("shows the server's `detail` instead of the raw HttpError text when the server refuses the delete", async () => {

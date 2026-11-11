@@ -1,4 +1,8 @@
+import { Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { SettingsSwitch } from "#/components/features/settings/settings-switch";
+import { I18nKey } from "#/i18n/declaration";
+import { settingsListIconActionButtonClassName } from "#/utils/settings-list-classes";
 import { Typography } from "#/ui/typography";
 
 export interface ProfileScopeItem {
@@ -12,7 +16,10 @@ interface ProfileScopeListProps {
   items: ProfileScopeItem[];
   selected: string[];
   isDisabled?: boolean;
-  onToggle: (name: string, checked: boolean) => void;
+  onToggle?: (name: string, checked: boolean) => void;
+  onDelete?: (name: string) => void;
+  deletableNames?: string[];
+  isDeleteDisabled?: boolean;
 }
 
 /**
@@ -27,20 +34,38 @@ export function ProfileScopeList({
   selected,
   isDisabled = false,
   onToggle,
+  onDelete,
+  deletableNames,
+  isDeleteDisabled = false,
 }: ProfileScopeListProps) {
+  const { t } = useTranslation("openhands");
   return (
     <ul data-testid={`${testId}-list`} className="flex flex-col gap-2.5">
       {items.map(({ name, description }) => (
         <li key={name} className="flex flex-col gap-0.5">
-          <SettingsSwitch
-            testId={`${testId}-${name}`}
-            name={`${testId}-${name}`}
-            isToggled={selected.includes(name)}
-            isDisabled={isDisabled}
-            onToggle={(checked) => onToggle(name, checked)}
-          >
-            <span className="font-mono">{name}</span>
-          </SettingsSwitch>
+          <div className="flex items-center justify-between gap-3">
+            <SettingsSwitch
+              testId={`${testId}-${name}`}
+              name={`${testId}-${name}`}
+              isToggled={selected.includes(name)}
+              isDisabled={isDisabled || !onToggle}
+              onToggle={(checked) => onToggle?.(name, checked)}
+            >
+              <span className="font-mono">{name}</span>
+            </SettingsSwitch>
+            {onDelete && deletableNames?.includes(name) && (
+              <button
+                type="button"
+                data-testid={`${testId}-delete-${name}`}
+                aria-label={`${t(I18nKey.BUTTON$DELETE)} ${name}`}
+                onClick={() => onDelete(name)}
+                disabled={isDeleteDisabled}
+                className={settingsListIconActionButtonClassName}
+              >
+                <Trash2 aria-hidden="true" className="size-4" />
+              </button>
+            )}
+          </div>
           {description ? (
             <Typography.Text className="text-xs text-tertiary-alt pl-11">
               {description}

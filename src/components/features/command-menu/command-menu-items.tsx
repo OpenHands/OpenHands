@@ -5,15 +5,12 @@ import {
   Container,
   Home,
   Keyboard,
-  KeyRound,
   ListTodo,
   PanelsTopLeft,
   Route,
-  Search,
   Settings,
   ShieldCheck,
   Sparkles,
-  Wrench,
   Zap,
 } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
@@ -33,17 +30,14 @@ export const COMMAND_MENU_ROUTE = {
   conversations: "/conversations",
   customize: "/customize",
   automations: automationListPath(),
-  mcp: "/mcp",
   settings: "/settings",
-  agentSettings: "/settings/agents",
-  llmSettings: "/settings/llm",
+  agentSettings: "/agents",
   metaLlmSettings: "/settings/meta-llm",
   condenserSettings: "/settings/condenser",
   agentContextSettings: "/settings/agent-context",
   verificationSettings: "/settings/verification",
   runtimeSettings: "/settings/runtime",
   appSettings: "/settings/app",
-  secretsSettings: "/settings/secrets",
 } as const;
 
 export type CommandMenuGroupId = "navigation" | "settings" | "actions";
@@ -51,17 +45,14 @@ export type CommandMenuItemId =
   | "new-chat"
   | "customize"
   | "automations"
-  | "mcp"
   | "settings"
   | "agent-settings"
-  | "llm-settings"
   | "meta-llm-settings"
   | "condenser-settings"
   | "agent-context-settings"
   | "verification-settings"
   | "runtime-settings"
   | "app-settings"
-  | "secrets-settings"
   | "toggle-sidebar";
 
 export interface CommandMenuItemDefinition {
@@ -155,15 +146,6 @@ export const createCommandMenuItems = ({
         ]
       : []),
     {
-      id: "mcp",
-      group: "navigation",
-      titleKey: I18nKey.COMMAND_MENU$MCP_TITLE,
-      descriptionKey: I18nKey.COMMAND_MENU$MCP_DESCRIPTION,
-      keywordsKey: I18nKey.COMMAND_MENU$MCP_KEYWORDS,
-      icon: <Wrench size={ICON_SIZE} />,
-      to: COMMAND_MENU_ROUTE.mcp,
-    },
-    {
       id: "settings",
       group: "settings",
       titleKey: I18nKey.COMMAND_MENU$SETTINGS_TITLE,
@@ -180,15 +162,6 @@ export const createCommandMenuItems = ({
       keywordsKey: I18nKey.COMMAND_MENU$AGENT_SETTINGS_KEYWORDS,
       icon: <Bot size={ICON_SIZE} />,
       to: COMMAND_MENU_ROUTE.agentSettings,
-    },
-    {
-      id: "llm-settings",
-      group: "settings",
-      titleKey: I18nKey.COMMAND_MENU$LLM_SETTINGS_TITLE,
-      descriptionKey: I18nKey.COMMAND_MENU$LLM_SETTINGS_DESCRIPTION,
-      keywordsKey: I18nKey.COMMAND_MENU$LLM_SETTINGS_KEYWORDS,
-      icon: <Search size={ICON_SIZE} />,
-      to: COMMAND_MENU_ROUTE.llmSettings,
     },
     {
       id: "meta-llm-settings",
@@ -245,15 +218,6 @@ export const createCommandMenuItems = ({
       to: COMMAND_MENU_ROUTE.appSettings,
     },
     {
-      id: "secrets-settings",
-      group: "settings",
-      titleKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_TITLE,
-      descriptionKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_DESCRIPTION,
-      keywordsKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_KEYWORDS,
-      icon: <KeyRound size={ICON_SIZE} />,
-      to: COMMAND_MENU_ROUTE.secretsSettings,
-    },
-    {
       id: "toggle-sidebar",
       group: "actions",
       titleKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_TITLE,
@@ -272,7 +236,9 @@ export const createCommandMenuItems = ({
 
   return items.filter(
     (item) =>
-      (isCloud || item.to !== COMMAND_MENU_ROUTE.condenserSettings) &&
+      (isCloud ||
+        (item.to !== COMMAND_MENU_ROUTE.condenserSettings &&
+          item.to !== COMMAND_MENU_ROUTE.metaLlmSettings)) &&
       (!isLockedToCloud ||
         item.group !== "settings" ||
         item.to === COMMAND_MENU_ROUTE.settings ||

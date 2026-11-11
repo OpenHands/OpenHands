@@ -754,6 +754,66 @@ describe("MetaLlmSettingsView", () => {
       expect(activateMutateAsync).not.toHaveBeenCalled();
     });
 
+    it("deletes an unselected shared router without changing this agent's choice", async () => {
+      const onSelected = vi.fn();
+      const onDeleted = vi.fn();
+      const deleteAsync = vi.fn().mockResolvedValue({ name: "balanced" });
+      vi.mocked(useDeleteMetaProfileHook.useDeleteMetaProfile).mockReturnValue(
+        mockMutation(deleteAsync),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(
+        <MetaLlmSettingsView
+          onSelected={onSelected}
+          onDeleted={onDeleted}
+          selectedRouter="cheap"
+          embedded
+        />,
+      );
+
+      expect(screen.queryByTestId("meta-profile-list")).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("agent-settings-router-choices-option-cheap"),
+      ).toBeChecked();
+      await user.click(
+        screen.getByTestId("agent-settings-router-choices-delete-balanced"),
+      );
+      expect(
+        screen.getByText("SETTINGS$META_PROFILE_DELETE_SHARED_WARNING"),
+      ).toBeInTheDocument();
+      await user.click(screen.getByTestId("delete-meta-profile-confirm"));
+
+      await waitFor(() => expect(onDeleted).toHaveBeenCalledWith("balanced"));
+      expect(onSelected).not.toHaveBeenCalled();
+      expect(
+        screen.getByTestId("agent-settings-router-choices-option-cheap"),
+      ).toBeChecked();
+      expect(activateMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it("selects a newly created router on the owning agent without a global activation", async () => {
+      const onCreated = vi.fn();
+      const user = userEvent.setup();
+      saveMutateAsync.mockResolvedValue({ name: "new-router" });
+      renderWithProviders(
+        <MetaLlmSettingsView onCreated={onCreated} embedded />,
+      );
+
+      await openRouterProTemplate(user);
+      await user.clear(screen.getByTestId("meta-profile-name-input"));
+      await user.type(
+        screen.getByTestId("meta-profile-name-input"),
+        "new-router",
+      );
+      fireEvent.change(screen.getByTestId("meta-profile-model-table"), {
+        target: { value: "" },
+      });
+      await user.click(screen.getByTestId("meta-profile-save"));
+
+      await waitFor(() => expect(onCreated).toHaveBeenCalledWith("new-router"));
+      expect(activateMutateAsync).not.toHaveBeenCalled();
+    });
+
     it("enables Run on first message once any router exists", () => {
       vi.mocked(useMetaProfilesHook.useMetaProfiles).mockReturnValue({
         data: { meta_profiles: mockMetaProfiles, active_meta_profile: null },

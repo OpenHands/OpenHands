@@ -48,7 +48,7 @@ const ACTIONS_GROUP_KEY = "COMMAND_MENU$GROUP_ACTIONS";
 // its title renders as the manifest literal rather than a translation key.
 const AUTOMATIONS_TITLE_KEY = getInterfaceCopy().commandMenuTitle;
 const NEW_CHAT_TITLE_KEY = "COMMAND_MENU$NEW_CHAT_TITLE";
-const SECRETS_TITLE_KEY = "COMMAND_MENU$SECRETS_SETTINGS_TITLE";
+const AGENT_SETTINGS_TITLE_KEY = "COMMAND_MENU$AGENT_SETTINGS_TITLE";
 const TOGGLE_SIDEBAR_TITLE_KEY = "COMMAND_MENU$TOGGLE_SIDEBAR_TITLE";
 const APPLE_SHORTCUT_KEY = "COMMAND_MENU$SHORTCUT";
 const CTRL_SHORTCUT_KEY = "COMMAND_MENU$SHORTCUT_CTRL";
@@ -251,10 +251,10 @@ describe("CommandMenu", () => {
 
     await userEvent.type(
       screen.getByRole("combobox", { name: SEARCH_LABEL_KEY }),
-      "secrets",
+      "agent",
     );
 
-    expect(screen.getByText(SECRETS_TITLE_KEY)).toBeInTheDocument();
+    expect(screen.getByText(AGENT_SETTINGS_TITLE_KEY)).toBeInTheDocument();
     expect(screen.queryByText(NEW_CHAT_TITLE_KEY)).not.toBeInTheDocument();
     expect(screen.getByText(SETTINGS_GROUP_KEY)).toBeInTheDocument();
     expect(screen.queryByText(NAVIGATION_GROUP_KEY)).not.toBeInTheDocument();
@@ -285,27 +285,34 @@ describe("CommandMenu", () => {
     });
   });
 
-  it.each([
-    ["meta_llm", COMMAND_MENU_ROUTE.metaLlmSettings],
-    ["agent_context", COMMAND_MENU_ROUTE.agentContextSettings],
-  ])(
-    "finds the %s settings page and opens it",
-    async (searchTerm, expectedRoute) => {
-      useCommandMenuStore.getState().open();
-      const { navigate } = renderCommandMenu();
+  it("hides the cloud-only Model Router settings page on a local backend", async () => {
+    useCommandMenuStore.getState().open();
+    renderCommandMenu();
 
-      await userEvent.type(
-        screen.getByRole("combobox", { name: SEARCH_LABEL_KEY }),
-        searchTerm,
-      );
-      await userEvent.keyboard("{Enter}");
+    await userEvent.type(
+      screen.getByRole("combobox", { name: SEARCH_LABEL_KEY }),
+      "meta_llm",
+    );
+    expect(screen.getByText(NO_RESULTS_TITLE_KEY)).toBeInTheDocument();
+  });
 
-      expect(navigate).toHaveBeenCalledWith(expectedRoute);
-      await waitFor(() => {
-        expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
-      });
-    },
-  );
+  it("finds the agent context settings page and opens it", async () => {
+    useCommandMenuStore.getState().open();
+    const { navigate } = renderCommandMenu();
+
+    await userEvent.type(
+      screen.getByRole("combobox", { name: SEARCH_LABEL_KEY }),
+      "agent_context",
+    );
+    await userEvent.keyboard("{Enter}");
+
+    expect(navigate).toHaveBeenCalledWith(
+      COMMAND_MENU_ROUTE.agentContextSettings,
+    );
+    await waitFor(() => {
+      expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+    });
+  });
 
   it("supports arrow-key navigation and enter selection", async () => {
     useCommandMenuStore.getState().open();
@@ -480,7 +487,7 @@ describe("CommandMenu", () => {
       name: SEARCH_LABEL_KEY,
     });
     expect(reopenedInput).toHaveValue("");
-    expect(screen.getAllByRole("option")).toHaveLength(14);
+    expect(screen.getAllByRole("option")).toHaveLength(10);
     expect(screen.getAllByRole("option")[0]).toHaveAttribute(
       "aria-selected",
       "true",

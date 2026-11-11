@@ -10,7 +10,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { RouterProvider, createMemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import SkillsSettingsScreen from "#/routes/skills-settings";
+import { SkillsSettingsScreen } from "#/routes/skills-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import SkillsService from "#/api/skills-service";
 import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
@@ -144,15 +144,15 @@ describe("SkillsSettingsScreen", () => {
     );
     expect(description).toHaveTextContent("SETTINGS$SKILLS_PAGE_DESCRIPTION");
     expect(screen.getByText("NAV$CUSTOMIZE")).toBeInTheDocument();
-    expect(screen.getByTestId("sidebar-extensions-/skills")).toHaveTextContent(
-      "Skills",
-    );
+    expect(
+      screen.queryByTestId("sidebar-extensions-/skills"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("sidebar-extensions-/plugins")).toHaveTextContent(
       "Plugins",
     );
-    expect(screen.getByTestId("sidebar-extensions-/mcp")).toHaveTextContent(
-      "MCP Servers",
-    );
+    expect(
+      screen.queryByTestId("sidebar-extensions-/mcp"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows card subtitle text from skill content when description is omitted", async () => {

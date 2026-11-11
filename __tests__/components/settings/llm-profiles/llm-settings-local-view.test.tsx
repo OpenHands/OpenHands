@@ -273,6 +273,46 @@ describe("LlmSettingsLocalView", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders an inline create form without duplicating agent navigation or header", () => {
+    renderWithProviders(
+      <LlmSettingsLocalView createInAgent onCancel={vi.fn()} />,
+    );
+
+    expect(screen.getByTestId("profile-name-input")).toBeInTheDocument();
+    expect(screen.getByTestId("save-profile-btn")).toBeInTheDocument();
+    expect(screen.queryByTestId("back-to-profiles")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("profile-editor-title"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("loads the selected saved LLM directly into the embedded edit form", async () => {
+    vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+      name: "gpt-4-profile",
+      config: { model: "openai/gpt-4", api_key: "encrypted-key" },
+    } as never);
+
+    renderWithProviders(
+      <LlmSettingsLocalView
+        createInAgent
+        initialProfile={mockProfiles[0]}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByTestId("profile-name-input")).toHaveValue(
+      "gpt-4-profile",
+    );
+    expect(ProfilesService.getProfile).toHaveBeenCalledWith(
+      "gpt-4-profile",
+      "encrypted",
+    );
+    expect(screen.getByTestId("mock-basic-model-input")).toHaveValue(
+      "openai/gpt-4",
+    );
+    expect(screen.queryByTestId("add-llm-profile")).not.toBeInTheDocument();
+  });
+
   it("returns to list view when back button clicked", async () => {
     const user = userEvent.setup();
     renderWithProviders(<LlmSettingsLocalView />);

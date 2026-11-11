@@ -1,6 +1,6 @@
 import React from "react";
+import { Navigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import {
   ExtensionsNavigation,
@@ -42,8 +42,11 @@ import { cn } from "#/utils/utils";
 
 const SEARCH_URL_SYNC_DELAY_MS = 300;
 
-function SkillsSettingsScreen() {
+export function SkillsSettingsScreen({
+  embedded = false,
+}: { embedded?: boolean } = {}) {
   const { t } = useTranslation("openhands");
+  const Main = embedded ? "div" : "main";
 
   const { backend } = useActiveBackend();
   const isCloud = backend.kind === "cloud";
@@ -140,15 +143,21 @@ function SkillsSettingsScreen() {
   return (
     <div
       data-testid="skills-settings-screen"
-      className="flex h-full gap-4 lg:gap-10 lg:pl-10"
+      className={
+        embedded ? "flex flex-col" : "flex h-full gap-4 lg:gap-10 lg:pl-10"
+      }
     >
-      <ExtensionsNavigation />
-      <main className={cn(settingsLikeMainScrollClassName, "h-full")}>
+      {!embedded && <ExtensionsNavigation />}
+      <Main
+        className={
+          embedded ? "w-full" : cn(settingsLikeMainScrollClassName, "h-full")
+        }
+      >
         <div
           data-testid="skills-page"
           className="mx-auto flex w-full min-w-0 max-w-275 flex-col gap-6"
         >
-          <ExtensionsCompactNavigation />
+          {!embedded && <ExtensionsCompactNavigation />}
           <div className="flex min-w-0 items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <h2 className="text-xl font-semibold leading-6 text-foreground">
@@ -304,9 +313,11 @@ function SkillsSettingsScreen() {
         {showAddSkillModal && (
           <AddSkillModal onClose={() => setShowAddSkillModal(false)} />
         )}
-      </main>
+      </Main>
     </div>
   );
 }
 
-export default SkillsSettingsScreen;
+export default function SkillsSettingsRoute() {
+  return <Navigate to="/agents" replace />;
+}

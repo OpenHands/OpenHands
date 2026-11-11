@@ -130,55 +130,49 @@ describe("ChatInputActions", () => {
     useActiveConversationMock.mockReturnValue({ data: undefined });
   });
 
-  it("renders the LLM-profile picker on the home page (local)", () => {
-    useActiveConversationMock.mockReturnValue({ data: undefined });
+  it.each(["local", "cloud"])(
+    "offers both agent and LLM profiles on the %s home page",
+    async (backend) => {
+      listAgentProfilesMock.mockResolvedValue({
+        profiles: [{ id: "p1", name: "default", agent_kind: "openhands" }],
+        active_agent_profile_id: "p1",
+      });
+      if (backend === "cloud") {
+        setRegisteredBackends([cloudBackend]);
+        setActiveSelection({ backendId: cloudBackend.id });
+      }
+      renderWithProviders(
+        <ActiveBackendProvider>
+          <ChatInputActions disabled={false} />
+        </ActiveBackendProvider>,
+        { navigation: { conversationId: null } },
+      );
 
-    renderWithProviders(<ChatInputActions disabled={false} />, {
-      navigation: { conversationId: null },
+      expect(
+        await screen.findByTestId("agent-profile-pill-stub"),
+      ).toBeVisible();
+      expect(screen.getByTestId("llm-profile-picker-stub")).toBeVisible();
+      expect(screen.queryByTestId("chat-input-llm-model")).toBeNull();
+    },
+  );
+
+  it("offers both selectors inside a blank local OpenHands conversation", async () => {
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [{ id: "p1", name: "default", agent_kind: "openhands" }],
+      active_agent_profile_id: "p1",
     });
-
-    // The pill is always an LLM selector (OSS-5735) — agent-profile switching
-    // lives in the "+" tools menu instead.
-    expect(screen.getByTestId("llm-profile-picker-stub")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("chat-input-llm-model"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("renders the LLM-profile picker on the home page (cloud)", () => {
-    // Cloud used to fall back to a read-only model chip before a conversation
-    // started, surfacing the raw model path instead of the profile name (#1932
-    // review). The pill names the profile on every backend now.
-    setRegisteredBackends([cloudBackend]);
-    setActiveSelection({ backendId: cloudBackend.id });
-    useActiveConversationMock.mockReturnValue({ data: undefined });
-
-    renderWithProviders(<ChatInputActions disabled={false} />, {
-      navigation: { conversationId: null },
-    });
-
-    expect(screen.getByTestId("llm-profile-picker-stub")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("chat-input-llm-model"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("renders the LLM-profile picker inside a blank local OpenHands conversation", () => {
     useActiveConversationMock.mockReturnValue({
       data: { conversation_id: "test-conversation-id", llm_model: null },
     });
 
     renderWithProviders(
       <ChatInputActions disabled={false} hasStartedConversation={false} />,
-      {
-        navigation: { conversationId: "test-conversation-id" },
-      },
+      { navigation: { conversationId: "test-conversation-id" } },
     );
 
-    expect(screen.getByTestId("llm-profile-picker-stub")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("chat-input-llm-model"),
-    ).not.toBeInTheDocument();
+    expect(await screen.findByTestId("agent-profile-pill-stub")).toBeVisible();
+    expect(screen.getByTestId("llm-profile-picker-stub")).toBeVisible();
+    expect(screen.queryByTestId("chat-input-llm-model")).toBeNull();
   });
 
   it("renders the LLM-profile switcher inside a started local OpenHands conversation", () => {
@@ -636,17 +630,32 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
     });
   };
 
-  it("stays open after the opening click reaches document listeners", () => {
-    renderWithProviders(<ChatInputActions disabled={false} />);
+  it("keeps the LLM profile available in a narrow home menu", () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    renderWithProviders(
+      <ActiveBackendProvider>
+        <ChatInputActions disabled={false} />
+      </ActiveBackendProvider>,
+      { navigation: { conversationId: null } },
+    );
 
     clickTrigger();
 
     expect(getTrigger()).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByTestId("chat-input-overflow-menu")).toBeInTheDocument();
-    expect(screen.getByTestId("overflow-model-button")).toBeInTheDocument();
+    expect(screen.getByTestId("overflow-agent-button")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("overflow-model-button"));
+    expect(
+      within(screen.getByTestId("overflow-model-submenu")).getByTestId(
+        "llm-profile-menu-stub",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("closes on a second trigger click and on a click outside", () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
     renderWithProviders(<ChatInputActions disabled={false} />);
 
     clickTrigger();
@@ -667,7 +676,12 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
   });
 
   it("closes on Escape and returns focus to the trigger", () => {
-    renderWithProviders(<ChatInputActions disabled={false} />);
+    renderWithProviders(
+      <ChatInputActions disabled={false} hasStartedConversation />,
+      {
+        navigation: { conversationId: "conv-started" },
+      },
+    );
 
     clickTrigger();
     fireEvent.click(screen.getByTestId("overflow-model-button"));
@@ -696,8 +710,13 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
     );
   });
 
-  it("opens the Model submenu with the profile list", () => {
-    renderWithProviders(<ChatInputActions disabled={false} />);
+  it("opens the Model submenu with the profile list once a conversation starts", () => {
+    renderWithProviders(
+      <ChatInputActions disabled={false} hasStartedConversation />,
+      {
+        navigation: { conversationId: "conv-started" },
+      },
+    );
 
     clickTrigger();
     fireEvent.click(screen.getByTestId("overflow-model-button"));

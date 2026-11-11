@@ -96,7 +96,7 @@ describe("ChatInputProfileMenuContent", () => {
     const { container } = renderMenu();
 
     expect(
-      container.ownerDocument.querySelector('a[href="/settings/agents"]'),
+      container.ownerDocument.querySelector('a[href="/agents"]'),
     ).not.toBeNull();
   });
 

@@ -194,10 +194,8 @@ export function Sidebar() {
 
   const isExtensionsActive =
     currentPath === "/customize" ||
-    currentPath.startsWith("/skills") ||
     currentPath === "/plugins" ||
-    currentPath === "/apps" ||
-    currentPath === "/mcp";
+    currentPath === "/apps";
 
   const railBodyProps = {
     collapseToggleLabel,
