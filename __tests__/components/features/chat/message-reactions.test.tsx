@@ -197,6 +197,7 @@ describe("MessageReactions", () => {
         "CHAT_INTERFACE$REACTION_FAILED",
       ),
     );
+    expect(screen.queryByTestId("reaction-heart")).not.toBeInTheDocument();
   });
 
   it("lets the person react to the agent's message while the feature is on", async () => {
@@ -220,6 +221,19 @@ describe("MessageReactions", () => {
       targetEventId: "msg-1",
       removed: false,
     });
+    // The chip shows before the server's event arrives (the server holds a
+    // reaction back while a tool call waits for approval), and the event
+    // then takes over.
+    const chip = await screen.findByTestId("reaction-+1");
+    expect(chip).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(chip);
+    expect(react).toHaveBeenLastCalledWith(
+      expect.objectContaining({ emoji: "+1", removed: true }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId("reaction-+1")).not.toBeInTheDocument(),
+    );
   });
 
   it("takes the person's own reaction off when its chip is clicked", async () => {

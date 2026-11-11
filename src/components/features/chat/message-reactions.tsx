@@ -169,7 +169,24 @@ export function MessageReactions({
     }
   }, [pickerOpen]);
 
+  // The person's clicks show at once. The server's events replace them when
+  // they arrive, which can be a while if a tool call is waiting for approval.
+  const [optimistic, setOptimistic] = React.useState<
+    Partial<Record<ReactionEmoji, boolean>>
+  >({});
+  React.useEffect(() => setOptimistic({}), [key]);
+
   const reactions = parseKey(key);
+  for (const [emoji, on] of Object.entries(optimistic) as [
+    ReactionEmoji,
+    boolean,
+  ][]) {
+    const sources = reactions.get(emoji) ?? new Set<ReactionSource>();
+    if (on) sources.add("user");
+    else sources.delete("user");
+    if (sources.size > 0) reactions.set(emoji, sources);
+    else reactions.delete(emoji);
+  }
   if (reactions.size === 0 && !canReact) return null;
 
   const toggle = async (emoji: ReactionEmoji) => {
@@ -179,14 +196,18 @@ export function MessageReactions({
       setPickerOpen(false);
       triggerRef.current?.focus();
     }
+    const removed = reactions.get(emoji)?.has("user") ?? false;
+    const before = optimistic;
+    setOptimistic({ ...before, [emoji]: !removed });
     try {
       await experimentalFeaturesService.react({
         conversationId,
         emoji,
         targetEventId: eventId,
-        removed: reactions.get(emoji)?.has("user") ?? false,
+        removed,
       });
     } catch (error) {
+      setOptimistic(before);
       displayApiErrorToast(error, t(I18nKey.CHAT_INTERFACE$REACTION_FAILED));
     } finally {
       setPending(false);
