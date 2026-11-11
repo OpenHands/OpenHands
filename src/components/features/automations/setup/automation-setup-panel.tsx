@@ -1,3 +1,4 @@
+import { useAgentProfileAvailability } from "#/hooks/use-agent-profile-availability";
 import type {
   AutomationUpdate,
   Automation,
@@ -1129,11 +1130,14 @@ export function AutomationSetupPanel({
   );
   // Services that run scripts from an agent profile may still refuse one on
   // a prompt or plugin preset; those advertise a feature of their own.
-  const canSelectAgentProfile = (
-    deploymentCapabilities.data?.features ?? []
-  ).includes(
-    kind === "custom" ? AGENT_PROFILES_FEATURE : PRESET_AGENT_PROFILES_FEATURE,
-  );
+  const agentProfilesAvailable = useAgentProfileAvailability();
+  const canSelectAgentProfile =
+    agentProfilesAvailable &&
+    (deploymentCapabilities.data?.features ?? []).includes(
+      kind === "custom"
+        ? AGENT_PROFILES_FEATURE
+        : PRESET_AGENT_PROFILES_FEATURE,
+    );
   const selectedAgentProfileId =
     (canSelectAgentProfile && agentProfileId.trim()) || null;
 
@@ -3569,6 +3573,77 @@ function EventSourceControl({
   );
 }
 
+function EventKeyControl({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+}) {
+  const { t } = useTranslation("openhands");
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useClickOutsideElement<HTMLDivElement>(
+    () => setIsMenuOpen(false),
+    triggerRef,
+  );
+  useCloseOnEscape(isMenuOpen, () => setIsMenuOpen(false), triggerRef);
+
+  return (
+    <div className="relative flex min-w-0 flex-1">
+      <input
+        id="automation-setup-event-key"
+        data-testid="automation-setup-event-key"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={cn(
+          "min-w-0 w-full border-0 bg-transparent px-3 text-sm text-contrast outline-none",
+          options.length > 0 && "pr-9",
+        )}
+      />
+      {options.length > 0 && (
+        <button
+          ref={triggerRef}
+          type="button"
+          data-testid="automation-setup-event-key-toggle"
+          aria-label={t(I18nKey.AUTOMATION_SETUP$EVENT_KEY)}
+          aria-haspopup="menu"
+          aria-expanded={isMenuOpen}
+          className="absolute top-1/2 right-2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted hover:bg-interactive-hover hover:text-contrast"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => setIsMenuOpen((open) => !open)}
+        >
+          <ChevronDown className="size-4 shrink-0" aria-hidden />
+        </button>
+      )}
+      {isMenuOpen && options.length > 0 && (
+        <div
+          ref={menuRef}
+          role="menu"
+          data-testid="automation-setup-event-key-menu"
+          className="absolute top-full left-0 z-60 mt-1 flex max-h-72 w-full flex-col overflow-y-auto rounded-md border border-border-subtle bg-tertiary p-1 shadow-lg"
+        >
+          {options.map((option) => (
+            <ContextMenuListItem
+              key={option}
+              onClick={() => {
+                onChange(option);
+                setIsMenuOpen(false);
+                triggerRef.current?.focus();
+              }}
+              className="flex w-full min-w-0 items-center"
+            >
+              <span className="truncate">{option}</span>
+            </ContextMenuListItem>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EventFields({
   eventSource,
   eventKey,
@@ -3682,7 +3757,7 @@ function EventFields({
             </label>
             <div
               className={cn(
-                "flex w-full min-w-0 overflow-hidden",
+                "flex w-full min-w-0",
                 formControlHeightClassName,
                 formControlRadiusClassName,
                 formControlBorderClassName,
@@ -3692,19 +3767,11 @@ function EventFields({
                 streamingHighlightClassName(streamingField === "eventFilter"),
               )}
             >
-              <input
-                id="automation-setup-event-key"
-                data-testid="automation-setup-event-key"
+              <EventKeyControl
                 value={eventKey}
-                list="automation-setup-event-key-options"
-                onChange={(event) => setEventKey(event.target.value)}
-                className="min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-contrast outline-none"
+                options={eventTypeOptions}
+                onChange={setEventKey}
               />
-              <datalist id="automation-setup-event-key-options">
-                {eventTypeOptions.map((eventType) => (
-                  <option key={eventType} value={eventType} />
-                ))}
-              </datalist>
               {showEventFilter ? null : (
                 <button
                   type="button"

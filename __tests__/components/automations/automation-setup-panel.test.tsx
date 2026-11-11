@@ -55,6 +55,11 @@ import type { AutomationDraftApiResponse } from "#/manifests/types";
 import type { Automation } from "#/types/automation";
 import type { Provider } from "#/types/settings";
 
+const mockInstanceConfig = vi.hoisted(() => vi.fn());
+vi.mock("#/hooks/query/use-cloud-integrations-config", () => ({
+  useCloudIntegrationsConfig: () => mockInstanceConfig(),
+}));
+
 const mockNavigate = vi.fn();
 const mockToastSuccess = vi.fn();
 const createGitRepositoriesQueryResult = () => ({
@@ -368,6 +373,7 @@ function renderSessionBoundPanel(conversationId: string) {
 
 describe("AutomationSetupPanel", () => {
   beforeEach(() => {
+    mockInstanceConfig.mockReturnValue({ data: undefined });
     serviceAccountMocks.enabled = false;
     window.sessionStorage.clear();
     vi.clearAllMocks();
@@ -850,6 +856,72 @@ describe("AutomationSetupPanel", () => {
       screen.queryByTestId("automation-setup-repository-menu"),
     ).not.toBeInTheDocument();
     expect(repositoryTrigger).toHaveFocus();
+  });
+
+  it("opens the full event catalog for a nonmatching key and keeps custom entry editable", async () => {
+    vi.mocked(useDeploymentCapabilities).mockReturnValue({
+      data: {
+        ready: true,
+        features: [],
+        triggerKinds: ["cron", "event"],
+        eventSources: ["github"],
+        eventTypes: ["issues.*", "push"],
+        triggers: {},
+      },
+      isLoading: false,
+    } as never);
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+    const input = screen.getByTestId("automation-setup-event-key");
+    await user.clear(input);
+    await user.type(input, "issues.opened");
+    const toggle = screen.getByTestId("automation-setup-event-key-toggle");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const menu = screen.getByTestId("automation-setup-event-key-menu");
+    expect(
+      within(menu).getByRole("button", { name: "issues.*" }),
+    ).toBeVisible();
+    expect(within(menu).getByRole("button", { name: "push" })).toBeVisible();
+    expect(input).toHaveValue("issues.opened");
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByTestId("automation-setup-event-key-menu"),
+    ).not.toBeInTheDocument();
+    expect(toggle).toHaveFocus();
+    await user.click(toggle);
+    await user.click(
+      within(screen.getByTestId("automation-setup-event-key-menu")).getByRole(
+        "button",
+        { name: "push" },
+      ),
+    );
+    expect(input).toHaveValue("push");
+    expect(
+      screen.queryByTestId("automation-setup-event-key-menu"),
+    ).not.toBeInTheDocument();
+    await user.clear(input);
+    await user.type(input, "custom.event, issues.opened");
+    expect(input).toHaveValue("custom.event, issues.opened");
+    await user.click(toggle);
+    await user.click(screen.getByTestId("automation-setup-settings-group"));
+    expect(
+      screen.queryByTestId("automation-setup-event-key-menu"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the event key editable without a dropdown when no catalog is reported", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+    expect(
+      screen.queryByTestId("automation-setup-event-key-toggle"),
+    ).not.toBeInTheDocument();
+    const input = screen.getByTestId("automation-setup-event-key");
+    await user.clear(input);
+    await user.type(input, "custom.*");
+    expect(input).toHaveValue("custom.*");
   });
 
   it("closes the event source menu on Escape and returns focus to its toggle", async () => {
@@ -1749,7 +1821,8 @@ describe("AutomationSetupPanel", () => {
       screen.queryByTestId("automation-setup-event-filter"),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByTestId("automation-setup-event-key").parentElement,
+      screen.getByTestId("automation-setup-event-key").parentElement
+        ?.parentElement,
     ).toContainElement(screen.getByTestId("automation-setup-add-event-filter"));
     expect(
       screen.getByTestId("automation-setup-add-event-filter"),
@@ -2017,6 +2090,18 @@ describe("AutomationSetupPanel", () => {
       vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
         id: "automation-custom",
       });
+    });
+
+    it("hides profile selection when the backend disables it despite automation support", () => {
+      withCapabilities(["agentProfiles", "presetAgentProfiles"]);
+      mockInstanceConfig.mockReturnValue({
+        data: { deploymentMode: "self_hosted", isAgentProfilesEnabled: false },
+      });
+      renderPanel({ prompt: "Run a custom security check", kind: "custom" });
+      expect(
+        screen.queryByTestId("automation-setup-agent-profile"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("automation-setup-model")).toBeInTheDocument();
     });
 
     it("locks the LLM profile to the agent profile's and sends only the agent profile", async () => {
@@ -3209,12 +3294,20 @@ describe("AutomationSetupPanel", () => {
           .getByTestId("automation-setup-event-source-option-github")
           .compareDocumentPosition(custom) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
+      await user.click(screen.getByTestId("automation-setup-event-key-toggle"));
       expect(
-        document.querySelector(
-          '#automation-setup-event-key-options option[value="issues.*"]',
+        within(screen.getByTestId("automation-setup-event-key-menu")).getByRole(
+          "button",
+          { name: "issues.*" },
         ),
-      ).not.toBeNull();
-      await user.click(custom);
+      ).toBeVisible();
+      await user.keyboard("{Escape}");
+      await user.click(
+        screen.getByTestId("automation-setup-event-source-toggle"),
+      );
+      await user.click(
+        screen.getByTestId("automation-setup-event-source-custom"),
+      );
       const sourceInput = screen.getByTestId("automation-setup-event-source");
       expect(sourceInput).toHaveValue("");
       expect(sourceInput).toHaveAttribute(
@@ -3291,12 +3384,20 @@ describe("AutomationSetupPanel", () => {
         isLoading: false,
       } as never);
       mockSavedDraftEcho();
-      const eventTypeOptions = () =>
-        Array.from(
-          document.querySelectorAll(
-            "#automation-setup-event-key-options option",
-          ),
-        ).map((option) => option.getAttribute("value"));
+      const eventTypeOptions = async (
+        user: ReturnType<typeof userEvent.setup>,
+      ) => {
+        await user.click(
+          screen.getByTestId("automation-setup-event-key-toggle"),
+        );
+        const options = within(
+          screen.getByTestId("automation-setup-event-key-menu"),
+        )
+          .getAllByRole("button")
+          .map((option) => option.textContent);
+        await user.keyboard("{Escape}");
+        return options;
+      };
       const pickSource = async (
         user: ReturnType<typeof userEvent.setup>,
         source: string,
@@ -3312,14 +3413,17 @@ describe("AutomationSetupPanel", () => {
       const user = userEvent.setup();
       renderPanel();
       await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
-      expect(eventTypeOptions()).toEqual(["issues.*", "issue_comment.*"]);
+      expect(await eventTypeOptions(user)).toEqual([
+        "issues.*",
+        "issue_comment.*",
+      ]);
       // GitHub's default key still matches a GitHub pattern.
       expect(screen.getByTestId("automation-setup-event-key")).toHaveValue(
         "issue_comment.created",
       );
 
       await pickSource(user, "jira_dc");
-      expect(eventTypeOptions()).toEqual([
+      expect(await eventTypeOptions(user)).toEqual([
         "comment_created",
         "jira:issue_created",
       ]);
@@ -3340,10 +3444,17 @@ describe("AutomationSetupPanel", () => {
       ).toMatchObject({ webhookEvent: "comment_created" });
 
       await pickSource(user, "bitbucket_data_center");
-      expect(eventTypeOptions()).toEqual(["pr:comment:added", "pr:opened"]);
-      fireEvent.change(screen.getByTestId("automation-setup-event-key"), {
-        target: { value: "pr:opened" },
-      });
+      expect(await eventTypeOptions(user)).toEqual([
+        "pr:comment:added",
+        "pr:opened",
+      ]);
+      await user.click(screen.getByTestId("automation-setup-event-key-toggle"));
+      await user.click(
+        within(screen.getByTestId("automation-setup-event-key-menu")).getByRole(
+          "button",
+          { name: "pr:opened" },
+        ),
+      );
       expect(
         JSON.parse(
           (
