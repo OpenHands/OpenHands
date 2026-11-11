@@ -338,4 +338,41 @@ describe("SettingsDropdownInput", () => {
       screen.queryByRole("button", { name: "COMMON$CLEAR_SELECTION" }),
     ).not.toBeInTheDocument();
   });
+
+  it("clears to the fallback option and hides the button while it is selected", async () => {
+    const user = userEvent.setup();
+    const onSelectionChange = vi.fn();
+    const { rerender } = render(
+      <SettingsDropdownInput
+        clearedKey="english"
+        items={items}
+        label="Language"
+        name="language"
+        onSelectionChange={onSelectionChange}
+        selectedKey="german"
+        testId="language-input"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "COMMON$CLEAR_SELECTION" }),
+    );
+    expect(onSelectionChange).toHaveBeenCalledWith("english");
+
+    rerender(
+      <SettingsDropdownInput
+        clearedKey="english"
+        items={items}
+        label="Language"
+        name="language"
+        onSelectionChange={onSelectionChange}
+        selectedKey="english"
+        testId="language-input"
+      />,
+    );
+    expect(screen.getByLabelText("Language")).toHaveValue("English");
+    expect(
+      screen.queryByRole("button", { name: "COMMON$CLEAR_SELECTION" }),
+    ).not.toBeInTheDocument();
+  });
 });

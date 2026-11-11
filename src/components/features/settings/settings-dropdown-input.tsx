@@ -21,6 +21,9 @@ interface SettingsDropdownInputProps {
   defaultSelectedKey?: string;
   selectedKey?: string;
   isClearable?: boolean;
+  /** The option a cleared field falls back to (such as "Automatic"); clearing
+   *  selects it, and the clear button hides while it is selected. */
+  clearedKey?: string;
   allowsCustomValue?: boolean;
   required?: boolean;
   onSelectionChange?: (key: React.Key | null) => void;
@@ -36,19 +39,29 @@ function ClearButton({
   isDisabled,
   isLoading,
   clearLabel,
+  clearedKey,
 }: {
   isClearable: boolean;
   isDisabled: boolean | undefined;
   isLoading: boolean | undefined;
   clearLabel: string;
+  clearedKey: string | undefined;
 }) {
   const state = useContext(ComboBoxStateContext);
   const handleClear = useCallback(() => {
+    if (clearedKey !== undefined) {
+      state?.setSelectedKey(clearedKey);
+      return;
+    }
     state?.setSelectedKey(null);
     state?.setInputValue("");
-  }, [state]);
+  }, [state, clearedKey]);
 
-  if (!isClearable || isLoading || !state?.inputValue) return null;
+  const isCleared =
+    clearedKey !== undefined
+      ? state?.selectedKey === clearedKey
+      : !state?.inputValue;
+  if (!isClearable || isLoading || isCleared) return null;
 
   // The trigger is absolutely positioned at the group's end; keep clear of it.
   return (
@@ -105,6 +118,7 @@ export function SettingsDropdownInput({
   defaultSelectedKey,
   selectedKey,
   isClearable = true,
+  clearedKey,
   allowsCustomValue,
   required,
   onSelectionChange,
@@ -158,6 +172,7 @@ export function SettingsDropdownInput({
           />
           <ClearButton
             isClearable={isClearable}
+            clearedKey={clearedKey}
             isDisabled={isDisabled}
             isLoading={isLoading}
             clearLabel={t(I18nKey.COMMON$CLEAR_SELECTION)}

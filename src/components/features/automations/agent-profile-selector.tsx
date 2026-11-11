@@ -36,7 +36,7 @@ export function AutomationAgentProfileSelector({ value, onChange }: Props) {
       label={t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER)}
       items={items}
       selectedKey={value ?? "__default__"}
-      isClearable
+      clearedKey="__default__"
       isLoading={isLoading}
       isDisabled={isError}
       onSelectionChange={(key) =>

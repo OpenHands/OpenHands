@@ -259,6 +259,7 @@ function AppSettingsForm() {
               selectedKey={
                 selectedTitleLlmProfile ?? AUTOMATIC_TITLE_LLM_PROFILE_KEY
               }
+              clearedKey={AUTOMATIC_TITLE_LLM_PROFILE_KEY}
               onSelectionChange={(key) => {
                 const value = key?.toString();
                 setTitleLlmProfileInput(
