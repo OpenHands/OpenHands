@@ -66,6 +66,65 @@ function measureMount(events: OpenHandsEvent[], withScrollParent: boolean) {
   return { mountMs, domNodes, renderedRows, mountedRows };
 }
 
+// Whole-array methods that a full-key scan could use. Spying on the methods
+// (rather than the production `join` separator) keeps the assertion independent
+// of how the signature is built: a different separator, a `map`/`filter`, or any
+// other whole-array pass still registers.
+const FULL_SCAN_METHODS = [
+  "join",
+  "map",
+  "filter",
+  "forEach",
+  "some",
+  "every",
+  "reduce",
+  "reduceRight",
+  "indexOf",
+  "lastIndexOf",
+  "includes",
+  "find",
+  "findIndex",
+  "flat",
+  "flatMap",
+  "slice",
+  "concat",
+  "sort",
+  "reverse",
+  "fill",
+] as const;
+
+type ArrayMethod = (...args: unknown[]) => unknown;
+
+/**
+ * Watches for whole-array methods running over the large *string* array that
+ * holds the row keys — the shape of a full-key rescan — regardless of method or
+ * separator. Only string arrays are flagged, so the virtualizer's own
+ * `measurementsCache` (an array of objects) does not trip the detector.
+ */
+function watchFullKeyScans() {
+  const scans: string[] = [];
+  const spies = FULL_SCAN_METHODS.map((name) => {
+    const target = Array.prototype as unknown as Record<string, ArrayMethod>;
+    const original = target[name];
+    return vi.spyOn(target, name).mockImplementation(function (
+      this: unknown[],
+      ...args: unknown[]
+    ) {
+      if (this.length >= ROW_COUNT / 2 && typeof this[0] === "string") {
+        scans.push(`${name} on ${this.length} keys`);
+      }
+      return original.apply(this, args);
+    });
+  });
+  return { scans, restore: () => spies.forEach((spy) => spy.mockRestore()) };
+}
+
+/** The `data-index` of every mounted virtual row, in document order. */
+const mountedRowIndices = () =>
+  screen
+    .queryAllByTestId("virtualized-message-row")
+    .map((row) => row.getAttribute("data-index"));
+
 describe("Messages virtualization performance", () => {
   // jsdom has no layout; give the scroll container a measurable viewport.
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
@@ -91,30 +150,35 @@ describe("Messages virtualization performance", () => {
   it("does not rescan the row keys while scrolling", () => {
     // The item-key accessor's identity is a signature of every row key, and the
     // virtualizer re-renders this component on each scroll frame. Building the
-    // signature inline would join the whole (2000-row) key list on every frame,
+    // signature inline would scan the whole (2000-row) key list on every frame,
     // so scroll work would grow with conversation length even though the mounted
     // window stays bounded. The signature is memoized on `rowKeys`, which does
-    // not change while scrolling, so no join should run at all.
-    const join = vi.spyOn(Array.prototype, "join");
+    // not change while scrolling, so no full-key scan should run at all.
+    const { scans, restore } = watchFullKeyScans();
     try {
       renderWithProviders(
         <Harness events={buildEvents(ROW_COUNT)} withScrollParent />,
       );
-      // Joins from mount are expected; only the scroll frames must be free.
-      join.mockClear();
+      // Scans from mount are expected; only the scroll frames must be free.
+      scans.length = 0;
+
+      const before = mountedRowIndices();
+      expect(before.length).toBeGreaterThan(0);
 
       const parent = screen.getByTestId("scroll-parent");
-      for (let step = 0; step < 10; step += 1) {
-        parent.scrollTop = 1000 + step * 500;
+      for (const top of [1000, 4000, 8000, 12000, 16000, 20000, 24000, 28000]) {
+        parent.scrollTop = top;
         fireEvent.scroll(parent);
       }
 
-      const rowKeyJoins = join.mock.calls.filter(
-        ([separator]) => separator === "\u0000",
-      );
-      expect(rowKeyJoins).toHaveLength(0);
+      // Guard against a test that passes without exercising scroll at all: the
+      // mounted window must have moved to a different slice of the history.
+      const after = mountedRowIndices();
+      expect(after).not.toEqual(before);
+
+      expect(scans).toEqual([]);
     } finally {
-      join.mockRestore();
+      restore();
     }
   });
 
