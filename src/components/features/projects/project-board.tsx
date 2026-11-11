@@ -19,7 +19,7 @@ import { cn } from "#/utils/utils";
 
 /** The board's columns, most urgent first, and the attention each one holds. */
 export const BOARD_GROUPS: Array<{
-  id: "needs_you" | "working" | "done" | "resolved";
+  id: "needs_you" | "working" | "idle" | "resolved";
   label: I18nKey;
   attention: ProjectAttention[];
 }> = [
@@ -34,9 +34,9 @@ export const BOARD_GROUPS: Array<{
     attention: ["working"],
   },
   {
-    id: "done",
-    label: I18nKey.PROJECTS$GROUP_DONE,
-    attention: ["finished", "idle"],
+    id: "idle",
+    label: I18nKey.PROJECTS$GROUP_IDLE,
+    attention: ["idle"],
   },
   {
     id: "resolved",

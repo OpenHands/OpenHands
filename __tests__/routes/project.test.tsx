@@ -88,6 +88,7 @@ describe("ProjectPage", () => {
           execution_status: "running",
         }),
         member("03000000000040008000000000000001", "Locales", "resolved"),
+        member("06000000000040008000000000000001", "Docs", "idle"),
       ],
     });
     vi.spyOn(ProjectsService, "listArtifacts").mockResolvedValue([
@@ -143,6 +144,10 @@ describe("ProjectPage", () => {
     expect(
       within(screen.getByTestId("project-group-resolved")).getByText("Locales"),
     ).toBeInTheDocument();
+    // Not running, not waiting on the person, not resolved: Idle, not "Done".
+    const idle = screen.getByTestId("project-group-idle");
+    expect(within(idle).getByText("Docs")).toBeInTheDocument();
+    expect(idle).toHaveTextContent(I18nKey.PROJECTS$GROUP_IDLE);
 
     const files = await screen.findAllByTestId("project-file");
     expect(files.map((f) => f.getAttribute("data-source"))).toEqual([
