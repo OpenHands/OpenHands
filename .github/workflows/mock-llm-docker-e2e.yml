@@ -71,7 +71,7 @@ jobs:
           fi
 
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ steps.ctx.outputs.ref }}
 
@@ -95,7 +95,7 @@ jobs:
           fi
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4.7.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -110,7 +110,7 @@ jobs:
 
       # ── Test infrastructure setup ──────────────────────────────────────
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24.22.1"
           cache: npm
@@ -124,7 +124,7 @@ jobs:
 
       - name: Cache Playwright browsers
         id: pw_cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw_version.outputs.version }}
@@ -256,7 +256,7 @@ jobs:
       - name: Upload test artifacts
         id: upload_artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: mock-llm-docker-e2e-results
           if-no-files-found: ignore
@@ -285,3 +285,4 @@ jobs:
         run: |
           exit_code="${{ steps.run_tests.outputs.exit_code }}"
           exit "${exit_code:-1}"
+

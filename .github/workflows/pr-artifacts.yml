@@ -17,7 +17,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Post or update PR artifacts comment
-        uses: actions/github-script@v9
+        uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
         with:
           script: |
             const marker = '<!-- pr-artifacts-notice -->';
@@ -111,7 +111,7 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.pull_request.base.ref }}
           token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC }}
@@ -185,7 +185,7 @@ jobs:
 
       - name: Update source PR comment
         if: steps.cleanup.outputs.created == 'true'
-        uses: actions/github-script@v9
+        uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
         env:
           CLEANUP_PR_URL: ${{ steps.cleanup.outputs.pr_url }}
         with:
@@ -225,3 +225,4 @@ jobs:
                 body,
               });
             }
+
