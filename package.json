@@ -134,7 +134,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "3.3.7",
-    "@eslint/js": "9.39.4",
+    "@eslint/js": "10.0.1",
     "@playwright/test": "1.64.1",
     "@react-router/dev": "8.5.1",
     "@shadcn/lint": "0.2.3",
