@@ -178,3 +178,11 @@ code {
   animation: search-jump-pulse 2.4s ease-out forwards;
   border-radius: 8px;
 }
+
+/* Words matched by the search that brought the user here. */
+[data-search-jump-target="true"] mark {
+  background-color: color-mix(in oklab, var(--oh-accent) 18%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}

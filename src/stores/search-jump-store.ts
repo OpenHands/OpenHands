@@ -19,6 +19,12 @@ interface SearchJumpState {
 
 const MAX_HIGHLIGHT_TERMS = 8;
 
+/**
+ * How long the target stays highlighted after the jump lands. Matches the
+ * search-jump-pulse animation in index.css; keep the two in sync.
+ */
+export const SEARCH_JUMP_HIGHLIGHT_MS = 2400;
+
 export const useSearchJumpStore = create<SearchJumpState>((set) => ({
   targetEventId: null,
   highlightTerms: [],

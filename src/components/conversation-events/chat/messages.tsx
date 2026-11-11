@@ -32,7 +32,10 @@ import { ModelMessages } from "#/components/features/chat/model-messages";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
 import type { SecretRequest } from "#/stores/secret-request-store";
-import { useSearchJumpStore } from "#/stores/search-jump-store";
+import {
+  useSearchJumpStore,
+  SEARCH_JUMP_HIGHLIGHT_MS,
+} from "#/stores/search-jump-store";
 import {
   SecretRequestCard,
   usePendingSecretRequests,
@@ -89,9 +92,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     }, []);
 
     // Content-search jump: when a target event id is pending and the matching
-    // anchor has rendered, scroll it into view once and clear the jump. The
-    // anchor may appear later (history still loading), so the effect runs on
-    // every messages change until it finds it.
+    // anchor has rendered, scroll it into view once. The anchor may appear
+    // later (history still loading), so the effect runs on every messages
+    // change until it finds it. The target stays set for the pulse duration
+    // so the ring animation and word highlights are actually seen.
     const searchJump = useSearchJumpStore();
     React.useEffect(() => {
       const target = searchJump.targetEventId;
@@ -101,7 +105,11 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       );
       if (!anchor) return;
       anchor.scrollIntoView({ behavior: "smooth", block: "center" });
-      searchJump.clearJump();
+      const timer = window.setTimeout(
+        () => searchJump.clearJump(),
+        SEARCH_JUMP_HIGHLIGHT_MS,
+      );
+      return () => window.clearTimeout(timer);
     }, [messages, searchJump.targetEventId, searchJump]);
 
     // EventMessage used to receive the complete allEvents array and the plan
@@ -223,6 +231,11 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           >
             <EventMessage
               event={event}
+              searchHighlightTerms={
+                searchJump.targetEventId === event.id
+                  ? searchJump.highlightTerms
+                  : undefined
+              }
               correspondingAction={
                 (isObservationEvent(event) || isUserRejectObservation(event)) &&
                 event.action_id

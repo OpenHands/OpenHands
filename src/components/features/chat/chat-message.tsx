@@ -36,6 +36,8 @@ interface ChatMessageProps {
   timestamp?: string;
   /** The message is a reply still being streamed in. */
   isStreaming?: boolean;
+  /** Search words to mark inside the message (content-search jump). */
+  searchHighlightTerms?: string[];
 }
 
 export function ChatMessage({
@@ -52,6 +54,7 @@ export function ChatMessage({
   onStop,
   timestamp,
   isStreaming = false,
+  searchHighlightTerms,
 }: React.PropsWithChildren<ChatMessageProps>) {
   const { t } = useTranslation("openhands");
   const [isHovering, setIsHovering] = React.useState(false);
@@ -131,6 +134,7 @@ export function ChatMessage({
         isHovering={isHovering}
         isExpanded={isExpanded}
         onTruncatableChange={setIsTruncatable}
+        searchHighlightTerms={searchHighlightTerms}
       />
     </div>
   ) : (
@@ -144,6 +148,7 @@ export function ChatMessage({
         allowHtml
         components={chatBubbleMarkdownComponents}
         streaming={isStreaming}
+        searchHighlightTerms={searchHighlightTerms}
       >
         {message}
       </MarkdownRenderer>
