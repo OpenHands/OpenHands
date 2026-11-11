@@ -13,6 +13,7 @@ import {
   RESOLVED_CONVERSATION_TAG_KEY,
   RESOLVE_NOTE_TAG_KEY,
   getConversationResolution,
+  autoResolveMessage,
   parseAutoResolveNote,
 } from "#/utils/conversation-tag-flags";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
@@ -155,12 +156,7 @@ export function ResolvedConversationBanner() {
             className="text-xs text-muted mt-0.5"
             data-testid="resolved-conversation-auto-note"
           >
-            {t(
-              autoNote.source === "critic"
-                ? I18nKey.PROJECTS$AUTO_RESOLVED_CRITIC
-                : I18nKey.PROJECTS$AUTO_RESOLVED,
-              { percent: autoNote.percent },
-            )}
+            {t(...autoResolveMessage(autoNote))}
           </p>
         ) : null}
         <p className="text-xs text-muted mt-0.5">

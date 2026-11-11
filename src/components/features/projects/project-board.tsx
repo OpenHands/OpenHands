@@ -9,7 +9,10 @@ import ProjectsService, {
 } from "#/api/projects-service/projects-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { projectsQueryRoot } from "#/hooks/query/use-projects";
-import { parseAutoResolveNote } from "#/utils/conversation-tag-flags";
+import {
+  autoResolveMessage,
+  parseAutoResolveNote,
+} from "#/utils/conversation-tag-flags";
 import { displayApiErrorToast } from "#/utils/custom-toast-handlers";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import { cn } from "#/utils/utils";
@@ -115,12 +118,7 @@ function ProjectCard({
           data-testid="project-card-auto-resolved"
           className="text-xs text-muted"
         >
-          {t(
-            autoNote.source === "critic"
-              ? I18nKey.PROJECTS$AUTO_RESOLVED_CRITIC
-              : I18nKey.PROJECTS$AUTO_RESOLVED,
-            { percent: autoNote.percent },
-          )}
+          {t(...autoResolveMessage(autoNote))}
         </p>
       ) : null}
       {conversation.turn === "asked" && conversation.ask ? (

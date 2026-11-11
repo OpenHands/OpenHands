@@ -120,6 +120,8 @@ describe("getConversationResolution", () => {
       percent: 95,
       source: "critic",
     });
+    // resolve_conversation: the agent resolved its own conversation.
+    expect(parseAutoResolveNote("agent")).toEqual({ source: "agent" });
     for (const bad of [null, undefined, "", "sure", "1.5 nothing", "0.9"]) {
       expect(parseAutoResolveNote(bad)).toBeNull();
     }

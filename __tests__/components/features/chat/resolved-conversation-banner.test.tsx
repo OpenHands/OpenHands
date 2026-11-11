@@ -113,12 +113,15 @@ describe("ResolvedConversationBanner", () => {
     expect(reopenButton()).toBeEnabled();
   });
 
-  it("says why the server resolved it", () => {
-    renderBanner({ resolved: "auto", resolvenote: "0.93 nothing" });
+  it.each([
+    ["0.93 nothing", I18nKey.PROJECTS$AUTO_RESOLVED],
+    ["agent", I18nKey.PROJECTS$AUTO_RESOLVED_AGENT],
+  ])("says why it resolved itself (%s)", (resolvenote, message) => {
+    renderBanner({ resolved: "auto", resolvenote });
 
     expect(
       screen.getByTestId("resolved-conversation-auto-note"),
-    ).toHaveTextContent(I18nKey.PROJECTS$AUTO_RESOLVED);
+    ).toHaveTextContent(message);
   });
 
   it.each<Record<string, string>>([

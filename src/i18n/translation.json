@@ -43775,6 +43775,24 @@
     "ca": "Resolta automàticament: {{percent}} % de certesa que no et queda res per fer.",
     "id": "Diselesaikan otomatis: {{percent}}% yakin tidak ada lagi yang perlu Anda lakukan."
   },
+  "PROJECTS$AUTO_RESOLVED_AGENT": {
+    "en": "Resolved automatically: the agent found nothing left for you.",
+    "ja": "自動で解決済み: エージェントが、対応すべきことは残っていないと判断しました。",
+    "zh-CN": "已自动解决：智能体认为没有需要你处理的事项。",
+    "zh-TW": "已自動解決：代理認為沒有需要你處理的事項。",
+    "ko-KR": "자동으로 해결됨: 에이전트가 남은 할 일이 없다고 판단했습니다.",
+    "no": "Løst automatisk: agenten fant at ingenting gjenstår for deg.",
+    "it": "Risolta automaticamente: l'agente non ha trovato nulla da fare per te.",
+    "pt": "Resolvida automaticamente: o agente concluiu que não resta nada para você.",
+    "es": "Resuelta automáticamente: el agente no encontró nada pendiente para ti.",
+    "ar": "حُلّت تلقائيًا: لم يجد الوكيل شيئًا متبقيًا لك.",
+    "fr": "Résolue automatiquement : l'agent n'a rien trouvé qu'il vous reste à faire.",
+    "tr": "Otomatik çözüldü: ajan size kalan bir şey bulmadı.",
+    "de": "Automatisch erledigt: der Agent hat nichts mehr für dich offen gefunden.",
+    "uk": "Вирішено автоматично: агент не знайшов нічого, що лишилося для вас.",
+    "ca": "Resolta automàticament: l'agent no ha trobat res pendent per a tu.",
+    "id": "Diselesaikan otomatis: agen tidak menemukan apa pun yang tersisa untuk Anda."
+  },
   "PROJECTS$AUTO_RESOLVED_CRITIC": {
     "en": "Resolved automatically: the critic scored the work {{percent}}%.",
     "ja": "自動で解決済み: クリティックの評価は{{percent}}%です。",
