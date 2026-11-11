@@ -5,9 +5,8 @@ import { cn } from "#/utils/utils";
 import type { ContentSearchHit } from "#/api/conversation-service/content-search.api";
 
 // Base key of the _zero/_one/_other plural family; i18next picks the form
-// from `count`. Held in a variable because the generated I18nKey enum only
-// contains the suffixed members (same convention as event-group-summary's
-// STEP_KIND_KEYS).
+// from `count`. The generated I18nKey enum only contains the suffixed
+// members (same convention as event-group-summary's STEP_KIND_KEYS).
 const MATCH_COUNT_KEY = "CONVERSATION_PANEL$CONTENT_SEARCH_MATCH_COUNT";
 
 /**

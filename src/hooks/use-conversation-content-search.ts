@@ -49,8 +49,7 @@ export function useConversationContentSearch(): ContentSearchState {
   const { backend } = useActiveBackend();
   const queryClient = useQueryClient();
   const [input, setInput] = useState("");
-  // Debounced query actually sent to the server: firing a full-text search
-  // per keystroke would spam the index sync + FTS query for each character.
+  // Debounce: a full-text search per keystroke would spam the index sync.
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const isLocal = backend.kind === "local";
 
@@ -68,8 +67,7 @@ export function useConversationContentSearch(): ContentSearchState {
     queryKey: [...CONVERSATION_CONTENT_SEARCH_QUERY_KEY, debouncedQuery],
     queryFn: () => fetchContentSearch(debouncedQuery),
     enabled,
-    // Search results age fast (the index self-syncs on every query), so a
-    // cached answer older than a keystroke-series is not worth reusing.
+    // Results age fast (the index self-syncs on every query).
     staleTime: 0,
     gcTime: 60_000,
     placeholderData: (prev) => prev,
@@ -77,8 +75,7 @@ export function useConversationContentSearch(): ContentSearchState {
     meta: { disableToast: true },
   });
 
-  // When the user clears the box, drop any cached results so re-opening
-  // starts fresh instead of flashing the old hits.
+  // Clearing the box also drops cached results so re-opening starts fresh.
   const reset = useMemo(() => {
     return () => {
       setInput("");

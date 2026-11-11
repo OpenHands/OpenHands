@@ -4,8 +4,7 @@ import { create } from "zustand";
  * One-shot "jump to this message" state, set when the user clicks a content
  * search result and consumed by the chat once the target event is rendered.
  * Events can arrive long after navigation (streaming, lazy history load),
- * so the target stays pending until the matching event is found or the user
- * navigates away.
+ * so the target stays pending until found or the user navigates away.
  */
 interface SearchJumpState {
   /** Event id to scroll to; null when no jump is pending. */
