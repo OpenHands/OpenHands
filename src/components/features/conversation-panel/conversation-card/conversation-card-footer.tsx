@@ -150,7 +150,12 @@ export function ConversationCardFooter({
   const displayTags: Array<[string, string]> = showTags
     ? getDisplayConversationTags(tags, parentConversationId).flatMap(
         ([key, value]): Array<[string, string]> => {
-          if (key.trim().toLowerCase() !== "project") return [[key, value]];
+          const normalized = key.trim().toLowerCase();
+          // A project member's resolution is board state, hidden with
+          // Projects off like its project chip.
+          if (normalized === "resolved" && tags?.project && !projects.enabled)
+            return [];
+          if (normalized !== "project") return [[key, value]];
           if (!projects.enabled) return [];
           return [[key, projects.names.get(projectIdKey(value)) ?? value]];
         },
