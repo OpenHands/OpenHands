@@ -127,6 +127,7 @@ const SHARED_PREFIXES = [
   "vite.config.ts",
   "react-router.config.ts",
   "tailwind.config.js",
+  "hero.ts",
   "tsconfig.json",
   "config/",
 ];
