@@ -294,4 +294,34 @@ describe("SettingsDropdownInput", () => {
     expect(group?.className).toContain("border-control");
     expect(group?.className).toContain("focus-within:ring-1");
   });
+
+  it("offers a clear button unless the field opts out", () => {
+    const { unmount } = render(
+      <SettingsDropdownInput
+        defaultSelectedKey="english"
+        items={items}
+        label="Language"
+        name="language"
+        testId="language-input"
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "COMMON$CLEAR_SELECTION" }),
+    ).toBeInTheDocument();
+    unmount();
+
+    render(
+      <SettingsDropdownInput
+        defaultSelectedKey="english"
+        isClearable={false}
+        items={items}
+        label="Language"
+        name="language"
+        testId="language-input"
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "COMMON$CLEAR_SELECTION" }),
+    ).not.toBeInTheDocument();
+  });
 });
