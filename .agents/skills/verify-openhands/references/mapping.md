@@ -105,17 +105,27 @@ naming the server features it uses, as IDs of the verify-agent-server map
 family (`F15`) or one sub-feature (`F15.changes`), comma-separated and not
 backticked, so they never read as this map's own IDs:
 `Server: F13, F14, F15, F16.` Read them from the code the `Source:` paths
-reach (the `src/api/` clients and the routes they request), not from memory.
-The four OpenHands repositories only work together, and this is where the
-link between them lives: the consumer declares what it calls, because only
-its code knows, and the server side looks it up
-(`control-agent-server map dependents <ID>` lists the Canvas and automation
-families to drive for a server change). `map check` rejects an ID that is
-not shaped like one; `map check --server-map <software-agent-sdk checkout>`
-also rejects one the server map does not declare. A server bug that a
-`Server:` family shows to users gets a known-bug block here, citing the
-software-agent-sdk issue; one that no Canvas path reaches stays in the server
-map only.
+reach (the `src/api/` clients and the routes they request), not from memory,
+and name only the server features the family's own behaviors rest on.
+
+The line is an index, not a check. A Canvas behavior that passes already
+proves the server path under it, so a `Server:` line never adds server
+checks or recipes here. It answers one question: a server change, or an
+Agent Server bump in Canvas, touches `F15`; which Canvas families should a
+run drive? (`grep -l 'Server:.*F15' references/feature-map/`). The consumer
+declares the link because only its code knows what it calls; the server
+map keeps only its prose "Agent Canvas (context only)" notes and never
+lists Canvas IDs, which change with every map pass here. `map check`
+rejects an ID that is not shaped like one; `map check --server-map
+<software-agent-sdk checkout>` also rejects one the server map does not
+declare.
+
+Name a server feature on a single bullet or Gotcha only where Canvas hides
+or only partly shows the server's behavior, so a reader would otherwise
+blame Canvas or miss the server's part (F08's empty `.git` comes from the
+Agent Server's F04 start). A server bug that a `Server:` family shows to
+users gets a known-bug block here, citing the software-agent-sdk issue; one
+that no Canvas path reaches stays in the server map only.
 
 Then exactly four H2 sections, in this order:
 

@@ -12,6 +12,8 @@ this family covers what happens once such a conversation runs.
 
 Source: `src/components/conversation-events/chat/` (`event-message.tsx`, `group-events.ts`), `src/components/conversation-events/chat/event-content-helpers/` (`get-acp-tool-call-content.ts`, `get-event-content.tsx`, `should-render-event.ts`), `src/utils/handle-event-for-ui.ts`, `src/components/features/chat/components/chat-input-model.tsx`, `src/hooks/mutation/use-switch-acp-model.ts`, `src/utils/remembered-acp-models.ts`, `src/contexts/conversation-websocket-context.tsx`, `src/hooks/use-agent-state.ts`.
 
+Server: F05, F06, F09.
+
 ## Sub-features
 
 - `F29.session-start`: a conversation started from Home with an ACP profile active runs the external agent: `agent_state.acp_agent_name` names its adapter (`@agentclientprotocol/codex-acp`), the composer's model pill shows the profile's model, and the turn ends `finished` with an agent reply.

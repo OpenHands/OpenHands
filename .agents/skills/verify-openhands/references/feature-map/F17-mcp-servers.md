@@ -11,6 +11,8 @@ conversation's agent.
 
 Source: `src/routes/extensions-hub.tsx`, `src/routes/mcp.tsx`, `src/components/features/skills/extensions-navigation.tsx`, `src/components/shared/compact-section-navigation.tsx`, `src/components/features/skills/extensions-mobile-hub.tsx`, `src/components/features/mcp-page/`, `src/components/features/mcp-logo-badge.tsx`, `src/components/features/settings/mcp-settings/mcp-server-form.tsx`, `src/utils/mcp-marketplace-utils.ts`, `src/api/mcp-health/`, `src/hooks/mutation/use-add-mcp-server.ts`, `src/hooks/use-cloud-mcp-settings-url.ts`, `src/utils/mobile-section-nav.ts`.
 
+Server: F19.
+
 ## Sub-features
 
 - `F17.customize-redirect`: on desktop, the sidebar **Customize** link, the URL `/customize` and the command-menu items **Customize** and **MCP servers** all land on `/mcp`.

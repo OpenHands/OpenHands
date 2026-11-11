@@ -11,6 +11,8 @@ this browser only.
 
 Source: `src/routes/app-settings.tsx`, `src/components/features/settings/app-settings/`, `src/components/features/settings/settings-switch.tsx`, `src/components/features/home/home-recommended-automations-storage.ts`, `src/themes/color-theme/`, `src/components/providers/agent-server-ui-root.tsx`, `src/styles/agent-server-ui-style-scope.ts`, `src/utils/transcription-endpoint-storage.ts`, `src/api/settings-service/settings-service.api.ts`, `src/services/telemetry.ts`.
 
+Server: F18.
+
 ## Sub-features
 
 - `F16.open`: the page opens from the settings navigation, the command menu and the direct URL; every section renders and **Save Changes** is disabled while nothing has changed.

@@ -14,6 +14,8 @@ template a new profile copies its other settings from.
 
 Source: `src/routes/agent-profiles-settings.tsx`, `src/routes/agent-settings.tsx`, `src/components/features/settings/agent-profiles/`, `src/components/features/settings/acp-credentials-section.tsx`, `src/components/features/settings/acp-conflict-warnings.tsx`, `src/components/features/settings/acp-auth-status-banner.tsx`, `src/constants/acp-providers.ts`, `src/constants/acp-brand-marks.ts`, `src/hooks/query/use-acp-model-discovery.ts`, `src/hooks/query/use-skill-catalog.ts`, `src/hooks/mutation/use-create-conversation.ts`, `src/hooks/mutation/resolve-conversation-launch.ts`, `src/hooks/mutation/use-new-conversation-command.ts`, `src/hooks/mutation/sync-agent-profiles.ts`, `src/hooks/use-chat-input-llm-profile-state.ts`, `src/api/agent-profiles-service/profile-field-support.ts`.
 
+Server: F21.
+
 ## Sub-features
 
 - `F13.list`: under **Available Profiles**, rows (sorted by name) show the profile name, then its LLM profile (OpenHands) or `ACP (external subprocess)`, an **Active** badge on the active profile and a `...` menu (Edit, Set as active, Delete).

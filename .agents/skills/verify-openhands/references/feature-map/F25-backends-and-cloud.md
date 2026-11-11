@@ -22,6 +22,8 @@ Managed Agents UI runs against a local stand-in for DigitalOcean
 
 Source: `src/components/features/backends/`, `src/contexts/active-backend-context.tsx`, `src/api/backend-registry/`, `src/hooks/query/use-backends-health.ts`, `src/routes/device-verify.tsx`, `src/routes/shared-conversation.tsx`, `src/components/features/conversation/conversation-name-context-menu.tsx`, `src/api/cloud/`, `src/api/mars/`, `src/hooks/use-mars-*.ts`, `src/hooks/use-connect-mars-session.ts`, `src/hooks/use-launch-mars-session.ts`, `src/hooks/query/use-mars-agents.ts`, `src/components/features/sidebar/mars-session-panel.tsx`, `src/assets/branding/digitalocean-logo.svg`, `scripts/mars-web-bridge.mjs`, `scripts/mars-tunnel-bridge.mjs`, `scripts/mars-oauth.mjs`, `scripts/mars-api.mjs`, `scripts/mars-credentials.mjs`, `scripts/mars-secret-store.mjs`.
 
+Server: F01, F02.
+
 ## Sub-features
 
 - `F25.selector-dropdown`: clicking (or hovering) the selector opens a listbox of backends, each option named `<status> <name>` with a status dot, and a footer with **Add Backend** and **Manage Backends**. The menu opens upward over the **Getting started** card, exactly as wide as the selector row (selector plus gear) so it stays inside the sidebar at any sidebar width, and grows to 24rem before it scrolls; **Add Backend** and **Manage Backends** sit in the same scrolling box, so with more rows than fit they scroll with the rows.
