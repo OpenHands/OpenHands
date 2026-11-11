@@ -37,10 +37,15 @@ export const HOME_PROMPT_DRAFT_KEY = "oh:home-prompt-draft";
  * under the conversation's key. When `conversationId` is undefined (home page),
  * the draft is persisted to sessionStorage under `HOME_PROMPT_DRAFT_KEY` so it
  * survives navigation within the session but is discarded on tab close.
+ *
+ * Pass `persist: false` for a composer that owns no draft, such as the
+ * automation setup composer: it then neither restores nor writes any draft,
+ * so it cannot pick up or overwrite the Home prompt.
  */
 export const useDraftPersistence = (
   conversationId: string | null | undefined,
   chatInputRef: React.RefObject<HTMLDivElement | null>,
+  { persist = true }: { persist?: boolean } = {},
 ) => {
   // Pass an empty string when conversationId is missing to keep the hook
   // call unconditional (rules of hooks). The early-return branches below
@@ -150,6 +155,12 @@ export const useDraftPersistence = (
       return;
     }
 
+    if (!persist) {
+      hasRestoredRef.current = true;
+      setIsRestored(true);
+      return;
+    }
+
     const element = chatInputRef.current;
     if (!element) {
       return;
@@ -191,10 +202,14 @@ export const useDraftPersistence = (
 
     hasRestoredRef.current = true;
     setIsRestored(true);
-  }, [chatInputRef, conversationId]);
+  }, [chatInputRef, conversationId, persist]);
 
   // Debounced save function - called from onInput handler
   const saveDraft = useCallback(() => {
+    if (!persist) {
+      return;
+    }
+
     // Clear any pending save
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -253,10 +268,20 @@ export const useDraftPersistence = (
         setDraftMessage(text || null);
       }
     }, DRAFT_SAVE_DEBOUNCE_MS);
-  }, [chatInputRef, state.draftMessage, setDraftMessage, conversationId]);
+  }, [
+    chatInputRef,
+    state.draftMessage,
+    setDraftMessage,
+    conversationId,
+    persist,
+  ]);
 
   // Clear draft - called after message delivery is confirmed
   const clearDraft = useCallback(() => {
+    if (!persist) {
+      return;
+    }
+
     // Cancel any pending save
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -273,7 +298,7 @@ export const useDraftPersistence = (
       return;
     }
     setDraftMessage(null);
-  }, [conversationId, setDraftMessage]);
+  }, [conversationId, setDraftMessage, persist]);
 
   // Flush the conversation input while it is still attached: reading innerText
   // after detachment loses line breaks between contentEditable block elements.
@@ -287,7 +312,7 @@ export const useDraftPersistence = (
   useLayoutEffect(
     () => () => {
       flushPendingDraft();
-      if (!currentConversationIdRef.current) {
+      if (persist && !currentConversationIdRef.current) {
         const text = lastHomeTextRef.current;
         try {
           if (text) {
@@ -302,7 +327,7 @@ export const useDraftPersistence = (
         }
       }
     },
-    [flushPendingDraft],
+    [flushPendingDraft, persist],
   );
 
   return {

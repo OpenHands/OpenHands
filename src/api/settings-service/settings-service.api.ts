@@ -23,6 +23,7 @@ import {
   getAgentServerClientOptions,
   type AgentServerClientOptions,
 } from "../agent-server-client-options";
+import { withRetry } from "../with-retry";
 
 /**
  * Fields the agent-server stores under `misc_settings.app_preferences` (see
@@ -41,6 +42,8 @@ export const APP_PREFERENCE_FIELDS = [
   "enabled_skills",
   "run_router_at_conversation_start",
   "workspace_file_discovery",
+  "home_pinned_automations",
+  "default_profile_migrated",
 ] as const;
 
 export type AppPreferenceField = (typeof APP_PREFERENCE_FIELDS)[number];
@@ -139,33 +142,6 @@ const mergeRecords = (
   base: Record<string, SettingsValue> | null | undefined,
   next: Record<string, SettingsValue> | null | undefined,
 ) => ({ ...(base ?? {}), ...(next ?? {}) });
-
-/**
- * Retry helper for API calls with exponential backoff.
- */
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = 3,
-  baseDelayMs: number = 500,
-): Promise<T> {
-  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (attempt >= maxRetries - 1) {
-        throw error;
-      }
-
-      const delay = baseDelayMs * 2 ** attempt;
-
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, delay);
-      });
-    }
-  }
-
-  throw new Error("Retry attempts exhausted");
-}
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -558,8 +534,7 @@ const syncDerivedSettings = (settings: Partial<Settings>): Settings => {
 
   const llm = agentSettings.llm as Record<string, SettingsValue> | undefined;
   const condenser = agentSettings.condenser as
-    | Record<string, SettingsValue>
-    | undefined;
+    Record<string, SettingsValue> | undefined;
 
   if (typeof agentSettings.agent === "string") {
     merged.agent = agentSettings.agent;
@@ -586,8 +561,7 @@ const syncDerivedSettings = (settings: Partial<Settings>): Settings => {
     conversationSettings.security_analyzer === null
   ) {
     merged.security_analyzer = conversationSettings.security_analyzer as
-      | string
-      | null;
+      string | null;
   }
   if (typeof conversationSettings.max_iterations === "number") {
     merged.max_iterations = conversationSettings.max_iterations;
@@ -830,16 +804,14 @@ class SettingsService {
 
     // Extract agent_settings_diff
     const agentSettingsDiff = rest.agent_settings_diff as
-      | Record<string, SettingsValue>
-      | undefined;
+      Record<string, SettingsValue> | undefined;
     if (agentSettingsDiff && Object.keys(agentSettingsDiff).length > 0) {
       payload.agent_settings_diff = agentSettingsDiff;
     }
 
     // Extract conversation_settings_diff
     const conversationSettingsDiff = rest.conversation_settings_diff as
-      | Record<string, SettingsValue>
-      | undefined;
+      Record<string, SettingsValue> | undefined;
     if (
       conversationSettingsDiff &&
       Object.keys(conversationSettingsDiff).length > 0

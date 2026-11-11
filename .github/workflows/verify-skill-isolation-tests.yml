@@ -1,0 +1,29 @@
+---
+name: Verify skill isolation tests
+
+on:
+    pull_request:
+        paths:
+            - .github/workflows/verify-skill-isolation.yml
+            - .github/workflows/verify-skill-isolation-tests.yml
+            - .github/scripts/tests/verify-skill-isolation.cjs
+    push:
+        branches: [main]
+        paths:
+            - .github/workflows/verify-skill-isolation.yml
+            - .github/workflows/verify-skill-isolation-tests.yml
+            - .github/scripts/tests/verify-skill-isolation.cjs
+
+permissions:
+    contents: read
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+            - uses: actions/checkout@v7
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: '24'
+            - run: node --test .github/scripts/tests/verify-skill-isolation.cjs

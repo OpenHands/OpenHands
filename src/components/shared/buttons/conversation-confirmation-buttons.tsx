@@ -121,16 +121,22 @@ export function ConversationConfirmationButtons() {
       {isHighRisk && (
         <RiskAlert
           content={t(I18nKey.CHAT_INTERFACE$HIGH_RISK_WARNING)}
-          icon={<WarningIcon width={16} height={16} color="#fff" />}
+          icon={
+            <WarningIcon
+              width={16}
+              height={16}
+              className="text-danger dark:text-white"
+            />
+          }
           severity="high"
           title={t(I18nKey.COMMON$HIGH_RISK)}
         />
       )}
-      <div className="flex justify-between items-center">
-        <p className="text-sm font-normal text-contrast">
+      <div className="flex justify-between items-center gap-3">
+        <p className="min-w-0 text-sm font-normal text-contrast">
           {t(I18nKey.CHAT_INTERFACE$USER_ASK_CONFIRMATION)}
         </p>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           <ActionTooltip
             type="reject"
             onClick={() => handleConfirmation(false)}

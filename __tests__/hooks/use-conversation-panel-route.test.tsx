@@ -2,6 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { useConversationPanelRoute } from "#/hooks/use-conversation-panel-route";
+import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { handleCanvasUIAction } from "#/services/canvas-ui";
 import { useConversationStore } from "#/stores/conversation-store";
 import type { CanvasUIAction } from "#/types/agent-server/core";
@@ -23,9 +24,15 @@ function setWindowWidth(width: number) {
 
 function Probe() {
   const showsMobilePanelPage = useConversationPanelRoute(CONVERSATION_ID);
+  const { navigateToTab } = useSelectConversationTab();
   const location = useLocation();
   return (
     <div>
+      <button
+        type="button"
+        data-testid="navigate-to-usage"
+        onClick={() => navigateToTab("usage")}
+      />
       <span data-testid="path">{location.pathname}</span>
       <span data-testid="mobile-panel-page">
         {String(showsMobilePanelPage)}
@@ -75,6 +82,33 @@ describe("useConversationPanelRoute", () => {
 
   afterEach(() => {
     setWindowWidth(originalInnerWidth);
+  });
+
+  it("opens the panel page at phone width when an app control navigates to a tab", () => {
+    setWindowWidth(PHONE_WIDTH);
+    renderAt(CHAT_PATH);
+
+    act(() => {
+      screen.getByTestId("navigate-to-usage").click();
+    });
+
+    expect(screen.getByTestId("path")).toHaveTextContent(PANEL_PATH);
+    expect(screen.getByTestId("mobile-panel-page")).toHaveTextContent("true");
+    expect(useConversationStore.getState().selectedTab).toBe("usage");
+  });
+
+  it("keeps the chat route on desktop when an app control navigates to a tab", () => {
+    setWindowWidth(DESKTOP_WIDTH);
+    renderAt(CHAT_PATH);
+
+    act(() => {
+      screen.getByTestId("navigate-to-usage").click();
+    });
+
+    expect(screen.getByTestId("path")).toHaveTextContent(CHAT_PATH);
+    expect(screen.getByTestId("path")).not.toHaveTextContent(PANEL_PATH);
+    expect(useConversationStore.getState().isRightPanelShown).toBe(true);
+    expect(useConversationStore.getState().selectedTab).toBe("usage");
   });
 
   it("opens the panel page at phone width when the agent reveals a tab", () => {

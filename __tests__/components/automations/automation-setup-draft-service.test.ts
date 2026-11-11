@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import { HttpError } from "@openhands/typescript-client";
 import {
   extractDraftDispatchErrors,
+  getDraftExecutionStatusText,
   formFromServerDraft,
   setupDraftFromServerDraft,
 } from "#/components/features/automations/setup/automation-setup-draft-service";
 import type { AutomationSetupFormValues } from "#/api/automation-setup-types";
+import { AutomationRunStatus } from "#/types/automation";
+import { I18nKey } from "#/i18n/declaration";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
 
 const detailEnvelope = {
@@ -60,12 +63,62 @@ const baseSavedDraft: AutomationDraftApiResponse = {
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
 
+describe("getDraftExecutionStatusText", () => {
+  const run = {
+    id: "run-1",
+    status: AutomationRunStatus.COMPLETED,
+    conversation_id: null,
+    bash_command_id: null,
+    error_detail: null,
+    started_at: "2026-01-01T00:00:00Z",
+    completed_at: "2026-01-01T00:01:00Z",
+  };
+  const translate = (key: I18nKey) => String(key);
+
+  it.each([
+    AutomationRunStatus.COMPLETED,
+    AutomationRunStatus.FAILED,
+    AutomationRunStatus.RUNNING,
+  ])(
+    "shows the current draft error ahead of a historical %s test",
+    (status) => {
+      const invalidDraft = {
+        ...baseSavedDraft,
+        dispatchable: false,
+        validationErrors: [
+          {
+            field: "trigger",
+            code: "invalid",
+            message: "Invalid cron expression: every day",
+          },
+        ],
+      };
+
+      const text = getDraftExecutionStatusText(
+        invalidDraft,
+        [{ ...run, status }],
+        translate,
+      );
+
+      expect(text).toBe("Invalid cron expression: every day");
+    },
+  );
+
+  it("keeps the successful test status for a currently valid draft", () => {
+    expect(getDraftExecutionStatusText(baseSavedDraft, [run], translate)).toBe(
+      I18nKey.AUTOMATION_SETUP$LATEST_TEST_PASSED,
+    );
+  });
+});
+
 const baseForm: AutomationSetupFormValues = {
   name: "",
+  runAsUserId: "",
   prompt: "",
   repository: "",
   pluginSource: "",
   pluginRef: "",
+  pluginConfig: "{}",
   pluginList: "",
   customCode: "",
   entrypoint: "",
@@ -89,11 +142,12 @@ const baseForm: AutomationSetupFormValues = {
 };
 
 describe("setupDraftFromServerDraft", () => {
-  it("hydrates all repositories and event keys from saved drafts", () => {
+  it("hydrates repositories, event keys, and run-as from saved drafts", () => {
     const saved = {
       ...baseSavedDraft,
       draft: {
         prompt: "Triage issues",
+        run_as_user_id: "sa-1",
         repos: [{ url: "acme/one" }, { url: "acme/two" }],
         trigger: {
           type: "event",
@@ -107,12 +161,14 @@ describe("setupDraftFromServerDraft", () => {
 
     expect(draft.form?.repository).toBe("acme/one, acme/two");
     expect(draft.form?.eventKey).toBe("pull_request,issues");
+    expect(draft.form?.runAsUserId).toBe("sa-1");
   });
 
-  it("updates an existing form with all repositories and event keys", () => {
+  it("updates an existing form with repositories, event keys, and run-as", () => {
     const saved = {
       ...baseSavedDraft,
       draft: {
+        run_as_user_id: "sa-2",
         repos: [{ url: "acme/one" }, { url: "acme/two" }],
         trigger: {
           type: "event",
@@ -122,9 +178,13 @@ describe("setupDraftFromServerDraft", () => {
       },
     } satisfies AutomationDraftApiResponse;
 
-    const form = formFromServerDraft(saved, baseForm);
+    const form = formFromServerDraft(saved, {
+      ...baseForm,
+      runAsUserId: "stale-selection",
+    });
 
     expect(form.repository).toBe("acme/one, acme/two");
     expect(form.eventKey).toBe("push,release.published");
+    expect(form.runAsUserId).toBe("sa-2");
   });
 });

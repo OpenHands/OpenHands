@@ -1,4 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
@@ -6,6 +9,9 @@ import {
   MAX_DIFF_EDITOR_HEIGHT_PX,
 } from "#/components/features/diff-viewer/file-diff-viewer";
 import { I18nKey } from "#/i18n/declaration";
+import { applyColorTheme, DEFAULT_COLOR_THEME } from "#/themes/color-themes";
+
+const { defineTheme } = vi.hoisted(() => ({ defineTheme: vi.fn() }));
 
 const MOCK_DIFF = { original: "old content", modified: "new content" };
 const MOCK_MD_DIFF = {
@@ -27,11 +33,26 @@ vi.mock("#/hooks/query/use-unified-git-diff", () => ({
 }));
 
 vi.mock("@monaco-editor/react", () => ({
-  DiffEditor: (props: Record<string, unknown>) => (
-    <div data-testid="file-diff-viewer" data-original={props.original} data-modified={props.modified} />
-  ),
+  DiffEditor: (props: Record<string, unknown>) => {
+    (props.beforeMount as (monaco: unknown) => void)({
+      Uri: { parse: (value: string) => value },
+      editor: { defineTheme, getModel: () => null },
+    });
+    return (
+      <div
+        data-testid="file-diff-viewer"
+        data-original={props.original}
+        data-modified={props.modified}
+        data-theme={props.theme}
+      />
+    );
+  },
   Editor: (props: Record<string, unknown>) => (
-    <div data-testid="file-single-viewer" data-value={props.value} />
+    <div
+      data-testid="file-single-viewer"
+      data-value={props.value}
+      data-theme={props.theme}
+    />
   ),
 }));
 
@@ -50,6 +71,59 @@ describe("FileDiffViewer", () => {
     mockDiff = MOCK_DIFF;
     mockIsSuccess = true;
     mockIsLoading = false;
+    applyColorTheme(DEFAULT_COLOR_THEME);
+    defineTheme.mockClear();
+  });
+
+  it("switches diff and single-file editors to Paper and back to dark", async () => {
+    const user = userEvent.setup();
+    render(<FileDiffViewer path="src/index.ts" type="M" />);
+    await expand(user);
+    const originalTheme = screen.getByTestId("file-diff-viewer").dataset.theme;
+
+    act(() => applyColorTheme("paper"));
+    const paperTheme = screen.getByTestId("file-diff-viewer").dataset.theme;
+    expect(paperTheme).not.toBe(originalTheme);
+    const definition = defineTheme.mock.calls.find(
+      ([name]) => name === paperTheme,
+    )?.[1];
+    expect(definition?.base).toBe("vs");
+    expect(definition?.colors["editor.background"]).toMatch(/^#[0-9a-f]{6}$/i);
+    const luminance = (hex: string) => {
+      const channels = [1, 3, 5].map((offset) => {
+        const channel =
+          Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
+        return channel <= 0.04045
+          ? channel / 12.92
+          : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    };
+    for (const background of [
+      "editor.background",
+      "diffEditor.insertedLineBackground",
+      "diffEditor.removedLineBackground",
+    ]) {
+      const surface = luminance(definition.colors[background]);
+      for (const rule of definition.rules) {
+        const ink = luminance(`#${rule.foreground}`);
+        expect(
+          (Math.max(ink, surface) + 0.05) / (Math.min(ink, surface) + 0.05),
+          `${rule.token || "default text"} on ${background}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+
+    await user.click(screen.getByTestId("view-mode-new"));
+    expect(screen.getByTestId("file-single-viewer")).toHaveAttribute(
+      "data-theme",
+      paperTheme,
+    );
+    act(() => applyColorTheme(DEFAULT_COLOR_THEME));
+    expect(screen.getByTestId("file-single-viewer")).toHaveAttribute(
+      "data-theme",
+      originalTheme,
+    );
   });
 
   it("caps opened editor panes at 600px", () => {
@@ -98,7 +172,10 @@ describe("FileDiffViewer", () => {
     await user.click(screen.getByTestId("view-mode-new"));
 
     expect(screen.getByTestId("file-single-viewer")).toBeInTheDocument();
-    expect(screen.getByTestId("file-single-viewer")).toHaveAttribute("data-value", "new content");
+    expect(screen.getByTestId("file-single-viewer")).toHaveAttribute(
+      "data-value",
+      "new content",
+    );
     expect(screen.queryByTestId("file-diff-viewer")).not.toBeInTheDocument();
   });
 
@@ -110,7 +187,10 @@ describe("FileDiffViewer", () => {
     await user.click(screen.getByTestId("view-mode-old"));
 
     expect(screen.getByTestId("file-single-viewer")).toBeInTheDocument();
-    expect(screen.getByTestId("file-single-viewer")).toHaveAttribute("data-value", "old content");
+    expect(screen.getByTestId("file-single-viewer")).toHaveAttribute(
+      "data-value",
+      "old content",
+    );
   });
 
   it("returns to diff editor when switching back to 'diff' mode", async () => {
@@ -134,9 +214,40 @@ describe("FileDiffViewer", () => {
     await user.click(screen.getByTestId("view-mode-new"));
 
     expect(screen.getByTestId("markdown-preview")).toBeInTheDocument();
-    expect(screen.getByTestId("markdown-renderer")).toHaveTextContent(/New Heading/);
+    expect(screen.getByTestId("markdown-renderer")).toHaveTextContent(
+      /New Heading/,
+    );
     expect(screen.getByTestId("markdown-renderer")).toHaveTextContent(/bold/);
     expect(screen.queryByTestId("file-single-viewer")).not.toBeInTheDocument();
+  });
+
+  it("compiles the rendered Markdown preview cap against its owned value", async () => {
+    // Arrange
+    mockDiff = MOCK_MD_DIFF;
+    const user = userEvent.setup();
+    render(<FileDiffViewer path="README.md" type="M" />);
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+
+    // Act
+    await expand(user);
+    await user.click(screen.getByTestId("view-mode-new"));
+    const preview = screen.getByTestId("markdown-preview");
+    const css = compiler.build(
+      [...preview.classList].filter((candidate) =>
+        candidate.startsWith("max-h-"),
+      ),
+    );
+
+    // Assert the generated declaration consumes a value this element owns.
+    // Reading both from the render catches either side being renamed alone.
+    const property = css.match(/max-height:\s*var\((--[\w-]+)\)/)?.[1];
+    expect(property).toBeDefined();
+    expect(preview.style.getPropertyValue(property!)).toBe(
+      `${MAX_DIFF_EDITOR_HEIGHT_PX}px`,
+    );
   });
 
   it("renders markdown preview for .md files in 'old' mode", async () => {
@@ -147,7 +258,9 @@ describe("FileDiffViewer", () => {
     await expand(user);
     await user.click(screen.getByTestId("view-mode-old"));
 
-    expect(screen.getByTestId("markdown-renderer")).toHaveTextContent(MOCK_MD_DIFF.original);
+    expect(screen.getByTestId("markdown-renderer")).toHaveTextContent(
+      MOCK_MD_DIFF.original,
+    );
   });
 
   it("shows diff editor for .md files in 'diff' mode", async () => {

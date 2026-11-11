@@ -11,7 +11,6 @@
   </p>
 </div>
 <div align="center">
-  <a href="https://github.com/OpenHands/incubator-program"><img src="https://img.shields.io/badge/status-beta-blue?style=for-the-badge" alt="Project status beta"></a>
   <a href="https://github.com/OpenHands/OpenHands/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/OpenHands/OpenHands/ci.yml?branch=main&style=for-the-badge" alt="CI status"></a>
   <a href="https://www.npmjs.com/package/@openhands/agent-canvas"><img src="https://img.shields.io/npm/v/%40openhands%2Fagent-canvas?style=for-the-badge&logo=npm" alt="npm version"></a>
   <a href="https://docs.openhands.dev/openhands/usage/agent-canvas/backends"><img src="https://img.shields.io/badge/Documentation-000?logo=googledocs&logoColor=FFE165&style=for-the-badge" alt="Documentation"></a>
@@ -81,26 +80,72 @@ agent-canvas --backend-only   # agent server + automation backend + ingress only
 
 ### Option 2: With a Docker Sandbox
 
-**Prerequisites**:
+Install Docker Desktop on macOS/Windows, or Docker Engine/Docker Desktop on Linux.
+Windows users can follow the [PowerShell quickstart](./README.windows.md).
 
-- Docker: Docker Desktop on macOS/Windows, or Docker Engine/Docker Desktop on Linux.
-- A host directory for `PROJECTS_PATH` containing the project folders you want the agent to access. Create it before starting the container.
+The steps below are for macOS and Linux. A named Docker volume stores settings,
+secrets, and conversations; projects are mounted at `/projects`.
 
-**macOS / Linux:**
+**1. Prepare a workspace**
 
 ```sh
 export PROJECTS_PATH="$HOME/projects"  # directory containing your project folders
-mkdir -p "$PROJECTS_PATH" "$HOME/.openhands"
+mkdir -p "$PROJECTS_PATH"
+```
 
+On **Linux Docker Engine**, uid 10001 inside the container must be able to read
+and write the workspace and its existing files. Grant that user access using
+appropriate ownership or ACLs for your system. For a dedicated workspace you are
+comfortable sharing with all local users, the following is another option:
+
+```sh
+find "$PROJECTS_PATH" -type d -exec chmod a+rwX {} +
+find "$PROJECTS_PATH" -type f -exec chmod a+rw {} +
+```
+
+These commands grant all host users access to the workspace. Keep it separate
+from `~/.openhands` and other sensitive data. Docker Desktop on macOS/Windows
+handles bind-mount permissions, so those commands are normally unnecessary.
+
+**2. Start Agent Canvas**
+
+```sh
 docker run -it --rm \
   -p 127.0.0.1:8000:8000 \
   -e AGENT_CANVAS_ALLOW_LAN_SESSION_KEY=true \
-  -v "$HOME/.openhands:/home/openhands/.openhands" \
+  -v openhands-state:/home/openhands/.openhands \
   -v "${PROJECTS_PATH}:/projects" \
-  ghcr.io/openhands/agent-canvas:1.27.1 # x-release-please-version
+  ghcr.io/openhands/agent-canvas:1.38.0 # x-release-please-version
 ```
 
-**Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
+Open [http://localhost:8000/canvas](http://localhost:8000/canvas). Reuse
+`openhands-state` to retain state across container removals. A fresh volume does
+not contain existing `~/.openhands` data; inspect or back it up with
+`docker volume inspect openhands-state`.
+
+<details>
+<summary>Linux permission troubleshooting and existing state</summary>
+
+If startup reports `Permission denied`, check access to the path named in the
+error. On SELinux hosts, check whether the bind mount needs a `:z` or `:Z` label.
+If you bind-mount existing `~/.openhands` state instead of the named volume,
+uid 10001 needs access to its directories, existing key files and automation
+database. Grant access using ownership or ACLs while keeping keys private.
+Making state directories writable by all users can let another local user
+replace the session key; do not use recursive world-writable permissions there.
+
+Keep the default container user. An override can make the browser configuration
+directory inaccessible. If you override the user, configure a writable
+`XDG_CONFIG_HOME` and ensure state and workspace mounts are accessible.
+
+</details>
+
+> [!NOTE]
+> The entrypoint stops the container with exit code 1 when the Agent Server stops answering
+> its `/alive` check for about 30 seconds, so a crash or hang fails visibly instead of leaving
+> a container that returns 502 for every request.
+> Automatic recovery needs a restart policy: use `--restart unless-stopped` instead of
+> `--rm`, or `restart: unless-stopped` in Docker Compose.
 
 The agent will be able to access any project under `PROJECTS_PATH`.
 
@@ -126,12 +171,18 @@ This setting isolates conversation execution; it does not move the entire Canvas
 > [!WARNING]
 > This runs the agent-server directly on the machine you're installing on — the agent will have full access to your filesystem!
 
-**Prerequisites**: [Node.js](https://nodejs.org/) 24 or later, `npm`, `uv` (for running the agent server via `uvx`)
+**Prerequisites**: [Node.js](https://nodejs.org/) 24 or later, npm 11.12.1 (the repository pin), `uv` (for running the agent server via `uvx`)
+
+Check `npm --version` before resolving dependencies. The seven-day release-age
+filter (`npm install --min-release-age=7`) requires npm >=11.10; older versions
+do not enforce it. Use `npm ci` to replay the committed lockfile. This npm
+requirement is for contributor dependency resolution, not for installing the
+published Canvas package.
 
 ```sh
 git clone https://github.com/OpenHands/OpenHands.git
 cd OpenHands
-npm install
+npm ci
 npm run dev
 ```
 
@@ -175,5 +226,5 @@ The Agent Server API is implemented by the SDK and consumed through the TypeScri
 
 - [Documentation index](./docs/README.md)
 - [Architecture overview](./docs/architecture.md)
-- [Development guide](./docs/DEVELOPMENT.md)
+- [Development guide](./docs/DEVELOPMENT.md), including [embedding Canvas components in a host app](./docs/DEVELOPMENT.md#css-isolation-and-host-app-customization) (load `@openhands/agent-canvas/styles.css` once next to the component imports)
 - [Self-hosting guide](./docs/SELF_HOSTING.md)

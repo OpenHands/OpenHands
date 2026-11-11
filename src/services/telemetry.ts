@@ -901,17 +901,6 @@ export async function trackEvent(
   posthog.capture(eventName, properties);
 }
 
-/** Track an exception through the same consent-aware client as custom events. */
-export async function trackException(
-  error: unknown,
-  properties: Record<string, unknown> = {},
-): Promise<void> {
-  const posthog = await getPostHogForConsentedCapture();
-  if (!posthog) return;
-
-  posthog.captureException(error, properties);
-}
-
 /**
  * Clear all telemetry data (for privacy/GDPR requests)
  */

@@ -296,6 +296,26 @@ describe("SettingsService", () => {
     expect(requestedBackends).toEqual(["a", "a", "b"]);
   });
 
+  it("rejects a settings save the server answers with 422 after one request", async () => {
+    let patchCount = 0;
+    server.use(
+      http.patch("*/api/settings", () => {
+        patchCount += 1;
+        return HttpResponse.json(
+          { detail: "Settings validation failed" },
+          { status: 422 },
+        );
+      }),
+    );
+
+    await expect(
+      SettingsService.saveSettings({
+        agent_settings_diff: { condenser: { max_size: -5 } },
+      }),
+    ).rejects.toMatchObject({ status: 422 });
+    expect(patchCount).toBe(1);
+  });
+
   it("skips API call when no diffs are provided to saveSettings", async () => {
     const fetchSpy = vi.spyOn(SettingsService, "fetchSettingsFromApi");
 
@@ -1258,7 +1278,8 @@ describe("SettingsService", () => {
     ).rejects.toBeDefined();
 
     expect(getCount).toBe(0);
-    expect(patchBodies).toHaveLength(3);
+    // A 400 is the server rejecting the payload, so it is sent once.
+    expect(patchBodies).toHaveLength(1);
     expect(patchBodies).not.toContainEqual({
       agent_settings_diff: { mcp_config: null },
     });

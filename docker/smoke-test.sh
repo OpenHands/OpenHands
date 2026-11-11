@@ -8,6 +8,8 @@
 # entrypoint takes the whole container down with it.
 #
 # Usage: docker/smoke-test.sh <image> [host-port]
+# Set SMOKE_CANVAS_BASE_PATH (e.g. /canvas) to also open the Canvas page in a
+# browser; that needs `playwright` on NODE_PATH and Chromium installed.
 set -euo pipefail
 
 IMAGE="${1:?usage: docker/smoke-test.sh <image> [host-port]}"
@@ -54,5 +56,30 @@ while [ "$SECONDS" -lt "$stable_until" ]; do
 done
 curl -fsS -o /dev/null --max-time 5 "$HEALTH_URL" ||
   fail "${HEALTH_URL} stopped answering"
+
+# The served agent-server comes from the base image, while system Python gets
+# its own copy as a dependency of openhands-workspace; a resolver conflict once
+# downgraded that copy silently (#17531). Check both against the release pin.
+if [ -n "${EXPECTED_AGENT_SERVER_VERSION:-}" ]; then
+  served=$(docker exec "$NAME" python -c 'import json, urllib.request
+print(json.load(urllib.request.urlopen("http://127.0.0.1:8000/server_info"))["version"])') ||
+    fail "could not read the agent-server version from /server_info"
+  installed=$(docker exec "$NAME" python -c 'from importlib.metadata import version
+print(version("openhands-agent-server"))') ||
+    fail "openhands-agent-server is not installed in system Python"
+  echo "Agent Server: expected ${EXPECTED_AGENT_SERVER_VERSION}, served ${served}, installed ${installed}"
+  [ "$served" = "$EXPECTED_AGENT_SERVER_VERSION" ] ||
+    fail "serves agent-server ${served}, expected ${EXPECTED_AGENT_SERVER_VERSION}"
+  [ "$installed" = "$EXPECTED_AGENT_SERVER_VERSION" ] ||
+    fail "system Python has openhands-agent-server ${installed}, expected ${EXPECTED_AGENT_SERVER_VERSION}"
+  docker exec "$NAME" python -m pip check || fail "pip check found broken requirements"
+fi
+
+# /health says nothing about the page: the 1.36.0 image served a blank Canvas
+# at its base path (#19405). Open it in a browser when Playwright is set up.
+if [ -n "${SMOKE_CANVAS_BASE_PATH:-}" ]; then
+  node "$(dirname "$0")/smoke-canvas-page.cjs" "http://127.0.0.1:${PORT}" "$SMOKE_CANVAS_BASE_PATH" ||
+    fail "Canvas at ${SMOKE_CANVAS_BASE_PATH} rendered a blank page"
+fi
 
 echo "Smoke test passed for ${IMAGE}"

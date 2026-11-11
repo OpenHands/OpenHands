@@ -47,7 +47,7 @@ candidate. Sources, roughly in order of yield:
 6. **Backends and modes**: local vs Cloud backend, public vs local auth, ACP
    agents, partial stacks (`agent-canvas --help`), Electron, Docker, and the
    embeddable library (`src/index.ts` / `build:lib`).
-7. **Docs, specs and tests**: `README.md`, `docs/*.md`, `specs/*.md` describe
+7. **Docs and tests**: `README.md`, `docs/*.md` describe
    intended behavior. The Playwright suites under `tests/e2e/` (mock-LLM, live,
    bind-policy, live-acp) assert behaviors a user sees too: read them for
    selectors and for behaviors the map lacks, then map those behaviors as
@@ -82,6 +82,14 @@ is mapped once, by the family that owns the destination; the others reference
 that ID instead of re-mapping it.
 
 ## 3. Write each entry
+
+Describe current behavior and how to verify it. Once a fix is proven, keep
+the corrected expectations and normal recipe steps, and remove the fix's
+PR or closed-issue references, verification dates or device lists, old UI
+wording, and descriptions of checkouts without the fix. Keep that history
+in the maintenance PR and evidence ledger. Retain links for known open
+bugs, authorizing PRs for retired IDs, and version or environment
+distinctions that still affect a supported run.
 
 Each file starts with an H1 title, one paragraph describing the user-visible
 behavior, and one `Source:` line with the main implementation paths (for drift
@@ -122,21 +130,30 @@ sections, in this order:
    exemptions). The map should know every open bug. Record one on the bullet
    that reproduces it, next to the expected result, as `Known failure
    (reproduced <date>, #<issue>): <what happens>`; list it here as
-   `Known issue #<issue>: ...` only when no recipe can drive it.
+   `Known issue #<issue>: ...` only when no recipe can drive it. The completed
+   [existing-bug backfill](backfills/2026-10-12-open-bugs.md) accounts for its frozen
+   inventory; the [main refresh](backfills/2026-10-16-main-refresh.md) records later
+   reconciliation. [bug-backfill.md](bug-backfill.md) defines ongoing intake and outcome
+   labels. Absence of `ready-for-dev` is not an exclusion.
+   Use full repository-qualified links for SDK and automation issues, so their
+   numbers cannot be mistaken for Canvas issue numbers.
 
    Make the note executable when a recipe can drive it: indent a fenced block
    under it, opened with `` ```sh known-bug <ID> [name] `` (the name tells
    entry points or viewports apart, such as `desktop` and `phone`). Its
    commands set their own viewport and starting page and assert the *correct*
-   behavior; exactly one line, the one that fails because of the bug, is a
+   behavior; exactly one command, the one that fails because of the bug, is a
    `control-openhands assert --field <path> --equals <correct> --bug-shows
-   <what the bug shows> -- <command>` ending in `# bug`. Arrange steps go
+   <what the bug shows> -- <command>` ending in `# bug` (a long one may
+   continue over lines ending in `\`). When the bug's value varies, or
+   needs more than one field to pin down, name it with `--bug 'PATH OP
+   [VALUE] && ...'` instead (see the known-bug contract below). Arrange steps go
    before it and must be able to fail on their own (assert the starting value
    too), so a broken setup is never read as the bug. Keep a `browser
    screenshot` before the assertion where the symptom is visual.
    `control-openhands bug run <ID>` then reports `xfail` while the bug lasts,
    `xpass` once it stops, and `fail` for anything else; `map check` rejects a
-   block without exactly one such line. F25's `F25.selector-dropdown` note is
+   block without exactly one such command. F25's `F25.selector-dropdown` note is
    the worked example. When a fix is proven, the PR that drops the note turns
    the block's commands into the bullet's normal steps, so the same assertion
    guards the corrected behavior.
@@ -165,6 +182,13 @@ will run them that way:
   option click otherwise goes unnoticed until a later step.
 - Assert deterministic text (what the UI sent, a file the agent wrote, a tool
   observation), not the model's wording.
+- A claim about how many ("the only toast", "once", "exactly one", "no
+  duplicate", "a single request") names a command that counts, and the
+  number it must give: the entries of `browser toasts --history` (cleared
+  before the action) with that text, `browser count`, a `browser network`
+  `total`. Checking that one other text is absent proves only that it is
+  absent: write it as its own check, never as the proof of "only". A
+  duplicate of the expected item passes a presence or absence check.
 - Secret and credential checks assert the tool's output, not the model's
   reply: models refuse to echo secrets. Compare inside the command
   (`test "$QA_SECRET" = expected && echo match`) and read the observation
@@ -232,3 +256,43 @@ parallel, each edits only its own file and checks it with `--file`; one
 coordinator updates the index afterwards.
 Then hand the evidence ledger (`control-openhands evidence report`) to whoever
 asked, with fail/blocked rows first.
+
+## The known-bug contract
+
+Keep these rules in step with the sibling verification skills
+(verify-agent-server in OpenHands/software-agent-sdk, verify-automation in
+OpenHands/automation), so a proof means the same thing in each. The code stays
+separate; only the syntax for naming the bug differs, noted below.
+
+- The recipe asserts the correct behavior. The command that fails because of
+  the bug ends its line with `# bug` and names the bug's own symptom: the
+  value or error it produces, not just any wrong value. Here that command is
+  always a `control-openhands assert`, which carries the symptom as
+  `--bug-shows V` or `--bug PREDICATE`; the sibling skills write
+  `# bug: PREDICATE` on the marked line instead.
+- Three outcomes. `xfail`: the marked command failed and its symptom held (the
+  documented bug reproduced). `xpass`: every command passed, so the correct
+  behavior was observed; `bug run` exits 1 so the note gets reviewed and the
+  marker removed. `fail`: anything else, including a different value at the
+  marked command, an arrange step that breaks first, a timeout, an unhealthy
+  stack before or after, a failure after the marked command, or a failing line
+  the runner could not locate.
+- The predicate is `PATH OP [VALUE]` clauses joined by `&&`, matched against
+  the JSON the asserted command printed: `--bug 'status eq 500 &&
+  body.error contains "has no attribute"'`. OP is `eq`, `ne`, `contains`,
+  `not-contains`, `matches` (a regex), `exists` or `missing`. `--bug-shows V`
+  is `--bug '<field> eq V'`. Prefer `contains` or `matches` on the stable part
+  of an error message over pinning its whole text.
+- `xpass` must mean the correct value was observed, so the marked command
+  asserts positively. Negative shapes (`! cmd`, `if cmd; then false; fi`,
+  `test !`) cannot be marked: the marked command must be an `assert`, and
+  `map check` rejects anything else.
+- `map check` rejects a missing or malformed predicate.
+- The observation is the marked command's own. Every assertion is logged with
+  the recipe line that ran it and the first failure is kept, so a later step
+  or an `EXIT` trap's cleanup cannot replace it. A marked command continued
+  over several lines counts as one, from its first line to the `# bug` line.
+- A fix is proven with the baseline reproducing (`xfail`) twice and the fix
+  passing (`xpass`) twice, with the same recipe, viewport and backend:
+  `control-openhands bug proof` computes that verdict (`verified`,
+  `not-fixed` or `inconclusive`).

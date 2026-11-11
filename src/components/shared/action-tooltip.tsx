@@ -29,8 +29,9 @@ export function ActionTooltip({ type, onClick }: ActionTooltipProps) {
   const shortcutHint = SHORTCUT_HINTS[isApplePlatform() ? "apple" : "other"];
 
   const buttonLabel = isConfirm
-    ? `${t(I18nKey.CHAT_INTERFACE$INPUT_CONTINUE_MESSAGE)} ${shortcutHint.confirm}`
-    : `${t(I18nKey.BUTTON$CANCEL)} ${shortcutHint.reject}`;
+    ? t(I18nKey.CHAT_INTERFACE$INPUT_CONTINUE_MESSAGE)
+    : t(I18nKey.BUTTON$CANCEL);
+  const buttonShortcut = isConfirm ? shortcutHint.confirm : shortcutHint.reject;
 
   return (
     <StyledTooltip closeDelay={100} content={content}>
@@ -39,14 +40,16 @@ export function ActionTooltip({ type, onClick }: ActionTooltipProps) {
         type="button"
         aria-label={ariaLabel}
         className={cn(
-          "rounded px-2 h-6.5 text-sm font-normal leading-5 cursor-pointer hover:opacity-80",
+          "inline-flex items-center gap-1 whitespace-nowrap rounded px-2 h-6.5 text-sm font-normal leading-5 cursor-pointer hover:opacity-80",
           type === "confirm"
             ? "bg-tertiary text-contrast"
             : "bg-contrast text-canvas-base",
         )}
         onClick={onClick}
       >
-        {buttonLabel}
+        <span>{buttonLabel}</span>
+        {/* Phones have no hardware keyboard and too little width for the hint. */}
+        <span className="hidden sm:inline">{buttonShortcut}</span>
       </button>
     </StyledTooltip>
   );

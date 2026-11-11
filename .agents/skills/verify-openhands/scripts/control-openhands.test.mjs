@@ -3,15 +3,18 @@
 //   npx vitest run .agents/skills/verify-openhands
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { EventEmitter } from "node:events";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:net";
+import { createServer as createHttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +25,7 @@ import { BUILD_INPUTS } from "./lib/build-inputs.mjs";
 import {
   editorOffset,
   launcherEnvFor,
+  lockedCloudOrigin,
   portsAfterRestart,
   runPorts,
 } from "./lib/launcher-env.mjs";
@@ -34,6 +38,10 @@ import {
   specMatches,
 } from "./lib/map-sources.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
+import {
+  networkTiming,
+  orderNetworkEntries,
+} from "./lib/network-timing.mjs";
 import { resolveTestids } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
@@ -51,13 +59,26 @@ import {
   withoutPauses,
 } from "./lib/recording.mjs";
 import { MAX_PAGES, collectEvents, countImages } from "./lib/events-paging.mjs";
-import { redactBody, redactUrl } from "./lib/network-bodies.mjs";
+import {
+  redactBody,
+  redactUrl,
+  redactBodyFields,
+  networkEntryForOutput,
+  BODY_FIELDS_LIMIT_BYTES,
+} from "./lib/network-bodies.mjs";
+import {
+  observeWebSocket,
+  webSocketMetadata,
+  isWebSocketObservation,
+} from "./lib/websocket-events.mjs";
 import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
 import {
   classifyAttempt,
   judgeAssertion,
   knownBugBlocks,
+  parseBugPredicate,
   proofVerdict,
+  viewportToRestore,
 } from "./lib/known-bug.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -84,8 +105,8 @@ function recorder(path = []) {
   };
 }
 
-function run(args, env = {}) {
-  const result = spawnSync(process.execPath, [cli, ...args], {
+function run(args, env = {}, execArgv = []) {
+  const result = spawnSync(process.execPath, [...execArgv, cli, ...args], {
     encoding: "utf8",
     env: {
       ...process.env,
@@ -191,6 +212,103 @@ test("usage errors exit 2 with a hint; a missing run exits 3", () => {
   const noRun = run(["doctor"]);
   assert.equal(noRun.status, 3);
   assert.match(noRun.json.hint, /control-openhands launch/);
+});
+
+// Exercise the real launch guard with deterministic OS inputs. An empty PATH
+// stops an accepted measurement at the next prerequisite, before any build or
+// service starts. The preload changes only memory readings in this child.
+function launchWithMemory(memory, flags = []) {
+  const emptyPath = mkdtempSync(join(tmpdir(), "cov-empty-path-"));
+  const preload = `
+    import fs from "node:fs";
+    import os from "node:os";
+    import { syncBuiltinESMExports } from "node:module";
+    const memory = ${JSON.stringify(memory)};
+    Object.defineProperty(process, "platform", { value: memory.platform });
+    process.availableMemory = () => memory.availableMb * 1024 * 1024;
+    os.freemem = () => memory.freeMb * 1024 * 1024;
+    const readFileSync = fs.readFileSync;
+    fs.readFileSync = (path, ...args) => {
+      if (path !== "/proc/meminfo") return readFileSync(path, ...args);
+      if (memory.meminfo !== undefined) return memory.meminfo;
+      throw new Error("/proc/meminfo is unavailable");
+    };
+    syncBuiltinESMExports();
+  `;
+  try {
+    return run(["launch", "--new", ...flags], { PATH: emptyPath }, [
+      "--import",
+      `data:text/javascript,${encodeURIComponent(preload)}`,
+    ]);
+  } finally {
+    rmSync(emptyPath, { recursive: true, force: true });
+  }
+}
+
+test.each([
+  {
+    name: "macOS launch accepts available memory beyond unused pages",
+    platform: "darwin",
+    freeMb: 300,
+    availableMb: 8192,
+    error: /uvx is not on PATH/,
+  },
+  {
+    name: "macOS launch refuses genuinely low available memory",
+    platform: "darwin",
+    freeMb: 8192,
+    availableMb: 1024,
+    error: /Only 1024 MB of memory available/,
+  },
+  {
+    name: "macOS launch refuses an unknown native memory reading",
+    platform: "darwin",
+    freeMb: 8192,
+    availableMb: 0,
+    error: /Only 0 MB of memory available/,
+  },
+  {
+    name: "macOS launch honors a custom minimum against available memory",
+    platform: "darwin",
+    freeMb: 300,
+    availableMb: 3000,
+    flags: ["--min-free-mb", "4000"],
+    error: /Only 3000 MB of memory available/,
+  },
+  {
+    name: "Linux launch keeps using MemAvailable",
+    platform: "linux",
+    freeMb: 300,
+    availableMb: 0,
+    meminfo: "MemFree:        307200 kB\nMemAvailable:  8388608 kB\n",
+    error: /uvx is not on PATH/,
+  },
+  {
+    name: "Linux launch keeps the free memory fallback when proc is missing",
+    platform: "linux",
+    freeMb: 4096,
+    availableMb: 0,
+    error: /uvx is not on PATH/,
+  },
+  {
+    name: "Linux launch keeps the free memory fallback without MemAvailable",
+    platform: "linux",
+    freeMb: 1024,
+    availableMb: 8192,
+    meminfo: "MemFree:       1048576 kB\n",
+    error: /Only 1024 MB of memory available/,
+  },
+  {
+    name: "other platforms keep the free memory fallback",
+    platform: "win32",
+    freeMb: 4096,
+    availableMb: 0,
+    error: /uvx is not on PATH/,
+  },
+])("$name", ({ flags, error, ...memory }) => {
+  const result = launchWithMemory(memory, flags);
+  assert.equal(result.status, 3);
+  assert.match(result.json.error, error);
 });
 
 test("keys are refused on argv before any request is made", () => {
@@ -578,6 +696,53 @@ test("this checkout's launcher answers the editor probe, and --vscode opts in", 
   assert.match(help.stdout, /OH_CANVAS_ENABLE_VSCODE/);
 });
 
+test("--lock-to-cloud takes P+4, keeps it across a restart, and needs an http(s) URL", () => {
+  const launcher = (offset) => ({ offset, source: "launcher" });
+  const locked = runPorts(18800, null, { lockedCloud: true });
+  assert.deepEqual(locked, {
+    ingress: 18800,
+    agentServer: 18801,
+    automation: 18802,
+    frontend: 18803,
+    lockedCloud: 18804,
+  });
+  // The locked page is not the launcher's: whatever the editor answer, a
+  // restart keeps its port.
+  assert.equal(
+    portsAfterRestart(locked, launcher(null)).ports.lockedCloud,
+    18804,
+  );
+  assert.equal(
+    portsAfterRestart(locked, launcher(1000)).ports.lockedCloud,
+    18804,
+  );
+  assert.equal(
+    portsAfterRestart(runPorts(18800, null), launcher(null)).ports.lockedCloud,
+    undefined,
+  );
+  assert.equal(
+    lockedCloudOrigin("https://app.all-hands.dev/"),
+    "https://app.all-hands.dev",
+  );
+  assert.throws(() => lockedCloudOrigin("app.all-hands.dev"), /Cloud URL/);
+  assert.throws(() => lockedCloudOrigin("ftp://example.com"), /http\(s\)/);
+  // A bad or missing URL is a usage error before anything is built or started.
+  for (const flags of [
+    ["--lock-to-cloud", "ftp://example.com"],
+    ["--lock-to-cloud"],
+  ]) {
+    const result = run(["launch", "--new", ...flags]);
+    assert.equal(result.status, 2, JSON.stringify(result.json));
+    assert.match(result.json.hint, /--lock-to-cloud https:/);
+  }
+  const help = spawnSync(process.execPath, [cli, "help", "launch"], {
+    encoding: "utf8",
+  });
+  assert.match(help.stdout, /--mars-web/);
+  assert.match(help.stdout, /MARS_WEB=1/);
+  assert.match(help.stdout, /--lock-to-cloud URL/);
+});
+
 test("a restart follows the launcher's editor answer, or keeps its ports", () => {
   const without = runPorts(18800, null);
   const withEditor = runPorts(18800, 1000);
@@ -729,6 +894,10 @@ test("changed paths map to the families whose Source: lines own them", () => {
     "src/components/features/brand-new/page.tsx",
     "src/mocks/conversation-handlers.ts",
     ".agents/skills/verify-openhands/SKILL.md",
+    "src/icons/close.svg",
+    "eslint.config.js",
+    "vitest.setup.ts",
+    "playwright.live.config.ts",
   ]);
   assert.deepEqual(
     result.families.map((f) => [f.id, f.paths]),
@@ -744,6 +913,7 @@ test("changed paths map to the families whose Source: lines own them", () => {
   assert.deepEqual(result.shared, [
     "src/hooks/query/use-get-secrets.ts",
     "src/i18n/translation.json",
+    "src/icons/close.svg",
   ]);
   // A src/ path no family owns is a map gap.
   assert.deepEqual(result.unmapped, [
@@ -756,6 +926,9 @@ test("changed paths map to the families whose Source: lines own them", () => {
     "__tests__/components/secrets.test.tsx",
     "src/mocks/conversation-handlers.ts",
     ".agents/skills/verify-openhands/SKILL.md",
+    "eslint.config.js",
+    "vitest.setup.ts",
+    "playwright.live.config.ts",
   ]);
 });
 
@@ -812,6 +985,23 @@ test("cited test ids resolve through literals and dynamic prefixes", () => {
   assert.equal(result.cited, 4);
   assert.deepEqual(result.unresolved, [
     { id: "renamed-away-button", files: ["F14-secrets.md"] },
+  ]);
+  // A one-word prefix accounts for an id only when the source builds ids
+  // from it; otherwise a removed id such as automation-setup-agent-profile
+  // would resolve through the plain word "automation".
+  const words = new Set(["automation", "edit"]);
+  words.heads = new Set(["edit"]);
+  words.tails = new Set(["message"]);
+  const strict = resolveTestids(
+    new Map([
+      ["automation-setup-agent-profile", new Set(["F28.md"])],
+      ["edit-automation-save", new Set(["F23.md"])],
+      ["agent-message", new Set(["F06.md"])],
+    ]),
+    words,
+  );
+  assert.deepEqual(strict.unresolved, [
+    { id: "automation-setup-agent-profile", files: ["F28.md"] },
   ]);
   // The live map against the live source tree: zero unresolved today, and
   // --strict makes any drift a failing exit.
@@ -1851,6 +2041,226 @@ test.skipIf(process.platform === "win32")(
   },
 );
 
+test("browser network-state restores connectivity and rejects invalid modes before dispatch", async () => {
+  // Arrange a browser service. The CLI must route state changes without
+  // confusing the observation-only network log with network availability.
+  const runDir = mkdtempSync(join(tmpdir(), "cov-network-state-"));
+  mkdirSync(join(runDir, "private"));
+  writeFileSync(join(runDir, "run.json"), "{}\n");
+  let offline = false;
+  let requests = 0;
+  const server = createHttpServer(async (req, res) => {
+    requests += 1;
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    const { cmd, args } = JSON.parse(body);
+    assert.equal(cmd, "network-state");
+    if (args.state !== "status") offline = args.state === "offline";
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ ok: true, offline }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  writeFileSync(
+    join(runDir, "private", "browser.json"),
+    JSON.stringify({
+      pid: process.pid,
+      port: server.address().port,
+      token: "dummy-control-token",
+    }),
+  );
+  const invoke = (state) =>
+    new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, [
+        cli,
+        "browser",
+        "network-state",
+        ...state,
+        "--run",
+        runDir,
+      ]);
+      let output = "";
+      child.stdout.on("data", (chunk) => {
+        output += chunk;
+      });
+      child.on("error", reject);
+      child.on("close", (code) => resolve({ code, ...JSON.parse(output) }));
+    });
+  try {
+    // Act / Assert: status is read-only, and online restores the prior
+    // offline browser. Bad input must not reach or mutate the service.
+    assert.equal((await invoke(["offline"])).offline, true);
+    assert.equal((await invoke(["status"])).offline, true);
+    assert.equal((await invoke(["online"])).offline, false);
+    const before = requests;
+    for (const args of [[], ["sometimes"], ["offline", "extra"]]) {
+      assert.equal((await invoke(args)).code, 2);
+    }
+    assert.equal(requests, before);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+test("WebSocket subscription events preserve cursors and counts without secrets or frame content", () => {
+  // Arrange the underlying Playwright socket event source; the real observer
+  // must expose only metadata to browser-events.jsonl and browser events.
+  const socket = new EventEmitter();
+  socket.url = () =>
+    "ws://user:SOCKET_PASSWORD@localhost:18800/sockets/events/qa?after_seq=7&session_api_key=SESSION_SECRET&unknown=OPAQUE_SECRET";
+  const events = [];
+  observeWebSocket(socket, (kind, detail) => events.push({ kind, ...detail }), {
+    connectionId: "qa-connection",
+    pageUrl: () =>
+      "http://user:PAGE_PASSWORD@localhost:18800/conversations/qa?api_key=PAGE_SECRET#TOKEN_SECRET",
+  });
+  // Act: even authentication frames and error text must never be retained.
+  socket.emit("framereceived", {
+    payload: "RECEIVED_SECRET",
+    headers: { authorization: "HEADER_SECRET" },
+  });
+  socket.emit("framesent", { payload: Buffer.from("SENT_SECRET") });
+  socket.emit("socketerror", "ERROR_SECRET");
+  socket.emit("close");
+  // Assert the consumer contract, including healthy/error classification.
+  assert.equal(events[0].afterSeq, "7");
+  assert.equal(new URL(events[0].url).searchParams.get("after_seq"), "7");
+  const opened = events.find((e) => e.kind === "websocket-open");
+  assert.equal(opened.observed, "first-frame");
+  assert.equal(opened.receivedFrames, 1);
+  const closed = events.at(-1);
+  assert.equal(closed.receivedFrames, 1);
+  assert.equal(closed.sentFrames, 1);
+  assert.equal(closed.connectionId, events[0].connectionId);
+  assert.deepEqual(
+    events.filter((e) => !isWebSocketObservation(e.kind)).map((e) => e.kind),
+    ["websocket-error"],
+  );
+  const shown = JSON.stringify(events);
+  for (const secret of [
+    "SOCKET_PASSWORD",
+    "SESSION_SECRET",
+    "OPAQUE_SECRET",
+    "PAGE_PASSWORD",
+    "PAGE_SECRET",
+    "TOKEN_SECRET",
+    "RECEIVED_SECRET",
+    "HEADER_SECRET",
+    "SENT_SECRET",
+    "ERROR_SECRET",
+  ])
+    assert.ok(!shown.includes(secret));
+  assert.equal(
+    webSocketMetadata("ws://localhost/x?after_seq=NOT_A_CURSOR_SECRET")
+      .afterSeq,
+    undefined,
+  );
+  assert.ok(
+    !JSON.stringify(
+      webSocketMetadata("ws://localhost/x?after_seq=NOT_A_CURSOR_SECRET"),
+    ).includes("NOT_A_CURSOR_SECRET"),
+  );
+  assert.ok(
+    !JSON.stringify(
+      webSocketMetadata(
+        "ws://localhost/x?after_seq=7&after_seq=DUPLICATE_SECRET",
+      ),
+    ).includes("DUPLICATE_SECRET"),
+  );
+  assert.equal(
+    webSocketMetadata("ws://localhost/x?after_seq=7&after_seq=8").afterSeq,
+    undefined,
+  );
+  assert.ok(
+    !JSON.stringify(
+      webSocketMetadata("ws://localhost/x?SECRET_NAME=ignored"),
+    ).includes("SECRET_NAME"),
+  );
+  assert.deepEqual(webSocketMetadata("invalid SECRET"), {
+    url: "<unavailable>",
+  });
+});
+
+test("browser events delivers filtered WebSocket metadata to the CLI consumer", async () => {
+  const runDir = mkdtempSync(join(tmpdir(), "cov-websocket-events-"));
+  mkdirSync(join(runDir, "private"));
+  writeFileSync(join(runDir, "run.json"), "{}\n");
+  const socket = new EventEmitter();
+  socket.url = () =>
+    "ws://localhost:18800/sockets/events/qa?after_seq=42&session_api_key=PRIVATE_SECRET";
+  const events = [];
+  observeWebSocket(
+    socket,
+    (kind, detail) =>
+      events.push({ ts: new Date().toISOString(), kind, ...detail }),
+    {
+      connectionId: "qa-reconnect",
+      pageUrl: () => "http://localhost:18800/conversations/qa",
+    },
+  );
+  socket.emit("framesent", { payload: "AUTH_SECRET" });
+  socket.emit("close");
+  const server = createHttpServer(async (req, res) => {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    const { cmd, args } = JSON.parse(body);
+    assert.equal(cmd, "events");
+    assert.equal(args.kinds, "websocket-open,websocket-close");
+    assert.equal(args.last, "2");
+    const wanted = args.kinds.split(",");
+    res.setHeader("content-type", "application/json");
+    res.end(
+      JSON.stringify({
+        ok: true,
+        events: events
+          .filter((e) => wanted.includes(e.kind))
+          .slice(-Number(args.last)),
+      }),
+    );
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  writeFileSync(
+    join(runDir, "private", "browser.json"),
+    JSON.stringify({
+      pid: process.pid,
+      port: server.address().port,
+      token: "dummy-control-token",
+    }),
+  );
+  try {
+    const output = await new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, [
+        cli,
+        "browser",
+        "events",
+        "--kinds",
+        "websocket-open,websocket-close",
+        "--last",
+        "2",
+        "--run",
+        runDir,
+      ]);
+      let stdout = "";
+      child.stdout.on("data", (chunk) => {
+        stdout += chunk;
+      });
+      child.on("error", reject);
+      child.on("close", (code) => resolve({ code, stdout }));
+    });
+    assert.equal(output.code, 0);
+    const result = JSON.parse(output.stdout);
+    assert.equal(result.events.length, 2);
+    assert.equal(result.events[0].afterSeq, "42");
+    assert.equal(result.events[1].sentFrames, 1);
+    assert.ok(result.events.every((e) => Number.isFinite(Date.parse(e.ts))));
+    assert.ok(!output.stdout.includes("PRIVATE_SECRET"));
+    assert.ok(!output.stdout.includes("AUTH_SECRET"));
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
 // A run directory with no stack behind it: enough for evidence and bug runs
 // whose recipes only call offline commands.
 function fakeRun(revision = "abc") {
@@ -1909,8 +2319,37 @@ test("known-bug blocks parse with their bug line, and malformed ones say why", (
   );
   assert.match(
     problems("control-openhands assert --field a --equals 1 -- status  # bug"),
-    /must name the bug's value with --bug-shows/,
+    /must name what the bug shows with --bug-shows or --bug/,
   );
+  assert.match(
+    problems(
+      "control-openhands assert --field a --equals 1 --bug 'a is 0' -- status  # bug",
+    ),
+    /--bug `a is 0` is not PATH OP \[VALUE\]/,
+  );
+  assert.match(
+    problems(
+      "control-openhands assert --field a --equals 1 --bug 'a eq' -- status  # bug",
+    ),
+    /needs a value/,
+  );
+  assert.deepEqual(
+    knownBugBlocks(
+      block(
+        "control-openhands assert --field a --equals 1 --bug 'a eq 0 && b.c contains \"no such\"' -- status  # bug",
+      ),
+    )[0].problems,
+    [],
+  );
+  // A command continued over several lines is one marked command.
+  const [continued] = knownBugBlocks(
+    block(
+      "true\ncontrol-openhands assert --field a --equals 1 \\\n  --bug-shows 0 \\\n  -- status  # bug\ntrue",
+    ),
+  );
+  assert.deepEqual(continued.problems, []);
+  assert.deepEqual(continued.bugLines, [4]);
+  assert.deepEqual(continued.bugRanges, [[2, 4]]);
   assert.match(
     knownBugBlocks(
       "```sh known-bug F14.create\ncontrol-openhands status\n",
@@ -1938,6 +2377,56 @@ test("an assertion tells the bug's value from another value and from an error", 
   assert.equal(judge({ field: "nope" }).kind, "error");
   assert.equal(judge({ exitCode: 1 }).kind, "error");
   assert.equal(judge({ equals: undefined, matches: "^$" }).kind, "hold");
+  // --bug clauses name the symptom on any field; all must hold.
+  const api = {
+    status: 500,
+    response: { body: { exception: "'int' object has no attribute 'pop'" } },
+  };
+  const bug = (predicate) =>
+    judgeAssertion({
+      exitCode: 0,
+      json: api,
+      field: "status",
+      equals: "422",
+      bug: predicate,
+    });
+  const reproduced = bug(
+    "status eq 500 && response.body.exception contains 'has no attribute'",
+  );
+  assert.equal(reproduced.kind, "mismatch");
+  assert.deepEqual(
+    reproduced.bugChecks.map((c) => c.ok),
+    [true, true],
+  );
+  assert.equal(
+    bug("status eq 500 && response.body.exception contains timeout").kind,
+    "other-symptom",
+  );
+  assert.equal(bug("status eq 503").kind, "other-symptom");
+  assert.equal(bug("response.body.exception matches ^'int'").kind, "mismatch");
+  assert.equal(bug("response.body.detail missing").kind, "mismatch");
+  assert.equal(bug("status ne 500").kind, "other-symptom");
+});
+
+test("bug predicates parse PATH OP [VALUE] clauses joined by &&", () => {
+  assert.deepEqual(
+    parseBugPredicate(
+      `status eq 500 && body.error contains "no such file" && body.x exists`,
+    ).clauses,
+    [
+      { path: "status", op: "eq", value: "500" },
+      { path: "body.error", op: "contains", value: "no such file" },
+      { path: "body.x", op: "exists" },
+    ],
+  );
+  assert.deepEqual(parseBugPredicate("value eq ''").clauses, [
+    { path: "value", op: "eq", value: "" },
+  ]);
+  assert.match(parseBugPredicate("value matches (").problems[0], /Invalid/);
+  assert.match(
+    parseBugPredicate("value exists 1").problems[0],
+    /takes no value/,
+  );
 });
 
 test("only a mismatch at the bug line on a healthy stack counts as reproducing", () => {
@@ -1975,6 +2464,11 @@ test("only a mismatch at the bug line on a healthy stack counts as reproducing",
   );
   assert.match(c({ assertion: undefined }).reason, /no assertion result/);
   assert.match(c({ failedLine: null }).reason, /unknown/);
+  // A continued marked command spans lines; bash reports its first one.
+  const span = { bugLines: [6], bugRanges: [[4, 6]] };
+  assert.deepEqual(c(span), { status: "xfail" });
+  assert.match(c({ ...span, failedLine: 3 }).reason, /^setup: line 3/);
+  assert.match(c({ ...span, failedLine: 7 }).reason, /after the `# bug`/);
   for (const o of [
     { doctorBefore: false },
     { doctorAfter: false },
@@ -2049,6 +2543,42 @@ test("a fix is verified only by two reproductions and two passes under the same 
     ).reasons.join(),
     /same revision/,
   );
+  // A backend fix: same revision, a different backend on each side.
+  const vb = (baseline, fix) =>
+    proofVerdict({ baseline, fix, sha: "s1", vary: "backend" });
+  const newBackend = { backend: "local agent-server 1.58.1 automation 1.25.1" };
+  assert.equal(
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass", newBackend), row("xpass", newBackend)],
+    ).verdict,
+    "verified",
+  );
+  assert.match(
+    vb([row("xfail"), row("xfail")], [row("xpass"), row("xpass")]).reasons.join(),
+    /same backend versions/,
+  );
+  assert.match(
+    vb(
+      [row("xfail"), row("xfail")],
+      [fixRow("xpass", newBackend), fixRow("xpass", newBackend)],
+    ).reasons.join(),
+    /different revisions/,
+  );
+  assert.match(
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass", newBackend), row("xpass")],
+    ).reasons.join(),
+    /one side ran different backend/,
+  );
+  assert.equal(
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass", newBackend), row("xfail", newBackend)],
+    ).verdict,
+    "not-fixed",
+  );
   // Attempts of an older recipe do not count.
   const old = v(
     [row("xpass", { sha: "s0" }), row("xfail"), row("xfail")],
@@ -2089,6 +2619,22 @@ test("bug run classifies live attempts and bug proof turns two runs into a verdi
       /after the `# bug` assertion held/,
     ],
     timeout: [`sleep 5\n${bugLine()}`, "fail", /^timeout$/, ["--timeout", "1"]],
+    predicate: [`true\n${bugLine("--equals 1 --bug 'count eq 0'")}`, "xfail"],
+    "predicate-symptom": [
+      `true\n${bugLine("--equals 1 --bug 'count eq 0 && count ne 0'")}`,
+      "fail",
+      /^wrong symptom/,
+    ],
+    continued: [
+      `true\ncontrol-openhands assert --field count \\\n  --equals 1 --bug-shows 0 \\\n  -- evidence list --feature QA  # bug`,
+      "xfail",
+    ],
+    // A cleanup trap's later assertions, passing or failing, do not replace
+    // the marked command's observation.
+    cleanup: [
+      `trap 'control-openhands assert --field count --equals 0 -- evidence list --feature QA; control-openhands assert --field count --equals 5 -- evidence list --feature QA; false' EXIT\ntrue\n${bugLine()}`,
+      "xfail",
+    ],
   };
   for (const [name, [body, status, reason, extra = []]] of Object.entries(
     cases,
@@ -2252,4 +2798,292 @@ test("help documents assert and bug, and the shipped map's known-bug blocks are 
   const list = run(["bug", "list"]);
   assert.equal(list.json.ok, true, list.stdout);
   assert.ok(list.json.count >= 1);
+});
+
+test("network plugin projection survives display truncation without exposing other fields", () => {
+  const request = JSON.stringify({
+    system_prompt: "unrelated-system-prompt-".repeat(200),
+    llm: { api_key: "never-project-me" },
+    plugins: [
+      {
+        source: "qa-plugin",
+        parameters: { greeting: "edited dummy value", count: 7, enabled: true },
+      },
+    ],
+    unrelated: { plugins: ["not-top-level"] },
+  });
+  assert.throws(() => JSON.parse(redactBody(request))); // existing display cap
+  const projection = redactBodyFields(request);
+  assert.deepEqual(projection, {
+    bodyFields: {
+      plugins: [
+        {
+          source: "qa-plugin",
+          parameters: {
+            greeting: "edited dummy value",
+            count: 7,
+            enabled: true,
+          },
+        },
+      ],
+    },
+  });
+  const serialized = JSON.stringify(projection);
+  assert.doesNotMatch(
+    serialized,
+    /system_prompt|unrelated|never-project-me|not-top-level/,
+  );
+  const entry = {
+    path: "/api/conversations",
+    body: redactBody(request),
+    ...projection,
+  };
+  assert.deepEqual(networkEntryForOutput(entry, false), {
+    path: "/api/conversations",
+  });
+  assert.deepEqual(
+    networkEntryForOutput(entry, true).bodyFields,
+    projection.bodyFields,
+  );
+});
+
+test("network plugin projection recursively redacts credentials maps and credential URLs", () => {
+  const projection = redactBodyFields(
+    JSON.stringify({
+      plugins: [
+        {
+          source: "https://user:pw@example.test/plugin?token=TOKEN&ref=main",
+          parameters: {
+            label: "dummy edited value",
+            nested: [
+              {
+                secret: "sensitive",
+                token: "tok",
+                api_key: "api-value",
+                password: "pass-value",
+                normal: "shown",
+              },
+            ],
+            credentials: { value: "hidden", list: ["nested-secret"] },
+            env: { NAME: "env-value", KEEP: "**********" },
+            headers: { Authorization: "Bearer actual-token" },
+          },
+        },
+      ],
+    }),
+  );
+  const plugin = projection.bodyFields.plugins[0];
+  assert.equal(plugin.parameters.label, "dummy edited value");
+  assert.deepEqual(plugin.parameters.nested, [
+    {
+      secret: "<redacted 9 chars>",
+      token: "<redacted 3 chars>",
+      api_key: "<redacted 9 chars>",
+      password: "<redacted 10 chars>",
+      normal: "shown",
+    },
+  ]);
+  assert.deepEqual(plugin.parameters.credentials, {
+    value: "<redacted 6 chars>",
+    list: ["<redacted 13 chars>"],
+  });
+  assert.deepEqual(plugin.parameters.env, {
+    NAME: "<redacted 9 chars>",
+    KEEP: "**********",
+  });
+  assert.equal(plugin.parameters.headers.Authorization, "<redacted 19 chars>");
+  assert.doesNotMatch(plugin.source, /user|pw|TOKEN/);
+  assert.match(plugin.source, /ref=main/);
+  const all = redactBodyFields(
+    JSON.stringify({ plugins: [{ source: "private", parameters: ["value"] }] }),
+    { all: true },
+  );
+  assert.deepEqual(all.bodyFields.plugins, [
+    { source: "<redacted 7 chars>", parameters: ["<redacted 5 chars>"] },
+  ]);
+});
+
+test("network plugin projection bounds complete UTF-8 JSON and omits non-JSON or non-top-level fields", () => {
+  for (const input of [
+    undefined,
+    null,
+    "",
+    "not-json",
+    "a=1&plugins=raw",
+    '[{"plugins":[]}]',
+    '{"nested":{"plugins":[]}}',
+  ]) {
+    assert.deepEqual(redactBodyFields(input), {});
+  }
+  assert.deepEqual(redactBodyFields('{"plugins":null}'), {
+    bodyFields: { plugins: null },
+  });
+  const near = { plugins: [{ parameters: { value: "😀".repeat(2000) } }] };
+  const fitting = redactBodyFields(JSON.stringify(near));
+  assert.ok(
+    Buffer.byteLength(JSON.stringify(fitting.bodyFields), "utf8") <=
+      BODY_FIELDS_LIMIT_BYTES,
+  );
+  const oversized = redactBodyFields(
+    JSON.stringify({ plugins: [{ parameters: { value: "😀".repeat(5000) } }] }),
+  );
+  assert.equal(oversized.bodyFields, undefined);
+  assert.equal(
+    oversized.bodyFieldsOmitted.plugins,
+    "redacted projection exceeds 16384 UTF-8 bytes",
+  );
+  assert.doesNotMatch(JSON.stringify(oversized), /😀/);
+  assert.deepEqual(
+    networkEntryForOutput({ path: "/api/conversations", ...oversized }, false),
+    { path: "/api/conversations" },
+  );
+  // The bound applies after redaction: a long credential never creates a huge projection.
+  const redacted = redactBodyFields(
+    JSON.stringify({ plugins: [{ api_key: "s".repeat(20000) }] }),
+  );
+  assert.equal(
+    redacted.bodyFields.plugins[0].api_key,
+    "<redacted 20000 chars>",
+  );
+});
+
+test("network body projection keeps the start request's runtime choice past the display cap", () => {
+  const request = JSON.stringify({
+    agent_launch_additions: { system_message_suffix_append: "x".repeat(4000) },
+    llm: { api_key: "never-project-me" },
+    worktree: true,
+    worktree_options: { base: "current_head", branch_prefix: "qa/" },
+    conversation_runtime: "local",
+    container: { memory: "2g", cpus: 1 },
+  });
+  assert.deepEqual(redactBodyFields(request), {
+    bodyFields: {
+      conversation_runtime: "local",
+      worktree: true,
+      worktree_options: { base: "current_head", branch_prefix: "qa/" },
+      container: { memory: "2g", cpus: 1 },
+    },
+  });
+  assert.doesNotMatch(
+    JSON.stringify(redactBodyFields(request)),
+    /never-project-me|system_message/,
+  );
+});
+
+test("browser media validates motion before dispatch and preserves playback observation", async () => {
+  const runDir = mkdtempSync(join(tmpdir(), "cov-media-motion-"));
+  mkdirSync(join(runDir, "private"));
+  writeFileSync(join(runDir, "run.json"), "{}\n");
+  const calls = [];
+  const server = createHttpServer(async (req, res) => {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    const call = JSON.parse(body);
+    calls.push(call);
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ ok: true, plays: [] }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  writeFileSync(join(runDir, "private", "browser.json"), JSON.stringify({
+    pid: process.pid, port: server.address().port, token: "dummy-control-token",
+  }));
+  const invoke = (args) => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [cli, "browser", "media", ...args, "--run", runDir]);
+    let output = "";
+    child.stdout.on("data", (chunk) => { output += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => resolve({ code, ...JSON.parse(output) }));
+  });
+  try {
+    for (const mode of ["reduce", "no-preference"]) {
+      assert.equal((await invoke(["--reduced-motion", mode])).code, 0);
+      assert.equal(calls.at(-1).cmd, "media");
+      assert.equal(calls.at(-1).args.reducedMotion, mode);
+    }
+    assert.equal((await invoke(["--clear"])).code, 0);
+    assert.deepEqual(calls.at(-1).args, { clear: true });
+    assert.equal((await invoke([])).code, 0);
+    const before = calls.length;
+    for (const args of [["--reduced-motion"], ["--reduced-motion", "sometimes"], ["reduce"], ["extra", "--reduced-motion", "reduce"]])
+      assert.equal((await invoke(args)).code, 2);
+    assert.equal(calls.length, before, "invalid media input must not mutate the browser");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+test("browser network times responses and can list them in completion order", () => {
+  let clock = 1_000;
+  const timing = networkTiming(() => clock);
+  // Two schema requests leave together; the second one answers first.
+  const agent = { ts: "t0", path: "/api/settings/agent-schema" };
+  const conversation = { ts: "t0", path: "/api/settings/conversation-schema" };
+  const pending = { ts: "t0", path: "/sockets/events" };
+  for (const entry of [agent, conversation, pending]) timing.start(entry);
+  clock = 1_040;
+  timing.response(conversation);
+  clock = 1_050;
+  timing.complete(conversation, "finished");
+  clock = 1_120;
+  timing.response(agent);
+  timing.response(agent); // a second call does not move the first answer
+  clock = 1_130;
+  timing.complete(agent, "finished");
+  timing.complete(agent, "failed"); // nor does a late failure
+  assert.deepEqual(networkEntryForOutput(conversation, false), {
+    ts: "t0",
+    path: "/api/settings/conversation-schema",
+    responseMs: 40,
+    outcome: "finished",
+    durationMs: 50,
+    completedTs: new Date(1_050).toISOString(),
+    completedSeq: 1,
+  });
+  assert.equal(agent.responseMs, 120);
+  assert.equal(agent.outcome, "finished");
+  assert.equal(agent.completedSeq, 2);
+  const list = [agent, conversation, pending];
+  assert.deepEqual(orderNetworkEntries(list), list);
+  assert.deepEqual(
+    orderNetworkEntries(list, "completion").map((e) => e.path),
+    [
+      "/api/settings/conversation-schema",
+      "/api/settings/agent-schema",
+      "/sockets/events",
+    ],
+  );
+  assert.throws(() => orderNetworkEntries(list, "size"), /request or completion/);
+  // --last windows completed and pending rows separately: 15 open sockets
+  // must not push the two completions out of a --last 15 listing.
+  const sockets = Array.from({ length: 15 }, (_, i) => ({ path: `/ws/${i}` }));
+  const busy = orderNetworkEntries([...list, ...sockets], "completion", 15);
+  assert.deepEqual(
+    busy.slice(0, 2).map((e) => e.path),
+    ["/api/settings/conversation-schema", "/api/settings/agent-schema"],
+  );
+  assert.equal(busy.length, 17);
+  assert.deepEqual(
+    orderNetworkEntries([...list, ...sockets], "request", 2).map((e) => e.path),
+    ["/ws/13", "/ws/14"],
+  );
+  const help = spawnSync(process.execPath, [cli, "help", "browser"], {
+    encoding: "utf8",
+  });
+  assert.match(help.stdout, /--order request\|completion/);
+});
+
+test("bug run puts back the viewport a block changed", () => {
+  const desktop = { width: 1440, height: 1000 };
+  const phone = { width: 390, height: 844 };
+  // F07.overview-toggle phone-overview switches to phone: back to desktop.
+  assert.equal(viewportToRestore(desktop, phone), "1440x1000");
+  assert.equal(viewportToRestore(phone, desktop), "390x844");
+  // Unchanged, or nothing known before the block: nothing to restore.
+  assert.equal(viewportToRestore(desktop, { ...desktop }), null);
+  assert.equal(viewportToRestore(undefined, phone), null);
+  const help = spawnSync(process.execPath, [cli, "help", "bug"], {
+    encoding: "utf8",
+  });
+  assert.match(help.stdout, /viewportRestored/);
 });

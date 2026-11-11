@@ -36,6 +36,7 @@ export interface AgentServerInfo extends BaseServerInfo {
   sdk_version?: string;
   runtime_services?: unknown;
   execution_runtime?: "local" | "docker";
+  available_conversation_runtimes?: ("local" | "docker")[];
 }
 
 let cachedAgentServerInfo: AgentServerInfo | null = null;
@@ -114,15 +115,6 @@ export const isAgentServerUnsupportedVersionError = (
     "code" in error &&
     error.code === AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE);
 
-export const isAgentServerUnknownVersionError = (
-  error: unknown,
-): error is AgentServerUnknownVersionError =>
-  error instanceof AgentServerUnknownVersionError ||
-  (typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === AGENT_SERVER_UNKNOWN_VERSION_ERROR_CODE);
-
 /**
  * Returns true when the agent-server probe failed with HTTP 401.
  * In public mode this means the stored key is stale (server restarted
@@ -198,26 +190,6 @@ export function getDisplayAgentServerVersion(
     return null;
   }
   return version;
-}
-
-export function getDisplayAgentServerSdkVersion(
-  serverInfo: AgentServerInfo,
-): string | null {
-  const version =
-    getRawAgentServerSdkVersion(serverInfo) ??
-    getComparableAgentServerVersion(serverInfo);
-  if (!version || version.toLowerCase() === UNKNOWN_AGENT_SERVER_VERSION) {
-    return null;
-  }
-  return version;
-}
-
-export function getCachedAgentServerSdkVersion(
-  host?: string | null,
-): string | null {
-  if (!cachedAgentServerInfo) return null;
-  if (host && getEffectiveLocalBackend()?.host !== host) return null;
-  return getDisplayAgentServerSdkVersion(cachedAgentServerInfo);
 }
 
 export function getCachedAgentServerVersion(

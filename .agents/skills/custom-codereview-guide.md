@@ -267,10 +267,10 @@ Adequate design context states:
 
 Put it in the PR description, or link a `.pr/` design doc that covers it from
 the `pr-design-doc` skill. Count a `.pr/` doc only when the link is pinned to a
-commit SHA, not the branch name. Approving a same-repository PR runs the
-`PR Artifacts` cleanup, which removes `.pr/` from the branch, so a branch link
-stops resolving before a human maintainer reads it, while a SHA link keeps
-working.
+full commit SHA, not the branch name. After either a same-repository or fork PR
+merges, the `PR Artifacts` workflow opens or updates a cleanup PR that removes
+`.pr/` from `main`. A SHA-pinned link keeps working after post-merge cleanup or
+PR branch deletion.
 
 Scale the response to the risk assessment:
 
@@ -373,3 +373,24 @@ temporary `.pr/` artifacts. Do not manufacture feedback to avoid approval.
 For every finding, trace the call or data flow far enough to show the concrete
 user-visible or architectural consequence. Prefer one root-cause comment over
 several symptoms, and suggest the smallest viable correction.
+
+## Dependency release-age review
+
+For dependency additions or updates, inspect every changed third-party npm or
+PyPI version, including transitive lockfile changes. Require at least seven days
+since publication of that exact version. Use npm or PyPI registry publication/
+upload metadata; this repository has no `uv.lock`. Include PyPI version changes
+in Docker or launcher install commands. A weekly bot schedule, an old package
+name, or a passing install is not age evidence.
+
+For an under-seven-day artifact, leave a COMMENT naming the package, version,
+publication time, and source, and defer approval until it ages out or a maintainer
+explicitly approves a narrowly documented exception. If publication time is
+unavailable, ask for that evidence. Existing named first-party exemptions apply
+only to those packages, not their third-party dependencies or blanket approval
+of the lockfile. Apply this check before any dependency-bump fast path.
+
+Flag removal or weakening of the npm Dependabot cooldown or new broad
+exemptions. Dependabot security updates bypass cooldown, so review them under
+the explicit maintainer-exception rule in `AGENTS.md`; agents cannot approve
+their own bypass.
