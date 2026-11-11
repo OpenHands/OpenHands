@@ -29,7 +29,12 @@ const noop = () => {};
  */
 export function useCurrentPathGetter(pathname: string): () => string {
   const pathRef = React.useRef(pathname);
-  React.useEffect(() => {
+  // Layout effect, not a passive one: a fork that settles during the commit
+  // between a navigation and this effect would read the previous route. React
+  // flushes layout effects bottom-up before any passive effect, so a consumer
+  // reading the getter from its own effect (or a mutation callback that runs
+  // then) sees the committed route rather than the one before it.
+  React.useLayoutEffect(() => {
     pathRef.current = pathname;
   }, [pathname]);
   return React.useCallback(() => pathRef.current, []);

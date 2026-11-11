@@ -519,15 +519,25 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // deciding whether to rebuild its measurement cache, and an inline arrow —
     // or a callback closing over `rowKeys`, which is a fresh array whenever
     // `renderedItems` changes — would look like a new key extractor on every
-    // append and invalidate the cache. Read the keys through a ref so the
-    // identity really is stable: the count still drives a rebuild (offsets are
-    // recomputed; the sizes in TanStack's `itemSizeCache` survive), but
-    // unrelated re-renders no longer reset the memo.
+    // append and invalidate the cache. Read the keys through a ref so appends
+    // that keep every existing key (the common streaming case) reuse the cache
+    // and, crucially, reuse each row's `virtualRow.key` so React does not
+    // remount visible rows.
+    //
+    // The identity must still change when the key *set* changes: TanStack
+    // rebuilds its cache only when `count`, `getItemKey`, `scrollMargin`, or
+    // `enabled` change, so a same-length history whose keys all move (a lone
+    // event folding into a group while another arrives) would otherwise keep the
+    // old keys, leaving every `virtualRow.key` stale while `data-row-key` and
+    // `renderItem` use the new rows — React would reuse a DOM node for a
+    // different message. A signature of the keys gives the extractor a new
+    // identity exactly when the keys change.
+    const rowKeySignature = rowKeys.join("\u0000");
     const rowKeysRef = React.useRef(rowKeys);
     rowKeysRef.current = rowKeys;
     const getItemKey = React.useCallback(
       (index: number) => rowKeysRef.current[index],
-      [],
+      [rowKeySignature],
     );
 
     // The virtualizer's scroll element is the chat column, which also holds

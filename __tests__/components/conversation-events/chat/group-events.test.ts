@@ -757,6 +757,36 @@ describe("renderedItemKey stability", () => {
     ]);
     expect(renderedItemKey(group)).toBe("group-startup");
   });
+
+  it("keeps a group's key when a step is appended", () => {
+    // A live run grows at its tail as the agent keeps working. Keying it by the
+    // last event instead of the first would rename the group on every step, so
+    // the group the user opened would collapse mid-run. The key must not move
+    // under append.
+    const run = [makeBashAction("a1"), makeBashAction("a2")];
+    const grown = [...run, makeBashAction("a3")];
+    const [before] = groupEvents(run, 1, run, 1);
+    const [after] = groupEvents(grown, 1, grown, 1);
+    expect(renderedItemKey(before)).toBe("group-a1");
+    expect(renderedItemKey(after)).toBe(renderedItemKey(before));
+  });
+
+  it("renames a thought-less group when older events prepend into its run", () => {
+    // Known limitation, pinned so a change is deliberate. A run of thought-less
+    // actions is keyed by its first event; when "load older" prepends events
+    // that continue the same run, the head moves and the group's key with it.
+    // `messages.tsx` prunes expansion entries by row key, so an open group at
+    // the page boundary loses its state. Keying by the tail instead would fix
+    // this but rename the group on every append (see the append test above), so
+    // the head anchor is the safer trade; a stable run identity would need to be
+    // assigned when the run is created.
+    const page = [makeBashAction("a1"), makeBashAction("a2")];
+    const withOlder = [makeBashAction("a0"), ...page];
+    const [pageGroup] = groupEvents(page, 1, page, 1);
+    const [olderGroup] = groupEvents(withOlder, 1, withOlder, 1);
+    expect(renderedItemKey(pageGroup)).toBe("group-a1");
+    expect(renderedItemKey(olderGroup)).toBe("group-a0");
+  });
 });
 
 it("keeps reasoning in order and deduplicates an action only within its group", () => {

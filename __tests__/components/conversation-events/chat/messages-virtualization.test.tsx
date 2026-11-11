@@ -199,6 +199,30 @@ describe("Messages virtualization", () => {
     ).toBeLessThan(100);
   });
 
+  it("remounts a row whose key changes in place", () => {
+    // A same-length history whose row keys all change — e.g. a lone event folds
+    // into a neighbouring group while a new event arrives, so the count is
+    // unchanged but every key moves. TanStack rebuilds its measurement cache
+    // only when `count`, `getItemKey`, `scrollMargin`, or `enabled` change; with
+    // a stable `getItemKey` and an unchanged count the cache keeps the *old*
+    // keys, so every `virtualRow.key` is stale and React reuses the DOM node
+    // for what is now a different message (leaking per-row DOM state). The key
+    // extractor must take a new identity when the key set changes so each row
+    // remounts under its real key.
+    const { rerender } = renderMessages(buildEvents(200));
+    const nodeBefore = screen.getAllByTestId("virtualized-message-row")[0];
+    expect(nodeBefore).toHaveAttribute("data-row-key", "single-message-0");
+
+    const rekeyed = Array.from({ length: 200 }, (_, index) =>
+      createUserMessageEvent(`other-${index}`),
+    );
+    rerender(<Harness events={rekeyed} withScrollParent />);
+
+    const nodeAfter = screen.getAllByTestId("virtualized-message-row")[0];
+    expect(nodeAfter).toHaveAttribute("data-row-key", "single-other-0");
+    expect(nodeAfter).not.toBe(nodeBefore);
+  });
+
   it("toggles one reasoning entry at a time inside a virtualized group", () => {
     // Two reasoning-bearing actions form one group at the top of a list long
     // enough to virtualize, so the group is inside the mounted window and its
