@@ -532,7 +532,14 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // `renderItem` use the new rows — React would reuse a DOM node for a
     // different message. A signature of the keys gives the extractor a new
     // identity exactly when the keys change.
-    const rowKeySignature = rowKeys.join("\u0000");
+    //
+    // Memoized on `rowKeys`: the virtualizer re-renders this component on every
+    // scroll frame while `rowKeys` keeps its identity, so joining inline would
+    // rescan the whole history on each frame.
+    const rowKeySignature = React.useMemo(
+      () => rowKeys.join("\u0000"),
+      [rowKeys],
+    );
     const rowKeysRef = React.useRef(rowKeys);
     rowKeysRef.current = rowKeys;
     const getItemKey = React.useCallback(

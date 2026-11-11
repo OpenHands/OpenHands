@@ -1,7 +1,7 @@
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { performance } from "node:perf_hooks";
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { Messages } from "#/components/conversation-events/chat/messages";
 import { createUserMessageEvent, renderWithProviders } from "test-utils";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
@@ -86,6 +86,36 @@ describe("Messages virtualization performance", () => {
     const virtualized = measureMount(events, true);
     expect(virtualized.mountedRows).toBeGreaterThan(0);
     expect(virtualized.mountedRows).toBeLessThan(100);
+  });
+
+  it("does not rescan the row keys while scrolling", () => {
+    // The item-key accessor's identity is a signature of every row key, and the
+    // virtualizer re-renders this component on each scroll frame. Building the
+    // signature inline would join the whole (2000-row) key list on every frame,
+    // so scroll work would grow with conversation length even though the mounted
+    // window stays bounded. The signature is memoized on `rowKeys`, which does
+    // not change while scrolling, so no join should run at all.
+    const join = vi.spyOn(Array.prototype, "join");
+    try {
+      renderWithProviders(
+        <Harness events={buildEvents(ROW_COUNT)} withScrollParent />,
+      );
+      // Joins from mount are expected; only the scroll frames must be free.
+      join.mockClear();
+
+      const parent = screen.getByTestId("scroll-parent");
+      for (let step = 0; step < 10; step += 1) {
+        parent.scrollTop = 1000 + step * 500;
+        fireEvent.scroll(parent);
+      }
+
+      const rowKeyJoins = join.mock.calls.filter(
+        ([separator]) => separator === "\u0000",
+      );
+      expect(rowKeyJoins).toHaveLength(0);
+    } finally {
+      join.mockRestore();
+    }
   });
 
   it.skipIf(!BENCH_ENABLED)(
