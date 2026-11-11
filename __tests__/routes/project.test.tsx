@@ -42,7 +42,6 @@ const setProjectsFeature = (enabled: boolean) =>
         key: "projects",
         label: "Projects",
         description: "",
-        default: false,
         enabled,
       },
     ] as Awaited<
