@@ -24,8 +24,8 @@ Useful fields:
 * frequency: "once", "hourly", "daily", "weekdays", "weekly", or "custom" for cron triggers.
 * time, scheduleDateTime, timezone, weekday, customSchedule: cron scheduling fields. "scheduleDateTime" is a local "YYYY-MM-DDTHH:MM" value used when frequency is "once". "weekday" is "0" (Sunday) through "6" (Saturday) and applies when frequency is "weekly".
 * eventSource, eventKey, eventFilter: event trigger fields. eventSource is one of this deployment's event sources listed below, eventKey one of that source's event keys (a trailing * matches a family, such as "pr:*" or "jira:issue_*"), and eventFilter an optional JMESPath expression over the webhook payload that must be true for a run to start.
-* model: LLM profile name for an existing model-backed automation. New automations require an agent profile instead.
-* agentProfileId: saved agent profile id for this automation. New automations require the user to select one explicitly; ask them to choose it rather than guessing. This does not change the conversation.
+* model: LLM profile name for this automation. Leave empty to use the active profile. This does not change the conversation composer.
+* agentProfileId: agent profile id for this automation. Leave empty to use the active agent profile. This does not change the conversation.
 * showTimeout and timeoutSeconds: optional timeout controls.
 
 Call this with only the fields you are changing. After calling it, briefly tell the user which fields you filled and ask them to review anything uncertain.`;
@@ -81,12 +81,12 @@ const AUTOMATION_FORM_UPDATE_PARAMETERS: ClientToolSpec["parameters"] = {
         model: {
           type: "string",
           description:
-            "LLM profile name for an existing model-backed automation. New automations require an agent profile instead.",
+            "LLM profile name for this automation. Empty uses the active profile and does not change the conversation.",
         },
         agentProfileId: {
           type: "string",
           description:
-            "Saved agent profile id. New automations require the user to select one explicitly; ask them to choose it rather than guessing.",
+            "Agent profile id for this automation. Empty uses the active agent profile and does not change the conversation.",
         },
         showTimeout: { type: "boolean" },
         timeoutSeconds: { type: "string" },

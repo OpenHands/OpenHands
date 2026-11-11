@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
 import { MCPPage } from "#/routes/mcp";
+import { MCPSettings } from "#/components/settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import McpService from "#/api/mcp-service/mcp-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
@@ -34,8 +35,8 @@ function buildSettings(overrides: Partial<Settings> = {}): Settings {
   };
 }
 
-function renderPage() {
-  return render(<MCPPage />, {
+function renderPage(Component: typeof MCPPage = MCPPage) {
+  return render(<Component />, {
     wrapper: ({ children }) => (
       <QueryClientProvider
         client={
@@ -66,6 +67,16 @@ describe("MCPPage", () => {
     await screen.findByTestId("mcp-marketplace-section");
     expect(screen.getByTestId("mcp-installed-empty")).toBeInTheDocument();
     expect(screen.getByTestId("mcp-marketplace-grid")).toBeInTheDocument();
+  });
+
+  it("renders the published MCPSettings export without a router", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+
+    renderPage(MCPSettings);
+
+    expect(
+      await screen.findByTestId("mcp-marketplace-section"),
+    ).toBeInTheDocument();
   });
 
   it("lists GitHub, Slack, and Tavily as the first three marketplace tiles", async () => {
