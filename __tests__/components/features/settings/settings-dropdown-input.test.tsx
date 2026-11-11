@@ -324,4 +324,18 @@ describe("SettingsDropdownInput", () => {
       screen.queryByRole("button", { name: "COMMON$CLEAR_SELECTION" }),
     ).not.toBeInTheDocument();
   });
+
+  it("shows no clear button while the field is empty", () => {
+    render(
+      <SettingsDropdownInput
+        items={items}
+        label="Language"
+        name="language"
+        testId="language-input"
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "COMMON$CLEAR_SELECTION" }),
+    ).not.toBeInTheDocument();
+  });
 });

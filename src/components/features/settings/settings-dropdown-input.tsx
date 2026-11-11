@@ -48,15 +48,16 @@ function ClearButton({
     state?.setInputValue("");
   }, [state]);
 
-  if (!isClearable || isLoading) return null;
+  if (!isClearable || isLoading || !state?.inputValue) return null;
 
+  // The trigger is absolutely positioned at the group's end; keep clear of it.
   return (
     <button
       type="button"
       aria-label={clearLabel}
       disabled={isDisabled}
       onClick={handleClear}
-      className="inline-flex size-4 shrink-0 items-center justify-center text-current opacity-60 transition-opacity hover:opacity-100"
+      className="me-6 inline-flex size-4 shrink-0 items-center justify-center text-current opacity-60 transition-opacity hover:opacity-100"
     >
       ×
     </button>
