@@ -58,3 +58,16 @@ describe("tooltip trigger semantics", () => {
     expect(document.body).toHaveFocus();
   });
 });
+
+describe("tooltip content wrapping", () => {
+  it("wraps prose between words instead of HeroUI's break-all", async () => {
+    const user = userEvent.setup();
+    render(
+      <Tooltip content="Connect an external MCP server">
+        <button type="button">{actionLabel}</button>
+      </Tooltip>,
+    );
+    await user.tab();
+    expect(await screen.findByRole("tooltip")).toHaveClass("break-normal");
+  });
+});

@@ -81,7 +81,8 @@ export function Tooltip({
         offset={offset}
         shouldFlip={shouldFlip}
         showArrow={showArrow}
-        className={cn(className, classNames?.content)}
+        // HeroUI's .tooltip sets word-break: break-all; prose wraps between words.
+        className={cn("break-normal", className, classNames?.content)}
       >
         {showArrow && <HeroTooltip.Arrow />}
         {content}
