@@ -1,3 +1,4 @@
+import { useAgentProfileAvailability } from "#/hooks/use-agent-profile-availability";
 import type {
   AutomationUpdate,
   Automation,
@@ -1129,11 +1130,14 @@ export function AutomationSetupPanel({
   );
   // Services that run scripts from an agent profile may still refuse one on
   // a prompt or plugin preset; those advertise a feature of their own.
-  const canSelectAgentProfile = (
-    deploymentCapabilities.data?.features ?? []
-  ).includes(
-    kind === "custom" ? AGENT_PROFILES_FEATURE : PRESET_AGENT_PROFILES_FEATURE,
-  );
+  const agentProfilesAvailable = useAgentProfileAvailability();
+  const canSelectAgentProfile =
+    agentProfilesAvailable &&
+    (deploymentCapabilities.data?.features ?? []).includes(
+      kind === "custom"
+        ? AGENT_PROFILES_FEATURE
+        : PRESET_AGENT_PROFILES_FEATURE,
+    );
   const selectedAgentProfileId =
     (canSelectAgentProfile && agentProfileId.trim()) || null;
 
