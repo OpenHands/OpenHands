@@ -47,7 +47,10 @@ import { AgentServerUIRoot } from "#/components/providers";
 import { TelemetryConsentBanner } from "#/components/features/analytics/telemetry-consent-banner";
 import { buildAgentCanvasPath } from "#/utils/base-path";
 import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
-import { NavigationProvider } from "#/context/navigation-context";
+import {
+  NavigationProvider,
+  useCurrentPathGetter,
+} from "#/context/navigation-context";
 import {
   applyColorTheme,
   COLOR_THEME_BOOTSTRAP_SCRIPT,
@@ -168,6 +171,7 @@ function FirstRunOnboardingScreen({ onClose }: { onClose: () => void }) {
   const routerNavigation = useRouterNavigation();
   const conversationId =
     location.pathname.match(/^\/conversations\/([^/]+)/)?.[1] ?? null;
+  const getCurrentPath = useCurrentPathGetter(location.pathname);
   const navigationValue = React.useMemo(
     () => ({
       currentPath: location.pathname,
@@ -175,8 +179,15 @@ function FirstRunOnboardingScreen({ onClose }: { onClose: () => void }) {
       isNavigating: Boolean(routerNavigation.location),
       navigate: (to: string, options?: { replace?: boolean }) =>
         navigate(to, options),
+      getCurrentPath,
     }),
-    [conversationId, location.pathname, navigate, routerNavigation.location],
+    [
+      conversationId,
+      location.pathname,
+      navigate,
+      routerNavigation.location,
+      getCurrentPath,
+    ],
   );
 
   const lockedCloudHost = getLockedCloudHost();

@@ -16,16 +16,36 @@ const conversationPath = (conversationId: string) =>
   `/conversations/${conversationId}`;
 
 /**
- * Whether the current location is the conversation the fork branched from
- * (or a sub-route of it, e.g. its panel). The Canvas base path is stripped so
- * the comparison holds when Canvas is mounted under a subpath.
+ * The active app-relative route, read from the navigation owner rather than the
+ * document URL. Prefers the owner's live getter (correct even after the caller
+ * unmounts and when an embedding host routes without updating the URL), then
+ * the route the owner last supplied, and only falls back to the document URL
+ * for a provider-less context. `window.location` alone is wrong when an
+ * embedding host drives routing without changing it.
  */
-const isViewingConversation = (sourceConversationId: string): boolean => {
-  if (typeof window === "undefined") return false;
+const resolveCurrentAppPath = (
+  getCurrentPath?: () => string,
+  ownerPath?: string | null,
+): string => {
+  const live = getCurrentPath?.();
+  if (typeof live === "string") return live;
+  if (typeof ownerPath === "string") return ownerPath;
+  if (typeof window === "undefined") return "";
   const base = getAgentCanvasBasePath();
   const { pathname } = window.location;
-  const path =
-    base && pathname.startsWith(base) ? pathname.slice(base.length) : pathname;
+  return base && pathname.startsWith(base)
+    ? pathname.slice(base.length)
+    : pathname;
+};
+
+/**
+ * Whether `path` is the conversation the fork branched from (or a sub-route of
+ * it, e.g. its panel).
+ */
+const isViewingConversation = (
+  sourceConversationId: string,
+  path: string,
+): boolean => {
   const source = conversationPath(sourceConversationId);
   return path === source || path.startsWith(`${source}/`);
 };
@@ -77,15 +97,16 @@ interface ForkConversationResult {
  * Because the callbacks outlive the row, they must not assume the reader is
  * still looking at the source conversation. The reader may have navigated
  * elsewhere while the fork was in flight, and pulling them into the fork would
- * hijack that navigation. Navigation therefore runs only when the current
- * location is still the source conversation; otherwise the fork is announced
- * with a success toast that links to it, and the reader stays put. The saved
- * draft is written unconditionally, so opening the fork from the toast still
- * restores the text.
+ * hijack that navigation. Navigation therefore runs only when the active route
+ * — read from the navigation owner, so it is right for an embedded host that
+ * routes without changing the document URL — is still the source conversation;
+ * otherwise the fork is announced with a success toast whose link routes back
+ * through that owner, and the reader stays put. The saved draft is written
+ * unconditionally, so opening the fork from the toast still restores the text.
  */
 export const useForkConversation = (sourceConversationId: string) => {
   const queryClient = useQueryClient();
-  const { navigate } = useNavigation();
+  const { navigate, getCurrentPath, currentPath } = useNavigation();
 
   return useMutation({
     mutationKey: forkConversationMutationKey(sourceConversationId),
@@ -137,15 +158,26 @@ export const useForkConversation = (sourceConversationId: string) => {
     onSuccess: ({ info }) => {
       // Surface the fork in the sidebar without wiping loaded pages.
       queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
-      if (isViewingConversation(sourceConversationId)) {
-        navigate(conversationPath(info.id));
+      const forkPath = conversationPath(info.id);
+      // Read the route from the navigation owner, not `window.location`: an
+      // embedding host can route Canvas without touching the document URL, so
+      // the document path would report the reader as having left the source
+      // when they are still viewing it.
+      const stillViewingSource = isViewingConversation(
+        sourceConversationId,
+        resolveCurrentAppPath(getCurrentPath, currentPath),
+      );
+      if (stillViewingSource) {
+        navigate(forkPath);
       } else {
         // The reader moved on while the fork was in flight. Announce it with a
-        // link instead of dragging them out of where they are.
+        // link instead of dragging them out of where they are. The link routes
+        // through the navigation owner so an embedded Canvas stays embedded.
         displaySuccessToastWithLink(
           i18n.t(I18nKey.CONVERSATION$BRANCHED),
           i18n.t(I18nKey.CHILD_CONVERSATION$OPEN),
-          conversationPath(info.id),
+          forkPath,
+          () => navigate(forkPath),
         );
       }
     },
