@@ -1,5 +1,11 @@
 import React from "react";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   afterEach,
@@ -47,8 +53,11 @@ import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-e
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import {
   getConversationState,
+  getConversationDraftRevision,
   setConversationState,
 } from "#/utils/conversation-local-storage";
+
+import { useDraftPersistence } from "#/hooks/chat/use-draft-persistence";
 
 interface TestSocket {
   readonly readyState: number;
@@ -436,6 +445,94 @@ describe("Conversation websocket behavior", () => {
     vi.restoreAllMocks();
     window.localStorage.clear();
   });
+
+  it.each(["main", "planning"] as const)(
+    "confirms a %s message submitted before its draft debounce completes",
+    (target) => {
+      vi.useFakeTimers();
+      renderProvider({
+        subConversations: [makeSubConversation()],
+        subConversationIds: ["conv-planning"],
+      });
+      const input = document.createElement("div");
+      Object.defineProperty(input, "innerText", {
+        get() {
+          return this.textContent ?? "";
+        },
+      });
+      const inputRef = { current: input };
+      const composer = renderHook(() =>
+        useDraftPersistence("conv-main", inputRef),
+      );
+      input.textContent = "Sent before debounce";
+      act(() => composer.result.current.saveDraft());
+      const draftRevision = getConversationDraftRevision("conv-main");
+      useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+        conversationId: "conv-main",
+        text: "Sent before debounce",
+        draftRevision,
+      });
+
+      act(() => vi.advanceTimersByTime(500));
+      expect(getConversationState("conv-main").draftMessage).toBe(
+        "Sent before debounce",
+      );
+      const dispatch = target === "main" ? dispatchMain : dispatchPlanning;
+      dispatch(makeMessageEvent("50", "user", ["Sent before debounce"]));
+      composer.unmount();
+      expect(getConversationState("conv-main").draftMessage).toBeNull();
+    },
+  );
+
+  it.each(["main", "planning"] as const)(
+    "clears only the confirmed draft revision on the %s socket",
+    (target) => {
+      renderProvider({
+        subConversations: [makeSubConversation()],
+        subConversationIds: ["conv-planning"],
+      });
+      const dispatch = target === "main" ? dispatchMain : dispatchPlanning;
+      const store = useOptimisticUserMessageStore.getState();
+      const submit = (text: string) => {
+        setConversationState("conv-main", { draftMessage: text });
+        store.enqueuePendingMessage({
+          conversationId: "conv-main",
+          text,
+          draftRevision: getConversationDraftRevision("conv-main"),
+        });
+      };
+
+      // An unchanged submitted draft is cleared on confirmation.
+      submit("First request");
+      dispatch(makeMessageEvent("51", "user", ["First request"]));
+      expect(getConversationState("conv-main").draftMessage).toBeNull();
+
+      // A different saved follow-up belongs to the composer, not that echo.
+      submit("Second request");
+      setConversationState("conv-main", { draftMessage: "New follow-up" });
+      dispatch(makeMessageEvent("52", "user", ["Second request"]));
+      expect(getConversationState("conv-main").draftMessage).toBe(
+        "New follow-up",
+      );
+
+      // Even identical text can be a new edit after submission.
+      submit("Repeated request");
+      setConversationState("conv-main", { draftMessage: "Repeated request" });
+      dispatch(makeMessageEvent("53", "user", ["Repeated request"]));
+      expect(getConversationState("conv-main").draftMessage).toBe(
+        "Repeated request",
+      );
+
+      // Another tab or replay has no local submitted revision to confirm.
+      dispatch(makeMessageEvent("54", "user", ["Repeated request"]));
+      expect(getConversationState("conv-main").draftMessage).toBe(
+        "Repeated request",
+      );
+      expect(
+        useOptimisticUserMessageStore.getState().pendingMessages,
+      ).toHaveLength(0);
+    },
+  );
 
   it.each(["main", "planning"] as const)(
     "keeps %s replay out of live execution status, including after reconnect",
@@ -1532,10 +1629,12 @@ describe("Conversation websocket behavior", () => {
     );
     expect(socketCapture.trackError).toHaveBeenCalledTimes(2);
 
+    setConversationState("conv-main", { draftMessage: "hello world" });
     useOptimisticUserMessageStore.setState({
       pendingMessages: [
         {
           id: "pending-main",
+          draftRevision: getConversationDraftRevision("conv-main"),
           conversationId: "conv-main",
           text: "hello world",
           content: "hello world",
@@ -1546,7 +1645,6 @@ describe("Conversation websocket behavior", () => {
         },
       ],
     });
-    setConversationState("conv-main", { draftMessage: "hello world" });
     dispatchMain(makeMessageEvent("14", "user", ["hello", " world"]));
     expect(useOptimisticUserMessageStore.getState().pendingMessages).toEqual(
       [],
@@ -2521,10 +2619,12 @@ describe("Conversation websocket behavior", () => {
     );
     expect(socketCapture.trackError).toHaveBeenCalledTimes(2);
 
+    setConversationState("conv-main", { draftMessage: "plan this" });
     useOptimisticUserMessageStore.setState({
       pendingMessages: [
         {
           id: "pending-plan",
+          draftRevision: getConversationDraftRevision("conv-main"),
           conversationId: "conv-main",
           text: "plan this",
           content: "plan this",
@@ -2535,7 +2635,6 @@ describe("Conversation websocket behavior", () => {
         },
       ],
     });
-    setConversationState("conv-main", { draftMessage: "plan this" });
     dispatchPlanning(makeMessageEvent("40", "user", ["plan this"]));
     expect(useOptimisticUserMessageStore.getState().pendingMessages).toEqual(
       [],
