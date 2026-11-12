@@ -1,4 +1,5 @@
 import {
+  type ACPEffortOption,
   type ACPModelInfo,
   ConversationSortOrder,
   type ForkConversationRequest,
@@ -76,7 +77,10 @@ import {
   type WorkspaceMode,
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
-import { toAcpModelOptions } from "#/constants/acp-providers";
+import {
+  toAcpEffortChoices,
+  toAcpModelOptions,
+} from "#/constants/acp-providers";
 import { isPlannerConversationOf } from "#/utils/plan-file";
 import { buildAutomationSetupModeTags } from "#/utils/automation-draft-tags";
 import {
@@ -130,6 +134,15 @@ function numberOrZero(value: unknown): number {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function normalizeAcpEfforts(value: unknown): ACPEffortOption[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) =>
+    isRecord(entry) && typeof entry.value === "string"
+      ? [{ value: entry.value, name: stringOrNull(entry.name) }]
+      : [],
+  );
 }
 
 function normalizeAcpModels(value: unknown): ACPModelInfo[] {
@@ -377,6 +390,8 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     current_model_id: stringOrNull(item.current_model_id),
     current_model_name: stringOrNull(item.current_model_name),
     available_models: normalizeAcpModels(item.available_models),
+    current_effort: stringOrNull(item.current_effort),
+    available_efforts: normalizeAcpEfforts(item.available_efforts),
   };
 }
 
@@ -1113,6 +1128,8 @@ class AgentServerConversationService {
       max_budget_per_run: data.max_budget_per_run,
       stats: data.stats ?? { usage_to_metrics: {} },
       available_models: toAcpModelOptions(data.available_models),
+      current_effort: data.current_effort ?? null,
+      available_efforts: toAcpEffortChoices(data.available_efforts),
     };
   }
 
@@ -1449,6 +1466,31 @@ class AgentServerConversationService {
     await new ConversationClient(getAgentServerClientOptions()).switchAcpModel(
       conversationId,
       model,
+    );
+  }
+
+  /**
+   * Switch a started ACP conversation's reasoning effort live (or persist it
+   * for one not yet run). The ACP analog of {@link switchAcpModel}.
+   */
+  static async switchAcpEffort(
+    conversationId: string,
+    effort: string,
+  ): Promise<void> {
+    const { backend } = getActiveBackend();
+    if (backend.kind === "cloud") {
+      await callCloudProxy({
+        backend,
+        method: "POST",
+        path: `/api/v1/app-conversations/${conversationId}/switch_acp_effort`,
+        body: { effort },
+      });
+      return;
+    }
+
+    await new ConversationClient(getAgentServerClientOptions()).switchAcpEffort(
+      conversationId,
+      effort,
     );
   }
 }

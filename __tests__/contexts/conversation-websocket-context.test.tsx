@@ -308,6 +308,67 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     }
   });
 
+  it("continues Cloud history from the ordered page after its early persisted page", async () => {
+    setRegisteredBackends([
+      {
+        id: "history-cloud",
+        name: "Cloud",
+        kind: "cloud",
+        host: "https://cloud.test",
+        apiKey: "test-key",
+      },
+    ]);
+    setActiveSelection({ backendId: "history-cloud", orgId: "org-a" });
+    let resolveCount!: (count: number) => void;
+    vi.mocked(EventService.getEventCount).mockReturnValue(
+      new Promise((resolve) => {
+        resolveCount = resolve;
+      }),
+    );
+    const recent = createUserMessageEvent("recent");
+    const older = {
+      ...createUserMessageEvent("older"),
+      timestamp: recent.timestamp,
+    };
+    vi.mocked(EventService.searchEvents)
+      .mockResolvedValueOnce({ items: [recent], next_page_id: null })
+      .mockResolvedValueOnce({ items: [recent], next_page_id: older.id })
+      .mockResolvedValueOnce({ items: [older], next_page_id: null });
+    let history!: ReturnType<typeof useLoadOlderEvents>;
+    function Probe() {
+      history = useLoadOlderEvents("cloud-frontier");
+      return null;
+    }
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="cloud-frontier"
+          conversationUrl="https://runtime.test/api"
+        >
+          <Probe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    try {
+      await waitFor(() => expect(history.hasMore).toBe(false));
+      await act(async () => resolveCount(80));
+      await waitFor(() => expect(history.hasMore).toBe(true));
+      await act(async () => history.loadOlder());
+      expect(eventIds()).toEqual([older.id, recent.id]);
+      expect(EventService.searchEvents).toHaveBeenLastCalledWith(
+        "cloud-frontier",
+        expect.any(String),
+        null,
+        expect.objectContaining({ pageId: older.id, excludeFullState: true }),
+      );
+      expect(history.hasMore).toBe(false);
+    } finally {
+      view.unmount();
+      queryClient.clear();
+      __resetActiveStoreForTests();
+    }
+  });
+
   it("clears the displayed transcript when the organization changes for the same conversation id", async () => {
     setRegisteredBackends([
       {

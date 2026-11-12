@@ -80,7 +80,7 @@ function PendingSignIn({
           target="_blank"
           rel="noopener noreferrer"
           data-testid="managed-agents-open-sign-in"
-          className="inline-flex items-center gap-1 text-primary hover:underline"
+          className="inline-flex items-center gap-1 text-link hover:underline"
         >
           {t(I18nKey.DO_AGENTS$OPEN_SIGN_IN_AGAIN)}
           <ExternalLink className="size-3" aria-hidden />
@@ -250,7 +250,7 @@ export function ManagedAgentsSignIn({
               href={DO_CREATE_TOKEN_URL}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-link hover:underline"
             >
               {t(I18nKey.DO_AGENTS$CREATE_TOKEN)}
               <ExternalLink className="size-3" aria-hidden />

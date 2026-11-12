@@ -59,24 +59,26 @@ const solarized: ITheme = {
   brightWhite: "#002b36",
 };
 
+// Every ANSI slot is an ink that stays legible on aged newsprint; "white" is
+// the faded ink, and bright variants print one shade heavier.
 const paper: ITheme = {
-  black: "#29241f",
-  red: "#9b4428",
-  green: "#52644b",
-  yellow: "#79601f",
-  blue: "#3f5f7c",
-  magenta: "#70456a",
-  cyan: "#346458",
-  white: "#6b6258",
-  brightBlack: "#6b6258",
-  brightRed: "#84371f",
-  brightGreen: "#43563c",
-  brightYellow: "#6b5219",
-  brightBlue: "#304f6d",
-  brightMagenta: "#60365a",
-  brightCyan: "#28564a",
-  brightWhite: "#29241f",
-  selectionBackground: "rgba(155, 68, 40, 0.18)",
+  black: "#241c17",
+  red: "#9a2616",
+  green: "#45572f",
+  yellow: "#724d16",
+  blue: "#335069",
+  magenta: "#6a3b56",
+  cyan: "#315855",
+  white: "#615448",
+  brightBlack: "#615448",
+  brightRed: "#891809",
+  brightGreen: "#364622",
+  brightYellow: "#5f3d06",
+  brightBlue: "#234058",
+  brightMagenta: "#572d45",
+  brightCyan: "#204745",
+  brightWhite: "#241c17",
+  selectionBackground: "rgba(154, 38, 22, 0.18)",
 };
 
 const palettes: Record<ColorThemeKey, ITheme> = {

@@ -12,6 +12,8 @@ activity list of enabled automations with per-item actions.
 
 Source: `src/routes/home.tsx`, `src/routes/index-home.tsx`, `src/components/features/home/`, `src/components/features/plugins/plugin-picker-modal.tsx`, `src/components/features/automations/recommended-automations-launcher.tsx`, `src/hooks/use-home-pinned-automations.ts`, `src/fixtures/home-automations-demo.ts`, `src/hooks/use-home-automation-actions.ts`, `src/utils/recommended-automation-rail.ts`, `src/components/features/automations/responder-deployment-modal.tsx`, `src/components/features/automations/built-in-integration-choice-modal.tsx`, `src/hooks/use-remembered-repository-selection.ts`.
 
+Server: F04, F17.
+
 ## Sub-features
 
 Starting work:

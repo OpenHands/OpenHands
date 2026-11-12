@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import type { ReactNode } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { HookExecutionEventMessage } from "#/components/shared/hook-execution-event-message";
+import { IsInEventGroupContext } from "#/components/features/chat/is-in-event-group-context";
 import { I18nKey } from "#/i18n/declaration";
 import type {
   HookExecutionEvent,
@@ -23,14 +24,17 @@ vi.mock("#/components/features/chat/generic-event-message", () => ({
     title,
     details,
     success,
+    className,
   }: {
     title: ReactNode;
     details: ReactNode;
     success?: "success" | "error";
+    className?: string;
   }) => (
     <section
       data-testid="generic-event-message"
       data-success={success ?? "none"}
+      data-spacing-override={className ? "yes" : "no"}
     >
       <header>{title}</header>
       <div>{details}</div>
@@ -233,6 +237,27 @@ describe("hook execution event message", () => {
 
     expect(screen.getByTestId("generic-event-message")).not.toHaveTextContent(
       I18nKey.HOOK$EXIT_CODE,
+    );
+  });
+
+  it("takes the event-group spacing only when it stands alone in the transcript", () => {
+    const event = makeHookEvent({ blocked: true, success: false });
+
+    const { unmount } = render(<HookExecutionEventMessage event={event} />);
+    expect(screen.getByTestId("generic-event-message")).toHaveAttribute(
+      "data-spacing-override",
+      "yes",
+    );
+    unmount();
+
+    render(
+      <IsInEventGroupContext.Provider value>
+        <HookExecutionEventMessage event={event} />
+      </IsInEventGroupContext.Provider>,
+    );
+    expect(screen.getByTestId("generic-event-message")).toHaveAttribute(
+      "data-spacing-override",
+      "no",
     );
   });
 });

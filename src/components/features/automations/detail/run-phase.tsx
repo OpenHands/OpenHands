@@ -1,4 +1,4 @@
-import { Tooltip } from "@heroui/react";
+import { Tooltip } from "#/components/shared/tooltip";
 import { AutomationRunStatus } from "#/types/automation";
 import { cn } from "#/utils/utils";
 
