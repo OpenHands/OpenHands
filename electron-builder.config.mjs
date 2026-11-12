@@ -499,11 +499,9 @@ const config = {
     //   done
     // (fpm installs each at /usr/share/icons/hicolor/<s>x<s>/apps/…)
     icon: "electron/build-resources/icons",
-    // Electron's window class / Wayland app-id is the executable basename
-    // ("agent-canvas"), not the productName. Without this hint GNOME can't
-    // match the running window back to the desktop entry, so the dock shows
-    // a generic icon while the app is open.
-    desktop: { StartupWMClass: "agent-canvas" },
+    // Match the generated desktop filename and StartupWMClass to Electron's
+    // window class / Wayland app-id from electron/package.json.
+    syncDesktopName: true,
     // fpm-backed targets (deb) require a maintainer with an email address;
     // electron/package.json carries no author, so set it here. Without this
     // the deb step fails with "Please specify author 'email'".
