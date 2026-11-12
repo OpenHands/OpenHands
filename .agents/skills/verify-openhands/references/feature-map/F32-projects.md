@@ -5,7 +5,7 @@ stores it ([software-agent-sdk#6602](https://github.com/OpenHands/software-agent
 the record, a `project` tag on each member, a coordinator conversation that
 starts workers, and project files. Canvas shows what the server stores: a
 Projects list, a project page with the coordinator, a board grouped by what
-needs the person, and the files. Everything sits behind the `projects`
+needs the user, and the files. Everything sits behind the `projects`
 experimental feature (Settings › Experimental). Insider's Cat persona,
 docked chat and Voice are App features (F30), not this family.
 
@@ -23,7 +23,7 @@ Source: `src/routes/projects.tsx`, `src/routes/project.tsx`, `src/components/fea
 - `F32.membership`: **Add a conversation…** adds a recent non-member; **Remove** drops a member's `project` tag; the coordinator cannot be removed.
 - `F32.files`: Upload adds a file marked "Added by you"; a file a conversation saved names that conversation; clicking a text file shows its contents, other files say there is no preview.
 - `F32.badge`: a member conversation's header shows the project's name as a link to its project page.
-- `F32.headers`: in the coordinator, the server's `[Update from …]`, `[Sent by …]`, `[Reply in …]` and `[Message from the person in …]` header lines render as one compact line with a working mention; the person's own bracketed text is untouched.
+- `F32.headers`: in the coordinator, the server's `[Update from …]`, `[Sent by …]`, `[Reply in …]` and `[Message from the user in …]` and `[Paused by the user: …]` header lines render as one compact line with a working mention; the user's own bracketed text is untouched.
 
 ## How to get to it (user POV)
 
