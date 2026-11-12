@@ -342,7 +342,7 @@ describe("shouldRenderEvent - reactions", () => {
       },
     } as unknown as OpenHandsEvent;
 
-    // Pending (for example awaiting confirmation): the person sees the call.
+    // Pending (for example awaiting confirmation): the user sees the call.
     expect(shouldRenderEvent(reactAction)).toBe(true);
     expect(shouldRenderEvent(unreactAction)).toBe(true);
     // Done: the observation replaces the call. It passes, so groupEvents can
