@@ -43,7 +43,7 @@ localContentSearchAxios.interceptors.request.use(async (config) => {
 
 export interface ContentSearchHit {
   conversation_id: string;
-  title: string;
+  title: string | null;
   event_id: string;
   source: string;
   timestamp: string | null;

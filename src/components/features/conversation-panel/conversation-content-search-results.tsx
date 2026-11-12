@@ -98,7 +98,9 @@ export function ConversationContentSearchResults({
             "transition-colors hover:border-border hover:bg-base-secondary",
           )}
         >
-          <div className="truncate text-sm font-medium">{hit.title}</div>
+          <div className="truncate text-sm font-medium">
+            {hit.title || t(I18nKey.CONVERSATION$UNTITLED)}
+          </div>
           <div className="mt-0.5 line-clamp-2 text-xs text-tertiary-alt">
             {renderSnippetWithMarks(hit.snippet)}
           </div>
