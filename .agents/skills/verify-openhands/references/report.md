@@ -27,7 +27,10 @@ bug reproduced at its marked assertion) and `xpass` (it stopped reproducing,
 which needs map review). Keep both apart from `pass` and `fail` in the counts:
 an `xfail` is neither a regression nor a pass, and an `xpass` is never folded
 into a family pass. For blocked rows name the missing
-prerequisite, attempted action, and next step. Identify checks outside the declared
+prerequisite, attempted action, and next step, and count them by prerequisite
+(a Cloud or Enterprise backend, an operating system, an account): a family
+whose Cloud rows were all blocked was not checked on Cloud, and the count is
+how a reader sees that. Identify checks outside the declared
 scope separately; do not count them as passed. Report denominator and counts for
 both feature families and individual checks. A layout-only inspection must say so.
 

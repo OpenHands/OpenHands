@@ -106,7 +106,7 @@ export default function CanvasExtensionsScreen() {
                 href={CANVAS_EXTENSIONS_DOCS_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                className="inline-flex items-center gap-1 text-sm text-link hover:underline"
               >
                 {t(I18nKey.SETTINGS$APPS_BUILD_LINK)}
                 <ExternalLink className="size-3.5" aria-hidden />
