@@ -21,6 +21,8 @@ offers it) followed by only that runtime's options.
 
 Source: `src/routes/runtime-settings.tsx`, `src/routes/condenser-settings.tsx`, `src/routes/agent-context-settings.tsx`, `src/routes/verification-settings.tsx`, `src/components/features/settings/sdk-settings/`, `src/utils/sdk-settings-schema.ts`, `src/components/features/settings/agent-profiles/profile-behavior-form.ts`.
 
+Server: F18.
+
 ## Sub-features
 
 - `F15.condenser-page`: on a local backend `/settings/condenser` replaces itself with `/settings/agents` and no nav item or command leads to it; on a Cloud backend Condenser shows its subtitle, Basic and All tabs (no Advanced), and in Basic only the **Enable Memory Condensation** switch.

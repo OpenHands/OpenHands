@@ -58,7 +58,7 @@ function createPaginationEvent(
 ): PaginationEvent {
   return {
     id: `${prefix.toLowerCase().replaceAll(" ", "-")}-${index}`,
-    timestamp: timestampForEvent(index),
+    timestamp: timestampForEvent(index === 51 ? 50 : index),
     source: "agent",
     kind: "MessageEvent",
     llm_message: {
@@ -99,13 +99,19 @@ function searchPaginationEvents(
     ? events.filter((e) => e.timestamp < timestampLt)
     : events;
   const sorted = [...filtered].sort((a, b) =>
-    sortOrder === "TIMESTAMP_DESC"
-      ? b.timestamp.localeCompare(a.timestamp)
-      : a.timestamp.localeCompare(b.timestamp),
+    a.timestamp.localeCompare(b.timestamp),
   );
+  if (sortOrder === "TIMESTAMP_DESC") sorted.reverse();
+  const pageId = searchParams.get("page_id");
+  const start = pageId
+    ? Math.max(
+        0,
+        sorted.findIndex((event) => event.id === pageId),
+      )
+    : 0;
   return {
-    items: sorted.slice(0, limit),
-    next_page_id: sorted.length > limit ? "next-page" : null,
+    items: sorted.slice(start, start + limit),
+    next_page_id: sorted[start + limit]?.id ?? null,
   };
 }
 
@@ -304,7 +310,7 @@ async function routePaginationConversation(
   });
 
   // Stub the event search endpoint with the synthetic paginated events.
-  // Older-events requests (those with timestamp__lt) are delayed slightly so
+  // Older-events requests (those with page_id or timestamp__lt) are delayed slightly so
   // the loading indicator has time to render before the response arrives.
   // Without this, React can batch the isLoading true→false transition into a
   // single commit and the DOM element never materialises — making the
@@ -317,7 +323,9 @@ async function routePaginationConversation(
         return;
       }
       const url = new URL(req.url());
-      const isOlderPage = url.searchParams.has("timestamp__lt");
+      const isOlderPage =
+        url.searchParams.has("page_id") ||
+        url.searchParams.has("timestamp__lt");
       const result = searchPaginationEvents(allEvents, url.searchParams);
       if (isOlderPage) {
         await new Promise((r) => setTimeout(r, 300));
@@ -575,7 +583,7 @@ test.describe("UI regressions", () => {
           )
       )
         return false;
-      return !new URL(req.url()).searchParams.has("timestamp__lt");
+      return !new URL(req.url()).searchParams.has("page_id");
     });
 
     await page.goto(`/conversations/${PAGINATION_CONVERSATION_ID}`, {
@@ -607,7 +615,7 @@ test.describe("UI regressions", () => {
           )
       )
         return false;
-      return new URL(req.url()).searchParams.has("timestamp__lt");
+      return new URL(req.url()).searchParams.has("page_id");
     });
 
     await triggerOlderEventLoad(page);
@@ -620,13 +628,17 @@ test.describe("UI regressions", () => {
     const olderUrl = new URL(olderRequest.url());
     expect(olderUrl.searchParams.get("limit")).toBe(String(PAGE_SIZE));
     expect(olderUrl.searchParams.get("sort_order")).toBe("TIMESTAMP_DESC");
-    expect(olderUrl.searchParams.get("timestamp__lt")).toBe(
-      timestampForEvent(51),
-    );
+    expect(olderUrl.searchParams.get("page_id")).toBe("pagination-message-50");
+    expect(olderUrl.searchParams.has("timestamp__lt")).toBe(false);
 
     await expect(
       page.getByText("Pagination message 50", { exact: true }),
     ).toBeAttached({ timeout: 15_000 });
+    await expect(page.getByText(/^Pagination message (49|50|51)$/)).toHaveText([
+      "Pagination message 49",
+      "Pagination message 50",
+      "Pagination message 51",
+    ]);
     await expect(page.getByTestId("loading-older-events")).toHaveCount(0);
   });
 

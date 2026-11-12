@@ -14,6 +14,8 @@ can be branched into a new conversation.
 
 Source: `src/components/features/chat/chat-interface.tsx`, `src/components/conversation-events/chat/`, `src/components/features/chat/` (messages, banners, `tool-visualizers/`, `task-tracking/`), `src/components/features/markdown/`, `src/themes/syntax-highlighter-themes.ts`, `src/components/features/images/`, `src/components/features/suggestions/`, `src/components/shared/buttons/conversation-confirmation-buttons.tsx`, `src/components/features/controls/agent-status.tsx`, `src/hooks/use-load-older-events.ts`, `src/hooks/mutation/use-fork-conversation.ts`, `src/hooks/use-streamed-text.ts`, `src/hooks/use-scroll-to-bottom.ts`, `src/utils/split-stable-markdown.ts`.
 
+Server: F06, F07, F08, F10.
+
 ## Sub-features
 
 - `F06.empty-state-suggestions`: an empty conversation shows "Let's start building!" with four suggestion chips; a chip fills the composer with its prompt (a prompt that grows the composer past its height threshold hides the suggestions until the composer is short again). The tab that created the conversation shows them too, below its `Initialized session` group (whose toggle stays clickable), also after reload; sending the first message hides them.

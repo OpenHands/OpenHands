@@ -175,6 +175,128 @@ describe("useLoadOlderEvents", () => {
     vi.clearAllMocks();
   });
 
+  it("continues the retained cursor across tied boundaries, live events and remounts", async () => {
+    const timestamp = "2024-06-01T00:00:00Z";
+    const recent = makeUserMessage("recent", timestamp);
+    act(() => {
+      useEventStore.getState().addEvents([recent], {
+        nextPageId: "boundary",
+        hasMore: true,
+      });
+    });
+    const boundary = makeUserMessage("boundary", timestamp);
+    const oldest = makeUserMessage("oldest", "2024-05-01T00:00:00Z");
+    const search = vi
+      .spyOn(EventService, "searchEvents")
+      .mockImplementation(async (_id, _url, _key, options) => {
+        if (options?.pageId === "boundary")
+          return makePage([boundary], "oldest");
+        if (options?.pageId === "oldest") return makePage([oldest]);
+        return makePage([]);
+      });
+    const first = renderConversationHook("conv-1");
+    act(() =>
+      useEventStore.getState().addEvent(makeUserMessage("live", timestamp)),
+    );
+    await act(async () => first.result.current.loadOlder());
+    expect(useEventStore.getState().uiEvents.map((event) => event.id)).toEqual([
+      "boundary",
+      "recent",
+      "live",
+    ]);
+    expect(first.result.current.hasMore).toBe(true);
+    first.unmount();
+
+    // A refreshed tail must not replace the already advanced continuation.
+    act(() =>
+      useEventStore.getState().addEvents([recent], {
+        nextPageId: "boundary",
+        hasMore: true,
+      }),
+    );
+    const second = renderConversationHook("conv-1");
+    const savedLoadOlder = second.result.current.loadOlder;
+    await act(async () => {
+      await savedLoadOlder();
+      await savedLoadOlder();
+    });
+    expect(useEventStore.getState().events.map((event) => event.id)).toEqual([
+      "oldest",
+      "boundary",
+      "recent",
+      "live",
+    ]);
+    expect(second.result.current.hasMore).toBe(false);
+    expect(search.mock.calls.map((call) => call[3]?.pageId)).toEqual([
+      "boundary",
+      "oldest",
+    ]);
+    expect(
+      search.mock.calls.every((call) => call[3]?.timestampLt === undefined),
+    ).toBe(true);
+    second.unmount();
+    const third = renderConversationHook("conv-1");
+    await act(async () => third.result.current.loadOlder());
+    expect(search).toHaveBeenCalledTimes(2);
+  });
+
+  it("discards a cursor page when the same conversation changes backend scope", async () => {
+    const timestamp = "2024-06-01T00:00:00Z";
+    const recent = makeUserMessage("old-scope", timestamp);
+    useEventStore
+      .getState()
+      .addEvents([recent], { nextPageId: "old-cursor", hasMore: true });
+    const pending = makeDeferred<EventSearchPage<OpenHandsEvent>>();
+    vi.spyOn(EventService, "searchEvents").mockReturnValue(pending.promise);
+    const { result } = renderConversationHook("conv-1");
+    const load = startLoad(result.current.loadOlder);
+    act(() => {
+      useEventStore
+        .getState()
+        .clearEventsForConversation("conv-1", "new-scope");
+      useEventStore
+        .getState()
+        .addEvents([makeUserMessage("new-scope", timestamp)], {
+          nextPageId: "new-cursor",
+          hasMore: true,
+        });
+    });
+    await act(async () => {
+      pending.resolve(makePage([makeUserMessage("stale", timestamp)]));
+      await load;
+    });
+    expect(useEventStore.getState().events.map((event) => event.id)).toEqual([
+      "new-scope",
+    ]);
+    expect(useEventStore.getState().historyPagination?.nextPageId).toBe(
+      "new-cursor",
+    );
+  });
+
+  it("retries the same cursor after an error and resets it when the conversation is cleared", async () => {
+    const timestamp = "2024-06-01T00:00:00Z";
+    const recent = makeUserMessage("recent", timestamp);
+    useEventStore
+      .getState()
+      .addEvents([recent], { nextPageId: "retry-cursor", hasMore: true });
+    const search = vi
+      .spyOn(EventService, "searchEvents")
+      .mockRejectedValueOnce(new Error("try again"))
+      .mockResolvedValueOnce(makePage([makeUserMessage("older", timestamp)]));
+    const { result } = renderConversationHook("conv-1");
+    await act(async () => {
+      await expect(result.current.loadOlder()).rejects.toThrow("try again");
+    });
+    expect(result.current.isLoading).toBe(false);
+    await act(async () => result.current.loadOlder());
+    expect(search.mock.calls.map((call) => call[3]?.pageId)).toEqual([
+      "retry-cursor",
+      "retry-cursor",
+    ]);
+    act(() => useEventStore.getState().clearEvents());
+    expect(useEventStore.getState().historyPagination).toBeNull();
+  });
+
   it("does nothing while the store has no anchor (REST hasn't seeded yet)", async () => {
     const spy = vi.spyOn(EventService, "searchEvents");
     const { result } = renderHook(() => useLoadOlderEvents("conv-1"), {
