@@ -103,8 +103,8 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     vscodeBasePath: null,
     // Also settable via the --disable-telemetry flag below.
     disableTelemetry: isEnvFlagEnabled(env.AGENT_CANVAS_DISABLE_TELEMETRY),
-    // Throws on an invalid policy so startup fails instead of serving full Canvas.
-    featurePolicy: resolveFeaturePolicy(env),
+    // Resolved after the argument loop so a bad policy cannot break --help.
+    featurePolicy: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -197,6 +197,11 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
         throw new Error(`Unknown flag: ${flag}`);
     }
   }
+
+  // Throws on an invalid policy so startup fails instead of serving full
+  // Canvas. After the loop above so `--help` still works when the environment
+  // holds a bad policy — that is when the operator most needs the usage text.
+  config.featurePolicy = resolveFeaturePolicy(env);
 
   // Fallback: allow the session API key to be supplied via the
   // SESSION_API_KEY environment variable instead of the command line, so

@@ -186,15 +186,23 @@ can configure an instance fully and then hand it to users without the controls
 for changing that setup:
 
 ```ini
-Environment=AGENT_CANVAS_FEATURES={"version":1,"disabled":["backends.add"]}
+Environment='AGENT_CANVAS_FEATURES={"version":1,"disabled":["backends.add"]}'
 ```
 
+The single quotes around the whole assignment matter: systemd strips the inner
+double quotes from an unquoted `Environment=` value, and Agent Canvas then
+rejects the result as invalid JSON.
+
 Or put the same JSON in a file and set
-`AGENT_CANVAS_FEATURES_FILE=/etc/agent-canvas/policy.json`. Every feature is on
-unless listed. The IDs you can use, and exactly which controls each one hides,
-are in [`config/features.json`](../config/features.json); the list grows one
-control at a time. An invalid policy stops Agent Canvas from starting rather
-than serving the full UI. Changing the policy needs a restart, not a rebuild.
+`AGENT_CANVAS_FEATURES_FILE=/etc/agent-canvas/policy.json`. Use an absolute
+path — a relative one is resolved against the Agent Canvas install directory,
+not the directory you started it from. Every feature is on unless listed. The
+IDs you can use, and exactly which controls each one hides, are in
+[`config/features.json`](../config/features.json); the list grows one control
+at a time. An invalid policy fails the frontend at startup rather than serving
+the full UI: the page returns an error instead of the full Canvas, and the
+reason is logged as a `[static]` line. Changing the policy needs a restart, not
+a rebuild.
 
 > [!IMPORTANT]
 > The policy hides controls in the Agent Canvas UI; it is not a security

@@ -27,7 +27,9 @@ export function loadFeatureCatalog() {
 
 function parsePolicyJson(raw, source) {
   try {
-    return JSON.parse(raw);
+    // Strip a UTF-8 BOM so an editor-saved policy file parses like the same
+    // JSON passed inline, which .trim() already handles.
+    return JSON.parse(raw.replace(/^\uFEFF/, ""));
   } catch (err) {
     throw new Error(
       `Invalid feature policy JSON in ${source}: ${err instanceof Error ? err.message : err}`,
@@ -71,7 +73,19 @@ export function resolveFeaturePolicy(env, knownIds = loadFeatureCatalog()) {
       `Unsupported feature policy version in ${source}: ${JSON.stringify(policy.version)} (expected ${FEATURE_POLICY_VERSION}).`,
     );
   }
-  const disabled = policy.disabled ?? [];
+  // A misspelled key is the typo this file exists to catch: `{"disable": […]}`
+  // would otherwise parse, disable nothing, and serve the full UI.
+  const unknownKeys = Object.keys(policy).filter(
+    (key) => key !== "version" && key !== "disabled",
+  );
+  if (unknownKeys.length > 0) {
+    throw new Error(
+      `Unknown feature policy keys in ${source}: ${unknownKeys.join(", ")}. Expected "version" and "disabled".`,
+    );
+  }
+  // An absent "disabled" turns nothing off; a present one must be a list, so
+  // `"disabled": null` is an error rather than a silent full UI.
+  const disabled = policy.disabled === undefined ? [] : policy.disabled;
   if (
     !Array.isArray(disabled) ||
     disabled.some((id) => typeof id !== "string")

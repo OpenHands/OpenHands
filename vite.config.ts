@@ -142,9 +142,13 @@ export default defineConfig(({ command, mode }) => {
       ),
       // The Vite dev server has no static-server to inject the operator's
       // feature policy, so resolve the same env vars here. Builds never bake a
-      // policy in: static-server injects it at runtime.
+      // policy in: static-server injects it at runtime. Vitest also runs with
+      // command === "serve", so skip it there: tests must not inherit (or fail
+      // to start because of) a policy the developer happens to have exported.
       __AGENT_CANVAS_DEV_FEATURE_POLICY__: JSON.stringify(
-        command === "serve" ? resolveFeaturePolicy(process.env) : null,
+        command === "serve" && !process.env.VITEST
+          ? resolveFeaturePolicy(process.env)
+          : null,
       ),
     },
     plugins: [

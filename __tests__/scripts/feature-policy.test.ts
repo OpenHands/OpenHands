@@ -52,6 +52,25 @@ describe("resolveFeaturePolicy", () => {
     });
   });
 
+  // An editor that saves JSON with a BOM must not be a startup failure: the
+  // same text passed inline already works because of the .trim().
+  it("reads a policy file saved with a UTF-8 BOM", () => {
+    const file = writePolicyFile(
+      `\uFEFF${JSON.stringify({ version: 1, disabled: ["backends.add"] })}`,
+    );
+
+    expect(resolveFeaturePolicy({ AGENT_CANVAS_FEATURES_FILE: file })).toEqual({
+      version: 1,
+      disabled: ["backends.add"],
+    });
+  });
+
+  it("accepts a policy with no disabled list as disabling nothing", () => {
+    expect(
+      resolveFeaturePolicy({ AGENT_CANVAS_FEATURES: '{"version":1}' }),
+    ).toEqual({ version: 1, disabled: [] });
+  });
+
   // An invalid policy must stop startup, never fall back to the full UI.
   it.each([
     {
@@ -85,6 +104,27 @@ describe("resolveFeaturePolicy", () => {
         AGENT_CANVAS_FEATURES: '{"version":1,"disabled":["backend.add"]}',
       },
       error: /Unknown feature IDs .*: backend\.add/,
+    },
+    // A misspelled key would otherwise parse, disable nothing, and quietly
+    // serve the full UI — the exact failure this module exists to prevent.
+    {
+      name: "misspelled disabled key",
+      env: {
+        AGENT_CANVAS_FEATURES: '{"version":1,"disable":["backends.add"]}',
+      },
+      error: /Unknown feature policy keys .*: disable\./,
+    },
+    {
+      name: "wrong-case disabled key",
+      env: {
+        AGENT_CANVAS_FEATURES: '{"version":1,"Disabled":["backends.add"]}',
+      },
+      error: /Unknown feature policy keys .*: Disabled\./,
+    },
+    {
+      name: "null disabled",
+      env: { AGENT_CANVAS_FEATURES: '{"version":1,"disabled":null}' },
+      error: /must be an array/,
     },
     {
       name: "unreadable file",
