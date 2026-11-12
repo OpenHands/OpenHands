@@ -63,7 +63,10 @@ import ChatStatusIndicator from "./chat-status-indicator";
 import { getStatusColor, getStatusText } from "#/utils/utils";
 import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
-import { setConversationState } from "#/utils/conversation-local-storage";
+import {
+  getConversationDraftRevision,
+  setConversationState,
+} from "#/utils/conversation-local-storage";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { hasConversationStarted } from "./components/resolve-picker-kind";
@@ -468,6 +471,11 @@ export function ChatInterface({
       return;
     }
 
+    // Capture before attachment conversion/upload can yield to a new edit.
+    const draftRevision = conversationId
+      ? getConversationDraftRevision(conversationId)
+      : undefined;
+
     // Create mutable copies of the arrays
     const images = [...originalImages];
     const files = [...originalFiles];
@@ -528,6 +536,7 @@ export function ChatInterface({
       // against. They're different when there are file attachments.
       text: content,
       content: prompt,
+      draftRevision,
       imageUrls,
       fileUrls: uploadedFiles,
       timestamp,

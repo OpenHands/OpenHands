@@ -7,6 +7,7 @@ import {
   HttpError,
 } from "@openhands/typescript-client";
 import type {
+  ACPEffortOption,
   ACPModelInfo,
   ConversationRuntimeInfo,
   HookConfig,
@@ -28,6 +29,7 @@ import {
 } from "#/types/settings";
 import {
   resolveEffectiveAcpModel,
+  toAcpEffortChoices,
   toAcpModelOptions,
 } from "#/constants/acp-providers";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
@@ -149,6 +151,8 @@ export interface DirectConversationInfo {
   current_model_id?: string | null;
   current_model_name?: string | null;
   available_models?: ACPModelInfo[] | null;
+  current_effort?: string | null;
+  available_efforts?: ACPEffortOption[] | null;
   workspace?: {
     working_dir?: string | null;
   } | null;
@@ -457,6 +461,10 @@ export function toAppConversation(
     acp_server: acpServer,
     acp_available_models: isAcp
       ? toAcpModelOptions(info.available_models)
+      : null,
+    acp_current_effort: isAcp ? (info.current_effort ?? null) : null,
+    acp_available_efforts: isAcp
+      ? toAcpEffortChoices(info.available_efforts)
       : null,
     tags: info.tags ?? null,
     parent_conversation_id: info.parent_conversation_id ?? null,

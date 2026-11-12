@@ -13,6 +13,7 @@ vi.mock("#/api/cloud/git-service.api", () => ({
   searchCloudRepositories: vi.fn(),
   getCloudInstallations: vi.fn(),
   getCloudRepositoryBranches: vi.fn(),
+  getCloudRepositoryDetails: vi.fn(),
 }));
 
 vi.mock("#/api/backend-registry/active-store", () => ({
@@ -40,6 +41,9 @@ const mockGetCloudInstallations = vi.mocked(
 );
 const mockGetCloudRepositoryBranches = vi.mocked(
   cloudGitService.getCloudRepositoryBranches,
+);
+const mockGetCloudRepositoryDetails = vi.mocked(
+  cloudGitService.getCloudRepositoryDetails,
 );
 const mockGetActiveBackend = vi.mocked(activeStore.getActiveBackend);
 
@@ -378,6 +382,46 @@ describe("GitService", () => {
         items: [],
         next_page_id: null,
       });
+    });
+
+    it("returns a repository's default branch from the cloud backend", async () => {
+      // Arrange
+      cloudActive();
+      mockGetCloudRepositoryDetails.mockResolvedValue({
+        id: "1",
+        full_name: "PROJ/repo",
+        git_provider: "bitbucket_data_center",
+        is_public: false,
+        main_branch: "master",
+      });
+
+      // Act
+      const branch = await GitService.getRepositoryDefaultBranch(
+        "PROJ/repo",
+        "bitbucket_data_center",
+      );
+
+      // Assert
+      expect(branch).toBe("master");
+      expect(mockGetCloudRepositoryDetails).toHaveBeenCalledWith({
+        provider: "bitbucket_data_center",
+        repository: "PROJ/repo",
+      });
+    });
+
+    it("does not look up a default branch on a local backend", async () => {
+      // Arrange
+      localActive();
+
+      // Act
+      const branch = await GitService.getRepositoryDefaultBranch(
+        "PROJ/repo",
+        "bitbucket_data_center",
+      );
+
+      // Assert
+      expect(branch).toBeNull();
+      expect(mockGetCloudRepositoryDetails).not.toHaveBeenCalled();
     });
 
     it("initializes fresh provider guards and empty result pages", async () => {
