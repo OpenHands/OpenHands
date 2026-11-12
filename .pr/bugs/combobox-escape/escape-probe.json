@@ -1,0 +1,10 @@
+{
+  "listboxOpened": true,
+  "afterFirstEscape": {
+    "modalStillOpen": true,
+    "listboxGone": true
+  },
+  "afterSecondEscape": {
+    "modalGone": true
+  }
+}

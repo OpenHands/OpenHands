@@ -33,11 +33,29 @@ export function ModalBackdrop({
   React.useEffect(() => {
     if (!closeOnEscape) return undefined;
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose?.();
+      if (e.key !== "Escape") return;
+      // An expanded combobox consumes this Escape itself: React Aria closes
+      // its listbox and lets the event keep propagating, so without this
+      // guard the same press also closed the dialog and lost any unsaved
+      // input (#19646). Focus stays on the combobox input while its popup is
+      // open (virtual focus rides the options). Capture phase is required:
+      // React's discrete-event handlers run before this window listener and
+      // collapse the popup (aria-expanded -> false) mid-dispatch, so a bubble
+      // listener would always read the already-closed state. The next press,
+      // with the popup closed, closes the dialog.
+      const target = e.target instanceof Element ? e.target : null;
+      if (
+        target?.getAttribute("role") === "combobox" &&
+        target.getAttribute("aria-expanded") === "true"
+      ) {
+        return;
+      }
+      onClose?.();
     };
 
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
+    // Capture: see the keydown before React's delegated handlers run.
+    window.addEventListener("keydown", handleEscape, true);
+    return () => window.removeEventListener("keydown", handleEscape, true);
   }, [closeOnEscape, onClose]);
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
