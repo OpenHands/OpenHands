@@ -91,12 +91,11 @@ and in, a row that jumps, the same error twice.
   `browser scroll --observe SEL`, `browser record` for layout, and a counted
   `browser toasts --history` (cleared first) for anything that must appear
   once.
-- **Observed is not the same as expected.** The map describes current
-  behavior, so a flicker that was there on the day of mapping gets written
-  down as the result. Before recording a transient state as expected, ask
-  whether a user would report it. If so it is a product defect to file, and
-  the bullet states the behavior a user would want with a `Known failure`
-  note, as [maintenance.md](maintenance.md) §5 describes.
+- Judge the transition as a user would. Something that breaks the
+  experience on the way (a flash, a jump, a delay, a duplicate) is a product
+  defect even when the end state is right: file it, and state in the bullet
+  the behavior a user would want, with a `Known failure` note as
+  [maintenance.md](maintenance.md) §5 describes.
 
 ## 5. Was the data like a user's?
 
