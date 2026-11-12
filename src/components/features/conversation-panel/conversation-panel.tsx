@@ -533,7 +533,11 @@ export function ConversationPanel({
           // Keep legacy entries intact when persistence fails.
         });
     }
-    if (legacyPinnedIds.length > 0) {
+    if (legacyPinnedIds.length > 0 && !hasNextPage) {
+      // The prune compares pins against the currently loaded pages only. A
+      // pin whose conversation lives on a page that has not been fetched yet
+      // is still valid, so prune only once pagination is exhausted and the
+      // loaded set is authoritative (#16399).
       pruneMissingPinnedConversations(
         backendId,
         allLoadedConversations.map((conversation) => conversation.id),
@@ -542,6 +546,7 @@ export function ConversationPanel({
   }, [
     activeBackend.id,
     allLoadedConversations,
+    hasNextPage,
     isFetched,
     legacyArchivedIds,
     legacyPinnedIds,
