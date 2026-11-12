@@ -122,27 +122,31 @@ const INTERACTIVE_ATTR =
 
 /** The JSX opening tag around `index`: its name and text, or null. */
 function openingTagAt(text, index) {
+  // The nearest `<Name` before the attribute is not always its element: an
+  // element passed as an earlier prop (`icon={<EditIcon />}`) sits between
+  // them and has already closed. Walk back until a tag encloses the index.
   let start = index;
-  for (;;) {
+  while (index - start < 4000) {
     start = text.lastIndexOf("<", start - 1);
     if (start < 0) return null;
-    if (/[A-Za-z]/.test(text[start + 1] ?? "")) break;
-  }
-  // The tag ends at the first `>` outside a `{...}` expression.
-  let depth = 0;
-  let end = -1;
-  for (let i = start; i < text.length && i < start + 4000; i += 1) {
-    const ch = text[i];
-    if (ch === "{") depth += 1;
-    else if (ch === "}") depth -= 1;
-    else if (ch === ">" && depth === 0) {
-      end = i;
-      break;
+    if (!/[A-Za-z]/.test(text[start + 1] ?? "")) continue;
+    // The tag ends at the first `>` outside a `{...}` expression.
+    let depth = 0;
+    let end = -1;
+    for (let i = start; i < text.length && i < start + 4000; i += 1) {
+      const ch = text[i];
+      if (ch === "{") depth += 1;
+      else if (ch === "}") depth -= 1;
+      else if (ch === ">" && depth === 0) {
+        end = i;
+        break;
+      }
     }
+    if (end < index) continue;
+    const tag = text.slice(start, end + 1);
+    return { name: /^<([A-Za-z][A-Za-z0-9.]*)/.exec(tag)[1], tag };
   }
-  if (end < index) return null;
-  const tag = text.slice(start, end + 1);
-  return { name: /^<([A-Za-z][A-Za-z0-9.]*)/.exec(tag)[1], tag };
+  return null;
 }
 
 /**

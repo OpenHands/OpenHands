@@ -1074,6 +1074,11 @@ test("map controls lists interactive elements whose test id the map never names"
       "        Ask Agent",
       "      </button>",
       '      <BrandButton testId="demo-save">Save</BrandButton>',
+      "      <MenuItem",
+      "        icon={<EditIcon width={16} height={16} />}",
+      "        onClick={() => items.length > 1 && open()}",
+      '        testId="demo-edit"',
+      "      />",
       '      <div role="menuitem" data-testid={"demo-menu-item"} />',
       '      <span data-testid="demo-save-hint">Saved</span>',
       "    </section>",
@@ -1094,6 +1099,9 @@ test("map controls lists interactive elements whose test id the map never names"
     controls.map((c) => [c.id, c.tag, c.interactive]),
     [
       ["demo-ask-agent", "button", true],
+      // The id follows an element passed as a prop: the row is the menu
+      // item, not the icon.
+      ["demo-edit", "MenuItem", true],
       ["demo-menu-item", "div", true],
       ["demo-panel", "section", false],
       ["demo-save", "BrandButton", true],
@@ -1108,14 +1116,14 @@ test("map controls lists interactive elements whose test id the map never names"
     "The form has **Ask Agent**. Run `browser text 'testid=demo-save-hint'` and `browser click 'testid=demo-menu-item >> nth=0'`.",
   );
   const result = unnamedControls(controls, words);
-  assert.equal(result.considered, 3);
+  assert.equal(result.considered, 4);
   assert.deepEqual(
     result.unnamed.map((c) => c.id),
-    ["demo-ask-agent", "demo-save"],
+    ["demo-ask-agent", "demo-edit", "demo-save"],
   );
   assert.deepEqual(
     unnamedControls(controls, words, { all: true }).unnamed.map((c) => c.id),
-    ["demo-ask-agent", "demo-panel", "demo-save"],
+    ["demo-ask-agent", "demo-edit", "demo-panel", "demo-save"],
   );
   // On the live tree the command answers with counts and owning families.
   const live = spawnSync(
