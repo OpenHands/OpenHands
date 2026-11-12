@@ -1,0 +1,28 @@
+$ git checkout 44d91955f~1    # just before #19658
+pins: agent-server 1.61.0, automation 1.31.0, extensions 0.41.0, client 1.61.0
+
+$ PIN_SDK=1.62.0 PIN_AUTOMATION=1.32.1 PIN_EXTENSIONS=0.42.0 node scripts/bump-pins.mjs
+Updated: config/defaults.json
+         package.json
+         .agents/skills/local-stack-runtime/references/guide.md
+         scripts/dev-safe.mjs
+         scripts/check-sdk-version-sync.mjs
+         __tests__/scripts/dev-safe.test.ts
+         package-lock.json
+pins: agent-server 1.62.0, automation 1.32.1, extensions 0.42.0, client 1.62.0
+
+$ git diff --stat
+ .agents/skills/local-stack-runtime/references/guide.md |  4 ++--
+ __tests__/scripts/dev-safe.test.ts                     | 10 +++++-----
+ config/defaults.json                                   |  4 ++--
+ package-lock.json                                      | 16 ++++++++--------
+ package.json                                           |  4 ++--
+ scripts/check-sdk-version-sync.mjs                     | 12 ++++++------
+ scripts/dev-safe.mjs                                   |  2 +-
+ 7 files changed, 26 insertions(+), 26 deletions(-)
+
+$ git diff --quiet a54d4b67d -- <the seven files>    # main after #19658 + #19659
+identical to what the two pull requests merged
+
+$ PIN_SDK=1.62.0 PIN_AUTOMATION=1.32.1 PIN_EXTENSIONS=0.42.0 node scripts/bump-pins.mjs    # again
+The pins are already in place.
