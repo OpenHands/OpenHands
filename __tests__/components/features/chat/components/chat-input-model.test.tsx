@@ -472,6 +472,38 @@ describe("ChatInputModel", () => {
     ).toBeNull();
   });
 
+  it("renders the picker when llm_model is unset but the session already reported models (#19429)", () => {
+    // Regression test: a conversation whose stored `llm_model` never got
+    // synced from the session's negotiated model (null) must not hide the
+    // whole model affordance when the session already has models to offer.
+    sessionModelsMock.mockReturnValue(CLAUDE_MODELS);
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: null,
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    const model = screen.getByTestId("chat-input-llm-model");
+    expect(model).toBeInTheDocument();
+    expect(model).toHaveAttribute(
+      "title",
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
+    );
+
+    fireEvent.click(model);
+    expect(
+      screen.getByTestId("chat-input-acp-model-option-sonnet"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("chat-input-acp-model-option-opus[1m]"),
+    ).toBeInTheDocument();
+  });
+
   it("offers selectable rows on a cloud backend for ACP conversations (mid-conversation model switching is supported)", () => {
     useActiveBackendMock.mockReturnValue({ backend: { kind: "cloud" } });
     sessionModelsMock.mockReturnValue(CLAUDE_MODELS);

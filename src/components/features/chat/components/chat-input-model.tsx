@@ -52,7 +52,7 @@ export function ChatInputModelMenuContent({
 }: ChatInputModelMenuContentProps) {
   const { t } = useTranslation("openhands");
   const switchAcpModel = useSwitchAcpModel();
-  const hasModelRows = model.showAcpPicker || Boolean(model.displayModel);
+  const { hasModelRows } = model;
   // Locked-to-Cloud blocks the Canvas settings pages this links to (OHE-3457).
   const showSettingsLink = getLockedCloudHost() === null;
 
@@ -154,6 +154,7 @@ export function ChatInputModelMenuContent({
 }
 
 export function ChatInputModel() {
+  const { t } = useTranslation("openhands");
   const model = useChatInputModelState();
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
@@ -162,12 +163,18 @@ export function ChatInputModel() {
     triggerRef,
   );
 
-  if (!model.displayModel) {
+  if (!model.hasModelRows) {
     return null;
   }
 
+  // `hasModelRows` guarantees `displayModel` is set except in the narrow
+  // window where the picker's rows haven't resolved a label yet; fall back
+  // to the same agent-default copy the hook itself uses.
+  const buttonLabel =
+    model.displayModel ?? t(I18nKey.SETTINGS$AGENT_MODEL_AGENT_DEFAULT);
+
   const truncatedModelLabel = truncateModelLabel(
-    model.displayModel,
+    buttonLabel,
     model.isAcpContext ? ACP_MODEL_LABEL_MAX_CHARS : MODEL_LABEL_MAX_CHARS,
   );
 
@@ -177,7 +184,7 @@ export function ChatInputModel() {
         ref={triggerRef}
         type="button"
         className={chatInputPillButtonClassName}
-        title={model.displayModel}
+        title={buttonLabel}
         data-testid="chat-input-llm-model"
         aria-expanded={isPopoverOpen}
         aria-haspopup="dialog"
