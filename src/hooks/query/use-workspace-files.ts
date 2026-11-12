@@ -27,6 +27,14 @@ export interface WorkspaceFilesResult {
   data: string[] | undefined;
   isLoading: boolean;
   isTruncated?: boolean;
+  /**
+   * The listing request failed. The Files tab uses this to tell "the workspace
+   * is empty" apart from "we could not read the workspace" — without it a
+   * failed listing renders as a genuine empty tree. Both queries pass
+   * `meta: { disableToast: true }`, so nothing else surfaces the failure.
+   */
+  isError: boolean;
+  error?: unknown;
 }
 
 function normalizePath(path: string): string {
@@ -107,6 +115,8 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
     data: query.data?.paths,
     isLoading: discovery.isLoading || query.isLoading,
     isTruncated: query.data?.isTruncated ?? false,
+    isError: query.isError,
+    error: query.error,
   };
 }
 
@@ -161,7 +171,15 @@ function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
     meta: { disableToast: true },
   });
 
-  return { data: query.data, isLoading: query.isLoading };
+  return {
+    data: query.data,
+    isLoading: query.isLoading,
+    // Cloud listings are capped with `slice(0, MAX_FILES)`, so report
+    // truncation here too instead of silently dropping it.
+    isTruncated: (query.data?.length ?? 0) >= MAX_FILES,
+    isError: query.isError,
+    error: query.error,
+  };
 }
 
 /**

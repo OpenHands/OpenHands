@@ -212,13 +212,25 @@ function FilesTab() {
     </>
   );
 
+  const fileQuickRow = (
+    <FileQuickRow
+      openPaths={conversationOpenPaths}
+      selectedPath={selectedPath}
+      onSelectFile={handleSelectFile}
+      onCloseFile={closeOpenPath}
+      isTreeVisible={isTreeVisible}
+      onToggleTree={toggleTreeVisible}
+      actions={quickRowActions}
+    />
+  );
+
   return (
     <main
       className="h-full w-full flex flex-col items-stretch"
       data-testid="files-tab"
     >
       <WorkspacePath path={workspacePath} />
-      {filesQuery.isTruncated && (
+      {filesQuery.isTruncated && !filesQuery.isError && (
         <p
           role="status"
           className="border-b border-border px-3 py-2 text-xs text-muted"
@@ -226,21 +238,36 @@ function FilesTab() {
           {t(I18nKey.FILES$DISCOVERY_TRUNCATED, { count: paths.length })}
         </p>
       )}
+      {/* A failed refresh keeps the previous list on screen; label it as stale
+          instead of passing old paths off as the current tree. */}
+      {filesQuery.isError && paths.length > 0 && (
+        <div
+          role="alert"
+          className="border-b border-danger/40 bg-danger-soft px-3 py-2 text-xs text-danger-soft-foreground dark:border-status-error/40 dark:bg-status-error/10 dark:text-status-error"
+        >
+          <p className="font-medium">{t(I18nKey.FILES$LIST_ERROR)}</p>
+          <p className="mt-1">{t(I18nKey.FILES$LIST_STALE)}</p>
+        </div>
+      )}
       {filesQuery.isLoading ? (
         <div className="flex flex-1 items-center justify-center text-sm text-muted">
           {t(I18nKey.FILES$LOADING_FILES)}
         </div>
+      ) : filesQuery.isError && paths.length === 0 ? (
+        <>
+          {fileQuickRow}
+          <div
+            role="alert"
+            data-testid="files-tab-list-error"
+            className="flex flex-1 flex-col items-center justify-center gap-1 px-3 text-center text-sm text-muted"
+          >
+            <p className="font-medium">{t(I18nKey.FILES$LIST_ERROR)}</p>
+            <p>{t(I18nKey.FILES$RETRY_WITH_REFRESH)}</p>
+          </div>
+        </>
       ) : (
         <>
-          <FileQuickRow
-            openPaths={conversationOpenPaths}
-            selectedPath={selectedPath}
-            onSelectFile={handleSelectFile}
-            onCloseFile={closeOpenPath}
-            isTreeVisible={isTreeVisible}
-            onToggleTree={toggleTreeVisible}
-            actions={quickRowActions}
-          />
+          {fileQuickRow}
           <div ref={treeLayoutRef} className="flex h-full min-h-0 flex-1">
             {isTreeVisible && (
               <>
