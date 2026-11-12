@@ -142,13 +142,10 @@ share. Where a family's behavior can depend on one, it gets a bullet, or a
   the pass report counts those rows separately, so the gap stays visible
   instead of reading as coverage.
 
-## Why these six
+## Illustrative, not normative, not exclusive
 
-They come from the fix commits on `main` between this map's first version
-(2026-10-06) and 2026-11-11 that were not written by a pass of this skill:
-about 115, after setting aside those that fixed issues a pass had filed.
-Roughly a third needed a Cloud or Enterprise backend (§6); a sixth were about
-startup, transitions or saved history (§2 to §4); the rest split between the
-automation forms (§1 and §2), the environment (§6) and the shape of real data
-(§5). In nearly every case a bullet already covered the page. When a new kind
-of report does not fit any question here, add the question.
+These six are illustrative, not normative, not exclusive. Use your judgment
+to only apply them when necessary, when potential bugs would impair the user
+experience, not theoretical. They come from experience with the map since
+its first version (2026-10-06). When a new kind of report does not fit any
+question here, you can add the question.
