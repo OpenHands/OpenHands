@@ -50,6 +50,7 @@ import {
 } from "#/utils/conversation-local-storage";
 
 import { makeDefaultLocalBackend } from "#/api/backend-registry/default-backend";
+import { experimentalFeaturesQueryKey } from "#/hooks/query/use-experimental-features";
 import { NO_BACKEND } from "#/api/backend-registry/active-store";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { I18nKey } from "#/i18n/declaration";
@@ -996,6 +997,11 @@ describe("ChatInterface - Pending message queue", () => {
   });
 
   function seedResolvedConversation(sandboxStatus = "RUNNING") {
+    // The banner belongs to Projects, an experimental feature.
+    queryClient.setQueryData(
+      experimentalFeaturesQueryKey(makeDefaultLocalBackend() ?? NO_BACKEND),
+      [{ key: "projects", label: "Projects", description: "", enabled: true }],
+    );
     queryClient.setQueryData(
       [
         "user",

@@ -7,10 +7,47 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { NewProjectModal } from "#/components/features/projects/new-project-modal";
 import { ProjectsOffNotice } from "#/components/features/projects/projects-off-notice";
-import { useProjects, useProjectsEnabled } from "#/hooks/query/use-projects";
+import {
+  useProjectNeedsYouCount,
+  useProjects,
+  useProjectsEnabled,
+} from "#/hooks/query/use-projects";
+import type { Project } from "#/api/projects-service/projects-service.api";
 import { useNavigation } from "#/context/navigation-context";
 import { settingsLikeMainScrollClassName } from "#/utils/settings-like-page-layout-classes";
 import { projectPath } from "#/utils/project-paths";
+
+/** One project in the list, with how many of its conversations need the user. */
+function ProjectRow({ project }: { project: Project }) {
+  const { t } = useTranslation("openhands");
+  const needsYou = useProjectNeedsYouCount(project.id);
+  return (
+    <NavigationLink
+      to={projectPath(project.id)}
+      data-testid="project-row"
+      className="flex flex-col gap-1 rounded-lg border border-control bg-base-secondary px-4 py-3 hover:bg-contrast/5"
+    >
+      <span className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <span className="text-sm font-medium text-foreground">
+          {project.name}
+        </span>
+        {needsYou ? (
+          <span
+            data-testid="project-row-needs-you"
+            className="text-xs font-medium text-foreground"
+          >
+            {t(I18nKey.PROJECTS$GROUP_NEEDS_YOU)} · {needsYou}
+          </span>
+        ) : null}
+      </span>
+      {project.description ? (
+        <span className="line-clamp-2 text-sm text-muted">
+          {project.description}
+        </span>
+      ) : null}
+    </NavigationLink>
+  );
+}
 
 /** /projects: the active backend's projects, and New project. */
 export default function ProjectsPage() {
@@ -52,20 +89,7 @@ export default function ProjectsPage() {
       <ul className="flex flex-col gap-2" data-testid="projects-list">
         {[...projects].reverse().map((project) => (
           <li key={project.id}>
-            <NavigationLink
-              to={projectPath(project.id)}
-              data-testid="project-row"
-              className="flex flex-col gap-1 rounded-lg border border-control bg-base-secondary px-4 py-3 hover:bg-contrast/5"
-            >
-              <span className="text-sm font-medium text-foreground">
-                {project.name}
-              </span>
-              {project.description ? (
-                <span className="line-clamp-2 text-sm text-muted">
-                  {project.description}
-                </span>
-              ) : null}
-            </NavigationLink>
+            <ProjectRow project={project} />
           </li>
         ))}
       </ul>

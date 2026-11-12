@@ -66,6 +66,14 @@ export interface ProjectArtifact {
   updated_at: string;
 }
 
+/** A file of the project's memory: `MEMORY.md` or a topic file. */
+export interface ProjectMemoryFile {
+  name: string;
+  size: number;
+  revision: string;
+  updated_at: string;
+}
+
 /** A coordinator conversation the server starts together with the project. */
 export interface NewProjectCoordinator {
   working_dir: string;
@@ -236,6 +244,23 @@ class ProjectsService {
     return typeof response === "string"
       ? response
       : JSON.stringify(response, null, 2);
+  }
+
+  /** The project's memory files, `MEMORY.md` first. */
+  static async listMemory(projectId: string): Promise<ProjectMemoryFile[]> {
+    const response = await client().request<{ files?: ProjectMemoryFile[] }>({
+      method: "GET",
+      path: projectPath(projectId, "/memory"),
+    });
+    return response?.files ?? [];
+  }
+
+  static async readMemory(projectId: string, name: string): Promise<string> {
+    const response = await client().request<{ content?: string }>({
+      method: "GET",
+      path: projectPath(projectId, `/memory/${encodeURIComponent(name)}`),
+    });
+    return response?.content ?? "";
   }
 
   static async deleteArtifact(projectId: string, name: string): Promise<void> {

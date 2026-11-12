@@ -2,13 +2,15 @@ import React from "react";
 import { useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, MessageSquare } from "lucide-react";
+import { ArrowLeft, MessageSquare, Pencil, Plus } from "lucide-react";
 import { HttpError } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ProjectBoard } from "#/components/features/projects/project-board";
 import { ProjectFiles } from "#/components/features/projects/project-files";
+import { ProjectMemory } from "#/components/features/projects/project-memory";
+import { EditProjectModal } from "#/components/features/projects/edit-project-modal";
 import { ProjectsOffNotice } from "#/components/features/projects/projects-off-notice";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import ProjectsService, {
@@ -21,7 +23,13 @@ import {
   useProjectConversations,
   useProjectsEnabled,
 } from "#/hooks/query/use-projects";
+import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
+import { useNavigation } from "#/context/navigation-context";
 import { displayApiErrorToast } from "#/utils/custom-toast-handlers";
+import {
+  conversationStateLabel,
+  needsUser,
+} from "#/utils/project-conversation-state";
 import {
   formControlButtonClassName,
   formControlFieldClassName,
@@ -63,7 +71,7 @@ function AddConversation({
   if (!candidates.length) return null;
   return (
     <form
-      className="flex flex-wrap items-center gap-2"
+      className="flex items-center gap-2"
       onSubmit={(event) => {
         event.preventDefault();
         if (selected) add.mutate();
@@ -94,13 +102,53 @@ function AddConversation({
   );
 }
 
-/** /projects/:projectId: the coordinator, the board and the files. */
+/** Start a conversation that belongs to this project from its first message. */
+function NewConversation({ projectId }: { projectId: string }) {
+  const { t } = useTranslation("openhands");
+  const queryClient = useQueryClient();
+  const { backend } = useActiveBackend();
+  const { navigate } = useNavigation();
+  const { mutateAsync: createConversation } = useCreateConversation({
+    disableToast: true,
+  });
+  const start = useMutation({
+    mutationFn: async () => {
+      const created = await createConversation({ entryPoint: "project_page" });
+      await ProjectsService.addConversation(projectId, created.conversation_id);
+      return created.conversation_id;
+    },
+    meta: { disableToast: true },
+    onSuccess: (conversationId) => {
+      queryClient.invalidateQueries({ queryKey: projectsQueryRoot(backend) });
+      navigate(`/conversations/${conversationId}`);
+    },
+    onError: (error) =>
+      displayApiErrorToast(error, t(I18nKey.PROJECTS$UPDATE_FAILED)),
+  });
+  return (
+    <BrandButton
+      testId="project-new-conversation"
+      type="button"
+      variant="secondary"
+      isDisabled={start.isPending}
+      aria-busy={start.isPending}
+      startContent={<Plus width={14} height={14} />}
+      onClick={() => start.mutate()}
+    >
+      {t(I18nKey.PROJECTS$NEW_CONVERSATION)}
+    </BrandButton>
+  );
+}
+
+/** /projects/:projectId: the coordinator, the board, the files and the memory. */
 export default function ProjectPage() {
   const { t } = useTranslation("openhands");
   const { projectId } = useParams();
   const enabled = useProjectsEnabled();
   const { data: project, error } = useProject(projectId);
   const { data: board } = useProjectConversations(projectId);
+  const { navigate } = useNavigation();
+  const [isEditing, setIsEditing] = React.useState(false);
 
   const coordinator = board?.coordinator ?? null;
   const conversations = board?.conversations ?? [];
@@ -136,12 +184,24 @@ export default function ProjectPage() {
     body = (
       <>
         <div className="space-y-1">
-          <h1
-            data-testid="project-name"
-            className="text-xl font-medium leading-6 text-foreground"
-          >
-            {project.name}
-          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1
+              data-testid="project-name"
+              className="text-xl font-medium leading-6 text-foreground"
+            >
+              {project.name}
+            </h1>
+            <button
+              type="button"
+              data-testid="project-edit"
+              aria-label={t(I18nKey.PROJECTS$EDIT)}
+              title={t(I18nKey.PROJECTS$EDIT)}
+              className="rounded p-1 text-muted hover:text-foreground"
+              onClick={() => setIsEditing(true)}
+            >
+              <Pencil width={14} height={14} aria-hidden />
+            </button>
+          </div>
           {project.description ? (
             <p className="max-w-prose whitespace-pre-wrap text-sm text-muted">
               {project.description}
@@ -162,6 +222,23 @@ export default function ProjectPage() {
                 ? t(I18nKey.PROJECTS$COORDINATOR_HINT)
                 : t(I18nKey.PROJECTS$NO_COORDINATOR)}
             </p>
+            {coordinator ? (
+              <p
+                data-testid="project-coordinator-state"
+                data-attention={coordinator.attention}
+                className={cn(
+                  "text-xs",
+                  needsUser(coordinator)
+                    ? "font-medium text-foreground"
+                    : "text-muted",
+                )}
+              >
+                {t(conversationStateLabel(coordinator))}
+                {coordinator.turn === "asked" && coordinator.ask
+                  ? `: ${coordinator.ask}`
+                  : null}
+              </p>
+            ) : null}
           </div>
           {coordinatorId ? (
             <NavigationLink
@@ -189,12 +266,23 @@ export default function ProjectPage() {
             >
               {t(I18nKey.PROJECTS$CONVERSATIONS)}
             </h2>
-            <AddConversation projectId={projectId} memberIds={memberIds} />
+            <div className="flex flex-wrap items-center gap-2">
+              <AddConversation projectId={projectId} memberIds={memberIds} />
+              <NewConversation projectId={projectId} />
+            </div>
           </div>
           <ProjectBoard projectId={projectId} conversations={conversations} />
         </section>
 
         <ProjectFiles projectId={projectId} titles={titles} />
+        <ProjectMemory projectId={projectId} />
+        {isEditing ? (
+          <EditProjectModal
+            project={project}
+            onClose={() => setIsEditing(false)}
+            onDeleted={() => navigate(PROJECTS_PATH)}
+          />
+        ) : null}
       </>
     );
   }

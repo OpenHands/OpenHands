@@ -3,6 +3,7 @@ import { HttpError } from "@openhands/typescript-client";
 
 import ProjectsService from "#/api/projects-service/projects-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { needsUser } from "#/utils/project-conversation-state";
 import { useIsExperimentalFeatureEnabled } from "./use-experimental-features";
 
 /** The experimental feature that turns Projects on, per backend. */
@@ -71,6 +72,62 @@ export function useProjectConversations(projectId: string | undefined) {
     enabled: enabled && !!projectId,
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
+    meta: { disableToast: true },
+  });
+}
+
+/**
+ * How many of a project's conversations need the user, its coordinator
+ * included, for the Projects list. Polled more slowly than an open board.
+ */
+export function useProjectNeedsYouCount(projectId: string): number {
+  const { backend } = useActiveBackend();
+  const enabled = useProjectsEnabled();
+  const { data } = useQuery({
+    queryKey: [...projectsQueryRoot(backend), "conversations", projectId],
+    queryFn: () => ProjectsService.listConversations(projectId),
+    enabled,
+    staleTime: 10_000,
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
+    meta: { disableToast: true },
+  });
+  if (!data) return 0;
+  return [data.coordinator, ...data.conversations].filter(
+    (c) => c && needsUser(c),
+  ).length;
+}
+
+export function useProjectMemory(projectId: string | undefined) {
+  const { backend } = useActiveBackend();
+  const enabled = useProjectsEnabled();
+  return useQuery({
+    queryKey: [...projectsQueryRoot(backend), "memory", projectId],
+    queryFn: () => ProjectsService.listMemory(projectId!),
+    enabled: enabled && !!projectId,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    meta: { disableToast: true },
+  });
+}
+
+export function useProjectMemoryFile(
+  projectId: string | undefined,
+  name: string | null,
+  revision: string | undefined,
+) {
+  const { backend } = useActiveBackend();
+  return useQuery({
+    queryKey: [
+      ...projectsQueryRoot(backend),
+      "memory-file",
+      projectId,
+      name,
+      revision,
+    ],
+    queryFn: () => ProjectsService.readMemory(projectId!, name!),
+    enabled: !!projectId && !!name,
+    staleTime: Infinity,
     meta: { disableToast: true },
   });
 }

@@ -10,9 +10,15 @@ import ProjectsService, {
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
 import { I18nKey } from "#/i18n/declaration";
+import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
+
+vi.mock("#/hooks/mutation/use-create-conversation", () => ({
+  useCreateConversation: vi.fn(() => ({ mutateAsync: vi.fn() })),
+}));
 
 const PROJECT_ID = "aa000000000040008000000000000001";
 const COORDINATOR_ID = "cc000000000040008000000000000001";
+const NOW = "2026-11-09T10:00:00Z";
 
 const member = (
   id: string,
@@ -109,6 +115,12 @@ describe("ProjectPage", () => {
         updated_at: "2026-11-09T11:00:00Z",
       },
     ]);
+    vi.spyOn(ProjectsService, "listMemory").mockResolvedValue([
+      { name: "MEMORY.md", size: 12, revision: "r1", updated_at: NOW },
+    ]);
+    vi.spyOn(ProjectsService, "readMemory").mockResolvedValue(
+      "- Releases are cut from main.",
+    );
     vi.spyOn(
       AgentServerConversationService,
       "searchConversations",
@@ -206,5 +218,157 @@ describe("ProjectPage", () => {
     const notes = within(resolved).getAllByTestId("project-card-auto-resolved");
     expect(notes).toHaveLength(1);
     expect(notes[0]).toHaveTextContent(I18nKey.PROJECTS$AUTO_RESOLVED);
+  });
+  it("says what each card under Needs you wants, in words", async () => {
+    setProjectsFeature(true);
+    vi.spyOn(ProjectsService, "listConversations").mockResolvedValue({
+      project_id: PROJECT_ID,
+      coordinator: member(COORDINATOR_ID, "Coordinator", "needs_you", {
+        execution_status: "waiting_for_confirmation",
+      }),
+      conversations: [
+        member("01000000000040008000000000000001", "Asks", "needs_input", {
+          turn: "asked",
+          ask: "Which branch?",
+        }),
+        member("02000000000040008000000000000001", "Approve", "needs_you", {
+          execution_status: "waiting_for_confirmation",
+        }),
+        member("03000000000040008000000000000001", "Broke", "needs_you", {
+          execution_status: "error",
+        }),
+      ],
+    });
+    renderPage();
+
+    const needsYou = await screen.findByTestId("project-group-needs_you");
+    const states = within(needsYou)
+      .getAllByTestId("project-card-state")
+      .map((el) => el.textContent);
+    expect(states).toEqual([
+      I18nKey.PROJECTS$STATE_ASKED,
+      I18nKey.PROJECTS$STATE_WAITING_APPROVAL,
+      I18nKey.PROJECTS$STATE_ERROR,
+    ]);
+    expect(needsYou).not.toHaveTextContent("waiting_for_confirmation");
+
+    // The coordinator's own state shows on the page, not only its link.
+    const coordinatorState = screen.getByTestId("project-coordinator-state");
+    expect(coordinatorState).toHaveTextContent(
+      I18nKey.PROJECTS$STATE_WAITING_APPROVAL,
+    );
+    expect(coordinatorState).toHaveAttribute("data-attention", "needs_you");
+  });
+
+  it("asks before removing a conversation from the project", async () => {
+    setProjectsFeature(true);
+    const remove = vi
+      .spyOn(ProjectsService, "removeConversation")
+      .mockResolvedValue(undefined);
+    renderPage();
+
+    const idle = await screen.findByTestId("project-group-idle");
+    await userEvent.click(within(idle).getByTestId("project-card-remove"));
+    expect(remove).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByTestId("cancel-button"));
+    expect(screen.queryByTestId("confirmation-modal")).not.toBeInTheDocument();
+    expect(remove).not.toHaveBeenCalled();
+
+    await userEvent.click(within(idle).getByTestId("project-card-remove"));
+    await userEvent.click(screen.getByTestId("confirm-button"));
+    await waitFor(() =>
+      expect(remove).toHaveBeenCalledWith(
+        PROJECT_ID,
+        "06000000000040008000000000000001",
+      ),
+    );
+  });
+
+  it("shows the project's memory and opens a file", async () => {
+    setProjectsFeature(true);
+    renderPage();
+
+    const memory = await screen.findByTestId("project-memory");
+    await userEvent.click(await within(memory).findByText("MEMORY.md"));
+    expect(
+      await within(memory).findByTestId("project-memory-preview"),
+    ).toHaveTextContent("Releases are cut from main.");
+    expect(ProjectsService.readMemory).toHaveBeenCalledWith(
+      PROJECT_ID,
+      "MEMORY.md",
+    );
+  });
+
+  it("renames a project", async () => {
+    setProjectsFeature(true);
+    const update = vi
+      .spyOn(ProjectsService, "updateProject")
+      .mockImplementation(async (id, input) => ({
+        id,
+        name: input.name ?? "",
+        description: input.description ?? "",
+        coordinator_conversation_id: COORDINATOR_ID,
+        worker_agent_profile_id: null,
+        created_at: NOW,
+        updated_at: NOW,
+      }));
+    renderPage();
+
+    await userEvent.click(await screen.findByTestId("project-edit"));
+    const name = screen.getByTestId("edit-project-name");
+    await userEvent.clear(name);
+    await userEvent.type(name, "Insider 0.3");
+    await userEvent.click(screen.getByTestId("edit-project-save"));
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(PROJECT_ID, {
+        name: "Insider 0.3",
+        description: "Get Insider ready for people to try",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("edit-project-modal"),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("deletes a project only after a confirmation", async () => {
+    setProjectsFeature(true);
+    const remove = vi
+      .spyOn(ProjectsService, "deleteProject")
+      .mockResolvedValue(undefined);
+    renderPage();
+
+    await userEvent.click(await screen.findByTestId("project-edit"));
+    await userEvent.click(screen.getByTestId("edit-project-delete"));
+    expect(remove).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId("confirm-button"));
+    await waitFor(() => expect(remove).toHaveBeenCalledWith(PROJECT_ID));
+  });
+  it("starts a new conversation inside the project", async () => {
+    setProjectsFeature(true);
+    vi.mocked(useCreateConversation).mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({
+        conversation_id: "09000000000040008000000000000001",
+        session_api_key: null,
+        url: null,
+      }),
+    } as unknown as ReturnType<typeof useCreateConversation>);
+    const add = vi
+      .spyOn(ProjectsService, "addConversation")
+      .mockResolvedValue(undefined);
+    renderPage();
+
+    await userEvent.click(
+      await screen.findByTestId("project-new-conversation"),
+    );
+    await waitFor(() =>
+      expect(add).toHaveBeenCalledWith(
+        PROJECT_ID,
+        "09000000000040008000000000000001",
+      ),
+    );
   });
 });

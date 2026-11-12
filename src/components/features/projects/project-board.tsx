@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { I18nKey } from "#/i18n/declaration";
 import { NavigationLink } from "#/components/shared/navigation-link";
+import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import ProjectsService, {
   type ProjectAttention,
   type ProjectConversation,
@@ -15,6 +16,10 @@ import {
 } from "#/utils/conversation-tag-flags";
 import { displayApiErrorToast } from "#/utils/custom-toast-handlers";
 import { formatTimeDelta } from "#/utils/format-time-delta";
+import {
+  conversationStateLabel,
+  needsUser,
+} from "#/utils/project-conversation-state";
 import { cn } from "#/utils/utils";
 
 /** The board's columns, most urgent first, and the attention each one holds. */
@@ -99,6 +104,7 @@ function ProjectCard({
       displayApiErrorToast(error, t(I18nKey.PROJECTS$UPDATE_FAILED)),
   });
   const busy = resolve.isPending || remove.isPending;
+  const [isConfirmingRemove, setIsConfirmingRemove] = React.useState(false);
 
   return (
     <li
@@ -128,7 +134,12 @@ function ProjectCard({
         </p>
       ) : null}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-        <span>{conversation.execution_status}</span>
+        <span
+          data-testid="project-card-state"
+          className={cn(needsUser(conversation) && "text-foreground")}
+        >
+          {t(conversationStateLabel(conversation))}
+        </span>
         <span>{formatTimeDelta(conversation.updated_at)}</span>
         <span className="ml-auto flex gap-3">
           <button
@@ -147,12 +158,25 @@ function ProjectCard({
             className="text-muted hover:text-foreground hover:underline disabled:opacity-50"
             disabled={busy}
             aria-label={`${t(I18nKey.PROJECTS$REMOVE)} ${title}`}
-            onClick={() => remove.mutate()}
+            onClick={() => setIsConfirmingRemove(true)}
           >
             {t(I18nKey.PROJECTS$REMOVE)}
           </button>
         </span>
       </div>
+      {isConfirmingRemove ? (
+        <ConfirmationModal
+          text={t(I18nKey.PROJECTS$REMOVE_CONFIRM, { title })}
+          confirmText={t(I18nKey.PROJECTS$REMOVE)}
+          isConfirming={remove.isPending}
+          onCancel={() => setIsConfirmingRemove(false)}
+          onConfirm={() =>
+            remove.mutate(undefined, {
+              onSettled: () => setIsConfirmingRemove(false),
+            })
+          }
+        />
+      ) : null}
     </li>
   );
 }
