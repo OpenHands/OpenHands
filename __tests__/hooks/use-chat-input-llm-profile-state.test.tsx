@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -85,6 +85,15 @@ vi.mock("#/hooks/mutation/sync-agent-profiles", async (importOriginal) => ({
   >()),
   updateAgentProfile: updateAgentProfileMock,
 }));
+// The instance config a cloud backend reports, mocked at the service: it is
+// what tells a self-hosted instance with Agent Profiles off from OpenHands Cloud.
+const fetchCloudIntegrationsConfigMock = vi.hoisted(() => vi.fn());
+vi.mock("#/api/cloud/settings-service.api", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/api/cloud/settings-service.api")
+  >()),
+  fetchCloudIntegrationsConfig: fetchCloudIntegrationsConfigMock,
+}));
 
 // eslint-disable-next-line import/first
 import {
@@ -127,6 +136,12 @@ describe("useChatInputLlmProfileState", () => {
     useCanManageOrgProfilesMock.mockReturnValue(true);
     useAgentProfilesMock.mockReturnValue({ data: undefined });
     updateAgentProfileMock.mockReset();
+    fetchCloudIntegrationsConfigMock.mockReset();
+    // OpenHands Cloud, which runs agent profiles.
+    fetchCloudIntegrationsConfigMock.mockResolvedValue({
+      deploymentMode: "cloud",
+      isAgentProfilesEnabled: false,
+    });
     backendKind.id = "b1";
     backendKind.kind = "local";
     backendKind.orgId = null;
@@ -196,6 +211,40 @@ describe("useChatInputLlmProfileState", () => {
 
     expect(switchAndLog).not.toHaveBeenCalled();
     expect(updateAgentProfileMock.mock.calls[0][1]).toBe("default");
+  });
+
+  describe("on a self-hosted instance with Agent Profiles turned off", () => {
+    beforeEach(() => {
+      backendKind.kind = "cloud";
+      useOptionalConversationIdMock.mockReturnValue({ conversationId: null });
+      fetchCloudIntegrationsConfigMock.mockResolvedValue({
+        deploymentMode: "self_hosted",
+        isAgentProfilesEnabled: false,
+      });
+      // Activated before the feature was turned off.
+      activeAgent("reviewer", "Smart");
+    });
+
+    it("names the active LLM profile, not the activated agent profile's", async () => {
+      const { result } = renderState();
+
+      await waitFor(() =>
+        expect(result.current.currentProfileName).toBe("Fast"),
+      );
+    });
+
+    it("activates a home pick instead of editing the activated agent profile", async () => {
+      const { result } = renderState();
+      // Until the instance config arrives the pill still names "Smart".
+      await waitFor(() =>
+        expect(result.current.currentProfileName).toBe("Fast"),
+      );
+
+      result.current.selectProfile("Smart");
+
+      expect(switchAndLog).toHaveBeenCalledWith(null, "Smart");
+      expect(updateAgentProfileMock).not.toHaveBeenCalled();
+    });
   });
 
   it("falls back to model-matching when stamped profile's model differs from llm_model", () => {

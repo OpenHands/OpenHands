@@ -902,6 +902,7 @@ test("changed paths map to the families whose Source: lines own them", () => {
     "src/mocks/conversation-handlers.ts",
     ".agents/skills/verify-openhands/SKILL.md",
     "src/icons/close.svg",
+    "hero.ts",
     "eslint.config.js",
     "vitest.setup.ts",
     "playwright.live.config.ts",
@@ -921,6 +922,7 @@ test("changed paths map to the families whose Source: lines own them", () => {
     "src/hooks/query/use-get-secrets.ts",
     "src/i18n/translation.json",
     "src/icons/close.svg",
+    "hero.ts",
   ]);
   // A src/ path no family owns is a map gap.
   assert.deepEqual(result.unmapped, [
