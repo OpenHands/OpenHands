@@ -64,7 +64,7 @@ jobs:
           # client-side keys stored as repo vars — empty on fork PRs, which
           # simply disables analytics in the built app.
           VITE_POSTHOG_API_KEY: ${{ github.event_name == 'release' && vars.POSTHOG_PROD_KEY || vars.POSTHOG_STAGING_KEY }}
-          VITE_POSTHOG_SURVEY_ID: ${{ vars.POSTHOG_SURVEY_ID }}
+          VITE_POSTHOG_FEEDBACK_SURVEY_ID: ${{ vars.POSTHOG_FEEDBACK_SURVEY_ID }}
           # Authenticates download-uv.mjs's GitHub API version lookup so it
           # doesn't hit the unauthenticated per-IP rate limit on shared runners.
           GITHUB_TOKEN: ${{ github.token }}
