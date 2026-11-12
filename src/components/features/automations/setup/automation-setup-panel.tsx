@@ -1480,8 +1480,15 @@ export function AutomationSetupPanel({
    */
   const draftRequestBody = (
     tarballPath: string = PREFLIGHT_TARBALL_PATH,
-  ): SetupRequestBody =>
-    kind === "custom" ? buildCustomBody(tarballPath) : buildPresetBody();
+  ): SetupRequestBody => {
+    const body =
+      kind === "custom" ? buildCustomBody(tarballPath) : buildPresetBody();
+    // The pinned automation service's draft schema does not yet accept
+    // agent_profile_id (see #19474). Stripping it here prevents the 422
+    // extra_forbidden error. Create Automation still sends it.
+    delete body.agent_profile_id;
+    return body;
+  };
   const draftValidationByField = useMemo(() => {
     const byField = new Map<string, string>();
     for (const error of serverDraft?.validationErrors ?? []) {
