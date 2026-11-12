@@ -4,7 +4,7 @@
   "features": [
     {
       "id": "backends.add",
-      "description": "Hides \"Add Backend\" in the backend selector menu (sidebar, expanded and collapsed)."
+      "description": "Hides \"Add Backend\" in the backend selector menu (sidebar, expanded and collapsed) and the \"Add Backend\" button in the Manage Backends window, including the recovery screen shown when no backend is reachable. Manage Backends itself stays available, and existing backends can still be edited, removed and selected."
     }
   ]
 }
