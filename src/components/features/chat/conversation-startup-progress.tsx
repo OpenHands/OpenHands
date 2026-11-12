@@ -73,7 +73,7 @@ export function ConversationStartupProgress({
               .setOpen(sessionKey, session.id, open)
           }
         >
-          <SessionActivityDetails session={session} />
+          <SessionActivityDetails session={session} nested={false} />
         </EventGroup>
       ) : (
         <div

@@ -1,11 +1,15 @@
 import { useSessionActivities } from "#/hooks/use-session-activities";
 import { useSessionActivityStore } from "#/stores/session-activity-store";
+import { parseDateAsUTC } from "#/utils/format-time-delta";
 import { SessionActivityDetails } from "./event-message-components/session-activity";
-import { CollapsibleThinking } from "./event-message-components/collapsible-thinking";
+import {
+  CollapsibleThinking,
+  ThinkingContent,
+} from "./event-message-components/collapsible-thinking";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
-import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
+import { OpenHandsEvent } from "#/types/agent-server/core";
 import { I18nKey } from "#/i18n/declaration";
 import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
@@ -18,6 +22,8 @@ import {
 import { EventMessage } from "./event-message";
 import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
 import { groupEvents } from "./group-events";
+import { buildActionById } from "./event-thought-helpers";
+import { getSingleToolEvent } from "./event-message-components/event-group-summary";
 import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
 import { getStepKey, StepDisclosureContext } from "./step-disclosure-context";
@@ -61,7 +67,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             !hasOlderEvents ||
             (session.kind === "resume" &&
               (messages.some((event) => event.id === session.afterEventId) ||
-                session.startedAt >= Date.parse(messages[0]?.timestamp ?? ""))),
+                session.startedAt >=
+                  parseDateAsUTC(messages[0]?.timestamp ?? "").getTime())),
         ),
       [sessions, hasOlderEvents, messages],
     );
@@ -84,13 +91,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // Set, so every append changed every historical item's shallow props.
     // Derive the two event-specific values once and keep unchanged wrappers
     // eligible for React.memo without removing allEvents from grouping logic.
-    const actionById = React.useMemo(() => {
-      const actions = new Map<string, ActionEvent>();
-      for (const event of allEvents) {
-        if (isActionEvent(event)) actions.set(event.id, event);
-      }
-      return actions;
-    }, [allEvents]);
+    const actionById = React.useMemo(
+      () => buildActionById(allEvents),
+      [allEvents],
+    );
 
     // Set of event ids that have a /model entry anchored to them — used to
     // avoid mounting <ModelMessages> for every event (the component would
@@ -148,8 +152,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     const isAgentRunning =
       curAgentState === AgentState.RUNNING || isPlanningAgentRunning;
     const renderedItems = React.useMemo(
-      () => groupEvents(messages, 1, allEvents, 1, visibleSessions),
-      [messages, allEvents, visibleSessions],
+      () => groupEvents(messages, 1, allEvents, 1, visibleSessions, actionById),
+      [messages, allEvents, visibleSessions, actionById],
     );
     const eventIndexes = React.useMemo(
       () => new Map(messages.map((event, index) => [event, index])),
@@ -173,6 +177,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       event: OpenHandsEvent,
       index: number,
       suppressThought: boolean,
+      detailsOnly = false,
     ) => {
       const stepKey = getStepKey(event);
       return (
@@ -180,6 +185,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           key={stepKey}
           value={{
             open: openRows.get(stepKey),
+            detailsOnly,
             setOpen: (open) => setRowOpen(stepKey, open),
           }}
         >
@@ -232,6 +238,11 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             );
           }
 
+          const singleTool = getSingleToolEvent(item.events);
+          const showSingleToolDetails =
+            item.events.length === 1 &&
+            !item.session &&
+            !item.reasoning?.length;
           const groupKey =
             item.session?.id ??
             (item.reasoning?.[0] && item.reasoning[0].index <= item.startIndex
@@ -248,6 +259,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             item.session?.open ??
             openRows.get(`group:${groupKey}`) ??
             item.events.some((event) => openRows.get(getStepKey(event)));
+          const Reasoning =
+            item.events.length === 0 && !item.session
+              ? ThinkingContent
+              : CollapsibleThinking;
           return (
             <React.Fragment key={`group-${groupKey}`}>
               {pendingSessionId &&
@@ -258,20 +273,24 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 session={item.session}
                 hasReasoning={!!item.reasoning?.length}
                 allEvents={allEvents}
+                actionById={actionById}
                 isLive={
                   isAgentRunning && itemIndex === renderedItems.length - 1
                 }
                 open={groupOpen}
-                onOpenChange={(open) =>
-                  item.session
-                    ? useSessionActivityStore
-                        .getState()
-                        .setOpen(sessionKey, item.session.id, open)
-                    : setRowOpen(`group:${groupKey}`, open)
-                }
+                onOpenChange={(open) => {
+                  if (item.session)
+                    useSessionActivityStore
+                      .getState()
+                      .setOpen(sessionKey, item.session.id, open);
+                  else setRowOpen(`group:${groupKey}`, open);
+                }}
               >
                 {item.session && (
-                  <SessionActivityDetails session={item.session} />
+                  <SessionActivityDetails
+                    session={item.session}
+                    nested={item.events.length > 0}
+                  />
                 )}
                 {[
                   ...item.events.map((event) => ({
@@ -281,13 +300,14 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                       event,
                       eventIndexes.get(event)!,
                       true,
+                      event === singleTool && showSingleToolDetails,
                     ),
                   })),
                   ...(item.reasoning ?? []).map((reasoning) => ({
                     index: reasoning.index,
                     order: 0,
                     node: (
-                      <CollapsibleThinking
+                      <Reasoning
                         key={`reasoning-${reasoning.id}`}
                         content={reasoning.text}
                       />

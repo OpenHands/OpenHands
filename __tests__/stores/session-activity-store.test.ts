@@ -52,3 +52,17 @@ it("deduplicates an active resume but retains a later real resume", () => {
 function storeEntry() {
   return useSessionActivityStore.getState().entries[key][0];
 }
+
+it("tracks the latest repeated phase without duplicating its history", () => {
+  const store = useSessionActivityStore.getState();
+  store.begin(key, "initialize");
+  store.observe(key, "WAITING_FOR_SANDBOX");
+  store.observe(key, "PREPARING_REPOSITORY");
+  store.observe(key, "WAITING_FOR_SANDBOX");
+  expect(storeEntry()).toMatchObject({
+    currentStatus: "WAITING_FOR_SANDBOX",
+    steps: ["WAITING_FOR_SANDBOX", "PREPARING_REPOSITORY"],
+  });
+  store.observe(key, "PREPARING_REPOSITORY");
+  expect(storeEntry().currentStatus).toBe("PREPARING_REPOSITORY");
+});

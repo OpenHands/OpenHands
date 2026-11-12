@@ -16,10 +16,6 @@ import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { NavigationProvider } from "#/context/navigation-context";
 import ConversationView from "#/routes/conversation";
 import { resumeCloudSandbox } from "#/api/cloud/conversation-service.api";
-import {
-  __clearCloudAutoResumeSuppressionsForTests,
-  suppressNextCloudAutoResume,
-} from "#/api/cloud/cloud-sandbox-resume-suppression";
 import type { Backend } from "#/api/backend-registry/types";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { getCloudSharedConversation } from "#/api/cloud/shared-conversation-service.api";
@@ -240,7 +236,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-  __clearCloudAutoResumeSuppressionsForTests();
   window.localStorage.clear();
   __resetActiveStoreForTests();
 });
@@ -318,24 +313,6 @@ describe("conversation route — cloud sandbox resume", () => {
     expect(resumeCloudSandbox).toHaveBeenCalledTimes(1);
   });
 
-  it("does not auto-resume a cloud sandbox intentionally paused in this tab", async () => {
-    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
-    suppressNextCloudAutoResume(CLOUD_CONVERSATION_ID);
-    vi.mocked(
-      AgentServerConversationService.batchGetAppConversations,
-    ).mockResolvedValue([
-      makeConversation(CLOUD_CONVERSATION_ID, {
-        sandbox_status: "PAUSED",
-        sandbox_id: "sandbox-paused-suppressed",
-      }),
-    ]);
-
-    renderConversation();
-
-    expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
-    expect(resumeCloudSandbox).not.toHaveBeenCalled();
-  });
-
   it("resumes again on a new send after an external pause, without idle resume loops", async () => {
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
     vi.mocked(
@@ -375,7 +352,6 @@ describe("conversation route — cloud sandbox resume", () => {
 
   it("fails queued messages when resume is rejected and allows an explicit Retry", async () => {
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
-    suppressNextCloudAutoResume(CLOUD_CONVERSATION_ID);
     vi.mocked(
       AgentServerConversationService.batchGetAppConversations,
     ).mockResolvedValue([
@@ -425,43 +401,6 @@ describe("conversation route — cloud sandbox resume", () => {
         .getState()
         .pendingMessages.find((m) => m.id === id)?.status,
     ).toBe("sending");
-  });
-
-  it("clears stale suppression when the route unmounts before PAUSED is observed", async () => {
-    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-a" });
-    suppressNextCloudAutoResume(CLOUD_CONVERSATION_ID);
-    vi.mocked(
-      AgentServerConversationService.batchGetAppConversations,
-    ).mockResolvedValue([
-      makeConversation(CLOUD_CONVERSATION_ID, {
-        sandbox_status: "RUNNING",
-        sandbox_id: "sandbox-running-before-unmount",
-      }),
-    ]);
-
-    const { unmount } = renderConversation();
-
-    expect(await screen.findByTestId("conversation-main")).toBeInTheDocument();
-    expect(resumeCloudSandbox).not.toHaveBeenCalled();
-
-    unmount();
-    vi.mocked(resumeCloudSandbox).mockClear();
-    vi.mocked(
-      AgentServerConversationService.batchGetAppConversations,
-    ).mockResolvedValue([
-      makeConversation(CLOUD_CONVERSATION_ID, {
-        sandbox_status: "PAUSED",
-        sandbox_id: "sandbox-paused-after-reopen",
-      }),
-    ]);
-
-    renderConversation();
-
-    await waitFor(() => {
-      expect(resumeCloudSandbox).toHaveBeenCalledWith(
-        "sandbox-paused-after-reopen",
-      );
-    });
   });
 
   it("retries a failed cloud sandbox resume while the conversation remains paused", async () => {
@@ -583,6 +522,31 @@ describe("conversation route — shared read-only fallback", () => {
     // Assert
     expect(await screen.findByTestId("conversations-home")).toBeInTheDocument();
     expect(getCloudSharedConversation).not.toHaveBeenCalled();
+    expect(displayErrorToast).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a missing conversation once even if the route re-renders before the redirect lands", async () => {
+    // Arrange — the route stays mounted after it navigates away, as it does
+    // when something it reads (the router, the translation function) changes
+    // identity between the toast and the redirect. A second toast throws so a
+    // regression fails here instead of looping toast -> redirect -> toast.
+    setActiveSelection({ backendId: localBackend.id });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([null]);
+    vi.mocked(displayErrorToast)
+      .mockImplementationOnce(() => {})
+      .mockImplementation(() => {
+        throw new Error("the missing conversation was reported twice");
+      });
+
+    // Act
+    const { rerender } = renderConversation();
+    await waitFor(() => expect(displayErrorToast).toHaveBeenCalledTimes(1));
+    rerender(conversationTree(CLOUD_CONVERSATION_ID));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Assert
     expect(displayErrorToast).toHaveBeenCalledTimes(1);
   });
 });

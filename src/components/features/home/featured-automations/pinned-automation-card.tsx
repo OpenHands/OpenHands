@@ -1,4 +1,4 @@
-import { Tooltip } from "@heroui/react";
+import { Tooltip } from "#/components/shared/tooltip";
 import { ExternalLink } from "lucide-react";
 import { useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -36,6 +36,7 @@ import {
   shortenAutomationRunSummary,
   shouldShowAutomationRunSummaryHovercard,
 } from "./automation-run-health";
+import { describeSchedule } from "#/utils/automation-trigger-description";
 
 interface PinnedAutomationCardProps {
   automation: Automation;
@@ -87,7 +88,8 @@ export function PinnedAutomationCard({
     latestRun?.status === AutomationRunStatus.COMPLETED ||
     latestRun?.status === AutomationRunStatus.FAILED;
   const scheduleLabel =
-    automation.trigger.schedule_human || automation.trigger.type;
+    describeSchedule(automation.trigger, t, i18n.language) ??
+    automation.trigger.type;
   const pills = useMemo(
     () => buildAutomationMetadataPills(automation, scheduleLabel),
     [automation, scheduleLabel],
@@ -108,6 +110,7 @@ export function PinnedAutomationCard({
     automation,
     t,
     canManage: actions.canManage,
+    canEdit: actions.canEdit,
     isRunPending: actions.isRunPending,
     isCancelPending: actions.isCancelPending,
     canCancel: actions.canCancel,
@@ -153,12 +156,8 @@ export function PinnedAutomationCard({
         extensionModuleCardSurfaceClassName,
         extensionModuleCardInteractiveClassName,
         isDragging && "opacity-50",
-        isDropTarget &&
-          dropPosition === "before" &&
-          "shadow-[inset_0_2px_0_0_var(--oh-focus)]",
-        isDropTarget &&
-          dropPosition === "after" &&
-          "shadow-[inset_0_-2px_0_0_var(--oh-focus)]",
+        isDropTarget && dropPosition === "before" && "shadow-reorder-before",
+        isDropTarget && dropPosition === "after" && "shadow-reorder-after",
       )}
     >
       {/*

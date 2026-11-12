@@ -14,7 +14,7 @@ import { useEventStore } from "#/stores/use-event-store";
 import useMetricsStore from "#/stores/metrics-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useBrowserStore } from "#/stores/browser-store";
-import { useCommandStore } from "#/stores/command-store";
+import { getTerminalCommands } from "#/utils/terminal-commands";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
 import { useGoalStore } from "#/stores/goal-store";
@@ -173,7 +173,6 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     useOptimisticUserMessageStore.getState().clearPendingMessages();
     useBrowserStore.getState().reset();
     useMetricsStore.getState().resetMetrics();
-    useCommandStore.setState({ commands: [] });
     useErrorMessageStore.getState().removeErrorMessage();
     useConversationStateStore.getState().reset();
     useGoalStore.setState({ statusByConversation: {} });
@@ -305,6 +304,67 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       view.unmount();
       queryClient.clear();
       window.localStorage.clear();
+      __resetActiveStoreForTests();
+    }
+  });
+
+  it("continues Cloud history from the ordered page after its early persisted page", async () => {
+    setRegisteredBackends([
+      {
+        id: "history-cloud",
+        name: "Cloud",
+        kind: "cloud",
+        host: "https://cloud.test",
+        apiKey: "test-key",
+      },
+    ]);
+    setActiveSelection({ backendId: "history-cloud", orgId: "org-a" });
+    let resolveCount!: (count: number) => void;
+    vi.mocked(EventService.getEventCount).mockReturnValue(
+      new Promise((resolve) => {
+        resolveCount = resolve;
+      }),
+    );
+    const recent = createUserMessageEvent("recent");
+    const older = {
+      ...createUserMessageEvent("older"),
+      timestamp: recent.timestamp,
+    };
+    vi.mocked(EventService.searchEvents)
+      .mockResolvedValueOnce({ items: [recent], next_page_id: null })
+      .mockResolvedValueOnce({ items: [recent], next_page_id: older.id })
+      .mockResolvedValueOnce({ items: [older], next_page_id: null });
+    let history!: ReturnType<typeof useLoadOlderEvents>;
+    function Probe() {
+      history = useLoadOlderEvents("cloud-frontier");
+      return null;
+    }
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="cloud-frontier"
+          conversationUrl="https://runtime.test/api"
+        >
+          <Probe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    try {
+      await waitFor(() => expect(history.hasMore).toBe(false));
+      await act(async () => resolveCount(80));
+      await waitFor(() => expect(history.hasMore).toBe(true));
+      await act(async () => history.loadOlder());
+      expect(eventIds()).toEqual([older.id, recent.id]);
+      expect(EventService.searchEvents).toHaveBeenLastCalledWith(
+        "cloud-frontier",
+        expect.any(String),
+        null,
+        expect.objectContaining({ pageId: older.id, excludeFullState: true }),
+      );
+      expect(history.hasMore).toBe(false);
+    } finally {
+      view.unmount();
+      queryClient.clear();
       __resetActiveStoreForTests();
     }
   });
@@ -766,7 +826,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       deliver(action);
       deliver(observation);
 
-      expect(useCommandStore.getState().commands).toEqual([
+      expect(getTerminalCommands(useEventStore.getState().events)).toEqual([
         { content: "echo hi", type: "input" },
         { content: "hi\n", type: "output" },
       ]);

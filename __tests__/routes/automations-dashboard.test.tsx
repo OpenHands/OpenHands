@@ -27,6 +27,10 @@ import {
   getCurrentCloudApiKey,
 } from "#/api/cloud/organization-service.api";
 import {
+  fetchCloudIntegrationsConfig,
+  type CloudIntegrationsConfig,
+} from "#/api/cloud/settings-service.api";
+import {
   AutomationRunStatus,
   type Automation,
   type AutomationRun,
@@ -53,6 +57,30 @@ vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
   getCloudOrganizationMe: vi.fn(),
   getCurrentCloudApiKey: vi.fn(),
 }));
+
+// Mock only the web-client config read, which gates the Service accounts
+// owner-filter option on the instance's `enable_service_accounts` flag.
+vi.mock("#/api/cloud/settings-service.api", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/api/cloud/settings-service.api")
+  >()),
+  fetchCloudIntegrationsConfig: vi.fn(),
+}));
+
+function mockServiceAccountsEnabled(isServiceAccountsEnabled: boolean) {
+  const config: CloudIntegrationsConfig = {
+    providersConfigured: [],
+    isJiraEnabled: false,
+    isJiraDcEnabled: false,
+    isLinearEnabled: false,
+    isSlackEnabled: false,
+    deploymentMode: null,
+    isOrgMcpServersEnabled: false,
+    isAgentProfilesEnabled: false,
+    isServiceAccountsEnabled,
+  };
+  vi.mocked(fetchCloudIntegrationsConfig).mockResolvedValue(config);
+}
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
@@ -144,6 +172,8 @@ async function renderDashboardWithSettledInsights() {
 beforeEach(() => {
   window.localStorage.clear();
   __resetActiveStoreForTests();
+  vi.mocked(fetchCloudIntegrationsConfig).mockReset();
+  mockServiceAccountsEnabled(false);
   vi.mocked(AutomationService.checkHealth).mockReset();
   vi.mocked(AutomationService.checkHealth).mockResolvedValue({ status: "ok" });
   vi.mocked(AutomationService.getAutomations).mockReset();
@@ -525,6 +555,12 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
     user_id: "user-teammate",
   });
   const unowned = createAutomation({ id: "a-unowned", name: "Gamma widget" });
+  const serviceRun = createAutomation({
+    id: "a-service",
+    name: "Delta widget",
+    user_id: "svc-1",
+    run_as_kind: "service",
+  });
 
   function selectWorkspace(orgId: string) {
     setRegisteredBackends([cloudBackend]);
@@ -541,7 +577,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
 
   async function pickCreatedBy(
     user: ReturnType<typeof userEvent.setup>,
-    value: "all" | "me" | "others",
+    value: "all" | "me" | "others" | "service",
   ) {
     await user.click(
       within(
@@ -904,6 +940,60 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
       undefined,
     );
   });
+
+  it("offers the people options only while the instance has service accounts off", async () => {
+    // Arrange — the flag is off by default.
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-unowned");
+    await openFiltersMenu(user);
+
+    // Act
+    await user.click(
+      within(
+        await screen.findByTestId("automations-filter-created-by"),
+      ).getByTestId("dropdown-trigger"),
+    );
+
+    // Assert
+    expect(
+      screen.getByTestId("automations-filter-created-by-others"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automations-filter-created-by-service"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("asks the server for service-account automations once the instance has them on", async () => {
+    // Arrange
+    mockServiceAccountsEnabled(true);
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async (_limit, _offset, runAs) =>
+        runAs === "service"
+          ? { automations: [serviceRun], total: 1 }
+          : { automations: [mine, theirs, unowned, serviceRun], total: 4 },
+    );
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-service");
+    await openFiltersMenu(user);
+
+    // Act
+    await pickCreatedBy(user, "service");
+
+    // Assert
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual(["automation-card-a-service"]);
+    });
+    expect(AutomationService.getAutomations).toHaveBeenLastCalledWith(
+      50,
+      0,
+      "service",
+      undefined,
+    );
+  });
 });
 
 describe("AutomationTemplates — manifest-declared templates page", () => {
@@ -971,21 +1061,25 @@ describe("AutomationTemplates — manifest-declared templates page", () => {
       screen
         .queryAllByTestId(/^recommended-automation-card-/)
         .map((card) => card.getAttribute("data-testid"));
-    const slackCard = await screen.findByTestId(
-      "recommended-automation-card-slack-standup-digest",
-    );
-    await within(slackCard).findByText(
-      I18nKey.RECOMMENDED_AUTOMATIONS$CONNECTED,
-    );
+    await waitFor(() => {
+      expect(
+        within(
+          screen.getByTestId(
+            "recommended-automation-card-slack-standup-digest",
+          ),
+        ).getByText(I18nKey.RECOMMENDED_AUTOMATIONS$CONNECTED),
+      ).toBeInTheDocument();
+    });
     const initialCardIds = cardIds();
     const betaCount = within(
       screen.getByTestId("recommended-automations-beta-section"),
     ).getAllByTestId(/^recommended-automation-card-/).length;
+    const suggestedCount = initialCardIds.length - betaCount;
 
     // Act — adding a term from the description narrows the name match.
     await user.type(search, "github");
     expect(cardIds().length).toBeGreaterThan(1);
-    await user.type(search, " backlog");
+    await user.type(search, " posts");
 
     // Assert
     expect(cardIds()).toEqual([
@@ -997,7 +1091,7 @@ describe("AutomationTemplates — manifest-declared templates page", () => {
 
     // Act — reverse the terms and preserve selection of the result.
     await user.clear(search);
-    await user.type(search, "BACKLOG   GITHUB");
+    await user.type(search, "POSTS   GITHUB");
     await user.click(
       screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
     );
@@ -1007,25 +1101,27 @@ describe("AutomationTemplates — manifest-declared templates page", () => {
       "/automations/new/github-pr-reviewer",
     );
 
-    // Act — change to a Beta result without losing its connection state.
+    // Act — change to a connected Suggested result without losing its state.
     await user.clear(search);
     await user.type(search, "standup slack");
 
     // Assert
-    const filteredBeta = screen.getByTestId(
-      "recommended-automations-beta-section",
-    );
-    expect(
-      within(filteredBeta)
-        .getAllByTestId(/^recommended-automation-card-/)
-        .map((card) => card.getAttribute("data-testid")),
-    ).toEqual(["recommended-automation-card-slack-standup-digest"]);
-    expect(
-      within(filteredBeta).getByText(I18nKey.RECOMMENDED_AUTOMATIONS$CONNECTED),
-    ).toBeInTheDocument();
+    expect(cardIds()).toEqual([
+      "recommended-automation-card-slack-standup-digest",
+    ]);
     expect(
       within(
-        screen.getByTestId("recommended-automations-beta-heading"),
+        screen.getByTestId("recommended-automation-card-slack-standup-digest"),
+      ).getByText(I18nKey.RECOMMENDED_AUTOMATIONS$CONNECTED),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("recommended-automations-beta-section"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(
+        screen.getByRole("heading", {
+          name: I18nKey.RECOMMENDED_AUTOMATIONS$SUGGESTED_TITLE,
+        }).parentElement!,
       ).getByText("1", { exact: true }),
     ).toBeInTheDocument();
 
@@ -1052,7 +1148,7 @@ describe("AutomationTemplates — manifest-declared templates page", () => {
         screen.getByRole("heading", {
           name: I18nKey.RECOMMENDED_AUTOMATIONS$SUGGESTED_TITLE,
         }).parentElement!,
-      ).getByText("1", { exact: true }),
+      ).getByText(String(suggestedCount), { exact: true }),
     ).toBeInTheDocument();
     expect(
       within(

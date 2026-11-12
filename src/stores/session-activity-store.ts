@@ -10,6 +10,7 @@ export interface SessionActivity {
   startedAt: number;
   phase: "pending" | "connecting" | "complete" | "failed";
   steps: AppConversationStartTaskStatus[];
+  currentStatus?: AppConversationStartTaskStatus;
   open: boolean;
   detailsOpen?: boolean;
   afterEventId?: string;
@@ -105,9 +106,11 @@ export const useSessionActivityStore = create<SessionActivityState>()(
         set((state) => {
           const entries = state.entries[key];
           const last = entries?.at(-1);
-          if (!last || last.steps.at(-1) === status) return state;
+          if (!last || (last.currentStatus ?? last.steps.at(-1)) === status)
+            return state;
           const next: SessionActivity = {
             ...last,
+            currentStatus: status,
             steps: last.steps.includes(status)
               ? last.steps
               : [...last.steps, status],

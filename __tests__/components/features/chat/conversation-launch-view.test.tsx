@@ -10,6 +10,11 @@ import {
 } from "#/api/backend-registry/active-store";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { useConversationStore } from "#/stores/conversation-store";
+import {
+  clearAutomationFormSession,
+  getAutomationFormSession,
+  PENDING_AUTOMATION_SETUP_ID,
+} from "#/api/automation-form-session";
 
 vi.mock("#/components/features/chat/interactive-chat-box", () => ({
   InteractiveChatBox: () => <textarea disabled aria-label="Message" />,
@@ -25,13 +30,13 @@ vi.mock(
 );
 
 const navigate = vi.fn();
-function view(id: string) {
+function view(id: string, currentPath = `/conversations/${id}`) {
   return (
     <ActiveBackendProvider>
       <NavigationProvider
         value={{
           navigate,
-          currentPath: `/conversations/${id}`,
+          currentPath,
           conversationId: id,
           isNavigating: false,
         }}
@@ -55,6 +60,7 @@ beforeEach(() => {
   useConversationLaunchStore.setState({ launches: {} });
   useConversationStore.getState().clearAllFiles();
   useConversationStore.getState().clearMessageToSend();
+  clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
   setRegisteredBackends([
     {
       id: "cloud",
@@ -122,6 +128,51 @@ describe("pending conversation navigation", () => {
     expect(screen.getByText("Read my notes")).toBeVisible();
     page.unmount();
     expect(useConversationLaunchStore.getState().launches[id]).toBeUndefined();
+  });
+
+  it("does not yank focus to the new conversation when the user has already navigated away", () => {
+    const id = begin();
+    const { rerender } = render(view(id));
+    // The user switches to another conversation in the sidebar while the
+    // launch is still resolving. In the route tree this unmounts the launch
+    // view; here we mirror that by repointing `currentPath` at the other
+    // conversation before `targetId` lands.
+    rerender(view(id, "/conversations/another-conversation"));
+    act(() =>
+      useConversationLaunchStore
+        .getState()
+        .update(id, { targetId: "task-123" }),
+    );
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("restores the selected automation and unsaved form when editing a failed start", () => {
+    const draft = {
+      kind: "plugin" as const,
+      prompt: "Review PRs",
+      editingAutomationId: "reviewer-123",
+      form: { name: "Unsaved reviewer name", eventFilter: "repo == 'docs'" },
+    };
+    const id = useConversationLaunchStore.getState().begin({
+      backendId: "cloud",
+      orgId: "org-1",
+      message: "Add docs reviews",
+      files: [],
+      automationSetupDraft: draft,
+    });
+    useConversationLaunchStore.getState().update(id, { error: "Cannot start" });
+    render(view(id));
+
+    fireEvent.click(screen.getByRole("button", { name: "BUTTON$EDIT" }));
+
+    expect(getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID)).toMatchObject(
+      draft,
+    );
+    expect(useConversationStore.getState().messageToSend).toMatchObject({
+      text: "Add docs reviews",
+      target: "home",
+    });
+    expect(navigate).toHaveBeenCalledWith("/automations/setup");
   });
 
   it("does not reveal a pending prompt or redirect after switching organizations", () => {

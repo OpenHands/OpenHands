@@ -22,6 +22,7 @@ import { useConversationStore } from "#/stores/conversation-store";
 import { AUTOMATION_SETUP_SHOW_AGENT_EVENT } from "#/components/features/automations/setup/automation-setup-agent-request";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { consumeAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
+import { getAutomationFormSession } from "#/api/automation-form-session";
 import type { AutomationSetupDraft } from "#/api/automation-setup-types";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import {
@@ -136,9 +137,14 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
   );
   const isAutomationSetupMode =
     isAutomationSetupModeHandoff || hasTaggedAutomationSetupMode;
-  const automationSetupDraft = isAutomationSetupMode
-    ? BLANK_AUTOMATION_SETUP_DRAFT
-    : null;
+  const automationSetupDraft = useMemo(() => {
+    if (!isAutomationSetupMode) return null;
+    // Preserve the handoff's unsaved form and edit metadata on first mount.
+    return (
+      (conversationId ? getAutomationFormSession(conversationId) : null) ??
+      BLANK_AUTOMATION_SETUP_DRAFT
+    );
+  }, [conversationId, isAutomationSetupMode]);
   const showMobileAutomationForm =
     isMobile && isAutomationSetupMode && mobileAutomationView === "form";
 
@@ -193,7 +199,7 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
         <header
           data-testid="automation-setup-topbar"
           className={cn(
-            "flex shrink-0 border-b border-[var(--oh-border)] bg-canvas-base",
+            "flex shrink-0 border-b border-border bg-canvas-base",
             isMobile
               ? "flex-col"
               : "h-10 min-h-10 items-center justify-between gap-2 px-3",
@@ -219,7 +225,7 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
               <div
                 role="group"
                 aria-label={`${t(I18nKey.AUTOMATION_SETUP$VIEW_FORM)} / ${t(I18nKey.AUTOMATION_SETUP$VIEW_CONVERSATION)}`}
-                className="flex shrink-0 overflow-hidden rounded-lg border border-[var(--oh-border)]"
+                className="flex shrink-0 overflow-hidden rounded-lg border border-border"
               >
                 {MOBILE_AUTOMATION_VIEW_OPTIONS.map(
                   ({ view, labelKey, Icon }) => {
@@ -237,7 +243,7 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
                           "inline-flex size-7 items-center justify-center",
                           mobileAutomationView === view
                             ? "bg-tertiary text-content"
-                            : "text-[var(--oh-muted)]",
+                            : "text-muted",
                         )}
                       >
                         <Icon className="size-4" aria-hidden />
@@ -314,7 +320,7 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
                     isAutomationAgentHidden &&
                     "pointer-events-none opacity-0",
                   !isSecondaryDrawerOpen &&
-                    "transition-[width] duration-300 ease-in-out",
+                    "transition-panel-width duration-300 ease-in-out",
                 ),
           )}
           // panel width computed at runtime by resize hook; transition toggled by drag state

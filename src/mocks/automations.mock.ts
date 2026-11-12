@@ -4,7 +4,7 @@ import type { AutomationsResponse } from "#/types/automation";
  * Mock automations data matching the AutomationResponse schema from the backend.
  *
  * Backend schema fields: id, user_id, org_id, name, trigger (JSONB),
- * tarball_path, setup_script_path, entrypoint, timeout, enabled,
+ * tarball_path, setup_script_path, entrypoint, timeout, keep_alive, enabled,
  * last_triggered_at, created_at, updated_at.
  *
  * The frontend Automation type only uses a subset of these fields.
@@ -30,6 +30,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
       repository: "acme/frontend-app",
       model: "triage-fast",
       timeout: 600,
+      keep_alive: false,
       created_at: daysAgo(90),
       updated_at: now,
       prompt:
@@ -143,6 +144,7 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
       repository: "acme/frontend-app",
       model: "review-fast",
       timeout: 1800,
+      keep_alive: true,
       created_at: daysAgo(15),
       updated_at: now,
       prompt:

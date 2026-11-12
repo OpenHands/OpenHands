@@ -6,6 +6,8 @@ shown again, and every new conversation receives them as environment variables.
 
 Source: `src/routes/secrets-settings.tsx`, `src/components/features/settings/secrets-settings/`, `src/api/secrets-service.ts`, `src/components/features/conversation/secret-request-card.tsx`, `src/services/secret-request.ts`, `src/stores/secret-request-store.ts`, `src/constants/secret-request.ts`, `src/api/request-secret-client-tool.ts`.
 
+Server: F18.
+
 ## Sub-features
 
 - `F14.list`: the Secrets page lists each secret's name and description with Edit and Delete actions; the launcher-seeded `OPENHANDS_AUTOMATION_API_KEY` is always present.
