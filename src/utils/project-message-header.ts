@@ -2,7 +2,7 @@
  * Messages one conversation sends another in a project open with a bracketed
  * header line written by the Agent Server, such as
  * `[Update from [Title](conversation:<hex>), a conversation in your project, …]`.
- * The header is for the agent; the person sees a compact line instead.
+ * The header is for the agent; the user sees a compact line instead.
  */
 export type ProjectHeaderKind =
   "sent_by" | "update_from" | "reply_in" | "person_in";
@@ -29,7 +29,7 @@ export interface ProjectMessageHeader {
 
 /**
  * The header of a message another conversation sent (`sender` is
- * `conversation:<hex>`), or null for anything else, including the person's
+ * `conversation:<hex>`), or null for anything else, including the user's
  * own messages that merely start with a bracket.
  */
 export function parseProjectMessageHeader(

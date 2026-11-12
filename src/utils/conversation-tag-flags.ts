@@ -64,7 +64,7 @@ export function conversationTagFlagPatch(
 }
 
 /**
- * Projects mark a finished thread with `resolved=<who>` (`user` when a person
+ * Projects mark a finished conversation with `resolved=<who>` (`user` when the user
  * resolved it, `auto` when the Agent Server resolved it from a passing
  * critic score). Reopening removes the key; the Agent Server also removes it
  * when a new user message arrives.

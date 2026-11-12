@@ -44,7 +44,7 @@ describe("parseProjectMessageHeader", () => {
     });
   });
 
-  it("leaves the person's own messages alone", () => {
+  it("leaves the user's own messages alone", () => {
     const text = `[Update from [X](conversation:${ID}), hi]\nbody`;
     expect(parseProjectMessageHeader(text, undefined)).toBeNull();
     expect(parseProjectMessageHeader(text, "user")).toBeNull();

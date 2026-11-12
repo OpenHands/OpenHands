@@ -694,7 +694,7 @@ export const SERVER_OWNED_PROJECT_TAG_KEYS: ReadonlySet<string> = new Set([
   "resolvenote",
 ]);
 
-/** The tags a person can edit: the displayed ones minus Projects state. */
+/** The tags a user can edit: the displayed ones minus Projects state. */
 export function getEditableConversationTags(
   tags: Record<string, string> | null | undefined,
   parentConversationId?: string | null,

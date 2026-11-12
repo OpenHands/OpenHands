@@ -23,7 +23,7 @@ export interface Project extends ProjectSummary {
   updated_at: string;
 }
 
-/** What a conversation needs from the person, most urgent first. */
+/** What a conversation needs from the user, most urgent first. */
 export const PROJECT_ATTENTION_ORDER = [
   "needs_you",
   "needs_input",

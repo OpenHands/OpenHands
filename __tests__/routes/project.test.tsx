@@ -144,7 +144,7 @@ describe("ProjectPage", () => {
     expect(
       within(screen.getByTestId("project-group-resolved")).getByText("Locales"),
     ).toBeInTheDocument();
-    // Not running, not waiting on the person, not resolved: Idle, not "Done".
+    // Not running, not waiting on the user, not resolved: Idle, not "Done".
     const idle = screen.getByTestId("project-group-idle");
     expect(within(idle).getByText("Docs")).toBeInTheDocument();
     expect(idle).toHaveTextContent(I18nKey.PROJECTS$GROUP_IDLE);

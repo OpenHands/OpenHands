@@ -59,7 +59,7 @@ export function useProject(projectId: string | undefined) {
 
 /**
  * The project's board: its coordinator and its other conversations, grouped
- * by what they need from the person. Polled, since workers change state on
+ * by what they need from the user. Polled, since workers change state on
  * their own.
  */
 export function useProjectConversations(projectId: string | undefined) {
