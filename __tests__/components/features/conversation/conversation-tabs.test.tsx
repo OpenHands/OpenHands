@@ -171,7 +171,9 @@ describe("ConversationTabs localStorage behavior", () => {
       const parsed = JSON.parse(storedState!);
       expect(parsed).toHaveProperty("selectedTab");
       expect(parsed).toHaveProperty("unpinnedTabs");
-      expect(parsed.rightPanelShown).toBe(true);
+      // #19280: the drawer open/closed state is session-only (Zustand) — the
+      // dead rightPanelShown mirror must no longer be persisted.
+      expect("rightPanelShown" in parsed).toBe(false);
     });
   });
 
@@ -203,7 +205,8 @@ describe("ConversationTabs localStorage behavior", () => {
         localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
       );
       expect(storedState.selectedTab).toBe("terminal");
-      expect(storedState.rightPanelShown).toBe(true);
+      // #19280: panel visibility is session-only — no rightPanelShown write.
+      expect("rightPanelShown" in storedState).toBe(false);
     });
 
     it("should close panel when clicking the same active tab", async () => {
@@ -235,7 +238,9 @@ describe("ConversationTabs localStorage behavior", () => {
       const storedState = JSON.parse(
         localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
       );
-      expect(storedState.rightPanelShown).toBe(false);
+      // #19280: closing the panel no longer mirrors into the blob — the
+      // seeded legacy rightPanelShown value stays untouched as stale data.
+      expect(storedState.rightPanelShown).toBe(true);
     });
 
     it("should switch to different tab when clicking another tab while panel is open", async () => {

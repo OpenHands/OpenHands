@@ -26,13 +26,12 @@ export function useSelectConversationTab() {
     setCommitsAutoExpandSection,
   } = useConversationStore();
 
-  const { setSelectedTab: setPersistedSelectedTab, setRightPanelShown } =
+  const { setSelectedTab: setPersistedSelectedTab } =
     useConversationLocalStorageState(conversationId ?? "");
 
   const setPanelOpen = (open: boolean) => {
     setHasRightPanelToggled(open);
     setIsRightPanelShown(open);
-    setRightPanelShown?.(open);
   };
 
   const onTabChange = (value: ConversationTab | null) => {
