@@ -222,6 +222,7 @@ export function createInterfaceManifestWithSubPages(): InterfaceManifest {
               { value: "all", label: "Any maker" },
               { value: "me", label: "My widgets" },
               { value: "others", label: "Teammates' widgets" },
+              { value: "service", label: "Service widgets" },
             ],
           },
         ],

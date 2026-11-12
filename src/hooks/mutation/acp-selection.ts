@@ -1,7 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import AgentProfilesService, {
   type AgentProfileListResponse,
-  type AgentProfileSaveInput,
 } from "#/api/agent-profiles-service/agent-profiles-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { mergeAgentProfileSaveInput } from "#/components/features/settings/agent-profiles/merge-agent-profile-save-input";
@@ -67,8 +66,7 @@ export async function persistHomeAcpSelection(
       mergeAgentProfileSaveInput(detail.profile, {
         agent_kind: "acp",
         ...selection,
-        // The pinned client's profile type predates ``acp_effort``.
-      } as AgentProfileSaveInput),
+      }),
     );
     return;
   }

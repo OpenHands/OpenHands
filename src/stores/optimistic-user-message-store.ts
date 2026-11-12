@@ -42,6 +42,8 @@ export interface PendingUserMessage {
   imageUrls: string[];
   fileUrls: string[];
   timestamp: string;
+  /** Composer edit submitted by this attempt; absent for non-composer sends. */
+  draftRevision?: string | null;
   afterTimestamp?: number;
   errorMessage?: string;
 }
@@ -63,6 +65,7 @@ export interface EnqueuePendingMessagePayload {
   imageUrls?: string[];
   fileUrls?: string[];
   timestamp?: string;
+  draftRevision?: string | null;
 }
 
 interface OptimisticUserMessageActions {
@@ -168,6 +171,7 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
         imageUrls: payload.imageUrls ?? [],
         fileUrls: payload.fileUrls ?? [],
         timestamp: payload.timestamp ?? new Date().toISOString(),
+        draftRevision: payload.draftRevision,
         afterTimestamp: latestServerTimestamp(payload.conversationId),
       };
       set((state) => ({

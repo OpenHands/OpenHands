@@ -204,6 +204,8 @@ export interface ACPProviderSecretField {
    * a ``secret`` field satisfies it — a base URL or GCP scalar alone can't
    * authenticate anything. */
   secret?: boolean;
+  /** Marks a saved credential that authenticates a subscription agent. */
+  subscription?: boolean;
   /** Render as a multi-line textarea rather than a single-line input. Set for
    * file-content credentials the user pastes verbatim (Codex ``auth.json``,
    * Gemini Vertex service-account / ADC JSON) — the ones the SDK materialises
@@ -239,8 +241,9 @@ const ACP_RESERVED_CREDENTIALS: Record<string, ACPProviderSecretField[]> = {
     {
       name: "CODEX_AUTH_JSON",
       secret: true,
+      subscription: true,
       multiline: true,
-      hint_key: I18nKey.ONBOARDING$ACP_SECRET_FILE_BLOB_HINT,
+      hint_key: I18nKey.ONBOARDING$ACP_SECRET_CODEX_AUTH_JSON_HINT,
       hint_values: { file: "~/.codex/auth.json" },
     },
   ],
@@ -248,6 +251,7 @@ const ACP_RESERVED_CREDENTIALS: Record<string, ACPProviderSecretField[]> = {
     {
       name: "CLAUDE_CODE_OAUTH_TOKEN",
       secret: true,
+      subscription: true,
       hint_key: I18nKey.ONBOARDING$ACP_SECRET_OAUTH_TOKEN_HINT,
     },
   ],
@@ -293,6 +297,17 @@ const ACP_RESERVED_CREDENTIALS: Record<string, ACPProviderSecretField[]> = {
     },
   ],
 };
+
+const SUBSCRIPTION_CREDENTIAL_NAMES = new Set(
+  Object.values(ACP_RESERVED_CREDENTIALS)
+    .flat()
+    .filter((field) => field.subscription)
+    .map((field) => field.name),
+);
+
+export function isSubscriptionCredential(name: string): boolean {
+  return SUBSCRIPTION_CREDENTIAL_NAMES.has(name);
+}
 
 /**
  * Credential pairs that break each other at runtime, keyed by provider —
@@ -535,13 +550,10 @@ export function labelForAcpEffort(
   );
 }
 
-/**
- * ``acp_effort`` on a stored ACP profile. The pinned client's profile type
- * predates the field, which newer agent-servers return.
- */
-export function acpEffortOf(profile: object | null | undefined): string | null {
-  const effort = (profile as { acp_effort?: unknown } | null | undefined)
-    ?.acp_effort;
+export function acpEffortOf(
+  profile: { acp_effort?: unknown } | null | undefined,
+): string | null {
+  const effort = profile?.acp_effort;
   return typeof effort === "string" && effort ? effort : null;
 }
 

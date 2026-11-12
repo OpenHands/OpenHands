@@ -52,7 +52,17 @@ export type ChangeRunAsRequest =
 /** What kind of identity an automation runs as. */
 export type AutomationRunAsKind = "user" | "service";
 
+export interface AutomationPluginSpec {
+  plugin: { source: string; ref?: string; repo_path?: string };
+  config: Record<string, unknown>;
+}
+
+export type AutomationUpdate = Partial<Automation> & {
+  config?: Record<string, unknown>;
+};
+
 export interface Automation {
+  plugin_spec?: AutomationPluginSpec | null;
   id: string;
   name: string;
   trigger: AutomationTrigger;
@@ -223,10 +233,11 @@ export interface AutomationsResponse {
 }
 
 /**
- * Mirrors the list endpoint's `created_by` query param: the caller's
- * automations (`me`) or the rest of the org's (`others`).
+ * Mirrors the list endpoint's `run_as` query param: automations that run as
+ * the caller (`me`), as another person (`others`), or as a service account
+ * (`service`).
  */
-export type AutomationCreatedByFilter = "me" | "others";
+export type AutomationRunAsFilter = "me" | "others" | "service";
 
 /** Mirrors `RunStatus` in the automation service's OpenAPI schema. */
 export enum AutomationRunStatus {

@@ -106,7 +106,7 @@ export default function CanvasExtensionsScreen() {
                 href={CANVAS_EXTENSIONS_DOCS_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                className="inline-flex items-center gap-1 text-sm text-link hover:underline"
               >
                 {t(I18nKey.SETTINGS$APPS_BUILD_LINK)}
                 <ExternalLink className="size-3.5" aria-hidden />
@@ -126,7 +126,7 @@ export default function CanvasExtensionsScreen() {
             </BrandButton>
           </div>
 
-          <div className="rounded-xl border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-feedback-warning">
+          <div className="rounded-xl border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground dark:border-warning/30 dark:bg-warning/5 dark:text-feedback-warning">
             {t(I18nKey.SETTINGS$APPS_TRUST_NOTICE)}
           </div>
 

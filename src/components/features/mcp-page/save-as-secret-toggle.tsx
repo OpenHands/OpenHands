@@ -59,7 +59,7 @@ export function SaveAsSecretToggle({
           <button
             type="button"
             aria-label={t(I18nKey.MCP$SAVE_AS_SECRET_TOOLTIP)}
-            className="flex items-center justify-center size-3.75 shrink-0 rounded-full border border-muted text-contrast text-[9px] font-bold cursor-help"
+            className="flex items-center justify-center size-3.75 shrink-0 rounded-full border border-muted text-contrast text-4xs font-bold cursor-help"
             onClick={(e) => e.preventDefault()}
           >
             ?

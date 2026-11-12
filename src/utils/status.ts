@@ -1,5 +1,8 @@
 import { I18nKey } from "#/i18n/declaration";
-import { AppConversationStartTaskStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
+import type {
+  AppConversationStartTaskStatus,
+  SandboxStatus,
+} from "#/api/conversation-service/agent-server-conversation-service.types";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { WebSocketConnectionState } from "#/contexts/conversation-websocket-context";
 
@@ -14,6 +17,18 @@ export function isExecutionActive(
   status: ExecutionStatus | null | undefined,
 ): boolean {
   return !!status && ACTIVE_EXECUTION_STATUSES.has(status);
+}
+
+/**
+ * Whether the conversation's runtime can be stopped. A cloud sandbox keeps
+ * running after the agent is interrupted, so it stays stoppable while RUNNING.
+ * Local conversations have no sandbox status and follow the agent's state.
+ */
+export function canStopRuntime(
+  executionStatus: ExecutionStatus | null | undefined,
+  sandboxStatus?: SandboxStatus | null,
+): boolean {
+  return isExecutionActive(executionStatus) || sandboxStatus === "RUNNING";
 }
 
 export function isExecutionPaused(

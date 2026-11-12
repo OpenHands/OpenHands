@@ -47,7 +47,6 @@ import {
   sharedDefaultProfileFields,
 } from "#/hooks/mutation/sync-agent-profiles";
 import type { Settings } from "#/types/settings";
-import { acpEffortOf } from "#/constants/acp-providers";
 
 type ViewMode = "list" | "create" | "edit";
 
@@ -69,7 +68,7 @@ function toAgentSettingsOverride(
       acp_command: profile.acp_command ? parseCommand(profile.acp_command) : [],
       acp_args: profile.acp_args ?? [],
       acp_model: profile.acp_model ?? "",
-      acp_effort: acpEffortOf(profile) ?? "",
+      acp_effort: profile.acp_effort ?? "",
     };
   }
   const stored = profile as typeof profile & {
