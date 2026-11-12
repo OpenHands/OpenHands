@@ -36410,7 +36410,8 @@
     "es": "Configurar un agente con suscripción",
     "ca": "Configura un agent amb subscripció",
     "tr": "Abonelik aracısını yapılandır",
-    "uk": "Налаштувати агента з підпискою"
+    "uk": "Налаштувати агента з підпискою",
+    "id": "Konfigurasikan agen langganan"
   },
   "SIDEBAR$ONBOARDING_CHECKLIST_CONFIGURE_SUBSCRIPTION_AGENT_DESC": {
     "en": "Set up an agent that uses subscription sign-in, such as Codex with your ChatGPT subscription.",
@@ -36427,7 +36428,8 @@
     "es": "Configura un agente que use el inicio de sesión con suscripción, como Codex con tu suscripción de ChatGPT.",
     "ca": "Configura un agent que utilitzi l'inici de sessió amb subscripció, com ara Codex amb la teva subscripció de ChatGPT.",
     "tr": "ChatGPT aboneliğinizle Codex gibi abonelik oturumu kullanan bir aracı ayarlayın.",
-    "uk": "Налаштуйте агента, який використовує вхід за підпискою, наприклад Codex із вашою підпискою ChatGPT."
+    "uk": "Налаштуйте агента, який використовує вхід за підпискою, наприклад Codex із вашою підпискою ChatGPT.",
+    "id": "Siapkan agen yang menggunakan proses masuk dengan langganan, seperti Codex dengan langganan ChatGPT Anda."
   },
   "SIDEBAR$ONBOARDING_CHECKLIST_ACTION_CONFIGURE_SUBSCRIPTION_AGENT": {
     "en": "Configure agent",
@@ -36444,7 +36446,8 @@
     "es": "Configurar agente",
     "ca": "Configura l'agent",
     "tr": "Aracıyı yapılandır",
-    "uk": "Налаштувати агента"
+    "uk": "Налаштувати агента",
+    "id": "Konfigurasikan agen"
   },
   "ONBOARDING$ACP_SECRET_CODEX_AUTH_JSON_HINT": {
     "en": "Required when signing in to Codex with a ChatGPT subscription. Paste the full contents of {{file}}. Leave this blank when using OPENAI_API_KEY. Run `cat {{file}}` to get it. Saved as a secret and written to disk for the agent at runtime.",
@@ -36461,7 +36464,8 @@
     "es": "Obligatorio al iniciar sesión en Codex con una suscripción de ChatGPT. Pega todo el contenido de {{file}}. Déjalo vacío cuando uses OPENAI_API_KEY. Ejecuta `cat {{file}}` para obtenerlo. Se guarda como secreto y se escribe en disco para el agente en tiempo de ejecución.",
     "ca": "Obligatori en iniciar sessió a Codex amb una subscripció de ChatGPT. Enganxa tot el contingut de {{file}}. Deixa-ho en blanc quan utilitzis OPENAI_API_KEY. Executa `cat {{file}}` per obtenir-lo. Es desa com a secret i s'escriu al disc per a l'agent en temps d'execució.",
     "tr": "ChatGPT aboneliğiyle Codex'te oturum açarken gereklidir. {{file}} dosyasının tüm içeriğini yapıştırın. OPENAI_API_KEY kullanırken bu alanı boş bırakın. Almak için `cat {{file}}` çalıştırın. Bir secret olarak kaydedilir ve çalışma zamanında aracı için diske yazılır.",
-    "uk": "Обов’язково для входу в Codex за допомогою підписки ChatGPT. Вставте повний вміст {{file}}. Залиште поле порожнім, якщо використовуєте OPENAI_API_KEY. Виконайте `cat {{file}}`, щоб отримати його. Зберігається як секрет і записується на диск для агента під час виконання."
+    "uk": "Обов’язково для входу в Codex за допомогою підписки ChatGPT. Вставте повний вміст {{file}}. Залиште поле порожнім, якщо використовуєте OPENAI_API_KEY. Виконайте `cat {{file}}`, щоб отримати його. Зберігається як секрет і записується на диск для агента під час виконання.",
+    "id": "Diperlukan saat masuk ke Codex dengan langganan ChatGPT. Tempelkan seluruh isi {{file}}. Biarkan kosong saat menggunakan OPENAI_API_KEY. Jalankan `cat {{file}}` untuk mendapatkannya. Disimpan sebagai rahasia dan ditulis ke disk untuk agen saat runtime."
   },
   "SETTINGS$PROVIDER_CONNECTION_UPDATED": {
     "ar": "تم تحديث الاتصال \"{{name}}\"",
