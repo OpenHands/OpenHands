@@ -80,7 +80,7 @@ describe("MessageReactions", () => {
     vi.restoreAllMocks();
   });
 
-  it("shows the agent's reaction on the person's message", async () => {
+  it("shows the agent's reaction on the user's message", async () => {
     vi.spyOn(
       experimentalFeaturesService,
       "listExperimentalFeatures",
@@ -92,7 +92,7 @@ describe("MessageReactions", () => {
     const chip = await screen.findByTestId("reaction-eyes");
     expect(chip).toHaveAttribute("data-sources", "agent");
     expect(chip).toHaveTextContent("👀");
-    // The person reacts to the agent's messages, not to their own.
+    // The user reacts to the agent's messages, not to their own.
     expect(screen.queryByTestId("add-reaction")).not.toBeInTheDocument();
   });
 
@@ -200,7 +200,7 @@ describe("MessageReactions", () => {
     expect(screen.queryByTestId("reaction-heart")).not.toBeInTheDocument();
   });
 
-  it("lets the person react to the agent's message while the feature is on", async () => {
+  it("lets the user react to the agent's message while the feature is on", async () => {
     vi.spyOn(
       experimentalFeaturesService,
       "listExperimentalFeatures",
@@ -236,7 +236,7 @@ describe("MessageReactions", () => {
     );
   });
 
-  it("takes the person's own reaction off when its chip is clicked", async () => {
+  it("takes the user's own reaction off when its chip is clicked", async () => {
     vi.spyOn(
       experimentalFeaturesService,
       "listExperimentalFeatures",

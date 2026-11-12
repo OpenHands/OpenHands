@@ -14,8 +14,8 @@ import { getAgentServerClientOptions } from "../agent-server-client-options";
  * none.
  *
  * Every call names the backend it talks to. Each backend keeps its own
- * switches, and the person can change the active backend while a request is
- * queued or in flight, so the caller fixes the backend when the person acts
+ * switches, and the user can change the active backend while a request is
+ * queued or in flight, so the caller fixes the backend when the user acts
  * (see useExperimentalFeatures and useUpdateExperimentalFeature).
  */
 const settingsClient = (backend: Backend) =>
@@ -42,7 +42,7 @@ export const experimentalFeaturesService = {
   }): Promise<ExperimentalFeature> =>
     settingsClient(backend).updateExperimentalFeature(key, enabled),
 
-  /** Put the person's reaction on a message, or take it off. */
+  /** Put the user's reaction on a message, or take it off. */
   react: async ({
     conversationId,
     emoji,

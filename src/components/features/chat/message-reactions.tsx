@@ -111,7 +111,7 @@ export interface MessageReactionState {
 /**
  * The reactions row state for one message. The message passes the row as
  * bubble children only when `visible`, so messages without one keep their
- * layout. The person can react only to the main agent's messages: a planning
+ * layout. The user can react only to the main agent's messages: a planning
  * agent's messages live in a sub-conversation this route does not address.
  */
 export function useMessageReactions(
@@ -146,7 +146,7 @@ export function useMessageReactions(
 
 /**
  * Emoji reactions under a chat message: the agent's (from its `react` tool)
- * and the person's. On the agent's messages the person can add or take off
+ * and the user's. On the agent's messages the user can add or take off
  * their own reaction while the "Conversation reactions" feature is on.
  */
 export function MessageReactions({
@@ -169,7 +169,7 @@ export function MessageReactions({
     }
   }, [pickerOpen]);
 
-  // The person's clicks show at once. The server's events replace them when
+  // The user's clicks show at once. The server's events replace them when
   // they arrive, which can be a while if a tool call is waiting for approval.
   const [optimistic, setOptimistic] = React.useState<
     Partial<Record<ReactionEmoji, boolean>>

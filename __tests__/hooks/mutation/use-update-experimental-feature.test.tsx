@@ -71,7 +71,7 @@ describe("useUpdateExperimentalFeature", () => {
     act(() => {
       result.current.mutate({ key: "conversation_reactions", enabled: true });
     });
-    // The person switches to backend B before A answers.
+    // The user switches to backend B before A answers.
     active.backend = backends.b;
     rerender();
     await act(async () => {

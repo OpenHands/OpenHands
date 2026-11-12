@@ -10,7 +10,7 @@ import { experimentalFeaturesQueryKey } from "#/hooks/query/use-experimental-fea
 import { useActiveBackend } from "#/contexts/active-backend-context";
 
 interface FeatureSwitch {
-  /** Fixed when the person flips the switch, so a queued or slow request
+  /** Fixed when the user flips the switch, so a queued or slow request
    * still goes to, and is cached for, the backend they were looking at. */
   backend: Backend;
   key: string;

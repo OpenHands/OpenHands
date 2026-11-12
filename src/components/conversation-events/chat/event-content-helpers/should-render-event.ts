@@ -90,7 +90,7 @@ const isClientToolResult = (event: MessageEvent): boolean => {
  * A react / unreact call that succeeded. The reaction shows as a chip on its
  * message (MessageReactions), so groupEvents drops the tool card but keeps the
  * agent's narration on the call (its thought and reasoning). While pending,
- * the call itself shows, so the person sees what they are asked to confirm;
+ * the call itself shows, so the user sees what they are asked to confirm;
  * a failed reaction shows like any failed tool.
  */
 export const isReactionResult = (event: OpenHandsEvent): boolean =>
@@ -127,7 +127,7 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
     }
 
     // A react / unreact call stays visible while it has no observation (the
-    // UI list swaps an action for its observation), so the person sees the
+    // UI list swaps an action for its observation), so the user sees the
     // emoji and message they are asked to confirm (see isReactionResult).
 
     // The model switch tool reuses the same inline model message UI as
