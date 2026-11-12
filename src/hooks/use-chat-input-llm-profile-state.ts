@@ -8,6 +8,7 @@ import {
   updateAgentProfile,
 } from "#/hooks/mutation/sync-agent-profiles";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
+import { useAgentProfileAvailability } from "#/hooks/use-agent-profile-availability";
 import type { ProfileInfo } from "@openhands/typescript-client";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -95,6 +96,7 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
   const { data: agentProfiles } = useAgentProfiles({
     enabled: !conversationId,
   });
+  const agentProfilesAvailable = useAgentProfileAvailability();
   const canManageOrgProfiles = useCanManageOrgProfiles();
   const { switchAndLog } = useSwitchLlmProfileAndLog();
   // Read the switch's pending state globally by mutation key: the pill button
@@ -214,11 +216,15 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
     isSwitching,
   ]);
 
-  const activeAgentProfile = agentProfiles?.profiles?.find(
-    (profile) =>
-      profile.id != null &&
-      profile.id === agentProfiles.active_agent_profile_id,
-  );
+  // An instance with Agent Profiles off launches without the activated
+  // profile, so that profile neither names nor takes the home pick.
+  const activeAgentProfile = agentProfilesAvailable
+    ? agentProfiles?.profiles?.find(
+        (profile) =>
+          profile.id != null &&
+          profile.id === agentProfiles.active_agent_profile_id,
+      )
+    : undefined;
   const agentLlmProfile =
     activeAgentProfile?.agent_kind === "openhands" &&
     profiles.some((p) => p.name === activeAgentProfile.llm_profile_ref)
