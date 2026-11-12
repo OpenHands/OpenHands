@@ -78,8 +78,10 @@ export function ConversationName() {
   };
 
   const handleBlur = () => {
-    if (inputRef.current?.value && conversationId) {
-      const trimmed = inputRef.current.value.trim();
+    // A whitespace-only title trims to "" and takes the same reset path as an
+    // empty field, matching the sidebar rename behavior (#17061).
+    const trimmed = inputRef.current?.value.trim();
+    if (trimmed && conversationId) {
       if (trimmed !== displayTitle) {
         updateConversation(
           { conversationId, newTitle: trimmed },
