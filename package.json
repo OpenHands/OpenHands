@@ -48,7 +48,7 @@
     "mdast-util-from-markdown": "2.1.0",
     "mermaid": "12.2.0",
     "monaco-editor": "0.57.0",
-    "posthog-js": "1.444.0",
+    "posthog-js": "1.445.1",
     "react": "19.3.1",
     "react-aria": "3.53.1",
     "react-aria-components": "1.22.1",
