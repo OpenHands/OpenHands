@@ -10,19 +10,32 @@ export interface SecretRequest {
 
 /** In-progress input for a request's card, held across a card remount. */
 export interface SecretRequestDraft {
+  name: string;
+  description: string;
   value: string;
   showValue: boolean;
 }
+
+/**
+ * Mutation key scoping an in-flight secret save to one request's card. The card
+ * reads its pending state with `useIsMutating`, which lives on the mutation
+ * cache entry and survives the card unmounting across the virtualization
+ * threshold; a per-form `isPending` would read idle on the remount.
+ */
+export const secretRequestMutationKey = (toolCallId: string): string[] => [
+  "secret-request",
+  toolCallId,
+];
 
 interface SecretRequestState {
   /** Pending requests, oldest first; each is shown as a card in the chat. */
   requests: SecretRequest[];
   /**
-   * Typed value + show toggle per tool call. A card can be unmounted and
-   * remounted when the chat crosses the virtualization threshold (its row
-   * moves to the trailing list), which would otherwise lose what the user is
-   * typing while the agent keeps working. In-memory only: never persisted, so
-   * a typed secret value is not written to `localStorage`.
+   * Typed fields per tool call (name, description, value, show toggle). A card
+   * can be unmounted and remounted when the chat crosses the virtualization
+   * threshold (its row moves to the trailing list), which would otherwise lose
+   * what the user is typing while the agent keeps working. In-memory only:
+   * never persisted, so a typed secret value is not written to `localStorage`.
    */
   drafts: Record<string, SecretRequestDraft>;
 }

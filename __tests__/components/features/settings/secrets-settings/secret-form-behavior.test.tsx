@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CustomSecretWithoutValue } from "#/api/secrets-service.types";
 import { SecretForm } from "#/components/features/settings/secrets-settings/secret-form";
 import { I18nKey } from "#/i18n/declaration";
+import type { SecretRequestDraft } from "#/stores/secret-request-store";
 
 const mocks = vi.hoisted(() => ({
   secrets: undefined as CustomSecretWithoutValue[] | undefined,
@@ -89,7 +90,9 @@ interface RenderFormOptions {
   selectedSecret?: string | null;
   onCancel?: () => void;
   onSaved?: (secret: { name: string; description?: string }) => void;
-  onDraftChange?: (draft: { value: string; showValue: boolean }) => void;
+  onDraftChange?: (draft: SecretRequestDraft) => void;
+  initialDraft?: SecretRequestDraft;
+  mutationKey?: string[];
   keepOpenOnError?: boolean;
   strict?: boolean;
 }
@@ -100,6 +103,8 @@ function renderForm({
   onCancel = vi.fn(),
   onSaved = vi.fn(),
   onDraftChange,
+  initialDraft,
+  mutationKey,
   keepOpenOnError,
   strict = false,
 }: RenderFormOptions = {}) {
@@ -115,6 +120,8 @@ function renderForm({
         onCancel={onCancel}
         onSaved={onSaved}
         onDraftChange={onDraftChange}
+        initialDraft={initialDraft}
+        mutationKey={mutationKey}
         keepOpenOnError={keepOpenOnError}
       />
     </QueryClientProvider>
@@ -613,6 +620,8 @@ describe("Secret form behavior", () => {
 
     expect(onDraftChange).toHaveBeenCalledTimes(1);
     expect(onDraftChange).toHaveBeenLastCalledWith({
+      name: "",
+      description: "",
       value: "",
       showValue: true,
     });
@@ -636,6 +645,8 @@ describe("Secret form behavior", () => {
     });
 
     expect(onDraftChange).toHaveBeenLastCalledWith({
+      name: "",
+      description: "",
       value: "ghp_live",
       showValue: true,
     });
@@ -689,5 +700,25 @@ describe("Secret form behavior", () => {
 
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["secrets-search"] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["secrets"] });
+  });
+
+  it("restores a renamed secret and its description from the draft on remount", () => {
+    // The secret-request card remounts across the virtualization threshold; the
+    // draft it holds must carry the name and description too, or a rename and a
+    // typed description revert to `defaultName` and empty on the remount.
+    renderForm({
+      initialDraft: {
+        name: "GH_TOKEN",
+        description: "for the factory branch",
+        value: "ghp_live",
+        showValue: false,
+      },
+    });
+
+    expect(screen.getByTestId("name-input")).toHaveValue("GH_TOKEN");
+    expect(screen.getByTestId("description-input")).toHaveValue(
+      "for the factory branch",
+    );
+    expect(screen.getByTestId("value-input")).toHaveValue("ghp_live");
   });
 });

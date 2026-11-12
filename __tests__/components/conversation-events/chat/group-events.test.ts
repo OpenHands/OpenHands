@@ -14,6 +14,7 @@ import {
   UserRejectObservation,
 } from "#/types/agent-server/core";
 import { TextContent } from "#/types/agent-server/core/base/common";
+import { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
 import {
   ExecuteBashAction,
   FileEditorAction,
@@ -786,6 +787,38 @@ describe("renderedItemKey stability", () => {
     const [olderGroup] = groupEvents(withOlder, 1, withOlder, 1);
     expect(renderedItemKey(pageGroup)).toBe("group-a1");
     expect(renderedItemKey(olderGroup)).toBe("group-a0");
+  });
+
+  it("keeps a group's key when its first ACP call is replaced by its terminal event", () => {
+    // An ACP call is persisted as two events sharing a `tool_call_id` but with
+    // distinct `id`s: a started one and a terminal one. `handleEventForUI`
+    // swaps the started event for the terminal one in place, so keying the
+    // group on `events[0].id` would rename (and remount) it the moment the call
+    // finishes, collapsing the group the user had opened. The key must follow
+    // the stable `tool_call_id`, matching `getStepKey`.
+    const started: ACPToolCallEvent = {
+      kind: "ACPToolCallEvent",
+      id: "acp-started",
+      timestamp: "2026-04-16T19:32:29.828069",
+      source: "agent",
+      tool_call_id: "toolu_ABC",
+      title: "gh pr diff 490",
+      tool_kind: "execute",
+      status: "in_progress",
+      raw_input: { command: "gh pr diff 490" },
+      raw_output: null,
+      content: null,
+      is_error: false,
+    };
+    const terminal: ACPToolCallEvent = {
+      ...started,
+      id: "acp-completed",
+      status: "completed",
+    };
+    const [before] = groupEvents([started], 1, [started]);
+    const [after] = groupEvents([terminal], 1, [started, terminal]);
+    expect(renderedItemKey(before)).toBe("group-call:toolu_ABC");
+    expect(renderedItemKey(after)).toBe(renderedItemKey(before));
   });
 });
 

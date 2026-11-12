@@ -9,8 +9,9 @@ import {
 import { Messages } from "#/components/conversation-events/chat/messages";
 import type { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
 
-const { recordEventMessage } = vi.hoisted(() => ({
+const { recordEventMessage, recordDisclosure } = vi.hoisted(() => ({
   recordEventMessage: vi.fn(),
+  recordDisclosure: vi.fn(),
 }));
 
 interface CapturedProps {
@@ -23,12 +24,26 @@ interface CapturedProps {
   planPreviewEventIds?: Set<string>;
 }
 
-vi.mock("#/components/conversation-events/chat/event-message", () => ({
-  EventMessage: (props: CapturedProps) => {
-    recordEventMessage(props);
-    return <div data-testid={`event-${props.event.id}`} />;
-  },
-}));
+vi.mock("#/components/conversation-events/chat/event-message", async () => {
+  const ReactModule = await import("react");
+  const { StepDisclosureContext } =
+    await import("#/components/conversation-events/chat/step-disclosure-context");
+  return {
+    EventMessage: (props: CapturedProps) => {
+      recordEventMessage(props);
+      // Report the context value this row actually reads. `useStepDisclosure`
+      // consumes `StepDisclosureContext`, so a row that sees a new value object
+      // would re-render even though its inputs are unchanged.
+      recordDisclosure({
+        id: String(props.event.id ?? ""),
+        value: ReactModule.useContext(StepDisclosureContext),
+      });
+      return ReactModule.createElement("div", {
+        "data-testid": `event-${props.event.id}`,
+      });
+    },
+  };
+});
 
 const latestPropsFor = (eventId: string): CapturedProps => {
   const props = recordEventMessage.mock.calls
@@ -83,6 +98,33 @@ describe("Messages stable EventMessage props", () => {
     expect(latestPropsFor("message-12").isLastMessage).toBe(true);
     expect(latestPropsFor("message-0").messages).toBeUndefined();
     expect(latestPropsFor("message-0").planPreviewEventIds).toBeUndefined();
+  });
+
+  it("keeps each row's disclosure context value stable across a tail append", () => {
+    // The virtualizer re-renders `Messages` on every range change. If each render
+    // built a new `StepDisclosureContext` value, every row reading it would
+    // re-render despite `React.memo`, so the value must keep its identity when
+    // the row's own inputs do not change.
+    const initial = Array.from({ length: 6 }, (_, index) =>
+      createUserMessageEvent(`message-${index}`),
+    );
+    const { rerender } = renderWithProviders(
+      <Messages messages={initial} allEvents={initial} />,
+    );
+
+    const firstValueFor = (eventId: string) =>
+      recordDisclosure.mock.calls
+        .map(([value]) => value as { id: string; value: unknown })
+        .find(({ id }) => id === eventId)?.value;
+
+    const valueBefore = firstValueFor("message-0");
+    expect(valueBefore).toBeDefined();
+
+    recordDisclosure.mockClear();
+    const appended = [...initial, createUserMessageEvent("message-6")];
+    rerender(<Messages messages={appended} allEvents={appended} />);
+
+    expect(firstValueFor("message-0")).toBe(valueBefore);
   });
 
   it("refreshes an observation when its corresponding action is backfilled", () => {

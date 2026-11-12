@@ -142,6 +142,47 @@ const ROW_GAP_PX = 8;
 const getLastEventId = (events: OpenHandsEvent[]) => events.at(-1)?.id;
 const getLastEvent = (events: OpenHandsEvent[]) => events.at(-1);
 
+/**
+ * Supplies one row's disclosure state without rebuilding the context value on
+ * every render of the list.
+ *
+ * `GenericEventMessage` reads `StepDisclosureContext`, so `React.memo` on
+ * `EventMessage` only skips a row when the value it reads keeps its identity.
+ * The virtualizer re-renders `Messages` on every range change (each scroll
+ * frame), so an inline value object would re-render every mounted row even
+ * though none of them changed. Memoizing the value on its inputs — the row's
+ * open flag, its `detailsOnly`, and the stable `setRowOpen` — keeps it stable
+ * across those renders. The provider is keyed by step key, so the memo is
+ * per row.
+ */
+const StepDisclosureProvider = React.memo(function StepDisclosureProvider({
+  stepKey,
+  open,
+  detailsOnly,
+  setRowOpen,
+  children,
+}: {
+  stepKey: string;
+  open: boolean | undefined;
+  detailsOnly: boolean;
+  setRowOpen: (key: string, open: boolean) => void;
+  children: React.ReactNode;
+}) {
+  const value = React.useMemo(
+    () => ({
+      open,
+      detailsOnly,
+      setOpen: (next: boolean) => setRowOpen(stepKey, next),
+    }),
+    [open, detailsOnly, setRowOpen, stepKey],
+  );
+  return (
+    <StepDisclosureContext.Provider value={value}>
+      {children}
+    </StepDisclosureContext.Provider>
+  );
+});
+
 export const Messages: React.FC<MessagesProps> = React.memo(
   ({
     messages,
@@ -367,13 +408,12 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     ) => {
       const stepKey = getStepKey(event);
       return (
-        <StepDisclosureContext.Provider
+        <StepDisclosureProvider
           key={stepKey}
-          value={{
-            open: openRows.get(stepKey),
-            detailsOnly,
-            setOpen: (open) => setRowOpen(stepKey, open),
-          }}
+          stepKey={stepKey}
+          open={openRows.get(stepKey)}
+          detailsOnly={detailsOnly}
+          setRowOpen={setRowOpen}
         >
           {/* Scope the event id for the card's own expansion controls, so
               several cards sharing one virtualized row (an event group, a
@@ -400,7 +440,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
               )}
             />
           </EventExpansionContext.Provider>
-        </StepDisclosureContext.Provider>
+        </StepDisclosureProvider>
       );
     };
 
@@ -618,37 +658,58 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         return plainRowMutationObserver.current;
       }
       plainRowMutationObserver.current = new MutationObserver((records) => {
+        const resize = getPlainRowObserver();
         for (const record of records) {
           measurePlainRowWrapper(record.target as Element);
+          // A box added beside an existing one — a `/model` card, a secret card
+          // — grows the row without resizing it, so the ResizeObserver never
+          // fires for the new box. Watch it here, or a later resize of it (the
+          // card expands) goes unmeasured until the row set changes.
+          for (const node of Array.from(record.removedNodes)) {
+            if (!(node instanceof Element)) continue;
+            if (!observedPlainRows.current.delete(node)) continue;
+            resize?.unobserve(node);
+          }
+          for (const node of Array.from(record.addedNodes)) {
+            if (!(node instanceof Element)) continue;
+            if (observedPlainRows.current.has(node)) continue;
+            resize?.observe(node);
+            observedPlainRows.current.add(node);
+          }
         }
       });
       return plainRowMutationObserver.current;
-    }, [measurePlainRowWrapper]);
+    }, [measurePlainRowWrapper, getPlainRowObserver]);
 
     // Point the child-list observer at exactly the wrappers currently in the
-    // list. `MutationObserver` cannot stop watching one node, so when the set
-    // changed we disconnect and re-observe the survivors; re-observing an
-    // already-watched node is harmless. This releases the wrappers that left
-    // (a collapsed history) instead of pinning their detached DOM until the
-    // list virtualizes or unmounts.
+    // list. `MutationObserver` cannot stop watching one node, so a wrapper that
+    // left (a collapsed history) forces a disconnect and re-observe of the
+    // survivors. Re-observing an already-watched node is harmless, so when the
+    // set only *grew* — every append adds one wrapper — observe just the new
+    // ones instead of tearing the whole set down; a disconnect also drops
+    // records already queued for that commit.
     const syncPlainRowMutationObserver = React.useCallback(
       (wrappers: Set<Element>) => {
         const observer = getPlainRowMutationObserver();
         if (!observer) return;
         const watched = observedPlainWrappers.current;
-        let changed = watched.size !== wrappers.size;
-        if (!changed) {
-          for (const wrapper of wrappers) {
-            if (!watched.has(wrapper)) {
-              changed = true;
-              break;
-            }
+        let left = false;
+        for (const wrapper of watched) {
+          if (!wrappers.has(wrapper)) {
+            left = true;
+            break;
           }
         }
-        if (!changed) return;
-        observer.disconnect();
-        for (const wrapper of wrappers) {
-          observer.observe(wrapper, { childList: true });
+        if (left) {
+          observer.disconnect();
+          for (const wrapper of wrappers) {
+            observer.observe(wrapper, { childList: true });
+          }
+        } else {
+          for (const wrapper of wrappers) {
+            if (watched.has(wrapper)) continue;
+            observer.observe(wrapper, { childList: true });
+          }
         }
         observedPlainWrappers.current = new Set(wrappers);
       },
@@ -710,6 +771,13 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         if (currentRows.has(row)) return;
         observer?.unobserve(row);
         observedPlainRows.current.delete(row);
+      });
+      // Drop heights for rows that are gone (a collapsed history, a switch to a
+      // shorter conversation); the shell only reads keys it has rows for, so
+      // stale entries would just accumulate for the life of the list.
+      const liveKeys = new Set(rowKeys);
+      plainItemHeights.current.forEach((_height, key) => {
+        if (!liveKeys.has(key)) plainItemHeights.current.delete(key);
       });
       return undefined;
     }, [

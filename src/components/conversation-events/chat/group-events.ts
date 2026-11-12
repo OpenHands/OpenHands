@@ -98,9 +98,11 @@ export type RenderedItem =
  * same key: `handleEventForUI` swaps a finished action for its observation, so
  * keying on `events[0].id` would rename (and remount) the live group the moment
  * its first observation lands, dropping the state the user had opened. The
- * paired action's id is used instead. A reasoning-only group is keyed by its
- * reasoning id, which does not shift when older events are prepended, rather
- * than by its position.
+ * paired action's id is used instead. An ACP tool call is swapped the same way
+ * but keeps a new `id` per event, so it is keyed by its stable `tool_call_id`
+ * (matching `getStepKey`). A reasoning-only group is keyed by its reasoning id,
+ * which does not shift when older events are prepended, rather than by its
+ * position.
  */
 export const getGroupKey = (
   item: Extract<RenderedItem, { kind: "group" }>,
@@ -113,7 +115,9 @@ export const getGroupKey = (
     first &&
     (isObservationEvent(first) || isUserRejectObservation(first)
       ? (first.action_id ?? first.id)
-      : first.id);
+      : isACPToolCallEvent(first)
+        ? `call:${first.tool_call_id}`
+        : first.id);
   return eventKey ?? `group-${item.startIndex}`;
 };
 

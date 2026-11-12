@@ -981,6 +981,55 @@ describe("Messages virtualization", () => {
     ).toBe(true);
   });
 
+  it("observes only the new wrapper on append instead of re-observing the list", () => {
+    // Every append adds one wrapper. Tearing the whole set down and re-observing
+    // it — the disconnect/re-observe the sync did before — is O(n) work per
+    // append and also drops records already queued for that commit. Appending
+    // must instead observe just the wrapper that arrived and leave the watcher
+    // connected.
+    const watchers: { targets: Set<Element>; disconnected: number }[] = [];
+    const Original = window.MutationObserver;
+    class Tracked extends Original {
+      readonly record = { targets: new Set<Element>(), disconnected: 0 };
+
+      constructor(callback: MutationCallback) {
+        super(callback);
+        watchers.push(this.record);
+        const originalObserve = this.observe.bind(this);
+        this.observe = (target: Node, options?: MutationObserverInit) => {
+          this.record.targets.add(target as Element);
+          originalObserve(target, options);
+        };
+        const originalDisconnect = this.disconnect.bind(this);
+        this.disconnect = () => {
+          this.record.disconnected += 1;
+          this.record.targets.clear();
+          originalDisconnect();
+        };
+      }
+    }
+    vi.stubGlobal("MutationObserver", Tracked);
+
+    const { rerender } = renderMessages(buildEvents(30));
+    const watcher = watchers.find((record) =>
+      record.targets.has(
+        document.querySelector('[data-row-key="single-message-0"]') as Element,
+      ),
+    );
+    expect(watcher).toBeDefined();
+    const disconnectedBefore = watcher!.disconnected;
+
+    rerender(<Harness events={buildEvents(31)} withScrollParent />);
+
+    // The watcher stayed connected, and the appended wrapper was observed.
+    expect(watcher!.disconnected).toBe(disconnectedBefore);
+    expect(
+      watcher!.targets.has(
+        document.querySelector('[data-row-key="single-message-30"]') as Element,
+      ),
+    ).toBe(true);
+  });
+
   it("disconnects its observers when the virtualized shell unmounts", () => {
     // TanStack Virtual creates its own ResizeObserver for the scroll element, so
     // track instances and identify the one that observed the shell node — that
