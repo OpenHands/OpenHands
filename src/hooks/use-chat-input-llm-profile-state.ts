@@ -239,12 +239,19 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
       backend.kind === "local" &&
       activeAgentProfile?.name === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME
     );
+  // Resolution priority step 4 (home pick / agent profile / account default)
+  // only applies when no real conversation is open: inside a conversation the
+  // pill must not name a global default the conversation never ran (#16851).
+  // A task route still shows it because the launch runs that profile.
+  const canUseGlobalFallback = !conversationId || isTaskRoute;
   const currentProfileName =
     optimisticActiveProfile ??
     conversationProfile ??
     (conversationModel
       ? (profiles.find((p) => p.model === conversationModel)?.name ?? null)
-      : (homePick ?? agentLlmProfile ?? data?.active_profile ?? null));
+      : canUseGlobalFallback
+        ? (homePick ?? agentLlmProfile ?? data?.active_profile ?? null)
+        : null);
   const currentProfileModel =
     profiles.find((p) => p.name === currentProfileName)?.model ??
     conversationModel ??
