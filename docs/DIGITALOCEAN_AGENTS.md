@@ -55,12 +55,9 @@ rpc pauseSession '["<session id>"]'       # when done
 
 `openTunnel` answers with a `host` such as
 `$B/mars/sessions/<session id>`. That is the session's Agent Server: use its
-REST API under that prefix with the same `X-Session-API-Key` header. Canvas
-prepares the sandbox before `openTunnel` answers and says how that went in
-`sandbox`: `prepared` means it is ready to use; `unreachable` means its Agent
-Server never answered (`upstreamFailure` may say why); `failed` means a
-preparation step failed, so the terminal and encrypted settings may not work
-until the next `openTunnel` tries again.
+REST API under that prefix with the same `X-Session-API-Key` header: the
+Canvas key. The session's own Agent Server has a key of its own, which Canvas
+adds on the way in, so you never need it.
 
 ## With the OpenHands SDK
 

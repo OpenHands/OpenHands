@@ -2,7 +2,16 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { server as mswServer } from "#/mocks/node";
 
 import {
   MARS_TUNNEL_IPC,
@@ -24,6 +33,8 @@ import {
   createEncryptedFileStore,
   createMemoryStore,
 } from "../../scripts/mars-secret-store.mjs";
+import { startGuestTunnel } from "../../scripts/mars-guest-front.mjs";
+import { standInTunnel, startKeyedGuest, statusOf } from "./keyed-guest";
 
 vi.mock("../../scripts/mars-oauth.mjs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../scripts/mars-oauth.mjs")>()),
@@ -67,35 +78,21 @@ function fakeIpcMain() {
   };
 }
 
-/**
- * Remembers what it attached, like the real registry's snapshots; set
- * `nextLocalPort` to have the next attach listen elsewhere.
- */
 function fakeRegistry() {
-  const ports = { nextLocalPort: 51000 };
-  const snapshot = (params: { sessionId: string; remotePort: number }) => ({
-    ...params,
-    localPort: ports.nextLocalPort,
-    status: "connected" as const,
-    error: undefined,
-    upstreamFailure: null,
-  });
-  const attached = new Map<string, ReturnType<typeof snapshot>>();
   return {
-    ports,
-    attach: vi.fn(async (params: { sessionId: string; remotePort: number }) => {
-      const tunnel = snapshot(params);
-      attached.set(params.sessionId, tunnel);
-      return tunnel;
-    }),
-    detach: vi.fn(async (sessionId: string) => {
-      attached.delete(sessionId);
-    }),
-    detachAll: vi.fn(async () => {
-      attached.clear();
-    }),
+    attach: vi.fn(
+      async (params: { sessionId: string; remotePort: number }) => ({
+        ...params,
+        localPort: 51000,
+        status: "connected" as const,
+        error: undefined,
+        upstreamFailure: null,
+      }),
+    ),
+    detach: vi.fn(async () => {}),
+    detachAll: vi.fn(async () => {}),
     detachOwnedBy: vi.fn(async () => {}),
-    get: vi.fn((sessionId: string) => attached.get(sessionId)),
+    get: vi.fn(() => undefined),
   };
 }
 
@@ -146,7 +143,12 @@ function fakeApi() {
 function setup({
   realRegistry = false,
   env = {},
-}: { realRegistry?: boolean; env?: Record<string, string> } = {}) {
+  startTunnel,
+}: {
+  realRegistry?: boolean;
+  env?: Record<string, string>;
+  startTunnel?: typeof startGuestTunnel;
+} = {}) {
   const registry = fakeRegistry();
   const api = fakeApi();
   const credentials = createCredentialStore({
@@ -156,15 +158,12 @@ function setup({
     session_id: sessionId,
     status: "SESSION_STATUS_READY",
   }));
-  const prepare = vi.fn(
-    async (): Promise<"prepared" | "unreachable" | "failed"> => "prepared",
-  );
   const bridge = createMarsTunnelBridge({
     registry: realRegistry ? undefined : registry,
     api,
     credentials,
     ensureAwake,
-    prepare,
+    ...(startTunnel ? { startTunnel } : {}),
     env: { MARS_API_BASE_URL: API_URL, ...env },
   });
   const ipcMain = fakeIpcMain();
@@ -174,7 +173,6 @@ function setup({
     api,
     credentials,
     ensureAwake,
-    prepare,
     bridge,
     ipcMain,
   };
@@ -279,96 +277,6 @@ describe("createMarsTunnelBridge", () => {
     expect(revokeToken).toHaveBeenCalledWith("oauth-token");
   });
 
-  it("prepares a session's sandbox on connect, once, for every caller", async () => {
-    const { bridge, prepare, ipcMain } = setup();
-    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
-
-    await Promise.all([
-      bridge.openTunnel({ sessionId: "sess_a" }),
-      bridge.openTunnel({ sessionId: "sess_a" }),
-    ]);
-    await bridge.openTunnel({ sessionId: "sess_a" });
-    await bridge.openTunnel({ sessionId: "sess_b" });
-
-    expect(prepare).toHaveBeenCalledTimes(2);
-    expect(prepare).toHaveBeenCalledWith({
-      baseUrl: "http://127.0.0.1:51000",
-      readFailure: expect.any(Function),
-    });
-  });
-
-  it.each([
-    { why: "the sandbox could not be reached", result: "unreachable" },
-    {
-      why: "a step failed while the sandbox was still booting",
-      result: "failed",
-    },
-  ])("tries the preparation again when $why", async ({ result }) => {
-    const { bridge, prepare, ipcMain } = setup();
-    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
-    prepare.mockResolvedValueOnce(result as never);
-
-    await bridge.openTunnel({ sessionId: "sess_a" });
-    await bridge.openTunnel({ sessionId: "sess_a" });
-
-    expect(prepare).toHaveBeenCalledTimes(2);
-  });
-
-  it.each(["prepared", "unreachable", "failed"] as const)(
-    "tells the caller the sandbox came out %s",
-    async (result) => {
-      const { bridge, prepare, ipcMain } = setup();
-      await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
-      prepare.mockResolvedValueOnce(result);
-
-      expect(await bridge.openTunnel({ sessionId: "sess_a" })).toMatchObject({
-        status: "connected",
-        sandbox: result,
-      });
-    },
-  );
-
-  it("prepares again for a tunnel that came back on another port, rather than wait on the old run", async () => {
-    const { bridge, prepare, registry, ipcMain } = setup();
-    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
-    let finishFirst!: (result: "unreachable") => void;
-    prepare.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finishFirst = resolve;
-        }),
-    );
-    const first = bridge.openTunnel({ sessionId: "sess_a" });
-    await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
-
-    registry.ports.nextLocalPort = 52000;
-    const second = await bridge.openTunnel({ sessionId: "sess_a" });
-
-    expect(prepare).toHaveBeenCalledTimes(2);
-    expect(prepare).toHaveBeenLastCalledWith({
-      baseUrl: "http://127.0.0.1:52000",
-      readFailure: expect.any(Function),
-    });
-    expect(second).toMatchObject({ localPort: 52000, sandbox: "prepared" });
-    finishFirst("unreachable");
-    await first;
-  });
-
-  it("answers with the tunnel as it is once preparing ends, not as it was", async () => {
-    const { bridge, prepare, registry, ipcMain } = setup();
-    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
-    prepare.mockImplementationOnce(async () => {
-      await registry.detach("sess_a");
-      return "prepared";
-    });
-
-    expect(await bridge.openTunnel({ sessionId: "sess_a" })).toMatchObject({
-      status: "error",
-      localPort: undefined,
-      host: undefined,
-    });
-  });
-
   it("openTunnel refuses to connect while signed out", async () => {
     const { registry, ipcMain } = setup();
 
@@ -422,7 +330,6 @@ describe("createMarsTunnelBridge", () => {
       const bridge = createMarsTunnelBridge({
         registry: fakeRegistry(),
         credentials,
-        prepare: vi.fn(async () => "prepared" as const),
         env: { MARS_API_BASE_URL: API_URL },
       });
       await bridge.savePat({ token: OTHER_PAT });
@@ -988,7 +895,6 @@ describe("signing in with DigitalOcean (code + PKCE)", () => {
         registry,
         api: fakeApi(),
         credentials,
-        prepare: vi.fn(async () => "prepared" as const),
         env: { ...WITH_CLIENT.env, MARS_API_BASE_URL: API_URL },
       });
       return { bridge, registry };
@@ -1226,5 +1132,39 @@ describe("signing in with DigitalOcean (code + PKCE)", () => {
 
     expect(await getAccessToken()).toBeNull();
     expect(bridge.getAuthState().active).toMatchObject({ isExpired: true });
+  });
+});
+
+describe("reaching a session through its tunnel", () => {
+  // Real loopback servers end to end; see mars-guest-front.test.ts.
+  beforeAll(() => mswServer.close());
+  afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
+
+  it("hands callers the front's port, which adds the guest's own key", async () => {
+    const guest = await startKeyedGuest("guest-key");
+    // Only the dial to DigitalOcean is stood in: the raw tunnel's port is
+    // the guest's own.
+    const raw = standInTunnel(guest.port);
+    const startTunnel = vi.fn<typeof startGuestTunnel>((options) =>
+      startGuestTunnel(options, { startTunnel: raw.startTunnel }),
+    );
+    const { ipcMain, bridge } = setup({ realRegistry: true, startTunnel });
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+
+    try {
+      const tunnel = (await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, {
+        sessionId: "sess_a",
+      })) as { host: string };
+      const status = await statusOf(`${tunnel.host}/api/settings`);
+
+      expect(startTunnel).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionId: "sess_a", remotePort: 8000 }),
+      );
+      expect(status).toBe(200);
+      expect(guest.keysSeen).toEqual(["guest-key"]);
+    } finally {
+      await bridge.dispose();
+      await guest.close();
+    }
   });
 });
