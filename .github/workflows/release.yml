@@ -85,3 +85,6 @@ jobs:
     # `release: published` — a GITHUB_TOKEN release would be suppressed.
     secrets: inherit
     uses: OpenHands/release-actions/.github/workflows/release-please.yml@main
+    with:
+      # Each release PR update deletes root .pr/ in the same push as the version bump.
+      cleanup-pr-artifacts: true

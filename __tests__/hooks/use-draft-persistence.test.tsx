@@ -13,6 +13,7 @@ vi.mock("#/utils/conversation-local-storage", () => ({
   useConversationLocalStorageState: vi.fn(),
   getConversationState: vi.fn(),
   setConversationState: vi.fn(),
+  markConversationDraftEdited: vi.fn(() => "draft-edit"),
 }));
 
 // Mock the chat-input utilities. The hook uses both `getTextContent`
@@ -180,7 +181,10 @@ describe("useDraftPersistence", () => {
       });
 
       // Assert - should save after debounce
-      expect(mockSetDraftMessage).toHaveBeenCalledWith("New draft content");
+      expect(mockSetDraftMessage).toHaveBeenCalledWith(
+        "New draft content",
+        expect.any(String),
+      );
     });
 
     it("cancels pending save when new input arrives before debounce", () => {
@@ -216,7 +220,10 @@ describe("useDraftPersistence", () => {
 
       // Assert - should only save the final value once
       expect(mockSetDraftMessage).toHaveBeenCalledTimes(1);
-      expect(mockSetDraftMessage).toHaveBeenCalledWith("First Second");
+      expect(mockSetDraftMessage).toHaveBeenCalledWith(
+        "First Second",
+        expect.any(String),
+      );
     });
 
     it("does not save if content matches existing draft", () => {
@@ -284,7 +291,10 @@ describe("useDraftPersistence", () => {
         vi.advanceTimersByTime(500);
       });
 
-      expect(mockSetDraftMessage).toHaveBeenCalledWith("Stryker was here!");
+      expect(mockSetDraftMessage).toHaveBeenCalledWith(
+        "Stryker was here!",
+        expect.any(String),
+      );
     });
   });
 
@@ -500,7 +510,10 @@ describe("useDraftPersistence", () => {
       });
 
       expect(setDraftForA).not.toHaveBeenCalled();
-      expect(setDraftForB).toHaveBeenCalledWith("draft for B");
+      expect(setDraftForB).toHaveBeenCalledWith(
+        "draft for B",
+        expect.any(String),
+      );
     });
 
     it("clears the current conversation after leaving the home page", () => {
@@ -1018,7 +1031,10 @@ describe("useDraftPersistence", () => {
         vi.advanceTimersByTime(500);
       });
 
-      expect(mockSetDraftMessage).toHaveBeenCalledWith(null);
+      expect(mockSetDraftMessage).toHaveBeenCalledWith(
+        null,
+        expect.any(String),
+      );
     });
   });
 
@@ -1061,7 +1077,11 @@ describe("useDraftPersistence", () => {
       // Assert - cleanup flushes once without running the debounced setter later.
       expect(
         conversationLocalStorage.setConversationState,
-      ).toHaveBeenCalledWith(conversationId, { draftMessage: "Draft" });
+      ).toHaveBeenCalledWith(
+        conversationId,
+        { draftMessage: "Draft" },
+        expect.any(String),
+      );
       expect(mockSetDraftMessage).not.toHaveBeenCalled();
     });
   });
@@ -1080,10 +1100,50 @@ describe("useDraftPersistence", () => {
       vi.mocked(
         conversationLocalStorage.setConversationState,
       ).mockImplementation(actual.setConversationState);
+      vi.mocked(
+        conversationLocalStorage.markConversationDraftEdited,
+      ).mockImplementation(actual.markConversationDraftEdited);
     });
 
     afterEach(() => {
       vi.mocked(conversationLocalStorage.setConversationState).mockReset();
+      vi.mocked(
+        conversationLocalStorage.markConversationDraftEdited,
+      ).mockReset();
+    });
+
+    it("protects a same-text new edit from an earlier confirmation before debounce", async () => {
+      const actual = await vi.importActual<typeof conversationLocalStorage>(
+        "#/utils/conversation-local-storage",
+      );
+      const conversationId = "conv-same-text-new-edit";
+      conversationLocalStorage.setConversationState(conversationId, {
+        draftMessage: "Repeat this request",
+      });
+      const submitted = {
+        text: "Repeat this request",
+        draftRevision: actual.getConversationDraftRevision(conversationId),
+      };
+      const input = createMockChatInputRef();
+      const { result, unmount } = renderHook(() =>
+        useDraftPersistence(conversationId, input),
+      );
+
+      // Re-entering identical text is still a new composer edit. Its revision
+      // must change on input, before the debounced text save can run.
+      act(() => result.current.saveDraft());
+      act(() =>
+        actual.clearConfirmedConversationDraft(conversationId, submitted),
+      );
+      expect(
+        conversationLocalStorage.getConversationState(conversationId)
+          .draftMessage,
+      ).toBe("Repeat this request");
+      act(() => vi.advanceTimersByTime(500));
+      unmount();
+      const restored = createMockChatInputRef();
+      renderHook(() => useDraftPersistence(conversationId, restored));
+      expect(restored.current.textContent).toBe("Repeat this request");
     });
 
     it("restores the latest input after leaving before the debounce completes", () => {
