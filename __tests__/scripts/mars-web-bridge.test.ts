@@ -29,6 +29,11 @@ import { server as mswServer } from "#/mocks/node";
 
 import { createMarsTunnelBridge } from "../../scripts/mars-tunnel-bridge.mjs";
 import {
+  fetchGuestSessionKey,
+  startGuestFront,
+} from "../../scripts/mars-guest-front.mjs";
+import { startKeyedGuest, statusOf } from "./keyed-guest";
+import {
   FIRST_MESSAGE_AUTH_MAX_BYTES,
   FIRST_MESSAGE_AUTH_MAX_PENDING,
   RPC_METHODS,
@@ -1107,6 +1112,70 @@ describe("createMarsWebBridge first-message login window", () => {
     await marsWeb.dispose();
     web.close();
     upstream.close();
+  });
+});
+
+describe("createMarsWebBridge with a session whose guest has its own key", () => {
+  const KEY = "canvas-key";
+  const GUEST_KEY = "guest-key";
+  let guest: Awaited<ReturnType<typeof startKeyedGuest>>;
+  let front: Awaited<ReturnType<typeof startGuestFront>>;
+  let marsWeb: ReturnType<typeof createMarsWebBridge>;
+  let web: Awaited<ReturnType<typeof startWebServer>>;
+
+  beforeEach(async () => {
+    guest = await startKeyedGuest(GUEST_KEY);
+    front = await startGuestFront({
+      upstreamPort: guest.port,
+      readKey: () => fetchGuestSessionKey(guest.port),
+      log: () => {},
+    });
+    marsWeb = createMarsWebBridge({
+      bridge: fakeBridge(`http://127.0.0.1:${front.localPort}`) as never,
+      env: {},
+      key: KEY,
+      log: () => {},
+    });
+    web = await startWebServer(marsWeb);
+    await rpc(web.origin, "openTunnel", [{ sessionId: SESSION_ID }], {
+      headers: { "X-Session-API-Key": KEY },
+    });
+  });
+
+  afterEach(async () => {
+    await marsWeb.dispose();
+    web.close();
+    front.stop();
+    await guest.close();
+  });
+
+  it("gives the page the session with the guest's key, and the guest never Canvas's", async () => {
+    const status = await statusOf(
+      `${web.origin}/mars/sessions/${SESSION_ID}/api/settings`,
+      { "X-Session-API-Key": KEY },
+    );
+
+    expect(status).toBe(200);
+    expect(guest.keysSeen).toEqual([GUEST_KEY]);
+  });
+
+  it("lets an agent that logs in by its first message reach the guest", async () => {
+    const ws = new WebSocket(
+      `${web.origin.replace("http", "ws")}/mars/sessions/${SESSION_ID}/sockets/events/c1`,
+    );
+    const received: string[] = [];
+    ws.on("message", (data) => received.push(data.toString()));
+    await new Promise<void>((resolve, reject) => {
+      ws.on("open", () => resolve());
+      ws.on("error", reject);
+    });
+
+    ws.send(JSON.stringify({ type: "auth", session_api_key: KEY }));
+    ws.send("hello");
+
+    await vi.waitFor(() => expect(received).toEqual(["echo:hello"]));
+    expect(guest.keysSeen).toEqual([GUEST_KEY]);
+    ws.close();
   });
 });
 

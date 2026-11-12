@@ -832,8 +832,9 @@ export function createMarsWebBridge({
 
   /**
    * Take the upgrade, wait for the key as the first message, and only then
-   * dial the session and relay both ways. The login frame stays here: the
-   * guest agent-server takes no key.
+   * dial the session and relay both ways. The login frame stays here: it
+   * carries Canvas's key, and the tunnel's front adds the guest's own key to
+   * the upgrade (mars-guest-front.mjs).
    */
   function acceptFirstMessageAuth(req, socket, head, session) {
     if (pendingLogins >= FIRST_MESSAGE_AUTH_MAX_PENDING) {

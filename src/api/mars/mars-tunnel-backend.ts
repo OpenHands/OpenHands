@@ -180,12 +180,6 @@ export interface MarsTunnelStatus {
   localPort: number | undefined;
   error: string | undefined;
   upstreamFailure?: MarsUpstreamFailure | null;
-  /**
-   * How preparing the sandbox went, when the bridge prepares it on connect
-   * (scripts/mars-sandbox-prep.mjs). `unreachable` means the bridge already
-   * waited out the guest agent-server, so the renderer need not wait again.
-   */
-  sandbox?: "prepared" | "unreachable" | "failed";
 }
 
 export interface OpenMarsTunnelParams {
@@ -349,9 +343,10 @@ export function buildNewSessionName(configName: string | null | undefined) {
 }
 
 /**
- * The in-guest agent-server's session key is set by the sandbox template, not
- * by us. The DigitalOcean token is the authorization boundary instead:
- * dialing the tunnel requires it.
+ * The renderer sends a session no key. The guest agent-server's own key, which
+ * DigitalOcean's template sets, is added on the host by the tunnel's front
+ * (scripts/mars-guest-front.mjs), so it never reaches a page. Reaching the
+ * front takes the DigitalOcean credential that dials the tunnel.
  */
 export const MARS_GUEST_API_KEY = "";
 
@@ -423,8 +418,7 @@ export async function waitForMarsAgentServer(
   {
     sessionId,
     budgetMs = AGENT_SERVER_WAIT_MS,
-    portClosedGraceMs = GUEST_PORT_CLOSED_GRACE_MS,
-  }: { sessionId?: string; budgetMs?: number; portClosedGraceMs?: number } = {},
+  }: { sessionId?: string; budgetMs?: number } = {},
 ): Promise<string | null> {
   const startedAt = Date.now();
   const deadline = startedAt + budgetMs;
@@ -445,7 +439,7 @@ export async function waitForMarsAgentServer(
       const now = Date.now();
       if (failure?.closeCode === CLOSE_GUEST_DIAL_FAILED) {
         guestPortClosedSince ??= now;
-        if (now - guestPortClosedSince >= portClosedGraceMs) {
+        if (now - guestPortClosedSince >= GUEST_PORT_CLOSED_GRACE_MS) {
           throw new MarsAttachError("not-openhands", failure.message);
         }
       } else {

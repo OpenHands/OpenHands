@@ -19,9 +19,6 @@ interface FileQuickRowProps {
   actions?: ReactNode;
 }
 
-const HIDDEN_SCROLLBAR_CLASSNAME =
-  "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden";
-
 /**
  * Horizontal strip of open-file tabs. A path only appears after the user or
  * agent opens it. Overflow scrolls horizontally without a visible scrollbar.
@@ -70,10 +67,7 @@ export function FileQuickRow({
         <div
           role="tablist"
           aria-label={t(I18nKey.COMMON$FILES)}
-          className={cn(
-            "flex min-h-0 min-w-0 flex-1 flex-nowrap items-stretch overflow-x-auto overflow-y-hidden overscroll-y-none",
-            HIDDEN_SCROLLBAR_CLASSNAME,
-          )}
+          className="file-strip-scrollbar-hidden flex min-h-0 min-w-0 flex-1 flex-nowrap items-stretch overflow-x-auto overflow-y-hidden overscroll-y-none"
         >
           {openPaths.map((path, index) => {
             const isSelected = selectedPath === path;

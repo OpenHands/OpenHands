@@ -1347,7 +1347,7 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
               rel="noopener noreferrer"
               data-testid={`${testIdRoot}-docs-link`}
               tabIndex={isExpanded ? undefined : -1}
-              className="inline-flex w-fit items-center gap-1.5 text-primary hover:underline"
+              className="inline-flex w-fit items-center gap-1.5 text-link hover:underline"
             >
               <span>{docsLabel}</span>
               <ExternalLinkIcon className="size-4 shrink-0" aria-hidden />
@@ -1668,7 +1668,7 @@ function AddBackendAddModeBody({
                   rel="noopener noreferrer"
                   aria-label={t(I18nKey.BACKEND$DEPLOYMENT_OPTIONS)}
                   data-testid="add-backend-deployment-options-link"
-                  className="text-primary hover:underline"
+                  className="text-link hover:underline"
                 >
                   {t(I18nKey.CTA$LEARN_MORE)}
                   <ExternalLinkIcon

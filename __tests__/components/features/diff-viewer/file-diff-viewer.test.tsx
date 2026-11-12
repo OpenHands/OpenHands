@@ -35,7 +35,8 @@ vi.mock("#/hooks/query/use-unified-git-diff", () => ({
 vi.mock("@monaco-editor/react", () => ({
   DiffEditor: (props: Record<string, unknown>) => {
     (props.beforeMount as (monaco: unknown) => void)({
-      editor: { defineTheme },
+      Uri: { parse: (value: string) => value },
+      editor: { defineTheme, getModel: () => null },
     });
     return (
       <div
