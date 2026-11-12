@@ -6,7 +6,7 @@ const SENDER = `conversation:${ID}`;
 
 describe("parseProjectMessageHeader", () => {
   it("reads an update header with a mention and keeps the body", () => {
-    const text = `[Update from [Fix export](conversation:${ID}), a conversation in your project, not from the person. It finished its turn; its final message follows.]\nAll done.`;
+    const text = `[Update from [Fix export](conversation:${ID}), a conversation in your project, not from the user. It finished its turn; its final message follows.]\nAll done.`;
     expect(parseProjectMessageHeader(text, SENDER)).toEqual({
       kind: "update_from",
       title: "Fix export",
@@ -19,7 +19,8 @@ describe("parseProjectMessageHeader", () => {
     const kinds = {
       "Sent by": "sent_by",
       "Reply in": "reply_in",
-      "Message from the person in": "person_in",
+      "Message from the user in": "user_in",
+      "Paused by the user:": "paused",
     } as const;
     for (const [prefix, kind] of Object.entries(kinds)) {
       const parsed = parseProjectMessageHeader(
@@ -33,7 +34,7 @@ describe("parseProjectMessageHeader", () => {
 
   it("names a conversation without a mention by its title", () => {
     const parsed = parseProjectMessageHeader(
-      "[Sent by Coordinator, the coordinator of your project, not by the person.]\nGo",
+      "[Sent by Coordinator, the coordinator of your project, not by the user.]\nGo",
       SENDER,
     );
     expect(parsed).toMatchObject({

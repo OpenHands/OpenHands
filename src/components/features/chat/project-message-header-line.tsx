@@ -11,7 +11,8 @@ const LABELS: Record<ProjectHeaderKind, I18nKey> = {
   sent_by: I18nKey.PROJECTS$HEADER_SENT_BY,
   update_from: I18nKey.PROJECTS$HEADER_UPDATE_FROM,
   reply_in: I18nKey.PROJECTS$HEADER_REPLY_IN,
-  person_in: I18nKey.PROJECTS$HEADER_PERSON_IN,
+  user_in: I18nKey.PROJECTS$HEADER_USER_IN,
+  paused: I18nKey.PROJECTS$HEADER_PAUSED,
 };
 
 /** One compact line in place of the Agent Server's header for the agent. */

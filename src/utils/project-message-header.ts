@@ -5,17 +5,18 @@
  * The header is for the agent; the user sees a compact line instead.
  */
 export type ProjectHeaderKind =
-  "sent_by" | "update_from" | "reply_in" | "person_in";
+  "sent_by" | "update_from" | "reply_in" | "user_in" | "paused";
 
 const KINDS: Record<string, ProjectHeaderKind> = {
   "Sent by": "sent_by",
   "Update from": "update_from",
   "Reply in": "reply_in",
-  "Message from the person in": "person_in",
+  "Message from the user in": "user_in",
+  "Paused by the user:": "paused",
 };
 
 const HEADER =
-  /^\[(Sent by|Update from|Reply in|Message from the person in) (?:\[([^\]\n]*)\]\(conversation:([0-9a-f-]{32,36})\)|([^,\n]*))[^\n]*\]\s*\n?/i;
+  /^\[(Sent by|Update from|Reply in|Message from the user in|Paused by the user:) (?:\[([^\]\n]*)\]\(conversation:([0-9a-f-]{32,36})\)|([^,\n]*))[^\n]*\]\s*\n?/i;
 
 export interface ProjectMessageHeader {
   kind: ProjectHeaderKind;

@@ -44153,7 +44153,7 @@
     "ca": "Resposta a",
     "id": "Balasan di"
   },
-  "PROJECTS$HEADER_PERSON_IN": {
+  "PROJECTS$HEADER_USER_IN": {
     "en": "You wrote in",
     "ja": "あなたが書いた会話:",
     "zh-CN": "你写在：",
@@ -44170,6 +44170,24 @@
     "uk": "Ви написали в",
     "ca": "Vas escriure a",
     "id": "Anda menulis di"
+  },
+  "PROJECTS$HEADER_PAUSED": {
+    "en": "You paused",
+    "ja": "一時停止した会話:",
+    "zh-CN": "你已暂停：",
+    "zh-TW": "你已暫停：",
+    "ko-KR": "일시 중지한 대화:",
+    "no": "Du satte på pause",
+    "it": "Hai messo in pausa",
+    "pt": "Você pausou",
+    "es": "Pausaste",
+    "ar": "أوقفت مؤقتًا",
+    "fr": "Vous avez mis en pause",
+    "tr": "Duraklattığınız:",
+    "de": "Sie pausierten",
+    "uk": "Ви призупинили",
+    "ca": "Vas posar en pausa",
+    "id": "Anda menjeda"
   },
   "PROJECTS$WORKSPACE": {
     "en": "Coordinator's workspace",
