@@ -33,6 +33,10 @@ const {
   mockListAgentProfiles,
   mockListLlmProfiles,
   mockSupportsLaunchLlmOverride,
+  mockGetRuntimeConversation,
+  mockSearchEvents,
+  mockInterruptConversation,
+  mockDeleteConversation,
 } = vi.hoisted(() => ({
   mockCreateConversation: vi.fn(),
   mockResolveWorkingDir: vi.fn(),
@@ -48,6 +52,10 @@ const {
   mockListAgentProfiles: vi.fn(),
   mockListLlmProfiles: vi.fn(),
   mockSupportsLaunchLlmOverride: vi.fn(),
+  mockGetRuntimeConversation: vi.fn(),
+  mockSearchEvents: vi.fn(),
+  mockInterruptConversation: vi.fn(),
+  mockDeleteConversation: vi.fn(),
 }));
 
 vi.mock(
@@ -69,6 +77,10 @@ vi.mock(
       sendMessage: mockSendMessage,
       updateConversationTitle: mockUpdateTitle,
       batchGetAppConversations: mockBatchGetAppConversations,
+      getRuntimeConversation: mockGetRuntimeConversation,
+      searchEvents: mockSearchEvents,
+      interruptConversation: mockInterruptConversation,
+      deleteConversation: mockDeleteConversation,
     },
   }),
 );
@@ -216,6 +228,8 @@ describe("handleLaunchChildConversationAction", () => {
       active_profile: null,
     });
     mockSupportsLaunchLlmOverride.mockResolvedValue(true);
+    mockInterruptConversation.mockResolvedValue(undefined);
+    mockDeleteConversation.mockResolvedValue(undefined);
   });
 
   describe("parameter validation", () => {
@@ -251,6 +265,16 @@ describe("handleLaunchChildConversationAction", () => {
         "an empty task",
         { task: "   " },
         "`task` must be a self-contained brief",
+      ],
+      [
+        "a zero timeout_seconds",
+        { wait_for_response: true, timeout_seconds: 0 },
+        "`timeout_seconds` must be a positive number",
+      ],
+      [
+        "a negative timeout_seconds",
+        { wait_for_response: true, timeout_seconds: -10 },
+        "`timeout_seconds` must be a positive number",
       ],
     ])(
       "rejects %s with corrective guidance and launches nothing",
@@ -749,6 +773,191 @@ describe("handleLaunchChildConversationAction", () => {
 
     expect(mockCreateConversation).toHaveBeenCalledTimes(1);
     expect(mockSendMessage).not.toHaveBeenCalled();
+  });
+
+  describe("wait_for_response option and child lifecycle management", () => {
+    beforeEach(() => {
+      seedWorktreeCapableParent();
+    });
+
+    it("waits for the child conversation to finish and returns its finish message", async () => {
+      mockGetRuntimeConversation
+        .mockResolvedValueOnce({ status: "running" })
+        .mockResolvedValueOnce({ status: "finished" });
+      mockSearchEvents.mockResolvedValue({
+        items: [
+          {
+            id: 1,
+            action: {
+              kind: "FinishAction",
+              message: "Unit tests added and all passing.",
+            },
+          },
+        ],
+      });
+
+      await handleLaunchChildConversationAction(
+        action({ wait_for_response: true }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      const result = reportedResult();
+      expect(result).toMatchObject({
+        conversation_id: "child-id",
+        finished: true,
+        finish_message: "Unit tests added and all passing.",
+        cleanup_outcome: "retained",
+      });
+      expect(mockDeleteConversation).not.toHaveBeenCalled();
+    });
+
+    it("deletes the child conversation when delete_on_finish is true after capturing finish message", async () => {
+      mockGetRuntimeConversation.mockResolvedValue({ status: "finished" });
+      mockSearchEvents.mockResolvedValue({
+        items: [
+          {
+            id: 1,
+            action: {
+              kind: "FinishAction",
+              message: "Implementation complete.",
+            },
+          },
+        ],
+      });
+
+      await handleLaunchChildConversationAction(
+        action({ wait_for_response: true, delete_on_finish: true }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      const result = reportedResult();
+      expect(result).toMatchObject({
+        conversation_id: "child-id",
+        finished: true,
+        finish_message: "Implementation complete.",
+        cleanup_outcome: "deleted",
+      });
+      expect(mockDeleteConversation).toHaveBeenCalledWith("child-id");
+    });
+
+    it("returns error and deletes child on timeout when delete_on_timeout is true", async () => {
+      mockGetRuntimeConversation.mockResolvedValue({ status: "running" });
+
+      await handleLaunchChildConversationAction(
+        action({
+          wait_for_response: true,
+          timeout_seconds: 0.05,
+          delete_on_timeout: true,
+        }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      const result = reportedResult();
+      expect(result.status).toBe("error");
+      if (result.status === "error") {
+        expect(result.conversation_id).toBe("child-id");
+        expect(result.error).toMatch(/timed out/i);
+        expect(result.cleanup_outcome).toBe("deleted");
+      }
+      expect(mockInterruptConversation).toHaveBeenCalledWith("child-id");
+      expect(mockDeleteConversation).toHaveBeenCalledWith("child-id");
+    });
+
+    it("returns error and leaves child running on timeout when delete_on_timeout is false", async () => {
+      mockGetRuntimeConversation.mockResolvedValue({ status: "running" });
+
+      await handleLaunchChildConversationAction(
+        action({
+          wait_for_response: true,
+          timeout_seconds: 0.05,
+          delete_on_timeout: false,
+        }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      const result = reportedResult();
+      expect(result.status).toBe("error");
+      if (result.status === "error") {
+        expect(result.conversation_id).toBe("child-id");
+        expect(result.error).toMatch(/timed out/i);
+        expect(result.cleanup_outcome).toBe("left running");
+      }
+      expect(mockInterruptConversation).not.toHaveBeenCalled();
+      expect(mockDeleteConversation).not.toHaveBeenCalled();
+    });
+
+    it("leaves child running on timeout but cleans up in background when delete_on_finish is true and delete_on_timeout is false", async () => {
+      let callCount = 0;
+      mockGetRuntimeConversation.mockImplementation(async () => {
+        callCount += 1;
+        // First calls during wait loop return running
+        if (callCount <= 3) return { status: "running" };
+        // Later background check returns finished
+        return { status: "finished" };
+      });
+
+      await handleLaunchChildConversationAction(
+        action({
+          wait_for_response: true,
+          timeout_seconds: 0.05,
+          delete_on_finish: true,
+          delete_on_timeout: false,
+        }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      const result = reportedResult();
+      expect(result.status).toBe("error");
+      if (result.status === "error") {
+        expect(result.conversation_id).toBe("child-id");
+        expect(result.cleanup_outcome).toBe("left running");
+      }
+      expect(mockInterruptConversation).not.toHaveBeenCalled();
+
+      // Give background task a tick to complete
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(mockDeleteConversation).toHaveBeenCalledWith("child-id");
+    });
+
+    it("returns error when child transitions to error or stuck status", async () => {
+      mockGetRuntimeConversation.mockResolvedValue({ status: "error" });
+
+      await handleLaunchChildConversationAction(
+        action({ wait_for_response: true }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      const result = reportedResult();
+      expect(result.status).toBe("error");
+      if (result.status === "error") {
+        expect(result.conversation_id).toBe("child-id");
+        expect(result.error).toContain("error");
+      }
+    });
+
+    it("returns error when child finishes without a FinishAction message", async () => {
+      mockGetRuntimeConversation.mockResolvedValue({ status: "finished" });
+      mockSearchEvents.mockResolvedValue({ items: [] });
+
+      await handleLaunchChildConversationAction(
+        action({ wait_for_response: true }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      const result = reportedResult();
+      expect(result.status).toBe("error");
+      if (result.status === "error") {
+        expect(result.conversation_id).toBe("child-id");
+        expect(result.error).toContain("without a finish message");
+      }
+    });
   });
 });
 

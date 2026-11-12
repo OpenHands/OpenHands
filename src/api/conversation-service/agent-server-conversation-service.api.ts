@@ -61,6 +61,7 @@ import {
   toHooksResponse,
 } from "../agent-server-adapter";
 import { GetVSCodeUrlResponse } from "../open-hands.types";
+import EventService from "../event-service/event-service.api";
 import {
   getAgentServerClientOptions,
   NoBackendAvailableError,
@@ -1089,7 +1090,7 @@ class AgentServerConversationService {
 
   static async getRuntimeConversation(
     conversationId: string,
-    conversationUrl: string | null | undefined,
+    conversationUrl?: string | null,
     sessionApiKey?: string | null,
   ): Promise<RuntimeConversationInfo> {
     // Fetch directly from the per-conversation runtime agent-server at conversationUrl.
@@ -1450,6 +1451,29 @@ class AgentServerConversationService {
       conversationId,
       model,
     );
+  }
+
+  static async searchEvents(
+    conversationId: string,
+    conversationUrl?: string | null,
+    sessionApiKey?: string | null,
+  ) {
+    return EventService.searchEvents(
+      conversationId,
+      conversationUrl,
+      sessionApiKey,
+    );
+  }
+
+  static async interruptConversation(
+    conversationId: string,
+    conversationUrl?: string | null,
+    sessionApiKey?: string | null,
+  ): Promise<void> {
+    const client = new ConversationClient(
+      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+    );
+    await client.interruptConversation(conversationId);
   }
 }
 
