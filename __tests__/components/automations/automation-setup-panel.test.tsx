@@ -2372,6 +2372,34 @@ describe("AutomationSetupPanel", () => {
       } as never);
     });
 
+    it("omits agent_profile_id from draft payload while keeping it for create", async () => {
+      vi.mocked(AutomationService.supportsAutomationDrafts).mockReturnValue(true);
+      vi.mocked(AutomationService.createServerDraft).mockResolvedValue({
+        ...dispatchableDraft,
+        validationErrors: null,
+      });
+
+
+      const user = userEvent.setup();
+      renderPanel({ 
+        prompt: "Review every pull request", 
+        kind: "prompt", 
+        form: { kind: "prompt", agentProfileId: "agent-reviewer" } 
+      });
+
+
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+
+
+      await waitFor(() =>
+        expect(AutomationService.createServerDraft).toHaveBeenCalled()
+      );
+      
+      const draftBody = vi.mocked(AutomationService.createServerDraft).mock.calls[0][0].draft;
+      
+      expect(draftBody).not.toHaveProperty("agent_profile_id");
+    });
+
     it("tags the conversation as automation setup mode when opened", async () => {
       renderPanel();
 

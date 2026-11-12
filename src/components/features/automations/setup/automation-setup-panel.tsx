@@ -2550,16 +2550,26 @@ export function AutomationSetupPanel({
                           )}
                         </SetupKindCrossfade>
                         {kind === "custom" && canSelectAgentProfile ? (
-                          <SetupProfilePickers
-                            model={model}
-                            onModelChange={(value) =>
-                              updateField("model", value)
-                            }
-                            agentProfileId={agentProfileId}
-                            onAgentProfileChange={(value) =>
-                              updateField("agentProfileId", value)
-                            }
-                          />
+                          <div className="flex flex-col gap-3">
+                            <p
+                              data-testid="automation-setup-custom-agent-profile-draft-note"
+                              className="text-xs text-muted"
+                            >
+                              {t(
+                                I18nKey.AUTOMATION_SETUP$CUSTOM_AGENT_PROFILE_DRAFT_NOTE,
+                              )}
+                            </p>
+                            <SetupProfilePickers
+                              model={model}
+                              onModelChange={(value) =>
+                                updateField("model", value)
+                              }
+                              agentProfileId={agentProfileId}
+                              onAgentProfileChange={(value) =>
+                                updateField("agentProfileId", value)
+                              }
+                            />
+                          </div>
                         ) : null}
                         {kind === "custom" && !canSelectAgentProfile ? (
                           <SetupModelPill
