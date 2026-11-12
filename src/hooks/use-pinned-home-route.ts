@@ -33,18 +33,31 @@ export function getPinnedHomeRouteKey(
  * sidebar pin affordance and the `/` loader, so a stored pin that stops
  * resolving (backend switch, manifest absent) is ignored rather than an
  * error. `/` is never pinnable, which makes a redirect loop impossible.
- * Canvas Extensions pages can later add an `/extensions/…` branch here
- * without any storage or loader change.
+ * Canvas Extension pages are pinnable through `extensionHrefs`: a pin is
+ * valid only while the page's extension is currently enabled, so callers
+ * that know the live pages (sidebar, index route) pass their href set.
  */
-export function isPinnableRoute(path: string): boolean {
+export function isPinnableRoute(
+  path: string,
+  extensionHrefs?: ReadonlySet<string>,
+): boolean {
   if (path === CUSTOMIZE_PATH) return true;
   if (path === automationListPath()) return hasAutomationInterface();
+  if (isExtensionHomePath(path)) return extensionHrefs?.has(path) ?? false;
   return false;
 }
 
-function sanitizePinnedRoute(value: unknown): string | null {
+/** Structural match for a Canvas Extension page href (#16995). */
+export function isExtensionHomePath(path: string): boolean {
+  return /^\/extensions\/[^/]+(\/|$)/.test(path);
+}
+
+function sanitizePinnedRoute(
+  value: unknown,
+  extensionHrefs?: ReadonlySet<string>,
+): string | null {
   if (typeof value !== "string" || !value) return null;
-  return isPinnableRoute(value) ? value : null;
+  return isPinnableRoute(value, extensionHrefs) ? value : null;
 }
 
 /**
@@ -52,7 +65,10 @@ function sanitizePinnedRoute(value: unknown): string | null {
  * `usePinnedHomeRoute` writes; `useLocalStorage` JSON-serializes values, so
  * parse defensively and treat anything unreadable as "no pin". An invalid
  * pin is ignored, not cleared — it may become valid again (e.g. the
- * automations interface returning after a backend switch back).
+ * automations interface returning after a backend switch back). Without a
+ * live page set this deliberately rejects Canvas Extension hrefs: whether
+ * such a pin resolves is only known once the extension runtime loads, so
+ * the index route performs that redirect from React state instead.
  */
 export function readPinnedHomeRoute(): string | null {
   const active = getActiveBackend();
@@ -75,8 +91,13 @@ export function readPinnedHomeRoute(): string | null {
   }
 }
 
-/** Pin state for the home route: `/` redirects to the pinned sidebar page. */
-export function usePinnedHomeRoute() {
+/**
+ * Pin state for the home route: `/` redirects to the pinned sidebar page.
+ * `extensionHrefs` names the Canvas Extension pages that are enabled right
+ * now; an extension pin is only valid while its page is in the set, so a
+ * disabled or uninstalled extension falls back to the default home (#16995).
+ */
+export function usePinnedHomeRoute(extensionHrefs?: ReadonlySet<string>) {
   const active = useActiveBackend();
   const [rawPinnedRoute, setRawPinnedRoute] = useLocalStorage<string | null>(
     getPinnedHomeRouteKey(active.backend.id, active.orgId),
@@ -84,8 +105,8 @@ export function usePinnedHomeRoute() {
   );
 
   const pinnedRoute = useMemo(
-    () => sanitizePinnedRoute(rawPinnedRoute),
-    [rawPinnedRoute],
+    () => sanitizePinnedRoute(rawPinnedRoute, extensionHrefs),
+    [rawPinnedRoute, extensionHrefs],
   );
 
   const isPinnedRoute = useCallback(
@@ -99,10 +120,10 @@ export function usePinnedHomeRoute() {
         setRawPinnedRoute(null);
         return;
       }
-      if (!isPinnableRoute(path)) return;
+      if (!isPinnableRoute(path, extensionHrefs)) return;
       setRawPinnedRoute(path);
     },
-    [pinnedRoute, setRawPinnedRoute],
+    [pinnedRoute, setRawPinnedRoute, extensionHrefs],
   );
 
   return {
