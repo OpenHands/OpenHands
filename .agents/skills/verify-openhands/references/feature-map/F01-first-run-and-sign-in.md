@@ -12,6 +12,8 @@ conversation or app page.
 
 Source: `src/root.tsx`, `src/components/features/onboarding/`, `src/components/features/analytics/telemetry-consent-banner.tsx`, `src/components/features/backends/api-key-entry-screen.tsx`, `src/routes/root-layout.tsx`, `src/routes/not-found.tsx`, `src/hooks/use-app-title.ts`.
 
+Server: F04, F18, F20, F21.
+
 ## Sub-features
 
 - `F01.first-run-gate`: with no `openhands-onboarded` flag in localStorage, any URL (including `/conversations`) shows only `first-run-onboarding-screen` with the onboarding modal. There is no sidebar. Finishing or skipping sets the flag, and the app stays revealed after a reload.

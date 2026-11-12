@@ -74,6 +74,7 @@ import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { useConversationStore } from "#/stores/conversation-store";
 import { trackError } from "#/utils/error-handler";
+import { getUnreadableEventFileReason } from "#/utils/unreadable-event-file-error";
 import { matchesPendingConversationId } from "#/utils/pending-task-message-link";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore, { type MetricsState } from "#/stores/metrics-store";
@@ -82,7 +83,7 @@ import {
   usePersistedConversationHistory,
   getConversationHistoryScope,
 } from "#/hooks/query/use-conversation-history";
-import { setConversationState } from "#/utils/conversation-local-storage";
+import { clearConfirmedConversationDraft } from "#/utils/conversation-local-storage";
 import {
   recordModelSwitchMessage,
   seedModelSwitchesFromHistory,
@@ -446,8 +447,21 @@ export function ConversationWebSocketProvider({
   // user scrolls to the top of the chat. The WebSocket connection waits for
   // this query so it can subscribe with `resend_mode='since'` and avoid
   // re-streaming everything REST already returned.
-  const { data: preloadedHistory, isPending: isPreloadingHistory } =
-    useConversationHistory(conversationId);
+  const {
+    data: preloadedHistory,
+    isPending: isPreloadingHistory,
+    error: historyError,
+  } = useConversationHistory(conversationId);
+
+  // A server that cannot read one of the event files cannot open the
+  // conversation, so the socket below would only retry with nothing to show.
+  // Say why instead of leaving an empty chat.
+  useEffect(() => {
+    const reason = getUnreadableEventFileReason(historyError);
+    if (reason) {
+      useErrorMessageStore.getState().setErrorMessage(reason, "conversation");
+    }
+  }, [historyError]);
 
   const historyScope = getConversationHistoryScope();
   const historyConnectionKey = JSON.stringify([
@@ -536,10 +550,13 @@ export function ConversationWebSocketProvider({
   ]);
 
   useLayoutEffect(() => {
-    if (!visibleHistory || visibleHistory.events.length === 0) {
+    if (!visibleHistory) {
       return;
     }
-    addEvents(visibleHistory.events);
+    addEvents(visibleHistory.events, {
+      nextPageId: visibleHistory.nextPageId,
+      hasMore: visibleHistory.hasMore,
+    });
 
     // The first user message of a cloud start-task conversation is persisted
     // server-side and reaches us via this REST preload, not over the WebSocket
@@ -560,11 +577,12 @@ export function ConversationWebSocketProvider({
 
       for (const event of visibleHistory.events) {
         if (isUserMessageEvent(event)) {
-          consumeMatchingPendingMessage(
+          const confirmed = consumeMatchingPendingMessage(
             conversationId,
             extractMessageEventText(event),
             event,
           );
+          clearConfirmedConversationDraft(conversationId, confirmed);
         }
       }
     }
@@ -865,13 +883,12 @@ export function ConversationWebSocketProvider({
           // History and live delivery share the same timestamp/identity checks.
           if (isUserMessageEvent(event)) {
             if (conversationId) {
-              consumeMatchingPendingMessage(
+              const confirmed = consumeMatchingPendingMessage(
                 conversationId,
                 extractMessageEventText(event),
                 event,
               );
-              // Clear draft from localStorage - message was successfully delivered
-              setConversationState(conversationId, { draftMessage: null });
+              clearConfirmedConversationDraft(conversationId, confirmed);
             }
           }
 
@@ -1163,12 +1180,12 @@ export function ConversationWebSocketProvider({
           // events can never consume a main-conversation pending entry.
           if (isUserMessageEvent(event)) {
             if (conversationId) {
-              consumeMatchingPendingMessage(
+              const confirmed = consumeMatchingPendingMessage(
                 conversationId,
                 extractMessageEventText(event),
                 event,
               );
-              setConversationState(conversationId, { draftMessage: null });
+              clearConfirmedConversationDraft(conversationId, confirmed);
             }
           }
 

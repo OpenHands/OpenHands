@@ -9,6 +9,8 @@ conversation, jumps to usage and deletes it.
 
 Source: `src/routes/conversation.tsx`, `src/components/features/conversation/`, `src/components/features/conversation-panel/`, `src/components/features/controls/server-status-context-menu.tsx`, `src/hooks/use-conversation-name-context-menu.ts`, `src/api/agent-server-adapter.ts` (the Hooks dialog's `toHooksResponse`).
 
+Server: F04, F05, F12, F27.
+
 ## Sub-features
 
 - `F07.open-by-url`: `/conversations/<id>` shows header, history and composer, and remembers the id as the backend's last conversation.

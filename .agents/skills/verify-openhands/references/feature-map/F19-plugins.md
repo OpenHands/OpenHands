@@ -13,6 +13,8 @@ without plugins.
 
 Source: `src/routes/skills-plugins.tsx`, `src/routes/launch.tsx`, `src/components/features/plugins/`, `src/components/features/launch/`, `src/utils/plugin-launch-url.ts`, `src/utils/plugin-launch-preflight.ts`, `src/hooks/mutation/use-install-plugin.ts`, `src/hooks/mutation/use-set-plugin-enabled.ts`, `src/hooks/mutation/use-uninstall-plugin.ts`, `src/hooks/mutation/use-refresh-plugin.ts`.
 
+Server: F26.
+
 ## Sub-features
 
 - `F19.page`: `/plugins` shows the **Plugins** heading, the description "Browse, install, enable, and uninstall plugins. Enabled plugins load automatically into new conversations.", an enabled **Add plugin** button on a local backend, and the catalog as cards.

@@ -10,6 +10,8 @@ can be viewed and built; Ctrl/Cmd+Enter builds it.
 
 Source: `src/components/features/chat/`, `src/components/features/controls/tools-context-menu.tsx`, `src/components/features/controls/agent-status.tsx`, `src/components/features/controls/agent-loading.tsx`, `src/components/features/context-menu/context-menu-icon-text-with-description.tsx`, `src/hooks/chat/`, `src/utils/constants.ts`.
 
+Server: F05, F06, F09, F10, F14.
+
 ## Sub-features
 
 - `F05.send-message`: Send is disabled while the field is empty; Shift+Enter inserts a newline; Enter sends, clears the field and the message persists after reload.

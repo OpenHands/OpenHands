@@ -14,6 +14,7 @@ import type {
 
 const { drivers } = vi.hoisted(() => ({
   drivers: [] as {
+    drive: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
     moveTo: ReturnType<typeof vi.fn>;
     config: Config;
@@ -81,6 +82,13 @@ describe("startGuidedTour", () => {
     tour(
       stop({ id: "pick", advanceOnClick: "#card" }),
       stop({ id: "dialog", anchor: "#dialog" }),
+    );
+
+  // Like ModalBackdrop: a modal dialog on top of the page.
+  const openDialog = (content = "") =>
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `<div role="dialog" aria-modal="true">${content}</div>`,
     );
 
   it("ends the tour when the step its last stop waits for succeeds", async () => {
@@ -226,6 +234,61 @@ describe("startGuidedTour", () => {
     // Assert: driver.js would float the popover over the page.
     expect(drivers).toHaveLength(0);
     expect(isGuidedTourActive()).toBe(false);
+  });
+
+  it("starts on the stop in a dialog the admin has already opened", async () => {
+    // Arrange: the click the first stop waits for came before the tour.
+    openDialog('<div id="dialog"></div>');
+
+    // Act
+    await startGuidedTour(pickThenDialog(), NAV, LABELS);
+
+    // Assert
+    expect(drivers[0].drive).toHaveBeenCalledWith(1);
+  });
+
+  it("does not start while a dialog with none of its stops covers the page", async () => {
+    // Arrange
+    openDialog();
+
+    // Act
+    await startGuidedTour(pickThenDialog(), NAV, LABELS);
+
+    // Assert: the first stop would be drawn over that dialog.
+    expect(drivers).toHaveLength(0);
+    expect(isGuidedTourActive()).toBe(false);
+  });
+
+  it("ends the tour when the dialog its stop waits in is closed", async () => {
+    // Arrange
+    openDialog('<div id="dialog"></div>');
+    await startGuidedTour(
+      tour(stop({ anchor: "#dialog", waitForComplete: "connect-git" })),
+      NAV,
+      LABELS,
+    );
+
+    // Act
+    document.querySelector('[aria-modal="true"]')!.remove();
+
+    // Assert
+    await waitFor(() => expect(isGuidedTourActive()).toBe(false));
+    expect(drivers[0].destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("still shows the next stop when the clicked stop's page is replaced", async () => {
+    // Arrange
+    await startGuidedTour(pickThenDialog(), NAV, LABELS);
+    await wait(60);
+
+    // Act: the click opens another page, and the next stop's dialog is there.
+    document.getElementById("card")!.click();
+    document.getElementById("anchor")!.remove();
+    document.body.insertAdjacentHTML("beforeend", '<div id="dialog"></div>');
+
+    // Assert
+    await waitFor(() => expect(drivers[0].moveTo).toHaveBeenCalledWith(1));
+    expect(isGuidedTourActive()).toBe(true);
   });
 
   it("hides the popover footer only on a stop that asks for it", async () => {
