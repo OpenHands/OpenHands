@@ -23,6 +23,7 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { redactStorage } from "./lib/redact-storage.mjs";
 import { HeldKeys } from "./lib/held-keys.mjs";
+import { installMediaObservation } from "./lib/media-observation.mjs";
 import {
   observeWebSocket,
   isWebSocketObservation,
@@ -161,19 +162,28 @@ await context.addInitScript(() => {
   });
 });
 
-// Instrumentation, not mocking: record media playback so sound features can
-// be observed (`browser media`); playback itself still happens.
-await context.addInitScript(() => {
-  const original = HTMLMediaElement.prototype.play;
-  window.__ohMediaPlays = [];
-  HTMLMediaElement.prototype.play = function play(...args) {
-    window.__ohMediaPlays.push({
-      src: this.currentSrc || this.src || "",
-      ts: new Date().toISOString(),
-    });
-    return original.apply(this, args);
-  };
-});
+// Runs start in the Paper theme, so screenshots share one look. Seeded once per
+// browser profile: a check that clears or changes the theme keeps that choice
+// across reloads. CONTROL_OPENHANDS_THEME picks another theme; "default" keeps
+// the app's own default.
+const seedTheme = process.env.CONTROL_OPENHANDS_THEME ?? "paper";
+if (seedTheme && seedTheme !== "default") {
+  await context.addInitScript((theme) => {
+    try {
+      const marker = "openhands-verify-theme-seeded";
+      if (window.localStorage.getItem(marker)) return;
+      window.localStorage.setItem(marker, "1");
+      if (!window.localStorage.getItem("openhands-color-theme"))
+        window.localStorage.setItem("openhands-color-theme", theme);
+    } catch {
+      // Opaque origins (about:blank, data:) have no localStorage.
+    }
+  }, seedTheme);
+}
+
+// Read-only media observation. Normal microphone, playback and peer APIs still
+// execute; no responses, constraints, permissions or media are substituted.
+await context.addInitScript(installMediaObservation);
 
 let dialogPolicy = "dismiss";
 let networkOffline = false;
@@ -1431,7 +1441,7 @@ const handlers = {
       value: await input.inputValue().catch(() => undefined),
     };
   },
-  async media({ clear, reducedMotion }) {
+  async media({ clear, reducedMotion, voice }) {
     if (reducedMotion !== undefined) {
       if (!["reduce", "no-preference"].includes(reducedMotion))
         throw new Error("media reduced-motion needs reduce | no-preference");
@@ -1444,6 +1454,15 @@ const handlers = {
     }, Boolean(clear));
     return {
       plays,
+      ...(voice
+        ? {
+            voice: await activePage.evaluate(async () =>
+              window.__ohMediaObservation
+                ? window.__ohMediaObservation.snapshot()
+                : { supported: false, reason: "instrumentation-unavailable" },
+            ),
+          }
+        : {}),
       reducedMotion: await activePage.evaluate(() =>
         matchMedia("(prefers-reduced-motion: reduce)").matches
           ? "reduce"
