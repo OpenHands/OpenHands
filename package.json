@@ -210,6 +210,12 @@
     "@vercel/react-router": {
       "@react-router/dev": "$@react-router/dev",
       "@react-router/node": "$@react-router/node"
+    },
+    "eslint-plugin-jsx-a11y": {
+      "eslint": "$eslint"
+    },
+    "eslint-plugin-react": {
+      "eslint": "$eslint"
     }
   },
   "main": "./dist/index.cjs",
