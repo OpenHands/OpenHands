@@ -23,7 +23,7 @@ Source: `src/routes/projects.tsx`, `src/routes/project.tsx`, `src/components/fea
 - `F32.membership`: **Add a conversation…** adds a recent non-member; **Remove** drops a member's `project` tag; the coordinator cannot be removed.
 - `F32.files`: Upload adds a file marked "Added by you"; a file a conversation saved names that conversation; clicking a text file shows its contents, other files say there is no preview.
 - `F32.badge`: a member conversation's header shows the project's name as a link to its project page.
-- `F32.headers`: in the coordinator, the server's `[Update from …]`, `[Sent by …]`, `[Reply in …]` and `[Message from the user in …]` and `[Paused by the user: …]` header lines render as one compact line with a working mention; the user's own bracketed text is untouched.
+- `F32.headers`: in the coordinator, the server's `[Update from …]`, `[Sent by …]`, `[Reply in …]`, `[Message from the user in …]` and `[Paused by the user: …]` header lines render as one compact line with a working mention; the user's own bracketed text is untouched.
 
 ## How to get to it (user POV)
 
