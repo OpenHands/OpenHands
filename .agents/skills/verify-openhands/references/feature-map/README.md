@@ -236,7 +236,7 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F04 | [Conversation list and folders](F04-conversation-list.md) | sidebar list, View presets, workspace folders, tags, rename/pin/archive/delete, load more | sidebar on every page | several conversations; fixture repos | 43 |
 | F05 | [Composer, slash commands and plan mode](F05-composer.md) | send, drafts, attachments, model pill, slash commands, `/goal`, plan mode, dictation | home and conversation composer | LLM | 27 |
 | F06 | [Agent activity](F06-agent-activity.md) | messages, tool events, thinking, empty state, confirmation mode, stop/resume, errors, branching | `/conversations/<id>` | LLM | 39 |
-| F07 | [Conversation page, header and menu](F07-conversation-page.md) | title rename, status menu, ⋯ menu (skills, hooks, tools, export, download, cost, stop, delete), git bar, overview | sidebar row, URL, `/panel` | LLM; fixture repo; Cloud items blocked | 26 |
+| F07 | [Conversation page, header and menu](F07-conversation-page.md) | title rename, status menu, ⋯ menu (skills, hooks, tools, export, download, cost, stop, delete), git bar, overview, channel-origin chip | sidebar row, URL, `/panel` | LLM; fixture repo; Cloud items blocked | 27 |
 | F08 | [Workspace drawer: files and changes](F08-workspace-files-and-changes.md) | Files tab, Commits and uncommitted changes, diff viewer, file links in chat | panel toggle, file links | LLM; fixture repo | 35 |
 | F09 | [Settings shell and navigation](F09-settings-shell.md) | settings navigation, phone hub, deep links, update card, backend note | gear, command menu, URLs | baseline; deep links before `llm preset` | 26 |
 | F10 | [LLM profiles](F10-llm-profiles.md) | list, add, edit, rename, duplicate, delete, default, advanced fields, validation | `/settings/llm` | fresh run; DeepSeek key | 34 |
@@ -260,7 +260,7 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F28 | [Automation setup page](F28-automation-setup-page.md) | blank form, kind toggle, schedule presets, event fields, timeout, draft save and validation, draft Test, Create | **Add Automation → Create Automation**, `/automations/setup`, draft Resume, kebab Edit | automation service; no LLM | 20 |
 | F29 | [ACP agent sessions](F29-acp-sessions.md) | an ACP (Codex) conversation: narration order, tool cards, edits and Changes, follow-up, model switch, Stop, reload and restart, usage | Home composer with an ACP profile active (F13) | approved Codex login (`CODEX_AUTH_JSON`); fixture repo | 11 |
 
-29 families, 855 sub-features. `control-openhands map ids` lists every ID with its file.
+29 families, 856 sub-features. `control-openhands map ids` lists every ID with its file.
 
 ### Neighbouring families
 
