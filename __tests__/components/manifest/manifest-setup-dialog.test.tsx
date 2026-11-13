@@ -28,7 +28,9 @@ const mocks = vi.hoisted(() => ({
   capabilities: vi.fn(),
   llmProfiles: vi.fn(),
   nativeIntegrations: vi.fn(),
-  missingCreateEndpoints: vi.fn<(entry: SetupEntry) => string[]>(() => []),
+  missingCreateEndpoints: vi.fn<
+    (entry: SetupEntry, action?: string | null) => string[]
+  >(() => []),
   tracking: {
     trackAutomationSetupOpened: vi.fn(),
     trackAutomationSetupBlocked: vi.fn(),
@@ -136,16 +138,16 @@ const CUSTOM_AUTOMATION_ENTRY = AUTOMATION_CATALOG.find(
 
 function renderDialog(entry: SetupEntry = ENTRY) {
   const user = userEvent.setup();
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const dialog = () => (
+    <QueryClientProvider client={client}>
       <SetupDialog entry={entry} onClose={vi.fn()} />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return { user };
+  const view = render(dialog());
+  return { user, rerender: () => view.rerender(dialog()) };
 }
 
 /** Answer the two required fields the entry ships without a default. */
@@ -327,6 +329,101 @@ const LLM_PROFILE_ENTRY: SetupEntry = (() => {
 })();
 
 describe("SetupDialog", () => {
+  it("does not count unresolved prerequisites as a blocked setup", () => {
+    const blocked = {
+      ...NOTHING_TO_CONNECT,
+      blockingIntegrations: [
+        {
+          id: "github",
+          requirement: { message: "Connect GitHub" },
+          entry: null,
+        },
+      ],
+      isBlocked: true,
+    };
+    mocks.prerequisites.mockReturnValue({ ...blocked, isLoading: true });
+    const { rerender } = renderDialog();
+    expect(mocks.tracking.trackAutomationSetupBlocked).not.toHaveBeenCalled();
+
+    mocks.prerequisites.mockReturnValue(NOTHING_TO_CONNECT);
+    rerender();
+    expect(mocks.tracking.trackAutomationSetupBlocked).not.toHaveBeenCalled();
+
+    mocks.prerequisites.mockReturnValue(blocked);
+    rerender();
+    rerender();
+    expect(
+      mocks.tracking.trackAutomationSetupBlocked,
+    ).toHaveBeenCalledExactlyOnceWith({
+      automationId: ENTRY.id,
+      stage: "prerequisites",
+      reason: "github",
+      errorCode: "prerequisites_blocked",
+    });
+  });
+
+  it("does not count an initial action that discovery replaces as unsupported", () => {
+    const entry = createSetupEntry({
+      setup: createSetup({
+        actions: {
+          upload: {
+            label: "Upload",
+            help: "Upload a bundle",
+            features: [],
+            args: {},
+            tarballPath: "bundle.tar.gz",
+            entrypoint: "python main.py",
+          },
+          prompt: {
+            label: "Prompt",
+            help: "Run a prompt",
+            features: [],
+            args: {},
+            prompt: "Watch widgets",
+          },
+        },
+      }),
+    });
+    mocks.missingCreateEndpoints.mockImplementation((_entry, action) =>
+      action === "upload" ? ["uploads"] : [],
+    );
+    mocks.capabilities.mockReturnValue({
+      ...UNSUPPORTED,
+      supported: "unknown",
+      isLoading: true,
+    });
+    const { rerender } = renderDialog(entry);
+    expect(mocks.tracking.trackAutomationSetupBlocked).not.toHaveBeenCalled();
+
+    mocks.capabilities.mockReturnValue({
+      capabilities: ACTION_CAPABILITIES,
+      supported: true,
+      unmet: [],
+      isLoading: false,
+    });
+    rerender();
+    expect(screen.getByTestId("setup-field-widgetName")).toBeInTheDocument();
+    expect(mocks.tracking.trackAutomationSetupBlocked).not.toHaveBeenCalled();
+  });
+
+  it("waits for capability discovery before counting an unsupported setup", () => {
+    mocks.capabilities.mockReturnValue({ ...UNSUPPORTED, isLoading: true });
+    const { rerender } = renderDialog();
+    expect(mocks.tracking.trackAutomationSetupBlocked).not.toHaveBeenCalled();
+
+    mocks.capabilities.mockReturnValue(UNSUPPORTED);
+    rerender();
+    rerender();
+    expect(
+      mocks.tracking.trackAutomationSetupBlocked,
+    ).toHaveBeenCalledExactlyOnceWith({
+      automationId: ENTRY.id,
+      stage: "prerequisites",
+      reason: "webhookDelivery",
+      errorCode: "unsupported",
+    });
+  });
+
   it("offers agent profiles only for actions that accept them", async () => {
     mocks.capabilities.mockReturnValue({
       capabilities: ACTION_CAPABILITIES,

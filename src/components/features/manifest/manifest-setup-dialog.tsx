@@ -275,9 +275,11 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     });
   }, [entry.id, trackAutomationSetupOpened]);
 
+  const isLoading = capabilities.isLoading || prerequisites.isLoading;
+
   const emittedBlockedRef = useRef(false);
   useEffect(() => {
-    if (emittedBlockedRef.current) return;
+    if (isLoading || emittedBlockedRef.current) return;
     if (!prerequisites.isBlocked) return;
     emittedBlockedRef.current = true;
     trackAutomationSetupBlocked({
@@ -290,6 +292,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     });
   }, [
     entry.id,
+    isLoading,
     prerequisites.isBlocked,
     prerequisites.blockingIntegrations,
     trackAutomationSetupBlocked,
@@ -310,7 +313,15 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
 
   const emittedUnsupportedRef = useRef(false);
   useEffect(() => {
-    if (emittedUnsupportedRef.current) return;
+    if (isLoading || emittedUnsupportedRef.current) return;
+    if (
+      selectedAction &&
+      !actionOptions.includes(
+        selectedAction as (typeof actionOptions)[number],
+      ) &&
+      actionOptions.length > 0
+    )
+      return;
     if (!isUnsupported) return;
     emittedUnsupportedRef.current = true;
     trackAutomationSetupBlocked({
@@ -319,7 +330,15 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
       reason: unmet.join(",") || "unsupported",
       errorCode: "unsupported",
     });
-  }, [entry.id, isUnsupported, unmet, trackAutomationSetupBlocked]);
+  }, [
+    entry.id,
+    isLoading,
+    selectedAction,
+    actionOptions,
+    isUnsupported,
+    unmet,
+    trackAutomationSetupBlocked,
+  ]);
   const showPrerequisites =
     prerequisites.blockingIntegrations.length > 0 ||
     prerequisites.warningIntegrations.length > 0;
@@ -541,7 +560,6 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     return local ? formatFieldError(local, t) : serviceErrors.fieldErrors[name];
   };
 
-  const isLoading = capabilities.isLoading || prerequisites.isLoading;
   const isLoadingLlmProfileOptions = hasLlmProfileField && isLoadingProfiles;
 
   const title = (() => {
