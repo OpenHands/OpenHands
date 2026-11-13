@@ -272,6 +272,16 @@ describe("Sidebar", () => {
     });
   });
 
+  it("applies safe-area padding to the fixed mobile drawer", () => {
+    renderSidebar("/conversations");
+
+    fireEvent.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+
+    const drawer = screen.getByTestId("sidebar-mobile-drawer");
+    expect(drawer).toHaveClass("mobile-sidebar-drawer-safe-area");
+    expect(drawer).not.toHaveClass("pb-2", "pl-2.5", "pr-0");
+  });
+
   it("keeps the CSS drawer and backdrop timing in step with removal", async () => {
     // Arrange: compile the production stylesheet, then drive the real drawer.
     const compiler = await compile(

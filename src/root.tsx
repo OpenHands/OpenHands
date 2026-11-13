@@ -107,7 +107,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         />
       </head>
       <body data-agent-server-ui="" className="m-0">
-        <AgentServerUIRoot contentClassName="min-h-screen">
+        <AgentServerUIRoot contentClassName="h-dvh min-h-0">
           <ColorThemeApplier />
           {children}
           <Toaster toastOptions={TOAST_OPTIONS} />

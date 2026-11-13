@@ -8,10 +8,12 @@ import {
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Children, type ReactElement, type ReactNode } from "react";
 import { createRoutesStub } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
-import App, { links } from "#/root";
+import App, { Layout, links } from "#/root";
+import { AgentServerUIRoot } from "#/components/providers/agent-server-ui-root";
 import { server } from "#/mocks/node";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
 import { LOCKED_CLOUD_BACKEND_ID } from "#/api/backend-registry/default-backend";
@@ -982,6 +984,23 @@ describe("App root agent-server availability guard", () => {
       screen.queryByTestId("first-run-onboarding-screen"),
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("onboarding-modal")).not.toBeInTheDocument();
+  });
+});
+
+describe("App root viewport sizing", () => {
+  it("uses a dynamic viewport constraint for the outer UI wrapper", () => {
+    const layout = Layout({ children: <div /> }) as ReactElement<{
+      children: ReactNode;
+    }>;
+    const body = Children.toArray(layout.props.children)[1] as ReactElement<{
+      children: ReactNode;
+    }>;
+    const uiRoot = Children.toArray(body.props.children)[0] as ReactElement<{
+      contentClassName: string;
+    }>;
+
+    expect(uiRoot.type).toBe(AgentServerUIRoot);
+    expect(uiRoot.props.contentClassName).toBe("h-dvh min-h-0");
   });
 });
 
