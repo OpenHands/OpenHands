@@ -504,7 +504,7 @@ export default defineConfig(({ mode }) => {
         optimizer: {
           client: {
             enabled: true,
-            include: ["@heroui/react"],
+            include: [],
             exclude: [
               "react",
               "react/jsx-runtime",
