@@ -8,7 +8,7 @@ jobs:
   release-ready:
     permissions:
       actions: write
-      contents: read
+      contents: write # required by the reusable workflow; `read` fails as startup_failure
       issues: write
       pull-requests: write
     secrets: inherit
