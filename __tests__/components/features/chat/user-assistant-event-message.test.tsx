@@ -1,4 +1,5 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import React from "react";
 import { describe, it, expect, vi, beforeEach, onTestFinished } from "vitest";
 import { renderWithProviders } from "test-utils";
 import type { MessageEvent } from "#/types/agent-server/core";
@@ -10,6 +11,30 @@ import ConversationService from "#/api/conversation-service/conversation-service
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { DirectConversationInfo } from "#/api/agent-server-adapter";
+import {
+  useIsMutating,
+  useMutation,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import { forkConversationMutationKey } from "#/hooks/mutation/use-fork-conversation";
+
+// Capture the filters the row passes to `useIsMutating` (while still running the
+// real hook), so a test can assert the row never subscribes to a shared key.
+const { isMutatingFilters } = vi.hoisted(() => ({
+  isMutatingFilters: [] as unknown[],
+}));
+
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-query")>();
+  return {
+    ...actual,
+    useIsMutating: (filters?: unknown) => {
+      isMutatingFilters.push(filters);
+      return (actual.useIsMutating as (f?: unknown) => number)(filters);
+    },
+  };
+});
 
 const { useActiveBackendMock, useOptionalConversationIdMock, navigateMock } =
   vi.hoisted(() => ({
@@ -37,6 +62,7 @@ vi.mock("#/context/navigation-context", async (importActual) => ({
 // test-utils re-inits i18n with empty resources, so `t()` returns the key —
 // which becomes the button's accessible name (aria-label).
 const BRANCH_LABEL = I18nKey.CHAT_INTERFACE$BRANCH_FROM_HERE;
+const CONVERSATION_ID = "conv-1";
 const forkResult = { id: "fork-123" } as DirectConversationInfo;
 
 let forkSpy: ReturnType<typeof vi.spyOn>;
@@ -85,13 +111,19 @@ describe("UserAssistantEventMessage — branch action", () => {
     useActiveBackendMock.mockReset();
     useOptionalConversationIdMock.mockReset();
     navigateMock.mockReset();
+    isMutatingFilters.length = 0;
     localStorage.clear();
+    // The fork navigates only while the reader is still on the source
+    // conversation, which the hook reads from `window.location.pathname`.
+    window.history.replaceState({}, "", `/conversations/${CONVERSATION_ID}`);
 
     useActiveBackendMock.mockReturnValue({
       backend: { kind: "local" },
       orgId: null,
     });
-    useOptionalConversationIdMock.mockReturnValue({ conversationId: "conv-1" });
+    useOptionalConversationIdMock.mockReturnValue({
+      conversationId: CONVERSATION_ID,
+    });
 
     ConversationService.setCurrentConversation(null);
 
@@ -271,6 +303,124 @@ describe("UserAssistantEventMessage — branch action", () => {
     expect(forkSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("still blocks a second fork after the row is unmounted and remounted", async () => {
+    // A virtualized row unmounts when it scrolls out, taking the mutation
+    // observer (and its `isPending`) with it. A remounted row must still see
+    // the in-flight fork, which it reads from the cache entry via
+    // `useIsMutating`. The providers stay mounted, as they do in the app.
+    let resolveFork: ((value: DirectConversationInfo) => void) | undefined;
+    forkSpy.mockImplementation(
+      () =>
+        new Promise<DirectConversationInfo>((resolve) => {
+          resolveFork = resolve;
+        }),
+    );
+    const Row = ({ mounted }: { mounted: boolean }) =>
+      mounted ? (
+        <UserAssistantEventMessage
+          event={makeEvent("user", "evt-user")}
+          isLastMessage={false}
+          isFromPlanningAgent={false}
+        />
+      ) : null;
+    // Observes the same cache entry the row reads, so we can wait until the
+    // in-flight fork is visible before clicking again.
+    const forkKey = forkConversationMutationKey(CONVERSATION_ID);
+    const ForkCount = () => (
+      <span data-testid="fork-count">
+        {useIsMutating({ mutationKey: forkKey })}
+      </span>
+    );
+    // A stable client: the mutation observer created on first mount must live
+    // on the same cache the remounted row reads from.
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const tree = (mounted: boolean) => (
+      <QueryClientProvider client={client}>
+        <Row mounted={mounted} />
+        <ForkCount />
+      </QueryClientProvider>
+    );
+
+    const { rerender } = renderWithProviders(tree(true));
+    fireEvent.mouseEnter(screen.getByTestId("user-message"));
+    fireEvent.click(screen.getByRole("button", { name: BRANCH_LABEL }));
+    await waitFor(() => expect(forkSpy).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId("fork-count")).toHaveTextContent("1"),
+    );
+
+    rerender(tree(false));
+    rerender(tree(true));
+    await waitFor(() =>
+      expect(screen.getByTestId("fork-count")).toHaveTextContent("1"),
+    );
+
+    fireEvent.mouseEnter(screen.getByTestId("user-message"));
+    fireEvent.click(screen.getByRole("button", { name: BRANCH_LABEL }));
+
+    // Give the second click a chance to reach the service; it must not.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(forkSpy).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFork?.({ ...forkResult } as DirectConversationInfo);
+      await Promise.resolve();
+    });
+  });
+
+  it("does not block the branch action on a fork of another conversation", async () => {
+    // `useIsMutating` matches by mutation-key prefix. An unscoped key would
+    // make a fork in conversation B read as "already forking" here and silently
+    // skip the click; the key must be scoped to this conversation.
+    let resolveOther: ((value: DirectConversationInfo) => void) | undefined;
+    forkSpy.mockImplementation(
+      () =>
+        new Promise<DirectConversationInfo>((resolve) => {
+          resolveOther = resolve;
+        }),
+    );
+
+    const OtherFork = () => {
+      // A fork started elsewhere, in a different conversation.
+      const { mutate } = useMutation<void, Error, void>({
+        mutationKey: forkConversationMutationKey("other-conv"),
+        mutationFn: () => new Promise<void>(() => {}),
+      });
+      React.useEffect(() => {
+        mutate();
+      }, [mutate]);
+      return null;
+    };
+
+    renderWithProviders(
+      <>
+        <OtherFork />
+        <UserAssistantEventMessage
+          event={makeEvent("user", "evt-user")}
+          isLastMessage={false}
+          isFromPlanningAgent={false}
+        />
+      </>,
+    );
+
+    fireEvent.mouseEnter(screen.getByTestId("user-message"));
+    fireEvent.click(screen.getByRole("button", { name: BRANCH_LABEL }));
+
+    // The click in this conversation must reach the service despite the other
+    // conversation's fork being in flight.
+    await waitFor(() => expect(forkSpy).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      resolveOther?.({ ...forkResult } as DirectConversationInfo);
+      await Promise.resolve();
+    });
+  });
+
   it("hides the branch action on the cloud backend", () => {
     useActiveBackendMock.mockReturnValue({
       backend: { kind: "cloud" },
@@ -296,5 +446,22 @@ describe("UserAssistantEventMessage — branch action", () => {
     expect(
       screen.queryByRole("button", { name: BRANCH_LABEL }),
     ).not.toBeInTheDocument();
+  });
+
+  it("does not scope the in-flight-fork check to a shared empty conversation key", () => {
+    // Outside a conversation the id is empty. Matching `["fork-conversation",
+    // ""]` would make every id-less view share one key, so a fork started in
+    // one would read as in-flight in another. The row must not subscribe to
+    // that key at all.
+    useOptionalConversationIdMock.mockReturnValue({
+      conversationId: undefined,
+    });
+
+    renderMessage(makeEvent("agent", "evt-agent"));
+
+    expect(isMutatingFilters.length).toBeGreaterThan(0);
+    for (const filters of isMutatingFilters) {
+      expect(filters).not.toHaveProperty("mutationKey");
+    }
   });
 });

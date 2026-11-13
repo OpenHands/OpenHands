@@ -197,4 +197,35 @@ describe("ModelMessages", () => {
       screen.getByText(/model:\s+openhands\/glm-5\.2 \(free\)/),
     ).toBeInTheDocument();
   });
+
+  it("keeps profile expansion separate for two /model entries on one event", async () => {
+    const user = userEvent.setup();
+    // Both entries anchor to the same event and list a profile with the same
+    // name, so a key of just the profile name would make expanding one expand
+    // the other.
+    useModelStore.getState().show(CONVERSATION_ID, "event-1", [profiles[0]]);
+    useModelStore.getState().show(CONVERSATION_ID, "event-1", [profiles[0]]);
+
+    renderWithProviders(
+      <ModelMessages
+        conversationId={CONVERSATION_ID}
+        anchorEventId="event-1"
+      />,
+    );
+
+    // Expand both /model listings so both profile rows are mounted.
+    const expanders = screen.getAllByRole("button", { name: "BUTTON$EXPAND" });
+    await user.click(expanders[0]);
+    await user.click(expanders[1]);
+
+    const toggles = screen.getAllByRole("button", {
+      name: "Toggle details for haiku",
+    });
+    expect(toggles).toHaveLength(2);
+
+    await user.click(toggles[0]);
+
+    expect(toggles[0]).toHaveAttribute("aria-expanded", "true");
+    expect(toggles[1]).toHaveAttribute("aria-expanded", "false");
+  });
 });

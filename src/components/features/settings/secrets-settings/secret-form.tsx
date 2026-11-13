@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import React from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -12,6 +12,7 @@ import { BrandButton } from "../brand-button";
 import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 import { OptionalTag } from "../optional-tag";
 import type { CustomSecretInput } from "#/api/agent-server-adapter";
+import type { SecretRequestDraft } from "#/stores/secret-request-store";
 
 interface SecretFormProps {
   mode: "add" | "edit";
@@ -22,6 +23,21 @@ interface SecretFormProps {
   defaultName?: string;
   /** Keep the form open after a failed save so the user can retry. */
   keepOpenOnError?: boolean;
+  /**
+   * Draft to restore after a remount (a secret-request card the chat remounted
+   * across the virtualization threshold). Carries the name, description, value
+   * and show toggle, so a rename or a typed description survives too.
+   */
+  initialDraft?: SecretRequestDraft;
+  /** Reports every field edit so the caller can hold the draft across remounts. */
+  onDraftChange?: (draft: SecretRequestDraft) => void;
+  /**
+   * Mutation key for this form's saves, when the caller can remount. The
+   * in-flight state is then read with `useIsMutating`, which lives on the
+   * mutation cache entry and so still reads "saving" after a remount — a
+   * per-form `isPending` would read idle and let a second click double-save.
+   */
+  mutationKey?: string[];
 }
 
 export function SecretForm({
@@ -31,23 +47,84 @@ export function SecretForm({
   onSaved,
   defaultName = "",
   keepOpenOnError = false,
+  initialDraft,
+  onDraftChange,
+  mutationKey,
 }: SecretFormProps) {
   const queryClient = useQueryClient();
   const { t } = useTranslation("openhands");
 
   const { data: secrets } = useSearchSecrets();
-  const { mutate: createSecret, isPending: isCreating } = useCreateSecret();
-  const { mutate: updateSecret, isPending: isUpdating } = useUpdateSecret();
-  const isSaving = isCreating || isUpdating;
+
+  const invalidateSecrets = React.useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["secrets-search"] });
+    queryClient.invalidateQueries({ queryKey: ["secrets"] });
+  }, [queryClient]);
+
+  // Both the cache refresh and `onSaved` ride the mutation itself rather than a
+  // per-call `mutate` callback: the chat can unmount this form while a save is
+  // in flight (the virtualized list remounts a secret-request card across the
+  // virtualization threshold), and TanStack Query drops per-call callbacks with
+  // the unmounted observer — the saved secret would neither reach the waiting
+  // agent nor appear in Settings. Invalidate first, so the secrets list is
+  // refreshed even when `onSaved` completes a request that dismisses the form.
+  const handleSaved = React.useCallback(
+    (secret: CustomSecretInput) => {
+      invalidateSecrets();
+      onSaved?.(secret);
+    },
+    [invalidateSecrets, onSaved],
+  );
+
+  const { mutate: createSecret, isPending: isCreating } = useCreateSecret({
+    onSuccess: handleSaved,
+    mutationKey,
+  });
+  const { mutate: updateSecret, isPending: isUpdating } = useUpdateSecret({
+    onSuccess: handleSaved,
+    mutationKey,
+  });
+  // When the caller supplies a key the form can remount mid-save, so its own
+  // `isPending` belongs to a fresh observer and reads idle; read the cache entry
+  // instead so Save stays disabled and a second click cannot double-save.
+  const pendingKeyed =
+    useIsMutating(mutationKey ? { mutationKey } : { predicate: () => false }) >
+    0;
+  const isSaving = mutationKey ? pendingKeyed : isCreating || isUpdating;
 
   const [error, setError] = React.useState<string | null>(null);
   const [name, setName] = React.useState(
-    mode === "edit" && selectedSecret ? selectedSecret : defaultName,
+    initialDraft?.name ??
+      (mode === "edit" && selectedSecret ? selectedSecret : defaultName),
   );
-  const [value, setValue] = React.useState("");
-  const [showValue, setShowValue] = React.useState(false);
+  const [value, setValue] = React.useState(initialDraft?.value ?? "");
+  const [showValue, setShowValue] = React.useState(
+    initialDraft?.showValue ?? false,
+  );
+  const [description, setDescription] = React.useState(
+    initialDraft?.description ?? "",
+  );
+  // The draft callback has to carry the latest field values, but the inputs'
+  // `onChange` and the toggle read them from the render closure, which can be a
+  // render behind. Mirror them in refs updated every render and build the draft
+  // from the refs.
+  const nameRef = React.useRef(name);
+  const descriptionRef = React.useRef(description);
+  const valueRef = React.useRef(value);
+  const showValueRef = React.useRef(showValue);
+  nameRef.current = name;
+  descriptionRef.current = description;
+  valueRef.current = value;
+  showValueRef.current = showValue;
   const valueInputId = React.useId();
-  const [description, setDescription] = React.useState("");
+  const emitDraft = React.useCallback(() => {
+    onDraftChange?.({
+      name: nameRef.current,
+      description: descriptionRef.current,
+      value: valueRef.current,
+      showValue: showValueRef.current,
+    });
+  }, [onDraftChange]);
 
   const secretDescription =
     (mode === "edit" &&
@@ -59,24 +136,20 @@ export function SecretForm({
   const initialName = mode === "edit" && selectedSecret ? selectedSecret : "";
 
   React.useEffect(() => {
-    setName(mode === "edit" && selectedSecret ? selectedSecret : defaultName);
-    setValue("");
-    setShowValue(false);
-    setDescription(secretDescription);
+    setName(
+      initialDraft?.name ??
+        (mode === "edit" && selectedSecret ? selectedSecret : defaultName),
+    );
+    setValue(initialDraft?.value ?? "");
+    setShowValue(initialDraft?.showValue ?? false);
+    setDescription(initialDraft?.description ?? secretDescription);
     setError(null);
+    // `initialDraft` is a seed value for a remount, not a live input, so it is
+    // intentionally excluded from the deps.
   }, [mode, selectedSecret, secretDescription, defaultName]);
 
   const closeUnlessKeptOpen = (_data: unknown, error: Error | null) => {
     if (!error || !keepOpenOnError) onCancel();
-  };
-
-  const invalidateSecrets = () => {
-    queryClient.invalidateQueries({
-      queryKey: ["secrets-search"],
-    });
-    queryClient.invalidateQueries({
-      queryKey: ["secrets"],
-    });
   };
 
   const handleCreateSecret = (
@@ -86,13 +159,7 @@ export function SecretForm({
   ) => {
     createSecret(
       { name, value, description },
-      {
-        onSettled: closeUnlessKeptOpen,
-        onSuccess: () => {
-          invalidateSecrets();
-          onSaved?.({ name, description });
-        },
-      },
+      { onSettled: closeUnlessKeptOpen },
     );
   };
 
@@ -104,13 +171,7 @@ export function SecretForm({
   ) => {
     updateSecret(
       { secretToEdit, name, description, value },
-      {
-        onSettled: closeUnlessKeptOpen,
-        onSuccess: () => {
-          invalidateSecrets();
-          onSaved?.({ name, description });
-        },
-      },
+      { onSettled: closeUnlessKeptOpen },
     );
   };
 
@@ -180,7 +241,11 @@ export function SecretForm({
         className="w-full min-w-0"
         required
         value={name}
-        onChange={setName}
+        onChange={(next) => {
+          nameRef.current = next;
+          setName(next);
+          emitDraft();
+        }}
         placeholder={t(I18nKey.SECRETS$API_KEY_EXAMPLE)}
         pattern="^[a-zA-Z][a-zA-Z0-9_]{0,63}$"
         title={t(I18nKey.SETTINGS$SECRET_NAME_PATTERN_TITLE)}
@@ -202,7 +267,12 @@ export function SecretForm({
             autoComplete="new-password"
             required={mode === "add"}
             value={value}
-            onChange={(event) => setValue(event.currentTarget.value)}
+            onChange={(event) => {
+              const next = event.currentTarget.value;
+              valueRef.current = next;
+              setValue(next);
+              emitDraft();
+            }}
             className={cn(
               formControlSettingsFieldClassName,
               "disabled:bg-surface-raised disabled:border-border-subtle disabled:cursor-not-allowed",
@@ -217,7 +287,12 @@ export function SecretForm({
                 : I18nKey.SECRETS$SHOW_VALUE,
             )}
             isDisabled={isSaving}
-            onClick={() => setShowValue((visible) => !visible)}
+            onClick={() => {
+              const next = !showValueRef.current;
+              showValueRef.current = next;
+              setShowValue(next);
+              emitDraft();
+            }}
           >
             {showValue ? (
               <EyeOff size={16} aria-hidden="true" />
@@ -237,7 +312,12 @@ export function SecretForm({
           data-testid="description-input"
           name="secret-description"
           value={description}
-          onChange={(event) => setDescription(event.currentTarget.value)}
+          onChange={(event) => {
+            const next = event.currentTarget.value;
+            descriptionRef.current = next;
+            setDescription(next);
+            emitDraft();
+          }}
           className={cn(
             formControlSettingsFieldClassName,
             "disabled:bg-surface-raised disabled:border-border-subtle",

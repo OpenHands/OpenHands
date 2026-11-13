@@ -5,7 +5,9 @@ import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { I18nKey } from "#/i18n/declaration";
 import { completeSecretRequest } from "#/services/secret-request";
 import {
+  secretRequestMutationKey,
   type SecretRequest,
+  useSecretRequestDraftStore,
   useSecretRequestStore,
 } from "#/stores/secret-request-store";
 
@@ -27,6 +29,8 @@ export function usePendingSecretRequests(): SecretRequest[] {
  */
 export function SecretRequestCard({ request }: { request: SecretRequest }) {
   const { t } = useTranslation("openhands");
+  const draft = useSecretRequestDraftStore((s) => s.drafts[request.toolCallId]);
+  const setDraft = useSecretRequestDraftStore((s) => s.setDraft);
 
   return (
     <section
@@ -43,12 +47,19 @@ export function SecretRequestCard({ request }: { request: SecretRequest }) {
         ) : null}
       </div>
       {/* SecretForm also calls onCancel after a successful save; the request
-          is already complete by then, so that call is a no-op. */}
+          is already complete by then, so that call is a no-op. The draft is
+          held in the store so a remount across the virtualization threshold
+          (the card moving to the trailing list) keeps what the user typed, and
+          the mutation key lets the form read its in-flight state from the cache
+          entry so a remount cannot re-enable Save mid-request. */}
       <SecretForm
         mode="add"
         selectedSecret={null}
         defaultName={request.name}
         keepOpenOnError
+        initialDraft={draft}
+        mutationKey={secretRequestMutationKey(request.toolCallId)}
+        onDraftChange={(next) => setDraft(request.toolCallId, next)}
         onSaved={(secret) => void completeSecretRequest(request, secret)}
         onCancel={() => void completeSecretRequest(request, null)}
       />

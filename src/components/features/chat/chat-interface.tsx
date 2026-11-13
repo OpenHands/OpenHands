@@ -28,6 +28,11 @@ import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { useIsRevealingStreamedText } from "#/hooks/use-streamed-text";
 import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
 import { useClampDragSelection } from "#/hooks/chat/use-clamp-drag-selection";
+import {
+  type ScrollAnchor,
+  captureScrollAnchor,
+  scrollAnchorOffset,
+} from "./scroll-anchor";
 import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edit";
 import { WorkspaceFilesForChatProvider } from "./chat-markdown-path-code";
 import { ChatSuggestions } from "./chat-suggestions";
@@ -50,7 +55,10 @@ import { SkillInstallRestartBanner } from "./skill-install-restart-banner";
 import { ResolvedConversationBanner } from "./resolved-conversation-banner";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
-import { Messages } from "#/components/conversation-events/chat/messages";
+import {
+  Messages,
+  type MessagesHandle,
+} from "#/components/conversation-events/chat/messages";
 import { PendingUserMessages } from "./pending-user-messages";
 import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files";
 import { validateFiles } from "#/utils/file-validation";
@@ -143,6 +151,20 @@ export function ChatInterface({
   const { t } = useTranslation("openhands");
   const scrollRef = React.useRef<HTMLDivElement>(null);
   useClampDragSelection(scrollRef);
+  // The message list virtualizes against this element, so it needs the DOM
+  // node itself (a ref owned here would never re-render `Messages` once
+  // populated). The callback is stable so React attaches it once per mount
+  // instead of detaching and re-attaching it on every render.
+  const [scrollElement, setScrollElement] =
+    React.useState<HTMLDivElement | null>(null);
+  const setScrollNode = React.useCallback((node: HTMLDivElement | null) => {
+    scrollRef.current = node;
+    setScrollElement(node);
+  }, []);
+  // The list's imperative handle: the "load older" anchor restore uses it to
+  // drop a scroll correction still buffered from the prepended rows'
+  // measurement, which would otherwise apply the same shift a second time.
+  const messagesRef = React.useRef<MessagesHandle>(null);
   // A streamed reply grows inside one event as it is revealed, so follow it
   // frame by frame while it does.
   const isRevealingStreamedText = useIsRevealingStreamedText();
@@ -275,12 +297,40 @@ export function ChatInterface({
     scrollHeight: number;
     scrollTop: number;
   } | null>(null);
+  // Row anchor captured with the height delta. The height delta is exact only
+  // while the list is plain; once it virtualizes, the prepended rows are still
+  // at the estimate in the commit that applies it, so the reader lands off by
+  // the rows' (measured - estimate) sum. A second pass puts the anchored row
+  // back once the rows have settled (see the effect below).
+  const preserveScrollAnchor = React.useRef<ScrollAnchor | null>(null);
+  // The oldest event id when a load started. The older page is known to have
+  // landed once this changes; an event arriving mid-fetch leaves it untouched,
+  // so the restore is not run (and its anchor not cleared) against the position
+  // captured before the page, which would leave the page with no second pass.
+  const oldestEventIdRef = React.useRef<string | undefined>(undefined);
+  oldestEventIdRef.current = allConversationEvents[0]?.id;
+  const oldestEventIdAtLoadRef = React.useRef<string | undefined>(undefined);
+  const restoreScrollAnchor = React.useCallback(() => {
+    const anchor = preserveScrollAnchor.current;
+    const element = scrollRef.current;
+    preserveScrollAnchor.current = null;
+    if (!anchor || !element) return;
+    const next = scrollAnchorOffset(element, anchor);
+    if (next === null) return;
+    element.scrollTop = next;
+    // The anchor restore already accounts for the prepended rows' real heights.
+    // A correction still buffered from measuring those same rows describes the
+    // very shift just undone, so applying it on the next frame would move the
+    // reader a second time. The restore is authoritative.
+    messagesRef.current?.clearPendingScrollCorrection();
+  }, []);
 
   React.useEffect(() => {
     // A pending history load may be discarded during a conversation switch.
     // Do not let the previous conversation's saved scroll geometry affect the
     // next conversation's scroll restoration.
     preserveScrollPosition.current = null;
+    preserveScrollAnchor.current = null;
   }, [conversationId]);
 
   const maybeLoadOlder = React.useCallback(
@@ -298,8 +348,13 @@ export function ChatInterface({
         scrollHeight: target.scrollHeight,
         scrollTop: target.scrollTop,
       };
+      // Captured for both list shapes: the plain path restores from the height
+      // delta, the virtualized path also uses it for the settling second pass.
+      preserveScrollAnchor.current = captureScrollAnchor(target);
+      oldestEventIdAtLoadRef.current = oldestEventIdRef.current;
       loadOlder().catch((error) => {
         preserveScrollPosition.current = null;
+        preserveScrollAnchor.current = null;
         const message =
           error instanceof Error && error.message
             ? error.message
@@ -552,8 +607,15 @@ export function ChatInterface({
   // bottom in that case.
   React.useEffect(() => {
     // If a "load older" was just triggered, restore the scroll position so
-    // the conversation appears to extend upward instead of jumping.
-    if (preserveScrollPosition.current && scrollRef.current) {
+    // the conversation appears to extend upward instead of jumping. Gate on the
+    // older page having landed (the oldest id changed): an event arriving during
+    // the fetch must not consume the restore against the pre-page position, or
+    // the page then lands with nothing left to run the second pass.
+    if (
+      preserveScrollPosition.current &&
+      scrollRef.current &&
+      oldestEventIdRef.current !== oldestEventIdAtLoadRef.current
+    ) {
       const { scrollHeight: prevHeight, scrollTop: prevTop } =
         preserveScrollPosition.current;
       const dom = scrollRef.current;
@@ -576,6 +638,23 @@ export function ChatInterface({
     activeGoalScrollKey,
     scrollDomToBottom,
   ]);
+
+  // Second pass for the "load older" restore above. The height delta it applies
+  // is exact only while the list is plain; once it virtualizes the prepended
+  // rows are still at the estimate in that commit, so the reader lands off by
+  // their (measured - estimate) sum. Once the prepended rows have reported
+  // their sizes (the virtualizer's total height settles), put the anchored row
+  // back at its recorded offset. Gated on the older page having landed, and
+  // `restoreScrollAnchor` clears the anchor on the first run, so this fires once
+  // per load. The anchor is captured for both list shapes, but the plain path
+  // already restored from the height delta and holds no drift, so re-applying it
+  // is a no-op.
+  React.useLayoutEffect(() => {
+    if (!preserveScrollAnchor.current) return;
+    if (oldestEventIdRef.current === oldestEventIdAtLoadRef.current) return;
+    const id = requestAnimationFrame(restoreScrollAnchor);
+    return () => cancelAnimationFrame(id);
+  }, [renderableEvents.length, hasPendingUserMessages, restoreScrollAnchor]);
 
   // Auto-load older events when the chat content doesn't overflow the
   // scroll area (no scrollbar to drag, no wheel events past 0). We
@@ -712,7 +791,7 @@ export function ChatInterface({
           {/* Note: We only hide chat suggestions when there's a user message */}
 
           <div
-            ref={scrollRef}
+            ref={setScrollNode}
             data-testid="chat-scroll-container"
             onScroll={(e) => {
               onChatBodyScroll(e.currentTarget);
@@ -764,11 +843,13 @@ export function ChatInterface({
 
             {!isTask && showConversationMessages && (
               <Messages
+                ref={messagesRef}
                 hasOlderEvents={hasMoreOlderEvents}
                 messages={renderableEvents}
                 allEvents={allConversationEvents}
                 pendingMessages={pendingUserMessages}
                 pendingSessionId={isSessionStarting ? session?.id : undefined}
+                scrollParent={scrollElement}
               />
             )}
             {isTask && (

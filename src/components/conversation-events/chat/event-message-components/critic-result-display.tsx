@@ -4,6 +4,8 @@ import ArrowDown from "#/icons/angle-down-solid.svg?react";
 import ArrowUp from "#/icons/angle-up-solid.svg?react";
 import { useSettings } from "#/hooks/query/use-settings";
 import { I18nKey } from "#/i18n/declaration";
+import { useEventExpansionKey } from "#/components/features/chat/row-expansion-context";
+import { usePersistentExpansion } from "#/stores/message-expansion-store";
 import type {
   CriticResult,
   CriticFeature,
@@ -176,7 +178,11 @@ export function CriticResultDisplay({
 }: CriticResultDisplayProps) {
   const { t } = useTranslation();
   const { data: settings } = useSettings();
-  const [expanded, setExpanded] = React.useState(false);
+  const expansionKey = useEventExpansionKey("critic-details");
+  const [expanded, toggleExpanded] = usePersistentExpansion(
+    expansionKey,
+    false,
+  );
 
   const normalizedScore = normalizeScore(criticResult.score);
   const { filled, empty } = getStarRating(normalizedScore);
@@ -213,7 +219,7 @@ export function CriticResultDisplay({
         {hasDetails && (
           <button
             type="button"
-            onClick={() => setExpanded((prev) => !prev)}
+            onClick={() => toggleExpanded()}
             className="cursor-pointer ml-1"
             aria-label={
               expanded

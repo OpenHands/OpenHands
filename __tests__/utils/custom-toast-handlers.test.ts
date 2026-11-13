@@ -1,13 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { ReactElement } from "react";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import toast from "react-hot-toast";
 import {
   displaySuccessToast,
   displayErrorToast,
+  displaySuccessToastWithLink,
 } from "#/utils/custom-toast-handlers";
 
 const { toastMock } = vi.hoisted(() => ({
   toastMock: Object.assign(vi.fn(), {
-    success: vi.fn(),
+    success: vi.fn(() => "toast-id"),
     error: vi.fn(),
     loading: vi.fn(),
     dismiss: vi.fn(),
@@ -121,6 +125,56 @@ describe("custom-toast-handlers", () => {
       expect(actualDuration).toBeGreaterThan(4000);
       // But should not exceed the maximum 10000ms
       expect(actualDuration).toBeLessThanOrEqual(10000);
+    });
+  });
+
+  describe("displaySuccessToastWithLink", () => {
+    const toastNode = () =>
+      (toastMock.success as unknown as { mock: { calls: unknown[][] } }).mock
+        .calls[0][0] as ReactElement;
+
+    it("renders a plain anchor the browser follows when no navigation owner is given", () => {
+      displaySuccessToastWithLink("Branched", "Open", "/conversations/fork-1");
+
+      render(toastNode());
+
+      const link = screen.getByRole("link", { name: "Open" });
+      expect(link).toHaveAttribute("href", "/conversations/fork-1");
+      expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
+    });
+
+    it("routes the link through the navigation owner when one is given", async () => {
+      // An embedded Canvas must not follow a plain href: that navigates the
+      // host document out of the app. The owner's navigate keeps it embedded.
+      const onOpen = vi.fn();
+      displaySuccessToastWithLink(
+        "Branched",
+        "Open",
+        "/conversations/fork-1",
+        onOpen,
+      );
+
+      render(toastNode());
+
+      expect(screen.queryByRole("link", { name: "Open" })).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "Open" }));
+      expect(onOpen).toHaveBeenCalledTimes(1);
+    });
+
+    it("dismisses only its own toast when the link is followed", async () => {
+      // `toast.dismiss()` with no id clears every active toast, including
+      // unrelated ones; the dismiss must be scoped to this toast.
+      displaySuccessToastWithLink(
+        "Branched",
+        "Open",
+        "/conversations/fork-1",
+        vi.fn(),
+      );
+
+      render(toastNode());
+      await userEvent.click(screen.getByRole("button", { name: "Open" }));
+
+      expect(toast.dismiss).toHaveBeenCalledWith("toast-id");
     });
   });
 });

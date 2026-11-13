@@ -7,6 +7,7 @@ import {
   ThinkingContent,
 } from "./event-message-components/collapsible-thinking";
 import React from "react";
+import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
 import { OpenHandsEvent } from "#/types/agent-server/core";
@@ -16,12 +17,19 @@ import { AgentState } from "#/types/agent-state";
 import {
   isActionEvent,
   isObservationEvent,
+  isPlanningFileEditorObservationEvent,
   isStreamingDeltaEvent,
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { EventMessage } from "./event-message";
 import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
-import { groupEvents } from "./group-events";
+import {
+  getGroupKey,
+  groupEvents,
+  isToolRowItem,
+  renderedItemKey,
+  RenderedItem,
+} from "./group-events";
 import { buildActionById } from "./event-thought-helpers";
 import { getSingleToolEvent } from "./event-message-components/event-group-summary";
 import { EventGroup } from "./event-message-components/event-group";
@@ -31,6 +39,20 @@ import { useModelStore } from "#/stores/model-store";
 import { ModelMessages } from "#/components/features/chat/model-messages";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
+import {
+  EventExpansionContext,
+  RowExpansionContext,
+} from "#/components/features/chat/row-expansion-context";
+import { cn } from "#/utils/utils";
+import { useMessageExpansionStore } from "#/stores/message-expansion-store";
+import {
+  applyBufferedScrollCorrection,
+  buildInitialMeasurements,
+  measurePlainRow,
+  measuredAverage,
+  ScrollCorrectionBuffer,
+  shouldAnchorScroll,
+} from "./scroll-anchoring";
 import type { SecretRequest } from "#/stores/secret-request-store";
 import {
   SecretRequestCard,
@@ -43,10 +65,129 @@ interface MessagesProps {
   hasOlderEvents?: boolean;
   pendingMessages?: React.ReactNode;
   pendingSessionId?: string;
+  /**
+   * The chat scroll container element. When provided and the conversation is
+   * long enough, rows are virtualized against it so only a viewport's worth of
+   * message DOM is mounted. Omit it (shared/read-only views, isolated mounts)
+   * to always render the plain list.
+   *
+   * This is the *element*, not a ref: the virtualizer only attaches once the
+   * element exists, and a ref owned by an ancestor never re-renders this
+   * component when it is populated. `undefined` means "no virtualization
+   * context"; `null` means "context exists, element not mounted yet" — the
+   * virtualized shell renders (empty for one frame) instead of falling back to
+   * the full plain list, so a long conversation never pays for a full render.
+   */
+  scrollParent?: HTMLDivElement | null;
+  /**
+   * Imperative handle for the caller that owns the "load older" restore (the
+   * chat interface). It re-pins the reader from a row anchor after a prepend;
+   * a scroll correction still buffered from those prepended rows' measurement
+   * would apply the same delta a second time (see
+   * {@link MessagesHandle.clearPendingScrollCorrection}).
+   */
+  ref?: React.Ref<MessagesHandle>;
 }
+
+/**
+ * Imperative surface of the virtualized list, for the caller that restores the
+ * scroll position after loading older events.
+ */
+export interface MessagesHandle {
+  /**
+   * Drop any scroll correction still buffered from a row measurement and cancel
+   * the frame flush scheduled for it.
+   *
+   * The "load older" second pass re-pins the reader from the anchored row's
+   * recorded offset, which already accounts for the prepended rows' real
+   * heights. A correction buffered from measuring those same rows — their
+   * (measured - estimate) delta — describes the very shift the anchor restore
+   * just undid, so applying it afterwards shifts the reader twice. The anchor
+   * restore is authoritative once it has run.
+   */
+  clearPendingScrollCorrection: () => void;
+}
+
+/**
+ * Row count at which the list switches from plain rendering to virtualization.
+ * Below this, rendering every row is cheaper than the virtualizer's
+ * measurement churn, and short conversations stay byte-identical.
+ *
+ * 150, not the ~50 first sketched in #18102: a rendered row is a *grouped* row,
+ * not one event, so 150 rows is already a multi-hundred-event conversation. At
+ * that size the plain list is still only ~1.6k DOM nodes, so it stays cheap
+ * enough that the virtualizer's measurement churn is not worth paying for
+ * earlier; above it the mounted window is bounded regardless of history.
+ */
+const VIRTUALIZATION_THRESHOLD = 150;
+/**
+ * Row count at which a virtualized list drops back to the plain list.
+ *
+ * Hysteresis: entering virtualization costs a full remount (the plain rows
+ * detach and the shell's rows mount) and leaving it costs another, so a row
+ * count hovering at exactly {@link VIRTUALIZATION_THRESHOLD} — a streamed
+ * append, a collapse — would otherwise thrash between the two shapes. Enter at
+ * 150, leave only below 130.
+ */
+const VIRTUALIZATION_EXIT_THRESHOLD = 130;
+/** Rows to keep mounted beyond the viewport on each side. */
+const OVERSCAN = 8;
+/** Pre-measurement row height guess, corrected once rows mount. */
+const ESTIMATED_ROW_HEIGHT = 120;
+/**
+ * Vertical gap between rows, matching the plain list's `gap-2`. Absolutely
+ * positioned virtual rows drop out of flex flow, so the gap has to be part of
+ * each measured row instead of the container.
+ */
+const ROW_GAP_PX = 8;
 
 const getLastEventId = (events: OpenHandsEvent[]) => events.at(-1)?.id;
 const getLastEvent = (events: OpenHandsEvent[]) => events.at(-1);
+
+/**
+ * Supplies one row's disclosure state without rebuilding the context value on
+ * every render of the list.
+ *
+ * `GenericEventMessage` reads `StepDisclosureContext`, so `React.memo` on
+ * `EventMessage` only skips a row when the value it reads keeps its identity.
+ * The virtualizer re-renders `Messages` on every range change (each scroll
+ * frame), so an inline value object would re-render every mounted row even
+ * though none of them changed. Memoizing the value on its inputs — the row's
+ * open flag, its `detailsOnly`, and the stable `setRowOpen` — keeps it stable
+ * across those renders. The provider is keyed by step key, so the memo is
+ * per row.
+ *
+ * The component itself is deliberately not wrapped in `React.memo`: `children`
+ * is a fresh element on every `Messages` render, so the props compare would
+ * always fail. The `useMemo` above is what keeps the rows from re-rendering.
+ */
+function StepDisclosureProvider({
+  stepKey,
+  open,
+  detailsOnly,
+  setRowOpen,
+  children,
+}: {
+  stepKey: string;
+  open: boolean | undefined;
+  detailsOnly: boolean;
+  setRowOpen: (key: string, open: boolean) => void;
+  children: React.ReactNode;
+}) {
+  const value = React.useMemo(
+    () => ({
+      open,
+      detailsOnly,
+      setOpen: (next: boolean) => setRowOpen(stepKey, next),
+    }),
+    [open, detailsOnly, setRowOpen, stepKey],
+  );
+  return (
+    <StepDisclosureContext.Provider value={value}>
+      {children}
+    </StepDisclosureContext.Provider>
+  );
+}
 
 export const Messages: React.FC<MessagesProps> = React.memo(
   ({
@@ -55,6 +196,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     hasOlderEvents = false,
     pendingMessages,
     pendingSessionId,
+    scrollParent,
+    ref,
   }) => {
     const { conversationId } = useOptionalConversationId();
     const { key: sessionKey, sessions } = useSessionActivities(conversationId);
@@ -142,7 +285,14 @@ export const Messages: React.FC<MessagesProps> = React.memo(
 
     const maybeRenderSecretRequest = (eventId: string | undefined) => {
       const request = eventId && secretRequests.byAnchorId.get(eventId);
-      return request ? <SecretRequestCard request={request} /> : null;
+      // Inside the virtual shell a card in a row unmounts as soon as the reader
+      // scrolls more than the overscan away, which loses the draft they typed
+      // and — worse — drops the per-call `onSuccess` that reports the result to
+      // the agent while the save is in flight, leaving the tool call unanswered.
+      // Keep every pending card in `trailingContent` while virtualizing; the
+      // plain list never unmounts a row, so it keeps the card next to its call.
+      if (!request || shouldVirtualize) return null;
+      return <SecretRequestCard request={request} />;
     };
 
     // One activity group lasts until visible agent text or an actionable event.
@@ -151,24 +301,107 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     const { isPlanningAgentRunning } = usePlanningAgentState();
     const isAgentRunning =
       curAgentState === AgentState.RUNNING || isPlanningAgentRunning;
-    const renderedItems = React.useMemo(
+    // Fold consecutive action/observation events into collapsible groups so a
+    // long sequence of tool calls doesn't dominate the chat scroll. The trailing
+    // run uses `minSize` 1 while the agent works, so the stage it is on is a
+    // group from its first step instead of a lone row that later jumps into a
+    // group. `actionById` is the map already built above, so the grouping does
+    // not scan the whole history a second time.
+    const plainItems = React.useMemo(
       () => groupEvents(messages, 1, allEvents, 1, visibleSessions, actionById),
       [messages, allEvents, visibleSessions, actionById],
     );
+
+    // `null` (not `undefined`) means the caller has a scroll container but the
+    // element is not mounted yet: virtualize the shell rather than rendering
+    // every row for a frame.
+    //
+    // The mode is remembered in a ref so a row count that lands between the two
+    // thresholds keeps the shape it already had: enter at
+    // {@link VIRTUALIZATION_THRESHOLD}, leave only below
+    // {@link VIRTUALIZATION_EXIT_THRESHOLD}. Without it, a count oscillating at
+    // the enter threshold would remount the whole list every frame. A ref (not
+    // state) is correct because the decision has to be made in the same render
+    // that would flip it — a `setState` there would add a remount of its own.
+    const virtualizedRef = React.useRef(false);
+    if (scrollParent === undefined) {
+      virtualizedRef.current = false;
+    } else if (plainItems.length >= VIRTUALIZATION_THRESHOLD) {
+      virtualizedRef.current = true;
+    } else if (plainItems.length < VIRTUALIZATION_EXIT_THRESHOLD) {
+      virtualizedRef.current = false;
+    }
+    const shouldVirtualize = Boolean(
+      scrollParent !== undefined && virtualizedRef.current,
+    );
+
+    // A planning observation that is not the designated preview for its phase
+    // renders nothing. In the plain list that is invisible (a null render
+    // contributes no height), but a virtualized row would reserve an estimate
+    // for it and leave blank scroll space, so drop those rows on the
+    // virtualized path only. The plain list keeps them, so the EventMessage
+    // props (and therefore `showPlanPreview`) stay observable for every event.
+    //
+    // A row can also carry a /model entry, and `getLastRenderableEventId`
+    // anchors those to a planning observation. Dropping such a row would take
+    // the entry with it, so rows that anchor one are kept: their event content
+    // still renders null (exactly as in the plain list) while the entry shows.
+    const isHiddenPlanningObservation = React.useCallback(
+      (item: RenderedItem) =>
+        item.kind === "single" &&
+        isPlanningFileEditorObservationEvent(item.event) &&
+        !(!!item.event.id && planPreviewEventIds.has(item.event.id)) &&
+        !(!!item.event.id && modelAnchorIds?.has(item.event.id)),
+      [planPreviewEventIds, modelAnchorIds],
+    );
+
+    const renderedItems = React.useMemo(
+      () =>
+        shouldVirtualize
+          ? plainItems.filter((item) => !isHiddenPlanningObservation(item))
+          : plainItems,
+      [plainItems, shouldVirtualize, isHiddenPlanningObservation],
+    );
+
     const eventIndexes = React.useMemo(
       () => new Map(messages.map((event, index) => [event, index])),
       [messages],
     );
-    const groupedReasoningIds = new Set(
-      renderedItems.flatMap((item) =>
-        item.kind === "group"
-          ? (item.reasoning ?? []).map((reasoning) => reasoning.id)
-          : [],
-      ),
+    // Rebuilt on every virtualizer scroll re-render, so memoize it on the rows
+    // it is derived from (the PR bounds per-scroll work).
+    const groupedReasoningIds = React.useMemo(
+      () =>
+        new Set(
+          renderedItems.flatMap((item) =>
+            item.kind === "group"
+              ? (item.reasoning ?? []).map((reasoning) => reasoning.id)
+              : [],
+          ),
+        ),
+      [renderedItems],
     );
+    // Whether a group is still the live tail is decided from the last row the
+    // user can actually see, in both modes. A hidden planning observation
+    // renders nothing, so a group followed only by one is still the visible
+    // tail: it stays live and no separate Thinking line appears. The plain path
+    // keeps the hidden row in `renderedItems`, so the tail is the last
+    // non-hidden item; the virtualized path has already dropped it.
+    const visibleTailItem = React.useMemo(() => {
+      for (let index = renderedItems.length - 1; index >= 0; index -= 1) {
+        if (!isHiddenPlanningObservation(renderedItems[index])) {
+          return renderedItems[index];
+        }
+      }
+      return undefined;
+    }, [renderedItems, isHiddenPlanningObservation]);
+
+    const tailItemKey = visibleTailItem
+      ? renderedItemKey(visibleTailItem)
+      : undefined;
+
     const showThinkingLine =
       isAgentRunning &&
-      renderedItems.at(-1)?.kind !== "group" &&
+      visibleTailItem?.kind !== "group" &&
       !(
         messages.length && isStreamingDeltaEvent(messages[messages.length - 1])
       );
@@ -181,151 +414,679 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     ) => {
       const stepKey = getStepKey(event);
       return (
-        <StepDisclosureContext.Provider
+        <StepDisclosureProvider
           key={stepKey}
-          value={{
-            open: openRows.get(stepKey),
-            detailsOnly,
-            setOpen: (open) => setRowOpen(stepKey, open),
-          }}
+          stepKey={stepKey}
+          open={openRows.get(stepKey)}
+          detailsOnly={detailsOnly}
+          setRowOpen={setRowOpen}
         >
-          <EventMessage
-            event={event}
-            correspondingAction={
-              (isObservationEvent(event) || isUserRejectObservation(event)) &&
-              event.action_id
-                ? (actionById.get(event.action_id) ?? null)
-                : null
-            }
-            isLastMessage={messages.length - 1 === index}
-            isInLast10Actions={messages.length - 1 - index < 10}
-            showPlanPreview={
-              event.id ? planPreviewEventIds.has(event.id) : false
-            }
-            suppressThought={suppressThought}
-            suppressReasoning={groupedReasoningIds.has(
-              isObservationEvent(event) || isUserRejectObservation(event)
-                ? event.action_id
-                : (event.id ?? ""),
-            )}
-          />
-        </StepDisclosureContext.Provider>
+          {/* Scope the event id for the card's own expansion controls, so
+              several cards sharing one virtualized row (an event group, a
+              thought plus its action) don't collapse and expand together. */}
+          <EventExpansionContext.Provider value={String(event.id ?? "")}>
+            <EventMessage
+              event={event}
+              correspondingAction={
+                (isObservationEvent(event) || isUserRejectObservation(event)) &&
+                event.action_id
+                  ? (actionById.get(event.action_id) ?? null)
+                  : null
+              }
+              isLastMessage={messages.length - 1 === index}
+              isInLast10Actions={messages.length - 1 - index < 10}
+              showPlanPreview={
+                event.id ? planPreviewEventIds.has(event.id) : false
+              }
+              suppressThought={suppressThought}
+              suppressReasoning={groupedReasoningIds.has(
+                isObservationEvent(event) || isUserRejectObservation(event)
+                  ? event.action_id
+                  : (event.id ?? ""),
+              )}
+            />
+          </EventExpansionContext.Provider>
+        </StepDisclosureProvider>
       );
     };
 
-    return (
-      <>
-        {renderedItems.map((item, itemIndex) => {
-          if (item.kind === "single") {
-            return (
-              <React.Fragment key={`single-${getStepKey(item.event)}`}>
-                {/* Thoughts for singles are also hoisted as their own
-                    "thought" item, so suppress the inline render to avoid
-                    duplication. */}
-                {renderEventMessage(item.event, item.index, true)}
-                {maybeRenderModelMessages(item.event.id)}
-                {maybeRenderSecretRequest(item.event.id)}
-              </React.Fragment>
-            );
-          }
+    const renderItem = (item: RenderedItem) => {
+      if (item.kind === "single") {
+        return (
+          <React.Fragment key={`single-${getStepKey(item.event)}`}>
+            {/* Thoughts for singles are also hoisted as their own
+                "thought" item, so suppress the inline render to avoid
+                duplication. */}
+            {renderEventMessage(item.event, item.index, true)}
+            {maybeRenderModelMessages(item.event.id)}
+            {maybeRenderSecretRequest(item.event.id)}
+          </React.Fragment>
+        );
+      }
 
-          if (item.kind === "thought") {
-            return (
-              <React.Fragment key={`thought-${item.action.id}`}>
-                <ThoughtEventMessage event={item.action} />
-                {maybeRenderModelMessages(item.action.id)}
-              </React.Fragment>
-            );
-          }
+      if (item.kind === "thought") {
+        return (
+          <React.Fragment key={`thought-${item.action.id}`}>
+            <ThoughtEventMessage event={item.action} />
+            {maybeRenderModelMessages(item.action.id)}
+          </React.Fragment>
+        );
+      }
 
-          const singleTool = getSingleToolEvent(item.events);
-          const showSingleToolDetails =
-            item.events.length === 1 &&
-            !item.session &&
-            !item.reasoning?.length;
-          const groupKey =
-            item.session?.id ??
-            (item.reasoning?.[0] && item.reasoning[0].index <= item.startIndex
-              ? item.reasoning[0].id
-              : item.events[0]
-                ? isObservationEvent(item.events[0]) ||
-                  isUserRejectObservation(item.events[0])
-                  ? item.events[0].action_id
-                  : item.events[0].id
-                : `group-${item.startIndex}`);
-          // A group that forms around a step the user opened starts open, so
-          // that step stays visible.
-          const groupOpen =
-            item.session?.open ??
-            openRows.get(`group:${groupKey}`) ??
-            item.events.some((event) => openRows.get(getStepKey(event)));
-          const Reasoning =
-            item.events.length === 0 && !item.session
-              ? ThinkingContent
-              : CollapsibleThinking;
-          return (
-            <React.Fragment key={`group-${groupKey}`}>
-              {pendingSessionId &&
-                item.session?.id === pendingSessionId &&
-                pendingMessages}
-              <EventGroup
-                events={item.events}
+      const groupKey = getGroupKey(item);
+      const singleTool = getSingleToolEvent(item.events);
+      const showSingleToolDetails =
+        item.events.length === 1 && !item.session && !item.reasoning?.length;
+      // A group that forms around a step the user opened starts open, so
+      // that step stays visible.
+      const groupOpen =
+        item.session?.open ??
+        openRows.get(`group:${groupKey}`) ??
+        item.events.some((event) => openRows.get(getStepKey(event)));
+      const Reasoning =
+        item.events.length === 0 && !item.session
+          ? ThinkingContent
+          : CollapsibleThinking;
+      return (
+        <React.Fragment key={`group-${groupKey}`}>
+          {pendingSessionId &&
+            item.session?.id === pendingSessionId &&
+            pendingMessages}
+          <EventGroup
+            events={item.events}
+            session={item.session}
+            hasReasoning={!!item.reasoning?.length}
+            allEvents={allEvents}
+            actionById={actionById}
+            isLive={isAgentRunning && renderedItemKey(item) === tailItemKey}
+            open={groupOpen}
+            onOpenChange={(open) => {
+              if (item.session)
+                useSessionActivityStore
+                  .getState()
+                  .setOpen(sessionKey, item.session.id, open);
+              else setRowOpen(`group:${groupKey}`, open);
+            }}
+          >
+            {item.session && (
+              <SessionActivityDetails
                 session={item.session}
-                hasReasoning={!!item.reasoning?.length}
-                allEvents={allEvents}
-                actionById={actionById}
-                isLive={
-                  isAgentRunning && itemIndex === renderedItems.length - 1
-                }
-                open={groupOpen}
-                onOpenChange={(open) => {
-                  if (item.session)
-                    useSessionActivityStore
-                      .getState()
-                      .setOpen(sessionKey, item.session.id, open);
-                  else setRowOpen(`group:${groupKey}`, open);
-                }}
-              >
-                {item.session && (
-                  <SessionActivityDetails
-                    session={item.session}
-                    nested={item.events.length > 0}
+                nested={item.events.length > 0}
+              />
+            )}
+            {[
+              ...item.events.map((event) => ({
+                index: eventIndexes.get(event)!,
+                order: 1,
+                node: renderEventMessage(
+                  event,
+                  eventIndexes.get(event)!,
+                  true,
+                  event === singleTool && showSingleToolDetails,
+                ),
+              })),
+              ...(item.reasoning ?? []).map((reasoning) => ({
+                index: reasoning.index,
+                order: 0,
+                node: (
+                  <Reasoning
+                    key={`reasoning-${reasoning.id}`}
+                    content={reasoning.text}
+                    expansionId={`reasoning-${reasoning.id}`}
                   />
-                )}
-                {[
-                  ...item.events.map((event) => ({
-                    index: eventIndexes.get(event)!,
-                    order: 1,
-                    node: renderEventMessage(
-                      event,
-                      eventIndexes.get(event)!,
-                      true,
-                      event === singleTool && showSingleToolDetails,
-                    ),
-                  })),
-                  ...(item.reasoning ?? []).map((reasoning) => ({
-                    index: reasoning.index,
-                    order: 0,
-                    node: (
-                      <Reasoning
-                        key={`reasoning-${reasoning.id}`}
-                        content={reasoning.text}
-                      />
-                    ),
-                  })),
-                ]
-                  .sort((a, b) => a.index - b.index || a.order - b.order)
-                  .map((entry) => entry.node)}
-              </EventGroup>
-              {item.events.map((event) => (
-                <React.Fragment key={`model-${event.id}`}>
-                  {maybeRenderModelMessages(event.id)}
-                  {maybeRenderSecretRequest(event.id)}
-                </React.Fragment>
-              ))}
+                ),
+              })),
+            ]
+              .sort((a, b) => a.index - b.index || a.order - b.order)
+              .map((entry) => entry.node)}
+          </EventGroup>
+          {item.events.map((event) => (
+            <React.Fragment key={`model-${event.id}`}>
+              {maybeRenderModelMessages(event.id)}
+              {maybeRenderSecretRequest(event.id)}
             </React.Fragment>
+          ))}
+        </React.Fragment>
+      );
+    };
+
+    // A collapsed history (or a switch to another conversation) must not keep
+    // stale expansion entries for rows that no longer exist.
+    const rowKeys = React.useMemo(
+      () => renderedItems.map(renderedItemKey),
+      [renderedItems],
+    );
+    const pruneExpansion = useMessageExpansionStore((s) => s.prune);
+    React.useEffect(() => {
+      pruneExpansion(new Set(rowKeys));
+    }, [rowKeys, pruneExpansion]);
+
+    // Stable item-key accessor. TanStack compares this callback by identity when
+    // deciding whether to rebuild its measurement cache, and an inline arrow —
+    // or a callback closing over `rowKeys`, which is a fresh array whenever
+    // `renderedItems` changes — would look like a new key extractor on every
+    // append and invalidate the cache. Read the keys through a ref so appends
+    // that keep every existing key (the common streaming case) reuse the cache
+    // and, crucially, reuse each row's `virtualRow.key` so React does not
+    // remount visible rows.
+    //
+    // The identity must still change when the key *set* changes: TanStack
+    // rebuilds its cache only when `count`, `getItemKey`, `scrollMargin`, or
+    // `enabled` change, so a same-length history whose keys all move (a lone
+    // event folding into a group while another arrives) would otherwise keep the
+    // old keys, leaving every `virtualRow.key` stale while `data-row-key` and
+    // `renderItem` use the new rows — React would reuse a DOM node for a
+    // different message. A signature of the keys gives the extractor a new
+    // identity exactly when the keys change.
+    //
+    // Memoized on `rowKeys`: the virtualizer re-renders this component on every
+    // scroll frame while `rowKeys` keeps its identity, so joining inline would
+    // rescan the whole history on each frame.
+    const rowKeySignature = React.useMemo(
+      () => rowKeys.join("\u0000"),
+      [rowKeys],
+    );
+    const rowKeysRef = React.useRef(rowKeys);
+    rowKeysRef.current = rowKeys;
+    const getItemKey = React.useCallback(
+      (index: number) => rowKeysRef.current[index],
+      [rowKeySignature],
+    );
+
+    // The virtualizer's scroll element is the chat column, which also holds
+    // content *before* this list (top-anchored /model cards, the older-history
+    // spinner). TanStack compares the container's `scrollTop` against item
+    // starts, so without the list's own offset it believes the list starts at
+    // 0 and mounts the wrong rows — leaving blank space near the top once the
+    // preceding content is taller than the overscan. Measure the shell's
+    // offset within the scroll element and pass it as `scrollMargin`.
+    const [scrollMargin, setScrollMargin] = React.useState(0);
+
+    // Per-item heights of the plain list, keyed by row key. Captured while the
+    // plain list is mounted so that crossing the virtualization threshold can
+    // seed the virtualizer with the real geometry (see
+    // `buildInitialMeasurements`): seeding the shell with the plain list's own
+    // heights keeps its total height — and therefore the reader's scroll
+    // offset — unchanged across the switch, instead of collapsing to a flat
+    // estimate and jumping.
+    const plainListRef = React.useRef<HTMLDivElement | null>(null);
+    const plainItemHeights = React.useRef<Map<string, number>>(new Map());
+    // One observer for the whole plain phase. Rebuilding it on every append
+    // would re-observe every row, and each `observe` delivers an initial
+    // callback that re-measures it — so the work would grow with the list on
+    // every append instead of tracking just the rows that changed.
+    const plainRowObserver = React.useRef<ResizeObserver | null>(null);
+    const observedPlainRows = React.useRef<Set<Element>>(new Set());
+    // A box can also be added to a row that already exists — a `/model` card
+    // anchored to a loaded event, a secret card, a pending bubble joining a
+    // session group. None of those resize the row's existing boxes, so the
+    // ResizeObserver never fires and the row keeps its stale, shorter height
+    // until the next crossing seeds the shell from it. Watch each wrapper's own
+    // child list instead, which fires only when a box is added or removed.
+    // `MutationObserver` has no `unobserve`, so track the wrappers being
+    // watched; without that a wrapper dropped from the list (a collapsed
+    // history) would stay observed, pinning its detached DOM.
+    const plainRowMutationObserver = React.useRef<MutationObserver | null>(
+      null,
+    );
+    const observedPlainWrappers = React.useRef<Set<Element>>(new Set());
+
+    // Re-measure one row in place, from its `data-row-key` wrapper. The
+    // observers below call this for a row whose boxes resized or whose child
+    // list changed, and leaving the other rows' cached heights untouched keeps
+    // the work proportional to the row that changed instead of the whole list.
+    const measurePlainRowWrapper = React.useCallback(
+      (wrapper: Element | null) => {
+        if (!wrapper) return;
+        const measured = measurePlainRow(wrapper);
+        if (measured) plainItemHeights.current.set(measured[0], measured[1]);
+      },
+      [],
+    );
+
+    const getPlainRowObserver = React.useCallback(() => {
+      if (plainRowObserver.current || typeof ResizeObserver === "undefined") {
+        return plainRowObserver.current;
+      }
+      plainRowObserver.current = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          measurePlainRowWrapper(entry.target.parentElement);
+        }
+      });
+      return plainRowObserver.current;
+    }, [measurePlainRowWrapper]);
+
+    const getPlainRowMutationObserver = React.useCallback(() => {
+      if (
+        plainRowMutationObserver.current ||
+        typeof MutationObserver === "undefined"
+      ) {
+        return plainRowMutationObserver.current;
+      }
+      plainRowMutationObserver.current = new MutationObserver((records) => {
+        const resize = getPlainRowObserver();
+        for (const record of records) {
+          measurePlainRowWrapper(record.target as Element);
+          // A box added beside an existing one — a `/model` card, a secret card
+          // — grows the row without resizing it, so the ResizeObserver never
+          // fires for the new box. Watch it here, or a later resize of it (the
+          // card expands) goes unmeasured until the row set changes.
+          for (const node of Array.from(record.removedNodes)) {
+            if (!(node instanceof Element)) continue;
+            if (!observedPlainRows.current.delete(node)) continue;
+            resize?.unobserve(node);
+          }
+          for (const node of Array.from(record.addedNodes)) {
+            if (!(node instanceof Element)) continue;
+            if (observedPlainRows.current.has(node)) continue;
+            resize?.observe(node);
+            observedPlainRows.current.add(node);
+          }
+        }
+      });
+      return plainRowMutationObserver.current;
+    }, [measurePlainRowWrapper, getPlainRowObserver]);
+
+    // Point the child-list observer at exactly the wrappers currently in the
+    // list. `MutationObserver` cannot stop watching one node, so a wrapper that
+    // left (a collapsed history) forces a disconnect and re-observe of the
+    // survivors. Re-observing an already-watched node is harmless, so when the
+    // set only *grew* — every append adds one wrapper — observe just the new
+    // ones instead of tearing the whole set down; a disconnect also drops
+    // records already queued for that commit.
+    const syncPlainRowMutationObserver = React.useCallback(
+      (wrappers: Set<Element>) => {
+        const observer = getPlainRowMutationObserver();
+        if (!observer) return;
+        const watched = observedPlainWrappers.current;
+        let left = false;
+        for (const wrapper of watched) {
+          if (!wrappers.has(wrapper)) {
+            left = true;
+            break;
+          }
+        }
+        if (left) {
+          observer.disconnect();
+          for (const wrapper of wrappers) {
+            observer.observe(wrapper, { childList: true });
+          }
+        } else {
+          for (const wrapper of wrappers) {
+            if (watched.has(wrapper)) continue;
+            observer.observe(wrapper, { childList: true });
+          }
+        }
+        observedPlainWrappers.current = new Set(wrappers);
+      },
+      [getPlainRowMutationObserver],
+    );
+
+    // Keep the cache current while the plain list is mounted: it seeds the
+    // shell's geometry when the list later virtualizes. Only rows added since
+    // the last run are measured and observed; a ResizeObserver then re-measures
+    // a row that changes height *without* the row set changing — the reader
+    // expands a group, or async content settles. Without that, a resize
+    // followed by an append that crosses the threshold would seed a shell
+    // shorter than the plain list it replaced, and the browser would clamp the
+    // reader's scroll offset.
+    React.useLayoutEffect(() => {
+      // A list with no scroll container (shared/read-only views) can never
+      // virtualize, so its cache is never read: measuring every row on every
+      // append there is pure waste. And once the virtual shell has replaced the
+      // plain list, its rows are detached: release the observer and its row set
+      // so they do not retain that DOM for the rest of the conversation. The
+      // cached heights survive, so returning to the plain phase reseeds it.
+      if (scrollParent === undefined || shouldVirtualize) {
+        plainRowObserver.current?.disconnect();
+        plainRowObserver.current = null;
+        observedPlainRows.current.clear();
+        plainRowMutationObserver.current?.disconnect();
+        plainRowMutationObserver.current = null;
+        observedPlainWrappers.current.clear();
+        return undefined;
+      }
+      const list = plainListRef.current;
+      if (!list) return undefined;
+
+      // Observe each row's boxes, not the wrapper: the wrapper is
+      // `display: contents` and has no box of its own.
+      const observer = getPlainRowObserver();
+      const currentRows = new Set<Element>();
+      const currentWrappers = new Set<Element>();
+      for (const child of Array.from(list.children)) {
+        // Watch the wrapper's child list so a box added next to an existing one
+        // re-measures the row even though nothing resized.
+        currentWrappers.add(child);
+        for (const row of Array.from(child.children)) {
+          currentRows.add(row);
+          if (observedPlainRows.current.has(row)) continue;
+          const measured = measurePlainRow(child);
+          if (measured) plainItemHeights.current.set(measured[0], measured[1]);
+          observer?.observe(row);
+          observedPlainRows.current.add(row);
+        }
+      }
+      // Wrappers that left the list must stop being watched; the sync
+      // disconnects and re-observes the survivors so their detached DOM is not
+      // retained.
+      syncPlainRowMutationObserver(currentWrappers);
+      // Rows that left the list (collapsed history) must not keep the observer
+      // alive on a detached node.
+      observedPlainRows.current.forEach((row) => {
+        if (currentRows.has(row)) return;
+        observer?.unobserve(row);
+        observedPlainRows.current.delete(row);
+      });
+      // Drop heights for rows that are gone (a collapsed history, a switch to a
+      // shorter conversation); the shell only reads keys it has rows for, so
+      // stale entries would just accumulate for the life of the list.
+      const liveKeys = new Set(rowKeys);
+      plainItemHeights.current.forEach((_height, key) => {
+        if (!liveKeys.has(key)) plainItemHeights.current.delete(key);
+      });
+      return undefined;
+    }, [
+      shouldVirtualize,
+      scrollParent,
+      rowKeys,
+      getPlainRowObserver,
+      syncPlainRowMutationObserver,
+      measurePlainRowWrapper,
+    ]);
+
+    React.useEffect(
+      () => () => {
+        plainRowObserver.current?.disconnect();
+        plainRowObserver.current = null;
+        observedPlainRows.current.clear();
+        plainRowMutationObserver.current?.disconnect();
+        plainRowMutationObserver.current = null;
+        observedPlainWrappers.current.clear();
+      },
+      [],
+    );
+
+    // Seed the virtualizer once, the first time this list virtualizes, from the
+    // heights the plain list just had. The value is captured in a ref rather
+    // than recomputed: TanStack reads `initialMeasurementsCache` only while its
+    // own cache is empty, so rebuilding it on every append after the switch
+    // would be wasted work over a row set whose plain heights are no longer
+    // updated.
+    const initialMeasurementsCacheRef = React.useRef<VirtualItem[] | undefined>(
+      undefined,
+    );
+    // Average of the rows measured while plain, computed once and shared by the
+    // seed's fallback and the post-switch estimate so the two agree.
+    const measuredAverageRef = React.useRef<number | null>(null);
+    if (shouldVirtualize) {
+      if (initialMeasurementsCacheRef.current === undefined) {
+        const heights = rowKeys.map(
+          (key) => plainItemHeights.current.get(key) ?? 0,
+        );
+        const average = measuredAverage(heights);
+        measuredAverageRef.current =
+          average === null ? null : Math.round(average);
+        initialMeasurementsCacheRef.current = buildInitialMeasurements(
+          rowKeys,
+          heights,
+          ROW_GAP_PX,
+        );
+      }
+    } else {
+      // Reset while plain, so a later switch back to the shell re-seeds from
+      // the heights current at that moment rather than a stale snapshot.
+      initialMeasurementsCacheRef.current = undefined;
+      measuredAverageRef.current = null;
+    }
+
+    // Estimate for rows that mount after the switch (appended, or re-measured)
+    // and so were never captured while plain. Using the flat
+    // `ESTIMATED_ROW_HEIGHT` guess instead of the real rows' average height
+    // biases the shell's own total: `chat-interface` restores the reader's
+    // offset on "load older" from the shell's height delta, so a total built
+    // from an over-tall estimate over-counts the prepended page and drags the
+    // visible content up. Read the average the seed used (plus the row gap) so
+    // both fall back to the same number; the captured heights stop changing
+    // after the switch, so it stays frozen.
+    const estimatedRowHeightRef = React.useRef<number | null>(null);
+    if (shouldVirtualize) {
+      if (estimatedRowHeightRef.current === null) {
+        estimatedRowHeightRef.current =
+          measuredAverageRef.current === null
+            ? ESTIMATED_ROW_HEIGHT
+            : measuredAverageRef.current + ROW_GAP_PX;
+      }
+    } else {
+      estimatedRowHeightRef.current = null;
+    }
+
+    const shellRef = React.useCallback(
+      (node: HTMLDivElement | null) => {
+        if (!node || !scrollParent) return undefined;
+        const parent = node.parentElement;
+        const measure = () => {
+          const containerTop = scrollParent.getBoundingClientRect().top;
+          const nodeTop = node.getBoundingClientRect().top;
+          setScrollMargin(
+            Math.round(nodeTop - containerTop + scrollParent.scrollTop),
           );
-        })}
+        };
+        measure();
+        // Preceding siblings can grow *after* mount (a /model card expands) or
+        // appear late (the older-history spinner), so re-measure when their box
+        // changes. Observing a node only tracks that node's own size, so a
+        // MutationObserver watches the parent's child list too. A sibling that
+        // appears *after* mount must also be observed: a late /model card that
+        // later expands changes its height without adding a child, so a
+        // one-shot observe at mount would never see the growth. Reconcile the
+        // observed set on every child-list change. jsdom has neither observer;
+        // the one-shot measurement above still runs there.
+        const observers: { disconnect: () => void }[] = [];
+        let resize: ResizeObserver | undefined;
+        const observed = new Set<Element>();
+        const reconcile = () => {
+          measure();
+          if (!resize) return;
+          const siblings = new Set<Element>(
+            Array.from(parent?.children ?? []).filter(
+              (sibling) => sibling !== node,
+            ),
+          );
+          siblings.forEach((sibling) => {
+            if (!observed.has(sibling)) {
+              resize?.observe(sibling);
+              observed.add(sibling);
+            }
+          });
+          observed.forEach((sibling) => {
+            if (!siblings.has(sibling)) {
+              resize?.unobserve(sibling);
+              observed.delete(sibling);
+            }
+          });
+        };
+        if (typeof ResizeObserver !== "undefined") {
+          resize = new ResizeObserver(measure);
+          resize.observe(node);
+          observers.push(resize);
+          reconcile();
+        }
+        if (typeof MutationObserver !== "undefined" && parent) {
+          const mutation = new MutationObserver(reconcile);
+          mutation.observe(parent, { childList: true });
+          observers.push(mutation);
+        }
+        // React 19 calls this cleanup when the ref detaches (unmount or a
+        // changed ref identity), so the observers do not outlive the shell.
+        return () => observers.forEach((observer) => observer.disconnect());
+      },
+      [scrollParent],
+    );
+
+    const rowVirtualizer = useVirtualizer({
+      count: renderedItems.length,
+      getScrollElement: () => scrollParent ?? null,
+      getItemKey,
+      estimateSize: () => estimatedRowHeightRef.current ?? ESTIMATED_ROW_HEIGHT,
+      overscan: OVERSCAN,
+      enabled: shouldVirtualize,
+      // When `enabled` first flips on, TanStack seeds its internal offset from
+      // `initialOffset` (default 0) and immediately scrolls the element there.
+      // The virtualizer tracked nothing while it was disabled, so without this
+      // the container snaps to the top on the threshold-crossing render — and
+      // flashes there even when pinned to the bottom — before the chat's
+      // stick-to-bottom pulls it back.
+      initialOffset: () => scrollParent?.scrollTop ?? 0,
+      // Offsets are relative to the scroll element, so tell the virtualizer
+      // where this list begins inside it and shift each row back by the same
+      // amount (see the transform below).
+      scrollMargin,
+      // Seed the first virtualized render with the plain list's real row
+      // heights, so the shell's total height (and the reader's scroll offset)
+      // is unchanged by the switch.
+      initialMeasurementsCache: initialMeasurementsCacheRef.current,
+      // Row heights are unknown until they mount (code blocks, images,
+      // expanded output), so measure the live DOM and let the virtualizer
+      // correct the offsets. The gap is added here because absolutely
+      // positioned rows are outside the container's flex `gap`.
+      measureElement: (element) =>
+        Math.round(element.getBoundingClientRect().height) + ROW_GAP_PX,
+    });
+
+    // Rows are measured before the shell re-renders at its new total height, so
+    // writing the correction inside `shouldAdjustScrollPositionOnItemSizeChange`
+    // would clamp to the old `scrollHeight` and lose the excess. Buffer the
+    // deltas, report "no correction" to the virtualizer, and re-pin once the
+    // shell's total size has actually changed (the layout effect below).
+    const scrollCorrectionBufferRef = React.useRef(
+      new ScrollCorrectionBuffer(),
+    );
+    // A correction that leaves the total size unchanged (a batch whose deltas
+    // cancel, or one a clamp absorbs entirely) still has to run, or the buffer
+    // is only drained on the next unrelated change. Flush on the next frame.
+    const scrollCorrectionFrameRef = React.useRef<number | null>(null);
+    const flushScrollCorrection = () => {
+      const buffer = scrollCorrectionBufferRef.current;
+      const pending = buffer.peek();
+      if (!pending) return;
+      const element = scrollParent as HTMLElement | null;
+      if (!element) return;
+      const consumed = applyBufferedScrollCorrection(element, pending);
+      const remaining = pending.delta - consumed;
+      // Keep an unabsorbed remainder for the shell's next growth; the frame
+      // flush below drops it once the shell has settled.
+      buffer.set(
+        remaining === 0 ? null : { delta: remaining, pinned: pending.pinned },
+      );
+    };
+    const scheduleScrollCorrectionFlush = () => {
+      if (
+        scrollCorrectionFrameRef.current !== null ||
+        typeof requestAnimationFrame === "undefined"
+      ) {
+        return;
+      }
+      scrollCorrectionFrameRef.current = requestAnimationFrame(() => {
+        scrollCorrectionFrameRef.current = null;
+        flushScrollCorrection();
+        // The shell has settled by the next frame: a remainder the clamp still
+        // cannot absorb is unabsorbable, so drop it rather than carry it onto a
+        // later, unrelated size change as a jump.
+        scrollCorrectionBufferRef.current.clear();
+      });
+    };
+    rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = (
+      item,
+      delta,
+      instance,
+    ) => {
+      const correction = shouldAnchorScroll(item, delta, instance);
+      if (!correction) return false;
+      scrollCorrectionBufferRef.current.add(correction);
+      scheduleScrollCorrectionFlush();
+      return false;
+    };
+
+    // The "load older" restore (chat-interface) re-pins the reader from the
+    // anchored row's offset, which already accounts for the prepended rows'
+    // real heights. A correction still buffered from measuring those same rows
+    // would then apply their (measured - estimate) delta on top, moving the
+    // reader twice. The restore is authoritative, so drop the pending
+    // correction and cancel its scheduled flush before it can fire.
+    React.useImperativeHandle(
+      ref,
+      () => ({
+        clearPendingScrollCorrection: () => {
+          scrollCorrectionBufferRef.current.clear();
+          if (
+            scrollCorrectionFrameRef.current !== null &&
+            typeof cancelAnimationFrame !== "undefined"
+          ) {
+            cancelAnimationFrame(scrollCorrectionFrameRef.current);
+            scrollCorrectionFrameRef.current = null;
+          }
+        },
+      }),
+      [],
+    );
+
+    // Re-pin once the total size has changed, when `scrollTop + delta` is no
+    // longer clamped by the old height. A batch of corrections in one commit
+    // composes instead of each being lost, and any excess the new height still
+    // cannot absorb stays buffered for the next change rather than dropping. A
+    // pinned reader is landed on the new bottom directly (see the helper): a
+    // shrinking row at the bottom lowers the maximum, so the browser has
+    // already clamped the offset and adding the delta again would overshoot.
+    const totalSize = rowVirtualizer.getTotalSize();
+    React.useLayoutEffect(() => {
+      flushScrollCorrection();
+    }, [scrollParent, totalSize]);
+
+    // Cancel a correction frame still scheduled when the list unmounts. The
+    // scroll container outlives `Messages` (it is owned by the chat interface),
+    // so a callback that fires after unmount would write `scrollTop` on the live
+    // container for rows that no longer exist. `clearPendingScrollCorrection`
+    // cancels the frame for the "load older" restore; this covers every other
+    // unmount (a conversation switch, the empty-state skeleton).
+    React.useEffect(
+      () => () => {
+        if (
+          scrollCorrectionFrameRef.current !== null &&
+          typeof cancelAnimationFrame !== "undefined"
+        ) {
+          cancelAnimationFrame(scrollCorrectionFrameRef.current);
+          scrollCorrectionFrameRef.current = null;
+        }
+      },
+      [],
+    );
+
+    // A manual scroll means the reader has taken over. A correction buffered
+    // from a resize in the same frame would fight the gesture, so drop it. The
+    // clear only ever removes a *pending* correction; our own writes run
+    // through the buffer and leave nothing behind, so they do not re-trigger.
+    React.useEffect(() => {
+      const element = scrollParent as HTMLElement | null;
+      if (!element) return undefined;
+      const onScroll = () => {
+        scrollCorrectionBufferRef.current.clear();
+      };
+      element.addEventListener("scroll", onScroll, { passive: true });
+      return () => element.removeEventListener("scroll", onScroll);
+    }, [scrollParent]);
+
+    // With a scroll container, rows can cross the virtualization threshold
+    // and remount into the shell. Persist their expansion by row key in the
+    // plain list too, so a control the user opened before the switch restores
+    // once the shared shell mounts. Without a container (shared/read-only
+    // views) component state is stable, so the Provider is omitted.
+    const persistExpansion = scrollParent !== undefined;
+
+    // Rendered after both list shapes, so they stay in the scroll column's
+    // normal flow rather than inside an absolutely positioned virtual row.
+    const trailingContent = (
+      <>
         {!(
           pendingSessionId &&
           renderedItems.some(
@@ -343,10 +1104,125 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
           </div>
         )}
-        {secretRequests.unanchored.map((request) => (
+        {(shouldVirtualize
+          ? pendingSecretRequests
+          : secretRequests.unanchored
+        ).map((request) => (
           <SecretRequestCard key={request.toolCallId} request={request} />
         ))}
         <ConversationConfirmationButtons />
+      </>
+    );
+
+    if (!shouldVirtualize) {
+      return (
+        <>
+          {/*
+            The wrapper is `display: contents`, so it adds no box: the rows keep
+            the scroll column's own flex gap and the column's bottom padding.
+          */}
+          <div ref={plainListRef} className="contents">
+            {renderedItems.map((item, index) => {
+              const itemKey = renderedItemKey(item);
+              // Agent text trims its top margin when it follows a tool row, the
+              // way `EventGroup`'s own `[&+article]:mt-2` did when rows were
+              // direct children of the scroll column. Each row now has its own
+              // wrapper, so the `<article>` is no longer a sibling of the tool
+              // row and the trim is applied from the wrapper instead.
+              const trimsFollowingText =
+                index > 0 && isToolRowItem(renderedItems[index - 1]);
+              return (
+                <div
+                  key={itemKey}
+                  data-row-key={itemKey}
+                  className={cn(
+                    "contents",
+                    trimsFollowingText && "[&>article]:mt-2",
+                  )}
+                >
+                  {persistExpansion ? (
+                    <RowExpansionContext.Provider value={itemKey}>
+                      {renderItem(item)}
+                    </RowExpansionContext.Provider>
+                  ) : (
+                    renderItem(item)
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {trailingContent}
+        </>
+      );
+    }
+
+    return (
+      <>
+        <div
+          ref={shellRef}
+          data-testid="virtualized-message-list"
+          style={{
+            height: rowVirtualizer.getTotalSize(),
+            width: "100%",
+            position: "relative",
+            // The rows are absolutely positioned, so this container has no
+            // in-flow content and `min-height: auto` collapses to 0 — as a
+            // flex child of the scrolling column it would then be shrunk back
+            // to the viewport and the list could never scroll.
+            flexShrink: 0,
+          }}
+        >
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            const item = renderedItems[virtualRow.index];
+            // See the plain list: agent text trims its top margin when it
+            // follows a tool row, applied here because the row wrapper breaks
+            // the sibling relationship `[&+article]` relied on.
+            const trimsFollowingText =
+              virtualRow.index > 0 &&
+              isToolRowItem(renderedItems[virtualRow.index - 1]);
+            return (
+              <div
+                key={virtualRow.key}
+                data-index={virtualRow.index}
+                // The "load older" anchor finds a row by key; the plain wrapper
+                // carries it too, so both list shapes anchor the same way.
+                data-row-key={renderedItemKey(item)}
+                ref={rowVirtualizer.measureElement}
+                data-testid="virtualized-message-row"
+                // The scroll column is a flex column and the user bubble
+                // right-aligns with `self-end`; an absolutely positioned row
+                // would drop it out of that context, so the row reproduces the
+                // column layout for its own children.
+                //
+                // `gap-2` restores the intra-row spacing the plain list gets
+                // from the scroll column's own flex gap (its row wrapper is
+                // `display: contents`, so a row's siblings are spaced by the
+                // column).
+                className={cn(
+                  "flex flex-col gap-2",
+                  trimsFollowingText && "[&>article]:mt-2",
+                )}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  // `virtualRow.start` is measured from the scroll element
+                  // and so includes the scroll margin; subtract it to place
+                  // rows relative to this container.
+                  transform: `translateY(${virtualRow.start - scrollMargin}px)`,
+                }}
+              >
+                {/* Remounted rows read their expansion state back from the
+                    store instead of starting collapsed. */}
+                <RowExpansionContext.Provider value={renderedItemKey(item)}>
+                  {renderItem(item)}
+                </RowExpansionContext.Provider>
+              </div>
+            );
+          })}
+        </div>
+        {trailingContent}
       </>
     );
   },
@@ -356,6 +1232,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     prevProps.hasOlderEvents === nextProps.hasOlderEvents &&
     prevProps.messages.length === nextProps.messages.length &&
     prevProps.allEvents.length === nextProps.allEvents.length &&
+    prevProps.scrollParent === nextProps.scrollParent &&
     getLastEventId(prevProps.messages) === getLastEventId(nextProps.messages) &&
     getLastEventId(prevProps.allEvents) ===
       getLastEventId(nextProps.allEvents) &&
