@@ -42,13 +42,13 @@ index 74943df802..1ab169724c 100644
    ItemStartedFrame,
  } from &quot;#/types/agent-server/session-frames&quot;;
 +import { isStreamingDeltaEvent } from &quot;#/types/agent-server/type-guards&quot;;
- 
+&#32;
  export type OHEvent = UIEvent;
- 
+&#32;
 @@ -148,14 +150,34 @@ const appendEvent = (state: EventState, event: OHEvent): EventState =&gt; {
    };
  };
- 
+&#32;
 -const sortEventState = (
 +const rebuildUIEvents = (
    state: EventState,
@@ -83,13 +83,13 @@ index 74943df802..1ab169724c 100644
 +  ordered.sort(compare);
 +  return handleEventsForUI(ordered).sort(compare);
 +};
- 
+&#32;
  const applyAddEvent = (state: EventState, event: OHEvent): EventState =&gt; {
    const next = appendEvent(state, event);
 @@ -170,7 +192,11 @@ const applyAddEvent = (state: EventState, event: OHEvent): EventState =&gt; {
      return next;
    }
- 
+&#32;
 -  return sortEventState(next);
 +  return {
 +    ...next,
@@ -97,15 +97,15 @@ index 74943df802..1ab169724c 100644
 +    uiEvents: rebuildUIEvents(state, next.events, next.eventIds),
 +  };
  };
- 
+&#32;
  export const useEventStore = create&lt;EventState&gt;()((set) =&gt; ({
 @@ -202,7 +228,6 @@ export const useEventStore = create&lt;EventState&gt;()((set) =&gt; ({
- 
+&#32;
        const eventIds = new Set(state.eventIds);
        const events = [...state.events];
 -      let uiEvents = [...state.uiEvents];
        const incomingOrder = new Map&lt;OHEvent, number&gt;();
- 
+&#32;
        for (const event of incoming) {
 @@ -215,7 +240,6 @@ export const useEventStore = create&lt;EventState&gt;()((set) =&gt; ({
              eventIds.add(eventId);
@@ -114,7 +114,7 @@ index 74943df802..1ab169724c 100644
 -          uiEvents = handleEventForUI(event, uiEvents);
          }
        }
- 
+&#32;
 @@ -234,10 +258,22 @@ export const useEventStore = create&lt;EventState&gt;()((set) =&gt; ({
              (incomingOrder.get(a) ?? incomingOrder.size) -
                (incomingOrder.get(b) ?? incomingOrder.size)
@@ -183,7 +183,7 @@ index 86a3ece432..3da87c0fef 100644
 +    const slotIndex = positions.slot(eventId);
 +    if (slotIndex !== -1) return slotIndex;
    }
- 
+&#32;
    if (isACPToolCallEvent(event)) {
 -    const existingIndex = newUiEvents.findIndex(
 -      (uiEvent) =&gt;
@@ -199,7 +199,7 @@ index 86a3ece432..3da87c0fef 100644
 +    const index = positions.toolCall(event.tool_call_id);
 +    return index === -1 ? uiEvents.length : index;
    }
- 
+&#32;
 -  if (isObservationEvent(event)) {
 -    // Don&#x27;t add ThinkObservation at all - we keep the ThinkAction instead
 -    // The thought content is in the action, not the observation
@@ -220,7 +220,7 @@ index 86a3ece432..3da87c0fef 100644
 +  ) {
 +    return undefined;
    }
- 
+&#32;
 -  if (isUserRejectObservation(event)) {
 -    // Like their observations above, a rejection never replaces a ThinkAction
 -    // or FinishAction: the content to display is in the action itself
@@ -247,7 +247,7 @@ index 86a3ece432..3da87c0fef 100644
      }
 +    return index === -1 ? uiEvents.length : index;
    }
- 
+&#32;
 -  // A UserRejectObservation resolves its action just like an observation
 -  // does; left unreplaced, the rejected action would keep reading as in flight.
 -  if (isObservationEvent(event) || isUserRejectObservation(event)) {
