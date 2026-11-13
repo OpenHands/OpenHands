@@ -27,10 +27,14 @@ import { AccordionPanel } from "./accordion-panel";
 
 type ViewMode = "diff" | "old" | "new";
 
-const VIEW_MODES: { mode: ViewMode; icon: IconType }[] = [
-  { mode: "old", icon: LuHistory },
-  { mode: "diff", icon: LuGitCompareArrows },
-  { mode: "new", icon: LuFileCheck },
+const VIEW_MODES: { mode: ViewMode; icon: IconType; labelKey: I18nKey }[] = [
+  { mode: "old", icon: LuHistory, labelKey: I18nKey.DIFF_VIEWER$VIEW_MODE_OLD },
+  { mode: "diff", icon: LuGitCompareArrows, labelKey: I18nKey.FILES$DIFF_VIEW },
+  {
+    mode: "new",
+    icon: LuFileCheck,
+    labelKey: I18nKey.DIFF_VIEWER$VIEW_MODE_NEW,
+  },
 ];
 
 const SHARED_EDITOR_OPTIONS: editor_t.IEditorOptions = {
@@ -63,6 +67,7 @@ const MONACO_THEME_NAMES: Record<ColorThemeKey, string> = {
   "openhands-neo": "openhands-diff-dark",
   "light-plus": "openhands-diff-light-plus",
   "solarized-light": "openhands-diff-solarized-light",
+  paper: "openhands-diff-paper",
 };
 
 const beforeMount = (monaco: Monaco) => {
@@ -129,7 +134,85 @@ const beforeMount = (monaco: Monaco) => {
       "editorUnnecessaryCode.opacity": "rgba(88, 110, 117, 0.5)",
     },
   });
+
+  monaco.editor.defineTheme("openhands-diff-paper", {
+    base: "vs",
+    inherit: true,
+    rules: [
+      { token: "", foreground: "241C17" },
+      { token: "comment", foreground: "615448", fontStyle: "italic" },
+      { token: "keyword", foreground: "241C17", fontStyle: "bold" },
+      { token: "string", foreground: "45572F" },
+      { token: "number", foreground: "9A2616" },
+      { token: "type", foreground: "6A3B56" },
+      { token: "delimiter", foreground: "453B33" },
+    ],
+    colors: {
+      "editor.background": "#F8F0E1",
+      "editor.foreground": "#241C17",
+      "editorLineNumber.foreground": "#615448",
+      "editorLineNumber.activeForeground": "#241C17",
+      "editor.selectionBackground": "#9A26162E",
+      "editor.inactiveSelectionBackground": "#9A26161A",
+      "editor.lineHighlightBackground": "#F3E7D3",
+      "editorGutter.background": "#F8F0E1",
+      // Brackets stay in ink rather than Monaco's rainbow pair colours.
+      "editorBracketHighlight.foreground1": "#453B33",
+      "editorBracketHighlight.foreground2": "#453B33",
+      "editorBracketHighlight.foreground3": "#453B33",
+      "diffEditor.insertedTextBackground": "#45572F1F",
+      "diffEditor.removedTextBackground": "#9A26161F",
+      "diffEditor.insertedLineBackground": "#E6E1CF",
+      "diffEditor.removedLineBackground": "#F1E0D1",
+      "diffEditor.border": "#CABCA6",
+      "editorUnnecessaryCode.border": "#00000000",
+      "editorUnnecessaryCode.opacity": "rgba(36, 28, 23, 0.45)",
+    },
+  });
 };
+
+// Own the models for exactly the editor's lifetime, including accordion exits.
+function FileDiffEditor(props: React.ComponentProps<typeof DiffEditor>) {
+  const monacoRef = React.useRef<Monaco>(null);
+  const modelId = encodeURIComponent(React.useId());
+  const originalModelPath = `inmemory://file-diff/${modelId}/original`;
+  const modifiedModelPath = `inmemory://file-diff/${modelId}/modified`;
+
+  React.useEffect(
+    () => () => {
+      const monaco = monacoRef.current;
+      if (!monaco) return;
+
+      // Models exist before onMount runs. Capture this instance's models now,
+      // then release them after the child wrapper has disposed its editor.
+      const original = monaco.editor.getModel(
+        monaco.Uri.parse(originalModelPath),
+      );
+      const modified = monaco.editor.getModel(
+        monaco.Uri.parse(modifiedModelPath),
+      );
+      queueMicrotask(() => {
+        original?.dispose();
+        modified?.dispose();
+      });
+    },
+    [originalModelPath, modifiedModelPath],
+  );
+
+  return (
+    <DiffEditor
+      {...props}
+      originalModelPath={originalModelPath}
+      modifiedModelPath={modifiedModelPath}
+      keepCurrentOriginalModel
+      keepCurrentModifiedModel
+      beforeMount={(monaco) => {
+        monacoRef.current = monaco;
+        props.beforeMount?.(monaco);
+      }}
+    />
+  );
+}
 
 export interface FileDiffViewerProps {
   path: string;
@@ -289,7 +372,7 @@ export function FileDiffViewer({
   const renderContent = () => {
     if (viewMode === "diff") {
       return renderEditorShell(
-        <DiffEditor
+        <FileDiffEditor
           data-testid="file-diff-viewer"
           className="w-full h-full"
           language={language}
@@ -311,11 +394,15 @@ export function FileDiffViewer({
       return (
         <div
           className={cn(
-            "w-full border-b border-border overflow-auto p-4 bg-base prose max-w-none",
+            "w-full border-b border-border overflow-auto p-4 bg-canvas-base prose max-w-none max-h-(--markdown-preview-max-height)",
             !isLightTheme && "prose-invert",
           )}
           data-testid="markdown-preview"
-          style={{ maxHeight: MAX_DIFF_EDITOR_HEIGHT_PX }}
+          style={
+            {
+              "--markdown-preview-max-height": `${MAX_DIFF_EDITOR_HEIGHT_PX}px`,
+            } as React.CSSProperties
+          }
         >
           <MarkdownRenderer
             content={singleViewContent}
@@ -366,13 +453,14 @@ export function FileDiffViewer({
               onClick={(e) => e.stopPropagation()}
               aria-hidden={!viewModeControlsVisible}
             >
-              {VIEW_MODES.map(({ mode, icon: Icon }) => (
+              {VIEW_MODES.map(({ mode, icon: Icon, labelKey }) => (
                 <button
                   key={mode}
                   data-testid={`view-mode-${mode}`}
                   type="button"
                   tabIndex={viewModeControlsVisible ? 0 : -1}
                   aria-pressed={viewMode === mode}
+                  aria-label={t(labelKey)}
                   onClick={() => setViewMode(mode)}
                   className={cn(
                     "p-1 rounded transition-colors cursor-pointer",
@@ -389,6 +477,9 @@ export function FileDiffViewer({
           <button
             data-testid="collapse"
             type="button"
+            aria-label={t(
+              isCollapsed ? I18nKey.BUTTON$EXPAND : I18nKey.BUTTON$COLLAPSE,
+            )}
             className="shrink-0 text-muted"
           >
             {isCollapsed ? (
@@ -404,7 +495,7 @@ export function FileDiffViewer({
         {isDeleted && !commit ? (
           <div
             data-testid="file-deleted-message"
-            className="w-full border-b border-border p-4 bg-base text-text-dim text-sm"
+            className="w-full border-b border-border p-4 bg-canvas-base text-text-dim text-sm"
           >
             {t(I18nKey.DIFF_VIEWER$FILE_DELETED)}
           </div>

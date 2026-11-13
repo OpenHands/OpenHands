@@ -1,14 +1,12 @@
-import { RemoteWorkspace } from "@openhands/typescript-client/workspace/remote-workspace";
+import { GitClient } from "@openhands/typescript-client/clients";
 import { RepositoryPage, BranchPage, InstallationPage } from "#/types/git";
 import { Provider } from "#/types/settings";
-import { GitChange, GitChangeDiff } from "../open-hands.types";
-import AgentServerConversationService from "../conversation-service/agent-server-conversation-service.api";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
-import { mapAnyGitStatusToClientStatus } from "#/utils/git-status-mapper";
 import { getActiveBackend } from "../backend-registry/active-store";
 import {
   getCloudInstallations,
   getCloudRepositoryBranches,
+  getCloudRepositoryDetails,
   searchCloudRepositories,
 } from "../cloud/git-service.api";
 
@@ -31,6 +29,31 @@ const EMPTY_INSTALLATION_PAGE: InstallationPage = {
   next_page_id: null,
 };
 
+function normalizeRepositoryPage(page: RepositoryPage): RepositoryPage {
+  return {
+    items: page.items.map((repo) => ({
+      ...repo,
+      git_provider: safeProvider(repo.git_provider),
+    })),
+    next_page_id: page.next_page_id ?? null,
+    ...(page.missing_token !== undefined
+      ? { missing_token: page.missing_token }
+      : {}),
+  };
+}
+
+async function searchAgentServerRepositories(args: {
+  provider: string;
+  query?: string;
+  limit?: number;
+  pageId?: string;
+}): Promise<RepositoryPage> {
+  const page = await new GitClient(
+    getAgentServerClientOptions(),
+  ).searchRepositories(args);
+  return normalizeRepositoryPage(page as RepositoryPage);
+}
+
 class GitService {
   static async searchGitRepositories(
     query: string,
@@ -39,8 +62,16 @@ class GitService {
     pageId?: string,
     installationId?: string,
   ): Promise<RepositoryPage> {
-    if (isInvalidProvider(provider) || !isCloudActive()) {
+    if (isInvalidProvider(provider)) {
       return EMPTY_REPOSITORY_PAGE;
+    }
+    if (!isCloudActive()) {
+      return searchAgentServerRepositories({
+        provider,
+        query: query || undefined,
+        limit,
+        pageId,
+      });
     }
     return searchCloudRepositories({
       provider: safeProvider(provider),
@@ -57,8 +88,15 @@ class GitService {
     limit = 30,
     installationId?: string,
   ): Promise<RepositoryPage> {
-    if (isInvalidProvider(provider) || !isCloudActive()) {
+    if (isInvalidProvider(provider)) {
       return EMPTY_REPOSITORY_PAGE;
+    }
+    if (!isCloudActive()) {
+      return searchAgentServerRepositories({
+        provider,
+        limit,
+        pageId,
+      });
     }
     return searchCloudRepositories({
       provider: safeProvider(provider),
@@ -86,6 +124,24 @@ class GitService {
       limit,
       pageId,
     });
+  }
+
+  /**
+   * The repository's default branch, for repositories whose list entry has
+   * no `main_branch`. Null when it is unknown.
+   */
+  static async getRepositoryDefaultBranch(
+    repository: string,
+    provider: string,
+  ): Promise<string | null> {
+    if (isInvalidProvider(provider) || !isCloudActive()) {
+      return null;
+    }
+    const details = await getCloudRepositoryDetails({
+      provider: safeProvider(provider),
+      repository,
+    });
+    return details?.main_branch ?? null;
   }
 
   static async getRepositoryBranches(
@@ -139,39 +195,6 @@ class GitService {
       pageId,
       limit,
     });
-  }
-
-  static async getGitChanges(conversationId: string): Promise<GitChange[]> {
-    const workingDir =
-      await AgentServerConversationService.resolveConversationWorkingDir(
-        conversationId,
-      );
-    const changes = await new RemoteWorkspace(
-      getAgentServerClientOptions({ workingDir, conversationId }),
-    ).gitChanges(workingDir);
-
-    return changes.map((change) => ({
-      path: change.path,
-      status: mapAnyGitStatusToClientStatus(
-        String(change.status) as Parameters<
-          typeof mapAnyGitStatusToClientStatus
-        >[0],
-      ),
-    }));
-  }
-
-  static async getGitChangeDiff(
-    conversationId: string,
-    path: string,
-  ): Promise<GitChangeDiff> {
-    const diff = await new RemoteWorkspace(
-      getAgentServerClientOptions({ conversationId }),
-    ).gitDiff(path);
-
-    return {
-      modified: diff.modified ?? "",
-      original: diff.original ?? "",
-    };
   }
 }
 

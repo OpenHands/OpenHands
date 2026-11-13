@@ -1,7 +1,11 @@
 import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 import customAutomationFixture from "@openhands/extensions/testing/automations/custom-automation.json";
 import { describe, expect, it } from "vitest";
-import { buildCreatePayload, buildPreflightBody } from "./automation-setup";
+import {
+  buildCreatePayload,
+  buildPreflightBody,
+  supportsAgentProfile,
+} from "./automation-setup";
 import type { SetupEntry, SetupFormValues, SetupRequestBody } from "./types";
 import { validateSetupEntry } from "./manifest-validation";
 
@@ -10,7 +14,7 @@ const customAutomation = AUTOMATION_CATALOG.find(
 ) as SetupEntry | undefined;
 
 describe("custom automation setup actions", () => {
-  it("uses the selected agent profile instead of a second model authority", () => {
+  it("does not send an agent profile to the prompt endpoint", () => {
     const scenario = customAutomationFixture.scenarios[0];
     const values = {
       ...scenario.formValues,
@@ -24,8 +28,34 @@ describe("custom automation setup actions", () => {
       scenario.selectedTrigger,
       scenario.selectedAction,
     );
+    expect(payload).not.toHaveProperty("agent_profile_id");
+    expect(payload?.model).toBe(values.model);
+    expect(
+      supportsAgentProfile(customAutomation!, scenario.selectedAction),
+    ).toBe(false);
+  });
+
+  it("uses the selected agent profile for the raw upload endpoint", () => {
+    const scenario = customAutomationFixture.scenarios.find(
+      (candidate) => candidate.selectedAction === "upload",
+    );
+    expect(scenario).toBeDefined();
+    const values = {
+      ...scenario!.formValues,
+      agent_profile_id: "11111111-1111-4111-8111-111111111111",
+    } as unknown as SetupFormValues;
+    const payload = buildCreatePayload(
+      customAutomation!,
+      values,
+      undefined,
+      scenario!.selectedTrigger,
+      scenario!.selectedAction,
+    );
     expect(payload?.agent_profile_id).toBe(values.agent_profile_id);
     expect(payload).not.toHaveProperty("model");
+    expect(
+      supportsAgentProfile(customAutomation!, scenario!.selectedAction),
+    ).toBe(true);
   });
   it("admits the custom automation action manifest", () => {
     expect(customAutomation).toBeDefined();

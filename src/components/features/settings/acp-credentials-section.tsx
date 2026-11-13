@@ -19,9 +19,12 @@ import type { AcpCredentialForm } from "#/hooks/use-acp-credential-form";
 export function AcpCredentialsSection({
   form,
   providerKey,
+  loginRejected = false,
 }: {
   form: AcpCredentialForm;
   providerKey: string;
+  /** The agent itself refused its login, whatever the local check found. */
+  loginRejected?: boolean;
 }) {
   const { t } = useTranslation("openhands");
   const {
@@ -43,13 +46,13 @@ export function AcpCredentialsSection({
         <Typography.Text className="text-sm font-medium text-contrast">
           {t(I18nKey.SETTINGS$ACP_CREDENTIALS_TITLE)}
         </Typography.Text>
-        <Typography.Text className="text-xs text-[#717888]">
+        <Typography.Text className="text-xs text-text-dim dark:text-[#717888]">
           {t(I18nKey.SETTINGS$ACP_CREDENTIALS_DESCRIPTION)}
         </Typography.Text>
       </div>
 
       <AcpAuthStatusBanner
-        status={authStatus}
+        status={loginRejected ? "unauthenticated" : authStatus}
         isChecking={isChecking}
         credentialsConfigured={credentialsConfigured}
         providerName={providerName}

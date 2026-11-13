@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { getStatusCode, getTaskStatusI18nKey } from "#/utils/status";
+import {
+  canStopRuntime,
+  getStatusCode,
+  getTaskStatusI18nKey,
+} from "#/utils/status";
 import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import type { AppConversationStartTaskStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -35,6 +39,42 @@ describe("getStatusCode", () => {
     expect(result).toBe(I18nKey.CHAT_INTERFACE$DISCONNECTED);
   });
 
+  it("returns CONNECTING for a first-ever connect (hasConnectedOnce omitted)", () => {
+    const result = getStatusCode("CONNECTING", ExecutionStatus.IDLE);
+    expect(result).toBe(I18nKey.CHAT_INTERFACE$CONNECTING);
+  });
+
+  it("returns CONNECTING, not RECONNECTING, while hasConnectedOnce is false", () => {
+    const result = getStatusCode(
+      "CONNECTING",
+      ExecutionStatus.IDLE,
+      undefined,
+      undefined,
+      false,
+    );
+    expect(result).toBe(I18nKey.CHAT_INTERFACE$CONNECTING);
+  });
+
+  it("returns RECONNECTING when a previously-open connection is connecting again", () => {
+    const result = getStatusCode(
+      "CONNECTING",
+      ExecutionStatus.IDLE,
+      undefined,
+      undefined,
+      true,
+    );
+    expect(result).toBe(I18nKey.CHAT_INTERFACE$RECONNECTING);
+  });
+
+  it.each(["CLOSED", "CLOSING"] as const)(
+    "shows reconnecting during %s retry backoff",
+    (state) => {
+      expect(
+        getStatusCode(state, ExecutionStatus.IDLE, undefined, undefined, true),
+      ).toBe(I18nKey.CHAT_INTERFACE$RECONNECTING);
+    },
+  );
+
   it("returns COMMON$WAITING_FOR_SANDBOX when task is waiting for sandbox", () => {
     const result = getStatusCode("OPEN", null, "WAITING_FOR_SANDBOX");
     expect(result).toBe(I18nKey.COMMON$WAITING_FOR_SANDBOX);
@@ -66,5 +106,22 @@ describe("getTaskStatusI18nKey", () => {
     ["RUNNING_SETUP_SCRIPT", I18nKey.CONVERSATION$STARTING_CONVERSATION],
   ] as const)("maps %s to its i18n key", (taskStatus, expectedKey) => {
     expect(getTaskStatusI18nKey(taskStatus)).toBe(expectedKey);
+  });
+});
+
+describe("canStopRuntime", () => {
+  it("allows stopping while the agent is active", () => {
+    expect(canStopRuntime(ExecutionStatus.RUNNING)).toBe(true);
+    expect(canStopRuntime(ExecutionStatus.IDLE, null)).toBe(true);
+  });
+
+  it("allows stopping a running cloud sandbox after the agent is paused", () => {
+    expect(canStopRuntime(ExecutionStatus.PAUSED, "RUNNING")).toBe(true);
+  });
+
+  it("hides stop once the sandbox is paused or the local agent is paused", () => {
+    expect(canStopRuntime(ExecutionStatus.PAUSED, "PAUSED")).toBe(false);
+    expect(canStopRuntime(ExecutionStatus.PAUSED, null)).toBe(false);
+    expect(canStopRuntime(null, "MISSING")).toBe(false);
   });
 });

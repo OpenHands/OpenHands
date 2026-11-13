@@ -75,9 +75,10 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   const isLightTheme = COLOR_THEMES[colorTheme].appearance === "light";
   const query = useWorkspaceFileContent(path);
   // Subscribe to the workspace mutation counter so the iframe / <img> src
-  // changes after every agent-side edit, forcing a fresh fetch even when
-  // the *path* hasn't moved (e.g. agent rewrote `style.css` referenced by
-  // the currently-displayed `index.html`).
+  // changes after every agent file-editor edit and every Files tab Refresh,
+  // forcing a fresh fetch of the displayed file even when the *path* hasn't
+  // moved. Assets it references (e.g. a `style.css` used by `index.html`)
+  // keep their own URLs, so they are not cache-busted by this.
   const mutationCounter = useWorkspaceMutationCounter((state) => state.count);
 
   if (query.isLoading) {
@@ -194,12 +195,12 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
     return (
       <div
         data-testid="file-content-viewer-markdown"
-        className="h-full w-full overflow-auto bg-surface text-foreground custom-scrollbar-always [--oh-scroll-fade-from:var(--oh-surface)]"
+        className="h-full w-full overflow-auto bg-surface text-foreground custom-scrollbar-always file-preview-markdown"
       >
         <div
           className={cn(
             "prose prose-sm max-w-none p-6",
-            "[--tw-prose-body:var(--oh-foreground)] [--tw-prose-bold:var(--oh-foreground)] [--tw-prose-headings:var(--oh-foreground)] [--tw-prose-lead:var(--oh-text-secondary)] [--tw-prose-counters:var(--oh-text-secondary)] [--tw-prose-quotes:var(--oh-foreground)] [--tw-prose-quote-borders:var(--oh-border-subtle)] [--tw-prose-bullets:var(--oh-muted)] [--tw-prose-hr:var(--oh-border-subtle)] [--tw-prose-captions:var(--oh-muted)] [--tw-prose-kbd:var(--oh-foreground)]",
+            "file-preview-prose",
             !isLightTheme && "prose-invert",
           )}
         >

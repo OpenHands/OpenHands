@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route } from "react-router";
 import LaunchRoute from "#/routes/launch";
+import AutomationService from "#/api/automation-service/automation-service.api";
 
 // Mock the hooks
 const mockMutateAsync = vi.fn();
@@ -30,6 +31,15 @@ vi.mock("#/hooks/query/use-is-authed", () => ({
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({ data: {} }),
+}));
+
+// AutomationService is mocked per-test via vi.spyOn so each case controls
+// the preflight and install responses independently.
+vi.mock("#/api/automation-service/automation-service.api", () => ({
+  default: {
+    createPluginSpecAutomation: vi.fn(),
+    pluginSpecPreflight: vi.fn(),
+  },
 }));
 
 function renderLaunchRoute(searchParams: string) {
@@ -97,7 +107,9 @@ describe("LaunchRoute", () => {
       renderLaunchRoute("?plugins=not-valid-base64!!!");
 
       expect(screen.getByTestId("launch-error")).toBeInTheDocument();
-      expect(screen.getByText("LAUNCH$ERROR_INVALID_FORMAT")).toBeInTheDocument();
+      expect(
+        screen.getByText("LAUNCH$ERROR_INVALID_FORMAT"),
+      ).toBeInTheDocument();
     });
 
     it("should show error for invalid JSON in decoded base64", () => {
@@ -106,7 +118,9 @@ describe("LaunchRoute", () => {
       renderLaunchRoute(`?plugins=${invalidJson}`);
 
       expect(screen.getByTestId("launch-error")).toBeInTheDocument();
-      expect(screen.getByText("LAUNCH$ERROR_INVALID_FORMAT")).toBeInTheDocument();
+      expect(
+        screen.getByText("LAUNCH$ERROR_INVALID_FORMAT"),
+      ).toBeInTheDocument();
     });
 
     it("should show error when decoded plugins is not an array", () => {
@@ -115,7 +129,9 @@ describe("LaunchRoute", () => {
       renderLaunchRoute(`?plugins=${notArray}`);
 
       expect(screen.getByTestId("launch-error")).toBeInTheDocument();
-      expect(screen.getByText("LAUNCH$ERROR_INVALID_FORMAT")).toBeInTheDocument();
+      expect(
+        screen.getByText("LAUNCH$ERROR_INVALID_FORMAT"),
+      ).toBeInTheDocument();
     });
 
     it("should show error when plugin is missing source", () => {
@@ -124,7 +140,9 @@ describe("LaunchRoute", () => {
       renderLaunchRoute(`?plugins=${missingSource}`);
 
       expect(screen.getByTestId("launch-error")).toBeInTheDocument();
-      expect(screen.getByText("LAUNCH$ERROR_INVALID_FORMAT")).toBeInTheDocument();
+      expect(
+        screen.getByText("LAUNCH$ERROR_INVALID_FORMAT"),
+      ).toBeInTheDocument();
     });
 
     it("should parse simple params format (plugin_source)", () => {
@@ -132,13 +150,13 @@ describe("LaunchRoute", () => {
 
       expect(screen.getByTestId("plugin-launch-modal")).toBeInTheDocument();
       // Plugin name appears multiple times, use getAllByText
-      expect(screen.getAllByText("owner/simple-repo").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("owner/simple-repo").length).toBeGreaterThan(
+        0,
+      );
     });
 
     it("should parse simple params with ref", () => {
-      renderLaunchRoute(
-        "?plugin_source=github:owner/repo&plugin_ref=v1.0.0",
-      );
+      renderLaunchRoute("?plugin_source=github:owner/repo&plugin_ref=v1.0.0");
 
       expect(screen.getByTestId("plugin-launch-modal")).toBeInTheDocument();
       // Plugin name appears multiple times, use getAllByText
@@ -153,15 +171,109 @@ describe("LaunchRoute", () => {
     });
   });
 
+  describe("Message-Only Launch (no plugins)", () => {
+    it("should show the message confirmation modal instead of the no-plugins error", () => {
+      renderLaunchRoute("?message=hey%20whats%20up");
+
+      expect(screen.getByTestId("message-launch-modal")).toBeInTheDocument();
+      expect(screen.getByText("hey whats up")).toBeInTheDocument();
+      expect(screen.queryByTestId("launch-error")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("plugin-launch-modal"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("should not show a trust checkbox for message-only launches", () => {
+      renderLaunchRoute("?message=hey");
+
+      expect(screen.queryByTestId("trust-checkbox")).not.toBeInTheDocument();
+    });
+
+    it("should enable the start button without checking any checkbox", () => {
+      renderLaunchRoute("?message=hey");
+
+      expect(
+        screen.getByTestId("start-conversation-button"),
+      ).not.toBeDisabled();
+    });
+
+    it("should create a conversation with the message and no plugins", async () => {
+      const user = userEvent.setup();
+      renderLaunchRoute("?message=hey%20whats%20up");
+
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledWith({
+          plugins: [],
+          query: "hey whats up",
+          entryPoint: "launch_deeplink",
+        });
+      });
+    });
+
+    it("should navigate to conversation after successful creation", async () => {
+      const user = userEvent.setup();
+      mockMutateAsync.mockResolvedValue({ conversation_id: "msg-conv-789" });
+
+      renderLaunchRoute("?message=hey");
+
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith(
+          "/conversations/msg-conv-789",
+        );
+      });
+    });
+
+    it("should navigate home when close button clicked", async () => {
+      const user = userEvent.setup();
+
+      renderLaunchRoute("?message=hey");
+
+      await user.click(screen.getByTestId("close-button"));
+
+      expect(mockNavigate).toHaveBeenCalledWith("/conversations");
+    });
+
+    it("should strip HTML from message-only links", () => {
+      const maliciousMessage = "<script>alert(1)</script>Safe text";
+
+      renderLaunchRoute(`?message=${encodeURIComponent(maliciousMessage)}`);
+
+      expect(screen.queryByText(/<script>/)).not.toBeInTheDocument();
+      expect(screen.getByText("alert(1)Safe text")).toBeInTheDocument();
+    });
+
+    it("should show error when message is empty", () => {
+      renderLaunchRoute("?message=");
+
+      expect(screen.getByTestId("launch-error")).toBeInTheDocument();
+      expect(screen.getByText("LAUNCH$ERROR_NO_PLUGINS")).toBeInTheDocument();
+    });
+
+    it("should show error when message strips to empty", () => {
+      renderLaunchRoute(`?message=${encodeURIComponent("<div></div>")}`);
+
+      expect(screen.getByTestId("launch-error")).toBeInTheDocument();
+      expect(screen.getByText("LAUNCH$ERROR_NO_PLUGINS")).toBeInTheDocument();
+    });
+  });
+
   describe("Message Sanitization", () => {
     it("should display sanitized message", () => {
       const plugins = [{ source: "github:owner/repo" }];
       const encoded = btoa(JSON.stringify(plugins));
       const message = "Hello, this is a safe message";
 
-      renderLaunchRoute(`?plugins=${encoded}&message=${encodeURIComponent(message)}`);
+      renderLaunchRoute(
+        `?plugins=${encoded}&message=${encodeURIComponent(message)}`,
+      );
 
-      expect(screen.getByText("Hello, this is a safe message")).toBeInTheDocument();
+      expect(
+        screen.getByText("Hello, this is a safe message"),
+      ).toBeInTheDocument();
     });
 
     it("should remove script tags from message (XSS prevention)", () => {
@@ -182,7 +294,7 @@ describe("LaunchRoute", () => {
     it("should strip img tags with onerror handlers (XSS prevention)", () => {
       const plugins = [{ source: "github:owner/repo" }];
       const encoded = btoa(JSON.stringify(plugins));
-      const maliciousMessage = '<img src=x onerror=alert(1)>Safe content';
+      const maliciousMessage = "<img src=x onerror=alert(1)>Safe content";
 
       renderLaunchRoute(
         `?plugins=${encoded}&message=${encodeURIComponent(maliciousMessage)}`,
@@ -197,7 +309,7 @@ describe("LaunchRoute", () => {
     it("should strip svg tags with onload handlers (XSS prevention)", () => {
       const plugins = [{ source: "github:owner/repo" }];
       const encoded = btoa(JSON.stringify(plugins));
-      const maliciousMessage = '<svg/onload=alert(1)>Safe content';
+      const maliciousMessage = "<svg/onload=alert(1)>Safe content";
 
       renderLaunchRoute(
         `?plugins=${encoded}&message=${encodeURIComponent(maliciousMessage)}`,
@@ -212,7 +324,7 @@ describe("LaunchRoute", () => {
     it("should strip all HTML tags for plain text display", () => {
       const plugins = [{ source: "github:owner/repo" }];
       const encoded = btoa(JSON.stringify(plugins));
-      const htmlMessage = '<div><p>Hello</p> <b>World</b></div>';
+      const htmlMessage = "<div><p>Hello</p> <b>World</b></div>";
 
       renderLaunchRoute(
         `?plugins=${encoded}&message=${encodeURIComponent(htmlMessage)}`,
@@ -227,7 +339,9 @@ describe("LaunchRoute", () => {
       const encoded = btoa(JSON.stringify(plugins));
       const longMessage = "A".repeat(600);
 
-      renderLaunchRoute(`?plugins=${encoded}&message=${encodeURIComponent(longMessage)}`);
+      renderLaunchRoute(
+        `?plugins=${encoded}&message=${encodeURIComponent(longMessage)}`,
+      );
 
       // Should be truncated to 500 chars
       const displayedMessage = screen.getByText(/A{100,}/);
@@ -311,7 +425,9 @@ describe("LaunchRoute", () => {
 
       renderLaunchRoute(`?plugins=${encoded}`);
 
-      expect(screen.getByTestId("start-conversation-button")).toBeInTheDocument();
+      expect(
+        screen.getByTestId("start-conversation-button"),
+      ).toBeInTheDocument();
     });
 
     it("should display close button", () => {
@@ -346,8 +462,12 @@ describe("LaunchRoute", () => {
 
       expect(screen.getByText("LAUNCH$PLUGINS")).toBeInTheDocument();
       // Plugin names appear multiple times (title area and list), use getAllByText
-      expect(screen.getAllByText("owner/repo-without-params").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("owner/another-repo").length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText("owner/repo-without-params").length,
+      ).toBeGreaterThan(0);
+      expect(screen.getAllByText("owner/another-repo").length).toBeGreaterThan(
+        0,
+      );
     });
 
     it("should show additional plugins label when mixing params and no-params plugins", () => {
@@ -382,7 +502,6 @@ describe("LaunchRoute", () => {
       renderLaunchRoute(`?plugins=${encoded}`);
 
       // Check that the checkbox has a label associated with it
-      const checkbox = screen.getByTestId("trust-checkbox");
       const label = document.querySelector('label[for="trust-checkbox"]');
       expect(label).toBeInTheDocument();
     });
@@ -399,7 +518,7 @@ describe("LaunchRoute", () => {
       // In test environment, the translation key is shown
       const label = document.querySelector('label[for="trust-checkbox"]');
       expect(label).toBeInTheDocument();
-      expect(label?.textContent).toContain("LAUNCH$TRUST_SKILL_CHECKBOX");
+      expect(label?.textContent).toContain("LAUNCH$TRUST_PLUGIN_CHECKBOX");
     });
 
     it("should disable start button when trust checkbox is unchecked", () => {
@@ -430,9 +549,7 @@ describe("LaunchRoute", () => {
   describe("Conversation Creation", () => {
     it("should call createConversation with plugins when start button clicked after checking trust", async () => {
       const user = userEvent.setup();
-      const plugins = [
-        { source: "github:owner/repo", parameters: { apiKey: "test" } },
-      ];
+      const plugins = [{ source: "github:owner/repo" }];
       const encoded = btoa(JSON.stringify(plugins));
 
       renderLaunchRoute(`?plugins=${encoded}`);
@@ -448,7 +565,7 @@ describe("LaunchRoute", () => {
               source: "github:owner/repo",
               ref: null,
               repo_path: null,
-              parameters: { apiKey: "test" },
+              parameters: null,
             },
           ],
           query: undefined,
@@ -463,7 +580,9 @@ describe("LaunchRoute", () => {
       const encoded = btoa(JSON.stringify(plugins));
       const message = "/city-weather:now Tokyo";
 
-      renderLaunchRoute(`?plugins=${encoded}&message=${encodeURIComponent(message)}`);
+      renderLaunchRoute(
+        `?plugins=${encoded}&message=${encodeURIComponent(message)}`,
+      );
 
       // First check the trust checkbox
       await user.click(screen.getByTestId("trust-checkbox"));
@@ -499,7 +618,9 @@ describe("LaunchRoute", () => {
       await user.click(screen.getByTestId("start-conversation-button"));
 
       await waitFor(() => {
-        expect(mockNavigate).toHaveBeenCalledWith("/conversations/new-conv-456");
+        expect(mockNavigate).toHaveBeenCalledWith(
+          "/conversations/new-conv-456",
+        );
       });
     });
 
@@ -553,7 +674,9 @@ describe("LaunchRoute", () => {
 
       await waitFor(() => {
         expect(screen.getByTestId("launch-error")).toBeInTheDocument();
-        expect(screen.getByText("LAUNCH$ERROR_CREATION_FAILED")).toBeInTheDocument();
+        expect(
+          screen.getByText("LAUNCH$ERROR_CREATION_FAILED"),
+        ).toBeInTheDocument();
       });
     });
 
@@ -575,4 +698,271 @@ describe("LaunchRoute", () => {
       });
     });
   });
+
+  describe("Automation Mode", () => {
+    const mockCreate =
+      AutomationService.createPluginSpecAutomation as ReturnType<typeof vi.fn>;
+    const mockPreflight = AutomationService.pluginSpecPreflight as ReturnType<
+      typeof vi.fn
+    >;
+
+    const PREFLIGHT_RESPONSE = {
+      resolved_ref: "abc123",
+      manifest: {
+        name: "News Digest",
+        description: "A test automation.",
+        config_schema: {
+          properties: {
+            feeds: { type: "string", format: "textarea", title: "Feeds" },
+          },
+        },
+      },
+      suggested_trigger: {
+        type: "cron",
+        schedule: "0 9 * * *",
+        timezone: "UTC",
+      },
+    };
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockPreflight.mockResolvedValue(PREFLIGHT_RESPONSE);
+      mockCreate.mockResolvedValue({
+        automation: { id: "auto-42" },
+        created: true,
+      });
+    });
+
+    it("renders the Install Automation button in mode=automation", async () => {
+      renderLaunchRoute(
+        "?mode=automation&plugin_source=github:owner/news-digest",
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("start-conversation-button"),
+        ).toHaveTextContent("LAUNCH$INSTALL_AUTOMATION");
+      });
+    });
+
+    it("disables Install while preflight is loading", async () => {
+      // Never resolves — keeps the loading state active.
+      mockPreflight.mockReturnValue(new Promise(() => {}));
+
+      renderLaunchRoute(
+        "?mode=automation&plugin_source=github:owner/news-digest",
+      );
+
+      expect(
+        screen.getByTestId("plugin-preflight-loading"),
+      ).toBeInTheDocument();
+      // Tick trust first so the button's disabled state is solely from the
+      // pending preflight, not from the trust check. Without this, the test
+      // passes for the wrong reason: trust is false, so the button is
+      // disabled regardless of the preflight state.
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("trust-checkbox"));
+      expect(screen.getByTestId("start-conversation-button")).toBeDisabled();
+    });
+
+    it("installs via createPluginSpecAutomation with config from parameters", async () => {
+      const user = userEvent.setup();
+      const plugins = [
+        {
+          source: "github:owner/news-digest",
+          ref: "main",
+          parameters: { feeds: "https://example.com/rss" },
+        },
+      ];
+
+      renderLaunchRoute(
+        `?mode=automation&plugins=${btoa(JSON.stringify(plugins))}`,
+      );
+
+      // Wait for the trigger section, which only renders once preflight
+      // has loaded and the cron suggestion is available.
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("plugin-trigger-section"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("trust-checkbox"));
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      await waitFor(() => {
+        expect(mockCreate).toHaveBeenCalledTimes(1);
+      });
+
+      const call = mockCreate.mock.calls[0][0];
+      expect(call.name).toBe("News Digest");
+      expect(call.plugin.source).toBe("github:owner/news-digest");
+      expect(call.config).toEqual({ feeds: "https://example.com/rss" });
+      expect(call.trigger).toEqual({
+        type: "cron",
+        schedule: "0 9 * * *",
+        timezone: "UTC",
+      });
+    });
+
+    it("falls back to a repo-derived name when the manifest has no name", async () => {
+      const user = userEvent.setup();
+      mockPreflight.mockResolvedValue({
+        ...PREFLIGHT_RESPONSE,
+        manifest: { ...PREFLIGHT_RESPONSE.manifest, name: undefined },
+      });
+      const plugins = [
+        {
+          source: "github:owner/news-digest",
+          ref: "main",
+          parameters: { feeds: "https://example.com/rss" },
+        },
+      ];
+
+      renderLaunchRoute(
+        `?mode=automation&plugins=${btoa(JSON.stringify(plugins))}`,
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("plugin-trigger-section"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("trust-checkbox"));
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      await waitFor(() => {
+        expect(mockCreate).toHaveBeenCalledTimes(1);
+      });
+
+      const call = mockCreate.mock.calls[0][0];
+      expect(call.name).toBe("news-digest (owner)");
+    });
+
+    it("navigates to the automation detail page on success", async () => {
+      const user = userEvent.setup();
+      renderLaunchRoute(
+        "?mode=automation&plugin_source=github:owner/news-digest",
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("plugin-trigger-section"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("trust-checkbox"));
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith("/automations/auto-42");
+      });
+    });
+
+    it("shows an already-installed state instead of navigating when the service returns an existing automation", async () => {
+      const user = userEvent.setup();
+      mockCreate.mockResolvedValueOnce({
+        automation: { id: "auto-42" },
+        created: false,
+      });
+
+      renderLaunchRoute(
+        "?mode=automation&plugin_source=github:owner/news-digest",
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("plugin-trigger-section"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("trust-checkbox"));
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("launch-already-installed"),
+        ).toBeInTheDocument();
+      });
+      // The user can open the existing automation to edit it there.
+      await user.click(screen.getByTestId("open-to-edit-button"));
+      expect(mockNavigate).toHaveBeenCalledWith("/automations/auto-42");
+    });
+
+    it("surfaces the server detail message on install failure", async () => {
+      const user = userEvent.setup();
+      // Simulate an axios 422 carrying the server's actionable detail.
+      mockCreate.mockRejectedValue({
+        isAxiosError: true,
+        response: {
+          data: { detail: "Plugin config is invalid: feeds required" },
+        },
+        message: "Request failed with status code 422",
+      });
+
+      renderLaunchRoute(
+        "?mode=automation&plugin_source=github:owner/news-digest",
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("plugin-trigger-section"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId("trust-checkbox"));
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("launch-error")).toBeInTheDocument();
+      });
+      // The server's detail reaches the user, not the raw transport text.
+      expect(
+        screen.getByText(/Plugin config is invalid: feeds required/),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("Request failed with status code 422"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("falls back to the free-text flow when preflight is unavailable", async () => {
+      mockPreflight.mockRejectedValue(new Error("not found"));
+
+      renderLaunchRoute(
+        "?mode=automation&plugin_source=github:owner/news-digest",
+      );
+
+      // The loading state clears (preflight rejected → null), and no trigger
+      // section renders. The install button is gated only on trust after that.
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("plugin-preflight-loading"),
+        ).not.toBeInTheDocument();
+      });
+      expect(
+        screen.queryByTestId("plugin-trigger-section"),
+      ).not.toBeInTheDocument();
+    });
+  });
 });
+
+it.each(
+  [{ city: "Tokyo" }, 5, false, []].map((parameters) => ({ parameters })),
+)(
+  "identifies unsupported Local plugin parameters $parameters before creating a conversation",
+  async ({ parameters }) => {
+    vi.clearAllMocks();
+    const user = userEvent.setup();
+    renderLaunchRoute(
+      `?plugins=${btoa(JSON.stringify([{ source: "local-plugin", parameters }]))}`,
+    );
+    await user.click(screen.getByTestId("trust-checkbox"));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "LAUNCH$PARAMETERS_UNSUPPORTED_LOCAL",
+    );
+    expect(screen.getByTestId("start-conversation-button")).toBeDisabled();
+    await user.click(screen.getByTestId("start-conversation-button"));
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  },
+);

@@ -15,6 +15,8 @@ interface ConfirmDeleteModalProps {
   conversationTitle?: string;
   title?: string;
   description?: React.ReactNode;
+  isConfirmDisabled?: boolean;
+  isPending?: boolean;
 }
 
 export function ConfirmDeleteModal({
@@ -23,6 +25,8 @@ export function ConfirmDeleteModal({
   conversationTitle,
   title,
   description,
+  isConfirmDisabled = false,
+  isPending = false,
 }: ConfirmDeleteModalProps) {
   const { t } = useTranslation("openhands");
 
@@ -59,7 +63,8 @@ export function ConfirmDeleteModal({
             type="button"
             variant="secondary"
             onClick={onCancel}
-            data-testid="cancel-button"
+            testId="cancel-button"
+            isDisabled={isPending}
           >
             {t(I18nKey.BUTTON$CANCEL)}
           </BrandButton>
@@ -67,7 +72,9 @@ export function ConfirmDeleteModal({
             type="button"
             variant="primary"
             onClick={onConfirm}
-            data-testid="confirm-button"
+            testId="confirm-button"
+            isDisabled={isConfirmDisabled || isPending}
+            aria-busy={isPending}
           >
             {t(I18nKey.ACTION$CONFIRM_DELETE)}
           </BrandButton>

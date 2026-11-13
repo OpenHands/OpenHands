@@ -1,8 +1,9 @@
 import React, { useLayoutEffect, useState } from "react";
-import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
 import { ContextMenu } from "#/ui/context-menu";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
+import { clampLeftToViewport } from "#/hooks/use-popover-fixed-placement";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
 import {
@@ -25,6 +26,10 @@ import {
   dropdownInstantColorClassName,
   dropdownMenuRowIconWrapperClassName,
 } from "#/utils/dropdown-classes";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
+
+/** Space between the trigger and the portaled menu. */
+const MENU_GAP_PX = 8;
 
 interface ConversationTabsContextMenuProps {
   isOpen: boolean;
@@ -44,6 +49,7 @@ export function ConversationTabsContextMenu({
     onClose,
     ignoreOutsideClickRef,
   );
+  useCloseOnEscape(isOpen, onClose, anchorRef);
   const [portalStyle, setPortalStyle] = useState<React.CSSProperties>();
 
   useLayoutEffect(() => {
@@ -56,23 +62,38 @@ export function ConversationTabsContextMenu({
       const rect = anchorRef.current?.getBoundingClientRect();
       if (!rect) return;
 
-      const gap = 8;
+      // The menu's own box is only measurable once it has painted; the first
+      // pass falls back to anchoring on the trigger, and the frame below
+      // re-runs with real dimensions.
+      const menuRect = ref.current?.getBoundingClientRect();
+
+      const overflowsBelow =
+        rect.bottom + MENU_GAP_PX + (menuRect?.height ?? 0) >
+        window.innerHeight;
+
       setPortalStyle({
         position: "fixed",
         zIndex: 9999,
-        top: rect.bottom + gap,
-        left: rect.left,
+        // Flip above the trigger rather than clipping at the viewport bottom.
+        ...(overflowsBelow
+          ? { bottom: window.innerHeight - rect.top + MENU_GAP_PX }
+          : { top: rect.bottom + MENU_GAP_PX }),
+        // An embedded canvas can sit hard against the viewport's right edge,
+        // where left-aligning on the trigger clips the labels and pin controls.
+        left: clampLeftToViewport(rect.left, menuRect?.width ?? 0),
       });
     };
 
     updatePosition();
+    const frame = window.requestAnimationFrame(updatePosition);
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [isOpen, anchorRef]);
+  }, [isOpen, anchorRef, ref]);
   const { t } = useTranslation("openhands");
   const { conversationId } = useConversationId();
   const {
@@ -164,7 +185,7 @@ export function ConversationTabsContextMenu({
       position={isPortaled ? "none" : "bottom"}
       alignment={isPortaled ? "none" : "left"}
       spacing={isPortaled ? "none" : "default"}
-      className={cn("z-[9999] w-fit", isPortaled ? "mt-0" : "mt-2")}
+      className={cn("z-9999 w-fit", isPortaled ? "mt-0" : "mt-2")}
     >
       {tabConfig.map(({ tab, icon: Icon, i18nKey }) => {
         const pinned = !state.unpinnedTabs.includes(tab);
@@ -249,9 +270,10 @@ export function ConversationTabsContextMenu({
   );
 
   if (isPortaled && portalStyle && typeof document !== "undefined") {
-    return ReactDOM.createPortal(
-      <div style={portalStyle}>{menu}</div>,
-      document.body,
+    return (
+      <AppearancePortal>
+        <div style={portalStyle}>{menu}</div>
+      </AppearancePortal>
     );
   }
 

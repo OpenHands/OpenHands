@@ -2,8 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { isRateLimitError } from "#/utils/rate-limit-retry";
 import { CONVERSATION_QUERY_KEYS } from "./query-keys";
 
+const MAX_RATE_LIMIT_RETRIES = 2;
 const FIVE_MINUTES = 1000 * 60 * 5;
 const FIFTEEN_MINUTES = 1000 * 60 * 15;
 
@@ -47,6 +49,11 @@ export const useSubConversations = (
     enabled: ids.length > 0,
     staleTime: FIVE_MINUTES,
     gcTime: FIFTEEN_MINUTES,
-    retry: false,
+    // Same rate-limit-aware retry and no eager window-focus refetch as
+    // `useUserConversation` — these two hooks hit the same batch endpoint
+    // and compound into the same burst otherwise.
+    retry: (failureCount: number, error: unknown) =>
+      failureCount < MAX_RATE_LIMIT_RETRIES && isRateLimitError(error),
+    refetchOnWindowFocus: false,
   });
 };

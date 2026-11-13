@@ -424,6 +424,30 @@ describe("optimistic-user-message-store", () => {
     expect(entry.errorMessage).toBe("Send timed out");
   });
 
+  it("gives each retry a fresh bounded delivery window", () => {
+    const store = useOptimisticUserMessageStore.getState();
+    const id = store.enqueuePendingMessage({
+      conversationId: CONVO,
+      text: "resume",
+    });
+    vi.advanceTimersByTime(PENDING_MESSAGE_TIMEOUT_MS - 1000);
+    store.markPendingMessageError(id);
+    store.markPendingMessageSending(id);
+    vi.advanceTimersByTime(1000);
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages[0].status,
+    ).toBe("sending");
+    vi.advanceTimersByTime(PENDING_MESSAGE_TIMEOUT_MS - 1000);
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages[0].status,
+    ).toBe("error");
+    store.markPendingMessageSending(id);
+    vi.advanceTimersByTime(PENDING_MESSAGE_TIMEOUT_MS);
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages[0].status,
+    ).toBe("error");
+  });
+
   it("watchdog timeout does nothing if the echo already consumed the message", () => {
     const store = useOptimisticUserMessageStore.getState();
     store.enqueuePendingMessage({ conversationId: CONVO, text: "fast" });
@@ -460,6 +484,44 @@ describe("optimistic-user-message-store", () => {
     expect(waiting.id).toBe(waitingId);
     expect(waiting.status).toBe("error");
     expect(waiting.errorMessage).toBe("Send timed out");
+  });
+
+  it("does not time out a start-task message while the sandbox is still provisioning", () => {
+    const store = useOptimisticUserMessageStore.getState();
+    store.enqueuePendingMessage({
+      conversationId: "task-123",
+      text: "hello from home",
+    });
+
+    // The task is still not READY long after the watchdog would have fired.
+    vi.advanceTimersByTime(PENDING_MESSAGE_TIMEOUT_MS * 2);
+
+    const [entry] = useOptimisticUserMessageStore.getState().pendingMessages;
+    expect(entry.status).toBe("sending");
+    expect(entry.errorMessage).toBeUndefined();
+  });
+
+  it("starts the watchdog once a start-task message is reassigned to the real conversation", () => {
+    const store = useOptimisticUserMessageStore.getState();
+    const id = store.enqueuePendingMessage({
+      conversationId: "task-123",
+      text: "hello from home",
+    });
+    vi.advanceTimersByTime(PENDING_MESSAGE_TIMEOUT_MS * 2);
+
+    // The sandbox is ready: the route moves to the real id, but no echo lands.
+    store.reassignPendingMessages("task-123", CONVO);
+    vi.advanceTimersByTime(PENDING_MESSAGE_TIMEOUT_MS - 1);
+    const statusBeforeTimeout =
+      useOptimisticUserMessageStore.getState().pendingMessages[0].status;
+    vi.advanceTimersByTime(1);
+
+    // The full timeout is counted from the reassignment, not from the send.
+    expect(statusBeforeTimeout).toBe("sending");
+    const [entry] = useOptimisticUserMessageStore.getState().pendingMessages;
+    expect(entry.id).toBe(id);
+    expect(entry.status).toBe("error");
+    expect(entry.errorMessage).toBe("Send timed out");
   });
 
   it("removePendingMessage drops a specific entry by id", () => {

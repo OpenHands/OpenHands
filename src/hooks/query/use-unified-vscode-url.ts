@@ -150,10 +150,10 @@ export const useUnifiedVSCodeUrl = () => {
           : undefined,
       };
     };
-    // Cloud behavior is deliberately unchanged: a sandbox with no VSCODE
-    // entry in `exposed_urls` still surfaces the control. Narrowing this
-    // change to self-hosted keeps its blast radius off the cloud path.
-    isUnavailable = false;
+    isUnavailable =
+      cloudSandboxQuery.isSuccess &&
+      sandbox?.status === "RUNNING" &&
+      exposedUrl === null;
   } else {
     data = localQuery.data;
     // The URL request only starts once the capability probe has cleared it,

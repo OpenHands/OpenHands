@@ -14,6 +14,7 @@ import {
 export const LOCAL_STORAGE_KEYS = {
   CONVERSATION_STATE: "conversation-state",
   PENDING_TASK_DRAFT: "pending-task-draft",
+  CONVERSATION_DRAFT_REVISION: "conversation-draft-revision",
 } as const;
 
 const CONVERSATION_STATE_UPDATED_EVENT = "conversation-state-updated";
@@ -249,20 +250,63 @@ export function getConversationState(
   }
 }
 
+// Draft identities need uniqueness, not cryptographic randomness. Keep drafts
+// available when Canvas is hosted over HTTP without randomUUID support.
+const createDraftRevision = (): string =>
+  `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+const getDraftRevisionKey = (conversationId: string): string =>
+  `${LOCAL_STORAGE_KEYS.CONVERSATION_DRAFT_REVISION}-${conversationId}`;
+
+export function getConversationDraftRevision(
+  conversationId: string,
+): string | null {
+  if (shouldSkipPersistence(conversationId)) return null;
+  try {
+    return localStorage.getItem(getDraftRevisionKey(conversationId));
+  } catch {
+    return null;
+  }
+}
+
+/** Invalidate confirmations immediately without serializing the debounced text. */
+export function markConversationDraftEdited(conversationId: string): string {
+  const revision = createDraftRevision();
+  if (!shouldSkipPersistence(conversationId)) {
+    try {
+      localStorage.setItem(getDraftRevisionKey(conversationId), revision);
+    } catch {
+      // Draft persistence is best effort when storage is unavailable.
+    }
+  }
+  return revision;
+}
+
 /**
  * Set the conversation state in localStorage, merging with existing state.
  */
 export function setConversationState(
   conversationId: string,
   updates: Partial<ConversationState>,
+  draftRevision?: string,
 ): void {
   if (shouldSkipPersistence(conversationId)) {
     return;
   }
   try {
+    // An older debounce/flush must not overwrite a newer edit or a confirmed clear.
+    if (
+      "draftMessage" in updates &&
+      draftRevision !== undefined &&
+      getConversationDraftRevision(conversationId) !== draftRevision
+    )
+      return;
     const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
     const currentState = getConversationState(conversationId);
     const newState = { ...currentState, ...updates };
+    if ("draftMessage" in updates && draftRevision === undefined) {
+      markConversationDraftEdited(conversationId);
+    }
     localStorage.setItem(key, JSON.stringify(newState));
     if (typeof window !== "undefined") {
       window.dispatchEvent(
@@ -274,6 +318,21 @@ export function setConversationState(
     }
   } catch (err) {
     console.warn("Failed to set conversation localStorage", err);
+  }
+}
+
+/** Clear only the submitted edit confirmed by a locally tracked message. */
+export function clearConfirmedConversationDraft(
+  conversationId: string,
+  confirmed: { text: string; draftRevision?: string | null } | null,
+): void {
+  if (confirmed?.draftRevision === undefined) return;
+  const current = getConversationState(conversationId);
+  if (
+    getConversationDraftRevision(conversationId) === confirmed.draftRevision &&
+    current.draftMessage === confirmed.text.trim()
+  ) {
+    setConversationState(conversationId, { draftMessage: null });
   }
 }
 
@@ -312,6 +371,7 @@ export function clearConversationLocalStorage(conversationId: string) {
   try {
     const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
     localStorage.removeItem(key);
+    localStorage.removeItem(getDraftRevisionKey(conversationId));
     if (typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent<ConversationStateUpdatedDetail>(
@@ -343,7 +403,7 @@ export function useConversationLocalStorageState(conversationId: string): {
   setUnpinnedOverviewSections?: (sections: string[]) => void;
   setUnpinnedOverviewGitParts?: (parts: string[]) => void;
   setConversationMode: (mode: ConversationMode) => void;
-  setDraftMessage: (message: string | null) => void;
+  setDraftMessage: (message: string | null, draftRevision?: string) => void;
   setRightPanelShown?: (shown: boolean) => void;
   setFilesTabDiffView: (diffView: boolean | null) => void;
   setFilesTabContentViewMode: (mode: ViewMode) => void;
@@ -399,7 +459,10 @@ export function useConversationLocalStorageState(conversationId: string): {
     };
   }, [conversationId]);
 
-  const updateState = (updates: Partial<ConversationState>) => {
+  const updateState = (
+    updates: Partial<ConversationState>,
+    draftRevision?: string,
+  ) => {
     if (shouldSkipPersistence(conversationId)) {
       // No durable storage for this id (empty / task placeholder), but the
       // hook is still useful as ephemeral in-memory state — update the
@@ -408,7 +471,7 @@ export function useConversationLocalStorageState(conversationId: string): {
       setState((prev) => ({ ...prev, ...updates }));
       return;
     }
-    setConversationState(conversationId, updates);
+    setConversationState(conversationId, updates, draftRevision);
   };
 
   return {
@@ -420,7 +483,8 @@ export function useConversationLocalStorageState(conversationId: string): {
     setUnpinnedOverviewGitParts: (parts) =>
       updateState({ unpinnedOverviewGitParts: parts }),
     setConversationMode: (mode) => updateState({ conversationMode: mode }),
-    setDraftMessage: (message) => updateState({ draftMessage: message }),
+    setDraftMessage: (message, draftRevision) =>
+      updateState({ draftMessage: message }, draftRevision),
     setRightPanelShown: (shown) => updateState({ rightPanelShown: shown }),
     setFilesTabDiffView: (diffView) =>
       updateState({ filesTabDiffView: diffView }),

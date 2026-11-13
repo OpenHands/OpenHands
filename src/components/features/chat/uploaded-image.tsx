@@ -1,5 +1,7 @@
 import React from "react";
 import { LoaderCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
 import { PastedImageUploadAsFileButton } from "./pasted-image-upload-as-file-button";
 import { RemoveFileButton } from "./remove-file-button";
 
@@ -20,6 +22,7 @@ export function UploadedImage({
   uploadAsFileActive = false,
   onToggleUploadAsFile,
 }: UploadedImageProps) {
+  const { t } = useTranslation("openhands");
   const [imageUrl, setImageUrl] = React.useState<string>("");
 
   React.useEffect(() => {
@@ -36,7 +39,10 @@ export function UploadedImage({
   return (
     <div className="group relative flex h-12.25 w-12.75 min-h-12.25 min-w-12.75 items-center justify-center rounded-lg bg-interactive-hover">
       {isLoading ? (
-        <LoaderCircle className="animate-spin w-5 h-5" color="white" />
+        <LoaderCircle
+          className="animate-spin w-5 h-5"
+          color="var(--oh-contrast)"
+        />
       ) : (
         imageUrl && (
           <img
@@ -46,7 +52,10 @@ export function UploadedImage({
           />
         )
       )}
-      <RemoveFileButton onClick={onRemove} />
+      <RemoveFileButton
+        onClick={onRemove}
+        ariaLabel={t(I18nKey.BUTTON$REMOVE_IMAGE)}
+      />
       {showUploadAsFileToggle && onToggleUploadAsFile && (
         <PastedImageUploadAsFileButton
           active={uploadAsFileActive}

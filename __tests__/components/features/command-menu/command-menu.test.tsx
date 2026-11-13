@@ -1,17 +1,26 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { parse } from "postcss";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import {
-  CommandMenu,
-  CommandMenuTrigger,
-} from "#/components/features/command-menu";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { CommandMenu } from "#/components/features/command-menu/command-menu";
+import { CommandMenuTrigger } from "#/components/features/command-menu/command-menu-trigger";
 import { COMMAND_MENU_ROUTE } from "#/components/features/command-menu/command-menu-items";
 import { getInterfaceCopy } from "#/manifests/automation-interface";
 import {
   NavigationProvider,
   type NavigationContextValue,
 } from "#/context/navigation-context";
+import { ConversationCardActions } from "#/components/features/conversation-panel/conversation-card/conversation-card-actions";
 import { useCommandMenuStore } from "#/stores/command-menu-store";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import { renderWithProviders } from "../../../../test-utils";
@@ -41,6 +50,16 @@ const AUTOMATIONS_TITLE_KEY = getInterfaceCopy().commandMenuTitle;
 const NEW_CHAT_TITLE_KEY = "COMMAND_MENU$NEW_CHAT_TITLE";
 const SECRETS_TITLE_KEY = "COMMAND_MENU$SECRETS_SETTINGS_TITLE";
 const TOGGLE_SIDEBAR_TITLE_KEY = "COMMAND_MENU$TOGGLE_SIDEBAR_TITLE";
+const APPLE_SHORTCUT_KEY = "COMMAND_MENU$SHORTCUT";
+const CTRL_SHORTCUT_KEY = "COMMAND_MENU$SHORTCUT_CTRL";
+const MAC_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+const IPHONE_USER_AGENT =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+const LINUX_USER_AGENT =
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+const WINDOWS_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
 const SEARCH_INPUT_ID = "command-menu-search";
 const RESULTS_LISTBOX_ID = "command-menu-results";
 const NEW_CHAT_OPTION_ID = "command-menu-option-new-chat";
@@ -94,6 +113,81 @@ describe("CommandMenu", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
     });
+  });
+
+  it("closes with escape while a command option has focus", async () => {
+    const user = userEvent.setup();
+    renderCommandMenu();
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const searchInput = await screen.findByRole("combobox", {
+      name: SEARCH_LABEL_KEY,
+    });
+    await waitFor(() => expect(searchInput).toHaveFocus());
+
+    await user.tab();
+    expect(document.activeElement?.id).toBe(NEW_CHAT_OPTION_ID);
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+  });
+
+  it("returns focus to the element that had it before opening", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <>
+        <textarea data-testid="composer" />
+        <CommandMenu />
+      </>,
+      { navigation: { navigate: navigateMock } },
+    );
+    const composer = screen.getByTestId("composer");
+    composer.focus();
+
+    await user.keyboard("{Control>}k{/Control}");
+    const searchInput = await screen.findByRole("combobox", {
+      name: SEARCH_LABEL_KEY,
+    });
+    await waitFor(() => expect(searchInput).toHaveFocus());
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+    expect(composer).toHaveFocus();
+  });
+
+  it("closes itself, not a card menu left open underneath, on Escape", async () => {
+    const user = userEvent.setup();
+    const onContextMenuToggle = vi.fn();
+    renderWithProviders(
+      <>
+        <textarea data-testid="composer" />
+        <ConversationCardActions
+          contextMenuOpen
+          onContextMenuToggle={onContextMenuToggle}
+          onDelete={vi.fn()}
+        />
+        <CommandMenu />
+      </>,
+      { navigation: { navigate: navigateMock } },
+    );
+    const composer = screen.getByTestId("composer");
+    composer.focus();
+
+    await user.keyboard("{Control>}k{/Control}");
+    const searchInput = await screen.findByRole("combobox", {
+      name: SEARCH_LABEL_KEY,
+    });
+    await waitFor(() => expect(searchInput).toHaveFocus());
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+    expect(onContextMenuToggle).not.toHaveBeenCalled();
+    expect(screen.getByTestId("context-menu")).toBeInTheDocument();
+    expect(screen.getByTestId("ellipsis-button")).not.toHaveFocus();
+    expect(composer).toHaveFocus();
+
+    // The next Escape reaches the card menu.
+    await user.keyboard("{Escape}");
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
   });
 
   it("opens from the global ctrl-k shortcut", async () => {
@@ -190,6 +284,28 @@ describe("CommandMenu", () => {
       expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
     });
   });
+
+  it.each([
+    ["meta_llm", COMMAND_MENU_ROUTE.metaLlmSettings],
+    ["agent_context", COMMAND_MENU_ROUTE.agentContextSettings],
+  ])(
+    "finds the %s settings page and opens it",
+    async (searchTerm, expectedRoute) => {
+      useCommandMenuStore.getState().open();
+      const { navigate } = renderCommandMenu();
+
+      await userEvent.type(
+        screen.getByRole("combobox", { name: SEARCH_LABEL_KEY }),
+        searchTerm,
+      );
+      await userEvent.keyboard("{Enter}");
+
+      expect(navigate).toHaveBeenCalledWith(expectedRoute);
+      await waitFor(() => {
+        expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+      });
+    },
+  );
 
   it("supports arrow-key navigation and enter selection", async () => {
     useCommandMenuStore.getState().open();
@@ -364,7 +480,7 @@ describe("CommandMenu", () => {
       name: SEARCH_LABEL_KEY,
     });
     expect(reopenedInput).toHaveValue("");
-    expect(screen.getAllByRole("option")).toHaveLength(12);
+    expect(screen.getAllByRole("option")).toHaveLength(14);
     expect(screen.getAllByRole("option")[0]).toHaveAttribute(
       "aria-selected",
       "true",
@@ -397,25 +513,93 @@ describe("CommandMenu", () => {
     ).toHaveAttribute("type", "button");
   });
 
-  it("applies the command palette and active-option presentation", () => {
+  it("compiles the palette geometry, effects and inherited hint typography", async () => {
     useCommandMenuStore.getState().open();
     renderCommandMenu();
-
+    renderWithProviders(<CommandMenuTrigger collapsed={false} />);
     const dialog = screen.getByRole("dialog");
+    const backdrop = dialog.children[0] as HTMLElement;
     const surface = dialog.children[1] as HTMLElement;
     const [activeOption, inactiveOption] = screen.getAllByRole("option");
-    const activeIcon = activeOption.querySelector('[aria-hidden="true"]');
-    const inactiveIcon = inactiveOption.querySelector('[aria-hidden="true"]');
-
-    expect(surface).toHaveClass(
-      "max-w-2xl",
-      "border-border",
-      "shadow-[0_24px_90px_rgba(0,0,0,0.52),0_0_0_1px_rgba(255,255,255,0.03)_inset]",
+    const heading = screen.getByText(NAVIGATION_GROUP_KEY);
+    const shortcut = surface.querySelector("kbd")!;
+    const resultHint = activeOption.lastElementChild!;
+    const footer = screen.getByText("COMMAND_MENU$FOOTER_HINT");
+    const triggerHint = screen
+      .getByTestId("command-menu-trigger")
+      .querySelector("kbd")!;
+    const elements = [
+      dialog,
+      backdrop,
+      surface,
+      activeOption,
+      inactiveOption,
+      heading,
+      shortcut,
+      resultHint,
+      footer,
+      triggerHint,
+    ];
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
     );
-    expect(activeOption).toHaveClass("rounded-xl", "bg-contrast/[0.09]");
-    expect(inactiveOption).toHaveClass("rounded-xl", "text-muted");
-    expect(activeIcon).toHaveClass("size-9", "border-accent");
-    expect(inactiveIcon).toHaveClass("size-9", "border-border");
+    const stylesheet = parse(
+      compiler.build(elements.flatMap((element) => [...element.classList])),
+    );
+    const declarations = (element: Element) => {
+      const selectors = [...element.classList].map(
+        (name) => `.${name.replace(/([^\w-])/g, "\\$1")}`,
+      );
+      const values: Record<string, string> = {};
+      stylesheet.walkRules((rule) => {
+        if (rule.selectors.some((selector) => selectors.includes(selector))) {
+          rule.walkDecls(({ prop, value }) => {
+            values[prop] = value;
+          });
+        }
+      });
+      return values;
+    };
+
+    expect(declarations(dialog)).toMatchObject({
+      "z-index": "70",
+      "padding-top": "10vh",
+    });
+    expect(declarations(surface)["max-height"]).toBe("min(720px, 78vh)");
+    const blur = declarations(backdrop);
+    expect(blur["--tw-backdrop-blur"]).toBe("blur(2px)");
+    expect(blur["backdrop-filter"]).toContain("var(--tw-backdrop-blur,)");
+    expect(blur["backdrop-filter"]).toContain("var(--tw-backdrop-brightness,)");
+    expect(blur["-webkit-backdrop-filter"]).toBe(blur["backdrop-filter"]);
+    const panelShadow = declarations(surface);
+    expect(panelShadow["--tw-shadow"]).toContain("0 24px 90px");
+    expect(panelShadow["--tw-shadow"]).toContain("rgba(0,0,0,0.52)");
+    expect(panelShadow["--tw-shadow"]).toContain("rgba(255,255,255,0.03)");
+    const selectionShadow = declarations(activeOption);
+    expect(selectionShadow["--tw-shadow"]).toContain(
+      "color-mix(in srgb,var(--oh-contrast) 8%,transparent)",
+    );
+    expect(selectionShadow["--tw-shadow"]).toContain("inset");
+    for (const shadow of [panelShadow, selectionShadow]) {
+      expect(shadow["box-shadow"]).toBe(
+        "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)",
+      );
+    }
+    expect(declarations(inactiveOption)["box-shadow"]).toBeUndefined();
+    for (const [element, size, tracking] of [
+      [heading, "11px", "0.18em"],
+      [shortcut, "11px", "0.18em"],
+      [resultHint, "10px", "0.14em"],
+      [triggerHint, "10px", "0.12em"],
+      [footer, "11px", undefined],
+    ] as const) {
+      const typography = declarations(element);
+      expect(typography["font-size"]).toBe(size);
+      expect(typography["line-height"]).toBeUndefined();
+      expect(typography["letter-spacing"]).toBe(tracking);
+      expect(typography["--tw-tracking"]).toBe(tracking);
+    }
   });
 
   it("leaves modified command links to native browser behavior", () => {
@@ -465,6 +649,46 @@ describe("CommandMenu", () => {
       vi.resetModules();
     }
   });
+});
+
+describe("the command menu shortcut hint", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["macOS", MAC_USER_AGENT, APPLE_SHORTCUT_KEY],
+    ["iOS", IPHONE_USER_AGENT, APPLE_SHORTCUT_KEY],
+    ["Linux", LINUX_USER_AGENT, CTRL_SHORTCUT_KEY],
+    ["Windows", WINDOWS_USER_AGENT, CTRL_SHORTCUT_KEY],
+  ])(
+    "on %s reads the same in the sidebar trigger and the menu header",
+    (_platform, userAgent, expectedShortcutKey) => {
+      // Arrange
+      vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(userAgent);
+      useCommandMenuStore.getState().open();
+
+      // Act
+      renderWithProviders(
+        <>
+          <CommandMenuTrigger collapsed={false} />
+          <CommandMenu />
+        </>,
+      );
+
+      // Assert
+      expect(
+        within(screen.getByRole("button", { name: OPEN_LABEL_KEY })).getByText(
+          expectedShortcutKey,
+        ),
+      ).toBeInTheDocument();
+      expect(
+        within(screen.getByTestId("command-menu")).getByText(
+          expectedShortcutKey,
+        ),
+      ).toBeInTheDocument();
+    },
+  );
 });
 
 describe("CommandMenuTrigger", () => {

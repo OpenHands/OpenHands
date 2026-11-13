@@ -15,11 +15,13 @@
 //   churn on existing `// eslint-disable-next-line import/...` comments.
 // - `eslint-plugin-i18next` still ships only legacy config, so it is pulled
 //   in via `FlatCompat` from `@eslint/eslintrc`.
-// - Targets ESLint 9, not 10. The original dependabot PR proposed eslint@10,
-//   but as of this commit `eslint-plugin-react` still calls
-//   `context.getFilename()` (removed in ESLint 10) at rule-load time, which
-//   makes a v10 bump explode on every file. Re-evaluate once that plugin
-//   ships an ESLint-10-compatible release.
+// - Targets ESLint 10. `eslint-plugin-react` (7.37.5) and
+//   `eslint-plugin-jsx-a11y` (6.10.2) still declare ESLint peer ranges that
+//   exclude 10, and `eslint-plugin-react` calls `context.getFilename()`
+//   (removed in ESLint 10) when resolving the React version. The peer ranges
+//   are widened via `overrides` in package.json, and the removed API is
+//   avoided by pinning the React version below instead of `"detect"`.
+//   Re-evaluate once those plugins ship ESLint-10-compatible releases.
 
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -73,9 +75,7 @@ function createNoDirectAgentServerFetchRule() {
           return node.value;
         }
         if (node.type === "TemplateLiteral") {
-          return node.quasis
-            .map((q) => q.value.raw)
-            .join("");
+          return node.quasis.map((q) => q.value.raw).join("");
         }
         return null;
       }
@@ -94,6 +94,19 @@ function createNoDirectAgentServerFetchRule() {
     },
   };
 }
+
+// Retain these exact JS-config/plugin colors pending their token audit.
+// Do not exempt raw palettes or whole namespaces.
+const legacyColorClasses = [
+  // hero.ts / @heroui/theme.
+  "bg-background",
+  "bg-content1",
+  "text-primary-foreground",
+  // tailwind.config.js.
+  "bg-status-fail-bg",
+  "text-status-fail-text",
+  "text-content-muted",
+];
 
 export default [
   // Files / dirs we never want to lint.
@@ -118,6 +131,8 @@ export default [
 
   // Base JS recommended rules.
   js.configs.recommended,
+  // Keep the existing rule set while using @eslint/js 10's recommended config.
+  { rules: { "no-useless-assignment": "off", "preserve-caught-error": "off" } },
 
   // `eslint-plugin-import-x` ships flat configs directly. The rules are
   // registered under both `import-x/*` and `import/*` aliases so existing
@@ -168,13 +183,12 @@ export default [
       // @openhands/typescript-client clients instead of a raw `fetch`.
       local: {
         rules: {
-          "no-direct-agent-server-fetch":
-            createNoDirectAgentServerFetchRule(),
+          "no-direct-agent-server-fetch": createNoDirectAgentServerFetchRule(),
         },
       },
     },
     settings: {
-      react: { version: "detect" },
+      react: { version: "19.3.1" },
       // `eslint-import-resolver-typescript` resolves both TS path aliases
       // (via tsconfig) and regular node-style imports, so we don't also
       // configure the legacy `node` resolver shortcut here.
@@ -392,20 +406,181 @@ export default [
   },
 
   // @shadcn/lint — design-system linter for Tailwind v4.
-  // Rules: https://github.com/shadcn-ui/lint#rules
+  // Rules: https://github.com/shadcn-ui/lint/blob/main/docs/rules.md
   // `no-arbitrary-values` stays at "warn": the remaining hits are one-offs
   // (raw hex, vh/vw, calc(), grid templates) with no theme-scale equivalent.
-  // The other rules need per-component contracts before they are useful here.
+  // Class existence does not need component contracts. With no remaining
+  // unknown utilities, new findings fail lint; styling policy remains opt-in.
+  // Canvas primitives use #/ui, not the plugin's default components/ui path.
+  // require-static-classes is enabled for those consumers; imported class
+  // constants remain opaque, so its documented narrow exceptions remain.
+  // The raw Tailwind palette and undeclared named color utilities now fail globally.
+  // Keep the verified plugin/config tokens exempt below (#18004).
+  // no-restyle first protects divider/toggle appearances; layout remains public,
+  // and ToggleSwitch callers can dim the control for disabled/pending states.
+  // Carets expose layout and text color; their padding/shape stay internal.
+  // Stateful carets own rotation through isOpen; generic icons retain orientation.
+  // Three audited owners additionally scan literal class maps. Define contracts
+  // for the remaining UI primitives and audit dynamic styles for no-inline-styles.
+  // 0.2.0 also improves render-prop, destructuring, barrel-export, and custom
+  // animation recognition. Vue/Svelte support adds no new rule names or parsers
+  // to this React project. 0.2.1 uses Tailwind's JS-config loader and recognizes
+  // module-defined font sizes, custom theme scales, and SVG paint-clearing classes.
+  // Keep dependency upgrades separate from rule activation.
   {
     files: ["src/**/*.{ts,tsx}"],
     plugins: { shadcn: shadcnPlugin },
     rules: {
       "shadcn/no-arbitrary-values": "warn",
-      "shadcn/no-restyle": "off",
-      "shadcn/no-raw-colors": "off",
-      "shadcn/no-inline-styles": "off",
-      "shadcn/require-static-classes": "off",
-      "shadcn/no-unknown-classes": "off",
+      "shadcn/no-restyle": [
+        "error",
+        {
+          // Adopt only primitives whose appearance contract is already settled.
+          // Typography, menus, and Pre need a separate design audit.
+          componentImports: [
+            "^#/ui/(divider|toggle-switch|combobox-caret)$",
+            // Match the existing re-export path explicitly too.
+            "^#/components/features/automations/toggle-switch$",
+          ],
+          allow: ["layout"],
+          contracts: [
+            // The button wrapper can express caller-owned disabled/pending state.
+            // ToggleSwitchVisual still owns the track/thumb color, shape, and effects.
+            { pattern: "^ToggleSwitch$", allow: ["layout", "opacity"] },
+            {
+              pattern: "^ComboboxCaretIcon$",
+              allow: ["layout", "text-color"],
+              message:
+                "Keep caret classes to layout and text color; the SVG owns its appearance.",
+            },
+            {
+              pattern: "^ComboboxCaret(Button|Inline)$",
+              allow: ["layout", "text-color"],
+              deny: ["rotate-*"],
+              message:
+                "Use isOpen for caret rotation; keep caller classes to layout and text color.",
+            },
+          ],
+        },
+      ],
+      "shadcn/no-raw-colors": [
+        "error",
+        {
+          allow: legacyColorClasses,
+        },
+      ],
+      // Warning-only while measured layout, portal placement, accessibility
+      // helpers and renderer interfaces are reviewed by their owners. The rule
+      // permits CSS variables itself; no broad property/color exception is needed.
+      "shadcn/no-inline-styles": "warn",
+      "shadcn/require-static-classes": [
+        "error",
+        { componentImports: ["^#/ui(/|$)"] },
+      ],
+      "shadcn/no-unknown-classes": [
+        "error",
+        {
+          allow: [
+            // src/index.css owns the overlay animation outside the theme graph.
+            "environment-switch-overlay",
+            // Selector target for has-[.conversation-overview-diffs-git-action:hover].
+            "conversation-overview-diffs-git-action",
+          ],
+        },
+      ],
     },
+  },
+  {
+    // These completed owners use named recipes; other geometry stays warning-only.
+    files: [
+      "src/components/shared/modals/modal-backdrop.tsx",
+      "src/components/features/backends/environment-switch-overlay.tsx",
+      "src/components/features/chat/components/context-window-meter.tsx",
+      "src/components/features/conversation-panel/conversation-panel-wrapper.tsx",
+      "src/components/features/command-menu/command-menu.tsx",
+      "src/components/features/backends/backend-version.tsx",
+      "src/components/features/settings/settings-nav-header.tsx",
+      "src/components/features/settings/backend-synced-settings-badge.tsx",
+      "src/utils/custom-toast-handlers.tsx",
+      "src/utils/form-control-classes.ts",
+      "src/components/features/chat/chat-status-indicator.tsx",
+      "src/components/features/chat/components/context-window-ring.tsx",
+      "src/components/features/chat/user-message-body.tsx",
+      "src/components/features/conversation/conversation-main/conversation-main.tsx",
+      "src/components/features/chat/drag-over.tsx",
+      "src/components/features/chat/git-control-bar-branch-button.tsx",
+      "src/components/features/chat/git-control-bar-repo-button.tsx",
+      "src/components/features/chat/workspace-mode-selector.tsx",
+      "src/components/features/chat/chat-markdown-path-code.tsx",
+      "src/components/features/markdown/code.tsx",
+      "src/components/shared/horizontal-scroll-fade.tsx",
+      "src/components/features/markdown/markdown-table-scroll.tsx",
+      "src/components/features/diff-viewer/commit-row.tsx",
+      "src/components/features/diff-viewer/uncommitted-changes-row.tsx",
+      "src/components/features/diff-viewer/editor-container.tsx",
+      "src/components/features/files-tab/file-quick-row.tsx",
+      "src/components/features/files-tab/workspace-file-discovery-settings.tsx",
+      "src/components/features/automations/recommended-automations-rail.tsx",
+      "src/components/features/automations/automation-view-toggle.tsx",
+      "src/components/features/automations/dashboard/automations-dashboard-controls.tsx",
+      "src/components/features/automations/detail/run-phase.tsx",
+      "src/components/features/conversation-panel/conversation-card/conversation-card.tsx",
+      "src/utils/hover-reveal-classes.ts",
+      "src/components/conversation-events/chat/task-tracking/task-list-section.tsx",
+      "src/components/features/chat/tool-visualizers/primitives/markdown-file-preview.tsx",
+      "src/components/features/conversation-panel/skills-modal-section.tsx",
+      "src/components/features/home/featured-automations/pinned-automation-card.tsx",
+      "src/components/features/markdown/headings.tsx",
+      "src/components/features/mcp-page/mcp-logo-stack-badge.tsx",
+      "src/components/features/settings/llm-settings/openai-subscription-auth-card.tsx",
+      "src/components/features/skills/skill-icon-badge.tsx",
+      "src/routes/device-verify.tsx",
+      "src/utils/modal-classes.ts",
+    ],
+    rules: { "shadcn/no-arbitrary-values": "error" },
+  },
+  {
+    // Additionally audit literal class recipes that dynamic map/helper lookups hide.
+    // Keep broad string scanning away from unrelated program tags.
+    files: [
+      "src/components/features/backends/backend-status-dot.tsx",
+      "src/components/features/markdown/blockquote.tsx",
+      "src/components/features/mcp-page/mcp-server-health.tsx",
+    ],
+    rules: {
+      "shadcn/no-raw-colors": [
+        "error",
+        { allow: legacyColorClasses, scanAllStrings: true },
+      ],
+    },
+  },
+  {
+    // Primitive implementations own appearance and variant helpers. Token and
+    // unknown-class checks still apply to their definitions.
+    files: ["src/ui/**/*.{ts,tsx}"],
+    rules: {
+      "shadcn/no-restyle": "off",
+      "shadcn/require-static-classes": "off",
+    },
+  },
+  {
+    // Appearance owners already use class recipes and semantic variables.
+    // Keep the rest warning-only until each owner's dynamic styles are audited.
+    files: [
+      "src/ui/divider.tsx",
+      "src/ui/toggle-switch.tsx",
+      "src/ui/combobox-caret.tsx",
+      "src/components/features/backends/backend-status-dot.tsx",
+      "src/components/features/chat/components/context-window-meter.tsx",
+      "src/components/features/chat/components/context-window-ring.tsx",
+      "src/components/features/conversation/usage-panel/context-meter.tsx",
+    ],
+    rules: { "shadcn/no-inline-styles": "error" },
+  },
+  {
+    // Public embedding API: this owner must forward arbitrary caller styles.
+    // Its opaque object cannot be converted to custom-properties-only styles.
+    files: ["src/components/providers/agent-server-ui-root.tsx"],
+    rules: { "shadcn/no-inline-styles": "off" },
   },
 ];

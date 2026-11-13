@@ -6,14 +6,21 @@ import {
   OH_STATUS_ERROR_COLOR,
   OH_STATUS_SUCCESS_COLOR,
 } from "#/constants/status-colors";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { AgentState } from "#/types/agent-state";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
 const mocks = vi.hoisted(() => ({
   conversationId: "conversation-1" as string | undefined,
   conversation: {
     execution_status: "running",
-  } as { execution_status?: ExecutionStatus | null } | undefined,
+  } as
+    | {
+        execution_status?: ExecutionStatus | null;
+        sandbox_status?: string | null;
+      }
+    | undefined,
   curAgentState: "running" as AgentState,
   isTask: false,
   taskStatus: null as string | null,
@@ -86,26 +93,20 @@ vi.mock("#/components/features/controls/server-status-context-menu", () => ({
       data-is-pausing={String(isPausing)}
       data-position={position}
     >
-      <button type="button" data-testid="close-status-menu" onClick={onClose}>
-        close
-      </button>
+      <button type="button" data-testid="close-status-menu" onClick={onClose} />
       {onStopServer && (
         <button
           type="button"
           data-testid="stop-server-button"
           onClick={onStopServer}
-        >
-          stop
-        </button>
+        />
       )}
       {onStartServer && (
         <button
           type="button"
           data-testid="start-server-button"
           onClick={onStartServer}
-        >
-          start
-        </button>
+        />
       )}
     </div>
   ),
@@ -138,15 +139,56 @@ function openStatusMenu() {
   fireEvent.click(screen.getByTestId("server-status-menu-trigger"));
 }
 
+function hoverStatusMenu() {
+  fireEvent.pointerEnter(
+    screen.getByTestId("server-status-menu-trigger")
+      .parentElement as HTMLElement,
+    { pointerType: "mouse" },
+  );
+}
+
+function pressEscape() {
+  fireEvent.keyDown(document.activeElement ?? document.body, {
+    key: "Escape",
+  });
+}
+
+// Stands in for a layer opened before the status menu, such as the
+// context-window popover.
+function LayerUnderMenu({ onClose }: { onClose: () => void }) {
+  useCloseOnEscape(true, onClose);
+  return null;
+}
+
 describe("conversation name status controls", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useConversationLaunchStore.setState({ launches: {} });
     mocks.conversationId = "conversation-1";
     mocks.conversation = { execution_status: ExecutionStatus.RUNNING };
     mocks.curAgentState = AgentState.RUNNING;
     mocks.isTask = false;
     mocks.taskStatus = null;
     mocks.providers = [{ name: "provider-1" }];
+  });
+
+  it("shows a failed launch instead of the previous conversation status", () => {
+    const launchId = useConversationLaunchStore.getState().begin({
+      backendId: "local",
+      orgId: null,
+      message: "hello",
+      files: [],
+    });
+    useConversationLaunchStore
+      .getState()
+      .update(launchId, { error: "Create failed" });
+    mocks.conversationId = launchId;
+    mocks.conversation = undefined;
+    renderSubject();
+    expect(screen.getByTestId("conversation-status-dot")).toHaveAttribute(
+      "data-color",
+      OH_STATUS_ERROR_COLOR,
+    );
   });
 
   it("pauses an active conversation without triggering its parent", () => {
@@ -202,6 +244,23 @@ describe("conversation name status controls", () => {
     });
     expect(mocks.pauseConversation).not.toHaveBeenCalled();
     expect(onParentClick).not.toHaveBeenCalled();
+  });
+
+  it("offers Stop Runtime for a running cloud sandbox after the agent is interrupted", () => {
+    mocks.conversation = {
+      execution_status: ExecutionStatus.PAUSED,
+      sandbox_status: "RUNNING",
+    };
+    renderSubject();
+
+    openStatusMenu();
+    // The sandbox is already running, so there is nothing to start.
+    expect(screen.queryByTestId("start-server-button")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("stop-server-button"));
+
+    expect(mocks.pauseConversation).toHaveBeenCalledWith({
+      conversationId: "conversation-1",
+    });
   });
 
   it("dismisses the status menu when the child menu requests close", () => {
@@ -276,6 +335,63 @@ describe("conversation name status controls", () => {
     expect(
       screen.queryByTestId("server-status-context-menu"),
     ).not.toBeInTheDocument();
+  });
+
+  it.each(["server-status-menu-trigger", "stop-server-button"])(
+    "closes a clicked-open menu with Escape from %s and returns focus to the dot",
+    (focusedTestId) => {
+      renderSubject();
+      const trigger = screen.getByTestId("server-status-menu-trigger");
+
+      openStatusMenu();
+      screen.getByTestId(focusedTestId).focus();
+      pressEscape();
+
+      expect(
+        screen.queryByTestId("server-status-context-menu"),
+      ).not.toBeInTheDocument();
+      expect(trigger).toHaveAttribute("aria-expanded", "false");
+      expect(trigger).toHaveFocus();
+    },
+  );
+
+  it("closes a hover-opened menu with Escape without moving focus", () => {
+    render(
+      <>
+        <textarea data-testid="composer" />
+        <ConversationNameWithStatus />
+      </>,
+    );
+    const composer = screen.getByTestId("composer");
+    composer.focus();
+
+    hoverStatusMenu();
+    pressEscape();
+
+    expect(
+      screen.queryByTestId("server-status-context-menu"),
+    ).not.toBeInTheDocument();
+    expect(composer).toHaveFocus();
+  });
+
+  it("closes a menu opened over another layer before that layer", () => {
+    const closeLayer = vi.fn();
+    render(
+      <>
+        <LayerUnderMenu onClose={closeLayer} />
+        <ConversationNameWithStatus />
+      </>,
+    );
+
+    hoverStatusMenu();
+    pressEscape();
+    expect(
+      screen.queryByTestId("server-status-context-menu"),
+    ).not.toBeInTheDocument();
+    expect(closeLayer).not.toHaveBeenCalled();
+
+    pressEscape();
+    expect(closeLayer).toHaveBeenCalledTimes(1);
   });
 
   it.each([

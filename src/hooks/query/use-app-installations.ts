@@ -13,7 +13,15 @@ import { shouldUseInstallationRepos } from "#/utils/utils";
  * between backends (Local ↔ Cloud, Cloud A ↔ Cloud B) naturally produces
  * a fresh query — no `clear()`/`invalidate` orchestration required.
  */
-export const useAppInstallations = (selectedProvider: Provider | null) => {
+interface UseAppInstallationsOptions {
+  enabled?: boolean;
+}
+
+export const useAppInstallations = (
+  selectedProvider: Provider | null,
+  options: UseAppInstallationsOptions = {},
+) => {
+  const { enabled = true } = options;
   const { data: userIsAuthenticated } = useIsAuthed();
   const { providers } = useUserProviders();
   const active = useActiveBackend();
@@ -32,6 +40,7 @@ export const useAppInstallations = (selectedProvider: Provider | null) => {
     ],
     queryFn: () => GitService.getUserInstallations(selectedProvider!),
     enabled:
+      enabled &&
       userIsAuthenticated &&
       !!selectedProvider &&
       // Gate on providers length too: when settings haven't yet told

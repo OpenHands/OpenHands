@@ -1,16 +1,7 @@
 import { VSCodeClient } from "@openhands/typescript-client/clients";
-import { RemoteEventsList } from "@openhands/typescript-client/events/remote-events-list";
-import { uploadFilesToConversation } from "#/api/conversation-file-upload.api";
-import {
-  GetVSCodeUrlResponse,
-  GetTrajectoryResponse,
-  FileUploadSuccessResponse,
-} from "../open-hands.types";
+import { GetVSCodeUrlResponse } from "../open-hands.types";
 import { getAgentServerWorkingDir } from "../agent-server-config";
-import {
-  getAgentServerClientOptions,
-  getAgentServerHttpClientOptions,
-} from "../agent-server-client-options";
+import { getAgentServerClientOptions } from "../agent-server-client-options";
 import { AppConversation } from "./agent-server-conversation-service.types";
 
 class ConversationService {
@@ -55,28 +46,6 @@ class ConversationService {
     });
 
     return { vscode_url: vscodeUrl };
-  }
-
-  static async getTrajectory(
-    conversationId: string,
-  ): Promise<GetTrajectoryResponse> {
-    const page = await new RemoteEventsList(
-      getAgentServerHttpClientOptions(this.getClientOverrides(conversationId)),
-      conversationId,
-    ).search({ limit: 10000 });
-
-    return { trajectory: page.items ?? [] };
-  }
-
-  static async uploadFiles(
-    conversationId: string,
-    files: File[],
-  ): Promise<FileUploadSuccessResponse> {
-    return uploadFilesToConversation(
-      conversationId,
-      files,
-      this.currentConversation,
-    );
   }
 }
 
