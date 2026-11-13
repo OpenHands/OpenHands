@@ -144,6 +144,21 @@ export function useMessageReactions(
   };
 }
 
+const CLIPPING = new Set(["hidden", "clip", "auto", "scroll"]);
+
+/** Edges, with an 8px margin, of the area that can show `element`: its
+ * nearest ancestor that clips horizontally, else the window. */
+function visibleBounds(element: HTMLElement): { left: number; right: number } {
+  const margin = 8;
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    if (CLIPPING.has(getComputedStyle(node).overflowX)) {
+      const box = node.getBoundingClientRect();
+      return { left: box.left + margin, right: box.right - margin };
+    }
+  }
+  return { left: margin, right: window.innerWidth - margin };
+}
+
 /**
  * Emoji reactions under a chat message: the agent's (from its `react` tool)
  * and the user's. On the agent's messages the user can add or take off
@@ -162,6 +177,31 @@ export function MessageReactions({
   const pickerRef = useClickOutsideElement<HTMLDivElement>(closePicker);
   const choicesRef = React.useRef<HTMLDivElement>(null);
   useCloseOnEscape(pickerOpen, closePicker, triggerRef);
+
+  // Where the picker opens: beside its button, or above it, moved left by
+  // `shift` px, when a narrow chat (a phone) would cut its last choices off.
+  const [placement, setPlacement] = React.useState<{
+    above: boolean;
+    shift: number;
+  }>({ above: false, shift: 0 });
+
+  React.useLayoutEffect(() => {
+    const choices = choicesRef.current;
+    const anchor = pickerRef.current;
+    if (!pickerOpen || !choices || !anchor) {
+      setPlacement({ above: false, shift: 0 });
+      return;
+    }
+    const bounds = visibleBounds(anchor);
+    const picker = choices.getBoundingClientRect();
+    if (picker.right <= bounds.right) return;
+    const left = anchor.getBoundingClientRect().left;
+    const fitted = Math.max(
+      bounds.left,
+      Math.min(left, bounds.right - picker.width),
+    );
+    setPlacement({ above: true, shift: fitted - left });
+  }, [pickerOpen]);
 
   React.useEffect(() => {
     if (pickerOpen) {
@@ -278,7 +318,20 @@ export function MessageReactions({
               role="group"
               aria-label={t(I18nKey.CHAT_INTERFACE$ADD_REACTION)}
               data-testid="reaction-picker"
-              className="absolute left-7 top-1/2 z-10 -translate-y-1/2 flex gap-0.5 rounded-full border border-border bg-base-secondary px-1 py-0.5 shadow-sm"
+              data-placement={placement.above ? "above" : "beside"}
+              style={
+                {
+                  "--picker-shift": `${placement.shift}px`,
+                } as React.CSSProperties
+              }
+              className={cn(
+                "absolute z-10 flex gap-0.5 rounded-full border border-border bg-base-secondary px-1 py-0.5 shadow-sm",
+                placement.above
+                  ? // A measured shift, so it has no theme-scale value.
+                    // eslint-disable-next-line shadcn/no-arbitrary-values
+                    "bottom-full left-[var(--picker-shift)] mb-1"
+                  : "left-7 top-1/2 -translate-y-1/2",
+              )}
             >
               {EMOJI_ORDER.map((emoji) => (
                 <button
