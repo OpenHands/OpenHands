@@ -117,4 +117,36 @@ describe("git-diff-stats", () => {
     expect(stats.additions).toBeGreaterThanOrEqual(4999);
     expect(stats.additions).toBeLessThanOrEqual(5000);
   });
+
+  it("counts a moved half of a large file as one move", () => {
+    // Arrange: the second half moves above the first half.
+    const lines = Array.from({ length: 15000 }, (_, i) => `line ${i}`);
+    const original = `${lines.join("\n")}\n`;
+    const modified = `${[...lines.slice(7500), ...lines.slice(0, 7500)].join("\n")}\n`;
+
+    // Act
+    const stats = countGitChangeDiffStats({ original, modified });
+
+    // Assert: git diff --numstat --minimal reports 7500 7500 for these texts.
+    expect(stats).toEqual({ additions: 7500, deletions: 7500 });
+  });
+
+  it("matches repeated lines around a moved block of lockfile entries", () => {
+    // Arrange: only the package name lines are unique.
+    const entry = (i: number) => [`  "pkg-${i}": {`, '    "dev": true', "  },"];
+    const entries = Array.from({ length: 5000 }, (_, i) => entry(i)).flat();
+    const original = ["{", ...entries, "}"].join("\n");
+    const modified = [
+      "{",
+      ...entries.slice(7500),
+      ...entries.slice(0, 7500),
+      "}",
+    ].join("\n");
+
+    // Act
+    const stats = countGitChangeDiffStats({ original, modified });
+
+    // Assert: git diff --numstat --minimal reports 5000 5000.
+    expect(stats).toEqual({ additions: 5000, deletions: 5000 });
+  });
 });
