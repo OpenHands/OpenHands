@@ -1025,6 +1025,21 @@ describe("toAppConversation", () => {
     expect(result.llm_model).toBe("claude-sonnet-4-6");
   });
 
+  it("carries the ACP session's effort and the levels it offers", () => {
+    const result = toAppConversation({
+      ...baseInfo,
+      agent: { kind: "ACPAgent" },
+      current_effort: "high",
+      available_efforts: [{ value: "high", name: "High" }, { value: "max" }],
+    });
+
+    expect(result.acp_current_effort).toBe("high");
+    expect(result.acp_available_efforts).toEqual([
+      { value: "high", label: "High" },
+      { value: "max", label: "Max" },
+    ]);
+  });
+
   it("prefers ACP runtime model fields over configured acp_model", () => {
     const result = toAppConversation({
       ...baseInfo,

@@ -77,7 +77,9 @@ ids no literal in `src/` accounts for (`map check --fix-counts` refreshes the
 index counts). Then give one read-only reader per
 feature file (parallel if delegation is available). Each reads current source for that feature and returns:
 summary, source entry points, likely drift with citations (or none), new
-surfaces missing from the map, and one live recipe. Readers never edit files or
+surfaces missing from the map, the family's rows from `control-openhands map
+controls --family Fnn`, the questions in [scenarios.md](scenarios.md) that
+the family has no bullet for, and one live recipe. Readers never edit files or
 drive the browser.
 
 Reconcile before driving. Every feature file has a returned summary; re-run a

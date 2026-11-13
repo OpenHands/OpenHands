@@ -9,6 +9,7 @@ import {
   useConversationLocalStorageState,
   getConversationState,
   setConversationState,
+  markConversationDraftEdited,
 } from "#/utils/conversation-local-storage";
 import {
   focusContentEditableAtEnd,
@@ -59,6 +60,7 @@ export const useDraftPersistence = (
   const pendingDraftRef = useRef<{
     conversationId: string;
     element: HTMLDivElement;
+    revision: string;
   } | null>(null);
   const hasRestoredRef = useRef(false);
   const [isRestored, setIsRestored] = useState(false);
@@ -83,9 +85,13 @@ export const useDraftPersistence = (
         pendingDraft.conversationId,
       );
       if (text !== (draftMessage || "")) {
-        setConversationState(pendingDraft.conversationId, {
-          draftMessage: text || null,
-        });
+        setConversationState(
+          pendingDraft.conversationId,
+          {
+            draftMessage: text || null,
+          },
+          pendingDraft.revision,
+        );
       }
     }
   }, []);
@@ -240,9 +246,17 @@ export const useDraftPersistence = (
       return;
     }
 
+    // Invalidate an earlier send's draft snapshot immediately. Waiting for the
+    // text debounce would let its echo erase a new edit, even identical text.
+    const revision = markConversationDraftEdited(conversationId);
+
     // Capture the input and its owner before navigation can replace either.
     const capturedConversationId = conversationId;
-    const pendingDraft = { conversationId: capturedConversationId, element };
+    const pendingDraft = {
+      conversationId: capturedConversationId,
+      element,
+      revision,
+    };
     pendingDraftRef.current = pendingDraft;
 
     saveTimeoutRef.current = setTimeout(() => {
@@ -265,7 +279,7 @@ export const useDraftPersistence = (
       const text = getTextContent(element).trim();
       // Only save if content has changed
       if (text !== (state.draftMessage || "")) {
-        setDraftMessage(text || null);
+        setDraftMessage(text || null, pendingDraft.revision);
       }
     }, DRAFT_SAVE_DEBOUNCE_MS);
   }, [
