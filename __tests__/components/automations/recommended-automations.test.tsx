@@ -257,6 +257,7 @@ describe("recommended automations", () => {
       );
 
     expect(cardIds).toEqual([
+      "cve-remediation-factory",
       "github-pr-reviewer",
       "custom-automation",
       "github-issue-to-pr",
@@ -298,7 +299,7 @@ describe("recommended automations", () => {
     const suggestedHeading = screen.getByText(
       I18nKey.RECOMMENDED_AUTOMATIONS$SUGGESTED_TITLE,
     ).parentElement!;
-    expect(within(suggestedHeading).getByText("6")).toBeInTheDocument();
+    expect(within(suggestedHeading).getByText("7")).toBeInTheDocument();
     expect(
       screen.getByText(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_DESCRIPTION),
     ).toBeInTheDocument();
