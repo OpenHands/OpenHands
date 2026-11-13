@@ -1,3 +1,4 @@
+import React from "react";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useWebSocket, type WebSocketHookOptions } from "#/hooks/use-websocket";
@@ -38,7 +39,9 @@ class BrowserWebSocketDouble {
   }
 
   receive(data: unknown) {
-    this.onmessage?.(new MessageEvent("message", { data }));
+    if (this.readyState === BrowserWebSocketDouble.OPEN) {
+      this.onmessage?.(new MessageEvent("message", { data }));
+    }
   }
 
   emitError() {
@@ -328,6 +331,197 @@ describe("useWebSocket connection lifecycle", () => {
 });
 
 describe("useWebSocket messaging", () => {
+  it("keeps the committed socket active when a replacement render suspends", () => {
+    vi.stubGlobal("WebSocket", BrowserWebSocketDouble);
+    const received: string[] = [];
+    const pending = new Promise<never>(() => {});
+    const initialProps = { conversationId: "A", suspended: false };
+    const { rerender } = renderHook(
+      ({ conversationId, suspended }) => {
+        const connection = useWebSocket(
+          `ws://acme.test/events/${conversationId}`,
+          {
+            onMessage: (event) =>
+              received.push(`${conversationId}:${event.data}`),
+          },
+        );
+        if (suspended) throw pending;
+        return connection;
+      },
+      {
+        initialProps,
+        wrapper: ({ children }) =>
+          React.createElement(
+            React.StrictMode,
+            null,
+            React.createElement(React.Suspense, { fallback: null }, children),
+          ),
+      },
+    );
+    const socket = getSocket();
+    act(() => socket.open());
+
+    act(() => {
+      React.startTransition(() => {
+        rerender({ conversationId: "B", suspended: true });
+      });
+    });
+    act(() => socket.receive("while-suspended"));
+    rerender(initialProps);
+    act(() => socket.receive("resumed"));
+
+    expect(getSocket()).toBe(socket);
+    expect(received).toEqual(["A:while-suspended", "A:resumed"]);
+  });
+
+  it.each(["url", "connectionKey", "disable"] as const)(
+    "rejects messages after %s commits but before passive cleanup",
+    (transition) => {
+      vi.stubGlobal("WebSocket", BrowserWebSocketDouble);
+      const onMessage = vi.fn();
+      const previousConnection: { socket?: BrowserWebSocketDouble } = {};
+      let stateDuringCommit: number | undefined;
+      const initialProps = {
+        url: "ws://acme.test/events/A",
+        connectionKey: "first",
+      };
+      const { rerender } = renderHook(
+        ({ url, connectionKey }) => {
+          const connection = useWebSocket(url, { connectionKey, onMessage });
+          React.useLayoutEffect(() => {
+            if (previousConnection.socket) {
+              stateDuringCommit = previousConnection.socket.readyState;
+              previousConnection.socket.receive("during-commit");
+            }
+          }, [url, connectionKey]);
+          return connection;
+        },
+        { initialProps },
+      );
+      const previousSocket = getSocket();
+      previousConnection.socket = previousSocket;
+      act(() => previousSocket.open());
+
+      rerender({
+        url:
+          transition === "disable"
+            ? ""
+            : transition === "url"
+              ? "ws://acme.test/events/B"
+              : initialProps.url,
+        connectionKey: transition === "connectionKey" ? "second" : "first",
+      });
+
+      expect(stateDuringCommit).toBe(BrowserWebSocketDouble.OPEN);
+      expect(onMessage).not.toHaveBeenCalled();
+      if (transition !== "disable") {
+        const currentSocket = getSocket();
+        act(() => {
+          currentSocket.open();
+          currentSocket.receive("current");
+        });
+        expect(onMessage).toHaveBeenCalledOnce();
+        expect(onMessage.mock.calls[0][0].data).toBe("current");
+      }
+    },
+  );
+
+  it.each(["url", "connectionKey", "reconnect"] as const)(
+    "rejects a synthetically invoked stale callback after %s replacement",
+    (replacement) => {
+      vi.stubGlobal("WebSocket", BrowserWebSocketDouble);
+      const received: string[] = [];
+      const initialProps = { conversationId: "A", connectionKey: "first" };
+      const { result, rerender } = renderHook(
+        ({ conversationId, connectionKey }) =>
+          useWebSocket(`ws://acme.test/events/${conversationId}`, {
+            connectionKey,
+            onMessage: (event) =>
+              received.push(`${conversationId}:${event.data}`),
+          }),
+        { initialProps },
+      );
+      const firstSocket = getSocket();
+      const staleCallback = firstSocket.onmessage!;
+      act(() => {
+        firstSocket.open();
+        firstSocket.receive("initial");
+      });
+      firstSocket.close.mockImplementation(() => {});
+
+      if (replacement === "reconnect") {
+        act(() => result.current.reconnect());
+      } else {
+        rerender({
+          conversationId: replacement === "url" ? "B" : "A",
+          connectionKey: replacement === "connectionKey" ? "second" : "first",
+        });
+      }
+      const replacementSocket = getSocket();
+      act(() => {
+        replacementSocket.open();
+        staleCallback(new MessageEvent("message", { data: "stale" }));
+        replacementSocket.receive("current");
+      });
+      expect(received).toEqual([
+        "A:initial",
+        `${replacement === "url" ? "B" : "A"}:current`,
+      ]);
+
+      if (replacement === "url") {
+        const staleReplacementCallback = replacementSocket.onmessage!;
+        rerender(initialProps);
+        const returnedSocket = getSocket();
+        act(() => {
+          returnedSocket.open();
+          staleCallback(new MessageEvent("message", { data: "first-A" }));
+          staleReplacementCallback(new MessageEvent("message", { data: "B" }));
+          returnedSocket.receive("returned");
+        });
+        expect(received).toEqual(["A:initial", "B:current", "A:returned"]);
+      }
+    },
+  );
+
+  it.each(["disable", "disconnect", "unmount", "server-close"] as const)(
+    "rejects a synthetically invoked message callback after %s",
+    (transition) => {
+      vi.stubGlobal("WebSocket", BrowserWebSocketDouble);
+      const onMessage = vi.fn();
+      const { result, rerender, unmount } = renderHook(
+        ({ url }: { url: string }) => useWebSocket(url, { onMessage }),
+        { initialProps: { url: "ws://acme.test/events" } },
+      );
+      const socket = getSocket();
+      const staleCallback = socket.onmessage!;
+      act(() => {
+        socket.open();
+        socket.receive("initial");
+      });
+      onMessage.mockClear();
+
+      if (transition === "disable") {
+        socket.close.mockImplementation(() => {});
+        rerender({ url: "" });
+      } else if (transition === "unmount") {
+        socket.close.mockImplementation(() => {});
+        unmount();
+      } else if (transition === "disconnect") {
+        socket.close.mockImplementation(() => {
+          socket.readyState = BrowserWebSocketDouble.CLOSING;
+        });
+        act(() => result.current.disconnect());
+      } else {
+        act(() => socket.emitClose(1000));
+      }
+      act(() => {
+        staleCallback(new MessageEvent("message", { data: "stale" }));
+      });
+
+      expect(onMessage).not.toHaveBeenCalled();
+    },
+  );
+
   it("sends data only while the connection is open", () => {
     const { result } = renderWebSocket("ws://acme.test/events");
     const socket = getSocket();
