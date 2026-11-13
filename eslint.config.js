@@ -509,6 +509,8 @@ export default [
       "src/components/features/chat/user-message-body.tsx",
       "src/components/features/conversation/conversation-main/conversation-main.tsx",
       "src/components/features/chat/drag-over.tsx",
+      "src/components/features/onboarding/steps/say-hello-step.tsx",
+      "src/components/features/onboarding/steps/setup-llm-step.tsx",
       "src/components/features/chat/git-control-bar-branch-button.tsx",
       "src/components/features/chat/git-control-bar-repo-button.tsx",
       "src/components/features/chat/workspace-mode-selector.tsx",

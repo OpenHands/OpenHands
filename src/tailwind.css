@@ -1275,6 +1275,10 @@ code .token {
   max-height: 90vh;
 }
 
+@utility onboarding-step-height {
+  max-height: calc(90vh - 7rem);
+}
+
 @utility dialog-content-height {
   max-height: 80vh;
 }
