@@ -59,7 +59,11 @@ export function SettingsMobileDrawer({
             )}
             aria-label={t(I18nKey.SIDEBAR$CLOSE_MENU)}
           >
-            <CloseIcon width={32} height={32} />
+            <CloseIcon
+              width={32}
+              height={32}
+              className="text-contrast dark:text-white"
+            />
           </button>
         </div>
 
@@ -68,7 +72,7 @@ export function SettingsMobileDrawer({
             if (renderedItem.type === "header") {
               return (
                 <div key={`header-${renderedItem.text}`} className="px-3.5">
-                  <Typography.Text className="text-[11px] font-medium text-text-dim uppercase tracking-wide leading-5">
+                  <Typography.Text className="text-2xs font-medium text-text-dim uppercase tracking-wide leading-5">
                     {t(renderedItem.text)}
                   </Typography.Text>
                 </div>

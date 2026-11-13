@@ -5,6 +5,8 @@ import { useEventStore } from "#/stores/use-event-store";
 import {
   INITIAL_HISTORY_PAGE_SIZE,
   useConversationHistory,
+  usePersistedConversationHistory,
+  getConversationHistoryScope,
 } from "#/hooks/query/use-conversation-history";
 import { isTaskConversationId } from "#/utils/conversation-local-storage";
 import { seedModelSwitchesFromHistory } from "#/hooks/chat/record-model-switch-message";
@@ -18,8 +20,8 @@ interface UseLoadOlderEventsResult {
   isLoading: boolean;
   /**
    * Whether the server may have more events older than what we currently
-   * have in the store. Starts `true` and flips to `false` after the server
-   * returns a short page (i.e. it ran out of older events).
+   * have in the store. The initial page seeds this value; subsequent pages
+   * remain loadable while the server returns a continuation cursor.
    */
   hasMore: boolean;
   /**
@@ -31,77 +33,59 @@ interface UseLoadOlderEventsResult {
 
 /**
  * REST-side companion to `useConversationHistory`: paginates older events
- * (`timestamp < oldest known`) into the event store on demand. Used by the
- * chat scroll handler to lazily backfill history when the user scrolls up.
+ * using the retained server continuation (or the legacy timestamp fallback)
+ * into the event store on demand when the user scrolls up.
  *
- * Server dependency: cloud pagination requires the timestamp comparison
- * fix from OpenHands/OpenHands#14399. The `EventService.searchEvents`
- * cloud path includes a fallback that returns an empty page to stop
- * pagination if the full request fails, so older-event pages will
- * gracefully degrade to a no-op on unpatched backends rather than
- * surfacing errors.
+ * Prefer the server cursor so equal-timestamp boundary rows are included.
+ * Cursorless backends retain the legacy timestamp fallback. The Cloud
+ * EventService path also retains its empty-page fallback when pagination
+ * params are unsupported (OpenHands/OpenHands#14399).
  */
 export const useLoadOlderEvents = (
   conversationId?: string | null,
 ): UseLoadOlderEventsResult => {
+  const historyScope = getConversationHistoryScope();
   const isTaskConversation =
     !!conversationId && isTaskConversationId(conversationId);
   const realConversationId = isTaskConversation ? undefined : conversationId;
 
   const { data: conversation } = useUserConversation(conversationId ?? null);
-  const { data: initialHistory, isFetched: isInitialHistoryFetched } =
-    useConversationHistory(realConversationId ?? undefined);
+  const replayHistory = useConversationHistory(realConversationId ?? undefined);
+  const persistedHistory = usePersistedConversationHistory(
+    realConversationId ?? undefined,
+    false,
+  );
+  const initialHistory = replayHistory.data ?? persistedHistory.data;
+  const isInitialHistoryFetched =
+    replayHistory.isFetched || persistedHistory.isFetched;
   const addEvents = useEventStore((state) => state.addEvents);
 
   const [isLoading, setIsLoading] = React.useState(false);
-  const [hasMore, setHasMore] = React.useState(true);
+  const historyPagination = useEventStore((state) => state.historyPagination);
+  const hasMore =
+    !isTaskConversation &&
+    (historyPagination?.hasMore ??
+      (isInitialHistoryFetched ? initialHistory?.hasMore : undefined) ??
+      true);
   const isLoadingRef = React.useRef(false);
-  const hasMoreRef = React.useRef(true);
   const activeLoadMarkerRef = React.useRef<object | null>(null);
 
   React.useEffect(() => {
     return () => {
       activeLoadMarkerRef.current = null;
     };
-  }, [conversationId]);
+  }, [conversationId, historyScope]);
 
   React.useEffect(() => {
     isLoadingRef.current = false;
     setIsLoading(false);
-
-    if (isTaskConversation) {
-      hasMoreRef.current = false;
-      setHasMore(false);
-      return;
-    }
-
-    hasMoreRef.current = true;
-    setHasMore(true);
-  }, [conversationId, isTaskConversation]);
-
-  // Mirror the initial REST page: if the tail fetch already returned
-  // everything, don't auto-trigger an older-events request on short chats.
-  React.useEffect(() => {
-    if (isTaskConversation || !isInitialHistoryFetched || !initialHistory) {
-      return;
-    }
-    if (!initialHistory.hasMore) {
-      hasMoreRef.current = false;
-      setHasMore(false);
-    }
-  }, [
-    isTaskConversation,
-    isInitialHistoryFetched,
-    initialHistory?.hasMore,
-    realConversationId,
-  ]);
+  }, [conversationId, historyScope]);
 
   const loadOlder = React.useCallback(async () => {
     if (
       !conversationId ||
       isTaskConversationId(conversationId) ||
-      isLoadingRef.current ||
-      !hasMoreRef.current
+      isLoadingRef.current
     ) {
       return;
     }
@@ -113,19 +97,33 @@ export const useLoadOlderEvents = (
       return;
     }
 
-    const { events } = useEventStore.getState();
+    const {
+      events,
+      loadedConversationId,
+      loadedConversationScope,
+      historyPagination: pagination,
+    } = useEventStore.getState();
+    if (
+      loadedConversationId !== conversationId ||
+      (loadedConversationScope !== null &&
+        loadedConversationScope !== historyScope)
+    )
+      return;
+    if (!(pagination?.hasMore ?? hasMore)) return;
     const oldest = events[0];
 
     // No anchor yet — defer until the initial REST load has populated the
     // store (avoids fetching twice with the same `TIMESTAMP_DESC` window).
     if (!oldest) return;
 
+    const pageId = pagination
+      ? pagination.nextPageId
+      : initialHistory?.nextPageId;
     const oldestTimestamp = getEventTimestamp(oldest);
-    if (!oldestTimestamp) {
+    if (!pageId && !oldestTimestamp) {
       // Nothing paginate-able — treat as exhausted rather than surfacing an
       // error banner on brand-new conversations.
-      hasMoreRef.current = false;
-      setHasMore(false);
+      addEvents([], { nextPageId: null, hasMore: false, prepend: true });
       return;
     }
 
@@ -134,8 +132,11 @@ export const useLoadOlderEvents = (
     const loadMarker = {};
     activeLoadMarkerRef.current = loadMarker;
     const isActiveLoad = () =>
+      getConversationHistoryScope() === historyScope &&
       activeLoadMarkerRef.current === loadMarker &&
-      useEventStore.getState().loadedConversationId === conversationId;
+      useEventStore.getState().loadedConversationId === conversationId &&
+      useEventStore.getState().loadedConversationScope ===
+        loadedConversationScope;
 
     try {
       const page = await EventService.searchEvents(
@@ -145,7 +146,8 @@ export const useLoadOlderEvents = (
         {
           limit: INITIAL_HISTORY_PAGE_SIZE,
           sortOrder: "TIMESTAMP_DESC",
-          timestampLt: oldestTimestamp,
+          excludeFullState: true,
+          ...(pageId ? { pageId } : { timestampLt: oldestTimestamp }),
         },
       );
 
@@ -153,7 +155,10 @@ export const useLoadOlderEvents = (
       // clear the global event store. Do not merge this page if the store now
       // belongs to another conversation. There is no `await` below this guard,
       // so a navigation cannot interleave between the check and `addEvents`.
-      if (!isActiveLoad()) {
+      if (
+        !isActiveLoad() ||
+        useEventStore.getState().historyPagination !== pagination
+      ) {
         return;
       }
 
@@ -164,8 +169,12 @@ export const useLoadOlderEvents = (
       }
 
       const older = [...page.items].reverse();
+      addEvents(older, {
+        nextPageId: page.next_page_id ?? null,
+        hasMore: !!page.next_page_id,
+        prepend: true,
+      });
       if (older.length > 0) {
-        addEvents(older);
         // The initial preload only seeds switches from the tail page; a switch
         // in an older page is hidden as a card but never seeded — silently lost.
         // Reseed over the merged `uiEvents` (idempotent) so it still surfaces.
@@ -173,15 +182,6 @@ export const useLoadOlderEvents = (
           conversationId,
           useEventStore.getState().uiEvents,
         );
-      }
-      // Stop once the server signals there are no more pages, OR — for
-      // servers that don't fill in `next_page_id` for filtered queries —
-      // when we get back a short page.
-      const exhausted =
-        !page.next_page_id || page.items.length < INITIAL_HISTORY_PAGE_SIZE;
-      if (exhausted) {
-        hasMoreRef.current = false;
-        setHasMore(false);
       }
     } catch (error) {
       // Errors from an abandoned conversation are no longer relevant to the
@@ -200,10 +200,13 @@ export const useLoadOlderEvents = (
     }
   }, [
     conversationId,
+    historyScope,
     conversation,
     conversation?.conversation_url,
     conversation?.session_api_key,
     addEvents,
+    hasMore,
+    initialHistory,
   ]);
 
   return { isLoading, hasMore, loadOlder };

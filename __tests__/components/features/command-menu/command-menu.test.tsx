@@ -1,3 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { parse } from "postcss";
 import {
   act,
   fireEvent,
@@ -509,25 +513,93 @@ describe("CommandMenu", () => {
     ).toHaveAttribute("type", "button");
   });
 
-  it("applies the command palette and active-option presentation", () => {
+  it("compiles the palette geometry, effects and inherited hint typography", async () => {
     useCommandMenuStore.getState().open();
     renderCommandMenu();
-
+    renderWithProviders(<CommandMenuTrigger collapsed={false} />);
     const dialog = screen.getByRole("dialog");
+    const backdrop = dialog.children[0] as HTMLElement;
     const surface = dialog.children[1] as HTMLElement;
     const [activeOption, inactiveOption] = screen.getAllByRole("option");
-    const activeIcon = activeOption.querySelector('[aria-hidden="true"]');
-    const inactiveIcon = inactiveOption.querySelector('[aria-hidden="true"]');
-
-    expect(surface).toHaveClass(
-      "max-w-2xl",
-      "border-border",
-      "shadow-[0_24px_90px_rgba(0,0,0,0.52),0_0_0_1px_rgba(255,255,255,0.03)_inset]",
+    const heading = screen.getByText(NAVIGATION_GROUP_KEY);
+    const shortcut = surface.querySelector("kbd")!;
+    const resultHint = activeOption.lastElementChild!;
+    const footer = screen.getByText("COMMAND_MENU$FOOTER_HINT");
+    const triggerHint = screen
+      .getByTestId("command-menu-trigger")
+      .querySelector("kbd")!;
+    const elements = [
+      dialog,
+      backdrop,
+      surface,
+      activeOption,
+      inactiveOption,
+      heading,
+      shortcut,
+      resultHint,
+      footer,
+      triggerHint,
+    ];
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
     );
-    expect(activeOption).toHaveClass("rounded-xl", "bg-contrast/[0.09]");
-    expect(inactiveOption).toHaveClass("rounded-xl", "text-muted");
-    expect(activeIcon).toHaveClass("size-9", "border-accent");
-    expect(inactiveIcon).toHaveClass("size-9", "border-border");
+    const stylesheet = parse(
+      compiler.build(elements.flatMap((element) => [...element.classList])),
+    );
+    const declarations = (element: Element) => {
+      const selectors = [...element.classList].map(
+        (name) => `.${name.replace(/([^\w-])/g, "\\$1")}`,
+      );
+      const values: Record<string, string> = {};
+      stylesheet.walkRules((rule) => {
+        if (rule.selectors.some((selector) => selectors.includes(selector))) {
+          rule.walkDecls(({ prop, value }) => {
+            values[prop] = value;
+          });
+        }
+      });
+      return values;
+    };
+
+    expect(declarations(dialog)).toMatchObject({
+      "z-index": "70",
+      "padding-top": "10vh",
+    });
+    expect(declarations(surface)["max-height"]).toBe("min(720px, 78vh)");
+    const blur = declarations(backdrop);
+    expect(blur["--tw-backdrop-blur"]).toBe("blur(2px)");
+    expect(blur["backdrop-filter"]).toContain("var(--tw-backdrop-blur,)");
+    expect(blur["backdrop-filter"]).toContain("var(--tw-backdrop-brightness,)");
+    expect(blur["-webkit-backdrop-filter"]).toBe(blur["backdrop-filter"]);
+    const panelShadow = declarations(surface);
+    expect(panelShadow["--tw-shadow"]).toContain("0 24px 90px");
+    expect(panelShadow["--tw-shadow"]).toContain("rgba(0,0,0,0.52)");
+    expect(panelShadow["--tw-shadow"]).toContain("rgba(255,255,255,0.03)");
+    const selectionShadow = declarations(activeOption);
+    expect(selectionShadow["--tw-shadow"]).toContain(
+      "color-mix(in srgb,var(--oh-contrast) 8%,transparent)",
+    );
+    expect(selectionShadow["--tw-shadow"]).toContain("inset");
+    for (const shadow of [panelShadow, selectionShadow]) {
+      expect(shadow["box-shadow"]).toBe(
+        "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)",
+      );
+    }
+    expect(declarations(inactiveOption)["box-shadow"]).toBeUndefined();
+    for (const [element, size, tracking] of [
+      [heading, "11px", "0.18em"],
+      [shortcut, "11px", "0.18em"],
+      [resultHint, "10px", "0.14em"],
+      [triggerHint, "10px", "0.12em"],
+      [footer, "11px", undefined],
+    ] as const) {
+      const typography = declarations(element);
+      expect(typography["font-size"]).toBe(size);
+      expect(typography["line-height"]).toBeUndefined();
+      expect(typography["letter-spacing"]).toBe(tracking);
+      expect(typography["--tw-tracking"]).toBe(tracking);
+    }
   });
 
   it("leaves modified command links to native browser behavior", () => {

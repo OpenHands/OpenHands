@@ -15,6 +15,7 @@ import {
   readFileSync,
   readdirSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   unlinkSync,
@@ -26,26 +27,37 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateSync, gunzipSync } from "node:zlib";
 import { buildIdentity } from "./lib/build-id.mjs";
+import { groupAlive, privatePurgeAllowed } from "./lib/process-groups.mjs";
 import {
   editorOffset,
   launcherEnvFor,
+  lockedCloudOrigin,
   portsAfterRestart,
   runPorts,
 } from "./lib/launcher-env.mjs";
 import { baselineLines, parseBaseline, withBaseline } from "./lib/baseline.mjs";
-import { affectedFamilies, familyHead } from "./lib/map-sources.mjs";
+import {
+  affectedFamilies,
+  familyHead,
+  serverMapIds,
+  specMatches,
+} from "./lib/map-sources.mjs";
 import {
   classifyAttempt,
   judgeAssertion,
   knownBugBlocks,
   parseBugPredicate,
   proofVerdict,
+  viewportToRestore,
 } from "./lib/known-bug.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
 import {
   citedTestids,
   resolveTestids,
   sourceLiterals,
+  sourceControls,
+  mapWords,
+  unnamedControls,
 } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
@@ -224,16 +236,6 @@ function processAlive(pid) {
   }
 }
 
-function groupAlive(pgid) {
-  if (!pgid) return false;
-  try {
-    process.kill(-pgid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM";
-  }
-}
-
 function commandLine(pid) {
   try {
     if (existsSync(`/proc/${pid}/cmdline`)) {
@@ -299,13 +301,14 @@ function releaseClaim(run) {
   }
 }
 
-async function findPortBlock(start, runDir, editor) {
+async function findPortBlock(start, runDir, editor, options) {
   // The launcher needs ingress P, agent-server P+1, automation P+2, static
   // frontend P+3, and the editor port only when it serves VS Code (`editor`
   // is its offset from the agent-server port, or null; see editorOffset).
+  // A --lock-to-cloud run also needs P+4.
   mkdirSync(verifyHome, { recursive: true });
   for (let base = start; base < start + 900; base += 10) {
-    const ports = Object.values(runPorts(base, editor));
+    const ports = Object.values(runPorts(base, editor, options));
     const busy = await Promise.all(ports.map((p) => portOpen(p)));
     if (busy.some(Boolean)) continue;
     if (tryClaim(base, runDir)) return base;
@@ -360,6 +363,7 @@ function defaults() {
 }
 
 function availableMemoryBytes() {
+  if (process.platform === "darwin") return process.availableMemory();
   // MemAvailable counts reclaimable cache; os.freemem() alone understates it.
   try {
     const line = readFileSync("/proc/meminfo", "utf8").match(
@@ -427,6 +431,8 @@ async function startBrowser(run) {
       ...process.env,
       OH_VERIFY_RUN: run.dir,
       OH_VERIFY_BASE_URL: run.baseUrl,
+      // `browser goto` may also open the run's own locked-to-Cloud page.
+      OH_VERIFY_EXTRA_ORIGINS: run.lockedCloud?.url ?? "",
     },
   });
   child.unref();
@@ -537,6 +543,19 @@ async function cmdLaunch({ flags }) {
   // and run.json of a run that may still be live. `restart` reuses a run.
   const requestedRunId = flags["run-id"];
   if (requestedRunId !== undefined) checkNewRunId(requestedRunId);
+  let lockedCloud;
+  if (flags["lock-to-cloud"] !== undefined) {
+    try {
+      lockedCloud = lockedCloudOrigin(
+        flags["lock-to-cloud"] === true ? "" : flags["lock-to-cloud"],
+      );
+    } catch (error) {
+      usage(
+        error.message,
+        "control-openhands launch --new --lock-to-cloud https://app.all-hands.dev",
+      );
+    }
+  }
   if (nodeMajor() < 24) {
     throw new CliError(
       `Node >=24 is required by the launcher; this is ${process.version}.`,
@@ -707,18 +726,22 @@ async function cmdLaunch({ flags }) {
   if (flags["automation-version"])
     env.OH_AUTOMATION_VERSION = flags["automation-version"];
   if (flags.vscode) env.OH_CANVAS_ENABLE_VSCODE = "true";
+  // The ingress hosts the DigitalOcean Managed Agents web bridge (/mars/*)
+  // only with exactly MARS_WEB=1 (OpenHands/OpenHands#18783).
+  if (flags["mars-web"]) env.MARS_WEB = "1";
   // Only PASS_ENV and the flags above reach the launcher, so a version pin
   // exported in the caller's shell would be dropped without a word.
   const ignoredEnv = Object.keys(process.env).filter(
     (k) =>
       (/^OH_(AGENT_SERVER|AUTOMATION)_/.test(k) ||
-        k === "OH_CANVAS_ENABLE_VSCODE") &&
+        k === "OH_CANVAS_ENABLE_VSCODE" ||
+        k === "MARS_WEB") &&
       !(k in env),
   );
   const warnings = [];
   if (ignoredEnv.length)
     warnings.push(
-      `Ignored ${ignoredEnv.join(", ")} from your shell: runs are isolated. Use --sdk-version/--sdk-ref/--sdk-path, --automation-version/--automation-ref/--automation-path or --vscode.`,
+      `Ignored ${ignoredEnv.join(", ")} from your shell: runs are isolated. Use --sdk-version/--sdk-ref/--sdk-path, --automation-version/--automation-ref/--automation-path, --vscode or --mars-web.`,
     );
 
   // 4. Ports. The editor port is reserved only when this checkout's launcher
@@ -729,14 +752,16 @@ async function cmdLaunch({ flags }) {
     warnings.push(
       `Could not ask scripts/dev-with-automation.mjs whether it serves VS Code (${editor.reason}); reserving the editor port as before.`,
     );
+  const portOptions = { lockedCloud: lockedCloud !== undefined };
   const base = flags.port
     ? intFlag(flags.port)
     : await findPortBlock(
         intFlag(flags["port-from"], 18800),
         dir,
         editor.offset,
+        portOptions,
       );
-  const ports = runPorts(base, editor.offset);
+  const ports = runPorts(base, editor.offset, portOptions);
   if (flags.port) {
     const busy = [];
     for (const [name, port] of Object.entries(ports))
@@ -787,23 +812,28 @@ async function cmdLaunch({ flags }) {
     pins: defaults().versions,
     overrides: Object.fromEntries(
       Object.entries(env).filter(([k]) =>
-        /^OH_(AGENT_SERVER_|AUTOMATION_|CANVAS_ENABLE_VSCODE$)/.test(k),
+        /^(OH_(AGENT_SERVER_|AUTOMATION_|CANVAS_ENABLE_VSCODE$)|MARS_WEB$)/.test(
+          k,
+        ),
       ),
     ),
+    ...(lockedCloud
+      ? {
+          lockedCloud: {
+            cloud: lockedCloud,
+            url: `http://127.0.0.1:${ports.lockedCloud}`,
+          },
+        }
+      : {}),
   };
   spawnLauncher(run);
   saveRun(run);
-  try {
-    if (
-      existsSync(join(verifyHome, "current")) ||
-      lstatSync(join(verifyHome, "current"), { throwIfNoEntry: false })
-    ) {
-      unlinkSync(join(verifyHome, "current"));
-    }
-  } catch {
-    // no previous pointer
-  }
-  symlinkSync(dir, join(verifyHome, "current"));
+  // Swap the pointer atomically: concurrent `launch --new` calls each write a
+  // private temporary link and rename it over `current`, so none of them
+  // races another's unlink/symlink pair (EEXIST).
+  const pointerTmp = join(verifyHome, `.current-${process.pid}-${randomBytes(4).toString("hex")}`);
+  symlinkSync(dir, pointerTmp);
+  renameSync(pointerTmp, join(verifyHome, "current"));
 
   // 6. Wait for readiness: authenticated settings, automation health and SPA.
   await waitForStack(run, intFlag(flags.timeout, 600));
@@ -814,6 +844,7 @@ async function cmdLaunch({ flags }) {
   };
   run.readyAt = new Date().toISOString();
   saveRun(run);
+  if (run.lockedCloud) await startLockedCloud(run, intFlag(flags.timeout, 600));
 
   let browser;
   if (!flags["no-browser"]) {
@@ -845,6 +876,7 @@ async function cmdLaunch({ flags }) {
     revision,
     builtThisRun: built,
     ports,
+    ...(run.lockedCloud ? { lockedCloud: run.lockedCloud } : {}),
     versions: run.versions,
     browser,
     next: [
@@ -922,6 +954,102 @@ function spawnLauncher(run) {
   return child;
 }
 
+// A page locked to one OpenHands Cloud host (F01.locked-cloud-first-run,
+// F25.locked-cloud). bin/agent-canvas.mjs has no option for it; only
+// scripts/static-server.mjs --lock-to-cloud has. So a --lock-to-cloud run
+// serves the same build from a second static server on P+4, in its own
+// process group, which `stop` ends with the run. The locked page talks only
+// to that Cloud host, so it gets no session key.
+async function startLockedCloud(run, timeoutSec) {
+  const priv = join(run.dir, "private");
+  const env = {};
+  for (const name of PASS_ENV)
+    if (process.env[name] !== undefined) env[name] = process.env[name];
+  Object.assign(env, {
+    HOME: join(priv, "home"),
+    DO_NOT_TRACK: "1",
+    // One bridge per stack at most: this page never hosts /mars/*.
+    MARS_WEB: "0",
+  });
+  const logPath = join(priv, "locked-cloud.log");
+  const logFd = openSync(logPath, "a", 0o600);
+  const child = spawn(
+    process.execPath,
+    [
+      join(repoRoot, "scripts", "static-server.mjs"),
+      "--dir",
+      join(repoRoot, "build"),
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(run.ports.lockedCloud),
+      "--lock-to-cloud",
+      run.lockedCloud.cloud,
+    ],
+    { cwd: repoRoot, env, detached: true, stdio: ["ignore", logFd, logFd] },
+  );
+  child.unref();
+  run.lockedCloud.pgid = child.pid;
+  saveRun(run);
+  const deadline = Date.now() + timeoutSec * 1000;
+  let last = "";
+  for (;;) {
+    if (!groupAlive(child.pid)) {
+      throw new CliError("The locked-to-Cloud static server exited.", {
+        code: 3,
+        hint: "The stack is running; `control-openhands stop` it and retry.",
+        extra: {
+          run: run.dir,
+          logTail: readFileSync(logPath, "utf8")
+            .split("\n")
+            .slice(-15)
+            .join("\n"),
+        },
+      });
+    }
+    try {
+      const response = await fetch(`${run.lockedCloud.url}/`, {
+        signal: AbortSignal.timeout(4000),
+      });
+      const html = await response.text();
+      last = `status=${response.status}`;
+      if (response.ok && html.includes("__AGENT_CANVAS_LOCK_TO_CLOUD__"))
+        return;
+    } catch (error) {
+      last = String(error.message);
+    }
+    if (Date.now() > deadline)
+      throw new CliError(
+        `The locked-to-Cloud page is not ready after ${timeoutSec}s (${last}).`,
+        { code: 3, extra: { run: run.dir } },
+      );
+    await delay(500);
+  }
+}
+
+async function stopLockedCloud(run) {
+  const pgid = run.lockedCloud?.pgid;
+  if (!groupAlive(pgid)) return { stopped: true };
+  const cmd = commandLine(pgid);
+  if (cmd && !cmd.includes("static-server.mjs")) {
+    throw new CliError(
+      `PID ${pgid} is no longer this run's locked-to-Cloud server (${cmd.slice(0, 80)}); refusing to signal it.`,
+      { code: 3 },
+    );
+  }
+  let forced = false;
+  process.kill(-pgid, "SIGTERM");
+  for (let i = 0; i < 20 && groupAlive(pgid); i += 1) await delay(500);
+  if (groupAlive(pgid)) {
+    process.kill(-pgid, "SIGKILL");
+    forced = true;
+    await delay(1000);
+  }
+  for (let i = 0; i < 20 && (await portOpen(run.ports.lockedCloud)); i += 1)
+    await delay(500);
+  return { stopped: !groupAlive(pgid), forced };
+}
+
 async function stopLauncher(run) {
   const pgid = run.launcherPgid;
   let forced = false;
@@ -958,7 +1086,9 @@ async function stopLauncher(run) {
     }
   }
   // Give sockets a moment to close before callers check or reuse the ports.
-  for (const port of Object.values(run.ports)) {
+  // The locked-to-Cloud page is not the launcher's: a restart keeps it.
+  for (const [name, port] of Object.entries(run.ports)) {
+    if (name === "lockedCloud") continue;
     for (let i = 0; i < 20 && (await portOpen(port)); i += 1) await delay(500);
   }
   return { stopped: !groupAlive(pgid), forced };
@@ -1132,6 +1262,14 @@ async function cmdStatus({ flags }) {
     launcherAlive: groupAlive(run.launcherPgid),
     browserAlive: Boolean(daemonInfo(run)),
     ports: run.ports,
+    ...(run.lockedCloud
+      ? {
+          lockedCloud: {
+            ...run.lockedCloud,
+            alive: groupAlive(run.lockedCloud.pgid),
+          },
+        }
+      : {}),
     versions: run.versions,
     startedAt: run.startedAt,
   });
@@ -1239,8 +1377,38 @@ async function cmdDoctor({ flags }) {
         automation.status === 200,
         `status=${automation.status}`,
       );
+      if (run.overrides?.MARS_WEB === "1") {
+        const mars = await http(run, "GET", "/mars/health", { auth: false });
+        add(
+          "Managed Agents web bridge mounted (--mars-web)",
+          mars.status === 200 && mars.json?.ok === true,
+          `GET /mars/health status=${mars.status} ${mars.text.slice(0, 80)}`,
+        );
+      }
     } catch (error) {
       add("HTTP checks", false, String(error.message));
+    }
+  }
+  if (run.lockedCloud) {
+    try {
+      const response = await fetch(`${run.lockedCloud.url}/`, {
+        signal: AbortSignal.timeout(4000),
+      });
+      const html = await response.text();
+      const locked = html.match(/__AGENT_CANVAS_LOCK_TO_CLOUD__=([^;<]*)/);
+      add(
+        "locked-to-Cloud page serves the lock (--lock-to-cloud)",
+        response.ok &&
+          Boolean(locked) &&
+          locked[1].includes(run.lockedCloud.cloud),
+        `${run.lockedCloud.url}/ status=${response.status} lock=${locked?.[1] ?? "missing"}`,
+      );
+    } catch (error) {
+      add(
+        "locked-to-Cloud page serves the lock (--lock-to-cloud)",
+        false,
+        String(error.message),
+      );
     }
   }
   if (!flags["skip-ui"]) {
@@ -1296,11 +1464,16 @@ async function cmdStop({ flags }) {
   const pgid = run.launcherPgid;
   const launcher = await stopLauncher(run);
   if (launcher.forced) result.forced = true;
+  if (run.lockedCloud) {
+    const locked = await stopLockedCloud(run);
+    if (locked.forced) result.forced = true;
+  }
   const ports = {};
   for (const [name, port] of Object.entries(run.ports))
     ports[name] = (await portOpen(port)) ? "still open" : "closed";
-  result.launcherStopped = !groupAlive(pgid);
-  if (result.launcherStopped) {
+  result.launcherStopped =
+    !groupAlive(pgid) && !groupAlive(run.lockedCloud?.pgid);
+  if (privatePurgeAllowed(result.launcherStopped, ports)) {
     releaseClaim(run);
     rmSync(tmuxPathFor(run.dir), { recursive: true, force: true });
   }
@@ -1310,9 +1483,9 @@ async function cmdStop({ flags }) {
   const evidence = listFiles(join(run.dir, "evidence"));
   result.evidenceFiles = evidence.length;
   if (flags["purge-private"]) {
-    if (!result.launcherStopped)
+    if (!privatePurgeAllowed(result.launcherStopped, ports))
       throw new CliError(
-        "Refusing to purge private state while processes are alive.",
+        "Refusing to purge private state while processes or ports are alive.",
         { code: 3 },
       );
     const privateDir = join(run.dir, "private");
@@ -1927,7 +2100,7 @@ async function openWorkspace(run, name, { stay, mode } = {}) {
     selector: "testid=workspace-launch-button",
     timeout: 30_000,
   });
-  // The mode selector (Local Repo / New Worktree) sits in the preview bar
+  // The mode selector (Local / Worktree) sits in the preview bar
   // the launch click leaves behind.
   let preview;
   if (mode !== undefined) {
@@ -1994,11 +2167,13 @@ async function cmdConversation({ positional, flags }) {
       value: prompt,
     });
     await browserCall(run, "click", { selector: "testid=submit-button" });
+    // Some launches (the automation setup page) show a temporary
+    // /conversations/launch-<id> page first; wait for the real id.
     const { url } = await browserCall(run, "wait-url", {
-      pattern: "/conversations/[^/?#]+",
+      pattern: "/conversations/(?!launch-)[^/?#]+",
       timeout: 60_000,
     });
-    const conversationId = /\/conversations\/([^/?#]+)/.exec(url)[1];
+    const conversationId = /\/conversations\/((?!launch-)[^/?#]+)/.exec(url)[1];
     const result = {
       ok: true,
       id: conversationId,
@@ -2639,6 +2814,15 @@ function inspectDownload(path, needle) {
   return info;
 }
 
+function networkOrder(value) {
+  if (value === undefined) return undefined;
+  if (value === "request" || value === "completion") return value;
+  usage(
+    `--order must be request or completion, got ${value === true ? "nothing" : value}`,
+    "control-openhands browser network --filter 'schema' --order completion",
+  );
+}
+
 async function cmdBrowser({ positional, flags }) {
   const run = loadRun(flags);
   const [verb, ...rest] = positional;
@@ -2728,9 +2912,23 @@ async function cmdBrowser({ positional, flags }) {
       );
       result = await browserCall(run, "tooltip", { selector: sel, timeout });
       break;
-    case "media":
-      result = await browserCall(run, "media", { clear: Boolean(flags.clear) });
+    case "media": {
+      const reducedMotion = flags["reduced-motion"];
+      if (
+        rest.length ||
+        (reducedMotion !== undefined &&
+          !["reduce", "no-preference"].includes(reducedMotion))
+      )
+        usage(
+          "browser media --reduced-motion needs reduce | no-preference",
+          "control-openhands browser media --reduced-motion no-preference",
+        );
+      result = await browserCall(run, "media", {
+        clear: Boolean(flags.clear),
+        reducedMotion,
+      });
       break;
+    }
     case "toasts":
       result = await browserCall(run, "toasts", {
         history: Boolean(flags.history),
@@ -2838,6 +3036,7 @@ async function cmdBrowser({ positional, flags }) {
         last: flags.last,
         filter:
           flags.filter && flags.filter !== true ? flags.filter : undefined,
+        order: networkOrder(flags.order),
       });
       break;
     case "hover":
@@ -3044,6 +3243,17 @@ async function cmdBrowser({ positional, flags }) {
         offsetMs: flags["offset-ms"],
         system: flags.system,
         fixed: flags.fixed,
+      });
+      break;
+    case "timezone":
+      if (!flags.reset)
+        need(
+          1,
+          "control-openhands browser timezone America/Sao_Paulo   # an IANA name, or --reset",
+        );
+      result = await browserCall(run, "timezone", {
+        zone: rest[0],
+        reset: Boolean(flags.reset),
       });
       break;
     case "viewport":
@@ -3614,6 +3824,10 @@ async function cmdBug({ positional, flags }) {
         const logFile = join(work, `${stamp}.asserts.jsonl`);
         const failureFile = join(work, `${stamp}.failed`);
         const doctorBefore = doctor();
+        // Every attempt starts at the viewport the caller had, and leaves it so.
+        const viewportBefore = daemonInfo(run)
+          ? (await browserCall(run, "url").catch(() => ({}))).viewport
+          : undefined;
         let exec = {
           exitCode: null,
           timedOut: false,
@@ -3654,6 +3868,15 @@ async function cmdBug({ positional, flags }) {
         const page = daemonInfo(run)
           ? await browserCall(run, "url").catch(() => ({}))
           : {};
+        const restore = viewportToRestore(viewportBefore, page.viewport);
+        let viewportRestored;
+        if (restore) {
+          viewportRestored = await browserCall(run, "viewport", {
+            size: restore,
+          })
+            .then(() => restore)
+            .catch((error) => `failed: ${error.message}`);
+        }
         const transcript = join(dir, `${stamp}.json`);
         writeFileSync(
           transcript,
@@ -3703,6 +3926,7 @@ async function cmdBug({ positional, flags }) {
           viewport: page.viewport
             ? `${page.viewport.width}x${page.viewport.height}`
             : undefined,
+          ...(viewportRestored ? { viewportRestored } : {}),
           transcript: relative(run.dir, transcript),
         };
         appendFileSync(attemptsFile(run.dir), `${JSON.stringify(attempt)}\n`);
@@ -3767,6 +3991,12 @@ async function cmdBug({ positional, flags }) {
         "bug proof needs a sub-feature ID, --baseline RUN_DIR and --fix RUN_DIR",
         "control-openhands bug proof F05.prefill-send --baseline $BASE_RUN --fix $FIX_RUN",
       );
+    const vary = flags.vary === undefined ? "revision" : String(flags.vary);
+    if (vary !== "revision" && vary !== "backend")
+      usage(
+        "bug proof --vary takes revision or backend",
+        "control-openhands bug proof F08.diff-view-modes --vary backend --baseline $OLD_SDK_RUN --fix $RUN",
+      );
     const blocks = selectBlocks(id, flags);
     const read = (dir) => {
       const path = attemptsFile(resolve(String(dir)));
@@ -3791,6 +4021,7 @@ async function cmdBug({ positional, flags }) {
         fix: fix.filter((r) => r.name === block.name),
         sha: block.sha,
         min: intFlag(flags.min, 2),
+        vary,
       }),
     }));
     const verified = verdicts.every((v) => v.verdict === "verified");
@@ -3890,6 +4121,7 @@ const BROWSER_VERBS = new Set([
   "record",
   "viewport",
   "clock",
+  "timezone",
   "errors",
   "events",
   "eval",
@@ -3918,7 +4150,7 @@ function featureFiles() {
     .sort();
 }
 
-function mapCheck({ only } = {}) {
+function mapCheck({ only, serverIds } = {}) {
   const problems = [];
   const ids = new Map();
   const index = existsSync(join(mapDir, "README.md"))
@@ -4014,6 +4246,22 @@ function mapCheck({ only } = {}) {
       if (!sourcePathExists(s))
         problems.push(`${file}: Source: path ${s.path} does not exist`);
     }
+    // The Server: line names verify-agent-server IDs; with --server-map each
+    // one must exist in that map.
+    for (const token of head.server.invalid)
+      problems.push(
+        `${file}: Server: ${token} is not an Agent Server ID like F15 or F15.changes`,
+      );
+    const serverSeen = new Set();
+    for (const id of head.server.ids) {
+      if (serverSeen.has(id))
+        problems.push(`${file}: Server: ${id} is listed twice`);
+      serverSeen.add(id);
+      if (serverIds && !serverIds.has(id))
+        problems.push(
+          `${file}: Server: ${id} is not in the verify-agent-server map`,
+        );
+    }
   }
   // References (`Fnn.slug` in prose, --feature Fnn.slug in recipes) must name
   // a declared ID once that family's file exists.
@@ -4102,6 +4350,30 @@ function sourcePathExists(s) {
   return readdirSync(dir).some(
     (name) => name.startsWith(head) && name.endsWith(tail),
   );
+}
+
+// A software-agent-sdk checkout, or the verify-agent-server feature-map
+// directory itself.
+function resolveServerMap(dir) {
+  const root = resolve(dir);
+  for (const candidate of [
+    join(
+      root,
+      ".agents",
+      "skills",
+      "verify-agent-server",
+      "references",
+      "feature-map",
+    ),
+    root,
+  ]) {
+    if (
+      existsSync(candidate) &&
+      readdirSync(candidate).some((f) => /^F\d{2}-.*\.md$/.test(f))
+    )
+      return candidate;
+  }
+  return null;
 }
 
 // Families with their parsed Source: lines.
@@ -4354,7 +4626,26 @@ async function cmdMap({ positional, flags }) {
         ? basename(String(flags.file))
         : undefined;
     if (flags["fix-counts"] && !only) fixIndexCounts();
-    const result = mapCheck({ only });
+    let serverIds;
+    let serverMap;
+    if (flags["server-map"]) {
+      serverMap = resolveServerMap(String(flags["server-map"]));
+      if (!serverMap)
+        usage(
+          `No verify-agent-server feature map under ${flags["server-map"]}`,
+          "control-openhands map check --server-map ../software-agent-sdk",
+        );
+      serverIds = serverMapIds(
+        readdirSync(serverMap)
+          .filter((f) => /^F\d{2}-.*\.md$/.test(f))
+          .map((file) => ({
+            file,
+            text: readFileSync(join(serverMap, file), "utf8"),
+          })),
+      );
+    }
+    const result = mapCheck({ only, serverIds });
+    if (serverMap) result.serverMap = serverMap;
     if (only) {
       result.problems = result.problems.filter(
         (p) => p.startsWith(`${only}:`) || p.includes(`(also in ${only})`),
@@ -4484,8 +4775,69 @@ async function cmdMap({ positional, flags }) {
     if (!ok) process.exitCode = 1;
     return;
   }
+  if (sub === "controls") {
+    // The reverse of `map testids`: controls the source renders that no
+    // bullet names. Candidates to operate or to leave out on purpose.
+    const families = familyList();
+    let controls = sourceControls(join(repoRoot, "src"), repoRoot);
+    let range;
+    if (flags.base && flags.base !== true) {
+      const target =
+        flags.target && flags.target !== true ? String(flags.target) : "HEAD";
+      const changed = new Set(
+        git(["diff", "--name-only", `${flags.base}..${target}`])
+          .split("\n")
+          .filter(Boolean),
+      );
+      controls = controls.filter((c) => changed.has(c.file));
+      range = { base: String(flags.base), target };
+    }
+    const owners = (file) => {
+      const ids = families
+        .filter((f) => f.sources.some((s) => specMatches(s, file)))
+        .map((f) => f.id);
+      return ids.length ? ids : ["unowned"];
+    };
+    const corpus = featureFiles()
+      .map((f) => readFileSync(join(mapDir, f), "utf8"))
+      .join("\n");
+    const result = unnamedControls(controls, mapWords(corpus), {
+      all: Boolean(flags.all),
+    });
+    let unnamed = result.unnamed.map((c) => ({
+      id: c.id,
+      tag: c.tag,
+      file: c.file,
+      families: owners(c.file),
+    }));
+    let considered = result.considered;
+    if (flags.family && flags.family !== true) {
+      const family = String(flags.family);
+      unnamed = unnamed.filter((c) => c.families.includes(family));
+      considered = controls.filter(
+        (c) => (flags.all || c.interactive) && owners(c.file).includes(family),
+      ).length;
+    }
+    const byFamily = {};
+    for (const c of unnamed)
+      for (const f of c.families) byFamily[f] = (byFamily[f] ?? 0) + 1;
+    const ok = !flags.strict || unnamed.length === 0;
+    out({
+      ok,
+      ...(range ? { range } : {}),
+      controls: considered,
+      unnamed: unnamed.length,
+      byFamily: Object.fromEntries(
+        Object.entries(byFamily).sort(([a], [b]) => a.localeCompare(b)),
+      ),
+      list: unnamed,
+      note: "Candidates, not defects: each is a control with a literal test id that no map file mentions. Operate it in a bullet (what it does, and what it does on a second use), or confirm a recipe already reaches it by role or label. `unowned` files belong to no family's Source: line.",
+    });
+    if (!ok) process.exitCode = 1;
+    return;
+  }
   usage(
-    "Usage: control-openhands map check|coverage|ids|routes|affected|testids|baseline",
+    "Usage: control-openhands map check|coverage|ids|routes|affected|testids|controls|baseline",
     "control-openhands map coverage",
   );
 }
@@ -4557,7 +4909,7 @@ Evidence and map
   evidence      add | list | report — the run's pass/fail/blocked/not-run ledger
   assert        --field F --equals V [--bug-shows B | --bug P] -- <command> — check one value of a command's output
   bug           list | run ID --attempts 2 | proof ID — known bugs as executable expected failures
-  map           check | coverage | ids | routes | affected | testids | baseline — keep the feature map honest
+  map           check | coverage | ids | routes | affected | testids | controls | baseline — keep the feature map honest
 
 Run state lives in $OH_VERIFY_HOME (default: $TMPDIR/openhands-verify); the
 current run is the 'current' symlink there, or --run / $OH_VERIFY_RUN.
@@ -4577,6 +4929,7 @@ Examples:
   launch: `control-openhands launch [--public] [--new] [--print-run] [--port N | --port-from N] [--build auto|always|never] [--min-free-mb 2000]
                          [--no-browser] [--timeout SEC] [--sdk-path DIR | --sdk-ref REF | --sdk-version V]
                          [--automation-path DIR | --automation-ref REF | --automation-version V] [--run-id ID] [--vscode]
+                         [--mars-web] [--lock-to-cloud URL]
 
 Builds the checkout when build/verify-revision.txt does not match HEAD, then
 starts bin/agent-canvas.mjs with a private HOME, state dir, session key and
@@ -4587,14 +4940,25 @@ ports, only when the checkout's launcher serves VS Code. Where that is opt-in
 is bundled (before #17660, or since #18048), it is always reserved and --vscode
 changes nothing. Waits for authenticated settings, automation health and the
 SPA, then starts the browser daemon.
+--mars-web starts the launcher with MARS_WEB=1, so the run's ingress hosts the
+DigitalOcean Managed Agents web bridge (/mars/*) and Add Backend offers the
+Providers tab; doctor checks /mars/health.
+--lock-to-cloud URL also serves this build locked to that OpenHands Cloud host
+(scripts/static-server.mjs --lock-to-cloud; bin/agent-canvas.mjs has no such
+option) on P+4, listed as ports.lockedCloud and lockedCloud.url. The locked page
+talks only to that Cloud host, never to the run's backend. \`browser goto
+<lockedCloud.url>/\` opens it without --allow-external, doctor checks the lock is
+injected, and stop ends it with the run.
 Idempotent: an alive current run is reused unless --new is given.
 --print-run prints only the run directory, for
   export OH_VERIFY_RUN=$(control-openhands launch --new --print-run)
 Every other command uses --run, else $OH_VERIFY_RUN, else the only live run;
 with several live runs it refuses to guess (several agents on one machine).
-Backend versions and VS Code come only from the flags: OH_AGENT_SERVER_*,
-OH_AUTOMATION_* and OH_CANVAS_ENABLE_VSCODE in your shell are not forwarded
-(launch warns). An Agent Server below
+Backend versions, VS Code and the bridge come only from the flags:
+OH_AGENT_SERVER_*, OH_AUTOMATION_*, OH_CANVAS_ENABLE_VSCODE and MARS_WEB in your
+shell are not forwarded (launch warns). TZ is forwarded: TZ=America/Sao_Paulo
+control-openhands launch --new runs the stack's services in that zone (a server
+host that is not in UTC; browser timezone moves the browser instead). An Agent Server below
 config/defaults.json compatibility.minimumAgentServer never gets
 past the UI's backend-compatibility gate.
 
@@ -4607,6 +4971,8 @@ Examples:
   control-openhands launch
   control-openhands launch --public --new
   control-openhands launch --sdk-path ../software-agent-sdk --build always
+  control-openhands launch --new --mars-web
+  control-openhands launch --new --lock-to-cloud https://app.all-hands.dev
 `,
   doctor: `control-openhands doctor [--skip-ui]
 
@@ -4619,7 +4985,9 @@ Exit 3 when any check fails.
 
 Stops the browser daemon and SIGTERMs the launcher's process group (SIGKILL
 after 30 s), verifies every run port closed and counts evidence files.
---purge-private then deletes private/ (keys, state, logs) and recounts evidence.
+On Linux, a group containing only defunct processes counts as stopped.
+--purge-private requires the group stopped and every run port closed, then
+deletes private/ (keys, state, logs) and recounts evidence.
 `,
   api: `control-openhands api <METHOD> </path> [--data JSON|@file | --data-file F --content-type T] [--write] [--pick a.b.c] [--max-bytes N]
 
@@ -4678,7 +5046,7 @@ control-openhands conversation events ID [--last N] [--kinds MessageEvent,Action
 testid=submit-button and returns the new /conversations/<id>. --stay uses the
 current page's composer instead of navigating home first. --workspace PATH
 first picks that folder through Open Workspace (see 'workspace open'), so the
-conversation runs in it; --mode picks Local Repo or New Worktree there. 'wait' polls the
+conversation runs in it; --mode picks Local or Worktree there. 'wait' polls the
 conversation's execution_status until one of --until (default: any terminal).
 
 Examples:
@@ -4696,7 +5064,7 @@ control-openhands fixture file [--name qa-note.txt] [--content TEXT]
 control-openhands fixture tarball [--name qa-tarball]   # evidence/_fixtures/qa-tarball.tar.gz (main.py prints pong)
 control-openhands fixture skill [--name qa-hello] [--repo qa-repo] [--trigger qa-ping] [--body TEXT] [--commit]
         # SKILL.md in the run's private ~/.agents/skills, or in a fixture repo's .agents/skills;
-        # --commit records it in the repo (a New Worktree conversation checks out commits only)
+        # --commit records it in the repo (a Worktree conversation checks out commits only)
 `,
   workspace: `control-openhands workspace open PATH|NAME [--stay] [--mode local_repo|new_worktree]
 
@@ -4704,7 +5072,7 @@ NAME (no slash) resolves inside <run>/workspace, where 'fixture' creates repos.
 
 Drives Home > Open Workspace > workspace dropdown > + Add Workspace, walks the
 folder browser (folder-browser-up / folder-browser-entry-<name>) to PATH,
-clicks Use and Launch, then with --mode picks Local Repo or New Worktree in the
+clicks Use and Launch, then with --mode picks Local or Worktree in the
 preview bar's mode selector (printed back as mode and preview). The composer then
 carries the workspace chip; follow
 with 'conversation start --stay', or use 'conversation start --workspace PATH'.
@@ -4763,6 +5131,9 @@ Verbs
   viewport desktop|phone|narrow|tablet|WxH                    1440x1000, 390x844, 320x700, 820x1180
   clock --offset-ms N | --system ISO|+MS | --fixed ISO|+MS    skew the page's clock (install before the goto
                                          whose page should see it; the server's clock is untouched)
+  timezone <IANA name> | --reset         put the active tab in another time zone (America/Sao_Paulo, Asia/Tokyo);
+                                         it holds across reloads until --reset, and the server's zone is untouched
+                                         (timestamps, "N minutes ago", ordering by time: reload after setting it)
   errors [--clear] [--all] [--app-only] [--no-warnings]        page/console/HTTP errors since last clear
                                          (--clear prints the list, then empties it: run it before the action)
   events [--kinds pageerror,dialog,download,websocket-created,websocket-open,websocket-close,websocket-error] [--last N]
@@ -4776,13 +5147,23 @@ Verbs
   downloads [--last N] [--inspect] [--contains TEXT]   saved files; --inspect adds a text head or zip entry names
   storage [--session] [--values]         localStorage (or sessionStorage) keys; values only on request
                                          (keys, tokens and secrets inside values are redacted)
-  media [--clear]                        media playback recorded since load (sound features)
+  media [--clear] [--reduced-motion reduce|no-preference]
+                                         observe playback; optionally emulate active-page motion preference
   network-state offline|online|status     interrupt or restore this browser context's real network; status is read-only
                                          (all its tabs; restore online before doctor/cleanup; no request interception)
-  network [--external] [--filter REGEX] [--clear] [--last N] [--bodies]   requests with status and redacted query (rows under "recent")
+  network [--external] [--filter REGEX] [--clear] [--last N] [--bodies] [--order request|completion]
+                                        requests with status and redacted query (rows under "recent"); each row
+                                        also has responseMs (headers), durationMs and completedTs (body done or
+                                        failed), outcome and completedSeq. --order completion lists the last N
+                                        rows in the order they completed, then the last N still pending: use it
+                                        for response races
         (--bodies adds each app-origin write's body, JSON with credential values and env/header maps
          replaced by their length, URL userinfo and secret-named query values redacted in any string;
-         the settings API's ********** placeholder is kept as is)
+         the settings API's ********** placeholder is kept as is; body is capped at 2000 chars.
+         bodyFields projects only the top-level plugins, conversation_runtime, worktree,
+         worktree_options and container before that cap, recursively redacted, at most 16384
+         UTF-8 bytes; oversized values are omitted with bodyFieldsOmitted.<field>.
+         Body fields and omission metadata are absent without --bodies)
                                          (privacy/telemetry checks; --clear as for errors)
   toasts [--history [--clear]]          toasts on screen now (with links); --history adds every
                                          status/alert text seen since this page loaded
@@ -4826,7 +5207,7 @@ spaces. The result lists each clause under bugChecks.
 `,
   bug: `control-openhands bug list [--file PATH]
 control-openhands bug run ID [--name N] [--attempts N] [--label L] [--timeout SEC] [--no-doctor] [--file PATH]
-control-openhands bug proof ID --baseline RUN_DIR --fix RUN_DIR [--baseline-label L] [--fix-label L] [--min 2]
+control-openhands bug proof ID --baseline RUN_DIR --fix RUN_DIR [--baseline-label L] [--fix-label L] [--min 2] [--vary revision|backend]
 
 A known bug in the map can carry a fenced block, opened with
 "\`\`\`sh known-bug <ID> [name]", whose commands assert the correct behavior. Its one
@@ -4843,6 +5224,9 @@ attempt after a passing doctor, and classifies it:
 Each attempt is appended to evidence/known-bugs/attempts.jsonl (revision,
 backend, viewport, recipe hash, failing line, assertion, transcript) and to the
 ledger as an xfail/xpass/fail row. Exit 0 only when every attempt is xfail.
+Every attempt starts at the viewport the browser had before 'run': a block that
+switches it (browser viewport phone) is put back afterwards, and the attempt
+records the size it ran at (viewport) and what it restored (viewportRestored).
 Each assertion is logged with the recipe line that ran it, and the first
 failure is the one kept, so a cleanup step (an EXIT trap) cannot replace the
 marked command's observation.
@@ -4851,13 +5235,19 @@ marked command's observation.
 run: verified only when the baseline has at least two attempts, all xfail, the
 fix at least two, all xpass, on different revisions with the same viewport and
 backend. A fix that still reproduces is not-fixed; anything else is inconclusive.
+--vary backend proves an Agent Server or automation fix instead: both runs serve
+the same revision at the same viewport, and each side has its own backend
+versions (the baseline launched with --sdk-version or --automation-version set
+to a release before the fix).
 
   control-openhands bug run F25.selector-dropdown --attempts 2 --label baseline --run $BASE_RUN
   control-openhands bug run F25.selector-dropdown --attempts 2 --label fix --run $FIX_RUN
   control-openhands bug proof F25.selector-dropdown --baseline $BASE_RUN --baseline-label baseline --fix $FIX_RUN --fix-label fix
+  control-openhands bug proof F08.diff-view-modes --vary backend --baseline $OLD_SDK_RUN --baseline-label baseline --fix $RUN --fix-label fix
 `,
   map: `control-openhands map check [--file Fnn-name.md]   lint the map (or one entry, skipping index links): four H2s, unique IDs, links, known commands, index counts
 control-openhands map check --fix-counts   rewrite the index's sub-feature counts and total from the files, then lint
+control-openhands map check --server-map ../software-agent-sdk   also check every Server: ID against that checkout's verify-agent-server map
 control-openhands map coverage   routes in src/routes.ts and src/components/features/* dirs not yet mapped
 control-openhands map ids        every sub-feature ID with its file
 control-openhands map routes     the route registry as path → route module
@@ -4875,6 +5265,13 @@ control-openhands map baseline [--set TARGET [--force]]
 control-openhands map testids [--strict]
                                  test ids the map drives that no literal or prefix in src/ accounts for
                                  (a cheap drift check before launching; --strict exits 1 on any)
+
+control-openhands map controls [--family Fnn] [--base REF [--target REF]] [--all] [--strict]
+                                 the reverse check: interactive elements in src/ with a literal test id
+                                 that no map file mentions, with the families whose Source: lines own
+                                 the file. A page can be mapped while a button on it is never operated;
+                                 this lists those buttons. --base limits it to files changed in a range
+                                 (the day's new controls), --all adds non-interactive elements
 
 check also verifies every Source: path exists and the baseline line's shape.
 `,

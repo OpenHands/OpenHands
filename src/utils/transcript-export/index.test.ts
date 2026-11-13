@@ -6,6 +6,7 @@ import type {
   ObservationEvent,
   UserRejectObservation,
 } from "#/types/agent-server/core";
+import type { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
 import type {
   ExecuteBashAction,
   MCPToolAction,
@@ -26,7 +27,9 @@ vi.mock("#/i18n", () => ({
     resolvedLanguage: "en",
     t: (key: string, values?: Record<string, string>) => {
       const translations: Record<string, string> = {
-        ACTION_MESSAGE$ACP_TOOL: "Use tool",
+        ACTION_MESSAGE$ACP_TOOL: values?.title
+          ? `<cmd>${values.title}</cmd>`
+          : "<cmd>{{title}}</cmd>",
         CHAT_INTERFACE$ASSISTANT: "Assistant",
         COMMON$ERROR: "Error",
         EVENT$REJECTED: "Rejected",
@@ -382,5 +385,58 @@ describe("conversation transcript export", () => {
 
     expect(html).not.toMatch(/<(?:link|script)[^>]+(?:href|src)=/i);
     expect(html).toMatchSnapshot();
+  });
+
+  it("exports titleless ACP tool calls with a plain-text summary and no template leaks", () => {
+    const titlelessACPEvent: ACPToolCallEvent = {
+      id: "acp-1",
+      timestamp,
+      source: "agent",
+      kind: "ACPToolCallEvent",
+      tool_call_id: "call-1",
+      title: "",
+      status: "completed",
+      tool_kind: "other",
+      raw_input: null,
+      raw_output: null,
+      content: null,
+      is_error: false,
+    };
+
+    const markdown = eventsToMarkdown([titlelessACPEvent], defaultOptions);
+    const html = eventsToHtml([titlelessACPEvent], defaultOptions);
+
+    expect(markdown).toContain("Tool");
+    expect(markdown).not.toContain("{{title}}");
+    expect(markdown).not.toContain("<cmd>");
+    expect(markdown).not.toContain("&lt;cmd&gt;");
+
+    expect(html).toContain("Tool");
+    expect(html).not.toContain("{{title}}");
+    expect(html).not.toContain("<cmd>");
+    expect(html).not.toContain("&lt;cmd&gt;");
+  });
+
+  it("exports ACP tool calls with title intact", () => {
+    const titledACPEvent: ACPToolCallEvent = {
+      id: "acp-2",
+      timestamp,
+      source: "agent",
+      kind: "ACPToolCallEvent",
+      tool_call_id: "call-2",
+      title: "Read /workspace/main.py",
+      status: "completed",
+      tool_kind: "read",
+      raw_input: null,
+      raw_output: null,
+      content: null,
+      is_error: false,
+    };
+
+    const markdown = eventsToMarkdown([titledACPEvent], defaultOptions);
+    const html = eventsToHtml([titledACPEvent], defaultOptions);
+
+    expect(markdown).toContain("/workspace/main.py");
+    expect(html).toContain("/workspace/main.py");
   });
 });

@@ -401,7 +401,10 @@ describe("conversation group folder interactions", () => {
     expect(dragImage.style.borderRadius).toBe("0.5rem");
     expect(dragImage.style.padding).toBe("0.25rem");
     expect(dragImage.style.backgroundColor).toBe("var(--oh-surface-raised)");
-    expect(dragImage.style.boxShadow).toBe("0 8px 24px rgba(0, 0, 0, 0.35)");
+    // jsdom 31 normalizes the shadow to `rgba(...) 0px 8px 24px`; compare the
+    // individual components rather than the serialized shorthand.
+    expect(dragImage.style.boxShadow).toMatch(/rgba\(0, 0, 0, 0\.35\)/);
+    expect(dragImage.style.boxShadow).toMatch(/0px 8px 24px/);
     expect(callbacks.onDragStart).toHaveBeenCalledOnce();
 
     act(() => vi.runAllTimers());

@@ -1,11 +1,13 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PluginLaunchModal } from "#/components/features/launch/plugin-launch-modal";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
+import type { SchemaFormField } from "#/utils/plugin-launch-preflight";
 
 const mockOnStartConversation = vi.fn();
+const mockOnInstallAutomation = vi.fn();
 const mockOnClose = vi.fn();
 
 function renderModal(
@@ -13,6 +15,18 @@ function renderModal(
   props: Partial<{
     message: string;
     isLoading: boolean;
+    parametersSupported: boolean;
+    mode: "conversation" | "automation";
+    preflight: {
+      description?: string | null;
+      resolvedRef?: string | null;
+      fields: SchemaFormField[];
+      suggestedTrigger?: {
+        type: string;
+        schedule?: string;
+        timezone?: string;
+      } | null;
+    } | null;
   }> = {},
 ) {
   const queryClient = new QueryClient({
@@ -23,9 +37,15 @@ function renderModal(
     <QueryClientProvider client={queryClient}>
       <PluginLaunchModal
         plugins={plugins}
+        parametersSupported={props.parametersSupported ?? true}
         message={props.message}
         isLoading={props.isLoading ?? false}
+        mode={props.mode ?? "conversation"}
+        preflight={props.preflight ?? null}
         onStartConversation={mockOnStartConversation}
+        onInstallAutomation={
+          props.mode === "automation" ? mockOnInstallAutomation : undefined
+        }
         onClose={mockOnClose}
       />
     </QueryClientProvider>,
@@ -39,7 +59,9 @@ describe("PluginLaunchModal", () => {
 
   describe("Plugin Display Name Extraction", () => {
     it("should extract plugin name from repo_path when provided", () => {
-      renderModal([{ source: "github:owner/repo", repo_path: "plugins/my-plugin" }]);
+      renderModal([
+        { source: "github:owner/repo", repo_path: "plugins/my-plugin" },
+      ]);
 
       // Plugin name should be "my-plugin" from the path
       expect(screen.getByText("my-plugin")).toBeInTheDocument();
@@ -54,9 +76,7 @@ describe("PluginLaunchModal", () => {
     });
 
     it("should extract name from git URL", () => {
-      renderModal([
-        { source: "https://github.com/owner/repo-name.git" },
-      ]);
+      renderModal([{ source: "https://github.com/owner/repo-name.git" }]);
 
       const elements = screen.getAllByText("repo-name");
       expect(elements.length).toBeGreaterThan(0);
@@ -221,8 +241,7 @@ describe("PluginLaunchModal", () => {
       ]);
 
       const input = screen.getByTestId("plugin-0-param-count");
-      await user.clear(input);
-      await user.type(input, "100");
+      fireEvent.change(input, { target: { value: "100" } });
 
       expect(input).toHaveValue(100);
     });
@@ -296,13 +315,13 @@ describe("PluginLaunchModal", () => {
 
       expect(screen.getByText("LAUNCH$ADDITIONAL_PLUGINS")).toBeInTheDocument();
       // When no repo_path, the full repo path is shown
-      expect(screen.getAllByText("owner/without-params").length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText("owner/without-params").length,
+      ).toBeGreaterThan(0);
     });
 
     it("should show ref in simple plugin list", () => {
-      renderModal([
-        { source: "github:owner/plugin", ref: "main" },
-      ]);
+      renderModal([{ source: "github:owner/plugin", ref: "main" }]);
 
       expect(screen.getByText("@ main")).toBeInTheDocument();
     });
@@ -363,10 +382,9 @@ describe("PluginLaunchModal", () => {
 
     it("should call onStartConversation with message when provided", async () => {
       const user = userEvent.setup();
-      renderModal(
-        [{ source: "github:owner/repo" }],
-        { message: "/city-weather:now Tokyo" },
-      );
+      renderModal([{ source: "github:owner/repo" }], {
+        message: "/city-weather:now Tokyo",
+      });
 
       // Check the trust checkbox first
       await user.click(screen.getByTestId("trust-checkbox"));
@@ -423,5 +441,284 @@ describe("PluginLaunchModal", () => {
       // First plugin should have new value
       expect(input1).toHaveValue("new-val1");
     });
+  });
+});
+
+describe("unsupported backend plugin parameters", () => {
+  it("explains the unsupported configuration and prevents starting even after trust", async () => {
+    const user = userEvent.setup();
+    renderModal([{ source: "local-plugin", parameters: { city: "Paris" } }], {
+      parametersSupported: false,
+    });
+    await user.type(screen.getByTestId("plugin-0-param-city"), " test");
+    await user.click(screen.getByTestId("trust-checkbox"));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "LAUNCH$PARAMETERS_UNSUPPORTED_LOCAL",
+    );
+    expect(screen.getByTestId("start-conversation-button")).toBeDisabled();
+    await user.click(screen.getByTestId("start-conversation-button"));
+    expect(mockOnStartConversation).not.toHaveBeenCalled();
+  });
+
+  it("allows coordinate-only plugins when parameters are unsupported", async () => {
+    const user = userEvent.setup();
+    renderModal([{ source: "local-plugin", parameters: {} }], {
+      parametersSupported: false,
+    });
+    await user.click(screen.getByTestId("trust-checkbox"));
+    await user.click(screen.getByTestId("start-conversation-button"));
+
+    expect(mockOnStartConversation).toHaveBeenCalledWith(
+      [{ source: "local-plugin", parameters: {} }],
+      undefined,
+    );
+  });
+});
+
+describe("automation mode preflight", () => {
+  const cronPreflight = {
+    description: "A recipe automation",
+    resolvedRef: "main",
+    fields: [
+      { key: "repo", type: "string", label: "repo", required: false },
+      {
+        key: "style",
+        type: "string",
+        label: "style",
+        required: false,
+        options: ["compact", "full"],
+        defaultValue: "compact",
+      },
+    ] as SchemaFormField[],
+    suggestedTrigger: { type: "cron", schedule: "0 9 * * *", timezone: "UTC" },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows the preflight description and editable cron trigger", async () => {
+    renderModal([{ source: "github:org/recipe" }], {
+      mode: "automation",
+      preflight: cronPreflight,
+    });
+
+    expect(
+      screen.getByTestId("plugin-preflight-description"),
+    ).toHaveTextContent("A recipe automation");
+    expect(screen.getByTestId("plugin-trigger-schedule")).toHaveValue(
+      "0 9 * * *",
+    );
+    expect(screen.getByTestId("plugin-trigger-timezone")).toHaveValue("UTC");
+  });
+
+  it("passes the edited cron trigger on install", async () => {
+    const user = userEvent.setup();
+    renderModal([{ source: "github:org/recipe" }], {
+      mode: "automation",
+      preflight: cronPreflight,
+    });
+
+    await user.clear(screen.getByTestId("plugin-trigger-schedule"));
+    await user.type(
+      screen.getByTestId("plugin-trigger-schedule"),
+      "*/15 * * * *",
+    );
+    await user.click(screen.getByTestId("trust-checkbox"));
+    await user.click(screen.getByTestId("start-conversation-button"));
+
+    expect(mockOnInstallAutomation).toHaveBeenCalledWith(
+      [
+        {
+          source: "github:org/recipe",
+          parameters: { style: "compact" },
+        },
+      ],
+      { type: "cron", schedule: "*/15 * * * *", timezone: "UTC" },
+    );
+  });
+
+  it("renders enum schema fields as selects with help text", () => {
+    renderModal(
+      [{ source: "github:org/recipe", parameters: { style: "full" } }],
+      {
+        mode: "automation",
+        preflight: {
+          ...cronPreflight,
+          fields: [
+            { key: "repo", type: "string", label: "repo", required: false },
+            {
+              key: "style",
+              type: "string",
+              label: "style",
+              required: false,
+              options: ["compact", "full"],
+              helpText: "Report style",
+            },
+          ],
+        },
+      },
+    );
+
+    const select = screen.getByTestId("plugin-0-param-style");
+    expect(select.tagName).toBe("SELECT");
+    expect(screen.getByText("Report style")).toBeInTheDocument();
+  });
+
+  it("submits the raw numeric value when a numeric enum option is selected", async () => {
+    const user = userEvent.setup();
+    renderModal(
+      [{ source: "github:org/recipe", parameters: { priority: 1 } }],
+      {
+        mode: "automation",
+        preflight: {
+          ...cronPreflight,
+          fields: [
+            {
+              key: "priority",
+              type: "number",
+              label: "priority",
+              required: false,
+              options: ["0", "1", "2"],
+              enumValues: [0, 1, 2],
+            },
+          ],
+        },
+      },
+    );
+
+    const select = screen.getByTestId(
+      "plugin-0-param-priority",
+    ) as HTMLSelectElement;
+    expect(select.tagName).toBe("SELECT");
+
+    // Change to the third option (value "2"); the submit should carry the
+    // raw number 2, not the string "2".
+    await user.selectOptions(select, "2");
+    await user.click(screen.getByTestId("trust-checkbox"));
+    await user.click(screen.getByTestId("start-conversation-button"));
+
+    expect(mockOnInstallAutomation).toHaveBeenCalledTimes(1);
+    const submitted = mockOnInstallAutomation.mock.calls[0][0] as PluginSpec[];
+    expect(submitted[0].parameters).toEqual({ priority: 2 });
+    expect(typeof submitted[0].parameters?.priority).toBe("number");
+  });
+
+  it("renders a stale badge value as a disabled placeholder so display and submission agree", async () => {
+    const user = userEvent.setup();
+    // The badge pre-encodes mode: "fast", but the schema enum only allows
+    // "compact"/"full". The select must show the raw value (not "— select —")
+    // and submit it unchanged so the user isn't surprised by a 422.
+    renderModal(
+      [{ source: "github:org/recipe", parameters: { mode: "fast" } }],
+      {
+        mode: "automation",
+        preflight: {
+          ...cronPreflight,
+          fields: [
+            {
+              key: "mode",
+              type: "string",
+              label: "mode",
+              required: false,
+              options: ["compact", "full"],
+            },
+          ],
+        },
+      },
+    );
+
+    const select = screen.getByTestId(
+      "plugin-0-param-mode",
+    ) as HTMLSelectElement;
+    // The stale value is surfaced as a disabled option carrying the raw value.
+    const staleOption = screen.getByText("fast (current)") as HTMLOptionElement;
+    expect(staleOption.disabled).toBe(true);
+    // The select's current value is the raw badge value, not the placeholder.
+    expect(select.value).toBe("fast");
+
+    await user.click(screen.getByTestId("trust-checkbox"));
+    await user.click(screen.getByTestId("start-conversation-button"));
+
+    expect(mockOnInstallAutomation).toHaveBeenCalledTimes(1);
+    const submitted = mockOnInstallAutomation.mock.calls[0][0] as PluginSpec[];
+    expect(submitted[0].parameters).toEqual({ mode: "fast" });
+  });
+
+  it("installs without an explicit trigger when preflight has no cron suggestion", async () => {
+    const user = userEvent.setup();
+    renderModal([{ source: "github:org/recipe" }], {
+      mode: "automation",
+      preflight: {
+        ...cronPreflight,
+        suggestedTrigger: null,
+      },
+    });
+
+    expect(
+      screen.queryByTestId("plugin-trigger-schedule"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("trust-checkbox"));
+    await user.click(screen.getByTestId("start-conversation-button"));
+
+    expect(mockOnInstallAutomation).toHaveBeenCalledTimes(1);
+    expect(mockOnInstallAutomation.mock.calls[0][1]).toBeNull();
+    expect(mockOnInstallAutomation.mock.calls[0][0]).toEqual([
+      {
+        source: "github:org/recipe",
+        parameters: { style: "compact" },
+      },
+    ]);
+  });
+
+  it("renders the schema label and help text instead of the raw key", () => {
+    renderModal(
+      [{ source: "github:org/recipe", parameters: { repo: "org/repo" } }],
+      {
+        mode: "automation",
+        preflight: {
+          ...cronPreflight,
+          fields: [
+            {
+              key: "repo",
+              type: "string",
+              label: "Repository",
+              required: false,
+              helpText: "Which repo to scan",
+            },
+          ],
+        },
+      },
+    );
+
+    expect(screen.getByText("Repository")).toBeInTheDocument();
+    expect(screen.getByText("Which repo to scan")).toBeInTheDocument();
+    expect(screen.queryByText("repo")).not.toBeInTheDocument();
+  });
+
+  it("renders textarea fields with a multi-line input", () => {
+    renderModal(
+      [{ source: "github:org/recipe", parameters: { feeds: "a\nb" } }],
+      {
+        mode: "automation",
+        preflight: {
+          ...cronPreflight,
+          fields: [
+            {
+              key: "feeds",
+              type: "string",
+              label: "Feeds",
+              required: false,
+              widget: "textarea",
+            },
+          ],
+        },
+      },
+    );
+
+    const input = screen.getByTestId("plugin-0-param-feeds");
+    expect(input.tagName).toBe("TEXTAREA");
+    expect(input).toHaveValue("a\nb");
   });
 });

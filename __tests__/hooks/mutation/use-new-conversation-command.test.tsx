@@ -223,10 +223,13 @@ describe("useNewConversationCommand", () => {
     // Assert — only sandbox_id travels; parent_conversation_id and agent_type
     // stay undefined because /new is NOT a sub-conversation.
     await waitFor(() => {
-      expect(createSpy).toHaveBeenCalledWith({
-        sandboxId: "sandbox-abc",
-      });
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ sandboxId: "sandbox-abc" }),
+      );
     });
+    const [options] = createSpy.mock.lastCall ?? [];
+    expect(options).not.toHaveProperty("parentConversationId");
+    expect(options).not.toHaveProperty("agentType");
   });
 
   it("launches the active agent profile rather than the global settings", async () => {

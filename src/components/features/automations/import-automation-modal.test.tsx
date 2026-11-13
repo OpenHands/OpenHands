@@ -109,6 +109,28 @@ describe("ImportAutomationModal", () => {
     expect(markup).toContain('data-testid="import-automation-confirm"');
   });
 
+  it("previews the entrypoint instead of a prompt for a script automation", () => {
+    const markup = renderToStaticMarkup(
+      <ImportAutomationModal
+        isOpen
+        spec={{
+          ...spec,
+          prompt: null,
+          plugins: undefined,
+          script: { entrypoint: "python3 main.py", tarball_base64: "H4sIAA==" },
+        }}
+        isImporting={false}
+        onClose={vi.fn()}
+        onImport={vi.fn()}
+        onFile={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain(I18nKey.AUTOMATIONS$DETAIL$SCRIPT);
+    expect(markup).toContain("python3 main.py");
+    expect(markup).not.toContain(I18nKey.AUTOMATIONS$PROMPT);
+  });
+
   it("does not render when closed", () => {
     const markup = renderToStaticMarkup(
       <ImportAutomationModal

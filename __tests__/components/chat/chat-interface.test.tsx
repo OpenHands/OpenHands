@@ -1,3 +1,4 @@
+import { useLayoutEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 import {
   fireEvent,
@@ -28,14 +29,30 @@ import {
 } from "#/types/agent-server/core";
 import { useEventStore } from "#/stores/use-event-store";
 import { useAgentState } from "#/hooks/use-agent-state";
+import * as conversationWebSocket from "#/contexts/conversation-websocket-context";
 import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { AgentState } from "#/types/agent-state";
 import { useConversationStore } from "#/stores/conversation-store";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
+import {
+  sessionActivityKey,
+  useSessionActivityStore,
+} from "#/stores/session-activity-store";
 import { useGoalStore } from "#/stores/goal-store";
 import { act } from "@testing-library/react";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
-import { getConversationState } from "#/utils/conversation-local-storage";
+import {
+  getConversationState,
+  getConversationDraftRevision,
+  setConversationState,
+} from "#/utils/conversation-local-storage";
+
+import { makeDefaultLocalBackend } from "#/api/backend-registry/default-backend";
+import { NO_BACKEND } from "#/api/backend-registry/active-store";
+import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
+import { I18nKey } from "#/i18n/declaration";
+import EventService from "#/api/event-service/event-service.api";
 
 const mockSend = vi.fn();
 vi.mock("#/hooks/use-send-message", () => ({
@@ -340,6 +357,8 @@ describe("ChatInterface - Scroll-up loads older events", () => {
   });
 
   afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
     useEventStore.setState({
       events: [],
       eventIds: new Set(),
@@ -500,6 +519,73 @@ describe("ChatInterface - Scroll-up loads older events", () => {
     // prevTop + (newHeight - prevHeight) = 50 + (6000 - 5000) = 1050.
     expect(setScrollTop).not.toHaveBeenCalledWith(1050);
   });
+
+  it.each(["cached", "hydrated"])(
+    "does not fetch older history before the initial bottom scroll (%s)",
+    async (mode) => {
+      setupPaginationTest();
+      const initialEvents = useEventStore.getState().events;
+      if (mode === "hydrated") {
+        useEventStore
+          .getState()
+          .clearEventsForConversation("test-conversation-id");
+      }
+      function HydratedChat() {
+        useLayoutEffect(() => {
+          if (mode === "hydrated")
+            useEventStore.getState().addEvents(initialEvents);
+        }, []);
+        return <ChatInterface />;
+      }
+      const actual = await vi.importActual<
+        typeof import("#/hooks/use-load-older-events")
+      >("#/hooks/use-load-older-events");
+      vi.mocked(useLoadOlderEvents).mockImplementation(
+        actual.useLoadOlderEvents,
+      );
+      const { CONVERSATION_QUERY_KEYS } =
+        await import("#/hooks/query/query-keys");
+      const backend = makeDefaultLocalBackend() ?? NO_BACKEND;
+      queryClient.setQueryData(
+        CONVERSATION_QUERY_KEYS.detail(
+          "test-conversation-id",
+          backend.id,
+          null,
+        ),
+        { conversation_id: "test-conversation-id", conversation_url: null },
+      );
+      const { default: events } =
+        await import("#/api/event-service/event-service.api");
+      const search = vi
+        .spyOn(events, "searchEvents")
+        .mockImplementation((_id, _url, _key, options) =>
+          options?.timestampLt
+            ? Promise.resolve({ items: [], next_page_id: null })
+            : new Promise(() => {}),
+        );
+      vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(
+        function (this: HTMLElement) {
+          return this.querySelector('[data-testid="user-message"]')
+            ? 5000
+            : 500;
+        },
+      );
+      vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(
+        800,
+      );
+      vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
+
+      renderWithQueryClient(<HydratedChat />, queryClient);
+      const olderCalls = () =>
+        search.mock.calls.filter((call) => call[3]?.timestampLt);
+      expect(olderCalls()).toHaveLength(0);
+
+      fireEvent.wheel(screen.getByTestId("chat-scroll-container"), {
+        deltaY: -100,
+      });
+      await waitFor(() => expect(olderCalls()).toHaveLength(1));
+    },
+  );
 
   it("auto-loads older events when the chat content does not overflow the viewport", async () => {
     // No overflow ⇒ no scrollbar ⇒ user can't trigger loadOlder by
@@ -735,6 +821,60 @@ describe("ChatInterface - Pending message queue", () => {
     );
   }
 
+  it("shows resume progress in place of the connection warning only while a send waits", async () => {
+    const conversationId = "test-conversation-id";
+    const queryKey = [
+      "user",
+      "conversation",
+      conversationId,
+      (makeDefaultLocalBackend() ?? NO_BACKEND).id,
+      null,
+    ];
+    queryClient.setQueryData(queryKey, {
+      id: conversationId,
+      sandbox_status: "PAUSED",
+    });
+    const id = useOptimisticUserMessageStore
+      .getState()
+      .enqueuePendingMessage({ conversationId, text: "resume my work" });
+    useErrorMessageStore.setState({
+      errorMessage: SERVER_CONNECTION_ERROR_MESSAGE,
+      errorType: "connection",
+      errorCode: null,
+    });
+    renderInterface();
+    expect(
+      screen.getByText(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(SERVER_CONNECTION_ERROR_MESSAGE),
+    ).not.toBeInTheDocument();
+
+    act(() => useErrorMessageStore.setState({ errorType: "conversation" }));
+    expect(screen.getByText(SERVER_CONNECTION_ERROR_MESSAGE)).toBeVisible();
+    act(() =>
+      useErrorMessageStore.setState({
+        errorMessage: "Resume permission denied",
+      }),
+    );
+    expect(screen.getByText("Resume permission denied")).toBeVisible();
+    act(() => {
+      useErrorMessageStore.setState({
+        errorMessage: SERVER_CONNECTION_ERROR_MESSAGE,
+        errorType: "connection",
+        errorCode: null,
+      });
+      useOptimisticUserMessageStore
+        .getState()
+        .markPendingMessageError(id, "Resume failed");
+    });
+    expect(screen.getByText(SERVER_CONNECTION_ERROR_MESSAGE)).toBeVisible();
+    expect(screen.getByTestId("chat-message-retry")).toBeVisible();
+    expect(
+      screen.queryByText(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows the message in 'sending' state immediately when submitted", async () => {
     let resolveSend: ((value: unknown) => void) | undefined;
     mockSend.mockImplementation(
@@ -785,6 +925,53 @@ describe("ChatInterface - Pending message queue", () => {
     const messages = screen.getAllByTestId("user-message");
     expect(messages[0]).toHaveTextContent("first");
     expect(messages[1]).toHaveTextContent("second");
+  });
+
+  function seedResolvedConversation(sandboxStatus = "RUNNING") {
+    queryClient.setQueryData(
+      [
+        "user",
+        "conversation",
+        "test-conversation-id",
+        (makeDefaultLocalBackend() ?? NO_BACKEND).id,
+        null,
+      ],
+      {
+        id: "test-conversation-id",
+        sandbox_status: sandboxStatus,
+        tags: { resolved: "auto", project: "abc" },
+      },
+    );
+  }
+
+  it("shows the resolved banner above a usable composer", () => {
+    seedResolvedConversation();
+
+    renderInterface();
+
+    const banner = screen.getByTestId("resolved-conversation-banner");
+    expect(banner).toHaveTextContent(I18nKey.CHAT_INTERFACE$RESOLVED_TITLE);
+    expect(screen.getByTestId("chat-input")).toHaveAttribute(
+      "contenteditable",
+      "true",
+    );
+    expect(
+      banner.compareDocumentPosition(screen.getByTestId("chat-input")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("does not show the resolved banner on an archived conversation", () => {
+    seedResolvedConversation("MISSING");
+
+    renderInterface();
+
+    expect(
+      screen.getByTestId("archived-conversation-banner"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("resolved-conversation-banner"),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -1046,7 +1233,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
 });
 
 describe("ChatInterface - Status Indicator", () => {
-  it("shows the unresolved terminal action while the agent is running", () => {
+  it("shows the running step as the last line of the chat instead of a chip", () => {
     const terminalAction: ActionEvent = {
       id: "action-running-terminal",
       timestamp: "2026-07-27T18:00:00Z",
@@ -1084,9 +1271,10 @@ describe("ChatInterface - Status Indicator", () => {
 
     renderChatInterfaceWithRouter();
 
-    const chip = screen.getByTestId("live-activity-chip");
-    expect(chip).toHaveTextContent("ACTION_MESSAGE$RUN");
-    expect(chip.parentElement).toHaveClass("inset-x-9");
+    expect(screen.queryByTestId("live-activity-chip")).not.toBeInTheDocument();
+    const live = screen.getByTestId("event-group-toggle");
+    expect(live).toHaveTextContent("ACTION_MESSAGE$RUN");
+    expect(live.querySelector('[data-testid="spinner-icon"]')).not.toBeNull();
   });
 
   it("hides the live activity chip when the agent is no longer running", () => {
@@ -1392,4 +1580,683 @@ describe("ChatInterface - Build plan keyboard shortcut", () => {
 
     expect(sentBuildPrompt()).toBe(false);
   });
+});
+
+describe("ChatInterface - initial attachment recovery", () => {
+  it("captures the submitted draft before an attachment upload yields to a newer edit", async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    useConversationStore.getState().resetConversationState();
+    useConversationStore.getState().clearMessageToSend();
+    useConversationStore.getState().clearAllFiles();
+    useErrorMessageStore.getState().removeErrorMessage();
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+    useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
+    const file = new File(["notes"], "notes.txt");
+    useConversationStore.getState().addFiles([file]);
+    let finishUpload!: (result: {
+      skipped_files: [];
+      uploaded_files: string[];
+    }) => void;
+    const upload = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finishUpload = resolve;
+        }),
+    );
+    vi.mocked(useUnifiedUploadFiles).mockReturnValue({
+      mutateAsync: upload,
+      isLoading: false,
+    } as never);
+    vi.mocked(useConfig).mockReturnValue({ data: {} } as never);
+    mockSend.mockReset().mockResolvedValue({ queued: false });
+    setConversationState("test-conversation-id", {
+      draftMessage: "Read my notes",
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const page = renderWithQueryClient(<ChatInterface />, queryClient);
+    const input = screen.getByTestId("chat-input");
+    Object.defineProperty(input, "innerText", {
+      configurable: true,
+      get() {
+        return this.textContent ?? "";
+      },
+    });
+    input.textContent = "Read my notes";
+    fireEvent.input(input);
+    const submittedRevision = getConversationDraftRevision(
+      "test-conversation-id",
+    );
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(upload).toHaveBeenCalledOnce());
+
+    // The same text typed again while upload is in flight is a different draft.
+    input.textContent = "Read my notes";
+    fireEvent.input(input);
+    expect(getConversationDraftRevision("test-conversation-id")).not.toBe(
+      submittedRevision,
+    );
+    await act(async () =>
+      finishUpload({ skipped_files: [], uploaded_files: [file.name] }),
+    );
+    await waitFor(() => expect(mockSend).toHaveBeenCalledOnce());
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages[0].draftRevision,
+    ).toBe(submittedRevision);
+    page.unmount();
+    queryClient.clear();
+  });
+
+  it("keeps a second failed upload unsent and clears the error after a successful retry", async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    useConversationStore.getState().resetConversationState();
+    useConversationStore.getState().clearMessageToSend();
+    const file = new File(["notes"], "notes.txt");
+    const upload = vi
+      .fn()
+      .mockResolvedValueOnce({
+        skipped_files: [{ name: file.name, reason: "Interrupted" }],
+        uploaded_files: [],
+      })
+      .mockResolvedValueOnce({
+        skipped_files: [],
+        uploaded_files: [file.name],
+      });
+    vi.mocked(useUnifiedUploadFiles).mockReturnValue({
+      mutateAsync: upload,
+      isLoading: false,
+    } as never);
+    vi.mocked(useConfig).mockReturnValue({ data: {} } as never);
+    mockSend.mockReset();
+    mockSend.mockResolvedValue({ queued: false });
+    useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+    useConversationStore.getState().clearAllFiles();
+    useConversationStore.getState().addFiles([file]);
+    useErrorMessageStore
+      .getState()
+      .setErrorMessage(
+        "Upload failed",
+        "conversation",
+        "StartupAttachmentUploadFailed",
+      );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const page = renderWithQueryClient(<ChatInterface />, queryClient);
+    const input = screen.getByTestId("chat-input");
+    Object.defineProperty(input, "innerText", {
+      configurable: true,
+      get() {
+        return this.textContent ?? "";
+      },
+    });
+    input.textContent = "Read my notes";
+    fireEvent.input(input);
+    await waitFor(() =>
+      expect(getConversationState("test-conversation-id").draftMessage).toBe(
+        "Read my notes",
+      ),
+    );
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(useConversationStore.getState().files).toEqual([file]),
+    );
+    expect(mockSend).not.toHaveBeenCalled();
+    await waitFor(() => expect(input).toHaveTextContent("Read my notes"));
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(mockSend).toHaveBeenCalledTimes(1));
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    page.unmount();
+    queryClient.clear();
+  });
+});
+
+describe("ChatInterface - recovery visibility", () => {
+  beforeEach(() => {
+    (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: {},
+    });
+    (
+      useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
+    ).mockReturnValue({ mutateAsync: vi.fn(), isLoading: false });
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [],
+      active_profile: null,
+    } as Awaited<ReturnType<typeof ProfilesService.listProfiles>>);
+    useConversationStore.setState({ conversationMode: "code" });
+    useErrorMessageStore.getState().removeErrorMessage();
+    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    vi.spyOn(conversationWebSocket, "useConversationWebSocket").mockReturnValue(
+      {
+        connectionState: "CLOSED",
+        mainConnectionState: "CLOSED",
+        recoveryState: "retryable",
+        sendMessage: vi.fn().mockResolvedValue({ queued: false }),
+        isLoadingHistory: false,
+        isHistoryReady: false,
+        reconnect: vi.fn(),
+        hasConnectedOnce: true,
+      },
+    );
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    AgentState.AWAITING_USER_INPUT,
+    AgentState.PAUSED,
+    AgentState.FINISHED,
+    AgentState.LOADING,
+  ])("keeps recovery silent when the selected agent is %s", (state) => {
+    vi.mocked(useAgentState).mockReturnValue({ curAgentState: state });
+    renderChatInterfaceWithRouter();
+    expect(
+      screen.queryByText(I18nKey.CHAT_INTERFACE$STILL_RECONNECTING),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows delayed feedback while running and clears it when work finishes", () => {
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.RUNNING,
+    });
+    const view = renderChatInterfaceWithRouter();
+    expect(
+      screen.getByText(I18nKey.CHAT_INTERFACE$STILL_RECONNECTING),
+    ).toBeVisible();
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.FINISHED,
+    });
+    view.rerender(
+      <MemoryRouter>
+        <ChatInterface />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.queryByText(I18nKey.CHAT_INTERFACE$STILL_RECONNECTING),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses the planner's activity instead of the main agent in plan mode", () => {
+    useConversationStore.setState({ conversationMode: "plan" });
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.RUNNING,
+    });
+    const socket = conversationWebSocket.useConversationWebSocket()!;
+    vi.mocked(conversationWebSocket.useConversationWebSocket).mockReturnValue({
+      ...socket,
+      recoveryConversationId: "planner",
+    });
+    vi.mocked(useAgentState).mockImplementation((id) => ({
+      curAgentState:
+        id === "planner" ? AgentState.AWAITING_USER_INPUT : AgentState.RUNNING,
+    }));
+    const view = renderChatInterfaceWithRouter();
+    expect(
+      screen.queryByText(I18nKey.CHAT_INTERFACE$STILL_RECONNECTING),
+    ).not.toBeInTheDocument();
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.RUNNING,
+    });
+    view.rerender(
+      <MemoryRouter>
+        <ChatInterface />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByText(I18nKey.CHAT_INTERFACE$STILL_RECONNECTING),
+    ).toBeVisible();
+  });
+});
+
+describe("ChatInterface - session connection handoff", () => {
+  beforeEach(() => {
+    vi.mocked(useConfig).mockReturnValue({ data: {} } as ReturnType<
+      typeof useConfig
+    >);
+    vi.mocked(useUnifiedUploadFiles).mockReturnValue({
+      mutateAsync: vi.fn(),
+    } as unknown as ReturnType<typeof useUnifiedUploadFiles>);
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.RUNNING,
+    });
+    useSessionActivityStore.setState({ entries: {} });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+    useErrorMessageStore.getState().removeErrorMessage();
+    useEventStore.setState({
+      events: [],
+      uiEvents: [],
+      eventIds: new Set(),
+      loadedConversationId: "test-conversation-id",
+    });
+  });
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    useSessionActivityStore.setState({ entries: {} });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+  });
+
+  describe("failed REST history recovery", () => {
+    // Keep the real socket hook, provider, and history query in the path. Only
+    // the browser transport and EventService responses are controlled here.
+    class HistoryWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSED = 3;
+      static instances: HistoryWebSocket[] = [];
+
+      readyState = HistoryWebSocket.CONNECTING;
+      onopen: ((event: Event) => void) | null = null;
+      onmessage: ((event: globalThis.MessageEvent) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      send = vi.fn();
+
+      constructor(readonly url: string) {
+        HistoryWebSocket.instances.push(this);
+      }
+
+      open() {
+        this.readyState = HistoryWebSocket.OPEN;
+        this.onopen?.(new Event("open"));
+      }
+
+      receive(frame: unknown) {
+        this.onmessage?.(
+          new window.MessageEvent("message", { data: JSON.stringify(frame) }),
+        );
+      }
+
+      close(code = 1000) {
+        this.readyState = HistoryWebSocket.CLOSED;
+        this.onclose?.(new CloseEvent("close", { code }));
+      }
+    }
+
+    let queryClient: QueryClient;
+    let originalWebSocket: typeof WebSocket;
+
+    beforeEach(() => {
+      HistoryWebSocket.instances = [];
+      originalWebSocket = globalThis.WebSocket;
+      vi.stubGlobal("WebSocket", HistoryWebSocket);
+      queryClient = new QueryClient({
+        defaultOptions: { queries: { retryDelay: 0 } },
+      });
+    });
+
+    afterEach(() => {
+      cleanup();
+      queryClient.clear();
+      globalThis.WebSocket = originalWebSocket;
+    });
+
+    const renderFailedHistory = async (
+      eventCount: number,
+      hasSession = true,
+    ) => {
+      const conversationId = "test-conversation-id";
+      const conversationUrl = `http://localhost:8000/api/conversations/${conversationId}`;
+      const { backend, orgId } = getActiveBackend();
+      if (hasSession) {
+        const key = sessionActivityKey(backend.id, orgId, conversationId);
+        const activity = useSessionActivityStore.getState();
+        activity.begin(key, "initialize");
+        activity.observe(key, "READY");
+        activity.complete(
+          key,
+          useSessionActivityStore.getState().entries[key][0].id,
+        );
+      }
+      vi.spyOn(EventService, "getEventCount").mockResolvedValue(eventCount);
+      const search = vi
+        .spyOn(EventService, "searchEvents")
+        .mockRejectedValue(new Error("HTTP 502"));
+      queryClient.setQueryData(
+        ["user", "conversation", conversationId, backend.id, orgId],
+        {
+          id: conversationId,
+          sandbox_status: null,
+          conversation_url: conversationUrl,
+          session_api_key: null,
+          sub_conversation_ids: [],
+        },
+      );
+      renderWithProviders(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <conversationWebSocket.ConversationWebSocketProvider
+              conversationId={conversationId}
+              conversationUrl={conversationUrl}
+            >
+              <ChatInterface />
+            </conversationWebSocket.ConversationWebSocketProvider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => expect(HistoryWebSocket.instances).toHaveLength(1));
+      // Exhausting the real query's retry opens the supported full-log fallback.
+      expect(search).toHaveBeenCalledTimes(2);
+      const socket = HistoryWebSocket.instances[0];
+      expect(new URL(socket.url).searchParams.get("after_seq")).toBe("-1");
+      return socket;
+    };
+
+    const savedMessage: MessageEvent = {
+      id: "saved-user-message",
+      timestamp: "2026-11-05T10:00:00Z",
+      source: "user",
+      llm_message: {
+        role: "user",
+        content: [{ type: "text", text: "Saved conversation history" }],
+      },
+      activated_skills: [],
+      extended_content: [],
+    };
+
+    it.each([
+      { tab: "originating", hasSession: true },
+      { tab: "another", hasSession: false },
+    ])(
+      "keeps suggestions hidden while saved history replays in the $tab tab",
+      async ({ hasSession }) => {
+        const socket = await renderFailedHistory(1, hasSession);
+
+        act(() => socket.open());
+        expect
+          .soft(screen.queryByTestId("chat-suggestions"))
+          .not.toBeInTheDocument();
+        act(() =>
+          socket.receive({ type: "sync", from_seq: -1, through_seq: 0 }),
+        );
+        expect
+          .soft(screen.queryByTestId("chat-suggestions"))
+          .not.toBeInTheDocument();
+        act(() =>
+          socket.receive({ type: "durable", seq: 0, event: savedMessage }),
+        );
+
+        expect(
+          await screen.findByText("Saved conversation history"),
+        ).toBeVisible();
+        expect(
+          screen.queryByTestId("chat-suggestions"),
+        ).not.toBeInTheDocument();
+      },
+    );
+
+    it("shows a truly empty fallback after sync and waits for replay again on reconnect", async () => {
+      const socket = await renderFailedHistory(0);
+
+      act(() => socket.open());
+      expect
+        .soft(screen.queryByTestId("chat-suggestions"))
+        .not.toBeInTheDocument();
+      act(() =>
+        socket.receive({ type: "sync", from_seq: -1, through_seq: null }),
+      );
+      expect(screen.getByTestId("chat-suggestions")).toBeInTheDocument();
+
+      // The conversation can gain history while disconnected. A previous empty
+      // sync must not let a new transport OPEN bypass this connection's replay.
+      act(() => socket.close(1006));
+      await waitFor(() => expect(HistoryWebSocket.instances).toHaveLength(2), {
+        timeout: 2000,
+      });
+      const reconnected = HistoryWebSocket.instances[1];
+      act(() => reconnected.open());
+      expect
+        .soft(screen.queryByTestId("chat-suggestions"))
+        .not.toBeInTheDocument();
+      act(() =>
+        reconnected.receive({ type: "sync", from_seq: -1, through_seq: 0 }),
+      );
+      expect
+        .soft(screen.queryByTestId("chat-suggestions"))
+        .not.toBeInTheDocument();
+      act(() =>
+        reconnected.receive({ type: "durable", seq: 0, event: savedMessage }),
+      );
+
+      expect(
+        await screen.findByText("Saved conversation history"),
+      ).toBeVisible();
+      expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
+    });
+  });
+
+  it("does not flash empty-chat suggestions while reconnecting saved session history", () => {
+    const { backend, orgId } = getActiveBackend();
+    const key = sessionActivityKey(backend.id, orgId, "test-conversation-id");
+    const activity = useSessionActivityStore.getState();
+    activity.begin(key, "initialize");
+    activity.observe(key, "READY");
+    activity.complete(
+      key,
+      useSessionActivityStore.getState().entries[key][0].id,
+    );
+    vi.spyOn(conversationWebSocket, "useConversationWebSocket").mockReturnValue(
+      {
+        connectionState: "CONNECTING",
+        mainConnectionState: "CONNECTING",
+        recoveryState: "idle",
+        isLoadingHistory: false,
+        isHistoryReady: false,
+        hasConnectedOnce: false,
+        sendMessage: vi.fn(),
+        reconnect: vi.fn(),
+      },
+    );
+    renderWithProviders(
+      <MemoryRouter>
+        <ChatInterface />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
+    expect(screen.getByTestId("event-group-toggle")).toBeVisible();
+  });
+
+  it("shows empty-chat suggestions once a started session is connected with no history", () => {
+    const { backend, orgId } = getActiveBackend();
+    const key = sessionActivityKey(backend.id, orgId, "test-conversation-id");
+    const activity = useSessionActivityStore.getState();
+    activity.begin(key, "initialize");
+    activity.observe(key, "READY");
+    activity.complete(
+      key,
+      useSessionActivityStore.getState().entries[key][0].id,
+    );
+    vi.spyOn(conversationWebSocket, "useConversationWebSocket").mockReturnValue(
+      {
+        connectionState: "OPEN",
+        mainConnectionState: "OPEN",
+        recoveryState: "idle",
+        isLoadingHistory: false,
+        isHistoryReady: true,
+        hasConnectedOnce: true,
+        sendMessage: vi.fn(),
+        reconnect: vi.fn(),
+      },
+    );
+    renderWithProviders(
+      <MemoryRouter>
+        <ChatInterface />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("chat-suggestions")).toBeInTheDocument();
+    expect(screen.getByTestId("event-group-toggle")).toBeVisible();
+  });
+
+  it("keeps empty-chat suggestions hidden while a started session is still pending", () => {
+    const { backend, orgId } = getActiveBackend();
+    const key = sessionActivityKey(backend.id, orgId, "test-conversation-id");
+    const activity = useSessionActivityStore.getState();
+    activity.begin(key, "initialize");
+    vi.spyOn(conversationWebSocket, "useConversationWebSocket").mockReturnValue(
+      {
+        connectionState: "OPEN",
+        mainConnectionState: "OPEN",
+        recoveryState: "idle",
+        isLoadingHistory: false,
+        isHistoryReady: true,
+        hasConnectedOnce: true,
+        sendMessage: vi.fn(),
+        reconnect: vi.fn(),
+      },
+    );
+    renderWithProviders(
+      <MemoryRouter>
+        <ChatInterface />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
+  });
+
+  it.each(["initialize", "resume"] as const)(
+    "keeps %s, connecting and message delivery in one group",
+    (kind) => {
+      const conversationId = "test-conversation-id";
+      const { backend, orgId } = getActiveBackend();
+      const key = sessionActivityKey(backend.id, orgId, conversationId);
+      const history: MessageEvent[] =
+        kind === "resume"
+          ? [
+              {
+                id: "previous-reply",
+                timestamp: "2026-10-01T00:00:00Z",
+                source: "agent",
+                llm_message: {
+                  role: "assistant",
+                  content: [{ type: "text", text: "Previous answer" }],
+                },
+                activated_skills: [],
+                extended_content: [],
+              },
+            ]
+          : [];
+      useEventStore.setState({
+        events: history,
+        uiEvents: history,
+        eventIds: new Set(history.map((e) => e.id)),
+      });
+      vi.mocked(useLoadOlderEvents).mockReturnValue({
+        isLoading: false,
+        hasMore: true,
+        loadOlder: vi.fn().mockResolvedValue(undefined),
+      });
+      const activity = useSessionActivityStore.getState();
+      activity.begin(key, kind, history.at(-1)?.id);
+      activity.observe(key, "READY");
+      const pending = useOptimisticUserMessageStore.getState();
+      pending.enqueuePendingMessage({
+        conversationId,
+        text: "Please continue",
+      });
+      const socket = {
+        connectionState: "CONNECTING" as "CONNECTING" | "OPEN",
+        mainConnectionState: "CONNECTING" as "CONNECTING" | "OPEN",
+        recoveryState: "idle" as const,
+        isLoadingHistory: false,
+        isHistoryReady: false,
+        sendMessage: vi.fn(),
+        reconnect: vi.fn(),
+        hasConnectedOnce: false,
+      };
+      vi.spyOn(
+        conversationWebSocket,
+        "useConversationWebSocket",
+      ).mockImplementation(() => socket);
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+      });
+      client.setQueryData(
+        ["user", "conversation", conversationId, backend.id, orgId],
+        { id: conversationId, sandbox_status: "RUNNING" },
+      );
+      const view = () => (
+        <QueryClientProvider client={client}>
+          <MemoryRouter>
+            <ChatInterface />
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+      const page = renderWithProviders(view());
+      const header = screen.getByTestId("event-group-toggle");
+      expect(
+        screen.queryByTestId("chat-message-sending"),
+      ).not.toBeInTheDocument();
+      expect(header).not.toHaveTextContent(I18nKey.ACTION_MESSAGE$THINK);
+      expect(screen.getAllByRole("status")).toHaveLength(1);
+      expect(
+        within(screen.getByTestId("chat-scroll-container")).queryByText(
+          I18nKey.CHAT_INTERFACE$CONNECTING,
+        ),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("user-message").compareDocumentPosition(header) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      fireEvent.click(header);
+      expect(header).toHaveAttribute("aria-expanded", "true");
+
+      socket.connectionState = socket.mainConnectionState = "OPEN";
+      socket.isHistoryReady = true;
+      page.rerender(view());
+      expect(
+        screen.queryByTestId("chat-message-sending"),
+      ).not.toBeInTheDocument();
+      expect(header).not.toHaveTextContent(I18nKey.ACTION_MESSAGE$THINK);
+      const echo: MessageEvent = {
+        id: "echo",
+        timestamp: new Date().toISOString(),
+        source: "user",
+        llm_message: {
+          role: "user",
+          content: [{ type: "text", text: "Please continue" }],
+        },
+        activated_skills: [],
+        extended_content: [],
+      };
+      vi.mocked(useLoadOlderEvents).mockReturnValue({
+        isLoading: false,
+        hasMore: false,
+        loadOlder: vi.fn().mockResolvedValue(undefined),
+      });
+      act(() => {
+        pending.consumeMatchingPendingMessage(
+          conversationId,
+          "Please continue",
+          echo,
+        );
+        useEventStore.setState({
+          events: [...history, echo],
+          uiEvents: [...history, echo],
+          eventIds: new Set([...history, echo].map((e) => e.id)),
+        });
+      });
+      expect(screen.getByTestId("event-group-toggle")).toBe(header);
+      expect(header).toHaveAttribute("aria-expanded", "true");
+      expect(header).toHaveTextContent(I18nKey.ACTION_MESSAGE$THINK);
+      expect(screen.getAllByTestId("user-message")).toHaveLength(1);
+      expect(
+        screen.getByTestId("user-message").compareDocumentPosition(header) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      act(() => {
+        pending.enqueuePendingMessage({
+          conversationId,
+          text: "Another message",
+        });
+      });
+      expect(screen.getByTestId("chat-message-sending")).toBeVisible();
+    },
+  );
 });
