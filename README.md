@@ -115,7 +115,7 @@ docker run -it --rm \
   -e AGENT_CANVAS_ALLOW_LAN_SESSION_KEY=true \
   -v openhands-state:/home/openhands/.openhands \
   -v "${PROJECTS_PATH}:/projects" \
-  ghcr.io/openhands/agent-canvas:1.39.0 # x-release-please-version
+  ghcr.io/openhands/agent-canvas:1.40.0 # x-release-please-version
 ```
 
 Open [http://localhost:8000/canvas](http://localhost:8000/canvas). Reuse

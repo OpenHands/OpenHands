@@ -14,6 +14,7 @@ import { useDebounce } from "#/hooks/use-debounce";
 import { cn } from "#/utils/utils";
 import { formControlFieldClassName } from "#/utils/form-control-classes";
 import { useBranchData } from "#/hooks/query/use-branch-data";
+import { useRepositoryDefaultBranch } from "#/hooks/query/use-repository-default-branch";
 
 import { ClearButton } from "../shared/clear-button";
 import { ToggleButton } from "../shared/toggle-button";
@@ -55,6 +56,15 @@ export function GitBranchDropdown({
     [debouncedInputValue],
   );
 
+  // Repository lists leave the default branch empty for some providers
+  // (e.g. Bitbucket Data Center), so look it up for the selected repository.
+  const { data: fetchedDefaultBranch } = useRepositoryDefaultBranch(
+    repository,
+    provider,
+    !defaultBranch,
+  );
+  const resolvedDefaultBranch = defaultBranch || fetchedDefaultBranch || null;
+
   // Use the new branch data hook with default branch prioritization
   const {
     branches: filteredBranches,
@@ -67,7 +77,7 @@ export function GitBranchDropdown({
   } = useBranchData(
     repository,
     provider,
-    defaultBranch || null,
+    resolvedDefaultBranch,
     processedSearchInput,
     inputValue,
     selectedBranch,
@@ -145,14 +155,14 @@ export function GitBranchDropdown({
   useEffect(() => {
     if (
       repository &&
-      defaultBranch &&
+      resolvedDefaultBranch &&
       !selectedBranch &&
       !userManuallyCleared && // Don't auto-select if user manually cleared
       filteredBranches.length > 0 &&
       !isLoading
     ) {
       const defaultBranchObj = filteredBranches.find(
-        (branch) => branch.name === defaultBranch,
+        (branch) => branch.name === resolvedDefaultBranch,
       );
 
       if (defaultBranchObj) {
@@ -161,7 +171,7 @@ export function GitBranchDropdown({
     }
   }, [
     repository,
-    defaultBranch,
+    resolvedDefaultBranch,
     selectedBranch,
     userManuallyCleared,
     filteredBranches,
