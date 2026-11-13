@@ -1,9 +1,13 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import { compile } from "@tailwindcss/node";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { AgentServerUIRoot } from "#/components/providers/agent-server-ui-root";
+import type { TFunction } from "i18next";
+import { parse } from "postcss";
+import { CirclePlusCheckToggle } from "#/components/shared/buttons/circle-plus-check-toggle";
+import { buildSkillPills } from "#/components/features/skills/build-skill-pills";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 import { ALERT_TYPES } from "#/components/features/markdown/remark-github-alerts";
 import { AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES } from "#/styles/agent-server-ui-style-scope";
@@ -17,6 +21,15 @@ const stylesheet = readFileSync(resolvePath("src/tailwind.css"), "utf-8");
 const defaultWarningColor = stylesheet.match(
   /^\s*--oh-warning:\s*([^;]+);/m,
 )?.[1];
+let catalogPaints: Record<
+  "light" | "dark",
+  Array<{
+    ink: string;
+    background: string;
+    minimum: number;
+    name: string;
+  }>
+>;
 let alertColors: Array<{
   type: (typeof ALERT_TYPES)[number];
   title: string | undefined;
@@ -30,10 +43,31 @@ let alertColors: Array<{
 describe("color themes", () => {
   beforeAll(async () => {
     const { container, unmount } = render(
-      <MarkdownRenderer includeStandard>
-        {ALERT_TYPES.map((type) => `> [!${type}]\n> Alert body.`).join("\n\n")}
-      </MarkdownRenderer>,
+      <>
+        <CirclePlusCheckToggle
+          testId="catalog-toggle"
+          isSelected
+          onToggle={() => {}}
+        />
+        {buildSkillPills(
+          {
+            name: "manual-only",
+            type: "knowledge",
+            source: "user",
+            disable_model_invocation: true,
+          },
+          ((key: string) => key) as TFunction,
+        ).map(({ id, node }) => (
+          <div key={id}>{node}</div>
+        ))}
+        <MarkdownRenderer includeStandard>
+          {ALERT_TYPES.map((type) => `> [!${type}]\n> Alert body.`).join(
+            "\n\n",
+          )}
+        </MarkdownRenderer>
+      </>,
     );
+    fireEvent.pointerEnter(screen.getByTestId("catalog-toggle"));
     const compiler = await compile(stylesheet, {
       base: resolvePath("src"),
       onDependency: () => {},
@@ -82,6 +116,73 @@ describe("color themes", () => {
           Number(background?.match(/ ([\d.]+)%, transparent\)/)?.[1]) / 100,
       };
     });
+    const compiled = parse(css);
+    const toggle = screen.getByTestId("catalog-toggle");
+    const badge = screen.getByTestId(
+      "skill-disable-model-invocation-manual-only",
+    );
+    const readCatalogPaints = (dark: boolean) => {
+      const paint = (element: Element, property: string, hover = false) => {
+        const selectors = [...element.classList]
+          .filter((name) => dark || !name.startsWith("dark:"))
+          .filter((name) => hover || !name.includes("hover:"))
+          .map((name) => {
+            const darkSelector = name.startsWith("dark:") ? ":is(.dark *)" : "";
+            const hoverSelector = name.includes("hover:") ? ":hover" : "";
+            return `.${name}${darkSelector}${hoverSelector}`;
+          });
+        let result: string | undefined;
+        compiled.walkRules((rule) => {
+          const decoded = rule.selector.replace(
+            /\\([0-9a-f]{1,6})\s?|\\(.)/gi,
+            (_, hex, character) =>
+              hex ? String.fromCodePoint(parseInt(hex, 16)) : character,
+          );
+          if (!selectors.includes(decoded)) return;
+          rule.walkDecls(property, (decl) => {
+            result = decl.value;
+          });
+        });
+        if (!result)
+          throw new Error(
+            `Missing rendered ${property} for ${element.outerHTML}`,
+          );
+        return result;
+      };
+      const badgeInk = paint(badge, "color");
+      const badgeBackground = paint(badge, "background-color");
+      const dotInk = paint(badge.firstElementChild!, "background-color");
+      return [
+        {
+          name: "remove",
+          ink: paint(toggle, "color"),
+          background: paint(toggle, "background-color"),
+          minimum: 3,
+        },
+        {
+          name: "remove hover",
+          ink: paint(toggle, "color", true),
+          background: paint(toggle, "background-color", true),
+          minimum: 3,
+        },
+        {
+          name: "manual-only text",
+          ink: badgeInk,
+          background: badgeBackground,
+          minimum: 4.5,
+        },
+        {
+          name: "manual-only dot",
+          ink: dotInk === "currentcolor" ? badgeInk : dotInk,
+          background: badgeBackground,
+          minimum: 3,
+        },
+      ];
+    };
+    catalogPaints = {
+      light: readCatalogPaints(false),
+      dark: readCatalogPaints(true),
+    };
     unmount();
   });
 
@@ -143,12 +244,76 @@ describe("color themes", () => {
         (Math.max(ink, surface) + 0.05) / (Math.min(ink, surface) + 0.05);
       const modalSurface = luminance(resolve("--oh-color-base-secondary"));
 
+      // Resolve the paints emitted for real catalog consumers, then composite
+      // their translucent backgrounds against card, detail and overflow surfaces.
+      const paint = (value: string): { color: number[]; alpha: number } => {
+        const mix = /^color-mix\(in (oklab|srgb), (.+) ([\d.]+)%, (.+)\)$/.exec(
+          value,
+        );
+        if (mix) {
+          const foreground = paint(mix[2]);
+          const weight = Number(mix[3]) / 100;
+          if (mix[4] === "transparent") return { ...foreground, alpha: weight };
+          if (mix[1] === "srgb") {
+            const background = paint(mix[4]);
+            return {
+              color: foreground.color.map(
+                (channel, index) =>
+                  channel * weight + background.color[index] * (1 - weight),
+              ),
+              alpha: 1,
+            };
+          }
+        }
+        const token = /^var\((--[\w-]+)\)$/.exec(value);
+        if (token) return paint(resolve(token[1]));
+        const rgba = /^rgba?\(([^)]+)\)$/.exec(value);
+        if (rgba) {
+          const parts = rgba[1].split(/[,\s/]+/).map(Number);
+          return {
+            color: parts.slice(0, 3).map((channel) => channel / 255),
+            alpha: parts[3] ?? 1,
+          };
+        }
+        if (!/^#[0-9a-f]{6}$/i.test(value))
+          throw new Error(`Unsupported paint ${value}`);
+        return { color: channels(value), alpha: 1 };
+      };
+      for (const surfaceRole of [
+        "--oh-color-base-secondary",
+        "--oh-surface",
+        "--oh-color-base",
+      ]) {
+        const card = channels(resolve(surfaceRole));
+        for (const sample of catalogPaints[theme.appearance]) {
+          const background = paint(sample.background);
+          const surface = background.color.map(
+            (channel, index) =>
+              channel * background.alpha + card[index] * (1 - background.alpha),
+          );
+          const ink = paint(sample.ink);
+          expect(
+            contrast(luminance(ink.color), luminance(surface)),
+            sample.name,
+          ).toBeGreaterThanOrEqual(sample.minimum);
+        }
+      }
+
       for (const role of ["--oh-feedback-error", "--oh-feedback-success"]) {
         expect(
           contrast(luminance(resolve(role)), modalSurface),
           `${role} against the modal surface`,
         ).toBeGreaterThanOrEqual(4.5);
       }
+
+      // Confirmation dialog descriptions are small body text on the modal surface.
+      expect(
+        contrast(
+          luminance(resolve("--oh-modal-description-foreground")),
+          modalSurface,
+        ),
+        "--oh-modal-description-foreground against the modal surface",
+      ).toBeGreaterThanOrEqual(4.5);
 
       // Markdown links appear in chat, user bubbles, and file/plan previews.
       for (const surfaceRole of [
