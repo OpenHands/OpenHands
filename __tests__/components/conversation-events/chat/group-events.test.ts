@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   groupEvents,
   isGroupableEvent,
@@ -703,4 +703,100 @@ it("keeps image-only replies visible after their grouped reasoning", () => {
     reasoning: [{ text: "Inspecting the result" }],
   });
   expect(items[1]).toEqual({ kind: "single", event: reply, index: 0 });
+});
+
+it("keeps reasoning in order and deduplicates an action only within its group", () => {
+  const reasoningOnly: MessageEvent = {
+    ...makeUserMessage("reasoning-only"),
+    source: "agent",
+    llm_message: {
+      role: "assistant",
+      content: [],
+      reasoning_content: "First consider the approach",
+    },
+  };
+  const action = {
+    ...makeBashAction("command"),
+    reasoning_content: "Then inspect the workspace",
+  };
+  const observation = makeBashObservation("result", action.id);
+  const separator = makeUserMessage("next-turn");
+  const events = [reasoningOnly, action, observation, separator, observation];
+
+  const items = groupEvents(events, 1);
+
+  expect(items).toMatchObject([
+    {
+      kind: "group",
+      reasoning: [
+        { id: reasoningOnly.id, text: "First consider the approach", index: 0 },
+        { id: action.id, text: "Then inspect the workspace", index: 1 },
+      ],
+    },
+    { kind: "single", event: separator },
+    {
+      kind: "group",
+      reasoning: [
+        { id: action.id, text: "Then inspect the workspace", index: 4 },
+      ],
+    },
+  ]);
+});
+
+it("places an unanchored resume after UTC history without timezone suffixes", () => {
+  vi.stubEnv("TZ", "America/New_York");
+  try {
+    const events = [
+      {
+        ...makeUserMessage("first-user"),
+        timestamp: "2026-11-05T18:32:35.376752",
+      },
+      {
+        ...makeUserMessage("first-reply"),
+        source: "agent" as const,
+        timestamp: "2026-11-05T18:32:44.416381",
+      },
+      {
+        ...makeUserMessage("last-user"),
+        timestamp: "2026-11-05T18:38:51.913504",
+      },
+      {
+        ...makeUserMessage("last-reply"),
+        source: "agent" as const,
+        timestamp: "2026-11-05T18:39:10.417648",
+      },
+    ];
+    const initialize = {
+      id: "initialize",
+      kind: "initialize" as const,
+      startedAt: Date.parse("2026-11-05T18:32:35Z"),
+      phase: "complete" as const,
+      steps: [],
+      open: false,
+    };
+    const resume = {
+      ...initialize,
+      id: "resume",
+      kind: "resume" as const,
+      startedAt: Date.parse("2026-11-05T23:20:00Z"),
+    };
+    const items = groupEvents(events, 1, events, 1, [initialize, resume]);
+    const order = items.map((item) =>
+      item.kind === "group"
+        ? item.session?.id
+        : item.kind === "single"
+          ? item.event.id
+          : item.action.id,
+    );
+    expect(order).toEqual([
+      "first-user",
+      "initialize",
+      "first-reply",
+      "last-user",
+      "last-reply",
+      "resume",
+    ]);
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });

@@ -1,0 +1,29 @@
+---
+name: PR Artifacts tests
+
+on:
+    pull_request:
+        paths:
+            - .github/workflows/pr-artifacts.yml
+            - .github/workflows/pr-artifacts-tests.yml
+            - .github/scripts/tests/pr-artifacts.cjs
+    push:
+        branches: [main]
+        paths:
+            - .github/workflows/pr-artifacts.yml
+            - .github/workflows/pr-artifacts-tests.yml
+            - .github/scripts/tests/pr-artifacts.cjs
+
+permissions:
+    contents: read
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+            - uses: actions/checkout@v7
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: '24'
+            - run: node --test .github/scripts/tests/pr-artifacts.cjs

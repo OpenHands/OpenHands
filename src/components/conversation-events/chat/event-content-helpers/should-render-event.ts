@@ -44,21 +44,28 @@ const isGoalLoopReprompt = (event: MessageEvent): boolean => {
   return GOAL_REPROMPT_PREFIXES.some((prefix) => text.startsWith(prefix));
 };
 
-// SDK steering messages injected as `environment` user turns: the
-// empty-response nudge (`_send_corrective_nudge`) and the feedback a blocked
-// Stop hook sends back (`ACP_STOP_HOOK_FEEDBACK_PREFIX`); keep in sync with
-// the SDK.
-const CORRECTIVE_NUDGE_PREFIXES = [
-  "Your last response did not include a function call or a message.",
-  "[Stop hook feedback]",
-];
+// SDK empty-response nudge (`_send_corrective_nudge`); keep in sync with the SDK.
+const CORRECTIVE_NUDGE_PREFIX =
+  "Your last response did not include a function call or a message.";
 
-export const isCorrectiveNudge = (event: MessageEvent): boolean => {
-  if (event.source !== "environment") return false;
-  const text = userMessageText(event);
-  if (text === null) return false;
-  return CORRECTIVE_NUDGE_PREFIXES.some((prefix) => text.startsWith(prefix));
-};
+const environmentMessageStartsWith = (
+  event: MessageEvent,
+  prefix: string,
+): boolean =>
+  event.source === "environment" &&
+  (userMessageText(event)?.startsWith(prefix) ?? false);
+
+export const isCorrectiveNudge = (event: MessageEvent): boolean =>
+  environmentMessageStartsWith(event, CORRECTIVE_NUDGE_PREFIX);
+
+// Feedback a blocked Stop hook sends back to the agent
+// (`ACP_STOP_HOOK_FEEDBACK_PREFIX` in the SDK; keep in sync). The hook's own
+// row already shows it as the blocked reason or context, so the message does
+// not repeat it in the chat.
+const STOP_HOOK_FEEDBACK_PREFIX = "[Stop hook feedback]";
+
+const isStopHookFeedback = (event: MessageEvent): boolean =>
+  environmentMessageStartsWith(event, STOP_HOOK_FEEDBACK_PREFIX);
 
 // The frontend posts the outcome of a `launch_child_conversation` or
 // `request_secret` call back as a `user` message because client tools have no
@@ -143,11 +150,15 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
 
   // Render message events (user and assistant messages), except the goal loop's
   // injected re-prompts — the judge feedback they carry is shown in the goal
-  // banner, so otherwise they leak into the chat as fake user turns — and the
+  // banner, so otherwise they leak into the chat as fake user turns — the
   // client tool results, which are machine payloads the agent relays in its
-  // own reply.
+  // own reply, and Stop hook feedback, which the hook row already shows.
   if (isMessageEvent(event)) {
-    return !isGoalLoopReprompt(event) && !isClientToolResult(event);
+    return (
+      !isGoalLoopReprompt(event) &&
+      !isClientToolResult(event) &&
+      !isStopHookFeedback(event)
+    );
   }
 
   // Render agent error events

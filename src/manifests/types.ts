@@ -203,6 +203,8 @@ export interface SetupEntry {
   id: string;
   name: string;
   description: string;
+  /** Mermaid source for a small diagram of what the automation does. */
+  diagram?: string;
   /**
    * Version of the template this entry publishes, sent with the create request
    * as provenance. A bundle declares its own at `setup.bundle.version`; a
@@ -489,7 +491,7 @@ export interface InterfaceOverview {
 export const DASHBOARD_FILTER_VALUES = {
   status: ["all", "active", "failing", "disabled"],
   trigger: ["all", "schedule", "event"],
-  created_by: ["all", "me", "others"],
+  created_by: ["all", "me", "others", "service"],
 } as const;
 
 export type DashboardFilterId = keyof typeof DASHBOARD_FILTER_VALUES;

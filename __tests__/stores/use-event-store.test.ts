@@ -143,6 +143,61 @@ describe("useEventStore", () => {
     ]);
   });
 
+  it("prepends tied history in server order without moving existing slots or duplicating rows", () => {
+    const timestamp = "2024-06-01T00:00:00Z";
+    const recent = { ...makeUserMessageEvent("recent", timestamp), seq: 10 };
+    const older = makeUserMessageEvent("older", timestamp);
+    const oldest = makeUserMessageEvent("oldest", timestamp);
+    const store = useEventStore.getState();
+    store.addEvents([recent], { nextPageId: "older-page", hasMore: true });
+    store.openStreamingSlot({
+      type: "item_started",
+      item_id: "stream",
+      anchor_seq: 10,
+    });
+    const slot = useEventStore.getState().uiEvents[1];
+    store.addEvents([oldest, older, { ...recent }], {
+      nextPageId: null,
+      hasMore: false,
+      prepend: true,
+    });
+    expect(useEventStore.getState().events).toEqual([oldest, older, recent]);
+    expect(useEventStore.getState().uiEvents).toEqual([
+      oldest,
+      older,
+      recent,
+      slot,
+    ]);
+    expect(useEventStore.getState().uiEvents[3]).toBe(slot);
+    store.addEvent(makeUserMessageEvent("live", timestamp));
+    expect(useEventStore.getState().uiEvents.map((event) => event.id)).toEqual([
+      "oldest",
+      "older",
+      "recent",
+      "stream",
+      "live",
+    ]);
+  });
+
+  it("refreshes the initial history frontier until backfill starts, independently of live or planner events", () => {
+    const store = useEventStore.getState();
+    const recent = makeUserMessageEvent("recent", "2024-06-01T00:00:00Z");
+    store.addEvents([recent], { nextPageId: null, hasMore: false });
+    store.addEvents([recent], { nextPageId: "refreshed-page", hasMore: true });
+    const pagination = useEventStore.getState().historyPagination;
+    expect(pagination).toMatchObject({
+      nextPageId: "refreshed-page",
+      hasMore: true,
+    });
+    store.addEvent({
+      ...makeUserMessageEvent("planner", recent.timestamp),
+      isFromPlanningAgent: true,
+    });
+    expect(useEventStore.getState().historyPagination).toBe(pagination);
+    store.clearEventsForConversation("another-conversation", "another-scope");
+    expect(useEventStore.getState().historyPagination).toBeNull();
+  });
+
   it("should de-duplicate events on bulk add", () => {
     const { result } = renderHook(() => useEventStore());
 

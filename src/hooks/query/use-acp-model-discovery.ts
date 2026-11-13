@@ -6,7 +6,9 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 import { ACP_MODEL_DISCOVERY_QUERY_KEYS } from "#/hooks/query/query-keys";
 import {
+  toAcpEffortChoices,
   toAcpModelOptions,
+  type ACPEffortChoice,
   type ACPModelOption,
 } from "#/constants/acp-providers";
 import { useRememberedAcpModels } from "#/hooks/use-remembered-acp-models";
@@ -96,11 +98,27 @@ export function useAcpModelDiscovery(
     source = "remembered";
   }
 
+  const effortsByModel = useMemo(() => {
+    const byModel: Record<string, ACPEffortChoice[]> = {};
+    for (const [modelId, options] of Object.entries(
+      discovery?.efforts_by_model ?? {},
+    )) {
+      byModel[modelId] = toAcpEffortChoices(options);
+    }
+    return byModel;
+  }, [discovery]);
+  const defaultModelId = discovery?.current_model_id ?? null;
+
   return {
     discovery,
     models,
     source,
-    defaultModelId: discovery?.current_model_id ?? null,
+    defaultModelId,
+    /** The agent's own effort for ``defaultModelId``. */
+    defaultEffort: discovery?.current_effort ?? null,
+    /** Effort levels ``modelId`` (null: the agent's default model) offers. */
+    effortsFor: (modelId: string | null): ACPEffortChoice[] =>
+      effortsByModel[modelId ?? defaultModelId ?? ""] ?? [],
     isDiscovering: queryEnabled && query.isFetching && !query.data,
   };
 }

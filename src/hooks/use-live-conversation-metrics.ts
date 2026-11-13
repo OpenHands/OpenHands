@@ -4,35 +4,25 @@ import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useConversationMetrics } from "#/hooks/query/use-conversation-metrics";
 
 /**
- * Combined cost/token metrics for the active conversation.
- *
- * Prefers the live WebSocket metrics store, which updates in real time as
- * agent events stream in, and falls back to the REST snapshot
- * (`GET /api/conversations/{id}` stats, combined across all usage ids and
- * refreshed on a 30s interval by {@link useConversationMetrics}) before the
- * first stats arrive. The store is reset on conversation switch (see
- * `ConversationWebSocketProvider`), so its contents always belong to the
- * active conversation — preferring it cannot leak a previous
- * conversation's figures, and preferring REST would lag the display up to
- * a poll interval behind what the user just watched happen.
- *
- * Pass `enabled: false` to pause the REST polling while the consumer is
- * hidden (e.g. a closed modal).
+ * Cost/token metrics and budget for the active conversation.
+ * Prefers matching live WebSocket metrics, falling back to the REST snapshot
+ * when no stats have arrived or the latest stats belong to a planning child.
+ * Pass `enabled: false` to pause REST polling while the consumer is hidden.
  */
 export function useLiveConversationMetrics(
   enabled: boolean = true,
-): MetricsState {
+): Pick<MetricsState, "cost" | "usage"> & { maxBudget: number | null } {
   // Per-field selectors rather than a bare `useMetricsStore()`: subscribing to
   // the whole store re-runs this hook on any store write, including the action
   // identity, and matches how `useContextWindowUsage` reads the same store.
-  const storeCost = useMetricsStore((state) => state.cost);
-  const storeMaxBudgetPerTask = useMetricsStore(
-    (state) => state.max_budget_per_task,
+  const sourceConversationId = useMetricsStore(
+    (state) => state.sourceConversationId,
   );
+  const storeCost = useMetricsStore((state) => state.cost);
   const storeUsage = useMetricsStore((state) => state.usage);
   const { data: conversation } = useActiveConversation();
 
-  const { data: conversationMetrics } = useConversationMetrics(
+  const { data: conversationMetrics, maxBudget } = useConversationMetrics(
     conversation?.id,
     conversation?.conversation_url,
     conversation?.session_api_key,
@@ -40,12 +30,13 @@ export function useLiveConversationMetrics(
   );
 
   return useMemo(() => {
-    // Live store first: real-time and (post-reset) always the active
-    // conversation's data. Any non-null field counts as data.
-    if (storeCost !== null || storeUsage !== null) {
+    if (
+      sourceConversationId === conversation?.id &&
+      (storeCost !== null || storeUsage !== null)
+    ) {
       return {
         cost: storeCost,
-        max_budget_per_task: storeMaxBudgetPerTask,
+        maxBudget,
         usage: storeUsage,
       };
     }
@@ -53,7 +44,7 @@ export function useLiveConversationMetrics(
     if (conversationMetrics) {
       return {
         cost: conversationMetrics.accumulated_cost,
-        max_budget_per_task: conversationMetrics.max_budget_per_task,
+        maxBudget,
         usage: conversationMetrics.accumulated_token_usage
           ? {
               prompt_tokens:
@@ -78,8 +69,15 @@ export function useLiveConversationMetrics(
 
     return {
       cost: null,
-      max_budget_per_task: null,
+      maxBudget,
       usage: null,
     };
-  }, [conversationMetrics, storeCost, storeMaxBudgetPerTask, storeUsage]);
+  }, [
+    conversation?.id,
+    conversationMetrics,
+    maxBudget,
+    sourceConversationId,
+    storeCost,
+    storeUsage,
+  ]);
 }
