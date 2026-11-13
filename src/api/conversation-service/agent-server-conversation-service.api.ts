@@ -1,4 +1,5 @@
 import {
+  type ACPEffortOption,
   type ACPModelInfo,
   ConversationSortOrder,
   type ForkConversationRequest,
@@ -76,10 +77,17 @@ import {
   type WorkspaceMode,
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
-import { toAcpModelOptions } from "#/constants/acp-providers";
+import {
+  toAcpEffortChoices,
+  toAcpModelOptions,
+} from "#/constants/acp-providers";
 import { isPlannerConversationOf } from "#/utils/plan-file";
 import { buildAutomationSetupModeTags } from "#/utils/automation-draft-tags";
-import { AUTOMATION_FORM_UPDATE_CLIENT_TOOL } from "../automation-form-client-tool";
+import {
+  AUTOMATION_SETUP_SYSTEM_SUFFIX,
+  buildAutomationFormUpdateClientTool,
+} from "../automation-form-client-tool";
+import type { DeploymentCapabilities } from "#/manifests/types";
 import { CANVAS_UI_CLIENT_TOOL } from "../canvas-ui-client-tool";
 import { LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL } from "../launch-child-conversation-client-tool";
 import type {
@@ -126,6 +134,15 @@ function numberOrZero(value: unknown): number {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function normalizeAcpEfforts(value: unknown): ACPEffortOption[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) =>
+    isRecord(entry) && typeof entry.value === "string"
+      ? [{ value: entry.value, name: stringOrNull(entry.name) }]
+      : [],
+  );
 }
 
 function normalizeAcpModels(value: unknown): ACPModelInfo[] {
@@ -295,10 +312,23 @@ function normalizeLaunchedAgentProfile(
 }
 
 function normalizeAbsolutePath(path: string): string | null {
-  if (!path.startsWith("/")) return null;
+  const normalizedPath = path.replace(/\\/g, "/");
+
+  let root: string;
+  let remainder: string;
+
+  if (/^[A-Za-z]:\//.test(normalizedPath)) {
+    root = normalizedPath.slice(0, 3);
+    remainder = normalizedPath.slice(3);
+  } else if (normalizedPath.startsWith("/")) {
+    root = "/";
+    remainder = normalizedPath.slice(1);
+  } else {
+    return null;
+  }
 
   const segments: string[] = [];
-  for (const segment of path.split("/")) {
+  for (const segment of remainder.split("/")) {
     if (segment && segment !== ".") {
       if (segment === "..") {
         if (!segments.length) return null;
@@ -309,7 +339,7 @@ function normalizeAbsolutePath(path: string): string | null {
     }
   }
 
-  return `/${segments.join("/")}`;
+  return `${root}${segments.join("/")}`;
 }
 
 function requirePathInsideDirectory(path: string, directory: string): string {
@@ -339,6 +369,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     created_at: readTimestamp(item, "created_at", "createdAt"),
     updated_at: readTimestamp(item, "updated_at", "updatedAt"),
     execution_status: stringOrNull(item.execution_status),
+    max_budget_per_run: numberOrNull(item.max_budget_per_run),
     sandbox_status: stringOrNull(item.sandbox_status),
     runtime_info: normalizeRuntimeInfo(item.runtime_info),
     metrics: normalizeMetrics(item.metrics),
@@ -359,6 +390,8 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     current_model_id: stringOrNull(item.current_model_id),
     current_model_name: stringOrNull(item.current_model_name),
     available_models: normalizeAcpModels(item.available_models),
+    current_effort: stringOrNull(item.current_effort),
+    available_efforts: normalizeAcpEfforts(item.available_efforts),
   };
 }
 
@@ -445,6 +478,9 @@ export interface CreateConversationOptions {
   initialUserMsg?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
+  /** The automation service's capabilities, for the setup assistant's form tool. */
+  automationSetupCapabilities?: DeploymentCapabilities | null;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   metadata?: ConversationMetadata | null;
@@ -539,6 +575,8 @@ class AgentServerConversationService {
       initialUserMsg,
       automationSetup,
       automationSetupTags,
+      automationSetupContext,
+      automationSetupCapabilities,
       conversationInstructions,
       plugins,
       metadata,
@@ -576,7 +614,17 @@ class AgentServerConversationService {
         initial_message: initialUserMsg
           ? {
               role: "user",
-              content: [{ type: "text", text: initialUserMsg }],
+              content: [
+                {
+                  type: "text",
+                  text:
+                    automationSetup &&
+                    agentProfileKind === "acp" &&
+                    automationSetupContext
+                      ? `${initialUserMsg}\n\n${automationSetupContext}`
+                      : initialUserMsg,
+                },
+              ],
             }
           : null,
         title: conversationInstructions ?? null,
@@ -605,8 +653,16 @@ class AgentServerConversationService {
               client_tools: [
                 CANVAS_UI_CLIENT_TOOL,
                 LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
-                AUTOMATION_FORM_UPDATE_CLIENT_TOOL,
+                buildAutomationFormUpdateClientTool(
+                  automationSetupCapabilities,
+                ),
               ],
+              system_message_suffix: [
+                AUTOMATION_SETUP_SYSTEM_SUFFIX,
+                automationSetupContext,
+              ]
+                .filter(Boolean)
+                .join("\n\n"),
             }
           : {}),
       };
@@ -651,6 +707,8 @@ class AgentServerConversationService {
       query: initialUserMsg,
       automationSetup,
       automationSetupTags,
+      automationSetupContext,
+      automationSetupCapabilities,
       conversationInstructions,
       plugins,
       conversationId,
@@ -738,8 +796,7 @@ class AgentServerConversationService {
       agent_server_url: localBackend.host,
       request: {
         initial_message: payload.initial_message as
-          | AppConversationStartRequest["initial_message"]
-          | undefined,
+          AppConversationStartRequest["initial_message"] | undefined,
         plugins: plugins ?? null,
       },
       created_at: data.created_at,
@@ -1068,8 +1125,11 @@ class AgentServerConversationService {
       created_at: data.created_at,
       updated_at: data.updated_at,
       status: toRuntimeStatus(data.execution_status),
+      max_budget_per_run: data.max_budget_per_run,
       stats: data.stats ?? { usage_to_metrics: {} },
       available_models: toAcpModelOptions(data.available_models),
+      current_effort: data.current_effort ?? null,
+      available_efforts: toAcpEffortChoices(data.available_efforts),
     };
   }
 
@@ -1180,8 +1240,9 @@ class AgentServerConversationService {
    * agent-server PATCH is replace-all, so callers must merge user edits with
    * any reserved/internal keys before calling). Mirrors
    * `updateConversationTitle`; local agent-server conversations only — Cloud
-   * callers go through {@link updateConversationTagFlags}, which uses the
-   * app-server's merge patch instead.
+   * callers go through {@link updateConversationTagFlags} or
+   * {@link replaceConversationTags}, which use the app-server's merge patch
+   * instead.
    */
   static async updateConversationTags(
     conversationId: string,
@@ -1196,6 +1257,31 @@ class AgentServerConversationService {
       conversationId,
     ]);
     return requireAppConversation(conversation, conversationId);
+  }
+
+  /**
+   * Replaces the tag map `currentTags` with `nextTags` on either backend. The
+   * local agent-server receives `nextTags` (its PATCH is replace-all). The
+   * Cloud app-server's PATCH is a merge patch that rejects server-managed keys
+   * even when unchanged, so it receives only the keys that differ: their new
+   * value, or `null` for a key `nextTags` drops.
+   */
+  static async replaceConversationTags(
+    conversationId: string,
+    currentTags: Record<string, string> | null | undefined,
+    nextTags: Record<string, string>,
+  ): Promise<AppConversation> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      const patch: Record<string, string | null> = {};
+      for (const [key, value] of Object.entries(nextTags)) {
+        if (currentTags?.[key] !== value) patch[key] = value;
+      }
+      for (const key of Object.keys(currentTags ?? {})) {
+        if (!(key in nextTags)) patch[key] = null;
+      }
+      return updateCloudConversationTags(conversationId, patch);
+    }
+    return this.updateConversationTags(conversationId, nextTags);
   }
 
   /**
@@ -1380,6 +1466,31 @@ class AgentServerConversationService {
     await new ConversationClient(getAgentServerClientOptions()).switchAcpModel(
       conversationId,
       model,
+    );
+  }
+
+  /**
+   * Switch a started ACP conversation's reasoning effort live (or persist it
+   * for one not yet run). The ACP analog of {@link switchAcpModel}.
+   */
+  static async switchAcpEffort(
+    conversationId: string,
+    effort: string,
+  ): Promise<void> {
+    const { backend } = getActiveBackend();
+    if (backend.kind === "cloud") {
+      await callCloudProxy({
+        backend,
+        method: "POST",
+        path: `/api/v1/app-conversations/${conversationId}/switch_acp_effort`,
+        body: { effort },
+      });
+      return;
+    }
+
+    await new ConversationClient(getAgentServerClientOptions()).switchAcpEffort(
+      conversationId,
+      effort,
     );
   }
 }

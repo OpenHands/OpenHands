@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { isHookExecutionEvent } from "#/types/agent-server/type-guards";
 import { OpenHandsEvent } from "#/types/agent-server/core";
 import { GenericEventMessage } from "#/components/features/chat/generic-event-message";
+import { useStandaloneEventRowClass } from "#/components/features/chat/is-in-event-group-context";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 
@@ -34,6 +35,7 @@ export function HookExecutionEventMessage({
   event,
 }: HookExecutionEventMessageProps) {
   const { t } = useTranslation("openhands");
+  const standaloneRowClass = useStandaloneEventRowClass();
 
   if (!isHookExecutionEvent(event)) {
     return null;
@@ -131,6 +133,7 @@ export function HookExecutionEventMessage({
       title={title}
       details={details}
       success={successStatus}
+      className={standaloneRowClass}
     />
   );
 }

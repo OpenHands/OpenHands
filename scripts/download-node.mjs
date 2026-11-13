@@ -28,7 +28,7 @@
  *
  * Usage:
  *   node scripts/download-node.mjs                       # host arch → resources/node/
- *   NODE_VERSION=24.21.0 node scripts/download-node.mjs
+ *   NODE_VERSION=24.22.1 node scripts/download-node.mjs
  *   ELECTRON_ARCH=universal node scripts/download-node.mjs  # macOS only
  *
  * Output (per platform):
@@ -67,7 +67,7 @@ const projectRoot = join(__dirname, "..");
 
 // Keep the subprocess runtime aligned with the package.json Volta pin.
 // Override at build time with NODE_VERSION=… to test another release.
-const NODE_BUNDLE_VERSION = "24.21.0";
+const NODE_BUNDLE_VERSION = "24.22.1";
 
 // ── Platform detection ───────────────────────────────────────────────────────
 

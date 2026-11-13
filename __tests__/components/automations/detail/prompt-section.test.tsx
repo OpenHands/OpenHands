@@ -1,14 +1,15 @@
+import { RunStatusBadge } from "#/components/features/automations/detail/run-status-badge";
+import { AutomationRunStatus } from "#/types/automation";
 import { describe, expect, it } from "vitest";
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { I18nKey } from "#/i18n/declaration";
-import { PromptSection } from "#/components/features/automations/detail/prompt-section";
-import { RunStatusBadge } from "#/components/features/automations/detail/run-status-badge";
-import { AutomationRunStatus } from "#/types/automation";
 
-describe("PromptSection", () => {
+import { I18nKey } from "#/i18n/declaration";
+import { PromptBody } from "#/components/features/automations/detail/prompt-section";
+
+describe("PromptBody", () => {
   it("does not show a toggle for short prompts", () => {
-    render(<PromptSection prompt="Short prompt." />);
+    render(<PromptBody prompt="Short prompt." />);
 
     expect(screen.getByTestId("automation-prompt-content")).toHaveTextContent(
       "Short prompt.",
@@ -34,7 +35,7 @@ describe("PromptSection", () => {
       },
     });
 
-    render(<PromptSection prompt={longPrompt} />);
+    render(<PromptBody prompt={longPrompt} />);
 
     expect(screen.getByTestId("automation-prompt-fade")).toBeInTheDocument();
     expect(screen.getByTestId("automation-prompt-content")).toHaveClass(

@@ -15,11 +15,14 @@ import AgentServerConversationService, {
 } from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { mergeStoredConversationMetadata } from "#/api/conversation-metadata-store";
+import AutomationService from "#/api/automation-service/automation-service.api";
 import {
   AGENT_PROFILES_QUERY_KEYS,
   AGENT_PROFILES_RETRY_OPTIONS,
   LLM_PROFILES_QUERY_KEYS,
+  SETUP_QUERY_KEYS,
 } from "#/hooks/query/query-keys";
+import type { DeploymentCapabilities } from "#/manifests/types";
 import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
 import i18n from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
@@ -206,6 +209,27 @@ async function assertLaunchLlmReady(llmProfile: string): Promise<void> {
   await assertSubscriptionAuthReady({ llm: config });
 }
 
+/**
+ * What the automation service supports, for the setup assistant's form tool.
+ * Shares the setup form's query, so an answer it already holds is reused. A
+ * deployment that cannot be asked still gets its conversation.
+ */
+async function resolveAutomationSetupCapabilities({
+  queryClient,
+  backendId,
+  orgId,
+}: ResolveConversationLaunchOptions): Promise<DeploymentCapabilities | null> {
+  return queryClient
+    .ensureQueryData({
+      queryKey: [...SETUP_QUERY_KEYS.capabilities(), backendId, orgId],
+      queryFn: () => AutomationService.getCapabilities(),
+      retry: false,
+      staleTime: 1000 * 60 * 5,
+      meta: { disableToast: true },
+    })
+    .catch(() => null);
+}
+
 /** Create a conversation from the resolved launch and record the LLM it runs. */
 export async function launchConversation(
   { agentProfileId, llmProfile, ...context }: ResolveConversationLaunchOptions,
@@ -220,9 +244,16 @@ export async function launchConversation(
   if (!context.isCloud && launch.llmProfile) {
     await assertLaunchLlmReady(launch.llmProfile);
   }
+  const setupCapabilities = options.automationSetup
+    ? {
+        automationSetupCapabilities:
+          await resolveAutomationSetupCapabilities(context),
+      }
+    : {};
   assertActiveEnvironment(requestedEnvironment);
   const task = await AgentServerConversationService.createConversation({
     ...options,
+    ...setupCapabilities,
     ...launchProfileOptions(launch),
   });
   // The chat LLM picker names this profile even when several share a model

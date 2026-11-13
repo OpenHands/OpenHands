@@ -123,10 +123,12 @@ describe("automation-setup-draft-service", () => {
 
   const baseForm: AutomationSetupFormValues = {
     name: "",
+    runAsUserId: "",
     prompt: "",
     repository: "",
     pluginSource: "",
     pluginRef: "",
+    pluginConfig: "{}",
     pluginList: "",
     customCode: "",
     entrypoint: "",
@@ -150,11 +152,12 @@ describe("automation-setup-draft-service", () => {
   };
 
   describe("setupDraftFromServerDraft", () => {
-    it("hydrates all repositories and event keys from saved drafts", () => {
+    it("hydrates repositories, event keys, and run-as from saved drafts", () => {
       const saved = {
         ...baseSavedDraft,
         draft: {
           prompt: "Triage issues",
+          run_as_user_id: "sa-1",
           repos: [{ url: "acme/one" }, { url: "acme/two" }],
           trigger: {
             type: "event",
@@ -168,12 +171,14 @@ describe("automation-setup-draft-service", () => {
 
       expect(draft.form?.repository).toBe("acme/one, acme/two");
       expect(draft.form?.eventKey).toBe("pull_request,issues");
+      expect(draft.form?.runAsUserId).toBe("sa-1");
     });
 
-    it("updates an existing form with all repositories and event keys", () => {
+    it("updates an existing form with repositories, event keys, and run-as", () => {
       const saved = {
         ...baseSavedDraft,
         draft: {
+          run_as_user_id: "sa-2",
           repos: [{ url: "acme/one" }, { url: "acme/two" }],
           trigger: {
             type: "event",
@@ -183,128 +188,147 @@ describe("automation-setup-draft-service", () => {
         },
       } satisfies AutomationDraftApiResponse;
 
-      const form = formFromServerDraft(saved, baseForm);
+      const form = formFromServerDraft(saved, {
+        ...baseForm,
+        runAsUserId: "stale-selection",
+      });
 
       expect(form.repository).toBe("acme/one, acme/two");
       expect(form.eventKey).toBe("push,release.published");
+      expect(form.runAsUserId).toBe("sa-2");
     });
   });
 });
+function buildAutomation(overrides: Partial<Automation> = {}): Automation {
+  return {
+    id: "automation-1",
+    name: "Triage",
+    prompt: "Triage the issue.",
+    enabled: true,
+    trigger: { type: "event", on: "issue.updated", source: "linear" },
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
 
-describe("build-automation-pills", () => {
-  function buildAutomation(overrides: Partial<Automation> = {}): Automation {
-    return {
-      id: "automation-1",
-      name: "Triage",
-      prompt: "Triage the issue.",
-      enabled: true,
-      trigger: { type: "event", on: "issue.updated", source: "linear" },
-      created_at: "2026-01-01T00:00:00Z",
-      updated_at: "2026-01-01T00:00:00Z",
-      ...overrides,
-    };
-  }
+function renderPills(pills: SkillCardPill[]) {
+  render(
+    <div>
+      {pills.map((pill) => (
+        <span key={pill.id} data-testid={`pill-${pill.id}`}>
+          {pill.node}
+        </span>
+      ))}
+    </div>,
+  );
+}
 
-  function renderPills(pills: SkillCardPill[]) {
-    render(
-      <div>
-        {pills.map((pill) => (
-          <span key={pill.id} data-testid={`pill-${pill.id}`}>
-            {pill.node}
-          </span>
-        ))}
-      </div>,
+describe("buildAutomationMetadataPills", () => {
+  it("puts the event and source on separate pills", () => {
+    const pills = buildAutomationMetadataPills(buildAutomation(), "unused");
+
+    expect(pills.map((pill) => pill.id)).toEqual([
+      "event-trigger",
+      "event-source",
+    ]);
+
+    renderPills(pills);
+
+    expect(screen.getByTestId("pill-event-trigger")).toHaveTextContent(
+      "issue.updated",
     );
-  }
+    expect(screen.getByTestId("pill-event-trigger")).not.toHaveTextContent(
+      "linear",
+    );
+    expect(screen.getByTestId("pill-event-source")).toHaveTextContent("Linear");
+    expect(
+      screen.getByTestId("pill-event-source").firstElementChild,
+    ).toHaveClass("py-0.5");
+    expect(screen.getByTestId("automation-source-logo")).toBeInTheDocument();
+  });
 
-  describe("buildAutomationMetadataPills", () => {
-    it("puts the event and source on separate pills", () => {
-      const pills = buildAutomationMetadataPills(buildAutomation(), "unused");
-
-      expect(pills.map((pill) => pill.id)).toEqual([
-        "event-trigger",
-        "event-source",
-      ]);
-
-      renderPills(pills);
-
-      expect(screen.getByTestId("pill-event-trigger")).toHaveTextContent(
-        "issue.updated",
-      );
-      expect(screen.getByTestId("pill-event-trigger")).not.toHaveTextContent(
-        "linear",
-      );
-      expect(screen.getByTestId("pill-event-source")).toHaveTextContent(
-        "Linear",
-      );
-      expect(
-        screen.getByTestId("pill-event-source").firstElementChild,
-      ).toHaveClass("py-0.5");
-      expect(screen.getByTestId("automation-source-logo")).toBeInTheDocument();
-    });
-
-    it("renders a fallback icon when the source is not in the catalog", () => {
-      renderPills(
-        buildAutomationMetadataPills(
-          buildAutomation({
-            trigger: {
-              type: "event",
-              on: "alert.fired",
-              source: "custom-pager",
-            },
-          }),
-          "unused",
-        ),
-      );
-
-      expect(screen.getByTestId("pill-event-source")).toHaveTextContent(
-        "Custom-Pager",
-      );
-      expect(screen.getByTestId("automation-source-logo")).toBeInTheDocument();
-    });
-
-    it("shows each repository the automation clones, with its full address on hover", () => {
-      const pills = buildAutomationMetadataPills(
+  it("draws a Data Center event source with its product's logo", () => {
+    renderPills(
+      buildAutomationMetadataPills(
         buildAutomation({
-          trigger: { type: "cron", schedule: "0 9 * * *" },
-          repositories: [
-            { url: "acme/widgets", provider: "github" },
-            { url: "https://github.com/acme/docs" },
-            {
-              url: "https://bitbucket.example.com/scm/DEM/demo-app.git",
-              provider: "bitbucket_data_center",
-            },
-          ],
+          trigger: {
+            type: "event",
+            on: "pr:opened",
+            source: "bitbucket_data_center",
+          },
         }),
         "unused",
-      );
+      ),
+    );
 
-      renderPills(pills);
+    // The badge (not the generic plug) carries the catalog entry's name.
+    expect(screen.getByTestId("automation-source-logo")).toHaveAttribute(
+      "title",
+      "Bitbucket",
+    );
+    expect(screen.getByTestId("pill-event-source")).toHaveTextContent(
+      "Bitbucket Data Center",
+    );
+  });
 
-      expect(screen.getByTestId("pill-repository")).toHaveTextContent(
-        "acme/widgets",
-      );
-      expect(screen.getByTestId("pill-repository-1")).toHaveTextContent(
-        "acme/docs",
-      );
-      expect(
-        screen.getByTitle("https://github.com/acme/docs"),
-      ).toBeInTheDocument();
-      expect(screen.getByTestId("pill-repository-2").textContent).toBe(
-        "DEM/demo-app",
-      );
-    });
-
-    it("omits the source pill when the event has no source", () => {
-      const pills = buildAutomationMetadataPills(
+  it("renders a fallback icon when the source is not in the catalog", () => {
+    renderPills(
+      buildAutomationMetadataPills(
         buildAutomation({
-          trigger: { type: "event", on: "pull_request.opened" },
+          trigger: { type: "event", on: "alert.fired", source: "custom-pager" },
         }),
         "unused",
-      );
+      ),
+    );
 
-      expect(pills.map((pill) => pill.id)).toEqual(["event-trigger"]);
-    });
+    expect(screen.getByTestId("pill-event-source")).toHaveTextContent(
+      "Custom-Pager",
+    );
+    expect(screen.getByTestId("automation-source-logo")).toBeInTheDocument();
+  });
+
+  it("shows each repository the automation clones, with its full address on hover", () => {
+    const pills = buildAutomationMetadataPills(
+      buildAutomation({
+        trigger: { type: "cron", schedule: "0 9 * * *" },
+        repositories: [
+          { url: "acme/widgets", provider: "github" },
+          { url: "https://github.com/acme/docs" },
+          {
+            url: "https://bitbucket.example.com/scm/DEM/demo-app.git",
+            provider: "bitbucket_data_center",
+          },
+        ],
+      }),
+      "unused",
+    );
+
+    renderPills(pills);
+
+    expect(screen.getByTestId("pill-repository")).toHaveTextContent(
+      "acme/widgets",
+    );
+    expect(screen.getByTestId("pill-repository-1")).toHaveTextContent(
+      "acme/docs",
+    );
+    expect(
+      screen.getByTitle("https://github.com/acme/docs"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("pill-repository-2").textContent).toBe(
+      "DEM/demo-app",
+    );
+  });
+
+  it("omits the source pill when the event has no source", () => {
+    const pills = buildAutomationMetadataPills(
+      buildAutomation({
+        trigger: { type: "event", on: "pull_request.opened" },
+      }),
+      "unused",
+    );
+
+    expect(pills.map((pill) => pill.id)).toEqual(["event-trigger"]);
   });
 });
 

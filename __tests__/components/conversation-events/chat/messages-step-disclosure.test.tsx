@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Messages } from "#/components/conversation-events/chat/messages";
@@ -7,6 +7,7 @@ import {
   ACPToolCallEvent,
   ActionEvent,
   HookExecutionEvent,
+  MessageEvent,
   ObservationEvent,
   OpenHandsEvent,
   SecurityRisk,
@@ -14,6 +15,11 @@ import {
 import { ExecuteBashAction } from "#/types/agent-server/core/base/action";
 import { ExecuteBashObservation } from "#/types/agent-server/core/base/observation";
 import { createUserMessageEvent, renderWithProviders } from "test-utils";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
+import {
+  sessionActivityKey,
+  useSessionActivityStore,
+} from "#/stores/session-activity-store";
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({ data: {} }),
@@ -199,6 +205,54 @@ describe("Messages: opened steps and groups survive live updates", () => {
   });
 });
 
+describe("Messages: reasoning in a finished conversation", () => {
+  beforeEach(() => {
+    agent.state = AgentState.FINISHED;
+  });
+
+  it("reveals a reply's reasoning with one click on its Thinking group", async () => {
+    const user = userEvent.setup();
+    const reply: MessageEvent = {
+      id: "reply",
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      llm_message: {
+        role: "assistant",
+        content: [{ type: "text", text: "All done." }],
+        reasoning_content: "Checking the tests passed",
+      },
+      activated_skills: [],
+      extended_content: [],
+    };
+    renderChat([reply], [reply]);
+
+    await user.click(screen.getByTestId("event-group-toggle"));
+
+    expect(screen.getByText("Checking the tests passed")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("collapsible-thinking-toggle"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps an action's reasoning in its step's group, below its message", async () => {
+    const user = userEvent.setup();
+    const a1 = {
+      ...action("a1", "pwd"),
+      thought: [{ type: "text" as const, text: "Now the directory." }],
+      reasoning_content: "Need the working directory",
+    };
+    renderChat([observation(a1)], [a1, observation(a1)]);
+
+    await user.click(screen.getByTestId("event-group-toggle"));
+
+    const group = screen.getByTestId("event-group-content");
+    await user.click(within(group).getByTestId("collapsible-thinking-toggle"));
+    expect(
+      within(group).getByText("Need the working directory"),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("Messages: live status at the end of the chat", () => {
   beforeEach(() => {
     agent.state = AgentState.RUNNING;
@@ -269,10 +323,6 @@ it("preserves a failed ACP command's revealed output outside the group", async (
 });
 
 it("keeps commands collapsed in a pre-opened session until explicitly opened", async () => {
-  const { getActiveBackend } =
-    await import("#/api/backend-registry/active-store");
-  const { sessionActivityKey, useSessionActivityStore } =
-    await import("#/stores/session-activity-store");
   const { backend, orgId } = getActiveBackend();
   const key = sessionActivityKey(backend.id, orgId, "test-conversation-id");
   const store = useSessionActivityStore.getState();
@@ -307,6 +357,105 @@ it("keeps commands collapsed in a pre-opened session until explicitly opened", a
   await userEvent.click(header);
   expect(document.body.textContent).toContain("output of ls");
   act(() => useSessionActivityStore.setState({ entries: {} }));
+});
+
+describe("Messages: completed resumes in paginated history", () => {
+  beforeEach(() => {
+    agent.state = AgentState.AWAITING_USER_INPUT;
+  });
+
+  afterEach(() => {
+    act(() => useSessionActivityStore.setState({ entries: {} }));
+    vi.unstubAllEnvs();
+  });
+
+  const renderCompletedResume = (
+    timestamp: string,
+    startedAt: string,
+    afterEventId?: string,
+  ) => {
+    const { backend, orgId } = getActiveBackend();
+    const key = sessionActivityKey(backend.id, orgId, "test-conversation-id");
+    useSessionActivityStore.setState({
+      entries: {
+        [key]: [
+          {
+            id: "resume",
+            kind: "resume",
+            startedAt: Date.parse(startedAt),
+            afterEventId,
+            phase: "complete",
+            steps: [],
+            open: false,
+          },
+        ],
+      },
+    });
+    const message = { ...createUserMessageEvent("loaded-user"), timestamp };
+    renderWithProviders(
+      <Messages messages={[message]} allEvents={[message]} hasOlderEvents />,
+    );
+  };
+
+  it.each([
+    {
+      name: "shows a newer resume west of UTC with suffixless history",
+      zone: "America/New_York",
+      offset: 300,
+      timestamp: "2026-11-05T18:32:35.376752",
+      startedAt: "2026-11-05T23:20:00Z",
+      visible: true,
+    },
+    {
+      name: "hides an older resume east of UTC with suffixless history",
+      zone: "Asia/Seoul",
+      offset: -540,
+      timestamp: "2026-11-05T15:00:00.000000",
+      startedAt: "2026-11-05T10:00:00Z",
+      visible: false,
+    },
+    {
+      name: "includes the exact boundary with an explicit negative offset",
+      zone: "Asia/Seoul",
+      offset: -540,
+      timestamp: "2026-11-05T18:32:35.376-05:00",
+      startedAt: "2026-11-05T23:32:35.376Z",
+      visible: true,
+    },
+    {
+      name: "excludes one millisecond before an explicit positive offset",
+      zone: "America/New_York",
+      offset: 300,
+      timestamp: "2026-11-05T15:00:00.000+09:00",
+      startedAt: "2026-11-05T05:59:59.999Z",
+      visible: false,
+    },
+  ])("$name", ({ zone, offset, timestamp, startedAt, visible }) => {
+    vi.stubEnv("TZ", zone);
+    // Changing TZ must affect native Date parsing, not just process.env.
+    expect(new Date("2026-11-05T12:00:00Z").getTimezoneOffset()).toBe(offset);
+
+    renderCompletedResume(timestamp, startedAt);
+
+    const header = screen.queryByTestId("event-group-toggle");
+    if (visible) {
+      expect(header).toHaveTextContent("EVENT_GROUP$SESSION_RESUMED");
+    } else {
+      expect(header).not.toBeInTheDocument();
+    }
+  });
+
+  it("keeps a loaded event anchor authoritative over the timestamp boundary", () => {
+    renderCompletedResume(
+      "2026-11-05T12:00:00Z",
+      "2026-11-05T11:00:00Z",
+      "loaded-user",
+    );
+
+    expect(screen.getByTestId("event-group-toggle")).toHaveTextContent(
+      "EVENT_GROUP$SESSION_RESUMED",
+    );
+  });
 });
 
 it("keeps a single tool's timeout visible on its group heading", async () => {
@@ -447,4 +596,28 @@ it("opens a lone blocked hook directly and preserves it when another tool joins"
   expect(
     within(screen.getByTestId("event-group-content")).getByText(hook.reason!),
   ).toBeVisible();
+});
+
+describe("Messages: reasoning group identity", () => {
+  it("opens reasoning independently and removes it when history changes", async () => {
+    agent.state = AgentState.AWAITING_USER_INPUT;
+    const actions = Array.from({ length: 8 }, (_, i) => ({
+      ...action(`old-${i}`, "pwd"),
+      thought: [{ type: "text" as const, text: `Checking step ${i}` }],
+      reasoning_content: `Reasoning for step ${i}`,
+    }));
+    const done = actions.flatMap((a, i) => [
+      observation(a),
+      createUserMessageEvent(`old-prompt-${i}`),
+    ]);
+    const { rerender } = renderChat(done, [...actions, ...done]);
+    await userEvent
+      .setup()
+      .click(screen.getAllByTestId("event-group-toggle")[0]);
+    expect(screen.getAllByTestId("event-group-content")).toHaveLength(1);
+
+    const message = createUserMessageEvent("new-prompt");
+    rerender(<Messages messages={[message]} allEvents={[message]} />);
+    expect(screen.queryAllByTestId("event-group-toggle")).toHaveLength(0);
+  });
 });

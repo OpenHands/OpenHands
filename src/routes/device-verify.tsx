@@ -152,7 +152,7 @@ export default function DeviceVerify() {
               <p className="text-xs text-text-subtle mb-2 text-center uppercase tracking-wider">
                 {t(I18nKey.DEVICE$CODE_LABEL)}
               </p>
-              <p className="text-xl font-mono font-semibold text-center tracking-[0.3em]">
+              <p className="text-xl font-mono font-semibold text-center tracking-device-code">
                 {userCode}
               </p>
             </div>

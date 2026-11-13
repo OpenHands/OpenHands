@@ -3,6 +3,12 @@ import {
   useSessionActivityStore,
 } from "#/stores/session-activity-store";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+import {
+  clearAutomationFormSession,
+  getAutomationFormSession,
+  initializeAutomationFormSession,
+} from "#/api/automation-form-session";
+import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 import { CONVERSATION_QUERY_KEYS } from "./query-keys";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
@@ -217,6 +223,12 @@ export const useTaskPollingController = () => {
         entry.orgId === environment.orgId,
     );
     if (launch) update(launch.id, { conversationId: appConversationId });
+    const automationDraft = getAutomationFormSession(`task-${taskId}`);
+    if (automationDraft) {
+      initializeAutomationFormSession(appConversationId, automationDraft);
+      markAutomationSetupHandoff(appConversationId);
+      clearAutomationFormSession(`task-${taskId}`);
+    }
     void (async () => {
       try {
         await flushPendingTaskAttachments(taskId, appConversationId);

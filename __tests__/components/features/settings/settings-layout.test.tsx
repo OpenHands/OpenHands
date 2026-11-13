@@ -172,13 +172,9 @@ describe("SettingsNavDivider", () => {
 
 describe("SettingsNavHeader", () => {
   it("should render the translated header text", () => {
-    render(
-      <SettingsNavHeader text={I18nKey.SETTINGS$PERSONAL_SETTINGS_HEADER} />,
-    );
+    render(<SettingsNavHeader text={I18nKey.SETTINGS$TITLE} />);
 
-    expect(
-      screen.getByText("SETTINGS$PERSONAL_SETTINGS_HEADER"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("SETTINGS$TITLE")).toBeInTheDocument();
   });
 
   // Prop-passthrough contract: consumer-supplied className must land on the
@@ -186,7 +182,7 @@ describe("SettingsNavHeader", () => {
   it("should accept custom className", () => {
     const { container } = render(
       <SettingsNavHeader
-        text={I18nKey.SETTINGS$PERSONAL_SETTINGS_HEADER}
+        text={I18nKey.SETTINGS$TITLE}
         className="custom-class"
       />,
     );
@@ -200,7 +196,7 @@ describe("settings-nav-link", () => {
   const mockNavItem = {
     to: "/settings/test",
     icon: <span data-testid="test-icon">Icon</span>,
-    text: I18nKey.SETTINGS$NAV_API_KEYS,
+    text: I18nKey.SETTINGS$NAV_SECRETS,
     subtitle: I18nKey.SETTINGS$PAGE_LLM_SUBLINE,
   };
 
@@ -221,7 +217,7 @@ describe("settings-nav-link", () => {
       // Assert
       expect(screen.getByRole("link")).toBeInTheDocument();
       expect(screen.getByTestId("test-icon")).toBeInTheDocument();
-      expect(screen.getByText("SETTINGS$NAV_API_KEYS")).toBeInTheDocument();
+      expect(screen.getByText("SETTINGS$NAV_SECRETS")).toBeInTheDocument();
     });
 
     it("should navigate to the correct route", () => {

@@ -1,0 +1,8 @@
+/* Newsreader: SIL OFL 1.1. Full license ships as assets/newsreader-OFL.txt. */
+@font-face {
+  font-family: "Canvas Newsreader";
+  src: url("./newsreader-roman.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+}
