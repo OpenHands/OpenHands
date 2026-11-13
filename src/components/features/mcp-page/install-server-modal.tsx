@@ -28,7 +28,7 @@ import { useTestMcpServer } from "#/hooks/mutation/use-test-mcp-server";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import {
   getMcpOAuthAuthenticationConfig,
-  getInstallableMcpConnectionOption,
+  getInstallableMcpConnectionOptions,
   type McpMarketplaceConnectionOption,
 } from "#/utils/mcp-marketplace-utils";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
@@ -121,10 +121,21 @@ function getRemoteHeaderFields(
   return option.transport.headerFields ?? [];
 }
 
-function makeInitialState(entry: MarketplaceEntry): FieldState {
+function getOptionLabelKey(option: McpMarketplaceConnectionOption): I18nKey {
+  if (option.auth.strategy === "oauth2") return I18nKey.MCP$OPTION_OAUTH;
+  if (["api_key", "bearer"].includes(option.auth.strategy)) {
+    return I18nKey.MCP$OPTION_API_KEY;
+  }
+  return option.transport.kind === "stdio"
+    ? I18nKey.MCP$OPTION_LOCAL
+    : I18nKey.MCP$OPTION_REMOTE;
+}
+
+function makeInitialState(
+  option: McpMarketplaceConnectionOption | undefined,
+): FieldState {
   const values: Record<string, string> = {};
   const savedAsSecret: Record<string, boolean> = {};
-  const option = getInstallableMcpConnectionOption(entry);
   const template = option?.transport;
   if (template?.kind === "stdio") {
     for (const field of template.envFields ?? []) {
@@ -172,8 +183,17 @@ export function InstallServerModal({
   const { backend } = useActiveBackend();
   const isCloudBackend = backend.kind === "cloud";
 
+  // The first installable option is the entry's preferred one; entries with
+  // several let the user pick another before filling in its fields.
+  const options = React.useMemo(
+    () => getInstallableMcpConnectionOptions(entry),
+    [entry],
+  );
+  const [selectedOptionIndex, setSelectedOptionIndex] = React.useState(0);
+  const option = options[selectedOptionIndex];
+
   const [state, setState] = React.useState<FieldState>(() =>
-    makeInitialState(entry),
+    makeInitialState(option),
   );
   // Always holds the latest state so async callbacks (onSuccess) never read
   // stale closure values, even under React concurrent-mode scheduling.
@@ -183,7 +203,6 @@ export function InstallServerModal({
   const [globalError, setGlobalError] = React.useState<string | null>(null);
   const [isFinalizingInstall, setIsFinalizingInstall] = React.useState(false);
   const [isAuthorizingOAuth, setIsAuthorizingOAuth] = React.useState(false);
-  const option = getInstallableMcpConnectionOption(entry);
   const template = option?.transport;
   // stdio servers on cloud backends get a synthetic test success (they only
   // run inside the sandbox); never seed card health from it.
@@ -220,6 +239,12 @@ export function InstallServerModal({
       values: { ...prev.values, [key]: value },
       errors: { ...prev.errors, [key]: null },
     }));
+    setGlobalError(null);
+  };
+
+  const selectOption = (index: number) => {
+    setSelectedOptionIndex(index);
+    setState(makeInitialState(options[index]));
     setGlobalError(null);
   };
 
@@ -519,9 +544,16 @@ export function InstallServerModal({
     if (template?.kind === "shttp" || template?.kind === "sse") {
       return handleHttpServerSubmit();
     }
-    return handleStdioSubmit();
+    if (template?.kind === "stdio") {
+      return handleStdioSubmit();
+    }
+    // @spec MCP-006 — Library installs never dead-end
+    return setGlobalError(
+      t(I18nKey.MCP$INSTALL_UNAVAILABLE, { name: entry.name }),
+    );
   };
 
+  // @spec MCP-004 — Form feedback follows readable theme text roles
   const renderFields = () => {
     if (template?.kind === "shttp" || template?.kind === "sse") {
       const oauthMode = isOAuthOption(option);
@@ -542,7 +574,7 @@ export function InstallServerModal({
             className="w-full"
           />
           {state.errors.url && (
-            <p className="text-xs text-red-500">{state.errors.url}</p>
+            <p className="text-xs text-feedback-error">{state.errors.url}</p>
           )}
           {headerFields.map((field) => (
             <div key={field.key} className="flex flex-col gap-1">
@@ -564,7 +596,7 @@ export function InstallServerModal({
                 </p>
               )}
               {state.errors[field.key] && (
-                <p className="text-xs text-red-500">
+                <p className="text-xs text-feedback-error">
                   {state.errors[field.key]}
                 </p>
               )}
@@ -615,7 +647,9 @@ export function InstallServerModal({
                 </p>
               )}
               {state.errors.api_key && (
-                <p className="text-xs text-red-500">{state.errors.api_key}</p>
+                <p className="text-xs text-feedback-error">
+                  {state.errors.api_key}
+                </p>
               )}
               {credentialSecretName && (
                 <SaveAsSecretToggle
@@ -664,7 +698,9 @@ export function InstallServerModal({
               </p>
             )}
             {state.errors[field.key] && (
-              <p className="text-xs text-red-500">{state.errors[field.key]}</p>
+              <p className="text-xs text-feedback-error">
+                {state.errors[field.key]}
+              </p>
             )}
             {field.key in state.savedAsSecret && (
               <SaveAsSecretToggle
@@ -697,7 +733,9 @@ export function InstallServerModal({
               </p>
             )}
             {state.errors[field.key] && (
-              <p className="text-xs text-red-500">{state.errors[field.key]}</p>
+              <p className="text-xs text-feedback-error">
+                {state.errors[field.key]}
+              </p>
             )}
           </div>
         ))}
@@ -711,7 +749,7 @@ export function InstallServerModal({
         data-testid="mcp-install-modal"
         data-marketplace-id={entry.id}
         onSubmit={handleSubmit}
-        className="relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border w-130 max-w-[90vw] max-h-[85vh] overflow-y-auto custom-scrollbar"
+        className="relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border w-130 extension-dialog-viewport overflow-y-auto custom-scrollbar"
       >
         <ModalCloseButton
           onClose={onClose}
@@ -803,12 +841,47 @@ export function InstallServerModal({
                 </a>
               )}
 
+              {options.length > 1 && (
+                <div
+                  role="tablist"
+                  aria-label={t(I18nKey.MCP$CONNECTION_METHOD)}
+                  data-testid="mcp-install-options"
+                  className="flex flex-wrap border-b border-border"
+                >
+                  {options.map((candidate, index) => (
+                    <TabButton
+                      key={candidate.id}
+                      isActive={index === selectedOptionIndex}
+                      onClick={() => selectOption(index)}
+                      disabled={isPending}
+                    >
+                      <span data-testid={`mcp-install-option-${candidate.id}`}>
+                        {t(getOptionLabelKey(candidate))}
+                      </span>
+                    </TabButton>
+                  ))}
+                </div>
+              )}
+
               <div className="flex flex-col gap-3">{renderFields()}</div>
 
+              {/* @spec MCP-006 — Library installs never dead-end */}
+              {!option && (
+                <div
+                  data-testid="mcp-install-unavailable"
+                  className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-tertiary"
+                >
+                  <p className="text-sm text-text-secondary">
+                    {t(I18nKey.MCP$INSTALL_UNAVAILABLE, { name: entry.name })}
+                  </p>
+                </div>
+              )}
+
+              {/* @spec MCP-004 — Form feedback follows readable theme text roles */}
               {globalError && (
                 <p
                   data-testid="mcp-install-modal-error"
-                  className="text-sm text-red-500 whitespace-pre-wrap"
+                  className="text-sm text-feedback-error whitespace-pre-wrap"
                 >
                   {globalError}
                 </p>
@@ -827,7 +900,7 @@ export function InstallServerModal({
                 <BrandButton
                   type="submit"
                   variant="primary"
-                  isDisabled={isPending}
+                  isDisabled={isPending || !option}
                   testId="mcp-install-submit"
                 >
                   {isTesting || isAuthorizingOAuth

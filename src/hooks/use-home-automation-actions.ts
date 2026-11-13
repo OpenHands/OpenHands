@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useOpenAutomationEditor } from "#/hooks/use-open-automation-editor";
 import { useTranslation } from "react-i18next";
 import { useNavigation } from "#/context/navigation-context";
 import {
@@ -6,10 +7,7 @@ import {
   useDispatchAutomation,
   useToggleAutomation,
 } from "#/hooks/query/use-automations";
-import {
-  useAutomationPermissions,
-  useIsAutomationOwner,
-} from "#/hooks/use-automation-permissions";
+import { useAutomationAccess } from "#/hooks/use-automation-access";
 import { isHomeAutomationsDemoEnabled } from "#/fixtures/home-automations-demo";
 import { I18nKey } from "#/i18n/declaration";
 import {
@@ -42,11 +40,7 @@ export function useHomeAutomationActions(
 ) {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
-  const { canManage: hasManagePermission } = useAutomationPermissions();
-  const isOwner = useIsAutomationOwner(automation);
-  // Write actions on a specific automation are allowed when the user has
-  // manage permission OR is the automation's creator (creator escape hatch).
-  const canManage = hasManagePermission || isOwner;
+  const { canManage, canEdit } = useAutomationAccess(automation);
   const isDemo = isHomeAutomationsDemoEnabled();
 
   const dispatchMutation = useDispatchAutomation();
@@ -54,7 +48,7 @@ export function useHomeAutomationActions(
   const toggleMutation = useToggleAutomation({ disableToast: true });
   const cancelMutation = useCancelAutomationRun();
 
-  const [editOpen, setEditOpen] = useState(false);
+  const { openEditor } = useOpenAutomationEditor();
   const [turnOffConfirmOpen, setTurnOffConfirmOpen] = useState(false);
 
   const isRunPending =
@@ -86,8 +80,8 @@ export function useHomeAutomationActions(
   }, [automation.id, navigate]);
 
   const openEdit = useCallback(() => {
-    setEditOpen(true);
-  }, []);
+    openEditor(automation);
+  }, [automation, openEditor]);
 
   const requestTurnOff = useCallback(() => {
     setTurnOffConfirmOpen(true);
@@ -135,11 +129,10 @@ export function useHomeAutomationActions(
 
   return {
     canManage,
+    canEdit,
     isRunPending,
     isCancelPending,
     canCancel,
-    editOpen,
-    setEditOpen,
     turnOffConfirmOpen,
     runNow,
     viewDetails,

@@ -1,5 +1,4 @@
 import React from "react";
-import ReactDOM from "react-dom";
 import { ExternalLink, Gauge, Share2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useActiveBackend } from "#/contexts/active-backend-context";
@@ -24,6 +23,7 @@ import CopyIcon from "#/icons/copy.svg?react";
 import { ConversationNameContextMenuIconText } from "./conversation-name-context-menu-icon-text";
 import { ArchivedDisabledTooltip } from "../context-menu/archived-disabled-tooltip";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 interface ConversationNameContextMenuProps {
   onClose: () => void;
@@ -109,7 +109,7 @@ export function ConversationNameContextMenu({
   const isMobile = useBreakpoint();
 
   const { t } = useTranslation("openhands");
-  const { backend } = useActiveBackend();
+  const { backend, orgId } = useActiveBackend();
   const { data: conversation } = useActiveConversation();
   const isArchivedConversation = useIsArchivedConversation();
   const ref = useClickOutsideElement<HTMLUListElement>(onClose, anchorRef);
@@ -166,11 +166,22 @@ export function ConversationNameContextMenu({
   const hasControl = Boolean(onStop || onDelete);
   const stopLabelKey =
     backend.kind === "cloud"
-      ? I18nKey.COMMON$CLOSE_CONVERSATION_STOP_RUNTIME
+      ? I18nKey.COMMON$STOP_SANDBOX
       : I18nKey.COMMON$STOP_CONVERSATION;
   const shouldShowPublicSharing =
     backend.kind === "cloud" && Boolean(onTogglePublic);
   const isPublic = conversation?.public || false;
+  // Team org: the backend only serves the share to org members. A personal
+  // workspace's org id is its owner's user id, and only the owner sees this menu.
+  const isOrgShare =
+    Boolean(orgId) &&
+    Boolean(conversation?.created_by_user_id) &&
+    orgId !== conversation?.created_by_user_id;
+  const shareLabel = t(
+    isOrgShare
+      ? I18nKey.CONVERSATION$SHARE_WITH_ORG_USERS
+      : I18nKey.CONVERSATION$SHARE_PUBLICLY,
+  );
 
   const isPortaled = Boolean(anchorElement);
   const portalClassName = isPortaled
@@ -213,7 +224,7 @@ export function ConversationNameContextMenu({
                 <SkillsIcon
                   width={16}
                   height={16}
-                  className="stroke-[1.75]"
+                  className="context-menu-icon-stroke"
                   aria-hidden
                 />
               }
@@ -298,9 +309,7 @@ export function ConversationNameContextMenu({
           <span className="flex shrink-0 items-center text-muted" aria-hidden>
             <Share2 size={16} />
           </span>
-          <span className="min-w-0 flex-1 truncate text-sm">
-            {t(I18nKey.CONVERSATION$SHARE_PUBLICLY)}
-          </span>
+          <span className="min-w-0 flex-1 truncate text-sm">{shareLabel}</span>
           <div className="flex shrink-0 items-center">
             {isPublic && shareUrl && onCopyShareLink && (
               <div className="mr-2 flex items-center gap-0.5">
@@ -329,7 +338,7 @@ export function ConversationNameContextMenu({
             <PublicShareToggle
               isPublic={isPublic}
               onToggle={onTogglePublic}
-              ariaLabel={t(I18nKey.CONVERSATION$SHARE_PUBLICLY)}
+              ariaLabel={shareLabel}
             />
           </div>
         </li>
@@ -365,9 +374,10 @@ export function ConversationNameContextMenu({
     if (typeof document === "undefined" || !portalStyle) {
       return null;
     }
-    return ReactDOM.createPortal(
-      <div style={portalStyle}>{menu}</div>,
-      document.body,
+    return (
+      <AppearancePortal>
+        <div style={portalStyle}>{menu}</div>
+      </AppearancePortal>
     );
   }
 

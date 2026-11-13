@@ -179,6 +179,10 @@ describe("formatCommand", () => {
       // as fewer tokens, silently dropping the empty slot.
       ["bash", "-c", ""],
       ["program", "", "--flag"],
+      // Line terminators next to shell metacharacters must stay inside
+      // one quoted token rather than splitting into a second command.
+      ["bash", "-c", "echo a\n{ b; } # c"],
+      ["bash", "-c", "x\r\n$(id) `id`"],
     ];
     for (const argv of cases) {
       expect(parseCommand(formatCommand(argv))).toEqual(argv);

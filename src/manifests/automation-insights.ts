@@ -26,30 +26,11 @@ import type {
   DashboardSortValue,
   DashboardStatusValue,
   DashboardTriggerValue,
-  InterfaceListInsights,
   OverviewMetric,
 } from "./types";
 
 export type AutomationHealth =
-  | "healthy"
-  | "failing"
-  | "running"
-  | "disabled"
-  | "never-run"
-  | "unknown";
-
-/** Which caption of the manifest's `insights.health` block names each state. */
-export const HEALTH_LABEL_KEYS: Record<
-  AutomationHealth,
-  keyof InterfaceListInsights["health"]
-> = {
-  healthy: "healthy",
-  failing: "failing",
-  running: "running",
-  disabled: "disabled",
-  "never-run": "neverRun",
-  unknown: "checking",
-};
+  "healthy" | "failing" | "running" | "disabled" | "never-run" | "unknown";
 
 export interface AutomationRunSummary {
   /** Lifetime run count, from the response — not the sample's length. */
@@ -180,6 +161,9 @@ export function matchesAutomationSearch(
   return (
     automation.name.toLowerCase().includes(q) ||
     (automation.prompt ?? "").toLowerCase().includes(q) ||
+    (automation.repositories ?? []).some(({ url }) =>
+      url.toLowerCase().includes(q),
+    ) ||
     automation.repository?.toLowerCase().includes(q) === true ||
     automation.model?.toLowerCase().includes(q) === true
   );
@@ -204,15 +188,24 @@ const TRIGGER_PREDICATES: Record<
   schedule: (automation) => automation.trigger.type !== "event",
 };
 
+// Who an automation runs as (`user_id`, `run_as_kind`), not who created it.
 // The caller's id is non-null whenever these run; applyDashboardView skips the
-// creator check until identity resolves, so "me" is an exact match and
-// "others" is everything else, including creator-less automations.
+// owner check until identity resolves. "me" and "others" are people only — an
+// automation without `run_as_kind` (an older service) runs as a person — so
+// "others" takes in identity-less automations, and "service" is every
+// automation that runs as a service account.
+const runsAsServiceAccount = (automation: Automation): boolean =>
+  automation.run_as_kind === "service";
+
 const CREATED_BY_PREDICATES: Record<
   Exclude<DashboardCreatedByValue, "all">,
   (automation: Automation, currentUserId: string) => boolean
 > = {
-  me: (automation, currentUserId) => automation.user_id === currentUserId,
-  others: (automation, currentUserId) => automation.user_id !== currentUserId,
+  me: (automation, currentUserId) =>
+    !runsAsServiceAccount(automation) && automation.user_id === currentUserId,
+  others: (automation, currentUserId) =>
+    !runsAsServiceAccount(automation) && automation.user_id !== currentUserId,
+  service: runsAsServiceAccount,
 };
 
 function runCount(automation: Automation, byId: Summaries): number {
@@ -243,6 +236,8 @@ export interface DashboardViewState {
   trigger: DashboardTriggerValue;
   createdBy: DashboardCreatedByValue;
   currentUserId: string | null;
+  /** The selected tag, or null for automations with any tags or none. */
+  tag: string | null;
   sort: DashboardSortValue;
 }
 
@@ -271,12 +266,15 @@ export function applyDashboardView(
         return false;
       }
       // With no caller id (local backend, personal workspace, or /me
-      // loading), the creator filter is inert.
+      // loading), the owner filter is inert.
       if (
         view.currentUserId !== null &&
         view.createdBy !== "all" &&
         !CREATED_BY_PREDICATES[view.createdBy](automation, view.currentUserId)
       ) {
+        return false;
+      }
+      if (view.tag !== null && !automation.tags?.includes(view.tag)) {
         return false;
       }
       return true;

@@ -64,7 +64,9 @@ function SettingsScreen() {
     // Resolve from the full list, not the listed subset, so a page that is
     // reachable but unlisted still gets its own title.
     const currentItem = OSS_NAV_ITEMS.find(
-      (item) => item.to === location.pathname,
+      (item) =>
+        item.to === location.pathname ||
+        location.pathname.startsWith(`${item.to}/`),
     );
     if (currentItem) {
       return {
@@ -102,9 +104,12 @@ function SettingsScreen() {
     return <Navigate to={LOCKED_CLOUD_SETTINGS_NAV_PATH} replace />;
   }
 
-  // SettingsLayout renders the page's only <main> landmark (#17909).
+  // SettingsLayout renders the page's only <main> landmark (#17909). Its
+  // h-full needs this definite height, as Customize roots provide: below lg,
+  // main then fills the column and scrolls, and popovers inside it are not
+  // clipped on short pages (#18255).
   return (
-    <div data-testid="settings-screen" className="min-h-0">
+    <div data-testid="settings-screen" className="h-full min-h-0">
       <SettingsSectionHeaderProvider
         setHideSectionHeader={setHideSectionHeader}
       >

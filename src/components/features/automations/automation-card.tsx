@@ -1,14 +1,11 @@
-import { Tooltip } from "@heroui/react";
+import { Tooltip } from "#/components/shared/tooltip";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
 import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { KebabMenu } from "./kebab-menu";
-import {
-  useAutomationPermissions,
-  useIsAutomationOwner,
-} from "#/hooks/use-automation-permissions";
+import { useAutomationAccess } from "#/hooks/use-automation-access";
 import { useNavigation } from "#/context/navigation-context";
 import PlayIcon from "#/icons/play.svg?react";
 import { SkillCardPillRow } from "#/components/features/skills/skill-card-pill-row";
@@ -28,6 +25,7 @@ import { toLatestRunState } from "./to-latest-run-state";
 import { RunPhase, shouldShowRunPhase } from "./detail/run-phase";
 import { resolveAutomationImpactStatement } from "#/utils/automation-catalog";
 import { RunStatusBadge } from "./detail/run-status-badge";
+import { ActiveStatusBadge } from "./detail/active-status-badge";
 import { AutomationRunActivitySparkline } from "#/components/features/home/featured-automations/automation-run-activity-sparkline";
 import type { RunSummaryState } from "#/manifests/automation-insights";
 import type { InterfaceListInsights } from "#/manifests/types";
@@ -36,6 +34,8 @@ import {
   shortenAutomationRunSummary,
   shouldShowAutomationRunSummaryHovercard,
 } from "#/components/features/home/featured-automations/automation-run-health";
+import { isDraftAutomation } from "#/utils/automation-state";
+import { describeSchedule } from "#/utils/automation-trigger-description";
 
 /** Run insights shown when the manifest declares the dashboard surface. */
 export interface AutomationInsightsProps {
@@ -66,15 +66,12 @@ export function AutomationCard({
 }: AutomationCardProps) {
   const { navigate } = useNavigation();
   const { t, i18n } = useTranslation("openhands");
-  const { canManage: hasManagePermission } = useAutomationPermissions();
-  const isOwner = useIsAutomationOwner(automation);
-  // Write actions on a specific automation: manage OR creator (escape hatch).
-  const canManage = hasManagePermission || isOwner;
-  // Non-creators may turn an automation off but not back on.
-  const canToggle = automation.enabled ? canManage : isOwner;
+  const { canManage, canEdit, canToggle } = useAutomationAccess(automation);
+  const isDraft = isDraftAutomation(automation);
 
   const scheduleLabel =
-    automation.trigger.schedule_human || automation.trigger.type;
+    describeSchedule(automation.trigger, t, i18n.language) ??
+    automation.trigger.type;
   const pills = useMemo(
     () => buildAutomationMetadataPills(automation, scheduleLabel),
     [automation, scheduleLabel],
@@ -88,6 +85,7 @@ export function AutomationCard({
     automation,
     t,
     canManage,
+    canEdit,
     canToggle,
     onRunNow,
     isRunPending,
@@ -114,6 +112,7 @@ export function AutomationCard({
     shouldShowAutomationRunSummaryHovercard(summary, shortSummary);
   const showPhase = shouldShowRunPhase(latestRun?.status);
   const disableAnimation = import.meta.env.MODE === "test";
+  const showDraftBadge = isDraft;
 
   return (
     <div
@@ -132,9 +131,14 @@ export function AutomationCard({
     >
       <header className="flex flex-col gap-1.5">
         <div className="flex h-8 items-center justify-between gap-3">
-          <h3 className="min-w-0 flex-1 truncate text-sm font-semibold leading-none text-foreground">
-            {automation.name}
-          </h3>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h3 className="min-w-0 truncate text-sm font-semibold leading-none text-foreground">
+              {automation.name}
+            </h3>
+            {showDraftBadge ? (
+              <ActiveStatusBadge automation={automation} compact />
+            ) : null}
+          </div>
           <div className="flex shrink-0 items-center gap-0.5">
             {canManage ? (
               <StyledTooltip
@@ -226,12 +230,7 @@ export function AutomationCard({
                 />
 
                 {showPhase ? (
-                  <RunPhase
-                    status={latestRun.status}
-                    code={latestRun.phase_code}
-                    label={latestRun.phase_label}
-                    updatedAt={latestRun.phase_updated_at}
-                  />
+                  <RunPhase currentPhase={latestRun.current_phase} />
                 ) : null}
 
                 {shortSummary ? (

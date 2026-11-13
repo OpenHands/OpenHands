@@ -36,6 +36,25 @@ export interface CloudOrganizationMember {
 }
 
 /**
+ * Subset of an enterprise service account that the GUI reads. Returned by
+ * `GET /api/organizations/{orgId}/service-accounts` (requires
+ * `manage_service_accounts`). `id` is the user id the automation service
+ * stores as `Automation.user_id` when `run_as_kind` is `service`.
+ */
+export interface CloudServiceAccount {
+  id: string;
+  org_id: string;
+  name: string;
+  is_disabled: boolean;
+}
+
+/** One page of `GET /api/organizations/{orgId}/service-accounts`. */
+export interface CloudServiceAccountPage {
+  items: CloudServiceAccount[];
+  next_page_id?: string | null;
+}
+
+/**
  * Response from `GET /api/keys/current`. Identifies the org the calling
  * API key is scoped to. Legacy keys without an org binding cause the
  * upstream to return HTTP 400 instead of producing this shape — the
@@ -50,24 +69,12 @@ export interface CloudApiKeyMetadata {
 }
 
 /**
- * Response from `GET /api/v1/users/git-info`. Identifies the currently
- * authenticated user across the connected git providers.
- */
-export interface CloudGitUser {
-  id: string;
-  login: string;
-  avatar_url: string;
-  company: string | null;
-  name: string | null;
-  email: string | null;
-}
-
-/**
  * Server-derived Super Admin setup-guide steps, from
  * `GET /api/admin/setup-state` on an OpenHands Enterprise backend.
  */
 export interface CloudSetupGuideSteps {
   org_llm: boolean;
+  git_provider: boolean;
   mcp_server: boolean;
   automation: boolean;
   invite: boolean;

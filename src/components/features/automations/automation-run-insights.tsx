@@ -3,26 +3,6 @@ import {
   type RunSummaryState,
 } from "#/manifests/automation-insights";
 import type { InterfaceListInsights } from "#/manifests/types";
-import { formatTimeDelta } from "#/utils/format-time-delta";
-
-/** `formatTimeDelta` renders seconds as `<n>s`; anything under a minute reads as "just now". */
-const SECONDS_DELTA_PATTERN = /^\d+s$/;
-
-/**
- * "Never", "Just now", or a localized "<delta> ago". The captions are the
- * manifest's; the delta and its "ago" suffix are the host's translations.
- */
-export function lastRunText(
-  startedAt: string | null | undefined,
-  copy: InterfaceListInsights["lastRun"],
-  agoSuffix: string,
-): string {
-  if (!startedAt) return copy.never;
-  const delta = formatTimeDelta(startedAt);
-  return SECONDS_DELTA_PATTERN.test(delta)
-    ? copy.justNow
-    : `${delta} ${agoSuffix}`;
-}
 
 export function runCountDisplay(state: RunSummaryState | undefined): string {
   if (state?.summary) return state.summary.total.toLocaleString();

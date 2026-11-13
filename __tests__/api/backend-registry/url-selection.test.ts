@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { LOCKED_CLOUD_BACKEND_ID } from "#/api/backend-registry/default-backend";
 import {
   BACKEND_QUERY_PARAM,
   ORG_QUERY_PARAM,
   readBackendSelectionFromUrl,
+  readLockedCloudOrgFromUrl,
   withBackendSelectionParams,
 } from "#/api/backend-registry/url-selection";
 import type { Backend } from "#/api/backend-registry/types";
@@ -161,6 +163,49 @@ describe("readBackendSelectionFromUrl", () => {
     expect(readBackendSelectionFromUrl(backends, "?tab=files")).toBeNull();
     expect(
       readBackendSelectionFromUrl(backends, `?${BACKEND_QUERY_PARAM}=`),
+    ).toBeNull();
+  });
+});
+
+describe("readLockedCloudOrgFromUrl", () => {
+  const lockedCloud: Backend = {
+    id: LOCKED_CLOUD_BACKEND_ID,
+    name: "OpenHands Cloud",
+    host: "https://app.all-hands.dev",
+    apiKey: "",
+    kind: "cloud",
+    authMode: "cookie",
+  };
+
+  it("reads the org the cloud's web app hands back", () => {
+    expect(
+      readLockedCloudOrgFromUrl([lockedCloud], `?${ORG_QUERY_PARAM}=org-7`),
+    ).toEqual({ backendId: LOCKED_CLOUD_BACKEND_ID, orgId: "org-7" });
+  });
+
+  it("leaves a URL that also names a backend to readBackendSelectionFromUrl", () => {
+    expect(
+      readLockedCloudOrgFromUrl(
+        [lockedCloud],
+        `?${BACKEND_QUERY_PARAM}=${LOCKED_CLOUD_BACKEND_ID}&${ORG_QUERY_PARAM}=org-7`,
+      ),
+    ).toBeNull();
+  });
+
+  it("ignores the org when Canvas is not locked to a cloud host", () => {
+    expect(
+      readLockedCloudOrgFromUrl(
+        [localBackend, cloudBackend],
+        `?${ORG_QUERY_PARAM}=org-7`,
+      ),
+    ).toBeNull();
+  });
+
+  it("ignores an empty or absent org", () => {
+    expect(readLockedCloudOrgFromUrl([lockedCloud], "")).toBeNull();
+    expect(readLockedCloudOrgFromUrl([lockedCloud], "?tab=files")).toBeNull();
+    expect(
+      readLockedCloudOrgFromUrl([lockedCloud], `?${ORG_QUERY_PARAM}=`),
     ).toBeNull();
   });
 });

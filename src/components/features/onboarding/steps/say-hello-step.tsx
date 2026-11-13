@@ -93,7 +93,7 @@ export function SayHelloStep({
       <form
         onSubmit={handleSubmit}
         data-testid="onboarding-hello-input-form"
-        className="mt-6 box-border flex w-full shrink-0 flex-col items-start justify-center rounded-[15px] border border-border bg-surface-raised p-4"
+        className="mt-6 box-border flex w-full shrink-0 flex-col items-start justify-center rounded-composer border border-border bg-surface-raised p-4"
       >
         <div className="relative w-full">
           <div className="box-border flex w-full shrink-0 flex-row items-end justify-between gap-2 p-0 pb-4.5">
@@ -111,7 +111,7 @@ export function SayHelloStep({
               }}
               placeholder={defaultMessage}
               disabled={isLaunching}
-              // `text-base` is a color utility in this theme (--color-base), not 16px.
+              // Keep a fixed 16px input size; text-base scales with the host root font size.
               // eslint-disable-next-line shadcn/no-arbitrary-values
               className="min-h-5 w-full flex-1 bg-transparent text-[16px] font-normal leading-5 text-contrast outline-none placeholder:text-text-tertiary disabled:cursor-not-allowed disabled:opacity-50"
             />
@@ -128,11 +128,7 @@ export function SayHelloStep({
       </form>
 
       {isPendingLaunch ? (
-        <p
-          role="status"
-          aria-live="polite"
-          className="mt-3 text-sm text-[var(--oh-muted)]"
-        >
+        <p role="status" aria-live="polite" className="mt-3 text-sm text-muted">
           {t(I18nKey.ONBOARDING$HELLO_LAUNCHING)}
         </p>
       ) : null}

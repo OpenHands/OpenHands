@@ -35,7 +35,7 @@ export function SettingsMobileDrawer({
     <>
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black bg-opacity-50 md:hidden"
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
           onClick={onCloseMobileMenu}
         />
       )}
@@ -61,7 +61,11 @@ export function SettingsMobileDrawer({
             )}
             aria-label={t(I18nKey.SIDEBAR$CLOSE_MENU)}
           >
-            <CloseIcon width={32} height={32} />
+            <CloseIcon
+              width={32}
+              height={32}
+              className="text-contrast dark:text-white"
+            />
           </button>
         </div>
 

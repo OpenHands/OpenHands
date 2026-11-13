@@ -70,13 +70,6 @@ vi.mock("#/components/shared/buttons/scroll-to-bottom-button", () => ({
   ScrollToBottomButton: () => <button type="button">Scroll to bottom</button>,
 }));
 
-vi.mock("#/components/conversation-events/chat", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("#/components/conversation-events/chat")
-  >()),
-  Messages: () => <div data-testid="conversation-messages" />,
-}));
-
 // Helper to render with QueryClient and route params
 const renderWithQueryClient = (
   ui: React.ReactElement,
@@ -145,8 +138,10 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       // Simulate: history is loading but events already exist in store (e.g., remount)
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: true,
+        isHistoryReady: false,
         connectionState: "OPEN",
         mainConnectionState: "OPEN",
+        recoveryState: "idle",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
         hasConnectedOnce: true,
@@ -167,18 +162,17 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       expect(
         screen.queryByTestId("chat-messages-skeleton"),
       ).not.toBeInTheDocument();
-      expect(
-        screen.queryByTestId("conversation-messages") ??
-          screen.queryByTestId("user-message"),
-      ).not.toBeNull();
+      expect(screen.getByTestId("user-message")).toBeInTheDocument();
     });
 
     it("shows skeleton when store is empty and loading", () => {
       // Simulate: first load, no events yet
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: true,
+        isHistoryReady: false,
         connectionState: "OPEN",
         mainConnectionState: "OPEN",
+        recoveryState: "idle",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
         hasConnectedOnce: true,
@@ -200,8 +194,10 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
     it("hides skeleton when a pending user message is visible during history load", () => {
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: true,
+        isHistoryReady: false,
         connectionState: "OPEN",
         mainConnectionState: "OPEN",
+        recoveryState: "idle",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
         hasConnectedOnce: true,
@@ -232,8 +228,10 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       // Simulate: component re-mounts when WebSocket has already finished loading
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: false,
+        isHistoryReady: true,
         connectionState: "OPEN",
         mainConnectionState: "OPEN",
+        recoveryState: "idle",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
         hasConnectedOnce: true,
@@ -253,10 +251,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       expect(
         screen.queryByTestId("chat-messages-skeleton"),
       ).not.toBeInTheDocument();
-      expect(
-        screen.queryByTestId("conversation-messages") ??
-          screen.queryByTestId("user-message"),
-      ).not.toBeNull();
+      expect(screen.getByTestId("user-message")).toBeInTheDocument();
     });
   });
 });

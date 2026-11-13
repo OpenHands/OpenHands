@@ -1,5 +1,4 @@
 import React from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
@@ -7,6 +6,7 @@ import {
   computeVisibleTagChipCount,
   formatConversationTagTooltip,
   getConversationTagLabel,
+  getConversationTagValueLabel,
   truncateTagChipValue,
 } from "./conversation-tag-display";
 import {
@@ -18,6 +18,7 @@ import {
   CONVERSATION_CARD_META_CHIP_ICON_CLASSNAME,
   CONVERSATION_CARD_META_CHIP_ICON_SLOT_CLASSNAME,
 } from "./conversation-card-meta-chip";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 interface ConversationTagChipsProps {
   tags: Array<[string, string]>;
@@ -286,7 +287,7 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
       <div
         ref={measureRef}
         aria-hidden
-        className="pointer-events-none fixed top-0 -left-2500 z-[-1] flex flex-nowrap items-center gap-1 opacity-0"
+        className="pointer-events-none fixed top-0 -left-2500 -z-1 flex flex-nowrap items-center gap-1 opacity-0"
       >
         {tags.map(([key, value]) => (
           <span key={key} className={CONVERSATION_CARD_META_CHIP_CLASSNAME}>
@@ -337,18 +338,16 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
         ) : null}
       </div>
 
-      {isOverflowOpen &&
-        popoverBox &&
-        typeof document !== "undefined" &&
-        createPortal(
-          // Stop card-level click activation when interacting with the list.
-          // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- dialog surface must swallow clicks
+      {isOverflowOpen && popoverBox && typeof document !== "undefined" && (
+        <AppearancePortal>
+          {/* Stop card-level click activation when interacting with the list. */}
+          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- dialog surface must swallow clicks */}
           <div
             ref={popoverRef}
             role="dialog"
             data-testid="conversation-card-tag-overflow-popover"
             className={cn(
-              "z-[9999] min-w-[10rem] max-w-[16rem]",
+              "z-9999 conversation-tag-popover-width",
               "rounded-md border border-border-subtle",
               "bg-surface p-2 shadow-lg",
             )}
@@ -368,7 +367,7 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
                 <div
                   key={key}
                   data-testid="conversation-card-tag-overflow-row"
-                  className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-2 text-[10px] leading-4"
+                  className="grid conversation-tag-popover-columns gap-x-2 conversation-meta-text leading-4"
                 >
                   <dt className="m-0 inline-flex min-w-0 items-center gap-1 whitespace-normal break-words text-muted">
                     <TagIconSlot icon={getConversationTagIcon(key, value)} />
@@ -380,14 +379,14 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
                     className="m-0 whitespace-normal break-words text-left leading-4 text-foreground"
                     title={value}
                   >
-                    {value}
+                    {getConversationTagValueLabel(key, value, t)}
                   </dd>
                 </div>
               ))}
             </dl>
-          </div>,
-          document.body,
-        )}
+          </div>
+        </AppearancePortal>
+      )}
     </div>
   );
 }

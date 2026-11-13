@@ -20,6 +20,7 @@ const runtimeInfo = {
   created_at: "2026-04-16T00:00:00Z",
   updated_at: "2026-04-16T00:00:00Z",
   status: ExecutionStatus.IDLE,
+  available_models: [],
   stats: {
     usage_to_metrics: {
       agent: {
@@ -170,6 +171,7 @@ describe("useConversationMetrics", () => {
       created_at: "2026-04-16T00:00:00Z",
       updated_at: "2026-04-16T00:00:00Z",
       status: ExecutionStatus.IDLE,
+      available_models: [],
       stats: {
         usage_to_metrics: {
           agent: {
