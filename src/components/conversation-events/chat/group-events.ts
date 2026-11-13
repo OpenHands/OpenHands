@@ -2,15 +2,18 @@ import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
   isACPToolCallEvent,
+  isAgentErrorEvent,
   isMessageEvent,
   isStreamingDeltaEvent,
   isHookExecutionEvent,
   isObservationEvent,
   isPlanningFileEditorObservationEvent,
+  isUserMessageEvent,
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { getStepKey } from "./step-disclosure-context";
 import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
+import { shouldShowSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
 import type { SessionActivity } from "#/stores/session-activity-store";
 import { parseDateAsUTC } from "#/utils/format-time-delta";
 import { parseMessageFromEvent } from "./event-content-helpers/parse-message-from-event";
@@ -136,15 +139,54 @@ export const renderedItemKey = (item: RenderedItem): string => {
 };
 
 /**
- * True for the rows that render a tool step: a collapsed `EventGroup` and a
- * hoisted `thought`. Agent text that follows one of these trims its top margin
- * so the tool row and the reply sit evenly; the message list applies that trim
- * to the following row (see `Messages`), because each row now has its own
- * wrapper element and the `<article>` is no longer a DOM sibling of the tool
- * row for the `[&+article]` selector to match.
+ * True for a rendered row whose visible content is a tool step: a collapsed
+ * `EventGroup`, or a standalone row that paints `GenericEventMessage` /
+ * `HookExecutionEventMessage`. Those rows carry their own
+ * `mt-2 mb-0 [&+article]:mt-2` class, and agent text that follows one trims its
+ * top margin so the tool row and the reply sit evenly.
+ *
+ * The message list applies that trim to the following row's own wrapper (see
+ * `Messages`), because each row now has its own wrapper element and the
+ * `<article>` is no longer a DOM sibling of the tool row for the
+ * `[&+article]` selector to match.
+ *
+ * The branches mirror `EventMessage`'s own order so the list's decision stays
+ * in step with what the row paints: a plain user/assistant message, an agent
+ * error, a `FinishAction` reply bubble, a `ThinkAction` thinking section, a
+ * streaming row, and a plan preview paint an `<article>` or their own box and
+ * carry no trim. Every other action or observation (including a markdown
+ * artifact card), a hook run, an ACP tool call, a rejection, and a Skill Ready
+ * card do carry it.
  */
-export const isToolRowItem = (item: RenderedItem): boolean =>
-  item.kind === "group" || item.kind === "thought";
+export const isToolRowItem = (item: RenderedItem): boolean => {
+  if (item.kind === "group") return true;
+  if (item.kind !== "single") return false;
+
+  const { event } = item;
+
+  // An agent error paints `ErrorMessage`'s own box, not a tool row.
+  if (isAgentErrorEvent(event)) return false;
+  if (isHookExecutionEvent(event)) return true;
+  if (isACPToolCallEvent(event)) return true;
+  if (isUserRejectObservation(event)) return true;
+  // A planning observation renders the plan preview, not a tool row.
+  if (isObservationEvent(event)) {
+    return !isPlanningFileEditorObservationEvent(event);
+  }
+  if (isActionEvent(event)) {
+    // `FinishAction` renders a reply bubble and `ThinkAction` a thinking
+    // section; every other action renders the trim-carrying wrapper.
+    return (
+      event.action.kind !== "FinishAction" &&
+      event.action.kind !== "ThinkAction"
+    );
+  }
+  // A user message with skills and extended content paints a Skill Ready card
+  // after its bubble.
+  if (isUserMessageEvent(event) && shouldShowSkillReadyEvent(event))
+    return true;
+  return false;
+};
 
 /**
  * Walk a list of UI events and bucket consecutive groupable events into

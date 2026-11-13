@@ -1,6 +1,12 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { Messages } from "#/components/conversation-events/chat/messages";
 import type { MessagesHandle } from "#/components/conversation-events/chat/messages";
 import {
@@ -1623,5 +1629,77 @@ describe("Messages virtualization", () => {
       '[data-row-key^="single-message-0"]',
     );
     expect(userRow?.className).not.toContain("[&>article]:mt-2");
+  });
+
+  it("trims agent text after a standalone tool card that is not a group", () => {
+    // A failed ACP call, a failed hook, and a markdown create card each render
+    // a single tool row that carries `[&+article]:mt-2` on main, so a reply
+    // after one must still trim. The row before the reply decides, and it is
+    // not a group, so the list has to recognize these standalone tool rows too.
+    const failedAcpCall = (id: string): OpenHandsEvent => ({
+      id,
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      kind: "ACPToolCallEvent",
+      tool_call_id: `call_${id}`,
+      title: "Run tests",
+      status: "failed",
+      tool_kind: "execute",
+      raw_input: null,
+      raw_output: null,
+      content: null,
+      is_error: true,
+    });
+    const failedHook = (id: string): OpenHandsEvent => ({
+      id,
+      timestamp: new Date().toISOString(),
+      source: "hook",
+      kind: "HookExecutionEvent",
+      hook_event_type: "PreToolUse",
+      tool_name: "execute_bash",
+      hook_command: "check.sh",
+      success: false,
+      blocked: false,
+      exit_code: 1,
+      reason: null,
+      additional_context: null,
+      error: "boom",
+      stdout: null,
+      stderr: null,
+      action_id: `call_${id}`,
+      message_id: null,
+      hook_input: null,
+    });
+    const agentMessage = (id: string): OpenHandsEvent => ({
+      id,
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      llm_message: {
+        role: "assistant",
+        content: [{ type: "text", text: `Reply ${id}` }],
+      },
+      activated_skills: [],
+      extended_content: [],
+    });
+
+    const cases: Array<{ before: OpenHandsEvent; key: string }> = [
+      { before: failedAcpCall("acp"), key: "single-call:call_acp" },
+      { before: failedHook("hook"), key: "single-hook" },
+    ];
+
+    for (const { before, key } of cases) {
+      const events: OpenHandsEvent[] = [
+        createUserMessageEvent("message-0"),
+        before,
+        agentMessage("reply"),
+      ];
+      renderMessages(events, false);
+
+      expect(document.querySelector(`[data-row-key="${key}"]`)).not.toBeNull();
+      const replyRow = document.querySelector('[data-row-key^="single-reply"]');
+      expect(replyRow?.className).toContain("[&>article]:mt-2");
+
+      cleanup();
+    }
   });
 });

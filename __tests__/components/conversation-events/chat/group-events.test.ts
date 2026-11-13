@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   groupEvents,
   isGroupableEvent,
+  isToolRowItem,
   renderedItemKey,
 } from "#/components/conversation-events/chat/group-events";
 import {
@@ -10,6 +11,7 @@ import {
   HookExecutionEvent,
   MessageEvent,
   ObservationEvent,
+  OpenHandsEvent,
   SecurityRisk,
   UserRejectObservation,
 } from "#/types/agent-server/core";
@@ -916,4 +918,53 @@ it("places an unanchored resume after UTC history without timezone suffixes", ()
   } finally {
     vi.unstubAllEnvs();
   }
+});
+
+describe("isToolRowItem", () => {
+  const single = (event: OpenHandsEvent) =>
+    ({ kind: "single", event, index: 0 }) as const;
+
+  it("treats a group and standalone tool cards as tool rows", () => {
+    // A group and every standalone row that paints `GenericEventMessage` /
+    // `HookExecutionEventMessage` carry the trim, so a reply after one must
+    // trim. A plain user message and an agent error paint their own box.
+    expect(isToolRowItem({ kind: "group", events: [], startIndex: 0 })).toBe(
+      true,
+    );
+    expect(isToolRowItem(single(makeBashAction("a1")))).toBe(true);
+    expect(isToolRowItem(single(makeHookExecutionEvent("h1")))).toBe(true);
+    expect(isToolRowItem(single(makeAgentErrorEvent("e1")))).toBe(false);
+    expect(isToolRowItem(single(makeUserMessage("m1")))).toBe(false);
+  });
+
+  it("does not treat reply-only actions, thoughts, or plan previews as tool rows", () => {
+    expect(isToolRowItem(single(makeFinishAction("f1")))).toBe(false);
+    expect(isToolRowItem(single(makeThinkAction("t1")))).toBe(false);
+    expect(isToolRowItem(single(makePlanObs("o1", "a1")))).toBe(false);
+    expect(
+      isToolRowItem({
+        kind: "thought",
+        action: makeThinkAction("t1"),
+        index: 0,
+      }),
+    ).toBe(false);
+  });
+
+  it("treats a markdown artifact and a rejection as tool rows", () => {
+    expect(isToolRowItem(single(makeMarkdownFileEditorAction("a1")))).toBe(
+      true,
+    );
+    expect(isToolRowItem(single(makeUserRejectObservation("r1", "a1")))).toBe(
+      true,
+    );
+  });
+
+  it("treats a Skill Ready user message as a tool row", () => {
+    const withSkill: MessageEvent = {
+      ...makeUserMessage("m1"),
+      activated_skills: ["canvas"],
+      extended_content: [{ type: "text", text: "ready" }],
+    };
+    expect(isToolRowItem(single(withSkill))).toBe(true);
+  });
 });
