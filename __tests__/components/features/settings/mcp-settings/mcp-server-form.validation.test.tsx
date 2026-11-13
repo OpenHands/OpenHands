@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { MCPServerForm } from "#/components/features/settings/mcp-settings/mcp-server-form";
 
@@ -431,5 +432,71 @@ describe("MCPServerForm validation", () => {
     ).toBeInTheDocument();
 
     r2.unmount();
+  });
+
+  it("defaults new server to SHTTP in add mode and exposes timeout input", () => {
+    render(
+      <MCPServerForm
+        mode="add"
+        existingServers={[]}
+        onSubmit={noop}
+        onCancel={noop}
+      />,
+    );
+
+    // Should default to shttp, so timeout input should be rendered
+    expect(screen.getByTestId("timeout-input")).toBeInTheDocument();
+    // Deprecation notice should not be displayed when defaulting to shttp
+    expect(
+      screen.queryByTestId("mcp-sse-deprecation-notice"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the deprecation notice and keeps the type when editing an SSE server", () => {
+    const onSubmit = vi.fn();
+    render(
+      <MCPServerForm
+        mode="edit"
+        server={{
+          id: "sse-1",
+          type: "sse",
+          name: "legacy_server",
+          url: "https://legacy.example.com/sse",
+        }}
+        existingServers={[]}
+        onSubmit={onSubmit}
+        onCancel={noop}
+      />,
+    );
+
+    const notice = screen.getByTestId("mcp-sse-deprecation-notice");
+    expect(notice).toBeInTheDocument();
+    expect(notice).toHaveTextContent(
+      "SETTINGS$MCP_SERVER_TYPE_SSE_DEPRECATION_NOTICE",
+    );
+    expect(notice).toHaveClass("text-feedback-warning");
+
+    fireEvent.click(screen.getByTestId("submit-button"));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0][0].type).toBe("sse");
+  });
+
+  it("offers the SSE type as deprecated when adding a server", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MCPServerForm
+        mode="add"
+        existingServers={[]}
+        onSubmit={noop}
+        onCancel={noop}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("SETTINGS$MCP_SERVER_TYPE"));
+
+    expect(
+      await screen.findByText("SETTINGS$MCP_SERVER_TYPE_SSE_DEPRECATED"),
+    ).toBeInTheDocument();
   });
 });
