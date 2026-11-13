@@ -94,6 +94,12 @@ vi.mock("#/hooks/query/use-automation-run-summaries", () => ({
   },
 }));
 
+// The owner filter is hidden here (no creator id), so the instance config
+// that gates its Service accounts option is never read.
+vi.mock("#/hooks/query/use-cloud-integrations-config", () => ({
+  useCloudIntegrationsConfig: () => ({ data: undefined }),
+}));
+
 vi.mock("#/hooks/query/use-automation-health", () => ({
   useAutomationHealth: () => mocks.healthState,
 }));
@@ -114,6 +120,8 @@ vi.mock("#/hooks/query/use-automations", () => ({
     mocks.useAutomations(options);
     return { ...mocks.automationsState, hasNextPage: false };
   },
+  // No tags endpoint, as with a manifest that predates tag support.
+  useAutomationTags: () => ({ data: undefined }),
   useToggleAutomation: () => ({ mutate: mocks.toggle }),
   useDeleteAutomation: () => ({ mutate: mocks.remove }),
   useDeleteAutomationDraft: () => ({ mutate: mocks.removeDraft }),
@@ -318,29 +326,6 @@ vi.mock("#/components/features/automations/delete-confirmation-modal", () => ({
       </div>
     ) : null,
 }));
-
-vi.mock(
-  "#/components/features/automations/detail/edit-automation-modal",
-  () => ({
-    EditAutomationModal: ({
-      automation,
-      isOpen,
-      onClose,
-    }: {
-      automation: Automation;
-      isOpen: boolean;
-      onClose: () => void;
-    }) =>
-      isOpen ? (
-        <div data-testid="edit-modal">
-          <span>{automation.name}</span>
-          <button type="button" onClick={onClose}>
-            close-edit
-          </button>
-        </div>
-      ) : null,
-  }),
-);
 
 vi.mock("#/components/features/automations/import-automation-modal", () => ({
   ImportAutomationModal: ({
@@ -743,7 +728,6 @@ describe("automations list interactions", () => {
       automationName: "missing-id",
     });
     expect(screen.queryByTestId("delete-modal")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("edit-modal")).not.toBeInTheDocument();
   });
 
   it("reports pending dispatches and confirms a successful run", async () => {
@@ -886,7 +870,6 @@ describe("automations list interactions", () => {
     expect(mocks.navigate).toHaveBeenCalledWith(
       "/automations/setup?automationId=automation-1",
     );
-    expect(screen.queryByTestId("edit-modal")).not.toBeInTheDocument();
   });
 
   it("offers editing regardless of the backend kind", () => {

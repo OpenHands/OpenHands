@@ -2,6 +2,7 @@ import { Trans } from "react-i18next";
 import React from "react";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
+import { REQUEST_SECRET_TOOL_NAME } from "#/constants/secret-request";
 import {
   OpenHandsEvent,
   ObservationEvent,
@@ -228,6 +229,10 @@ const getObservationEventTitle = (
       }
       if (event.tool_name === LAUNCH_CHILD_CONVERSATION_TOOL_NAME) {
         observationKey = "OBSERVATION_MESSAGE$LAUNCH_CHILD_CONVERSATION";
+        break;
+      }
+      if (event.tool_name === REQUEST_SECRET_TOOL_NAME) {
+        observationKey = "OBSERVATION_MESSAGE$REQUEST_SECRET";
         break;
       }
       return observationType.replace("Observation", "").toUpperCase();

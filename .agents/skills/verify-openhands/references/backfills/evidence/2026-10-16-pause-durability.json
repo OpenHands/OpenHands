@@ -1,0 +1,15 @@
+{
+  "before_crash": {
+    "api": "paused",
+    "disk": "paused"
+  },
+  "after_restart": {
+    "api": "paused",
+    "disk": "paused"
+  },
+  "agent_server_listener_identity_verified": true,
+  "ancestry_includes_owned_launcher": true,
+  "accepted_connections": 1,
+  "received_bytes_recorded": 0,
+  "ui_after_restart": "Stopped"
+}

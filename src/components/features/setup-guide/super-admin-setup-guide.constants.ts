@@ -17,6 +17,7 @@ export const SETUP_TOUR_PARAM = "setup_tour";
 
 export type SuperAdminSetupStepId =
   | "add-llm"
+  | "connect-git"
   | "add-integration"
   | "first-automation"
   | "invite-users"
@@ -27,8 +28,7 @@ export type SuperAdminSetupStepId =
  * "optional" for a link that never counts toward progress.
  */
 export type SuperAdminSetupStepCompletion =
-  | keyof CloudSetupGuideSteps
-  | "optional";
+  keyof CloudSetupGuideSteps | "optional";
 
 /**
  * Where a step opens: a page on the cloud host (`withOrg` adds the guide's
@@ -62,6 +62,14 @@ export const SUPER_ADMIN_SETUP_STEPS: readonly SuperAdminSetupStep[] = [
     },
   },
   {
+    id: "connect-git",
+    labelKey: I18nKey.ONBOARDING$SETUP_GUIDE_STEP_GIT,
+    completion: "git_provider",
+    // Canvas's MCP page, where the GitHub MCP server is installed with a
+    // personal access token (OHE-3901).
+    destination: { kind: "canvas", path: "/mcp" },
+  },
+  {
     id: "first-automation",
     labelKey: I18nKey.ONBOARDING$SETUP_GUIDE_STEP_AUTOMATION,
     completion: "automation",
@@ -90,7 +98,7 @@ export const SUPER_ADMIN_SETUP_STEPS: readonly SuperAdminSetupStep[] = [
     completion: "optional",
     destination: {
       kind: "cloud",
-      path: "/super-admin/instance",
+      path: "/super-admin/auth-providers",
       withOrg: false,
     },
   },

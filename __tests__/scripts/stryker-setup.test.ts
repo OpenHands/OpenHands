@@ -50,8 +50,8 @@ describe("Stryker mutation testing setup", () => {
         "npm run make-i18n && stryker run --incremental",
     });
     expect(packageJson.devDependencies).toMatchObject({
-      "@stryker-mutator/core": "9.6.1",
-      "@stryker-mutator/vitest-runner": "9.6.1",
+      "@stryker-mutator/core": "10.1.1",
+      "@stryker-mutator/vitest-runner": "10.1.1",
     });
   });
 

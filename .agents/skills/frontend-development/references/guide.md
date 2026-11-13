@@ -1,8 +1,65 @@
+## Arbitrary-value guard adoption
+
+`shadcn/no-arbitrary-values` warns globally. Thirty-five migrated owners reject new
+arbitrary classes: command-menu, backend-version, settings-nav-header,
+backend-synced-settings-badge, modal-backdrop, environment-switch-overlay,
+context-window-meter and conversation-panel-wrapper. Completed message/motion
+owners also reject new arbitrary values: custom-toast-handlers,
+form-control-classes, chat-status-indicator, context-window-ring,
+user-message-body and conversation-main. Their exact paths are in `eslint.config.js`,
+with executable probes in `__tests__/scripts/arbitrary-values-lint.test.ts`.
+Completed Markdown code/path chips, horizontal fade consumers, file-drop artwork, automation view/filter/run-phase bounds, conversation-card reserves and the hover-reveal helper also reject new arbitrary values.
+The cleaned letter-spacing and inset-shadow owners also reject new arbitrary
+values: `task-list-section.tsx`, `markdown-file-preview.tsx`,
+`skills-modal-section.tsx`, `headings.tsx`, `openai-subscription-auth-card.tsx`,
+`device-verify.tsx`, `modal-classes.ts`, `pinned-automation-card.tsx`,
+`mcp-logo-stack-badge.tsx` and `skill-icon-badge.tsx`. Plan Preview and the
+standalone MCP logo badge remain at warning severity while their remaining
+color and geometry findings are reviewed.
+Other components, routes and primitive implementations retain warnings during
+migration. Keep legitimate measured/portal geometry with its owner; do not
+expand this file list or add exemptions without auditing the remaining values.
+
+## Raw-color class-map scanning
+
+`shadcn/no-raw-colors` rejects raw Tailwind palette utilities, undeclared named
+color utilities and raw SVG paint throughout source, including primitive
+implementations. The seven exact legacy JS-config/plugin color exceptions stay
+valid. Backend-status-dot, Markdown blockquote and mcp-server-health additionally
+use `scanAllStrings` for literal class recipes hidden behind map/helper lookups;
+keep broad scanning away from unrelated program tags. Executable probes use the
+real flat config in `__tests__/scripts/raw-colors-lint.test.ts`.
+
+Bracketed hex/rgba color classes remain covered by the independently staged
+`shadcn/no-arbitrary-values` policy above. Do not claim that the palette guard
+finishes that migration or checks opaque runtime expressions.
+
+## Horizontal scroll fades
+
+`from-scroll-fade` resolves the existing `--oh-scroll-fade-from` ancestor override with `--oh-color-base` as fallback. The `scroll-fade-surface` utility sets that override to `--oh-surface` for Markdown artifact cards. Keep left/right edge visibility, direction, animation and scroll handling with their current owners; do not replace this override with a fixed palette color.
+
+## Inset-shadow recipes
+
+`shadow-badge-inset` retains the existing 1px inset highlight and 18% mix of
+`--oh-contrast`, including Tailwind's supports/fallback behavior. Reorder-before
+and reorder-after retain +2px/-2px inset edges in `--oh-focus`. These stay normal
+shadow utilities; register them in cn's shadow group so caller shadow geometry
+and shadow colors remain independent. Keep drag state and ordering with the
+existing pinned-card owner; do not replace fixed pixels or public color hooks.
+
 ## Inline-style rollout
 
-`shadcn/no-inline-styles` runs at warning severity across source, including UI
-primitive implementations. Numeric CSS custom properties and semantic token
-references pass; hardcoded variable colors and style elements still warn.
+`shadcn/no-inline-styles` warns globally, including UI primitive implementations.
+Four clean appearance owners reject inline styles at error severity: divider,
+toggle-switch, combobox-caret and backend-status-dot. The exact paths live in
+`eslint.config.js`, with executable probes in
+`__tests__/scripts/inline-styles-lint.test.ts`; other owners retain warnings.
+The composer ring and popover track share the context-window track color
+alias. Both progress bars pass the runtime percentage through the local
+`--context-fill-width` property. These three owners reject inline styling.
+
+Numeric CSS custom properties and semantic token references still pass in both
+scopes. Hardcoded variable colors and style elements remain findings.
 Do not add a blanket property allowance or blindly replace measured dimensions,
 portal coordinates, or renderer-library styles with static classes. Review the
 value's owner before moving it to classes or CSS variables.
@@ -18,9 +75,39 @@ Public skills are loaded from the `@openhands/extensions` npm package at build t
 Bundled catalog skills use the persisted `enabled_skills` allow-list defaulted from `DEFAULT_ENABLED_SKILL_NAMES`. User and project skills remain enabled unless listed in `disabled_skills`. Keep this logic centralized in `src/utils/skill-enablement.ts`. The Agent Server no longer clones the extensions repository or uses `EXTENSIONS_REF` for public skills.
 
 
+## Shared motion recipes
+
+`src/utils/form-control-classes.ts` uses named shell and transform recipes.
+Keep each transition's property list, timing fallback, duration fallback and
+important modifier intact; `transition-transform` includes more properties than
+the existing transform-only contract. Register custom transition and animation
+names in `cn` so later caller utilities retain Tailwind's conflict precedence.
+
+## Exact rem layout aliases
+
+Automation popover widths, run-phase limits and conversation hover-action reserves use the existing spacing scale (`min-w-40`, `min-w-64`, `max-w-112`, `max-w-48`, `min-w-15`) instead of equivalent arbitrary rem literals. Preserve each responsive hover/focus variant. Geometry is equivalent on the default spacing scale; explicit host scale overrides follow normal named-token behavior. Do not apply this substitution to fixed pixel geometry: a rem alias would change behavior when the embedding root font size differs.
+
+## Git control borders
+
+The repository button, unlinked branch chip, and Workspace mode button use
+`dark:border-git-control` for their shared 50% dark border. These owners reject
+new arbitrary values. Preserve their light borders, hover states, and the
+separate styling for linked Git controls.
+
+## Commit viewer geometry
+
+The commit and Uncommitted rows reserve the same `7ch` monospace column through
+`w-commit-sha`. The Monaco wrapper applies its measured pixel height through
+`h-(--editor-height)`. Keep these three components free of arbitrary values.
+
 ## Workspace files
 
-Local Files discovery preferences belong to `misc_settings.app_preferences.workspace_file_discovery`, keyed by working directory on the active backend. `useWorkspaceFileDiscovery` reads the settings cache and saves sparse workspace patches. Preserve default exclusions and the 2,000-file cap when no configuration exists. Fetch one extra result to distinguish truncation from an exact-size list. Cloud keeps its server-side listing contract without these controls. See `specs/workspace-file-discovery.md`.
+The open-file strip hides the scrollbar through `file-strip-scrollbar-hidden`
+while retaining horizontal scrolling. File discovery uses
+`file-discovery-viewport-height` for its 90vh cap and keeps its vertical
+overflow on the dialog body. Both owners reject new arbitrary values.
+
+Local Files discovery preferences belong to `misc_settings.app_preferences.workspace_file_discovery`, keyed by working directory on the active backend. `useWorkspaceFileDiscovery` reads the settings cache and saves sparse workspace patches. Preserve default exclusions and the 2,000-file cap when no configuration exists. Fetch one extra result to distinguish truncation from an exact-size list. Cloud keeps its server-side listing contract without these controls.
 
 ## Caret appearance contracts
 
@@ -31,6 +118,21 @@ Use `isOpen` for rotation on `ComboboxCaretButton` and `ComboboxCaretInline`.
 `ComboboxCaretIcon` is the generic SVG and still permits caller orientation.
 Primitive implementations remain exempt from no-restyle. The existing narrow
 static-class exceptions do not imply that opaque values are checked by no-restyle.
+
+## Markdown code spacing
+
+Inline code and workspace-path chips share `px-code-inline-x` / `py-code-inline-y`; plain code blocks use `p-code-block`. Their theme spacing entries retain em units so padding follows the element font. Register these spacing names in `cn()` so general and directional caller overrides keep normal precedence. The scoped library CSS and class-composition tests cover this contract.
+
+## Message wrapping recipes
+
+`message-word-break` retains `word-break: break-word` for chat bodies, corrective
+nudges and toast content. Toasts also use Tailwind's `wrap-anywhere` for their
+independent overflow-wrap behavior. Do not replace the former with `break-words`: it
+sets a different CSS property. Toast-library container styles remain library-owned.
+
+## File-drop illustration geometry
+
+The file-drop illustration uses `file-drop-image` and `file-drop-arrow` utilities for fixed SVG pixel offsets and rotation. Preserve pixel units in embedded roots; the shipped scoped library CSS contract covers these coordinates.
 
 ## No Magic Strings
 
@@ -119,29 +221,35 @@ When adding code that needs a new string, decide up front which rule it falls un
 - Route decoupling note: `src/components/` should stay free of direct `react-router` imports. Route state now flows through `src/context/navigation-context.tsx`, the standalone app bridges router state with `src/routes/react-router-navigation-provider.tsx`, and link-like UI should use `src/components/shared/navigation-link.tsx`.
 - Test helper note: `test-utils.tsx` now wraps renders with a default `NavigationProvider` (`currentPath: "/"`, `conversationId: "test-conversation-id"`). Navigation-sensitive tests can override that via `renderWithProviders(..., { navigation: { ... } })`.
 - CSS isolation for embeddable/hosted use now relies on a scoped wrapper attribute: all bundled CSS is prefixed under `[data-agent-server-ui]` via `postcss-prefix-selector` in `vite.config.ts`, with selector exceptions handled by `transformAgentServerUISelector()` in `src/styles/agent-server-ui-style-scope.ts`. That transform must remap global selectors like `:root`, `html`, and `body` directly onto the scoped shell instead of emitting impossible descendants such as `[data-agent-server-ui] :root`.
+- The library ships its CSS as `dist/styles.css`, exported as `@openhands/agent-canvas/styles.css`: `src/index.ts` imports the single entry `src/styles.css` (which `@import`s `index.css`, then `tailwind.css`), and `build.lib.cssFileName` names the extracted file. Keep it one CSS import: Vite's CJS output turns adjacent stripped CSS requires into a dangling comma. Hosts import it explicitly; the JS entries stay free of CSS imports. Do not add a `sideEffects` glob list to package.json: any list marks the unlisted JS side-effect free, and the library build then drops modules such as `dist/components/browser/index.js`. `__tests__/vite-config.test.ts` builds the library and checks that the stylesheet is scoped and `dist/index.cjs` parses; `__tests__/package-library.test.ts` checks the export.
 - Public embedding entry points should use `AgentServerUIProviders` (scoped root on by default) or `AgentServerUIRoot` for manual control. The standalone app already renders its own scoped root in `src/root.tsx`, so `src/entry.client.tsx` must pass `withStyleRoot={false}` to avoid nesting duplicate shells. Keep `AgentServerUIRoot` and the scoping constants re-exported from `src/lib/index.ts` so library consumers can customize the host wrapper without reaching into private paths.
 - `AgentServerUIRoot`'s themed inner wrapper must set a default `color: var(--foreground)` in addition to the `dark` / `data-theme` markers; otherwise inherited text and `currentColor` SVG icons fall back to dark browser defaults after CSS scoping, causing dark-on-dark regressions on pages like the home screen.
 - Theme/customization tokens for the embedded shell are exposed as `--oh-*` CSS variables. Override them through `styleOverrides`, `style`, or host CSS targeting `[data-agent-server-ui]`; Tailwind theme tokens in `src/tailwind.css` should continue to reference those variables with `@theme inline` so host apps can restyle the UI without reworking component class names.
+- Named control radii (`rounded-pill`, `rounded-composer`, `rounded-file-action`, `rounded-facet-control`) retain the existing absolute pixel values in `src/tailwind.css`. `cn()` registers these names in tailwind-merge's radius namespace so caller and directional overrides retain normal utility precedence. Keep the theme entries and merger registration aligned; do not replace these values with rem or percentage rounding.
+
 - Small form feedback uses the `feedback-error` / `feedback-success` text roles (`--oh-feedback-error` / `--oh-feedback-success`), separately from the general danger/success control palette. Their built-in values must meet 4.5:1 on modal surfaces; host overrides remain owned by the embedding root. See `src/themes/README.md` and the theme contrast tests when migrating raw feedback colors.
 - Regression coverage for the CSS isolation work lives in `__tests__/agent-server-ui-providers.test.tsx`, `__tests__/agent-server-ui-style-scope.test.ts`, and the browser-level CSS-isolation test in `tests/e2e/mock-llm/regressions/mock-llm-ui-regressions.spec.ts`.
-- MCP credential selection: `SaveAsSecretToggle` keeps its native checkbox as the semantic control and uses `ToggleSwitchVisual` for the decorative track. Selection uses contrast/surface tokens. Keep both states' labels readable, allow long secret names to wrap with their help control, and preserve visible keyboard focus. See `specs/mcp-secret-selection.md` (MCP-005).
+- MCP credential selection: `SaveAsSecretToggle` keeps its native checkbox as the semantic control and uses `ToggleSwitchVisual` for the decorative track. Selection uses contrast/surface tokens. Keep both states' labels readable, allow long secret names to wrap with their help control, and preserve visible keyboard focus.
 
 - Conversation history is loaded lazily, REST-first then WebSocket:
   - `useConversationHistory` (in `src/hooks/query/use-conversation-history.ts`) fetches only the most recent `INITIAL_HISTORY_PAGE_SIZE` (default 50) events using `sort_order='TIMESTAMP_DESC'`, then reverses to chronological order. Older pages are paginated in via `useLoadOlderEvents` when the user scrolls near the top of the chat.
   - `EventService.searchEvents(conversationId, conversationUrl, sessionApiKey, options)` returns the raw `EventSearchPage` (`{ items, next_page_id }`); options support `limit`, `pageId`, `sortOrder`, `timestampGte`, `timestampLt`. Both the local and cloud-proxy code paths forward the new params.
   - The main `ConversationWebSocketProvider` waits for the REST query to settle before opening its socket, then connects with `resend_mode='since'` and `after_timestamp=<latest preloaded event ts>` (falling back to `'all'` when the REST result is empty or errored). The legacy `resend_all=true` flag is removed for the main connection; the planning-agent sub-conversation still uses `resend_all` until it is migrated to the same REST-then-WS pattern.
-  - The event store gained a bulk `addEvents(events)` action (used for the initial REST seed and for "scroll-up" pagination) that re-sorts by timestamp once at the end so older pages can be merged in cheaply. Per-event dedup still works via the existing `eventIds` set.
+  - The event store owns the main history continuation alongside its loaded conversation/scope. `addEvents(events, { nextPageId, hasMore, prepend? })` atomically merges a REST page and its pagination metadata. Initial metadata may refresh until older-page loading progresses; subsequent tail refetches and remounts preserve that continuation, and conversation/scope clears reset it. `useLoadOlderEvents` forwards the retained `pageId` without a timestamp filter; only cursorless history uses the legacy timestamp fallback. Bulk merges sort once, placing newly prepended rows before existing equal-timestamp rows in server page order while retaining existing row/streaming-slot order. Live/planner `addEvent` calls leave history pagination untouched and keep their existing append fast path and `eventIds` dedup.
   - `ChatInterface` wires `useLoadOlderEvents` into its scroll handler (threshold 80px from the top), shows a `data-testid="loading-older-events"` spinner during pagination, and preserves the visible scroll offset by storing the previous `scrollHeight` and adding the height delta after the older page renders.
 
   - `useLoadOlderEvents` intentionally distinguishes between "no anchor yet" (empty store before the initial REST seed, so `loadOlder()` should no-op) and "malformed oldest event" (store has an oldest event with no timestamp, so the hook throws, flips `hasMore` false, and `ChatInterface` surfaces the failure via the shared error banner instead of failing silently).
 
-- Action grouping in the chat stream:
-  - `src/components/conversation-events/chat/group-events.ts` folds runs of consecutive groupable events (regular `ActionEvent`/`ObservationEvent` cards, but not `FinishAction`, `ThinkAction`, `PlanningFileEditorObservation`, `TaskTrackerObservation`, hooks, errors, or message events) into single `RenderedItem` groups. The threshold lives in `EVENT_GROUP_MIN_SIZE` (currently 2, so even pairs of back-to-back actions get folded).
-  - `EventGroup` (`src/components/conversation-events/chat/event-message-components/event-group.tsx`) is the collapsible header that wraps each run. Default state is collapsed; the header shows `EVENT_GROUP$ACTIONS_COMPLETED` (with a success check) when the group is done, or `EVENT_GROUP$ACTIONS_PROGRESS` plus the currently-running action's title (from `getEventContent`) while a member `ActionEvent` has not yet been replaced by its observation in the UI events array. Expanding renders the original `EventMessage`s verbatim so each card still expands the way it did before.
-  - Agent thoughts attached to an `ActionEvent` (`event.thought`) are hoisted out of groups: `groupEvents` emits a third `RenderedItem` kind `"thought"` whenever a groupable event carries (or, for an observation, originates from) a non-empty thought, flushing the current run and starting a new one. `messages.tsx` renders that item via `ThoughtEventMessage` and passes `suppressThought` to `EventMessage` so the inline thought isn't duplicated inside the group's expanded content. `ThinkAction` is excluded from this hoisting because the thought IS its action body and is rendered through its own codepath.
-  - `groupEvents` now de-duplicates hoisted thoughts by action ID so mixed UI arrays that temporarily contain both an action and its replacement observation do not emit the same thought twice; `minSize` is treated as a validated internal invariant (`>= 1`).
-  - `EventGroup` should return `null` for an empty `events` array and wire the toggle button to the expanded body with `aria-controls` / `role="region"` / `aria-labelledby`.
-  - `src/components/conversation-events/chat/messages.tsx` is the only consumer; the grouping is transparent to upstream code. Coverage lives in `__tests__/components/conversation-events/chat/group-events.test.ts` (pure logic, including thought hoisting) and `__tests__/components/conversation-events/chat/event-message-components/event-group.test.tsx` (rendering/interaction).
+- Activity grouping in the chat stream:
+  - `groupEvents` combines consecutive tools, successful/blocked hooks and reasoning; visible agent messages/thoughts, errors, approvals and artifact previews remain boundaries. `Messages` uses a one-step minimum so a completed group never unfolds just because the agent stopped. A lone blocked hook opens directly to its details; in mixed groups its blocked badge stays on the hook row, not the summary. Failed hooks remain standalone.
+  - `useSessionActivityStore` owns observed initialization/resume steps and disclosure state, scoped by backend, organization and conversation. Launch/task aliases transfer the same entry to the real conversation. This is tab-local presentation history in sessionStorage, not an SDK event or cross-device transcript; old conversations do not gain invented initialization rows.
+  - A READY sandbox leaves its session in `connecting` until the conversation socket is open and pending sends have settled. `ChatInterface` completes that handoff; startup/resume owns the progress row throughout. Pending user bubbles render before the active session group, keep failure/retry/stop controls, and omit their separate sending status only during that handoff. Later ordinary sends and connection recovery retain their own feedback.
+  - Session entries and streamed/finalized message reasoning join the first following activity run. Session setup is excluded from tool counts. The live header shows activity; completion keeps the same group and summarizes actual tools, or the completed session when no tools ran.
+  - Count summaries use natural English singulars and comma-separated sentence fragments. Later fragments use the i18n `continuation` context; casing is translated, never applied to tool names or paths. The separator is localized.
+  - A one-tool group uses the existing descriptive tool title. It reveals the body directly only when there is no session entry, reasoning or other activity alongside it; mixed groups retain collapsed tool rows until the user opens them. Its shared step disclosure records revealed output so adding another tool or moving a failed ACP call outside the group preserves that output. Reasoning, session history, rejection/timeout indicators and actionable boundaries remain accessible.
+  - Startup headers show the latest reported phase, independently of deduplicated history. Setup-only groups expose observed phase details directly; groups with tools retain a nested session entry. Phase labels describe observed activity, not inferred success or skipped steps. Other sandbox/composer status consumers keep their own labels.
+  - Active startup/resume groups stay visible while the initial history page is unknown. Paginated history hides completed initialization until the beginning is loaded; resume entries use an observed event anchor when available and timestamp ordering otherwise. Errors and pending secret/confirmation forms stay outside collapsed details.
+  - Coverage lives in `group-events.test.ts`, `event-group.test.tsx`, `messages-model-messages.test.tsx`, and `session-activity-store.test.ts` under `__tests__`.
 
 - Home page workspace UX (local backend):
   - `FolderBrowserModal`'s "Use this folder" button adds **only the currently navigated directory** as a single workspace (named by its basename). It no longer iterates `subdirs` and adds each child as a separate workspace.
@@ -151,7 +259,7 @@ When adding code that needs a new string, decide up front which rule it falls un
   - `ManageWorkspacesModal` should require a confirmation step before removing either a saved workspace or a workspace parent; parent removals should mention the child-workspace impact, and tests should assert both the confirmation flow and that removing the selected workspace clears the launch selection.
   - In `useWorkspacesStore`, keep `clearWorkspaces()` scoped to literal workspaces only; use explicit helpers like `clearWorkspaceParents()` / `clearAll()` for broader resets so future callers do not accidentally wipe parent registrations.
 
-- Default LLM model — `DEFAULT_SETTINGS.llm_model` (`"openhands/glm-5.2"`, defined in `src/services/settings.ts`) is the canonical frontend default. `buildConfiguredOpenHandsAgentSettings` in `src/api/agent-server-adapter.ts` **always** sends this value explicitly when the resolved `llm.model` is absent, empty, or whitespace-only — the frontend never relies on the agent-server SDK's own default (`gpt-5.5`). If you change the default model, update `DEFAULT_SETTINGS.llm_model` in `src/services/settings.ts` **and** the checklist in `specs/llm-defaults.md`. Spec: `@spec LLD-001`.
+- Default LLM model — `DEFAULT_SETTINGS.llm_model` (`"openhands/glm-5.2"`, defined in `src/services/settings.ts`) is the canonical frontend default. `buildConfiguredOpenHandsAgentSettings` in `src/api/agent-server-adapter.ts` **always** sends this value explicitly when the resolved `llm.model` is absent, empty, or whitespace-only — the frontend never relies on the agent-server SDK's own default (`gpt-5.5`). If you change the default model, update `DEFAULT_SETTINGS.llm_model` in `src/services/settings.ts`.
 
 - Custom secrets are NOT auto-attached by the agent-server. `POST /api/conversations` only persists what the client sends in `request.secrets`; the persisted secrets store (`/api/settings/secrets`) is never read at conversation start. `buildStartConversationRequestWithEncryptedSettings` enumerates `SecretsService.getSecrets()` and turns each entry into a `LookupSecret` whose `url` points back at `/api/settings/secrets/{name}` and whose `headers` carry `X-Session-API-Key` for auth.
 
@@ -168,8 +276,44 @@ When adding code that needs a new string, decide up front which rule it falls un
   - The environment-switch overlay is split: lightweight store/triggers live in `components/features/backends/environment-switch-store.ts`; the React component lives in `environment-switch-overlay.tsx` (re-exports the store API for back-compat). Eagerly-mounted callers (e.g. `backend-selector.tsx`) MUST import trigger helpers from the store, not the overlay file. The overlay is `React.lazy`'d from `routes/root-layout.tsx`.
   - Conditional UI is `React.lazy`'d to keep eager graphs small. Current examples include `AlertBanner` and `CommandMenu` in `root-layout.tsx`, `SettingsModal` in the sidebar, and backend/onboarding modals in `root.tsx`. Tests that assert on these mounted nodes may need `await screen.findByTestId(...)` / `waitFor(...)` instead of synchronous `getByTestId(...)`.
   - The terminal tab (`components/features/terminal/terminal.tsx`) is `React.lazy`'d in `conversation-tab-content.tsx` alongside the other tabs, so xterm + addon-fit + xterm.css don't enter the conversation route's eager graph (they ship as a separate `terminal-*.js` chunk now).
-  - Avoid importing app code through `#/components/conversation-events/chat` or its `event-message-components/index.ts` barrel — they exist for `lib/index.ts` (npm subpath) consumers only. Internal callers use deep paths (`./messages`, `./event-message-components/<name>`, `./event-content-helpers/should-render-event`) so Vite dev doesn't fan out the barrel.
+  - `components/conversation-events/chat/` and `components/features/command-menu/` deliberately have no barrel `index.ts`. Import deep paths (`./messages`, `./event-message-components/<name>`, `./event-content-helpers/should-render-event`, `command-menu/command-menu`) so Vite dev doesn't fan out a barrel.
 
 
 
 - ESLint config (flat, ESLint 9): the project uses `eslint.config.js` (not `.eslintrc`) and runs on `eslint@9.x`, not 10. The constraint pinning us below 10 is `eslint-plugin-react@7.37.x`, which still calls `context.getFilename()` at rule-load time — that API was removed in ESLint 10 and `@eslint/compat`'s `fixupPluginRules` does NOT shim it. Don't try to bump eslint past 9 until eslint-plugin-react ships a v10-compatible release. Import rules come from `eslint-plugin-import-x` (the maintained fork of `eslint-plugin-import`) but are registered under both `import-x/` and `import/` prefixes via `plugins: { import: importXPlugin, ... }` so existing `// eslint-disable-next-line import/...` directives keep working. `linterOptions.reportUnusedDisableDirectives` is set to `"warn"` (not "off") so stale airbnb-era disable comments still surface in lint output without failing CI. The TS-overrides block has an `ignores: ["src/hooks/query/query-keys.ts"]` so the `no-restricted-syntax` rule banning raw `["settings", ...]` query keys doesn't fire on the file that defines the helpers themselves. No `.npmrc` / `legacy-peer-deps` flag is needed — all our plugins declare ESLint 9 peer compatibility.
+
+## Letter-spacing recipes
+
+Named tracking recipes retain exact signed values: metadata 0.11px, label
+0.01em, title -0.01em, heading -0.02em, auth-code 0.08em and device-code 0.3em.
+Keep pixel metadata spacing independent of font size and the other values
+relative to their element font. Register tracking names in cn's tracking theme
+so caller overrides retain normal precedence without changing font or leading.
+Do not approximate these metrics with nearby default tracking-scale values.
+
+## Extended type scale
+
+`text-4xs`, `text-xs-plus`, `text-sm-plus` and `text-title` retain existing
+9px, 13px, 15px and 32px font sizes without setting line-height. Their names are
+registered in cn's text-size theme so color classes stay independent and later
+caller sizes or leading retain the same precedence as the former arbitrary
+sizes. Keep the compiled-CSS and class-composition contracts when changing them.
+
+## Fixed content columns
+
+Static metadata rows use `metadata-grid-columns` (auto / 1fr); automation
+summary rows use `automation-summary-columns` (auto / minmax(0, 1fr)); run-log
+details use `sm:run-log-detail-columns` (5rem / minmax(0, 1fr), from 40rem).
+These single-property utilities preserve intrinsic sizing and responsive scope.
+They are static owner recipes, not caller className overrides.
+
+- Executable plugin automations (`plugin_spec`) edit their configuration through the setup form's `pluginConfig` JSON field. The agent proposes that field through `automation_form_update`; only Save sends `config` and the trigger to the existing automation's PATCH endpoint. Preserve the plugin source, pins, and runtime fields. Gate configuration writes on the automation service's `pluginConfigUpdate` capability; older services display the configuration read-only.
+
+## Existing Canvas background and accent roles
+
+`bg-canvas-background` resolves exactly `--oh-background`; `text-on-accent`
+resolves exactly `--oh-accent-foreground`. Add Models selects and shared primary
+BrandButton/BrandBadge text retain these public roles, including host overrides.
+Do not substitute similarly colored Canvas or HeroUI roles. Caller color and
+font-size precedence stays covered by `cn` composition tests, and the scoped
+library CSS contract verifies the exact variable declarations.

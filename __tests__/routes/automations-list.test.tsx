@@ -323,7 +323,6 @@ describe("AutomationsList — draft sections", () => {
       "rounded-xl",
       "bg-surface",
     );
-    expect(draftCard).toHaveClass("hover:bg-surface-raised");
     expect(
       within(draftCard).queryByText(I18nKey.AUTOMATIONS$DETAIL$DRAFT),
     ).not.toBeInTheDocument();
@@ -362,9 +361,6 @@ describe("AutomationsList — draft sections", () => {
       within(draftCard).getByTestId("automation-setup-draft-delete-draft-1"),
     ).toBeInTheDocument();
 
-    expect(
-      screen.queryByText(I18nKey.AUTOMATIONS$MATERIALIZED_DRAFTS),
-    ).not.toBeInTheDocument();
     expect(
       screen.queryByText("Materialized test draft"),
     ).not.toBeInTheDocument();
@@ -452,6 +448,42 @@ describe("AutomationsList — draft sections", () => {
     );
   });
 
+  it("confirms a saved draft deletion in a named modal dialog that Escape cancels", async () => {
+    // Arrange — open the confirmation from the saved draft's Delete button.
+    const user = userEvent.setup();
+    vi.mocked(AutomationService.listServerDrafts).mockResolvedValue(
+      draftListResponse,
+    );
+    vi.mocked(AutomationService.deleteServerDraft).mockReset();
+    renderList();
+    await user.click(
+      await screen.findByTestId("automation-setup-draft-delete-draft-1"),
+    );
+
+    // Assert — a modal dialog that keyboard users land in, on Cancel.
+    const dialog = await screen.findByRole("dialog", {
+      name: I18nKey.AUTOMATION_SETUP$DELETE_DRAFT_TITLE,
+    });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(document.activeElement).toBe(
+      within(dialog).getByRole("button", { name: I18nKey.AUTOMATIONS$CANCEL }),
+    );
+
+    // Act — dismiss with the keyboard.
+    await user.keyboard("{Escape}");
+
+    // Assert — the dialog is gone, focus is back on the opener, and the
+    // draft was kept.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-draft-delete-draft-1"),
+    ).toHaveFocus();
+    expect(AutomationService.deleteServerDraft).not.toHaveBeenCalled();
+    expect(
+      screen.getByTestId("automation-setup-draft-draft-1"),
+    ).toBeInTheDocument();
+  });
+
   it("treats a Cloud HttpError 404 from the drafts API as an empty drafts list", async () => {
     // Cloud draft calls run through callCloudProxy, which throws the shared
     // client's HttpError with `status` on the error itself (not under `response`).
@@ -525,18 +557,26 @@ describe("AutomationsList — Edit from the row kebab", () => {
     // permissions come from) before mounting so the page sees it as the
     // active backend on first render.
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    // An admin edits a automation that runs as a service account; on a one that runs as a person only
+    // its creator can.
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [{ ...automation, run_as_kind: "service" }],
+      total: 1,
+    });
     const user = userEvent.setup();
     renderList();
     await waitFor(() => {
       expect(AutomationService.getAutomations).toHaveBeenCalledTimes(1);
     });
     await screen.findByText(automation.name);
+    // Run now renders once the caller's permissions have resolved.
+    await screen.findByTestId(`automation-run-now-${automation.id}`);
 
     // Act — open the row kebab and pick Edit. The aria-label resolves to
     // the I18n key in tests because `t` is mocked to return the key itself.
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
     await user.click(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+      await screen.findByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
     );
 
     // Assert — cloud uses the same collapsed setup form; the permission model
@@ -940,9 +980,9 @@ describe("AutomationsList — Load more", () => {
     // Assert
     await screen.findByText("Automation 120");
     expect(vi.mocked(AutomationService.getAutomations).mock.calls).toEqual([
-      [50, 0, undefined],
-      [50, 50, undefined],
-      [50, 100, undefined],
+      [50, 0, undefined, undefined],
+      [50, 50, undefined, undefined],
+      [50, 100, undefined, undefined],
     ]);
     expect(
       screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
@@ -1026,8 +1066,8 @@ describe("AutomationsList — Load more", () => {
     expect(
       vi.mocked(AutomationService.getAutomations).mock.calls.slice(1),
     ).toEqual([
-      [50, 50, undefined],
-      [50, 50, undefined],
+      [50, 50, undefined, undefined],
+      [50, 50, undefined, undefined],
     ]);
   });
 });

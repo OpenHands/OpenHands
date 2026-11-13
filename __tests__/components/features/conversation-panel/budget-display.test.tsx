@@ -1,51 +1,55 @@
 import React from "react";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
+import { createInstance } from "i18next";
+import { I18nextProvider } from "react-i18next";
 import { renderWithProviders } from "test-utils";
 import { BudgetDisplay } from "#/components/features/conversation-panel/budget-display";
+import { translationResources } from "#/i18n/resources";
+
+vi.unmock("react-i18next");
+
+const i18n = createInstance();
+
+beforeAll(async () => {
+  await i18n.init({
+    lng: "en",
+    resources: { en: { openhands: translationResources.en } },
+    ns: ["openhands"],
+    defaultNS: "openhands",
+    interpolation: { escapeValue: false },
+  });
+});
+
+function renderBudget(cost: number | null, maxBudget: number | null) {
+  return renderWithProviders(
+    <I18nextProvider i18n={i18n}>
+      <BudgetDisplay cost={cost} maxBudget={maxBudget} />
+    </I18nextProvider>,
+  );
+}
 
 describe("BudgetDisplay", () => {
-  it("renders nothing when cost is null", () => {
-    const { container } = renderWithProviders(
-      <BudgetDisplay cost={null} maxBudgetPerTask={5} />,
-    );
+  it("renders nothing when cost is unavailable", () => {
+    const { container } = renderBudget(null, 5);
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders nothing when maxBudgetPerTask is null (no budget cap)", () => {
-    // Per OHE-3110: there is no way for a user to set max_budget_per_task, so
-    // the "No budget limit" line must be omitted rather than shown.
-    const { container } = renderWithProviders(
-      <BudgetDisplay cost={1.23} maxBudgetPerTask={null} />,
-    );
+  it.each([null, 0, -1])("renders nothing for cap %s", (cap) => {
+    const { container } = renderBudget(1.23, cap);
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders nothing when maxBudgetPerTask is zero", () => {
-    const { container } = renderWithProviders(
-      <BudgetDisplay cost={1.23} maxBudgetPerTask={0} />,
-    );
-    expect(container).toBeEmptyDOMElement();
-  });
+  it.each([
+    [1.23, "$1.2300 / $5.0000 (24.60% used)", "24.6%"],
+    [6.25, "$6.2500 / $5.0000 (125.00% used)", "100%"],
+  ] as const)(
+    "shows actual spend %s and bounds only the meter width",
+    (cost, text, width) => {
+      const { container } = renderBudget(cost, 5);
 
-  it("renders nothing when maxBudgetPerTask is negative", () => {
-    const { container } = renderWithProviders(
-      <BudgetDisplay cost={1.23} maxBudgetPerTask={-1} />,
-    );
-    expect(container).toBeEmptyDOMElement();
-  });
-
-  it("renders the progress bar and usage text when a real cap exists", () => {
-    const { container } = renderWithProviders(
-      <BudgetDisplay cost={1.23} maxBudgetPerTask={5} />,
-    );
-    // Cap-present branch renders two child rows: BudgetProgressBar (whose
-    // fill div carries the transition-all class) and BudgetUsageText (the
-    // usage key renders untranslated in tests). Asserting on both proves we
-    // did not take the cap-absent (null) branch.
-    expect(container.querySelector(".transition-all")).toBeInTheDocument();
-    expect(
-      screen.getByText("CONVERSATION$BUDGET_USAGE_FORMAT"),
-    ).toBeInTheDocument();
-  });
+      expect(screen.getByText(text)).toBeInTheDocument();
+      expect(container.querySelector("[style]")).toHaveStyle({ width });
+    },
+  );
 });

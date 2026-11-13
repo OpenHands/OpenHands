@@ -4,10 +4,10 @@ import { I18nKey } from "#/i18n/declaration";
 
 interface CostSectionProps {
   cost: number | null;
-  maxBudgetPerTask: number | null;
+  maxBudget: number | null;
 }
 
-export function CostSection({ cost, maxBudgetPerTask }: CostSectionProps) {
+export function CostSection({ cost, maxBudget }: CostSectionProps) {
   const { t } = useTranslation("openhands");
 
   if (cost === null) {
@@ -16,8 +16,8 @@ export function CostSection({ cost, maxBudgetPerTask }: CostSectionProps) {
 
   return (
     <>
-      <BudgetDisplay cost={cost} maxBudgetPerTask={maxBudgetPerTask} />
-      <div className="flex justify-between items-center border-t border-border-subtle pt-2">
+      <BudgetDisplay cost={cost} maxBudget={maxBudget} />
+      <div className="flex justify-between items-center border-t border-divider pt-2">
         <span className="font-semibold">
           {t(I18nKey.CONVERSATION$TOTAL_COST)}
         </span>

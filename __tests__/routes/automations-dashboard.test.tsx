@@ -24,6 +24,10 @@ import {
   getCurrentCloudApiKey,
 } from "#/api/cloud/organization-service.api";
 import {
+  fetchCloudIntegrationsConfig,
+  type CloudIntegrationsConfig,
+} from "#/api/cloud/settings-service.api";
+import {
   AutomationRunStatus,
   type Automation,
   type AutomationRun,
@@ -50,6 +54,30 @@ vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
   getCloudOrganizationMe: vi.fn(),
   getCurrentCloudApiKey: vi.fn(),
 }));
+
+// Mock only the web-client config read, which gates the Service accounts
+// owner-filter option on the instance's `enable_service_accounts` flag.
+vi.mock("#/api/cloud/settings-service.api", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/api/cloud/settings-service.api")
+  >()),
+  fetchCloudIntegrationsConfig: vi.fn(),
+}));
+
+function mockServiceAccountsEnabled(isServiceAccountsEnabled: boolean) {
+  const config: CloudIntegrationsConfig = {
+    providersConfigured: [],
+    isJiraEnabled: false,
+    isJiraDcEnabled: false,
+    isLinearEnabled: false,
+    isSlackEnabled: false,
+    deploymentMode: null,
+    isOrgMcpServersEnabled: false,
+    isAgentProfilesEnabled: false,
+    isServiceAccountsEnabled,
+  };
+  vi.mocked(fetchCloudIntegrationsConfig).mockResolvedValue(config);
+}
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
@@ -141,6 +169,8 @@ async function renderDashboardWithSettledInsights() {
 beforeEach(() => {
   window.localStorage.clear();
   __resetActiveStoreForTests();
+  vi.mocked(fetchCloudIntegrationsConfig).mockReset();
+  mockServiceAccountsEnabled(false);
   vi.mocked(AutomationService.checkHealth).mockReset();
   vi.mocked(AutomationService.checkHealth).mockResolvedValue({ status: "ok" });
   vi.mocked(AutomationService.getAutomations).mockReset();
@@ -402,6 +432,105 @@ describe("AutomationsList — manifest-declared dashboard", () => {
   });
 });
 
+describe("AutomationsList — draft test automations stay out of the overview", () => {
+  // Testing a saved draft materializes a hidden automation in the DRAFT
+  // state; the groups never list it, so the tiles must not count it either.
+  const draftTestAutomation = createAutomation({
+    id: "a-draft",
+    name: "Draft widget",
+    enabled: false,
+    state: "DRAFT",
+  });
+  const savedDraft = {
+    id: "draft-1",
+    endpoint: "/v1/preset/prompt" as const,
+    name: "Saved widget draft",
+    draft: { prompt: "Draft prompt" },
+    validationErrors: null,
+    dispatchable: true,
+    sourceAutomationId: null,
+    materializedAutomationId: "a-draft",
+    lastTestRunId: "run-draft",
+    createdAt: "2026-01-02T00:00:00Z",
+    updatedAt: "2026-01-02T00:00:00Z",
+  };
+
+  beforeEach(() => {
+    vi.mocked(AutomationService.getAutomationRuns).mockImplementation((id) => {
+      if (id === "a-draft") {
+        return Promise.resolve({ runs: [createRun({})], total: 9 });
+      }
+      return Promise.resolve({ runs: [createRun({})], total: 6 });
+    });
+  });
+
+  it("counts only the listed automations and their runs in the tiles", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [okAutomation, draftTestAutomation],
+      total: 2,
+    });
+
+    // Act
+    renderAt("/automations", <AutomationsList />);
+    await within(
+      await screen.findByTestId("automation-card-a-ok"),
+    ).findByTestId("run-status-icon-completed");
+
+    // Assert
+    const automationsTile = screen.getByTestId("overview-tile-automations");
+    expect(
+      within(automationsTile).getByText("1", { exact: true }),
+    ).toBeInTheDocument();
+    expect(within(automationsTile).getByText("1 live")).toBeInTheDocument();
+    const runsTile = screen.getByTestId("overview-tile-total-runs");
+    expect(
+      within(runsTile).getByText("6", { exact: true }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("automation-card-a-draft")).toBeNull();
+  });
+
+  it("shows the first-run empty state when only draft test automations exist", async () => {
+    // Arrange — the saved draft is gone, its test automation is not.
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [draftTestAutomation],
+      total: 1,
+    });
+
+    // Act
+    renderAt("/automations", <AutomationsList />);
+
+    // Assert
+    expect(await screen.findByTestId("automations-empty")).toBeInTheDocument();
+    const automationsTile = screen.getByTestId("overview-tile-automations");
+    expect(
+      within(automationsTile).getByText("0", { exact: true }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a saved draft listed when its test automation is the only automation", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [draftTestAutomation],
+      total: 1,
+    });
+    vi.mocked(AutomationService.listServerDrafts).mockResolvedValue({
+      drafts: [savedDraft],
+      total: 1,
+    });
+
+    // Act
+    renderAt("/automations", <AutomationsList />);
+
+    // Assert
+    expect(
+      await screen.findByTestId("automation-setup-draft-draft-1"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("automations-empty")).toBeNull();
+    expect(screen.queryByTestId("automations-filtered-empty")).toBeNull();
+  });
+});
+
 describe("AutomationsList — created-by filter on cloud workspaces", () => {
   const TEAM_ORG_ID = "org-team";
   const CURRENT_USER_ID = "user-me";
@@ -423,6 +552,12 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
     user_id: "user-teammate",
   });
   const unowned = createAutomation({ id: "a-unowned", name: "Gamma widget" });
+  const serviceRun = createAutomation({
+    id: "a-service",
+    name: "Delta widget",
+    user_id: "svc-1",
+    run_as_kind: "service",
+  });
 
   function selectWorkspace(orgId: string) {
     setRegisteredBackends([cloudBackend]);
@@ -439,7 +574,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
 
   async function pickCreatedBy(
     user: ReturnType<typeof userEvent.setup>,
-    value: "all" | "me" | "others",
+    value: "all" | "me" | "others" | "service",
   ) {
     await user.click(
       within(
@@ -538,6 +673,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
       50,
       0,
       "me",
+      undefined,
     );
   });
 
@@ -681,6 +817,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
         50,
         0,
         "me",
+        undefined,
       ),
     );
     expect(screen.getByTestId("automations-empty")).toBeInTheDocument();
@@ -796,6 +933,61 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
     expect(AutomationService.getAutomations).toHaveBeenLastCalledWith(
       50,
       0,
+      undefined,
+      undefined,
+    );
+  });
+
+  it("offers the people options only while the instance has service accounts off", async () => {
+    // Arrange — the flag is off by default.
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-unowned");
+    await openFiltersMenu(user);
+
+    // Act
+    await user.click(
+      within(
+        await screen.findByTestId("automations-filter-created-by"),
+      ).getByTestId("dropdown-trigger"),
+    );
+
+    // Assert
+    expect(
+      screen.getByTestId("automations-filter-created-by-others"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automations-filter-created-by-service"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("asks the server for service-account automations once the instance has them on", async () => {
+    // Arrange
+    mockServiceAccountsEnabled(true);
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async (_limit, _offset, runAs) =>
+        runAs === "service"
+          ? { automations: [serviceRun], total: 1 }
+          : { automations: [mine, theirs, unowned, serviceRun], total: 4 },
+    );
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-service");
+    await openFiltersMenu(user);
+
+    // Act
+    await pickCreatedBy(user, "service");
+
+    // Assert
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual(["automation-card-a-service"]);
+    });
+    expect(AutomationService.getAutomations).toHaveBeenLastCalledWith(
+      50,
+      0,
+      "service",
       undefined,
     );
   });

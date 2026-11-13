@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   BACKEND_REQUEST_TIMEOUT_MESSAGE,
   CORS_OR_NETWORK_ERROR_MESSAGE,
-  getRawErrorMessage,
   getUserFacingConnectionErrorMessage,
   isBackendRequestTimeoutMessage,
   isCorsOrNetworkError,
@@ -89,10 +88,16 @@ describe("user-facing connection errors", () => {
       message: "outer",
       cause: { message: "Failed to fetch" },
     };
-    expect(getRawErrorMessage(wrapped)).toBe("outer");
+    expect(getUserFacingConnectionErrorMessage(wrapped)).toBe(
+      CORS_OR_NETWORK_ERROR_MESSAGE,
+    );
     expect(isCorsOrNetworkError(wrapped)).toBe(true);
-    expect(getRawErrorMessage("plain string")).toBe("plain string");
-    expect(getRawErrorMessage({ message: 42, cause: "nested" })).toBe("nested");
+    expect(getUserFacingConnectionErrorMessage("plain string")).toBe(
+      "plain string",
+    );
+    expect(
+      getUserFacingConnectionErrorMessage({ message: 42, cause: "nested" }),
+    ).toBe("nested");
   });
 
   it("ignores callable values with error-like properties", () => {
@@ -100,19 +105,19 @@ describe("user-facing connection errors", () => {
       message: "Failed to fetch",
     });
 
-    expect(getRawErrorMessage(callable)).toBeNull();
+    expect(getUserFacingConnectionErrorMessage(callable)).toBeNull();
   });
 
   it("handles empty, primitive, cyclic, and deeply nested causes", () => {
-    expect(getRawErrorMessage(undefined)).toBeNull();
-    expect(getRawErrorMessage(42)).toBeNull();
-    expect(getRawErrorMessage("")).toBeNull();
-    expect(getRawErrorMessage(new Error(""))).toBeNull();
-    expect(getRawErrorMessage({ message: "" })).toBeNull();
+    expect(getUserFacingConnectionErrorMessage(undefined)).toBeNull();
+    expect(getUserFacingConnectionErrorMessage(42)).toBeNull();
+    expect(getUserFacingConnectionErrorMessage("")).toBeNull();
+    expect(getUserFacingConnectionErrorMessage(new Error(""))).toBeNull();
+    expect(getUserFacingConnectionErrorMessage({ message: "" })).toBeNull();
 
     const cyclic: { message: string; cause?: unknown } = { message: "cycle" };
     cyclic.cause = cyclic;
-    expect(getRawErrorMessage(cyclic)).toBe("cycle");
+    expect(getUserFacingConnectionErrorMessage(cyclic)).toBe("cycle");
 
     const tooDeep = {
       message: "one",

@@ -240,3 +240,15 @@ describe("getConversationTagLabel", () => {
     expect(getConversationTagLabel("git_provider", t)).toBe("Git");
   });
 });
+
+describe("getDisplayConversationTags — launched agent profile tags", () => {
+  it("keeps the app server's agent profile id and revision out of the display tags", () => {
+    expect(
+      getDisplayConversationTags({
+        agentprofileid: "3f2a1b9c-d4e5-4f60-8a7b-9c0d1e2f3a4b",
+        agentprofilerevision: "3",
+        owner: "alice",
+      }),
+    ).toEqual([["owner", "alice"]]);
+  });
+});

@@ -47,7 +47,7 @@ export function SkillFacetRail({
           >
             <span
               id={titleId}
-              className="px-1 text-[11px] font-semibold uppercase tracking-wider text-tertiary-alt"
+              className="px-1 text-2xs font-semibold uppercase tracking-wider text-tertiary-alt"
             >
               {t(group.labelKey)}
             </span>

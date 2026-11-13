@@ -118,18 +118,18 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
   const hasSystemDetails = systemError || statusDetail;
 
   return (
-    <dl className="mt-4 grid gap-3 rounded-lg border border-border bg-black/20 p-3 text-xs">
-      <div className="grid gap-1 sm:grid-cols-[5rem_minmax(0,1fr)] sm:items-center">
+    <dl className="mt-4 grid gap-3 rounded-lg border border-border bg-surface-deep dark:bg-black/20 p-3 text-xs">
+      <div className="grid gap-1 sm:run-log-detail-columns sm:items-center">
         <dt className="text-muted">
           {t(I18nKey.AUTOMATIONS$DETAIL$RUN_LABEL)}
         </dt>
         <dd>
-          <span className="inline-flex rounded-md bg-surface-raised px-2 py-0.5 font-mono text-[10px] font-medium text-muted">
+          <span className="inline-flex rounded-md bg-surface-raised px-2 py-0.5 font-mono text-3xs font-medium text-muted">
             {run.status}
           </span>
         </dd>
       </div>
-      <div className="grid gap-1 sm:grid-cols-[5rem_minmax(0,1fr)] sm:items-start">
+      <div className="grid gap-1 sm:run-log-detail-columns sm:items-start">
         <dt className="pt-0.5 text-muted">
           {t(I18nKey.AUTOMATIONS$DETAIL$TASK_LABEL)}
         </dt>
@@ -153,7 +153,7 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
               </p>
               <pre
                 data-testid="automation-task-metadata"
-                className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-black/30 p-2 font-mono text-[11px] leading-4 text-content"
+                className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface-deep dark:bg-black/30 p-2 font-mono text-2xs leading-4 text-content"
               >
                 {taskMetadataText}
               </pre>
@@ -161,7 +161,7 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
           ) : null}
         </dd>
       </div>
-      <div className="grid gap-1 sm:grid-cols-[5rem_minmax(0,1fr)] sm:items-start">
+      <div className="grid gap-1 sm:run-log-detail-columns sm:items-start">
         <dt className="pt-0.5 text-muted">
           {t(I18nKey.AUTOMATIONS$DETAIL$SYSTEM_LABEL)}
         </dt>
@@ -273,7 +273,7 @@ export function RunLogsModal({
       />
       <div
         data-testid="run-logs-body"
-        className="relative flex max-h-[80vh] w-full max-w-3xl flex-col overflow-y-auto overscroll-contain rounded-xl border border-border bg-surface"
+        className="relative flex dialog-content-height w-full max-w-3xl flex-col overflow-y-auto overscroll-contain rounded-xl border border-border bg-surface"
       >
         <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-4 bg-surface px-6 pb-4 pt-6">
           <h2 className={modalTitleLgMediumClassName}>
@@ -331,7 +331,7 @@ export function RunLogsModal({
             role="tabpanel"
             id={`run-logs-panel-${activeTab}`}
             aria-labelledby={`run-logs-tab-${activeTab}`}
-            className="mt-3 min-h-[12rem] rounded-lg border border-border bg-black/40 p-4 font-mono text-xs"
+            className="mt-3 automation-log-min-height rounded-lg border border-border bg-surface-deep dark:bg-black/40 p-4 font-mono text-xs"
           >
             {noBashCommand && (
               <p className="text-muted italic">

@@ -1,9 +1,9 @@
 import React from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 /** @deprecated Use {@link extensionModuleCardPillClassName} from `#/utils/extension-module-card-classes`. */
 export const SKILL_CARD_PILL_CLASS = extensionModuleCardPillClassName;
@@ -200,7 +200,7 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
       <div
         ref={measureRef}
         aria-hidden
-        className="pointer-events-none fixed top-0 -left-2500 z-[-1] flex flex-nowrap items-center gap-1.5 opacity-0"
+        className="pointer-events-none fixed top-0 -left-2500 -z-1 flex flex-nowrap items-center gap-1.5 opacity-0"
       >
         {pills.map((pill) => (
           <span key={pill.id} className="inline-flex shrink-0">
@@ -241,18 +241,16 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
         ) : null}
       </div>
 
-      {isOverflowOpen &&
-        popoverBox &&
-        typeof document !== "undefined" &&
-        createPortal(
-          // Stop card-level click activation when interacting with the list.
-          // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- dialog surface must swallow clicks
+      {isOverflowOpen && popoverBox && typeof document !== "undefined" && (
+        <AppearancePortal>
+          {/* Stop card-level click activation when interacting with the list. */}
+          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- dialog surface must swallow clicks */}
           <div
             ref={popoverRef}
             role="dialog"
             data-testid={`${testId}-overflow-popover`}
             className={cn(
-              "z-[9999] flex w-max max-w-[20rem] flex-col gap-1.5",
+              "z-9999 flex w-max skill-pill-popover-width flex-col gap-1.5",
               "rounded-md border border-border-subtle",
               "bg-surface p-2 shadow-lg",
             )}
@@ -276,9 +274,9 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
                 {pill.node}
               </div>
             ))}
-          </div>,
-          document.body,
-        )}
+          </div>
+        </AppearancePortal>
+      )}
     </div>
   );
 }

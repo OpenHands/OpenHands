@@ -40,29 +40,11 @@ function deepMerge(
 
 const DEFAULT_AGENT_SETTINGS = DEFAULT_SETTINGS.agent_settings ?? {};
 const llmDefaults = (DEFAULT_AGENT_SETTINGS as Record<string, unknown>).llm as
-  | Record<string, unknown>
-  | undefined;
+  Record<string, unknown> | undefined;
 const DEFAULT_MODEL =
   typeof llmDefaults?.model === "string"
     ? llmDefaults.model
     : "openhands/claude-opus-4-5-20251101";
-
-export const createMockWebClientConfig = (
-  overrides: Partial<WebClientConfig> = {},
-): WebClientConfig => ({
-  feature_flags: {
-    hide_llm_settings: false,
-    hide_users_page: false,
-    ...overrides.feature_flags,
-  },
-  providers_configured: [],
-  maintenance_start_time: null,
-  recaptcha_site_key: null,
-  faulty_models: [],
-  error_message: null,
-  updated_at: new Date().toISOString(),
-  ...overrides,
-});
 
 const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
   Settings["agent_settings_schema"]
@@ -426,6 +408,118 @@ const MOCK_CONVERSATION_SETTINGS_SCHEMA: NonNullable<
         },
       ],
     },
+    {
+      key: "runtime",
+      label: "Runtime",
+      fields: [
+        {
+          key: "default_runtime",
+          label: "Default runtime",
+          description: "Where new conversations run.",
+          section: "runtime",
+          section_label: "Runtime",
+          value_type: "string",
+          default: "local",
+          choices: [
+            { label: "local", value: "local" },
+            { label: "worktree", value: "worktree" },
+            { label: "docker", value: "docker" },
+          ],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: false,
+        },
+        {
+          key: "worktree_base",
+          label: "Create worktrees from",
+          description: "Ref a new conversation worktree branches from.",
+          section: "runtime",
+          section_label: "Runtime",
+          value_type: "string",
+          default: "default_branch",
+          choices: [
+            { label: "default_branch", value: "default_branch" },
+            { label: "head", value: "head" },
+            { label: "ref", value: "ref" },
+          ],
+          depends_on: ["default_runtime=worktree"],
+          prominence: "major",
+          secret: false,
+          required: false,
+        },
+        {
+          key: "worktree_base_ref",
+          label: "Ref",
+          description: "Branch, tag or commit new worktrees branch from.",
+          section: "runtime",
+          section_label: "Runtime",
+          value_type: "string",
+          default: null,
+          choices: [],
+          depends_on: ["default_runtime=worktree", "worktree_base=ref"],
+          prominence: "major",
+          secret: false,
+          required: false,
+        },
+        {
+          key: "worktree_branch_prefix",
+          label: "Branch name prefix",
+          description: "Start of each worktree's branch name.",
+          section: "runtime",
+          section_label: "Runtime",
+          value_type: "string",
+          default: "openhands/",
+          choices: [],
+          depends_on: ["default_runtime=worktree"],
+          prominence: "major",
+          secret: false,
+          required: false,
+        },
+        {
+          key: "container_memory",
+          label: "Container memory limit",
+          description: "Memory limit for a Docker conversation's container.",
+          section: "runtime",
+          section_label: "Runtime",
+          value_type: "string",
+          default: null,
+          choices: [],
+          depends_on: ["default_runtime=docker"],
+          prominence: "major",
+          secret: false,
+          required: false,
+        },
+        {
+          key: "container_cpus",
+          label: "Container CPU limit",
+          description: "CPUs a Docker conversation's container may use.",
+          section: "runtime",
+          section_label: "Runtime",
+          value_type: "number",
+          default: null,
+          choices: [],
+          depends_on: ["default_runtime=docker"],
+          prominence: "major",
+          secret: false,
+          required: false,
+        },
+        {
+          key: "container_browser",
+          label: "Browser in containers",
+          description: "Run a browser in Docker conversation containers.",
+          section: "runtime",
+          section_label: "Runtime",
+          value_type: "boolean",
+          default: true,
+          choices: [],
+          depends_on: ["default_runtime=docker"],
+          prominence: "major",
+          secret: false,
+          required: false,
+        },
+      ],
+    },
   ],
 };
 
@@ -641,7 +735,7 @@ const MOCK_VERIFIED_MODELS_BY_PROVIDER = MOCK_MODELS.reduce<
 
 // Matches the pinned `@openhands/typescript-client`, so mock mode models a
 // server that actually ships this schema.
-const MOCK_AGENT_SERVER_VERSION = "1.54.0";
+const MOCK_AGENT_SERVER_VERSION = "1.59.0";
 
 // --- Handlers for options/config/settings ---
 // Uses wildcard "*" prefix to match both relative paths and absolute URLs
@@ -944,6 +1038,16 @@ export const SETTINGS_HANDLERS = [
     return HttpResponse.json(config);
   }),
 
+  // Built-in integration connection lookups of a cloud instance; the default
+  // user has linked neither Slack nor a Jira Cloud workspace (Jira answers
+  // 404 for "no link").
+  http.get("*/slack/status", () => HttpResponse.json({ connected: false })),
+
+  http.get(
+    "*/integration/jira/workspaces/link",
+    () => new HttpResponse(null, { status: 404 }),
+  ),
+
   http.get("*/api/settings/conversation-schema", async () => {
     await delay();
     return HttpResponse.json(MOCK_CONVERSATION_SETTINGS_SCHEMA);
@@ -1026,8 +1130,7 @@ export const SETTINGS_HANDLERS = [
     // but always fall back to the default-empty block so the GUI sees a
     // deterministic shape on first read.
     const storedMisc = (settings as Record<string, unknown>).misc_settings as
-      | { app_preferences?: Record<string, unknown> }
-      | undefined;
+      { app_preferences?: Record<string, unknown> } | undefined;
     const appPreferences = {
       ...DEFAULT_APP_PREFERENCES,
       ...(storedMisc?.app_preferences ?? {}),
@@ -1103,8 +1206,7 @@ export const SETTINGS_HANDLERS = [
     if (body.misc_settings_diff) {
       const existingMisc = (current as Record<string, unknown>)
         .misc_settings as
-        | { app_preferences?: Record<string, unknown> }
-        | undefined;
+        { app_preferences?: Record<string, unknown> } | undefined;
       // Deep-merge: nested `app_preferences` overlays field-by-field;
       // `disabled_skills` lists are replaced wholesale. This mirrors the
       // SDK's `_deep_merge` behaviour for the two-level shape currently
@@ -1130,8 +1232,9 @@ export const SETTINGS_HANDLERS = [
       llm_api_key_is_set: nextSettings.llm_api_key_set ?? false,
       misc_settings: ((nextSettings as Record<string, unknown>)
         .misc_settings as
-        | { app_preferences?: Record<string, unknown> }
-        | undefined) ?? { app_preferences: {} },
+        { app_preferences?: Record<string, unknown> } | undefined) ?? {
+        app_preferences: {},
+      },
     });
   }),
 
@@ -1174,8 +1277,7 @@ export const SETTINGS_HANDLERS = [
       const nextSettings: Settings = { ...current };
 
       const agentSettingsPatch = body.agent_settings_diff as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       if (agentSettingsPatch) {
         const merged = deepMerge(
           (current.agent_settings ?? {}) as Record<string, unknown>,
@@ -1185,8 +1287,7 @@ export const SETTINGS_HANDLERS = [
       }
 
       const conversationSettingsPatch = body.conversation_settings_diff as
-        | Record<string, SettingsValue>
-        | undefined;
+        Record<string, SettingsValue> | undefined;
       if (conversationSettingsPatch) {
         nextSettings.conversation_settings = {
           ...(current.conversation_settings ?? {}),

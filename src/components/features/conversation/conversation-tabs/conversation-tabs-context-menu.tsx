@@ -1,5 +1,4 @@
 import React, { useLayoutEffect, useState } from "react";
-import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
 import { ContextMenu } from "#/ui/context-menu";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
@@ -27,6 +26,7 @@ import {
   dropdownInstantColorClassName,
   dropdownMenuRowIconWrapperClassName,
 } from "#/utils/dropdown-classes";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 /** Space between the trigger and the portaled menu. */
 const MENU_GAP_PX = 8;
@@ -185,7 +185,7 @@ export function ConversationTabsContextMenu({
       position={isPortaled ? "none" : "bottom"}
       alignment={isPortaled ? "none" : "left"}
       spacing={isPortaled ? "none" : "default"}
-      className={cn("z-[9999] w-fit", isPortaled ? "mt-0" : "mt-2")}
+      className={cn("z-9999 w-fit", isPortaled ? "mt-0" : "mt-2")}
     >
       {tabConfig.map(({ tab, icon: Icon, i18nKey }) => {
         const pinned = !state.unpinnedTabs.includes(tab);
@@ -270,9 +270,10 @@ export function ConversationTabsContextMenu({
   );
 
   if (isPortaled && portalStyle && typeof document !== "undefined") {
-    return ReactDOM.createPortal(
-      <div style={portalStyle}>{menu}</div>,
-      document.body,
+    return (
+      <AppearancePortal>
+        <div style={portalStyle}>{menu}</div>
+      </AppearancePortal>
     );
   }
 

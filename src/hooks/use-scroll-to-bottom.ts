@@ -1,6 +1,20 @@
-import { RefObject, useState, useCallback, useRef } from "react";
+import {
+  RefObject,
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+} from "react";
 
-export function useScrollToBottom(scrollRef: RefObject<HTMLDivElement | null>) {
+/**
+ * @param followContent Content is growing in place (a streamed reply), so keep
+ *   the bottom in view frame by frame while the user is pinned to it.
+ */
+export function useScrollToBottom(
+  scrollRef: RefObject<HTMLDivElement | null>,
+  followContent = false,
+) {
   // Track whether the user is currently near the bottom of the scroll area.
   // Used by consumers to decide whether to scroll when new UI elements appear.
   // NOT used for automatic content-following.
@@ -60,6 +74,42 @@ export function useScrollToBottom(scrollRef: RefObject<HTMLDivElement | null>) {
       });
     }
   }, [scrollRef]);
+
+  // A streamed reply grows inside a single event, so nothing re-renders to
+  // scroll it into view. The user scrolling up is read from the element each
+  // frame: the `autoscroll` state that records it lags a render behind, and
+  // following until then would yank them back down.
+  const autoscrollRef = useRef(autoscroll);
+  useLayoutEffect(() => {
+    autoscrollRef.current = autoscroll;
+  }, [autoscroll]);
+
+  useEffect(() => {
+    const dom = scrollRef.current;
+    if (!followContent || !dom || typeof requestAnimationFrame !== "function") {
+      return undefined;
+    }
+
+    let lastTop = dom.scrollTop;
+    let frame = 0;
+    const follow = () => {
+      const bottom = dom.scrollHeight - dom.clientHeight;
+      if (autoscrollRef.current) {
+        // Content shrinking also lowers scrollTop, but leaves it at the bottom.
+        if (dom.scrollTop < lastTop - 1 && dom.scrollTop < bottom - 1) {
+          autoscrollRef.current = false;
+          setAutoscroll(false);
+        } else if (dom.scrollTop < bottom - 1) {
+          dom.scrollTop = bottom;
+        }
+      }
+      lastTop = dom.scrollTop;
+      frame = requestAnimationFrame(follow);
+    };
+
+    frame = requestAnimationFrame(follow);
+    return () => cancelAnimationFrame(frame);
+  }, [followContent, scrollRef]);
 
   return {
     scrollRef,

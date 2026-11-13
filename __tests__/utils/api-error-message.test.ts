@@ -36,6 +36,55 @@ describe("getApiErrorMessage", () => {
     );
   });
 
+  it("prefers the structured `detail.errors` over the generic `detail.message`", () => {
+    const error = new HttpError(422, "Unprocessable Entity", {
+      detail: {
+        message: "Draft body does not match endpoint schema",
+        errors: [
+          {
+            field: "timeout",
+            code: "value_error",
+            message:
+              "Value error, timeout must not exceed 1800 seconds (30 minutes)",
+          },
+        ],
+      },
+    });
+
+    expect(getApiErrorMessage(error, "fallback")).toBe(
+      "Value error, timeout must not exceed 1800 seconds (30 minutes)",
+    );
+  });
+
+  it("prefixes each structured `detail.errors` message with its field when there are several", () => {
+    const error = new HttpError(422, "Unprocessable Entity", {
+      detail: {
+        message: "Draft body does not match endpoint schema",
+        errors: [
+          { field: "timeout", message: "Too long" },
+          { field: "trigger.schedule", message: "Invalid cron" },
+        ],
+      },
+    });
+
+    expect(getApiErrorMessage(error, "fallback")).toBe(
+      "timeout: Too long; trigger.schedule: Invalid cron",
+    );
+  });
+
+  it("falls back to `detail.message` when `detail.errors` is empty", () => {
+    const error = new HttpError(422, "Unprocessable Entity", {
+      detail: {
+        message: "Draft body does not match endpoint schema",
+        errors: [],
+      },
+    });
+
+    expect(getApiErrorMessage(error, "fallback")).toBe(
+      "Draft body does not match endpoint schema",
+    );
+  });
+
   it("returns the reason from an Agent Server unhandled-error body, not its generic `detail`", () => {
     const error = new HttpError(500, "Internal Server Error", {
       detail: "Internal Server Error",

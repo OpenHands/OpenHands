@@ -102,6 +102,8 @@ function createPopup({
 }
 
 afterEach(() => {
+  delete (window as unknown as Record<string, unknown>)
+    .__AGENT_CANVAS_LOCK_TO_CLOUD__;
   useDeviceFlowMock.mockReset();
   useTranslationMock.mockReset();
   vi.restoreAllMocks();
@@ -364,6 +366,63 @@ describe("device-flow login", () => {
     );
   });
 
+  it("marks a local Canvas Cloud signup in both popup and manual links", async () => {
+    const user = userEvent.setup();
+    const verificationUrl =
+      "https://app.all-hands.dev/oauth/device/verify?user_code=ABCD";
+    arrangeFlowTransition(
+      createFlow(),
+      createFlow({ status: "awaiting_authorization", verificationUrl }),
+    );
+    const { popup, location } = createPopup();
+    vi.spyOn(window, "open").mockReturnValue(popup);
+    const props = createProps({ host: "app.all-hands.dev" });
+
+    const { rerender } = render(<DeviceFlowAuth {...props} />);
+    await user.click(screen.getByTestId("cloud-login-login-button"));
+    rerender(<DeviceFlowAuth {...props} />);
+
+    const expected = `${verificationUrl}&signup_entry_source=local_canvas`;
+    expect(location.href).toBe(expected);
+    expect(screen.getByRole("link", { name: expected })).toHaveAttribute(
+      "href",
+      expected,
+    );
+  });
+
+  it.each([
+    { host: "cloud.example.com", hosted: false },
+    { host: "app.all-hands.dev", hosted: true },
+  ])(
+    "does not mark $host as a local upgrade when hosted=$hosted",
+    async ({ host, hosted }) => {
+      if (hosted) {
+        (
+          window as unknown as Record<string, unknown>
+        ).__AGENT_CANVAS_LOCK_TO_CLOUD__ = "https://app.all-hands.dev";
+      }
+      const user = userEvent.setup();
+      const verificationUrl =
+        "https://app.all-hands.dev/oauth/device/verify?user_code=ABCD";
+      arrangeFlowTransition(
+        createFlow(),
+        createFlow({ status: "awaiting_authorization", verificationUrl }),
+      );
+      const { popup, location } = createPopup();
+      vi.spyOn(window, "open").mockReturnValue(popup);
+      const props = createProps({ host });
+
+      const { rerender } = render(<DeviceFlowAuth {...props} />);
+      await user.click(screen.getByTestId("cloud-login-login-button"));
+      rerender(<DeviceFlowAuth {...props} />);
+
+      expect(location.href).toBe(verificationUrl);
+      expect(
+        screen.getByRole("link", { name: verificationUrl }),
+      ).toHaveAttribute("href", verificationUrl);
+    },
+  );
+
   it("does not try to navigate a popup the user already closed", async () => {
     const user = userEvent.setup();
     const idleFlow = createFlow();
@@ -542,6 +601,44 @@ describe("device-flow login", () => {
 
     expect(props.onSuccess).not.toHaveBeenCalled();
     expect(flow.reset).not.toHaveBeenCalled();
+  });
+
+  it("closes each attempt's blank popup when the flow fails", async () => {
+    const user = userEvent.setup();
+    const idleFlow = createFlow();
+    const errorFlow = createFlow({
+      status: "error",
+      error: "Failed to start device flow: Failed to fetch",
+    });
+    const startingFlow = createFlow({ status: "starting" });
+    useDeviceFlowMock.mockReset();
+    useDeviceFlowMock
+      .mockReturnValueOnce(idleFlow)
+      .mockReturnValueOnce(errorFlow)
+      .mockReturnValueOnce(startingFlow)
+      .mockReturnValue(errorFlow);
+    const first = createPopup();
+    const second = createPopup();
+    const open = vi
+      .spyOn(window, "open")
+      .mockReturnValueOnce(first.popup)
+      .mockReturnValueOnce(second.popup);
+    const props = createProps();
+
+    const { rerender, unmount } = render(<DeviceFlowAuth {...props} />);
+    await user.click(screen.getByTestId("cloud-login-login-button"));
+    rerender(<DeviceFlowAuth {...props} />);
+    expect(first.close).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByTestId("cloud-login-auth-retry"));
+    rerender(<DeviceFlowAuth {...props} />);
+    rerender(<DeviceFlowAuth {...props} />);
+
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(second.close).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(first.close).toHaveBeenCalledTimes(1);
+    expect(second.close).toHaveBeenCalledTimes(1);
   });
 
   it("shows an authorization error and retries an explicit host", async () => {
