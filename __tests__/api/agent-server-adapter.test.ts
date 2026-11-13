@@ -5,6 +5,7 @@ import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import { REQUEST_SECRET_TOOL_NAME } from "#/constants/secret-request";
 import { AUTOMATION_FORM_UPDATE_TOOL_NAME } from "#/constants/automation-form";
+import { AUTOMATION_SETUP_SYSTEM_SUFFIX } from "#/api/automation-form-client-tool";
 
 import {
   ACP_SERVER_TAG_KEY,
@@ -32,7 +33,6 @@ import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import type { HookConfig } from "@openhands/typescript-client";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import type { SettingsValue } from "#/types/settings";
-import { useModelStore } from "#/stores/model-store";
 
 const {
   mockGetAgentServerWorkingDir,
@@ -132,7 +132,6 @@ beforeEach(() => {
     apiKey: "session-key",
     kind: "local",
   });
-  useModelStore.getState().setHomeManualModelPick(false);
 });
 
 const PROFILE = {
@@ -540,26 +539,47 @@ describe("buildStartConversationRequest", () => {
       ]);
     });
 
-    it("adds automation setup tags to local conversation requests", () => {
-      const payload = buildStartConversationRequest({
-        ...PROFILE,
-        settings: DEFAULT_SETTINGS,
-        automationSetup: true,
-        automationSetupTags: {
-          automationdraftid: "draft-1",
-          automationmaterializeddraftid: "auto-1",
-        },
-      });
+    it.each(["openhands", "acp"] as const)(
+      "adds automation identity and context for local %s conversations",
+      (agentProfileKind) => {
+        const payload = buildStartConversationRequest({
+          ...PROFILE,
+          settings: DEFAULT_SETTINGS,
+          automationSetup: true,
+          agentProfileKind,
+          query: "Help with this automation",
+          automationSetupContext: "Selected automation: reviewer-123",
+          automationSetupTags: {
+            automationdraftid: "draft-1",
+            automationmaterializeddraftid: "auto-1",
+          },
+        });
 
-      expect(payload.tags).toEqual(
-        expect.objectContaining({
-          automationsetup: "draft",
-          automationdraftid: "draft-1",
-          automationmaterializeddraftid: "auto-1",
-          clientsource: "agentcanvas",
-        }),
-      );
-    });
+        expect(payload.tags).toEqual(
+          expect.objectContaining({
+            automationsetup: "draft",
+            automationdraftid: "draft-1",
+            automationmaterializeddraftid: "auto-1",
+            clientsource: "agentcanvas",
+          }),
+        );
+        if (agentProfileKind === "openhands") {
+          expect(
+            payload.agent_launch_additions?.system_message_suffix_append,
+          ).toContain("Selected automation: reviewer-123");
+          expect(payload.initial_message?.content).toEqual([
+            { type: "text", text: "Help with this automation" },
+          ]);
+        } else {
+          expect(payload.initial_message?.content).toEqual([
+            {
+              type: "text",
+              text: "Help with this automation\n\nSelected automation: reviewer-123",
+            },
+          ]);
+        }
+      },
+    );
 
     it.each([
       {
@@ -593,6 +613,56 @@ describe("buildStartConversationRequest", () => {
         );
       },
     );
+
+    it("describes the deployment's event sources in the automation form tool", () => {
+      const formTool = (payload: {
+        client_tools: Array<{
+          name: string;
+          description: string;
+          parameters: unknown;
+        }>;
+      }) =>
+        payload.client_tools.find(
+          (tool) => tool.name === AUTOMATION_FORM_UPDATE_TOOL_NAME,
+        );
+      const withSources = formTool(
+        buildStartConversationRequest({
+          ...PROFILE,
+          settings: DEFAULT_SETTINGS,
+          automationSetup: true,
+          automationSetupCapabilities: {
+            ready: true,
+            triggerKinds: ["cron", "event"],
+            eventSources: ["bitbucket_data_center", "jira_dc"],
+            eventTypes: [],
+            eventTypesBySource: {
+              bitbucket_data_center: ["pr:opened"],
+              jira_dc: ["jira:issue_updated"],
+            },
+            triggers: {},
+            features: [],
+          },
+        }),
+      );
+      const unknown = formTool(
+        buildStartConversationRequest({
+          ...PROFILE,
+          settings: DEFAULT_SETTINGS,
+          automationSetup: true,
+          automationSetupCapabilities: null,
+        }),
+      );
+
+      expect(withSources?.description).toContain(
+        "* bitbucket_data_center (Bitbucket Data Center): event keys pr:opened.",
+      );
+      expect(withSources?.description).toContain(
+        "* jira_dc (Jira Data Center): event keys jira:issue_updated.",
+      );
+      expect(unknown?.description).toContain("event sources could not be read");
+      // Same tool name, same schema: the agent-server accepts both.
+      expect(withSources?.parameters).toEqual(unknown?.parameters);
+    });
 
     it("sends the client tool when resuming a conversation", () => {
       const payload = buildStartConversationRequest({
@@ -955,6 +1025,21 @@ describe("toAppConversation", () => {
     expect(result.llm_model).toBe("claude-sonnet-4-6");
   });
 
+  it("carries the ACP session's effort and the levels it offers", () => {
+    const result = toAppConversation({
+      ...baseInfo,
+      agent: { kind: "ACPAgent" },
+      current_effort: "high",
+      available_efforts: [{ value: "high", name: "High" }, { value: "max" }],
+    });
+
+    expect(result.acp_current_effort).toBe("high");
+    expect(result.acp_available_efforts).toEqual([
+      { value: "high", label: "High" },
+      { value: "max", label: "Max" },
+    ]);
+  });
+
   it("prefers ACP runtime model fields over configured acp_model", () => {
     const result = toAppConversation({
       ...baseInfo,
@@ -1284,6 +1369,25 @@ describe("profile launch additions", () => {
       } else {
         expect(appended ?? "").not.toContain("ROUTE_AT_CONVERSATION_START");
       }
+    },
+  );
+
+  it.each([
+    ["an OpenHands setup conversation", "openhands", true, true],
+    ["an ordinary conversation", "openhands", false, false],
+    ["an ACP setup conversation, which gets no form tool", "acp", true, false],
+  ] as const)(
+    "tells the agent to stay on the setup form only in %s",
+    (_case, agentProfileKind, automationSetup, expected) => {
+      const payload = buildStartConversationRequest({
+        settings: DEFAULT_SETTINGS,
+        agentProfileId: "profile-1",
+        agentProfileKind,
+        automationSetup,
+      });
+
+      const appended = additionsOf(payload)?.system_message_suffix_append ?? "";
+      expect(appended.includes(AUTOMATION_SETUP_SYSTEM_SUFFIX)).toBe(expected);
     },
   );
 

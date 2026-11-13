@@ -4,6 +4,7 @@ import { CopyableContentWrapper } from "#/components/shared/buttons/copyable-con
 import { useColorTheme } from "#/hooks/use-color-theme";
 import { getSyntaxHighlighterTheme } from "#/themes/syntax-highlighter-themes";
 import { cn } from "#/utils/utils";
+import { MermaidDiagram } from "./mermaid-diagram";
 import { SyntaxHighlighter } from "./syntax-highlighter";
 
 // See https://github.com/remarkjs/react-markdown?tab=readme-ov-file#use-custom-components-syntax-highlight
@@ -34,7 +35,7 @@ function Code({
         <code
           className={cn(
             className,
-            "bg-surface-raised text-foreground border border-surface-raised rounded px-[0.4em] py-[0.2em]",
+            "bg-surface-raised text-foreground border border-surface-raised rounded px-code-inline-x py-code-inline-y",
           )}
         >
           {children}
@@ -44,14 +45,14 @@ function Code({
 
     return (
       <CopyableContentWrapper text={codeString}>
-        <pre className="bg-surface-raised text-foreground border border-surface-raised rounded p-[1em] overflow-auto">
+        <pre className="bg-surface-raised text-foreground border border-surface-raised rounded p-code-block overflow-auto">
           <code className={className}>{codeString}</code>
         </pre>
       </CopyableContentWrapper>
     );
   }
 
-  return (
+  const highlighted = (
     <CopyableContentWrapper text={codeString}>
       <SyntaxHighlighter
         className="rounded-lg"
@@ -63,6 +64,12 @@ function Code({
       </SyntaxHighlighter>
     </CopyableContentWrapper>
   );
+
+  if (match[1] === "mermaid") {
+    return <MermaidDiagram source={codeString} fallback={highlighted} />;
+  }
+
+  return highlighted;
 }
 
 export { Code as code };

@@ -23,7 +23,7 @@ import {
 vi.mock("react-i18next", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({
-    t: (key: string) => (key === "NAV$EXTENSIONS" ? "Apps" : key),
+    t: (key: string) => key,
     i18n: { language: "en", exists: () => false },
   }),
 }));

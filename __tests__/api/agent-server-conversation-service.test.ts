@@ -21,6 +21,8 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { getOrganizationSuspension } from "#/api/cloud/organization-suspension-store";
+import { AUTOMATION_SETUP_SYSTEM_SUFFIX } from "#/api/automation-form-client-tool";
 import HooksService from "#/api/hooks-service";
 import LLMSubscriptionService from "#/api/llm-subscription-service";
 import {
@@ -371,6 +373,56 @@ describe("AgentServerConversationService", () => {
       expect(mockUpdateConversation).not.toHaveBeenCalled();
     });
 
+    it("replaces a local tag map with the complete new map", async () => {
+      const nextTags = { owner: "alice", automationdraftid: "draft-1" };
+      mockUpdateConversation.mockResolvedValue(undefined);
+      mockHttpGet.mockResolvedValue({
+        data: [makeDirectConversation({ tags: nextTags })],
+      });
+
+      const result =
+        await AgentServerConversationService.replaceConversationTags(
+          "conv-1",
+          { owner: "alice", automationeditid: "auto-1" },
+          nextTags,
+        );
+
+      expect(mockUpdateConversation).toHaveBeenCalledWith("conv-1", {
+        tags: nextTags,
+      });
+      expect(result.tags).toEqual(nextTags);
+    });
+
+    it("replaces a Cloud tag map by patching only the keys that change", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+      const updated = makeDirectConversation({
+        tags: { agentprofileid: "profile-1", automationdraftid: "draft-1" },
+      });
+      const requests = captureRequests(["patch"], updated);
+
+      await expect(
+        AgentServerConversationService.replaceConversationTags(
+          "conv-1",
+          { agentprofileid: "profile-1", automationeditid: "auto-1" },
+          { agentprofileid: "profile-1", automationdraftid: "draft-1" },
+        ),
+      ).resolves.toEqual(updated);
+
+      // A dropped key is deleted with null. The unchanged agentprofileid is a
+      // server-managed key the app server would reject, so it is not sent.
+      expect(requests).toEqual([
+        expect.objectContaining({
+          method: "PATCH",
+          url: `${cloudBackend.host}/api/v1/app-conversations/conv-1`,
+          body: {
+            tags: { automationdraftid: "draft-1", automationeditid: null },
+          },
+        }),
+      ]);
+      expect(mockUpdateConversation).not.toHaveBeenCalled();
+    });
+
     it("preserves disabled editor capability and explicit runtime credentials", async () => {
       const status = { enabled: false, running: false };
       mockVSCodeGetStatus.mockResolvedValue(status);
@@ -608,7 +660,42 @@ describe("AgentServerConversationService", () => {
       );
     });
   });
+  it("downloads the plan when the conversation workspace uses a Windows path", async () => {
+    const encodedPlan = new TextEncoder().encode("# Windows PLAN").buffer;
 
+    mockHttpGet.mockImplementation((url: string) => {
+      if (url === "/api/conversations") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "conv-windows",
+              created_at: "2024-01-01",
+              updated_at: "2024-01-01",
+              workspace: {
+                working_dir: "C:\\Users\\DELL\\workspaces\\conv-windows",
+              },
+            },
+          ],
+        });
+      }
+
+      return Promise.resolve({ data: encodedPlan });
+    });
+
+    const content =
+      await AgentServerConversationService.readConversationFile("conv-windows");
+
+    expect(content).toBe("# Windows PLAN");
+    expect(mockHttpGet).toHaveBeenCalledWith(
+      "/api/file/download",
+      expect.objectContaining({
+        params: {
+          path: "C:/Users/DELL/workspaces/conv-windows/.agents_tmp/PLAN.md",
+        },
+        responseType: "arrayBuffer",
+      }),
+    );
+  });
   describe("createConversation", () => {
     // #16885 — A named agent profile's pinned LLM (llm_profile_ref) must reach
     // the agent-server as `title_llm_profile` when no explicit preference is
@@ -1177,6 +1264,41 @@ describe("AgentServerConversationService", () => {
     afterEach(() => {
       window.localStorage.clear();
       __resetActiveStoreForTests();
+    });
+
+    it("keeps planning lookup and deletion on the original backend during a switch", async () => {
+      const original: Backend = { id: "delete-origin", kind: "local", name: "Original", host: "http://original.test", apiKey: "original-key" };
+      const next: Backend = { ...original, id: "delete-next", host: "http://next.test", apiKey: "next-key" };
+      setRegisteredBackends([original, next]);
+      setActiveSelection({ backendId: original.id });
+      let resolveParent!: (value: unknown) => void;
+      mockHttpGet.mockReturnValueOnce(new Promise(resolve => { resolveParent = resolve; }));
+      mockHttpGet.mockResolvedValueOnce({ data: [makeDirectConversation({ id: "planner", tags: { plannerparent: "parent" } })] });
+      mockHttpDelete.mockResolvedValue({ data: undefined });
+      const deletion = AgentServerConversationService.deleteConversation("parent");
+      setActiveSelection({ backendId: next.id });
+      resolveParent({ data: [makeDirectConversation({ id: "parent", sub_conversation_ids: ["planner"] })] });
+      await deletion;
+      expect(mockHttpDelete.mock.calls.map(call => call[0])).toEqual(["/api/conversations/planner", "/api/conversations/parent"]);
+      expect(vi.mocked(ConversationClient).mock.calls.map(([options]) => options?.host)).toEqual(expect.arrayContaining([original.host]));
+      expect(vi.mocked(ConversationClient).mock.calls.every(([options]) => options?.host === original.host)).toBe(true);
+    });
+
+    it("uses the captured Cloud organization and records suspension there after selection changes", async () => {
+      setRegisteredBackends([cloudBackend, localBackend]);
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "delete-org" });
+      const scope = AgentServerConversationService.createConversationDeletionScope();
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "other-org" });
+      const requests = captureRequests(["delete"], HttpResponse.json({ detail: "Organization is suspended" }, { status: 403 }));
+      await expect(AgentServerConversationService.deleteConversation("cloud-parent", scope)).rejects.toThrow();
+      expect(requests[0].url).toBe(`${cloudBackend.host}/api/v1/app-conversations/cloud-parent`);
+      expect(requests[0].headers["x-org-id"]).toBe("delete-org");
+      expect(getOrganizationSuspension(cloudBackend.id, "delete-org")).toBe("organization");
+      expect(getOrganizationSuspension(cloudBackend.id, "other-org")).toBeNull();
+      setActiveSelection({ backendId: localBackend.id });
+      server.use(http.delete(`${cloudBackend.host}/api/v1/app-conversations/cloud-parent`, () => new HttpResponse(null, { status: 204 })));
+      await AgentServerConversationService.deleteConversation("cloud-parent", scope);
+      expect(mockHttpDelete).not.toHaveBeenCalled();
     });
 
     it("hits the local /api/conversations/{id} endpoint when active backend is local", async () => {
@@ -1762,9 +1884,19 @@ describe("AgentServerConversationService", () => {
       await AgentServerConversationService.createConversation({
         initialUserMsg: "Create a daily report automation",
         automationSetup: true,
+        automationSetupContext: "Selected automation: reviewer-123",
         automationSetupTags: {
           automationdraftid: "draft-1",
           automationmaterializeddraftid: "auto-1",
+        },
+        automationSetupCapabilities: {
+          ready: true,
+          triggerKinds: ["cron", "event"],
+          eventSources: ["jira_dc"],
+          eventTypes: [],
+          eventTypesBySource: { jira_dc: ["jira:issue_updated"] },
+          triggers: {},
+          features: [],
         },
         agentProfileKind: "openhands",
       });
@@ -1773,18 +1905,33 @@ describe("AgentServerConversationService", () => {
       const [request] = requests;
       const body = request.body as {
         tags?: Record<string, string>;
-        client_tools: Array<{ name: string }>;
+        client_tools: Array<{ name: string; description: string }>;
+        system_message_suffix?: string;
       };
       expect(body.tags).toEqual({
         automationsetup: "draft",
         automationdraftid: "draft-1",
         automationmaterializeddraftid: "auto-1",
       });
+      // The agent is told to propose through the form, not the automation API.
+      expect(body.system_message_suffix).toContain("automation_form_update");
+      expect(body.system_message_suffix).toBe(
+        `${AUTOMATION_SETUP_SYSTEM_SUFFIX}\n\nSelected automation: reviewer-123`,
+      );
+      expect(request.body).toMatchObject({
+        initial_message: {
+          content: [{ type: "text", text: "Create a daily report automation" }],
+        },
+      });
       expect(body.client_tools.map((tool) => tool.name)).toEqual([
         "canvas_ui_control",
         "launch_child_conversation",
         "automation_form_update",
       ]);
+      // The form tool carries this deployment's event sources.
+      expect(body.client_tools[2].description).toContain(
+        "* jira_dc (Jira Data Center): event keys jira:issue_updated.",
+      );
     });
 
     it("does not forward automation client tools to cloud ACP conversations", async () => {
@@ -1800,6 +1947,8 @@ describe("AgentServerConversationService", () => {
 
       await AgentServerConversationService.createConversation({
         automationSetup: true,
+        initialUserMsg: "Help with this automation",
+        automationSetupContext: "Selected automation: reviewer-123",
         agentProfileKind: "acp",
       });
 
@@ -1808,9 +1957,42 @@ describe("AgentServerConversationService", () => {
       const body = request.body as {
         tags?: Record<string, string>;
         client_tools?: Array<{ name: string }>;
+        system_message_suffix?: string;
       };
       expect(body.tags).toEqual({ automationsetup: "draft" });
       expect(body.client_tools).toBeUndefined();
+      expect(body.system_message_suffix).toBeUndefined();
+      expect(request.body).toMatchObject({
+        initial_message: {
+          content: [
+            {
+              type: "text",
+              text: "Help with this automation\n\nSelected automation: reviewer-123",
+            },
+          ],
+        },
+      });
+    });
+
+    it("leaves an ordinary cloud conversation's system message alone", async () => {
+      const requests = captureRequests(["post"], {
+        id: "task-chat",
+        status: "WORKING",
+        app_conversation_id: null,
+        agent_server_url: null,
+        request: {},
+        created_at: "2024-01-01",
+        updated_at: "2024-01-01",
+      });
+
+      await AgentServerConversationService.createConversation({
+        initialUserMsg: "Create a daily report automation",
+        agentProfileKind: "openhands",
+      });
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0].body).not.toHaveProperty("system_message_suffix");
+      expect(requests[0].body).not.toHaveProperty("client_tools");
     });
 
     // Connect Repo on an existing cloud conversation must reach the server, so
@@ -2358,6 +2540,7 @@ describe("AgentServerConversationService", () => {
         title: "Conversation conv-",
         status: "idle",
         stats: { usage_to_metrics: {} },
+        max_budget_per_run: null,
       });
     });
 
@@ -2367,6 +2550,7 @@ describe("AgentServerConversationService", () => {
         makeDirectConversation({
           title: "Running conversation",
           execution_status: "running",
+          max_budget_per_run: 5,
           metrics: {
             accumulated_cost: 2,
             max_budget_per_task: 10,
@@ -2393,6 +2577,7 @@ describe("AgentServerConversationService", () => {
       expect(result).toMatchObject({
         title: "Running conversation",
         status: "running",
+        max_budget_per_run: 5,
         metrics: {
           accumulated_cost: 2,
           max_budget_per_task: 10,
@@ -2431,7 +2616,10 @@ describe("AgentServerConversationService", () => {
       // ConversationClient is constructed against those runtime coordinates
       // rather than routed through the cloud proxy.
       mockGetConversation.mockResolvedValue(
-        makeDirectConversation({ execution_status: "paused" }),
+        makeDirectConversation({
+          execution_status: "paused",
+          max_budget_per_run: 3,
+        }),
       );
 
       const result =
@@ -2442,6 +2630,7 @@ describe("AgentServerConversationService", () => {
         );
 
       expect(result.status).toBe("paused");
+      expect(result.max_budget_per_run).toBe(3);
       expect(mockGetConversation).toHaveBeenCalledWith("conv-cloud");
       expect(ConversationClient).toHaveBeenLastCalledWith({
         conversationId: "conv-cloud",
@@ -3054,6 +3243,23 @@ describe("AgentServerConversationService", () => {
         "/api/v1/app-conversations/conv-cloud/switch_acp_model",
       );
       expect(requests[0].body).toEqual({ model: "claude-opus-4-7" });
+    });
+
+    it("switches an ACP effort through the cloud app endpoint", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+      const requests = captureRequests(["post"], { success: true });
+
+      await AgentServerConversationService.switchAcpEffort(
+        "conv-cloud",
+        "high",
+      );
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0].url).toContain(
+        "/api/v1/app-conversations/conv-cloud/switch_acp_effort",
+      );
+      expect(requests[0].body).toEqual({ effort: "high" });
     });
   });
 

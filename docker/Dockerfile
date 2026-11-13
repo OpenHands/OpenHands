@@ -41,10 +41,14 @@ COPY . .
 # production for tagged releases and staging for PR/main images.
 # VITE_BASE_PATH is baked into React Router/Vite so the Docker image serves
 # Canvas under the Cloud subpath instead of a dedicated hostname.
+# VITE_WORKING_DIR is the base directory for per-conversation working dirs. It
+# must be absolute and inside a volume so they outlive the container (#18960).
 ARG VITE_POSTHOG_API_KEY=""
 ARG VITE_BASE_PATH="/canvas"
+ARG VITE_WORKING_DIR="/home/openhands/.openhands/agent-canvas/workspaces"
 ENV VITE_POSTHOG_API_KEY=${VITE_POSTHOG_API_KEY}
 ENV VITE_BASE_PATH=${VITE_BASE_PATH}
+ENV VITE_WORKING_DIR=${VITE_WORKING_DIR}
 RUN npm run build
 
 # ── Stage 1b: Generate shell-sourceable defaults from config/defaults.json ──
@@ -98,7 +102,7 @@ USER root
 # Refresh inherited packages so the final image includes available security
 # fixes. asyncpg publishes wheels for the supported Python and architectures
 # and implements the PostgreSQL protocol directly, so no libpq package is needed.
-ARG DEBIAN_SNAPSHOT=20260930T000000Z
+ARG DEBIAN_SNAPSHOT=20261108T000000Z
 RUN if command -v apt-get >/dev/null 2>&1; then \
       printf '%s\n' \
         'Types: deb' \
@@ -186,8 +190,10 @@ RUN chmod +x /opt/agent-canvas/entrypoint.sh
 # volumes (which default to root).
 RUN mkdir -p /home/openhands/.openhands/agent-canvas/conversations \
              /home/openhands/.openhands/agent-canvas/bash_events \
+             /home/openhands/.openhands/agent-canvas/workspaces \
              /home/openhands/.openhands/automation \
              /projects && \
+    chmod 755 /home/openhands && \
     chown -R openhands:openhands /home/openhands/.openhands /projects
 
 USER openhands

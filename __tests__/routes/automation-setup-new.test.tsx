@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AutomationSetupNew from "#/routes/automation-setup-new";
@@ -9,6 +15,10 @@ import {
 } from "#/api/automation-form-session";
 import type { Automation } from "#/types/automation";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
+import {
+  automationDetailPath,
+  automationListPath,
+} from "#/manifests/automation-interface";
 
 const { mockStartConversationFromPrompt } = vi.hoisted(() => ({
   mockStartConversationFromPrompt: vi.fn(),
@@ -127,6 +137,23 @@ describe("AutomationSetupNew", () => {
     expect(draft.form.name).toBe("Daily digest");
   });
 
+  it("keeps the loaded editor when the panel's unmount clears the session", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(automation);
+    renderRoute("/automations/setup?automationId=auto-1");
+    await screen.findByTestId("setup-panel-draft");
+
+    // Act: the panel clears its session on unmount, which a StrictMode or
+    // any other remount triggers while the route stays mounted.
+    act(() => clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID));
+
+    // Assert
+    const draft = JSON.parse(
+      screen.getByTestId("setup-panel-draft").textContent ?? "{}",
+    );
+    expect(draft.editingAutomationId).toBe("auto-1");
+  });
+
   it("reloads a saved draft from the draftId query", async () => {
     vi.mocked(AutomationService.getServerDraft).mockResolvedValue(serverDraft);
 
@@ -151,4 +178,33 @@ describe("AutomationSetupNew", () => {
       "ASK_AGENT_PROMPT",
     );
   });
+
+  it.each([
+    [
+      "an automation being edited",
+      "?automationId=auto-1",
+      automationDetailPath("auto-1"),
+    ],
+    ["a saved draft", "?draftId=draft-1", automationListPath()],
+    ["a new automation", "", automationListPath()],
+  ])(
+    "points the header's back arrow for %s at where it came from",
+    async (_case, query, expectedPath) => {
+      // Arrange
+      vi.mocked(AutomationService.getAutomation).mockResolvedValue(automation);
+      vi.mocked(AutomationService.getServerDraft).mockResolvedValue(
+        serverDraft,
+      );
+
+      // Act
+      renderRoute(`/automations/setup${query}`);
+      await screen.findByTestId("setup-panel-draft");
+
+      // Assert
+      expect(screen.getByTestId("automation-page-back")).toHaveAttribute(
+        "href",
+        expect.stringMatching(new RegExp(`${expectedPath}$`)),
+      );
+    },
+  );
 });
