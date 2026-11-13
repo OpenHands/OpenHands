@@ -1,8 +1,9 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, vi, beforeEach, it } from "vitest";
+import { describe, expect, vi, beforeEach, afterEach, it } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { GitBranchDropdown } from "../../../../src/components/features/home/git-branch-dropdown/git-branch-dropdown";
+import GitService from "#/api/git-service/git-service.api";
 import { Branch } from "#/types/git";
 
 // Mock the branch data hook
@@ -181,6 +182,30 @@ describe("GitBranchDropdown", () => {
       await userEvent.click(screen.getByText("develop"));
 
       expect(mockOnBranchSelect).toHaveBeenCalledWith(MOCK_BRANCHES[1]);
+    });
+  });
+
+  describe("default branch", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("should preselect the repository's default branch when the caller does not know it", async () => {
+      // Arrange
+      vi.spyOn(GitService, "getRepositoryDefaultBranch").mockResolvedValue(
+        "develop",
+      );
+
+      // Act
+      renderDropdown({
+        repository: "PROJ/repo",
+        provider: "bitbucket_data_center",
+      });
+
+      // Assert
+      await waitFor(() => {
+        expect(mockOnBranchSelect).toHaveBeenCalledWith(MOCK_BRANCHES[1]);
+      });
     });
   });
 });

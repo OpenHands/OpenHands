@@ -1,9 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  Autocomplete,
-  AutocompleteItem,
-  AutocompleteSection,
-} from "@heroui/react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { ComboBoxStateContext } from "react-aria-components";
+import { ComboBox, Header, Input, ListBox } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
@@ -22,6 +19,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { mapProvider } from "#/utils/map-provider";
 import { formControlSettingsFieldClassName } from "#/utils/form-control-classes";
+import { cn } from "#/utils/utils";
 import { heroUiAutocompleteSelectorButtonClassName } from "#/ui/combobox-caret";
 
 const DEFAULT_PROVIDER = "custom";
@@ -43,6 +41,20 @@ interface ProviderConnectionModalProps {
  * form, so a blank key on edit is simply omitted from the request — the
  * agent-server rejects `api_key: null`, so we never send it.
  */
+function OpenOnClickInput({ testId, name }: { testId: string; name: string }) {
+  const state = useContext(ComboBoxStateContext);
+  return (
+    <Input
+      data-testid={testId}
+      name={name}
+      className="border-0 bg-transparent shadow-none outline-none focus:ring-0 focus-visible:ring-0 data-[focused=true]:ring-0"
+      onClick={() => {
+        if (state && !state.isOpen) state.open(null, "manual");
+      }}
+    />
+  );
+}
+
 export function ProviderConnectionModal({
   connection,
   isCreate,
@@ -193,56 +205,64 @@ export function ProviderConnectionModal({
           <label className="text-sm">
             {t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
           </label>
-          <Autocomplete
-            data-testid="provider-connection-provider-input"
+          <ComboBox
+            menuTrigger="focus"
+            allowsEmptyCollection
             isRequired
-            isVirtualized={false}
-            name="provider-connection-provider-input"
             aria-label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
-            isClearable={false}
             selectedKey={provider}
             onSelectionChange={(key) => setProvider(key?.toString() ?? null)}
-            classNames={{
-              popoverContent: "bg-content1 rounded-xl border border-border",
-              selectorButton: heroUiAutocompleteSelectorButtonClassName,
-            }}
-            selectorButtonProps={{ disableRipple: true }}
-            inputProps={{
-              classNames: {
-                inputWrapper: formControlSettingsFieldClassName,
-              },
-            }}
           >
-            <AutocompleteSection
-              title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
-              classNames={{ heading: "text-muted" }}
+            <ComboBox.InputGroup
+              className={cn(
+                formControlSettingsFieldClassName,
+                "focus-within:border-contrast/40 dark:focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
+              )}
             >
-              {verifiedProviders.map((candidate) => (
-                <AutocompleteItem
-                  data-testid={`provider-item-${candidate.name}`}
-                  key={candidate.name}
-                  textValue={mapProvider(candidate.name)}
-                >
-                  {mapProvider(candidate.name)}
-                </AutocompleteItem>
-              ))}
-            </AutocompleteSection>
-            {unverifiedProviders.length > 0 ? (
-              <AutocompleteSection
-                title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
-                classNames={{ heading: "text-muted" }}
-              >
-                {unverifiedProviders.map((candidate) => (
-                  <AutocompleteItem
-                    key={candidate.name}
-                    textValue={mapProvider(candidate.name)}
-                  >
-                    {mapProvider(candidate.name)}
-                  </AutocompleteItem>
-                ))}
-              </AutocompleteSection>
-            ) : null}
-          </Autocomplete>
+              <OpenOnClickInput
+                testId="provider-connection-provider-input"
+                name="provider-connection-provider-input"
+              />
+              <ComboBox.Trigger
+                className={heroUiAutocompleteSelectorButtonClassName}
+              />
+            </ComboBox.InputGroup>
+            <ComboBox.Popover className="rounded-xl border border-border">
+              <ListBox>
+                <ListBox.Section>
+                  <Header className="text-muted">
+                    {t(I18nKey.MODEL_SELECTOR$VERIFIED)}
+                  </Header>
+                  {verifiedProviders.map((candidate) => (
+                    <ListBox.Item
+                      data-testid={`provider-item-${candidate.name}`}
+                      key={candidate.name}
+                      id={candidate.name}
+                      textValue={mapProvider(candidate.name)}
+                    >
+                      {mapProvider(candidate.name)}
+                    </ListBox.Item>
+                  ))}
+                </ListBox.Section>
+                {unverifiedProviders.length > 0 ? (
+                  <ListBox.Section>
+                    <Header className="text-muted">
+                      {t(I18nKey.MODEL_SELECTOR$OTHERS)}
+                    </Header>
+                    {unverifiedProviders.map((candidate) => (
+                      <ListBox.Item
+                        key={candidate.name}
+                        id={candidate.name}
+                        textValue={mapProvider(candidate.name)}
+                      >
+                        {mapProvider(candidate.name)}
+                      </ListBox.Item>
+                    ))}
+                  </ListBox.Section>
+                ) : null}
+              </ListBox>
+            </ComboBox.Popover>
+          </ComboBox>
         </fieldset>
         <SettingsInput
           testId="provider-connection-api-key-input"

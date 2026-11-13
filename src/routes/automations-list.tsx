@@ -12,6 +12,7 @@ import { getApiErrorMessage } from "#/utils/api-error-message";
 import {
   useAutomationDrafts,
   useAutomations,
+  useAutomationTags,
   useToggleAutomation,
   useDeleteAutomation,
   useDeleteAutomationDraft,
@@ -25,6 +26,7 @@ import {
   initializeAutomationFormSession,
 } from "#/api/automation-form-session";
 import type { AutomationSetupKind } from "#/api/automation-setup-types";
+import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import { SearchInput } from "#/components/features/automations/search-input";
@@ -54,11 +56,17 @@ import {
   useAutomationCreatorFilterUserId,
   useAutomationPermissions,
 } from "#/hooks/use-automation-permissions";
-import type { Automation, AutomationSpec } from "#/types/automation";
+import { useCloudIntegrationsConfig } from "#/hooks/query/use-cloud-integrations-config";
+import type {
+  Automation,
+  AutomationExportFile,
+  AutomationSpec,
+} from "#/types/automation";
 import {
   getAutomationExportFilename,
   parseAutomationFile,
   serializeAutomation,
+  serializeScriptAutomation,
 } from "#/utils/automation-export";
 import {
   automationDetailPath,
@@ -312,6 +320,7 @@ export default function AutomationsList() {
     useState<DashboardTriggerValue>("all");
   const [createdByFilter, setCreatedByFilter] =
     useState<DashboardCreatedByValue>("all");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [sortValue, setSortValue] = useState<DashboardSortValue>(
     dashboardSpec?.sort.default ?? "last-run",
   );
@@ -336,12 +345,19 @@ export default function AutomationsList() {
   // manage_automations (admins/owners) on every backend kind.
   const { canManage } = useAutomationPermissions();
   const creatorFilterUserId = useAutomationCreatorFilterUserId();
-  // The creator the server filters by; undefined while the filter is hidden
-  // or set to "all".
-  const serverCreatedBy =
+  // The owner (run-as identity) the server filters by; undefined while the
+  // filter is hidden or set to "all".
+  const serverRunAs =
     creatorFilterUserId !== null && createdByFilter !== "all"
       ? createdByFilter
       : undefined;
+  // The Service accounts option follows the instance's service accounts flag,
+  // like the run-as UI; the config is read only where the filter is shown.
+  const { data: cloudConfig } = useCloudIntegrationsConfig({
+    enabled: creatorFilterUserId !== null,
+  });
+  const canFilterByServiceAccount =
+    cloudConfig?.isServiceAccountsEnabled === true;
 
   const {
     data: healthData,
@@ -363,14 +379,23 @@ export default function AutomationsList() {
     isPlaceholderData,
   } = useAutomations({
     enabled: isBackendHealthy,
-    // The server filters by creator so pages and `total` cover only matches;
+    // The server filters by owner so pages and `total` cover only matches;
     // the client predicate in applyDashboardView stays as the fallback for
     // an automation service that ignores the param.
-    createdBy: serverCreatedBy,
+    runAs: serverRunAs,
+    // Same for the tag: the server filters, the client predicate backs it up.
+    tag: tagFilter ?? undefined,
   });
   // The overview tiles summarize the org list above the filters, so they read
   // it unfiltered; with no creator selected this is the same query as above.
   const { data: orgData } = useAutomations({ enabled: isBackendHealthy });
+  const { data: tagCounts } = useAutomationTags({
+    enabled: isBackendHealthy && dashboardSpec !== null,
+  });
+  const tagOptions = useMemo(
+    () => (tagCounts ?? []).map((entry) => entry.tag),
+    [tagCounts],
+  );
   const {
     data: draftsData,
     isLoading: isDraftsLoading,
@@ -427,6 +452,7 @@ export default function AutomationsList() {
         // workspace has no effect while the filter is hidden.
         createdBy: createdByFilter,
         currentUserId: creatorFilterUserId,
+        tag: tagFilter,
         sort: sortValue,
       },
       runSummaries,
@@ -439,6 +465,7 @@ export default function AutomationsList() {
     triggerFilter,
     createdByFilter,
     creatorFilterUserId,
+    tagFilter,
     sortValue,
     runSummaries,
   ]);
@@ -518,8 +545,21 @@ export default function AutomationsList() {
     if (automation) openEditor(automation);
   };
 
-  const handleExport = (automation: Automation) => {
-    const contents = `${JSON.stringify(serializeAutomation(automation), null, 2)}\n`;
+  const handleExport = async (automation: Automation) => {
+    let file: AutomationExportFile;
+    try {
+      // A script automation's file has to carry its bundle.
+      file = automation.prompt
+        ? serializeAutomation(automation)
+        : serializeScriptAutomation(
+            automation,
+            await AutomationService.fetchTarballBytes(automation.id),
+          );
+    } catch (error) {
+      displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
+      return;
+    }
+    const contents = `${JSON.stringify(file, null, 2)}\n`;
     downloadBlob(
       new Blob([contents], { type: "application/json" }),
       getAutomationExportFilename(automation),
@@ -602,6 +642,7 @@ export default function AutomationsList() {
     setStatusFilter("all");
     setTriggerFilter("all");
     setCreatedByFilter("all");
+    setTagFilter(null);
   };
 
   const overviewTiles = useMemo(() => {
@@ -762,10 +803,14 @@ export default function AutomationsList() {
             trigger={triggerFilter}
             createdBy={createdByFilter}
             canFilterByCreator={creatorFilterUserId !== null}
+            canFilterByServiceAccount={canFilterByServiceAccount}
+            tag={tagFilter}
+            tagOptions={tagOptions}
             sort={sortValue}
             onStatusChange={setStatusFilter}
             onTriggerChange={setTriggerFilter}
             onCreatedByChange={setCreatedByFilter}
+            onTagChange={setTagFilter}
             onSortChange={setSortValue}
           />
         )}

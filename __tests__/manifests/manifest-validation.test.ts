@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { validateSetupEntry } from "#/manifests/manifest-validation";
 import type {
+  SetupEntry,
   SetupForm,
   SetupFormField,
   SetupFormFields,
@@ -34,6 +35,40 @@ describe("validateSetupEntry", () => {
 
     // Assert
     expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  it("admits the built-in integrations an entry needs", () => {
+    // Arrange
+    const entry = createSetupEntry({
+      requires: {
+        integrations: {},
+        builtInIntegrations: ["jira_dc", "bitbucket_data_center"],
+      } as SetupEntry["requires"],
+    });
+
+    // Act
+    const result = validateSetupEntry(entry);
+
+    // Assert
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  it("refuses a malformed list of built-in integrations", () => {
+    // Arrange
+    const entry = createSetupEntry({
+      requires: {
+        integrations: {},
+        builtInIntegrations: ["jira_dc", ""],
+      } as SetupEntry["requires"],
+    });
+
+    // Act
+    const result = validateSetupEntry(entry);
+
+    // Assert
+    expect(result.errors).toEqual([
+      "requires.builtInIntegrations[1]: must be a non-empty string",
+    ]);
   });
 
   it("admits a direct entry carrying a fallback-conversation message", () => {
@@ -429,6 +464,57 @@ describe("validateSetupEntry", () => {
     expect(result).toEqual({ valid: true, errors: [] });
   });
 
+  // A repository picker names the provider whose repositories it lists. The
+  // Data Center and Azure DevOps integrations are providers the host can list
+  // from, so a template for either may ask for a repository the same way.
+  it.each(["bitbucket_data_center", "azure_devops"])(
+    "admits a repository field that lists %s repositories",
+    (provider) => {
+      // Arrange
+      const entry = createSetupEntry({
+        setup: createSetup({
+          form: formWithField("repository", {
+            type: "repo-picker",
+            label: "Repository",
+            help: "Which repository to watch.",
+            provider,
+            required: true,
+          }),
+        }),
+      });
+
+      // Act
+      const result = validateSetupEntry(entry);
+
+      // Assert
+      expect(result).toEqual({ valid: true, errors: [] });
+    },
+  );
+
+  it("refuses a repository field for a provider the host cannot list", () => {
+    // Arrange
+    const entry = createSetupEntry({
+      setup: createSetup({
+        form: formWithField("repository", {
+          type: "repo-picker",
+          label: "Repository",
+          help: "Which repository to watch.",
+          provider: "sourcehut",
+          required: true,
+        }),
+      }),
+    });
+
+    // Act
+    const result = validateSetupEntry(entry);
+
+    // Assert
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain(
+      "setup.form.args.repository.provider: is not a supported provider",
+    );
+  });
+
   it("reports every problem at once so an author sees the whole picture", () => {
     // Arrange
     const candidate = createSetupEntryWith({ name: "", description: "" });
@@ -483,6 +569,38 @@ describe("validateSetupEntry", () => {
             args: { ...args, repository: repoPicker },
           },
           prompt: "Report on {{form.repository}}.",
+        }),
+      });
+
+      // Act
+      const result = validateSetupEntry(entry);
+
+      // Assert
+      expect(result).toEqual({ valid: true, errors: [] });
+    });
+
+    it("admits an event trigger that names its source in a field of its own", () => {
+      // Arrange — a fixed source (here Jira Data Center) offered as a single
+      // option, for an entry with no repository picker to derive one from.
+      const entry = createSetupEntry({
+        setup: createSetup({
+          form: {
+            triggers: {
+              event: {
+                ...eventFields,
+                source: {
+                  type: "select",
+                  label: "Event source",
+                  help: "Where events come from.",
+                  default: "jira_dc",
+                  required: true,
+                  options: [{ value: "jira_dc", label: "Jira Data Center" }],
+                },
+              },
+            },
+            args,
+          },
+          prompt: "Report on {{form.widgetName}}.",
         }),
       });
 

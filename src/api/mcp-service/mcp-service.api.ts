@@ -183,6 +183,16 @@ function oauthStatusToTestResponse(
       }),
     };
   }
+  // The backend's probe gives up after its own budget. When it had already
+  // handed out an authorization URL, that budget ran out waiting for the
+  // person to finish the sign-in, not for the server.
+  if (status.error_kind === "timeout" && status.authorization_url) {
+    return {
+      ok: false,
+      error: status.error || "OAuth authorization was not completed",
+      error_kind: "authorization",
+    };
+  }
   return {
     ok: false,
     error: status.error || "OAuth authorization did not complete",
@@ -264,47 +274,6 @@ class McpService {
     return finalizeMcpTestResponse(result, validation, [server]);
   }
 
-  static async startOAuth(
-    server: MCPServerConfig,
-  ): Promise<MCPOAuthStartResponse> {
-    const transport = McpService.createOAuthTransport();
-    try {
-      return await transport.start(server);
-    } finally {
-      transport.close();
-    }
-  }
-
-  static async getOAuthStatus(jobId: string): Promise<MCPOAuthStatusResponse> {
-    const transport = McpService.createOAuthTransport();
-    try {
-      return await transport.status(jobId);
-    } finally {
-      transport.close();
-    }
-  }
-
-  /**
-   * Local agent-server only: hands a captured loopback callback URL to the
-   * probe. On cloud backends the provider redirects straight to the app
-   * server's callback route, so there is nothing to submit.
-   */
-  static async submitOAuthCallback(
-    jobId: string,
-    callbackUrl: string,
-  ): Promise<MCPOAuthStatusResponse> {
-    const client = createMcpProbeClient();
-    try {
-      return await McpService.submitOAuthCallbackWithClient(
-        client,
-        jobId,
-        callbackUrl,
-      );
-    } finally {
-      client.close();
-    }
-  }
-
   static async authorizeOAuth(
     server: MCPServerConfig,
   ): Promise<ExtendedMCPTestResponse> {
@@ -362,6 +331,16 @@ class McpService {
         }
       }
 
+      // With a pop-up, nothing on the server timed out: the person did not
+      // finish the sign-in. Without one, the app server was still probing the
+      // stored tokens, which is a plain timeout.
+      if (start.authorization_url) {
+        return {
+          ok: false,
+          error: "OAuth authorization was not completed",
+          error_kind: "authorization",
+        };
+      }
       return {
         ok: false,
         error: "OAuth authorization timed out",
@@ -424,16 +403,6 @@ class McpService {
     jobId: string,
   ): Promise<MCPOAuthStatusResponse> {
     return (await client.getOAuthStatus(jobId)) as MCPOAuthStatusResponse;
-  }
-
-  private static async submitOAuthCallbackWithClient(
-    client: MCPClient,
-    jobId: string,
-    callbackUrl: string,
-  ): Promise<MCPOAuthStatusResponse> {
-    return (await client.submitOAuthCallback(jobId, {
-      callback_url: callbackUrl,
-    })) as MCPOAuthStatusResponse;
   }
 }
 

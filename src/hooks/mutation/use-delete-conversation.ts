@@ -1,3 +1,7 @@
+import {
+  sessionActivityKey,
+  useSessionActivityStore,
+} from "#/stores/session-activity-store";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { ConversationDeletionScope } from "#/api/conversation-service/agent-server-conversation-service.api";
@@ -7,18 +11,28 @@ export const useDeleteConversation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (variables: {
+    mutationFn: async (variables: {
       conversationId: string;
       deletionScope?: ConversationDeletionScope;
-    }) =>
-      variables.deletionScope
-        ? AgentServerConversationService.deleteConversation(
-            variables.conversationId,
-            variables.deletionScope,
-          )
-        : AgentServerConversationService.deleteConversation(
+    }) => {
+      const scope =
+        variables.deletionScope ??
+        AgentServerConversationService.createConversationDeletionScope();
+      const result = await AgentServerConversationService.deleteConversation(
+        variables.conversationId,
+        scope,
+      );
+      useSessionActivityStore
+        .getState()
+        .remove(
+          sessionActivityKey(
+            scope.backend.id,
+            scope.orgId,
             variables.conversationId,
           ),
+        );
+      return result;
+    },
     onMutate: async (variables) => {
       await queryClient.cancelQueries({ queryKey: ["user", "conversations"] });
       const previousConversations = queryClient.getQueryData([

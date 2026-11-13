@@ -4,7 +4,7 @@ import {
 } from "#/constants/secret-request";
 import type { ClientToolSpec } from "./canvas-ui-client-tool";
 
-const REQUEST_SECRET_DESCRIPTION = `Ask the user to securely provide a secret you need (an API key, token, password or other credential) through a form shown over this conversation, without sending them to Settings.
+const REQUEST_SECRET_DESCRIPTION = `Ask the user to securely provide a secret you need (an API key, token, password or other credential) through a form shown in this conversation, without sending them to Settings.
 
 Call this when a task needs a credential that is not among your available
 secrets — for example a GitHub token to push to a repository. Never ask the
@@ -16,8 +16,10 @@ an environment variable named after the secret. Reference it as $NAME in
 commands; never print or echo it. One call per missing secret.
 
 What comes back: this tool is acknowledged immediately, before the user has
-answered. End your turn after calling it and wait. The outcome arrives as a
-follow-up message starting with "${SECRET_REQUEST_RESULT_PREFIX.trim()}". On "saved",
+answered, and the user answers whenever they are ready. Keep working on
+anything that does not need the secret, or end your turn if nothing is left;
+do not wait in a loop or ask again. The outcome arrives as a follow-up message
+starting with "${SECRET_REQUEST_RESULT_PREFIX.trim()}". On "saved",
 continue using the secret by the name it reports (the user may have renamed
 it). Otherwise, follow the guidance in the message; do not call this tool again
 unless the user asks you to.`;

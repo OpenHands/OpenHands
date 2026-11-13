@@ -1,12 +1,24 @@
 import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
+  isACPToolCallEvent,
+  isMessageEvent,
+  isStreamingDeltaEvent,
+  isHookExecutionEvent,
   isObservationEvent,
   isPlanningFileEditorObservationEvent,
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
-import { getThoughtSourceAction } from "./event-thought-helpers";
+import type { SessionActivity } from "#/stores/session-activity-store";
+import { parseDateAsUTC } from "#/utils/format-time-delta";
+import { parseMessageFromEvent } from "./event-content-helpers/parse-message-from-event";
+import {
+  getReasoningContent,
+  splitInlineThink,
+  getThoughtSourceAction,
+  buildActionById,
+} from "./event-thought-helpers";
 
 /** Minimum run-length before consecutive actions get folded into a single
  *  collapsible group. Even pairs are folded so the chat scroll stays compact
@@ -17,9 +29,10 @@ export const EVENT_GROUP_MIN_SIZE = 2;
  * Returns true if the given event is one of the action / observation cards
  * that we want to fold into an `EventGroup` when several appear in a row.
  *
- * Events that have their own dedicated rendering (FinishAction, ThinkAction,
- * HookExecution, AgentError, MessageEvent, PlanPreview, markdown file
- * artifacts, TaskTracker) are treated as group breakers.
+ * Successful and blocked hooks fold into the surrounding run; failed hooks
+ * stay visible on their own. Events that have their own dedicated rendering
+ * (FinishAction, AgentError, MessageEvent, PlanPreview, markdown
+ * file artifacts, TaskTracker) are treated as group breakers.
  */
 export const isGroupableEvent = (
   event: OpenHandsEvent,
@@ -27,7 +40,7 @@ export const isGroupableEvent = (
 ): boolean => {
   if (isActionEvent(event)) {
     const { kind } = event.action;
-    if (kind === "FinishAction" || kind === "ThinkAction") {
+    if (kind === "FinishAction") {
       return false;
     }
     // Keep markdown *create* artifact cards outside collapsed groups so their
@@ -51,6 +64,12 @@ export const isGroupableEvent = (
     return true;
   }
 
+  if (isACPToolCallEvent(event)) return event.status !== "failed";
+
+  if (isHookExecutionEvent(event)) {
+    return event.success || event.blocked;
+  }
+
   // A rejected action stays wherever the action itself was: in its run, or
   // on its own when the action is a group breaker.
   if (isUserRejectObservation(event)) {
@@ -63,7 +82,13 @@ export const isGroupableEvent = (
 export type RenderedItem =
   | { kind: "single"; event: OpenHandsEvent; index: number }
   | { kind: "thought"; action: ActionEvent; index: number }
-  | { kind: "group"; events: OpenHandsEvent[]; startIndex: number };
+  | {
+      kind: "group";
+      events: OpenHandsEvent[];
+      startIndex: number;
+      session?: SessionActivity;
+      reasoning?: { id: string; text: string; index: number }[];
+    };
 
 /**
  * Walk a list of UI events and bucket consecutive groupable events into
@@ -80,27 +105,72 @@ export type RenderedItem =
  *
  * `allEvents` should be the full event history so observations can find
  * their matching action; if omitted, it defaults to `events`.
+ *
+ * `trailingMinSize` applies to the run at the very end of `events`. While the
+ * agent is working, pass 1 so the stage it is on is a group from its first
+ * step and does not jump from a lone row into a group when a second arrives.
  */
 export const groupEvents = (
   events: OpenHandsEvent[],
   minSize: number = EVENT_GROUP_MIN_SIZE,
   allEvents: OpenHandsEvent[] = events,
+  trailingMinSize: number = minSize,
+  sessions: readonly SessionActivity[] = [],
+  actionById: ReadonlyMap<string, ActionEvent> = buildActionById(allEvents),
 ): RenderedItem[] => {
-  if (minSize < 1) {
+  if (minSize < 1 || trailingMinSize < 1) {
     throw new Error("minSize must be at least 1");
   }
 
   const items: RenderedItem[] = [];
   const emittedThoughtActionIds = new Set<string>();
-  let run: { events: OpenHandsEvent[]; startIndex: number } | null = null;
+  // An action and its observation share reasoning. Keep this lookup per run
+  // instead of scanning/copying its growing reasoning array for every step.
+  const runReasoningIds = new Set<string>();
+  let run: Omit<Extract<RenderedItem, { kind: "group" }>, "kind"> | null = null;
+  const startRun = (index: number) => {
+    if (!run) run = { events: [], startIndex: index };
+    return run;
+  };
+  const insertions = new Map<number, SessionActivity[]>();
+  for (const session of sessions) {
+    let index: number;
+    if (session.kind === "initialize") {
+      const userIndex = events.findIndex((event) => event.source === "user");
+      index = userIndex < 0 ? 0 : userIndex + 1;
+    } else {
+      const anchor = session.afterEventId
+        ? events.findIndex((event) => event.id === session.afterEventId)
+        : -1;
+      index =
+        anchor >= 0
+          ? anchor + 1
+          : events.findIndex(
+              (event) =>
+                parseDateAsUTC(event.timestamp ?? "").getTime() >=
+                session.startedAt,
+            );
+      if (index < 0) index = events.length;
+      if (events[index]?.source === "user") index += 1;
+    }
+    insertions.set(index, [...(insertions.get(index) ?? []), session]);
+  }
 
-  const flushRun = () => {
+  const flushRun = (size = minSize) => {
     if (!run) return;
-    if (run.events.length >= minSize) {
+    const loneBlockedHook =
+      !run.session &&
+      !run.reasoning?.length &&
+      run.events.length === 1 &&
+      isHookExecutionEvent(run.events[0]) &&
+      run.events[0].blocked;
+    if (
+      !loneBlockedHook &&
+      (run.session || run.reasoning?.length || run.events.length >= size)
+    ) {
       items.push({
         kind: "group",
-        events: run.events,
-        startIndex: run.startIndex,
+        ...run,
       });
     } else {
       run.events.forEach((event, offset) => {
@@ -108,22 +178,89 @@ export const groupEvents = (
       });
     }
     run = null;
+    runReasoningIds.clear();
+  };
+
+  const insertSessions = (index: number) => {
+    for (const session of insertions.get(index) ?? []) {
+      flushRun();
+      startRun(index).session = session;
+    }
   };
 
   events.forEach((event, index) => {
+    insertSessions(index);
+    if (
+      (isMessageEvent(event) && event.source === "agent") ||
+      isStreamingDeltaEvent(event)
+    ) {
+      const streaming = isStreamingDeltaEvent(event);
+      const { reasoning: inline, message } = splitInlineThink(
+        streaming ? (event.content ?? "") : parseMessageFromEvent(event),
+        { streaming },
+      );
+      const reasoning = [
+        streaming
+          ? event.reasoning_content
+          : getReasoningContent(event.llm_message),
+        inline,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      if (reasoning) {
+        const current = startRun(index);
+        (current.reasoning ??= []).push({
+          id: event.id,
+          text: reasoning,
+          index,
+        });
+        runReasoningIds.add(event.id);
+      }
+      const hasVisiblePayload =
+        isMessageEvent(event) &&
+        (event.critic_result != null ||
+          (Array.isArray(event.llm_message.content) &&
+            event.llm_message.content.some(
+              (content) =>
+                content.type === "image" && content.image_urls.length > 0,
+            )));
+      if (!message.trim() && !hasVisiblePayload && (streaming || reasoning))
+        return;
+    }
     const correspondingAction =
       isObservationEvent(event) || isUserRejectObservation(event)
-        ? allEvents.find(
-            (candidate): candidate is ActionEvent =>
-              isActionEvent(candidate) && candidate.id === event.action_id,
-          )
+        ? actionById.get(event.action_id ?? "")
         : undefined;
     if (isGroupableEvent(event, correspondingAction)) {
-      const thoughtAction = getThoughtSourceAction(event, allEvents);
+      // Hoist the thought before attaching the action's reasoning, so the
+      // reasoning lands in the step's own group rather than a "Thinking"-only
+      // group that shares the step's key and open state.
+      const thoughtAction = getThoughtSourceAction(
+        event,
+        allEvents,
+        actionById,
+      );
       if (thoughtAction && !emittedThoughtActionIds.has(thoughtAction.id)) {
         flushRun();
         emittedThoughtActionIds.add(thoughtAction.id);
         items.push({ kind: "thought", action: thoughtAction, index });
+      }
+      const reasoningAction = isActionEvent(event)
+        ? event
+        : correspondingAction;
+      const reasoning = reasoningAction
+        ? getReasoningContent(reasoningAction)
+        : "";
+      if (reasoning && reasoningAction) {
+        const current = startRun(index);
+        if (!runReasoningIds.has(reasoningAction.id)) {
+          (current.reasoning ??= []).push({
+            id: reasoningAction.id,
+            text: reasoning,
+            index,
+          });
+          runReasoningIds.add(reasoningAction.id);
+        }
       }
       if (!run) run = { events: [], startIndex: index };
       run.events.push(event);
@@ -133,6 +270,7 @@ export const groupEvents = (
     }
   });
 
-  flushRun();
+  insertSessions(events.length);
+  flushRun(trailingMinSize);
   return items;
 };

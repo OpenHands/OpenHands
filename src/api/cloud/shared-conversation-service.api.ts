@@ -20,8 +20,9 @@ function getActiveCloudBackend(): Backend {
 /**
  * Fetch a conversation shared with the caller from the cloud backend via
  * `GET /api/shared-conversations?ids=<id>`. The endpoint serves public
- * conversations to anyone and automation conversations to authenticated
- * members of their org; it returns `null` for anything else.
+ * conversations shared from a personal workspace to anyone, and public or
+ * automation conversations of a team org to authenticated members of that
+ * org; it returns `null` for anything else.
  */
 export async function getCloudSharedConversation(
   conversationId: string,

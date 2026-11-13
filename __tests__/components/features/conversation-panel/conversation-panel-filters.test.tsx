@@ -9,7 +9,6 @@ import {
 } from "./conversation-panel-test-utils";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
-import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const mockStopConversationMutate = vi.fn();
@@ -577,9 +576,6 @@ describe("ConversationPanel filters and pagination", () => {
               next_page_id: "second-page",
             },
       );
-      useArchivedConversationsStore.setState({
-        archivesByBackendId: { "default-local": ["archived"] },
-      });
       renderConversationPanel();
       await screen.findByTestId("conversation-card");
 
@@ -594,7 +590,10 @@ describe("ConversationPanel filters and pagination", () => {
         resolveSecondPage({
           items: [
             createMockConversation({ id: "visible" }),
-            createMockConversation({ id: "archived" }),
+            createMockConversation({
+              id: "archived",
+              tags: { archived: "true" },
+            }),
             createMockConversation({ id: "unloaded" }),
           ],
           next_page_id: null,
@@ -603,7 +602,9 @@ describe("ConversationPanel filters and pagination", () => {
       await screen.findByText("CONVERSATION$CONFIRM_DELETE_ALL_DESC 3");
       await user.click(screen.getByTestId("confirm-button"));
       await waitFor(() => expect(deleteSpy).toHaveBeenCalledTimes(3));
-      expect(new Set(deleteSpy.mock.calls.map(([, scope]) => scope)).size).toBe(1);
+      expect(new Set(deleteSpy.mock.calls.map(([, scope]) => scope)).size).toBe(
+        1,
+      );
       expect(deleteSpy.mock.calls.map(([id]) => id).sort()).toEqual([
         "archived",
         "unloaded",
@@ -682,8 +683,14 @@ describe("ConversationPanel filters and pagination", () => {
       await waitFor(() => {
         expect(deleteSpy).toHaveBeenCalledTimes(2);
       });
-      expect(deleteSpy).toHaveBeenCalledWith("recent-1", expect.objectContaining({ kind: "local" }));
-      expect(deleteSpy).toHaveBeenCalledWith("recent-2", expect.objectContaining({ kind: "local" }));
+      expect(deleteSpy).toHaveBeenCalledWith(
+        "recent-1",
+        expect.objectContaining({ kind: "local" }),
+      );
+      expect(deleteSpy).toHaveBeenCalledWith(
+        "recent-2",
+        expect.objectContaining({ kind: "local" }),
+      );
     });
 
     it("delete-all still deletes hidden archived conversations", async () => {
@@ -710,21 +717,18 @@ describe("ConversationPanel filters and pagination", () => {
             id: "archived-1",
             title: "Archived 1",
             updated_at: recentIso(),
+            tags: { archived: "true" },
           }),
           createMockConversation({
             id: "archived-2",
             title: "Archived 2",
             updated_at: recentIso(),
+            tags: { archived: "true" },
           }),
         ],
         next_page_id: null,
       });
 
-      useArchivedConversationsStore.setState({
-        archivesByBackendId: {
-          "default-local": ["archived-1", "archived-2"],
-        },
-      });
       useConversationPanelPreferencesStore.setState({
         showArchivedConversations: false,
       });
@@ -750,9 +754,18 @@ describe("ConversationPanel filters and pagination", () => {
       await waitFor(() => {
         expect(deleteSpy).toHaveBeenCalledTimes(3);
       });
-      expect(deleteSpy).toHaveBeenCalledWith("visible-1", expect.objectContaining({ kind: "local" }));
-      expect(deleteSpy).toHaveBeenCalledWith("archived-1", expect.objectContaining({ kind: "local" }));
-      expect(deleteSpy).toHaveBeenCalledWith("archived-2", expect.objectContaining({ kind: "local" }));
+      expect(deleteSpy).toHaveBeenCalledWith(
+        "visible-1",
+        expect.objectContaining({ kind: "local" }),
+      );
+      expect(deleteSpy).toHaveBeenCalledWith(
+        "archived-1",
+        expect.objectContaining({ kind: "local" }),
+      );
+      expect(deleteSpy).toHaveBeenCalledWith(
+        "archived-2",
+        expect.objectContaining({ kind: "local" }),
+      );
     });
 
     it("navigates away after the active conversation is deleted successfully even when another deletion fails", async () => {

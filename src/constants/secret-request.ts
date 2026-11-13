@@ -9,8 +9,8 @@ export const REQUEST_SECRET_ACTION_KIND =
   `ClientAction_${REQUEST_SECRET_TOOL_NAME}` as const;
 
 /**
- * Prefix of the message the frontend posts back once the user closes the
- * secret request modal. Client tools are acknowledged before the user acts, so
+ * Prefix of the message the frontend posts back once the user answers the
+ * secret request card. Client tools are acknowledged before the user acts, so
  * this message is the only way to tell the agent whether the secret is now
  * available. It carries the outcome only, never the value, and the chat hides
  * it (see `should-render-event.ts`).

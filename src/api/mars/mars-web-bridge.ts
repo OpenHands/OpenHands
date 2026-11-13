@@ -19,7 +19,15 @@
  * itself on the proxied REST calls and the WebSocket upgrade.
  */
 
-import { getAgentServerHeaders } from "#/api/agent-server-config";
+import {
+  getBakedSessionApiKey,
+  isServedOriginHost,
+} from "#/api/agent-server-config";
+import {
+  getEffectiveLocalBackend,
+  getRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import type { Backend } from "#/api/backend-registry/types";
 import type { MarsBridge } from "./mars-tunnel-backend";
 
 export const MARS_WEB_HEALTH_PATH = "/mars/health";
@@ -42,6 +50,50 @@ export class MarsWebBridgeError extends Error {
   }
 }
 
+/** A local backend for the page's served origin that carries a typed key. */
+function holdsServedOriginKey(backend: Backend): boolean {
+  return (
+    backend.kind === "local" &&
+    isServedOriginHost(backend.host) &&
+    backend.apiKey.trim().length > 0
+  );
+}
+
+/**
+ * Return headers required to authenticate with the Agent Canvas MARS web bridge.
+ *
+ * Attaches the session API key configured for the page's served origin:
+ * 1. Uses the baked session API key if present (e.g. default launcher).
+ * 2. Otherwise falls back to the key the user typed for the page's origin on the API key screen
+ *    (stored on the local backend in the backend registry).
+ * 3. Never attaches a key if baseUrl points to a different host (foreign backend), or if
+ *    the stored key belongs to a different host.
+ */
+export function getMarsBridgeHeaders(baseUrl = ""): Record<string, string> {
+  if (baseUrl && !isServedOriginHost(baseUrl)) {
+    return {};
+  }
+
+  const bakedKey = getBakedSessionApiKey();
+  if (bakedKey) {
+    return { "X-Session-API-Key": bakedKey };
+  }
+
+  // Prefer the active backend when it holds the served-origin key, so an older
+  // key saved for the same origin cannot shadow the one in use.
+  const active = getEffectiveLocalBackend();
+  const servedBackend =
+    active && holdsServedOriginKey(active)
+      ? active
+      : getRegisteredBackends().find(holdsServedOriginKey);
+
+  if (servedBackend) {
+    return { "X-Session-API-Key": servedBackend.apiKey.trim() };
+  }
+
+  return {};
+}
+
 async function rpc<T>(
   baseUrl: string,
   method: string,
@@ -52,7 +104,7 @@ async function rpc<T>(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...getAgentServerHeaders(),
+      ...getMarsBridgeHeaders(baseUrl),
     },
     body: JSON.stringify({ args }),
   });
