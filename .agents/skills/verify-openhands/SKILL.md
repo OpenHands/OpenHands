@@ -267,7 +267,11 @@ prerequisite; never substitute a mock and call it a pass.
   yesterday's is at hand.
 - **Create or extend the map**: follow [references/mapping.md](references/mapping.md).
   It teaches how to discover features, write entries against the CLI and prove
-  each one live. `control-openhands map coverage` measures what is still unmapped.
+  each one live. `control-openhands map coverage` measures what is still unmapped,
+  `map controls` lists the controls on mapped pages that no bullet operates, and
+  [references/scenarios.md](references/scenarios.md) lists the situations (the
+  item edited later, two actions at once, real data, another environment) to
+  ask of every sub-feature beyond its happy path.
 - **Maintain the map (periodic or weekly)**: follow
   [references/maintenance.md](references/maintenance.md): index hygiene, a source
   wave, one live pass over every feature, PR-intent reconciliation for the week's

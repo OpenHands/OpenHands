@@ -212,6 +212,8 @@ function redactQuery(search) {
 }
 let markIndex = 0;
 let activePage = context.pages()[0] ?? (await context.newPage());
+// One CDP session per tab keeps a `browser timezone` override alive.
+const timezoneSessions = new WeakMap();
 // Keys held with `browser key down` until `key up` or `key release-all`.
 const heldKeys = new HeldKeys();
 
@@ -1005,6 +1007,42 @@ const handlers = {
       clock: "installed",
       offsetMs: Number(offsetMs ?? 0),
       time: new Date(time).toISOString(),
+    };
+  },
+  async timezone({ zone, reset }) {
+    // The browser's time zone, for states that depend on it differing from
+    // the server's (a timestamp written without an offset, a "3 hours ago"
+    // on a message sent now). It holds for the active tab, across reloads
+    // and navigations, until --reset; a tab opened later starts in the
+    // machine's zone. The server's zone is untouched.
+    if (!reset) {
+      // Chromium accepts an unknown name without changing anything, so the
+      // name is checked here first.
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: String(zone) });
+      } catch {
+        throw new Error(
+          `Not a time zone: ${zone}. Use an IANA name such as America/Sao_Paulo or Asia/Tokyo.`,
+        );
+      }
+    }
+    let session = timezoneSessions.get(activePage);
+    if (!session) {
+      session = await context.newCDPSession(activePage);
+      timezoneSessions.set(activePage, session);
+    }
+    await session.send("Emulation.setTimezoneOverride", {
+      timezoneId: reset ? "" : String(zone),
+    });
+    const seen = await activePage.evaluate(() => ({
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      utcOffsetMinutes: -new Date().getTimezoneOffset(),
+      localTime: new Date().toString(),
+    }));
+    return {
+      timezone: reset ? "reset" : "set",
+      ...seen,
+      url: activePage.url(),
     };
   },
   async viewport({ size }) {
