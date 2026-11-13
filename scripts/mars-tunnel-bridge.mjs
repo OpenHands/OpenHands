@@ -84,6 +84,9 @@ const READY_FRESH_MS = 10_000;
 /** An OAuth access token is refreshed this long before it would expire. */
 const REFRESH_EARLY_MS = 60_000;
 
+/** When a renewal the locked store refused is saved again. */
+const UNSAVED_RETRY_MS = 10_000;
+
 /** How long `awaitSignIn` holds a call open before answering "pending". */
 const AWAIT_SIGN_IN_MS = 20_000;
 
@@ -223,18 +226,38 @@ export function createMarsTunnelBridge({
         }
         return null;
       }
-      const renewed = store.updateGrant(
-        id,
-        {
-          token: next.accessToken,
-          // DigitalOcean always sends a new one; without it, a null here
-          // would never be refreshed again.
-          refreshToken: next.refreshToken ?? current.refreshToken,
-          accessExpiresAt: next.accessExpiresAt,
-          clientId,
-        },
-        replacing,
-      );
+      const grant = {
+        token: next.accessToken,
+        // DigitalOcean always sends a new one; without it, a null here
+        // would never be refreshed again.
+        refreshToken: next.refreshToken ?? current.refreshToken,
+        accessExpiresAt: next.accessExpiresAt,
+        clientId,
+      };
+      let renewed;
+      try {
+        renewed = store.updateGrant(id, grant, replacing);
+      } catch (error) {
+        // The store stayed locked. The old refresh token is spent, so this
+        // answer is the only copy of the new one: keep it here, and let the
+        // next renewal save it.
+        console.warn(
+          `[mars] Could not save the renewed DigitalOcean sign-in: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        store.keepUnsaved(id, grant);
+        // Try the save once more soon, so a restart in the meantime does not
+        // lose it. Against the copy kept here: a new sign-in another process
+        // saves meanwhile replaces that copy, and is never overwritten.
+        const retry = setTimeout(() => {
+          try {
+            store.updateGrant(id, grant, { replacing: grant.refreshToken });
+          } catch {
+            // Still locked: the next renewal saves it.
+          }
+        }, UNSAVED_RETRY_MS);
+        retry.unref?.();
+        return next.accessToken;
+      }
       if (!renewed) {
         // The newer grant stays; the one renewed here is ended.
         void revokeToken(next.accessToken);

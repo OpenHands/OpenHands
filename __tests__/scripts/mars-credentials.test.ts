@@ -398,6 +398,83 @@ describe("createCredentialStore with a SecretStore (the Agent Canvas server)", (
     },
   );
 
+  it("ends the grant the store holds when a team signs in again, not an older cached one", () => {
+    const { dir, store: first } = serverStore();
+    const older = first.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "access-1",
+      refreshToken: "refresh-1",
+      label: "DigitalOcean",
+    });
+    first.setTeam(older.id, { uuid: "team-1", name: "My Team" });
+    const second = serverStore(dir).store;
+    // The first process renews the grant the second still has cached.
+    first.updateGrant(
+      older.id,
+      { token: "access-2", refreshToken: "refresh-2" },
+      { replacing: "refresh-1" },
+    );
+
+    const replaced: { token: string; refreshToken?: string | null }[] = [];
+    const again = second.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "access-new",
+      refreshToken: "refresh-new",
+      label: "DigitalOcean",
+    });
+    second.setTeam(
+      again.id,
+      { uuid: "team-1", name: "My Team" },
+      { onReplacedGrant: (grant) => replaced.push(grant) },
+    );
+
+    expect(replaced).toMatchObject([
+      { token: "access-2", refreshToken: "refresh-2" },
+    ]);
+  });
+
+  it("serves the grant another Canvas process signed a team in again with", () => {
+    const { dir, store: first } = serverStore();
+    const saved = first.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "access-1",
+      refreshToken: "refresh-1",
+      label: "DigitalOcean",
+    });
+    first.setTeam(saved.id, { uuid: "team-1", name: "My Team" });
+    const second = serverStore(dir).store;
+    expect(second.getGrant(saved.id)?.token).toBe("access-1");
+
+    // The first process signs the team in again (and ends the old grant).
+    const again = first.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "access-new",
+      refreshToken: "refresh-new",
+      label: "DigitalOcean",
+    });
+    first.setTeam(again.id, { uuid: "team-1", name: "My Team" });
+
+    expect(second.getGrant(saved.id)?.token).toBe("access-new");
+    expect(second.getActiveToken()).toBe("access-new");
+  });
+
+  it("stops serving a connection another Canvas process signed out", () => {
+    const { dir, store: first } = serverStore();
+    const saved = first.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "access-1",
+      refreshToken: "refresh-1",
+      label: "DigitalOcean",
+    });
+    const second = serverStore(dir).store;
+    expect(second.getGrant(saved.id)?.token).toBe("access-1");
+
+    first.remove(saved.id);
+
+    expect(second.getGrant(saved.id)).toBeNull();
+    expect(second.list()).toEqual([]);
+  });
+
   it("renews a grant the store still holds", () => {
     const { dir, store } = serverStore();
     const saved = store.save({
