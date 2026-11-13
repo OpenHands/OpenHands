@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>One tool call, one result — PR #19620</title>
+<style>
+:root{--fg:#19262c;--muted:#52616a;--subtle:#727e84;--bg:#fafaf7;--card:#fff;--elevated:#f1f3ef;--accent:#24565a;--accent-soft:#e8f2ee;--rule:#dce2dc;--warn:#ac5719;--code-bg:#f1f2ed;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;--mono:ui-monospace,SFMono-Regular,Consolas,monospace}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.62 var(--sans)}.wrap{display:grid;grid-template-columns:180px minmax(0,1fr);gap:42px;max-width:1240px;margin:auto;padding:36px 30px 70px}nav{position:sticky;top:30px;align-self:start;font-size:13px}nav h2{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}nav ol{padding-left:20px}nav li{margin:12px 0}nav a{color:var(--fg);text-decoration:none}nav small{display:block;color:var(--muted);font-size:11px}h1{font-family:Georgia,serif;font-size:42px;line-height:1.15;letter-spacing:-.02em;margin:8px 0 16px}h2{font-size:22px;line-height:1.3;margin:34px 0 12px}h3{font-size:17px;margin:22px 0 7px}p{margin:12px 0}.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.13em;font-weight:700;color:var(--accent)}.lead{max-width:760px;font-size:18px;color:var(--muted)}.callout{background:var(--accent-soft);border-left:4px solid var(--accent);padding:12px 16px;margin:22px 0;font-size:15px}.meta{font-size:12px;color:var(--muted)}a{color:var(--accent);text-underline-offset:3px}.src{font:11px/1.6 var(--mono);overflow-wrap:anywhere}code{font: .88em var(--mono);background:var(--code-bg);padding:2px 4px;border-radius:3px}.fig{margin:24px 0}.diagram{overflow-x:auto;background:var(--card);border:1px solid var(--rule);border-radius:9px}.diagram svg{display:block;min-width:660px;width:100%;height:auto}figcaption{font-size:13px;color:var(--muted);padding-top:8px}section{scroll-margin-top:20px}article{border-top:1px solid var(--rule);padding:8px 0 16px}table{border-collapse:collapse;width:100%;font-size:14px;margin:16px 0}th,td{text-align:left;padding:10px 11px;border-bottom:1px solid var(--rule);vertical-align:top}th{background:var(--elevated);font-weight:600}ul{padding-left:22px}li{margin:7px 0}details{margin:14px 0;border:1px solid var(--rule);border-radius:6px}summary{cursor:pointer;color:var(--muted);padding:9px 12px;font-size:13px}pre{margin:0;background:var(--code-bg);padding:16px;overflow-x:auto;font:12px/1.6 var(--mono);border-top:1px solid var(--rule)}.badge{font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em}.note{font-size:14px;color:var(--muted)}footer{border-top:1px solid var(--rule);margin-top:35px;padding-top:16px;font-size:12px;color:var(--muted)}@media(max-width:760px){.wrap{display:block;padding:24px 20px 50px}nav{position:static;margin-bottom:26px}nav ol{display:grid;grid-template-columns:1fr 1fr;gap:4px 22px;margin:0}nav li{margin:4px 0}h1{font-size:34px}.lead{font-size:17px}table{font-size:13px}th,td{padding:9px 7px}}@media print{nav{display:none}.wrap{display:block;max-width:none}.diagram{overflow:visible}details{display:none}a{color:inherit}h2,article{break-after:avoid}}
+</style></head><body><div class="wrap"><nav aria-label="Document contents"><h2>Review map</h2><ol>
+<li><a href="#story">One result per call</a></li><li><a href="#store">✏ Store +48 / −12</a><small>use-event-store.ts</small></li><li><a href="#helper">✏ Projector +85 / −64</a><small>handle-event-for-ui.ts</small></li><li><a href="#proof">✏ Tests +213</a><small>Store +165 · helper +48</small></li><li><a href="#scope">Coverage and limits</a></li></ol></nav><main>
+<header><div class="eyebrow">OpenHands · PR #19620 · design at 2b8fd1fe</div><h1>One tool call,<br>one result.</h1><p class="lead">When an older page arrives, rebuild the displayed history in event order. A result replaces its action, and a completed ACP call stays completed.</p>
+<p class="meta">Before: OpenHands/OpenHands @ 754abee4 · After: SaltGardenia/OpenHands @ 2b8fd1fe · 2 source files, 2 test files</p></header>
+<section id="story"><div class="callout">★ Sorting the visible cards cannot repair a replacement that already ran in the wrong order. The fix orders the durable history first, then applies the shared replacement rules. <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/stores/use-event-store.ts#L265">src/stores/use-event-store.ts:265</a></div>
+<p>The newest page may contain a tool result while its action is on the previous page. Previously, that result was appended alone; loading the older action added another card. ACP had the equivalent failure: an older <code>in_progress</code> event could replace an existing terminal result. <a href="https://github.com/OpenHands/OpenHands/issues/17559">Issue #17559</a> · <a class="src" href="https://github.com/OpenHands/OpenHands/blob/754abee4f0869dfc85dbd0acb6457f2e0ad17d4c/src/stores/use-event-store.ts#L202">src/stores/use-event-store.ts:202</a></p>
+<figure class="fig"><div class="diagram"><svg viewBox="0 0 860 416" role="img" aria-labelledby="flow-title flow-desc"><title id="flow-title">History projection before and after</title><desc id="flow-desc">Before: project pages in arrival order, then sort cards, leaving both action and result. After: sort durable events with preserved slots, project using indexed shared rules, then sort the resulting cards, leaving one result.</desc><defs><marker id="arr-old" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10Z" fill="var(--subtle)"/></marker><marker id="arr-new" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10Z" fill="var(--warn)"/></marker><linearGradient id="wash" x1="0" y1="0" x2="0" y2="1"><stop stop-color="var(--accent)" stop-opacity=".09"/><stop offset="1" stop-color="var(--accent)" stop-opacity=".02"/></linearGradient><style>.old{fill:var(--code-bg);stroke:var(--subtle);stroke-dasharray:5 3;stroke-width:1.3}.new{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5}.edge{fill:none;stroke:var(--subtle);stroke-dasharray:5 3;stroke-width:1.6}.changed{fill:none;stroke:var(--warn);stroke-width:1.8;stroke-dasharray:5 3}.node{font:700 16px var(--sans);fill:var(--fg)}.detail{font:13px var(--sans);fill:var(--muted)}.loc{font:11px var(--mono);fill:var(--accent);text-decoration:underline}.label{font:700 12px var(--sans);fill:var(--muted);letter-spacing:.05em}.result{font:700 18px var(--sans);fill:var(--fg)}</style></defs>
+<!-- One causal example; result labels are conceptual, boxes are source symbols. -->
+<rect x="438" y="16" width="406" height="384" rx="8" fill="url(#wash)"/><text class="label" x="220" y="40" text-anchor="middle">BEFORE · ARRIVAL ORDER</text><text class="label" x="640" y="40" text-anchor="middle">AFTER · EVENT ORDER</text>
+<g><rect class="old" x="32" y="62" width="376" height="76" rx="6"/><text class="node" x="220" y="87" text-anchor="middle">addEvents → handleEventForUI</text><text class="detail" x="220" y="108" text-anchor="middle">Result arrives first; older action is appended</text><a href="https://github.com/OpenHands/OpenHands/blob/754abee4f0869dfc85dbd0acb6457f2e0ad17d4c/src/stores/use-event-store.ts#L202"><text class="loc" x="220" y="127" text-anchor="middle">use-event-store.ts:202</text></a></g>
+<path class="edge" d="M220 138V169" marker-end="url(#arr-old)"/>
+<g><rect class="old" x="32" y="178" width="376" height="76" rx="6"/><text class="node" x="220" y="203" text-anchor="middle">sortEventState</text><text class="detail" x="220" y="224" text-anchor="middle">Sorting cards does not reconcile the pair</text><a href="https://github.com/OpenHands/OpenHands/blob/754abee4f0869dfc85dbd0acb6457f2e0ad17d4c/src/stores/use-event-store.ts#L151"><text class="loc" x="220" y="243" text-anchor="middle">use-event-store.ts:151</text></a></g>
+<path class="edge" d="M220 254V302" marker-end="url(#arr-old)"/><text class="result" x="220" y="334" text-anchor="middle">Action card + result card</text><text class="detail" x="220" y="359" text-anchor="middle">One call appears twice</text>
+<g><rect class="new" x="452" y="62" width="376" height="76" rx="6"/><text class="node" x="640" y="87" text-anchor="middle">addEvents → rebuildUIEvents</text><text class="detail" x="640" y="108" text-anchor="middle">Keep active slots; put durable events in order</text><a href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/stores/use-event-store.ts#L153"><text class="loc" x="640" y="127" text-anchor="middle">use-event-store.ts:153</text></a></g>
+<path class="changed" d="M640 138V169" marker-end="url(#arr-new)"/>
+<g><rect class="new" x="452" y="178" width="376" height="76" rx="6"/><text class="node" x="640" y="203" text-anchor="middle">handleEventsForUI → eventPosition</text><text class="detail" x="640" y="224" text-anchor="middle">Indexed replacements, then final card sorting</text><a href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/utils/handle-event-for-ui.ts#L345"><text class="loc" x="640" y="243" text-anchor="middle">handle-event-for-ui.ts:345</text></a></g>
+<path class="changed" d="M640 254V302" marker-end="url(#arr-new)"/><text class="result" x="640" y="334" text-anchor="middle">One result card</text><text class="detail" x="640" y="359" text-anchor="middle">Terminal ACP status also survives backfill</text>
+</svg></div><figcaption>Fig 1 · Page arrival order stops deciding which card survives. Orange arrows mark the changed path; box links open the exact source revision.</figcaption></figure></section>
+<section id="store"><article><span class="badge">Store · changed</span><h2>Rebuild only when durable order changes</h2>
+<p><code>addEvents</code> keeps ID deduplication and the retained REST continuation. If sorting changes the durable sequence, <code>rebuildUIEvents</code> reconstructs its display. An ordered batch uses the indexed helper against the existing display. An out-of-order single durable event takes the same repair path. <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/stores/use-event-store.ts#L182">src/stores/use-event-store.ts:182</a> · <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/stores/use-event-store.ts#L229">src/stores/use-event-store.ts:229</a></p>
+<table><thead><tr><th>Before</th><th>After</th></tr></thead><tbody><tr><td>Apply replacements as each page arrives; sort both arrays afterwards.</td><td>Order the durable events, project them, then sort visible rows by their own timestamps.</td></tr><tr><td>Older boundary events can leave duplicate or stale cards.</td><td>Prepend tie ranking from #19649 stays in effect; older tied rows precede the retained tail.</td></tr></tbody></table>
+<p>Open streaming slots remain the same objects, with their text, attempt and planning provenance. The rebuild places them before their existing next durable neighbor; trailing slots stay ahead of newly appended ties. A slot whose durable ID has arrived is omitted. <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/stores/use-event-store.ts#L159">src/stores/use-event-store.ts:159</a></p>
+<p>The final display sort matters: replacing an early action with its later result must not move that result above an intervening user message. <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/stores/use-event-store.ts#L179">src/stores/use-event-store.ts:179</a> · <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/__tests__/stores/use-event-store.test.ts#L317">__tests__/stores/use-event-store.test.ts:317</a></p><details><summary>Read the exact source diff</summary><pre>diff --git a/src/stores/use-event-store.ts b/src/stores/use-event-store.ts
+index 74943df802..1ab169724c 100644
+--- a/src/stores/use-event-store.ts
++++ b/src/stores/use-event-store.ts
+@@ -4,6 +4,7 @@ import {
+   appendStreamingDeltas,
+   clearStreamingSlots,
+   handleEventForUI,
++  handleEventsForUI,
+   openStreamingSlot,
+   type StreamingSlotMeta,
+   type UIEvent,
+@@ -12,6 +13,7 @@ import type {
+   DeltaFrame,
+   ItemStartedFrame,
+ } from &quot;#/types/agent-server/session-frames&quot;;
++import { isStreamingDeltaEvent } from &quot;#/types/agent-server/type-guards&quot;;
+ 
+ export type OHEvent = UIEvent;
+ 
+@@ -148,14 +150,34 @@ const appendEvent = (state: EventState, event: OHEvent): EventState =&gt; {
+   };
+ };
+ 
+-const sortEventState = (
++const rebuildUIEvents = (
+   state: EventState,
++  events: OHEvent[],
++  eventIds: Set&lt;string | number&gt;,
+   compare = compareEventsByTimestamp,
+-): EventState =&gt; ({
+-  ...state,
+-  events: [...state.events].sort(compare),
+-  uiEvents: [...state.uiEvents].sort(compare),
+-});
++): OHEvent[] =&gt; {
++  // Slots are UI-only. Keep their existing position relative to the next
++  // durable neighbor before stable sorting, including equal/missing timestamps.
++  const slotsBefore = new Map&lt;OHEvent, OHEvent[]&gt;();
++  let pending: OHEvent[] = [];
++  for (const event of state.uiEvents) {
++    if (isStreamingDeltaEvent(event)) {
++      if (!eventIds.has(event.id)) pending.push(event);
++    } else if (pending.length) {
++      slotsBefore.set(event, pending);
++      pending = [];
++    }
++  }
++  const ordered: OHEvent[] = [];
++  events.forEach((event, index) =&gt; {
++    // Trailing slots predate the newly appended rows, even when timestamps tie.
++    if (index === state.events.length) ordered.push(...pending);
++    ordered.push(...(slotsBefore.get(event) ?? []), event);
++  });
++  if (events.length === state.events.length) ordered.push(...pending);
++  ordered.sort(compare);
++  return handleEventsForUI(ordered).sort(compare);
++};
+ 
+ const applyAddEvent = (state: EventState, event: OHEvent): EventState =&gt; {
+   const next = appendEvent(state, event);
+@@ -170,7 +192,11 @@ const applyAddEvent = (state: EventState, event: OHEvent): EventState =&gt; {
+     return next;
+   }
+ 
+-  return sortEventState(next);
++  return {
++    ...next,
++    events: [...next.events].sort(compareEventsByTimestamp),
++    uiEvents: rebuildUIEvents(state, next.events, next.eventIds),
++  };
+ };
+ 
+ export const useEventStore = create&lt;EventState&gt;()((set) =&gt; ({
+@@ -202,7 +228,6 @@ export const useEventStore = create&lt;EventState&gt;()((set) =&gt; ({
+ 
+       const eventIds = new Set(state.eventIds);
+       const events = [...state.events];
+-      let uiEvents = [...state.uiEvents];
+       const incomingOrder = new Map&lt;OHEvent, number&gt;();
+ 
+       for (const event of incoming) {
+@@ -215,7 +240,6 @@ export const useEventStore = create&lt;EventState&gt;()((set) =&gt; ({
+             eventIds.add(eventId);
+           }
+           events.push(event);
+-          uiEvents = handleEventForUI(event, uiEvents);
+         }
+       }
+ 
+@@ -234,10 +258,22 @@ export const useEventStore = create&lt;EventState&gt;()((set) =&gt; ({
+             (incomingOrder.get(a) ?? incomingOrder.size) -
+               (incomingOrder.get(b) ?? incomingOrder.size)
+         : compareEventsByTimestamp;
+-      return sortEventState(
+-        { ...state, events, eventIds, uiEvents, historyPagination },
+-        compare,
++      const sortedEvents = [...events].sort(compare);
++      const reordered = sortedEvents.some(
++        (event, index) =&gt; event !== events[index],
+       );
++      const uiEvents = reordered
++        ? rebuildUIEvents(state, events, eventIds, compare)
++        : handleEventsForUI([...incomingOrder.keys()], state.uiEvents).sort(
++            compare,
++          );
++      return {
++        ...state,
++        events: sortedEvents,
++        eventIds,
++        uiEvents,
++        historyPagination,
++      };
+     }),
+   clearEvents: () =&gt;
+     set(() =&gt; ({
+</pre></details></article></section>
+<section id="helper"><article><span class="badge">Projection helper · changed</span><h2>One rule set, two lookup strategies</h2>
+<p><code>eventPosition</code> decides whether to append, replace or omit an event. The existing <code>handleEventForUI(event, uiEvents)</code> signature and sequential behavior remain. The new internal batch entry point uses temporary maps for event IDs, streaming IDs and ACP tool-call IDs, updating those maps when a row is replaced. <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/utils/handle-event-for-ui.ts#L282">src/utils/handle-event-for-ui.ts:282</a> · <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/utils/handle-event-for-ui.ts#L345">src/utils/handle-event-for-ui.ts:345</a></p>
+<table><thead><tr><th>Path</th><th>Lookup and ownership</th></tr></thead><tbody><tr><td>Single event</td><td>Existing array scans and one copied result array. Shared conversation and transcript export keep this entry point. <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/utils/handle-event-for-ui.ts#L326">src/utils/handle-event-for-ui.ts:326</a></td></tr><tr><td>Batch projection</td><td>One copied array and temporary indexes; a missing key returns directly. No copy or full-prefix scan per event. <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/utils/handle-event-for-ui.ts#L349">src/utils/handle-event-for-ui.ts:349</a></td></tr></tbody></table>
+<p>For <em>n</em> retained events, batch reconstruction uses O(n) projection work plus O(n log n) sorting. Streaming deltas keep their existing slot-update path and do not trigger reconstruction. This is a batch bound, not a claim that every live event or keystroke is constant time. <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/stores/use-event-store.ts#L308">src/stores/use-event-store.ts:308</a></p><p class="note">Local scaling probe: 1,000 → 10,000 durable events increased indexed ID reads from 4,000 → 40,000. Backfill medians were 0.226 → 1.573 ms. These synthetic function measurements describe the batch work, not browser input latency. <a href="https://github.com/SaltGardenia/OpenHands/blob/c555d4888fa98594590d2c13d2a50360904db6af/.pr/projection-proof/scaling.json">Measurements and limits</a></p><details><summary>Read the exact source diff</summary><pre>diff --git a/src/utils/handle-event-for-ui.ts b/src/utils/handle-event-for-ui.ts
+index 86a3ece432..3da87c0fef 100644
+--- a/src/utils/handle-event-for-ui.ts
++++ b/src/utils/handle-event-for-ui.ts
+@@ -272,86 +272,107 @@ export const clearStreamingSlots = (
+  * updates from running to its result, exactly like an observation superseding
+  * its action below.
+  */
+-export const handleEventForUI = (
++interface EventPositions {
++  slot: (id: string | number) =&gt; number;
++  event: (id: string | number) =&gt; number;
++  toolCall: (id: string) =&gt; number;
++}
++
++/** The replacement rules shared by incremental and batch projection. */
++const eventPosition = (
+   event: UIEvent,
+   uiEvents: UIEvent[],
+-): UIEvent[] =&gt; {
+-  const newUiEvents = [...uiEvents];
+-
+-  // The durable event *is* the item: the SDK mints its id when the stream
+-  // opens, so one equality test retires the slot — and replacing in place
+-  // keeps the finished message where the streamed text already was.
++  positions: EventPositions,
++): number | undefined =&gt; {
++  // A durable item&#x27;s id retires its provisional slot in place.
+   const eventId = &quot;id&quot; in event ? event.id : undefined;
+   if (eventId !== undefined) {
+-    const slotIndex = findSlotIndex(newUiEvents, eventId);
+-    if (slotIndex !== -1) {
+-      newUiEvents[slotIndex] = event;
+-      return newUiEvents;
+-    }
++    const slotIndex = positions.slot(eventId);
++    if (slotIndex !== -1) return slotIndex;
+   }
+ 
+   if (isACPToolCallEvent(event)) {
+-    const existingIndex = newUiEvents.findIndex(
+-      (uiEvent) =&gt;
+-        isACPToolCallEvent(uiEvent) &amp;&amp;
+-        uiEvent.tool_call_id === event.tool_call_id,
+-    );
+-    if (existingIndex !== -1) {
+-      newUiEvents[existingIndex] = event;
+-    } else {
+-      newUiEvents.push(event);
+-    }
+-    return newUiEvents;
++    const index = positions.toolCall(event.tool_call_id);
++    return index === -1 ? uiEvents.length : index;
+   }
+ 
+-  if (isObservationEvent(event)) {
+-    // Don&#x27;t add ThinkObservation at all - we keep the ThinkAction instead
+-    // The thought content is in the action, not the observation
+-    if (event.observation.kind === &quot;ThinkObservation&quot;) {
+-      return newUiEvents;
+-    }
+-
+-    // Don&#x27;t add FinishObservation at all - we keep the FinishAction instead
+-    // Both contain the same message content, so we only need to display one
+-    // This also prevents duplicate messages when events arrive out of order due to React batching
+-    if (event.observation.kind === &quot;FinishObservation&quot;) {
+-      return newUiEvents;
+-    }
++  if (
++    isObservationEvent(event) &amp;&amp;
++    (event.observation.kind === &quot;ThinkObservation&quot; ||
++      event.observation.kind === &quot;FinishObservation&quot;)
++  ) {
++    return undefined;
+   }
+ 
+-  if (isUserRejectObservation(event)) {
+-    // Like their observations above, a rejection never replaces a ThinkAction
+-    // or FinishAction: the content to display is in the action itself
+-    const rejectedAction = newUiEvents.find(
+-      (uiEvent) =&gt; uiEvent.id === event.action_id,
+-    );
++  if (isObservationEvent(event) || isUserRejectObservation(event)) {
++    const index = positions.event(event.action_id);
++    const action = uiEvents[index];
++    // Rejections also retain Think/Finish actions, which carry the content.
+     if (
+-      rejectedAction &amp;&amp;
+-      isActionEvent(rejectedAction) &amp;&amp;
+-      (rejectedAction.action.kind === &quot;ThinkAction&quot; ||
+-        rejectedAction.action.kind === &quot;FinishAction&quot;)
++      isUserRejectObservation(event) &amp;&amp;
++      action &amp;&amp;
++      isActionEvent(action) &amp;&amp;
++      (action.action.kind === &quot;ThinkAction&quot; ||
++        action.action.kind === &quot;FinishAction&quot;)
+     ) {
+-      return newUiEvents;
++      return undefined;
+     }
++    return index === -1 ? uiEvents.length : index;
+   }
+ 
+-  // A UserRejectObservation resolves its action just like an observation
+-  // does; left unreplaced, the rejected action would keep reading as in flight.
+-  if (isObservationEvent(event) || isUserRejectObservation(event)) {
+-    // Find and replace the corresponding action from uiEvents
+-    const actionIndex = newUiEvents.findIndex(
+-      (uiEvent) =&gt; uiEvent.id === event.action_id,
+-    );
+-    if (actionIndex !== -1) {
+-      newUiEvents[actionIndex] = event;
+-    } else {
+-      // Action not found in uiEvents, just add the observation
+-      newUiEvents.push(event);
++  return uiEvents.length;
++};
++
++export const handleEventForUI = (
++  event: UIEvent,
++  uiEvents: UIEvent[],
++): UIEvent[] =&gt; {
++  const next = [...uiEvents];
++  const index = eventPosition(event, next, {
++    slot: (id) =&gt;
++      next.findIndex((item) =&gt; isStreamingDeltaEvent(item) &amp;&amp; item.id === id),
++    event: (id) =&gt; next.findIndex((item) =&gt; item.id === id),
++    toolCall: (id) =&gt;
++      next.findIndex(
++        (item) =&gt; isACPToolCallEvent(item) &amp;&amp; item.tool_call_id === id,
++      ),
++  });
++  if (index !== undefined) next[index] = event;
++  return next;
++};
++
++/** Project a deduplicated history without copying/scanning the prefix per row. */
++export const handleEventsForUI = (
++  events: UIEvent[],
++  initialUIEvents: UIEvent[] = [],
++): UIEvent[] =&gt; {
++  const next = [...initialUIEvents];
++  const ids = new Map&lt;string | number, number&gt;();
++  const slots = new Map&lt;string | number, number&gt;();
++  const tools = new Map&lt;string, number&gt;();
++  const indexEvent = (event: UIEvent, index: number) =&gt; {
++    if (&quot;id&quot; in event &amp;&amp; event.id !== undefined) ids.set(event.id, index);
++    if (isStreamingDeltaEvent(event)) slots.set(event.id, index);
++    if (isACPToolCallEvent(event)) tools.set(event.tool_call_id, index);
++  };
++  next.forEach(indexEvent);
++  const positions: EventPositions = {
++    slot: (id) =&gt; slots.get(id) ?? -1,
++    event: (id) =&gt; ids.get(id) ?? -1,
++    toolCall: (id) =&gt; tools.get(id) ?? -1,
++  };
++  for (const event of events) {
++    const index = eventPosition(event, next, positions);
++    if (index === undefined) continue;
++    const previous = next[index];
++    if (previous) {
++      if (&quot;id&quot; in previous &amp;&amp; previous.id !== undefined)
++        ids.delete(previous.id);
++      if (isStreamingDeltaEvent(previous)) slots.delete(previous.id);
++      if (isACPToolCallEvent(previous)) tools.delete(previous.tool_call_id);
+     }
+-  } else {
+-    // For non-observation events, just add them to uiEvents
+-    newUiEvents.push(event);
++    next[index] = event;
++    indexEvent(event, index);
+   }
+-
+-  return newUiEvents;
++  return next;
+ };
+</pre></details></article></section>
+<section id="proof"><h2>Behavioral proof, with its limits</h2><table><thead><tr><th>Evidence</th><th>What it establishes</th></tr></thead><tbody><tr><td>Store regression tests<br>+165 lines</td><td>Earlier/equal/missing timestamp boundaries; completed/failed ACP; duplicate overlap; out-of-order durable event; result ordering; main/planning slot identity and content. <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/__tests__/stores/use-event-store.test.ts#L309">__tests__/stores/use-event-store.test.ts:309</a></td></tr><tr><td>Helper regression tests<br>+48 lines</td><td>Retired action indexes do not overwrite a previous observation; Think/Finish content and rejected tools keep the existing replacement behavior. <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/__tests__/utils/handle-event-for-ui.test.ts#L169">__tests__/utils/handle-event-for-ui.test.ts:169</a></td></tr><tr><td>Real Local before / after</td><td>SDK 1.62.0 served canonical persisted synthetic history. Across four desktop/phone attempts per build, the baseline showed 50 cards for 49 calls; the fix showed 49 cards with command 025 exactly once. Output disclosure and typing passed. Both builds passed all four tied-boundary controls: 100 unique messages in order. <a href="https://github.com/SaltGardenia/OpenHands/blob/c555d4888fa98594590d2c13d2a50360904db6af/.pr/projection-proof/verification.json">Verification summary</a> · <a href="https://github.com/SaltGardenia/OpenHands/blob/c555d4888fa98594590d2c13d2a50360904db6af/.pr/projection-proof/after-observations.json">Raw after</a> · <a href="https://github.com/SaltGardenia/OpenHands/blob/c555d4888fa98594590d2c13d2a50360904db6af/.pr/projection-proof/recipe.md">Recipe and limits</a></td></tr><tr><td>Current validation status</td><td id="validation-status">398 focused tests passed, 1 todo across 17 files. Lint passed with 0 errors and 140 existing warnings; application and library builds passed. The configured mock-LLM history E2E passed (1 test, 15.3 s); its intercepted fixture is separate from the real Local boundary proof.</td></tr></tbody></table>
+<p><a href="https://github.com/SaltGardenia/OpenHands/blob/c555d4888fa98594590d2c13d2a50360904db6af/.pr/projection-proof/README.md">Open the verification packet</a> for before/after media, exact run versions and reproducible steps. The persisted fixture runs no model or tool; no browser store injection or request interception is used. <a href="https://github.com/SaltGardenia/OpenHands/blob/c555d4888fa98594590d2c13d2a50360904db6af/.pr/projection-proof/recipe.md">Method</a></p></section>
+<section id="scope"><h2>The change stays at the display boundary</h2><p>The initial history, main socket and planning socket feed the same event store; older-page loading uses its bulk entry point. These shared consumers serve Local/Cloud and standalone/embedded Canvas. <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/contexts/conversation-websocket-context.tsx#L556">conversation-websocket-context.tsx:556</a> · <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/hooks/use-load-older-events.ts#L172">use-load-older-events.ts:172</a> OpenHands pairs and ACP terminal pairs have focused coverage; the real backend run covers Local OpenHands rendering. It does not establish live Cloud, ACP execution, delegated/planning lifecycle or embedded-host behavior. <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/stores/use-event-store.ts#L202">src/stores/use-event-store.ts:202</a> · <a href="https://github.com/SaltGardenia/OpenHands/blob/c555d4888fa98594590d2c13d2a50360904db6af/.pr/projection-proof/recipe.md">Live scope</a></p>
+<p>REST continuation, event schemas and Agent Server compatibility requirements stay unchanged. Raw events remain retained, and this change does not bound the DOM or evict old history. The principal risk is replacement order or streaming-slot placement during durable backfill; the focused cases above target those boundaries. <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/stores/use-event-store.ts#L215">src/stores/use-event-store.ts:215</a> · <a class="src" href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/src/stores/use-event-store.ts#L159">src/stores/use-event-store.ts:159</a></p></section>
+<footer>Review aid for <a href="https://github.com/OpenHands/OpenHands/pull/19620">PR #19620</a>. Source links are pinned to the before and after commits. Temporary <code>.pr/</code> artifacts are removed from main by the <a href="https://github.com/SaltGardenia/OpenHands/blob/2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73/.github/workflows/release.yml#L87">release workflow</a>; commit-pinned review links remain available.</footer>
+</main></div></body></html>
