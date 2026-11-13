@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { AppConversationStartTaskStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { randomUUID } from "#/utils/random-uuid";
 
 const STORAGE_KEY = "openhands-session-activity";
 const MAX_CONVERSATIONS = 100;
@@ -86,7 +87,7 @@ export const useSessionActivityStore = create<SessionActivityState>()(
             [key]: [
               ...previous,
               {
-                id: crypto.randomUUID(),
+                id: randomUUID(),
                 kind,
                 afterEventId,
                 startedAt: Date.now(),
