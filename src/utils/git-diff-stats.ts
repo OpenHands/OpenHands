@@ -74,11 +74,14 @@ const MAX_ALIGNMENT_STEPS = 10_000_000;
 
 /**
  * Work budget shared by all searches between anchors once the whole-file
- * search has stopped. The linear-time passes (nearby matching and anchoring)
- * visit at most {@link MAX_ALIGNMENT_STEPS} lines in total, so the whole count
+ * search has stopped. The two linear-time passes (nearby matching and
+ * anchoring) get {@link MAX_ALIGNMENT_STEPS} steps each, so the whole count
  * stays within a fixed bound.
  */
 const MAX_REFINEMENT_STEPS = 5_000_000;
+
+/** Lines per anchor when no single line occurs once in both versions. */
+const ANCHOR_RUN_LINES = 8;
 
 /** Nesting limit for anchoring inside gaps, which keeps the call stack small. */
 const MAX_ANCHOR_DEPTH = 500;
@@ -94,8 +97,9 @@ const MAX_ANCHOR_DEPTH = 500;
  * {@link MAX_ALIGNMENT_STEPS}, the count is the better of two alignments.
  * One extends the furthest partial search with a linear nearby-match walk.
  * The other matches lines that occur exactly once in both versions in their
- * longest shared order (as patience diff does) and aligns the gaps between
- * them again within {@link MAX_REFINEMENT_STEPS}. A moved block then counts
+ * longest shared order (as patience diff does), or runs of
+ * {@link ANCHOR_RUN_LINES} lines when every line repeats, and aligns the gaps
+ * between them again within {@link MAX_REFINEMENT_STEPS}. A moved block then counts
  * as one deletion and one addition per moved line. The result always
  * describes a real edit script, and it is the shortest one whenever the
  * search finishes.
@@ -198,13 +202,19 @@ function searchRange(
   return { matched: 0, complete: true, steps, endA: n, endB: m };
 }
 
-/** Furthest a line may be skipped to reach the nearest copy of another. */
+/** Furthest the walk in {@link matchNearby} looks ahead on either side. */
 const MAX_NEARBY_DISTANCE = 64;
+
+/** Run of matching lines after which the walk stops looking further. */
+const MIN_RESYNC_RUN = 4;
 
 /**
  * Linear-time alignment for ranges the search could not finish. Walks both
- * ranges together and, at a mismatch, skips ahead on whichever side reaches
- * the nearest copy of the other side's current line.
+ * ranges together. At a mismatch it treats the two current lines as one
+ * replacement or skips up to {@link MAX_NEARBY_DISTANCE} lines on one side,
+ * whichever lands on the longest run of matching lines (up to
+ * {@link MIN_RESYNC_RUN}, nearest first). Stops after `maxSteps` comparisons
+ * and counts the rest as changed.
  */
 function matchNearby(
   a: number[],
@@ -213,57 +223,66 @@ function matchNearby(
   b: number[],
   bStart: number,
   bHi: number,
-): number {
-  const positions = (lines: number[], lo: number, hi: number) => {
-    const map = new Map<number, number[]>();
-    for (let i = lo; i < hi; i += 1) {
-      const list = map.get(lines[i]);
-      if (list) list.push(i);
-      else map.set(lines[i], [i]);
+  maxSteps: number,
+): { matched: number; steps: number } {
+  let steps = 0;
+  // Matching lines in a row from (x, y), capped at MIN_RESYNC_RUN.
+  const runLength = (x: number, y: number) => {
+    let run = 0;
+    while (
+      run < MIN_RESYNC_RUN &&
+      x + run < aHi &&
+      y + run < bHi &&
+      a[x + run] === b[y + run]
+    ) {
+      run += 1;
     }
-    return map;
-  };
-  const positionsA = positions(a, aStart, aHi);
-  const positionsB = positions(b, bStart, bHi);
-  const cursorA = new Map<number, number>();
-  const cursorB = new Map<number, number>();
-  // Next position >= from of `id`; cursors only move forward.
-  const next = (
-    map: Map<number, number[]>,
-    cursors: Map<number, number>,
-    id: number,
-    from: number,
-  ) => {
-    const list = map.get(id);
-    if (!list) return Infinity;
-    let c = cursors.get(id) ?? 0;
-    while (c < list.length && list[c] < from) c += 1;
-    cursors.set(id, c);
-    return c < list.length ? list[c] : Infinity;
+    steps += run + 1;
+    return run;
   };
 
   let matched = 0;
   let x = aStart;
   let y = bStart;
-  while (x < aHi && y < bHi) {
+  while (x < aHi && y < bHi && steps < maxSteps) {
+    steps += 1;
     if (a[x] === b[y]) {
       matched += 1;
       x += 1;
       y += 1;
-      continue;
-    }
-    const skipA = next(positionsA, cursorA, b[y], x) - x;
-    const skipB = next(positionsB, cursorB, a[x], y) - y;
-    if (Math.min(skipA, skipB) > MAX_NEARBY_DISTANCE) {
-      x += 1;
-      y += 1;
-    } else if (skipA <= skipB) {
-      x += skipA;
     } else {
-      y += skipB;
+      // Default: replace the current line on both sides.
+      let bestRun = runLength(x + 1, y + 1);
+      let nextX = x + 1;
+      let nextY = y + 1;
+      for (
+        let d = 1;
+        d <= MAX_NEARBY_DISTANCE && bestRun < MIN_RESYNC_RUN;
+        d += 1
+      ) {
+        if (x + d < aHi) {
+          const run = runLength(x + d, y);
+          if (run > bestRun) {
+            bestRun = run;
+            nextX = x + d;
+            nextY = y;
+            if (run === MIN_RESYNC_RUN) break;
+          }
+        }
+        if (y + d < bHi) {
+          const run = runLength(x, y + d);
+          if (run > bestRun) {
+            bestRun = run;
+            nextX = x;
+            nextY = y + d;
+          }
+        }
+      }
+      x = nextX;
+      y = nextY;
     }
   }
-  return matched;
+  return { matched, steps };
 }
 
 /**
@@ -274,8 +293,11 @@ class LineAligner {
   /** Steps left for Myers searches. */
   private searchSteps = MAX_ALIGNMENT_STEPS;
 
-  /** Lines left to visit in linear-time passes (nearby matching, anchoring). */
-  private linearSteps = MAX_ALIGNMENT_STEPS;
+  /** Comparisons left for the nearby walk. */
+  private nearbySteps = MAX_ALIGNMENT_STEPS;
+
+  /** Line visits left for finding anchors. */
+  private anchorSteps = MAX_ALIGNMENT_STEPS;
 
   private refining = false;
 
@@ -334,10 +356,10 @@ class LineAligner {
       endA = aLo + result.endA;
       endB = bLo + result.endB;
     }
-    const size = aHi - aLo + (bHi - bLo);
-    if (this.linearSteps >= size) {
-      this.linearSteps -= size;
-      searched += matchNearby(a, endA, aHi, b, endB, bHi);
+    if (this.nearbySteps > 0) {
+      const nearby = matchNearby(a, endA, aHi, b, endB, bHi, this.nearbySteps);
+      this.nearbySteps -= nearby.steps;
+      searched += nearby.matched;
     }
 
     const anchored = this.alignAroundAnchors(aLo, aHi, bLo, bHi, depth);
@@ -348,6 +370,8 @@ class LineAligner {
    * Matches lines that occur exactly once in both ranges, keeping the longest
    * run that appears in the same order on both sides (found by patience
    * sorting in O(K log K)), then aligns each gap between consecutive anchors.
+   * A range where every line repeats anchors on runs of
+   * {@link ANCHOR_RUN_LINES} lines that occur once in both ranges.
    */
   private alignAroundAnchors(
     aLo: number,
@@ -356,31 +380,15 @@ class LineAligner {
     bHi: number,
     depth: number,
   ): number {
-    const { a, b } = this;
-    const size = aHi - aLo + (bHi - bLo);
-    if (depth >= MAX_ANCHOR_DEPTH || this.linearSteps < size) return 0;
-    this.linearSteps -= size;
-
-    // Per id: occurrences in a, occurrences in b, and its position in a.
-    const countA = new Map<number, number>();
-    const positionA = new Map<number, number>();
-    for (let i = aLo; i < aHi; i += 1) {
-      countA.set(a[i], (countA.get(a[i]) ?? 0) + 1);
-      positionA.set(a[i], i);
+    if (depth >= MAX_ANCHOR_DEPTH) return 0;
+    let width = 1;
+    let candidates = this.uniqueRuns(aLo, aHi, bLo, bHi, width);
+    if (candidates?.a.length === 0) {
+      width = ANCHOR_RUN_LINES;
+      candidates = this.uniqueRuns(aLo, aHi, bLo, bHi, width);
     }
-    const countB = new Map<number, number>();
-    for (let j = bLo; j < bHi; j += 1) {
-      countB.set(b[j], (countB.get(b[j]) ?? 0) + 1);
-    }
-    const candidatesA: number[] = [];
-    const candidatesB: number[] = [];
-    for (let j = bLo; j < bHi; j += 1) {
-      if (countB.get(b[j]) === 1 && countA.get(b[j]) === 1) {
-        candidatesA.push(positionA.get(b[j])!);
-        candidatesB.push(j);
-      }
-    }
-    if (candidatesA.length === 0) return 0;
+    if (!candidates || candidates.a.length === 0) return 0;
+    const { a: candidatesA, b: candidatesB } = candidates;
 
     // Longest increasing run of a-positions, in b order (patience sorting).
     const pileTops: number[] = [];
@@ -402,22 +410,83 @@ class LineAligner {
     }
     anchors.reverse();
 
-    let matched = anchors.length;
+    let matched = 0;
     let prevA = aLo;
     let prevB = bLo;
     for (const c of anchors) {
-      matched += this.align(
-        prevA,
-        candidatesA[c],
-        prevB,
-        candidatesB[c],
-        depth + 1,
-      );
-      prevA = candidatesA[c] + 1;
-      prevB = candidatesB[c] + 1;
+      const startA = candidatesA[c];
+      const startB = candidatesB[c];
+      if (startA >= prevA && startB >= prevB) {
+        matched += this.align(prevA, startA, prevB, startB, depth + 1);
+        matched += width;
+        prevA = startA + width;
+        prevB = startB + width;
+      } else if (startA - startB === prevA - prevB && startA + width > prevA) {
+        // Overlaps the previous run on the same diagonal, so extends it.
+        matched += startA + width - prevA;
+        prevA = startA + width;
+        prevB = startB + width;
+      }
     }
     matched += this.align(prevA, aHi, prevB, bHi, depth + 1);
     return matched;
+  }
+
+  /**
+   * Start positions of the runs of `width` lines that occur exactly once in
+   * a[aLo, aHi) and once in b[bLo, bHi), listed in b order. Returns null
+   * when the anchoring budget is spent.
+   */
+  private uniqueRuns(
+    aLo: number,
+    aHi: number,
+    bLo: number,
+    bHi: number,
+    width: number,
+  ): { a: number[]; b: number[] } | null {
+    const { a, b } = this;
+    const cost = (aHi - aLo + (bHi - bLo)) * width;
+    if (this.anchorSteps < cost) return null;
+    this.anchorSteps -= cost;
+
+    // Key of the run starting at `start`. A run of one line uses its id.
+    const key = (lines: number[], start: number) => {
+      if (width === 1) return lines[start];
+      let high = 0;
+      let low = 0;
+      for (let k = 0; k < width; k += 1) {
+        high = Math.imul(high ^ lines[start + k], 0x9e3779b1) >>> 0;
+        low = (Math.imul(low, 31) + lines[start + k]) >>> 0;
+      }
+      return high * 0x200000 + (low & 0x1fffff);
+    };
+    const countA = new Map<number, number>();
+    const positionA = new Map<number, number>();
+    for (let i = aLo; i + width <= aHi; i += 1) {
+      const k = key(a, i);
+      countA.set(k, (countA.get(k) ?? 0) + 1);
+      positionA.set(k, i);
+    }
+    const countB = new Map<number, number>();
+    const keysB: number[] = [];
+    for (let j = bLo; j + width <= bHi; j += 1) {
+      const k = key(b, j);
+      keysB.push(k);
+      countB.set(k, (countB.get(k) ?? 0) + 1);
+    }
+    const result = { a: [] as number[], b: [] as number[] };
+    keysB.forEach((k, offset) => {
+      if (countB.get(k) !== 1 || countA.get(k) !== 1) return;
+      const i = positionA.get(k)!;
+      const j = bLo + offset;
+      // Equal keys can still differ in content, so compare the lines.
+      for (let w = 0; w < width; w += 1) {
+        if (a[i + w] !== b[j + w]) return;
+      }
+      result.a.push(i);
+      result.b.push(j);
+    });
+    return result;
   }
 }
 
