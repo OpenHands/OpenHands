@@ -54,6 +54,22 @@ export function CollapsibleThinking({ content }: CollapsibleThinkingProps) {
 }
 
 /**
+ * Reasoning text without a disclosure of its own, for a group whose header is
+ * already the "Thinking" disclosure.
+ */
+export function ThinkingContent({ content }: CollapsibleThinkingProps) {
+  if (!content.trim()) {
+    return null;
+  }
+
+  return (
+    <div className="py-2 text-sm text-muted" data-testid="thinking-content">
+      <MarkdownRenderer>{content}</MarkdownRenderer>
+    </div>
+  );
+}
+
+/**
  * Reasoning shown at the top of a tool step's own details, so it is one click
  * away on the step instead of a separate dropdown above it.
  */

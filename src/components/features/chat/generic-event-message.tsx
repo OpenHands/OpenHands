@@ -26,6 +26,8 @@ interface GenericEventMessageProps {
   /** Optional icon rendered before the title text. */
   titleIcon?: React.ReactNode;
   timestamp?: string;
+  /** Extra classes for the row's outer element, e.g. to adjust its margins. */
+  className?: string;
 }
 
 export function GenericEventMessage({
@@ -37,6 +39,7 @@ export function GenericEventMessage({
   titleTrailing,
   titleIcon,
   timestamp,
+  className,
 }: GenericEventMessageProps) {
   const { t, i18n } = useTranslation("openhands");
   const disclosure = React.useContext(StepDisclosureContext);
@@ -136,7 +139,12 @@ export function GenericEventMessage({
   );
 
   return (
-    <div className="flex flex-col gap-1.5 my-1 py-1 text-sm w-full">
+    <div
+      className={cn(
+        "flex flex-col gap-1.5 my-1 py-1 text-sm w-full",
+        className,
+      )}
+    >
       {!detailsOnly && titleRow}
       {(detailsOnly || showDetails) && (
         <div

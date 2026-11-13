@@ -48,7 +48,7 @@ const renderEvent = (event: MessageEvent) =>
     />,
   );
 
-describe("EventMessage - empty-response corrective nudge", () => {
+describe("EventMessage - SDK corrective nudges", () => {
   beforeEach(() => {
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.INIT,

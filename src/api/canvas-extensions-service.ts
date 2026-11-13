@@ -45,9 +45,7 @@ function parseHttpUrl(value: string): URL | null {
 }
 
 export type CanvasExtensionsUnsupportedReason =
-  | "no-backend"
-  | "cloud-backend"
-  | "missing-api";
+  "no-backend" | "cloud-backend" | "missing-api";
 
 export class CanvasExtensionsUnsupportedError extends Error {
   readonly reason: CanvasExtensionsUnsupportedReason;

@@ -33,6 +33,8 @@ export interface AgentStatusProps {
   handleResumeAgent: () => void;
   disabled?: boolean;
   isPausing?: boolean;
+  /** Keep only the status control; the label stays for screen readers. */
+  compact?: boolean;
 }
 
 export function AgentStatus({
@@ -41,6 +43,7 @@ export function AgentStatus({
   handleResumeAgent,
   disabled = false,
   isPausing = false,
+  compact = false,
 }: AgentStatusProps) {
   const { t } = useTranslation("openhands");
   const progressInChat = useChatProgress();
@@ -111,7 +114,8 @@ export function AgentStatus({
       curAgentState === AgentState.PAUSED);
   const isInteractive =
     !isLoading && (shouldShownAgentStop || shouldShownAgentResume);
-  const compactStatus = progressInChat && (isLoading || shouldShownAgentStop);
+  const compactStatus =
+    compact || (progressInChat && (isLoading || shouldShownAgentStop));
   const isDoneStatus =
     statusCode === I18nKey.CHAT_INTERFACE$AGENT_FINISHED_MESSAGE;
   const isReadyStatus = statusCode === I18nKey.AGENT_STATUS$WAITING_FOR_TASK;
@@ -181,7 +185,7 @@ export function AgentStatus({
       <div
         title={compactStatus ? t(statusCode) : undefined}
         className={cn(
-          "box-border content-stretch flex flex-row gap-0.75 items-center justify-center overflow-clip px-0.5 py-1 relative rounded-[100px] shrink-0 size-6 transition-all duration-200 active:scale-95 bg-transparent text-muted hover:bg-contrast/10 hover:text-contrast",
+          "box-border content-stretch flex flex-row gap-0.75 items-center justify-center overflow-clip px-0.5 py-1 relative rounded-pill shrink-0 size-6 transition-all duration-200 active:scale-95 bg-transparent text-muted hover:bg-contrast/10 hover:text-contrast",
           isInteractive ? "cursor-pointer" : "cursor-default",
           isLoading && "text-warning",
           !isLoading && shouldShownAgentError && "text-status-error",

@@ -46,15 +46,6 @@ interface ModelState {
    * activating the profile org-wide (which needs org-admin permission).
    */
   homeLlmProfile: string | null;
-  /**
-   * A model pick (LLM profile or ACP model) was made on the home page before
-   * the first message. Suppresses "Run on first message" routing for that one
-   * launch so the explicit pick isn't overridden on turn 1. Set at the UI pick
-   * handlers (the single chokepoint covering every pick path) and read once by
-   * `useCreateConversation`, which clears it as it consumes it — so it never
-   * leaks to child/`/new`/other launches.
-   */
-  homeManualModelPick: boolean;
 }
 
 interface ModelActions {
@@ -85,7 +76,6 @@ interface ModelActions {
   /** Drops only the optimistic active-profile entry for a conversation. */
   clearActiveProfile: (conversationId: string) => void;
   setHomeLlmProfile: (profileName: string | null) => void;
-  setHomeManualModelPick: (value: boolean) => void;
   clear: (conversationId: string) => void;
   clearAll: () => void;
 }
@@ -112,7 +102,6 @@ export const useModelStore = create<ModelStore>()(
       entriesByConversation: {},
       activeProfileByConversation: {},
       homeLlmProfile: null,
-      homeManualModelPick: false,
       show: (conversationId, anchorEventId, profiles) =>
         set((s) =>
           appendEntry(s, conversationId, {
@@ -152,16 +141,14 @@ export const useModelStore = create<ModelStore>()(
           const existingIds = new Set(existing.map((e) => e.id));
           const additions = switches
             .filter((sw) => !existingIds.has(sw.id))
-            .map(
-              (sw): ModelListEntry => ({
-                id: sw.id,
-                anchorEventId: sw.anchorEventId,
-                profiles: [],
-                switchedTo: sw.profileName,
-                initiator: sw.initiator,
-                reason: sw.reason,
-              }),
-            );
+            .map((sw): ModelListEntry => ({
+              id: sw.id,
+              anchorEventId: sw.anchorEventId,
+              profiles: [],
+              switchedTo: sw.profileName,
+              initiator: sw.initiator,
+              reason: sw.reason,
+            }));
           if (additions.length === 0) return s;
           return {
             entriesByConversation: {
@@ -187,7 +174,6 @@ export const useModelStore = create<ModelStore>()(
           return { activeProfileByConversation };
         }),
       setHomeLlmProfile: (profileName) => set({ homeLlmProfile: profileName }),
-      setHomeManualModelPick: (value) => set({ homeManualModelPick: value }),
       clear: (conversationId) =>
         set((s) => {
           const entriesByConversation = { ...s.entriesByConversation };
@@ -203,7 +189,6 @@ export const useModelStore = create<ModelStore>()(
           entriesByConversation: {},
           activeProfileByConversation: {},
           homeLlmProfile: null,
-          homeManualModelPick: false,
         }),
     }),
     { name: "ModelStore" },

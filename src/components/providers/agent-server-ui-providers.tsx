@@ -29,9 +29,7 @@ export interface AgentServerUIPostHogAnalyticsConfig extends TelemetryConfig {
 }
 
 export type AgentServerUIAnalyticsConfig =
-  | AgentServerUIPostHogAnalyticsConfig
-  | false
-  | null;
+  AgentServerUIPostHogAnalyticsConfig | false | null;
 
 export const DEFAULT_AGENT_SERVER_ANALYTICS: AgentServerUIAnalyticsConfig = {
   provider: "posthog",

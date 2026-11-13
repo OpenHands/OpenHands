@@ -12,6 +12,7 @@ import { useConfig } from "#/hooks/query/use-config";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
 import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
 import { SidebarMobileMenuBar } from "#/components/features/sidebar/sidebar-mobile-menu-bar";
+import { LicenseBanner } from "#/components/features/alerts/license-banner";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useEnsureActiveProfile } from "#/hooks/use-ensure-active-profile";
 import { useMigrateDefaultAgentProfile } from "#/hooks/use-migrate-default-agent-profile";
@@ -184,6 +185,7 @@ function MainAppContent() {
 
             <div className="flex min-h-0 flex-col w-full min-w-0 h-full gap-3">
               {!hideMobileSidebarMenuBar ? <SidebarMobileMenuBar /> : null}
+              <LicenseBanner />
               {config.data &&
                 (config.data.maintenance_start_time ||
                   (config.data.faulty_models &&

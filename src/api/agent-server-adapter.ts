@@ -7,6 +7,7 @@ import {
   HttpError,
 } from "@openhands/typescript-client";
 import type {
+  ACPEffortOption,
   ACPModelInfo,
   ConversationRuntimeInfo,
   HookConfig,
@@ -23,6 +24,7 @@ import {
 } from "#/types/settings";
 import {
   resolveEffectiveAcpModel,
+  toAcpEffortChoices,
   toAcpModelOptions,
 } from "#/constants/acp-providers";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
@@ -75,7 +77,11 @@ import {
   LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
   LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
 } from "./launch-child-conversation-client-tool";
-import { AUTOMATION_FORM_UPDATE_CLIENT_TOOL } from "./automation-form-client-tool";
+import {
+  AUTOMATION_SETUP_SYSTEM_SUFFIX,
+  buildAutomationFormUpdateClientTool,
+} from "./automation-form-client-tool";
+import type { DeploymentCapabilities } from "#/manifests/types";
 import { REQUEST_SECRET_CLIENT_TOOL } from "./request-secret-client-tool";
 import {
   buildPlanPath,
@@ -92,6 +98,7 @@ export interface DirectConversationInfo {
   created_at: string;
   updated_at: string;
   execution_status?: string | null;
+  max_budget_per_run?: number | null;
   /** Cloud-only sandbox lifecycle state. Omitted / null for local agent-server conversations. */
   sandbox_status?: string | null;
   /** Availability of the runtime that backs a local conversation. */
@@ -139,6 +146,8 @@ export interface DirectConversationInfo {
   current_model_id?: string | null;
   current_model_name?: string | null;
   available_models?: ACPModelInfo[] | null;
+  current_effort?: string | null;
+  available_efforts?: ACPEffortOption[] | null;
   workspace?: {
     working_dir?: string | null;
   } | null;
@@ -446,6 +455,10 @@ export function toAppConversation(
     acp_server: acpServer,
     acp_available_models: isAcp
       ? toAcpModelOptions(info.available_models)
+      : null,
+    acp_current_effort: isAcp ? (info.current_effort ?? null) : null,
+    acp_available_efforts: isAcp
+      ? toAcpEffortChoices(info.available_efforts)
       : null,
     tags: info.tags ?? null,
     launched_agent_profile: info.launched_agent_profile ?? null,
@@ -1064,6 +1077,13 @@ export interface StartConversationOptions {
   query?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
+  /**
+   * What the automation service reports it supports, so the setup assistant's
+   * form tool can name this deployment's event sources. Null when it could
+   * not be read; the tool then carries its generic description.
+   */
+  automationSetupCapabilities?: DeploymentCapabilities | null;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
@@ -1145,6 +1165,12 @@ export function buildStartConversationRequest(
         !options.suppressRouterAtStart,
       options.profileHasRouter ?? false,
     ),
+    // Sent with the form tool below, which only OpenHands profiles get.
+    options.automationSetup && options.agentProfileKind === "openhands"
+      ? [AUTOMATION_SETUP_SYSTEM_SUFFIX, options.automationSetupContext]
+          .filter(Boolean)
+          .join("\n\n")
+      : null,
   ]
     .filter((suffix): suffix is string => Boolean(suffix))
     .join("\n\n");
@@ -1177,6 +1203,11 @@ export function buildStartConversationRequest(
 
   const conversationSettings = buildConfiguredConversationSettings({
     ...sourceConversationOptions,
+    ...(options.automationSetup &&
+    options.agentProfileKind === "acp" &&
+    options.automationSetupContext
+      ? { query: `${options.query ?? ""}\n\n${options.automationSetupContext}` }
+      : {}),
     executionRuntime: options.executionRuntime,
   });
 
@@ -1198,7 +1229,11 @@ export function buildStartConversationRequest(
             LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
             REQUEST_SECRET_CLIENT_TOOL,
             ...(options.automationSetup
-              ? [AUTOMATION_FORM_UPDATE_CLIENT_TOOL]
+              ? [
+                  buildAutomationFormUpdateClientTool(
+                    options.automationSetupCapabilities,
+                  ),
+                ]
               : []),
           ]
         : [],
@@ -1259,8 +1294,7 @@ export function buildStartConversationRequest(
 
   const toolModuleQualnames = {
     ...((conversationSettings.tool_module_qualnames as
-      | Record<string, string>
-      | undefined) ?? {}),
+      Record<string, string> | undefined) ?? {}),
   };
   delete toolModuleQualnames[LEGACY_CANVAS_UI_TOOL_NAME];
   delete toolModuleQualnames[CANVAS_UI_CLIENT_TOOL_NAME];
@@ -1594,6 +1628,8 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   query?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
+  automationSetupCapabilities?: DeploymentCapabilities | null;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;

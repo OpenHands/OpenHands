@@ -235,7 +235,7 @@ export function Sidebar() {
         }}
         className={cn(
           "max-md:hidden relative flex bg-canvas-base flex-col min-h-0 sidebar-text-scale",
-          !isResizingSidebar && "transition-[width,min-width] duration-200",
+          !isResizingSidebar && "transition-sidebar-width duration-200",
           "md:border-r md:border-border md:h-full",
           collapsed
             ? "md:w-15 md:min-w-15 md:px-2.5"

@@ -11,11 +11,13 @@ import {
 } from "#/types/agent-server/type-guards";
 import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
 import type { SessionActivity } from "#/stores/session-activity-store";
+import { parseDateAsUTC } from "#/utils/format-time-delta";
 import { parseMessageFromEvent } from "./event-content-helpers/parse-message-from-event";
 import {
   getReasoningContent,
   splitInlineThink,
   getThoughtSourceAction,
+  buildActionById,
 } from "./event-thought-helpers";
 
 /** Minimum run-length before consecutive actions get folded into a single
@@ -114,6 +116,7 @@ export const groupEvents = (
   allEvents: OpenHandsEvent[] = events,
   trailingMinSize: number = minSize,
   sessions: readonly SessionActivity[] = [],
+  actionById: ReadonlyMap<string, ActionEvent> = buildActionById(allEvents),
 ): RenderedItem[] => {
   if (minSize < 1 || trailingMinSize < 1) {
     throw new Error("minSize must be at least 1");
@@ -121,6 +124,9 @@ export const groupEvents = (
 
   const items: RenderedItem[] = [];
   const emittedThoughtActionIds = new Set<string>();
+  // An action and its observation share reasoning. Keep this lookup per run
+  // instead of scanning/copying its growing reasoning array for every step.
+  const runReasoningIds = new Set<string>();
   let run: Omit<Extract<RenderedItem, { kind: "group" }>, "kind"> | null = null;
   const startRun = (index: number) => {
     if (!run) run = { events: [], startIndex: index };
@@ -140,7 +146,9 @@ export const groupEvents = (
         anchor >= 0
           ? anchor + 1
           : events.findIndex(
-              (event) => Date.parse(event.timestamp ?? "") >= session.startedAt,
+              (event) =>
+                parseDateAsUTC(event.timestamp ?? "").getTime() >=
+                session.startedAt,
             );
       if (index < 0) index = events.length;
       if (events[index]?.source === "user") index += 1;
@@ -170,6 +178,7 @@ export const groupEvents = (
       });
     }
     run = null;
+    runReasoningIds.clear();
   };
 
   const insertSessions = (index: number) => {
@@ -200,10 +209,12 @@ export const groupEvents = (
         .join("\n\n");
       if (reasoning) {
         const current = startRun(index);
-        current.reasoning = [
-          ...(current.reasoning ?? []),
-          { id: event.id, text: reasoning, index },
-        ];
+        (current.reasoning ??= []).push({
+          id: event.id,
+          text: reasoning,
+          index,
+        });
+        runReasoningIds.add(event.id);
       }
       const hasVisiblePayload =
         isMessageEvent(event) &&
@@ -218,12 +229,22 @@ export const groupEvents = (
     }
     const correspondingAction =
       isObservationEvent(event) || isUserRejectObservation(event)
-        ? allEvents.find(
-            (candidate): candidate is ActionEvent =>
-              isActionEvent(candidate) && candidate.id === event.action_id,
-          )
+        ? actionById.get(event.action_id ?? "")
         : undefined;
     if (isGroupableEvent(event, correspondingAction)) {
+      // Hoist the thought before attaching the action's reasoning, so the
+      // reasoning lands in the step's own group rather than a "Thinking"-only
+      // group that shares the step's key and open state.
+      const thoughtAction = getThoughtSourceAction(
+        event,
+        allEvents,
+        actionById,
+      );
+      if (thoughtAction && !emittedThoughtActionIds.has(thoughtAction.id)) {
+        flushRun();
+        emittedThoughtActionIds.add(thoughtAction.id);
+        items.push({ kind: "thought", action: thoughtAction, index });
+      }
       const reasoningAction = isActionEvent(event)
         ? event
         : correspondingAction;
@@ -232,20 +253,14 @@ export const groupEvents = (
         : "";
       if (reasoning && reasoningAction) {
         const current = startRun(index);
-        if (
-          !current.reasoning?.some((entry) => entry.id === reasoningAction.id)
-        ) {
-          current.reasoning = [
-            ...(current.reasoning ?? []),
-            { id: reasoningAction.id, text: reasoning, index },
-          ];
+        if (!runReasoningIds.has(reasoningAction.id)) {
+          (current.reasoning ??= []).push({
+            id: reasoningAction.id,
+            text: reasoning,
+            index,
+          });
+          runReasoningIds.add(reasoningAction.id);
         }
-      }
-      const thoughtAction = getThoughtSourceAction(event, allEvents);
-      if (thoughtAction && !emittedThoughtActionIds.has(thoughtAction.id)) {
-        flushRun();
-        emittedThoughtActionIds.add(thoughtAction.id);
-        items.push({ kind: "thought", action: thoughtAction, index });
       }
       if (!run) run = { events: [], startIndex: index };
       run.events.push(event);
