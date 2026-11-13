@@ -931,6 +931,10 @@ function buildAgentContext(
   // snapshot of ~60 skills, so a deny-list puts every future addition into
   // every system prompt (OpenHands#16302). Skills the agent context already
   // carries are user-authored and stay opt-out.
+  //
+  // An installed catalog skill is also bundled, and the SDK rejects duplicate
+  // names before its own merge runs (422), so the first copy wins: the
+  // settings-carried one, matching the SDK's explicit-over-auto-loaded rule.
   const seenSkillNames = new Set<string>();
   const mergedSkills = [
     ...existingSkills.filter(

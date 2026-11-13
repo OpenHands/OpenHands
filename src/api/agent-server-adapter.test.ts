@@ -48,6 +48,14 @@ function getPlannerAgentContextSkillNames(payload: {
   return payload.agent.agent_context?.skills?.map((skill) => skill.name) ?? [];
 }
 
+function plannerSkills(
+  payload: ReturnType<typeof buildStartPlanningConversationRequest>,
+): Array<{ name: string; source?: string }> {
+  const context = payload.agent.agent_context as
+    { skills?: Array<{ name: string; source?: string }> } | undefined;
+  return context?.skills ?? [];
+}
+
 describe("buildStartConversationRequest", () => {
   it("builds a raw planning agent request for local Planner", () => {
     const agentSettings = {
@@ -212,6 +220,65 @@ describe("buildStartConversationRequest", () => {
     });
 
     expect(payload.max_iterations).toBe(250);
+  });
+
+  // An installed catalog skill reaches the settings' agent_context.skills and
+  // is bundled too; the agent-server rejects the payload (422 "Duplicate skill
+  // name found") before the planner can start (#19336).
+  it("sends a skill both installed and bundled to the planner once, keeping the installed copy", () => {
+    const installedSource =
+      "/home/user/.openhands/skills/installed/add-skill/SKILL.md";
+    const payload = buildStartPlanningConversationRequest({
+      encryptedAgentSettings: {
+        agent_kind: "openhands",
+        llm: { model: "openhands/minimax-m2.7" },
+        agent_context: {
+          skills: [
+            {
+              name: "add-skill",
+              content: "installed copy",
+              source: installedSource,
+            },
+          ],
+        },
+      },
+      workingDir: "/workspace/project",
+      parentConversationId: "parent-1",
+      skillEnablement: { enabledSkills: ["add-skill", "github"] },
+    });
+
+    const skills = plannerSkills(payload);
+    const names = skills.map((skill) => skill.name);
+    expect(names.filter((name) => name === "add-skill")).toHaveLength(1);
+    expect(new Set(names).size).toBe(names.length);
+    expect(skills.find((skill) => skill.name === "add-skill")?.source).toBe(
+      installedSource,
+    );
+    expect(names).toContain("github");
+  });
+
+  it("still drops disabled settings skills and catalog skills that are not enabled", () => {
+    const payload = buildStartPlanningConversationRequest({
+      encryptedAgentSettings: {
+        agent_kind: "openhands",
+        llm: { model: "openhands/minimax-m2.7" },
+        agent_context: {
+          skills: [
+            { name: "my-skill", content: "kept" },
+            { name: "muted-skill", content: "disabled" },
+          ],
+        },
+      },
+      workingDir: "/workspace/project",
+      parentConversationId: "parent-1",
+      skillEnablement: {
+        enabledSkills: ["github"],
+        disabledSkills: ["muted-skill"],
+      },
+    });
+
+    const names = plannerSkills(payload).map((skill) => skill.name);
+    expect(names).toEqual(["my-skill", "github"]);
   });
 
   it("omits local planner helper conversations from paginated conversation results", () => {
