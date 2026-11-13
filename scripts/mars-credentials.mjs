@@ -18,7 +18,13 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { hostname, platform } from "node:os";
 import path from "node:path";
 
@@ -187,6 +193,8 @@ export function createCredentialStore({
   /** Connections whose grant this process could not save: memory holds it. */
   const unsaved = new Set();
 
+  /** Which write of the connection list this process last read or made. */
+  let seen = null;
   let state = load();
 
   /**
@@ -226,12 +234,61 @@ export function createCredentialStore({
   function load() {
     memoryGrants.clear();
     unsaved.clear();
+    seen = stampOf();
     // Missing or corrupt store — start clean rather than blocking sign-in.
     const loaded = readState() ?? emptyState();
     if (secrets) {
       for (const connection of loaded.connections) readSecret(connection.id);
     }
     return loaded;
+  }
+
+  /** Identifies one write of the connection file: each write replaces it. */
+  function stampOf() {
+    if (!filePath) return null;
+    try {
+      const { ino, mtimeMs, size } = statSync(filePath);
+      return `${ino}:${mtimeMs}:${size}`;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Take the list as the file holds it now. A connection another Canvas
+   * process removed, or gave a new sign-in (a new fingerprint, or a new
+   * encrypted token), drops this process's cached grant for it, so the next
+   * read gets the grant the store holds.
+   *
+   * @param {ReturnType<typeof readState>} next
+   */
+  function adopt(next) {
+    if (!next) return;
+    for (const connection of state.connections) {
+      const now = next.connections.find((other) => other.id === connection.id);
+      if (
+        !now ||
+        now.fingerprint !== connection.fingerprint ||
+        // Absent and null both mean "no token in the file".
+        (now.token ?? null) !== (connection.token ?? null)
+      ) {
+        memoryGrants.delete(connection.id);
+        unsaved.delete(connection.id);
+      }
+    }
+    state = next;
+  }
+
+  /**
+   * Pick up what another Canvas process wrote since this one last looked: a
+   * new sign-in for a team, a sign-out. Only a renewal changes nothing in
+   * the file, and its old access token still works until it falls due.
+   */
+  function syncFromDisk() {
+    const stamp = stampOf();
+    if (stamp === seen) return;
+    seen = stamp;
+    adopt(readState());
   }
 
   /**
@@ -249,8 +306,9 @@ export function createCredentialStore({
     withLockFileSync(
       `${filePath}.lock`,
       () => {
-        state = readState() ?? state;
+        adopt(readState());
         if (change() !== false) persist();
+        seen = stampOf();
       },
       STORE_LOCK,
     );
@@ -413,10 +471,12 @@ export function createCredentialStore({
     },
 
     list() {
+      syncFromDisk();
       return state.connections.map(toMetadata);
     },
 
     getActive() {
+      syncFromDisk();
       return toMetadata(find(state.activeConnectionId));
     },
 
@@ -436,6 +496,7 @@ export function createCredentialStore({
      * @returns {Grant | null}
      */
     getGrant(id) {
+      syncFromDisk();
       const connection = find(id);
       if (!connection || isExpired(connection)) return null;
       return decrypt(connection);
@@ -449,6 +510,7 @@ export function createCredentialStore({
      * @returns {Grant | null}
      */
     readGrant(id) {
+      syncFromDisk();
       const connection = find(id);
       if (!connection || isExpired(connection)) return null;
       return storedGrant(connection);
@@ -513,6 +575,21 @@ export function createCredentialStore({
         );
       });
       return updated;
+    },
+
+    /**
+     * Keep a renewed grant that could not be written (the store stayed
+     * locked): DigitalOcean has already spent the old refresh token, so this
+     * is the only copy of the new one. It lives in this process, like a grant
+     * the keychain refused, until a later renewal saves it.
+     *
+     * @param {string} id
+     * @param {Grant} grant
+     */
+    keepUnsaved(id, grant) {
+      if (!find(id)) return;
+      memoryGrants.set(id, grant);
+      unsaved.add(id);
     },
 
     /**
@@ -592,7 +669,9 @@ export function createCredentialStore({
         target = older ?? connection;
         if (older) {
           const grant = decrypt(connection);
-          const previous = decrypt(older);
+          // The grant the store holds now: another Canvas process may have
+          // renewed it since this one cached it.
+          const previous = storedGrant(older);
           if (
             older.kind === CREDENTIAL_KIND_OAUTH &&
             previous &&
