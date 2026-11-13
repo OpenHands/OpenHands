@@ -10,7 +10,10 @@ export function HomeHeaderTitle() {
       <Typography.H1 className="w-full text-center leading-normal">
         {t(I18nKey.HOME$WHAT_TO_WORK_ON)}
       </Typography.H1>
-      <p className="text-center text-[var(--oh-text-tertiary)]">
+      <p
+        data-testid="home-header-subtitle"
+        className="text-center text-text-tertiary"
+      >
         {t(I18nKey.HOME$ENGINEERING_TASKS_SUBHEADER)}
       </p>
     </div>

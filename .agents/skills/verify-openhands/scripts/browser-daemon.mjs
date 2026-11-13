@@ -34,6 +34,7 @@ import {
   redactBodyFields,
   networkEntryForOutput,
 } from "./lib/network-bodies.mjs";
+import { networkTiming, orderNetworkEntries } from "./lib/network-timing.mjs";
 import { buildLocator, toCss } from "./lib/selectors.mjs";
 import {
   RECORD_DEFAULTS,
@@ -58,6 +59,14 @@ if (!runDir) {
 const privateDir = join(runDir, "private");
 const evidenceDir = join(runDir, "evidence");
 const baseUrl = new URL(process.env.OH_VERIFY_BASE_URL);
+// Other origins this run serves (`launch --lock-to-cloud`): its own pages too.
+const runOrigins = new Set([
+  baseUrl.origin,
+  ...(process.env.OH_VERIFY_EXTRA_ORIGINS ?? "")
+    .split(",")
+    .filter(Boolean)
+    .map((u) => new URL(u).origin),
+]);
 const eventsPath = join(privateDir, "browser-events.jsonl");
 const VIEWPORTS = {
   desktop: { width: 1440, height: 1000 },
@@ -190,6 +199,7 @@ if (existsSync(eventsPath)) {
 // bodies are never kept.
 const requests = [];
 const requestEntries = new WeakMap();
+const timing = networkTiming();
 
 function redactQuery(search) {
   if (!search) return "";
@@ -202,6 +212,8 @@ function redactQuery(search) {
 }
 let markIndex = 0;
 let activePage = context.pages()[0] ?? (await context.newPage());
+// One CDP session per tab keeps a `browser timezone` override alive.
+const timezoneSessions = new WeakMap();
 // Keys held with `browser key down` until `key up` or `key release-all`.
 const heldKeys = new HeldKeys();
 
@@ -225,7 +237,7 @@ function record(kind, page, detail) {
     ...detail,
   };
   const subject = entry.url || entry.page;
-  entry.appOrigin = originOf(subject) === baseUrl.origin;
+  entry.appOrigin = runOrigins.has(originOf(subject));
   events.push(entry);
   try {
     appendFileSync(eventsPath, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
@@ -291,15 +303,22 @@ function watch(page) {
       query: query || undefined,
       method: request.method(),
       type: request.resourceType(),
-      app: origin === baseUrl.origin,
+      app: runOrigins.has(origin),
       body,
       ...bodyDetails,
     };
+    timing.start(entry);
     requestEntries.set(request, entry);
     requests.push(entry);
     if (requests.length > 5000) requests.splice(0, 1000);
   });
+  page.on("requestfinished", (request) => {
+    const entry = requestEntries.get(request);
+    if (entry) timing.complete(entry, "finished");
+  });
   page.on("requestfailed", (request) => {
+    const entry = requestEntries.get(request);
+    if (entry) timing.complete(entry, "failed");
     const failure = request.failure()?.errorText ?? "failed";
     if (failure === "net::ERR_ABORTED") return;
     record("requestfailed", page, {
@@ -310,7 +329,10 @@ function watch(page) {
   });
   page.on("response", (response) => {
     const entry = requestEntries.get(response.request());
-    if (entry) entry.status = response.status();
+    if (entry) {
+      entry.status = response.status();
+      timing.response(entry);
+    }
     if (response.status() >= 400) {
       record("http-error", page, {
         url: response.url().slice(0, 500),
@@ -537,9 +559,9 @@ function evidencePath(feature, name, ext) {
 
 function assertAppUrl(target, allowExternal) {
   const url = new URL(target, baseUrl);
-  if (!allowExternal && url.origin !== baseUrl.origin) {
+  if (!allowExternal && !runOrigins.has(url.origin)) {
     throw new Error(
-      `Refusing to navigate outside this run (${baseUrl.origin}); pass --allow-external for a deliberate external check`,
+      `Refusing to navigate outside this run (${[...runOrigins].join(", ")}); pass --allow-external for a deliberate external check`,
     );
   }
   return url.toString();
@@ -987,6 +1009,42 @@ const handlers = {
       time: new Date(time).toISOString(),
     };
   },
+  async timezone({ zone, reset }) {
+    // The browser's time zone, for states that depend on it differing from
+    // the server's (a timestamp written without an offset, a "3 hours ago"
+    // on a message sent now). It holds for the active tab, across reloads
+    // and navigations, until --reset; a tab opened later starts in the
+    // machine's zone. The server's zone is untouched.
+    if (!reset) {
+      // Chromium accepts an unknown name without changing anything, so the
+      // name is checked here first.
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: String(zone) });
+      } catch {
+        throw new Error(
+          `Not a time zone: ${zone}. Use an IANA name such as America/Sao_Paulo or Asia/Tokyo.`,
+        );
+      }
+    }
+    let session = timezoneSessions.get(activePage);
+    if (!session) {
+      session = await context.newCDPSession(activePage);
+      timezoneSessions.set(activePage, session);
+    }
+    await session.send("Emulation.setTimezoneOverride", {
+      timezoneId: reset ? "" : String(zone),
+    });
+    const seen = await activePage.evaluate(() => ({
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      utcOffsetMinutes: -new Date().getTimezoneOffset(),
+      localTime: new Date().toString(),
+    }));
+    return {
+      timezone: reset ? "reset" : "set",
+      ...seen,
+      url: activePage.url(),
+    };
+  },
   async viewport({ size }) {
     const preset = VIEWPORTS[size];
     let next = preset;
@@ -1206,7 +1264,7 @@ const handlers = {
     }
     return { offline: networkOffline };
   },
-  async network({ clear, external, last, filter, bodies }) {
+  async network({ clear, external, last, filter, bodies, order }) {
     const re = filter ? new RegExp(filter) : null;
     const list = requests.filter(
       (r) =>
@@ -1218,9 +1276,10 @@ const handlers = {
     const result = {
       total: list.length,
       byOrigin,
-      recent: list
-        .slice(-Number(last ?? 15))
-        .map((entry) => networkEntryForOutput(entry, bodies)),
+      order: order ?? "request",
+      recent: orderNetworkEntries(list, order, Number(last ?? 15)).map(
+        (entry) => networkEntryForOutput(entry, bodies),
+      ),
     };
     if (clear) requests.length = 0;
     return result;

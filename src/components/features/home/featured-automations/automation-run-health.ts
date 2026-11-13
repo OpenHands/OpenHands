@@ -9,12 +9,7 @@ import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { formatEventOn } from "#/utils/automation-schedule";
 
 export type AutomationRunHealth =
-  | "success"
-  | "failed"
-  | "warning"
-  | "in_progress"
-  | "none"
-  | "unknown";
+  "success" | "failed" | "warning" | "in_progress" | "none" | "unknown";
 
 export function deriveRunHealth(
   state: LatestAutomationRunState,
@@ -65,6 +60,9 @@ const TRIGGER_SOURCE_LABELS: Record<string, string> = {
   slack: "Slack",
   linear: "Linear",
   jira: "Jira",
+  jira_dc: "Jira Data Center",
+  bitbucket_data_center: "Bitbucket Data Center",
+  azure_devops: "Azure DevOps",
 };
 
 export function formatTriggerSourceLabel(source: string): string {

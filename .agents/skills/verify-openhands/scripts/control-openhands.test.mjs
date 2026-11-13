@@ -25,6 +25,7 @@ import { BUILD_INPUTS } from "./lib/build-inputs.mjs";
 import {
   editorOffset,
   launcherEnvFor,
+  lockedCloudOrigin,
   portsAfterRestart,
   runPorts,
 } from "./lib/launcher-env.mjs";
@@ -33,11 +34,22 @@ import { baselineLines, parseBaseline, withBaseline } from "./lib/baseline.mjs";
 import {
   affectedFamilies,
   familyHead,
+  parseServerLine,
   parseSourceLine,
+  serverMapIds,
   specMatches,
 } from "./lib/map-sources.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
-import { resolveTestids } from "./lib/testids.mjs";
+import {
+  networkTiming,
+  orderNetworkEntries,
+} from "./lib/network-timing.mjs";
+import {
+  mapWords,
+  resolveTestids,
+  sourceControls,
+  unnamedControls,
+} from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
 import { HeldKeys, keyDownArguments } from "./lib/held-keys.mjs";
@@ -73,6 +85,7 @@ import {
   knownBugBlocks,
   parseBugPredicate,
   proofVerdict,
+  viewportToRestore,
 } from "./lib/known-bug.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -690,6 +703,53 @@ test("this checkout's launcher answers the editor probe, and --vscode opts in", 
   assert.match(help.stdout, /OH_CANVAS_ENABLE_VSCODE/);
 });
 
+test("--lock-to-cloud takes P+4, keeps it across a restart, and needs an http(s) URL", () => {
+  const launcher = (offset) => ({ offset, source: "launcher" });
+  const locked = runPorts(18800, null, { lockedCloud: true });
+  assert.deepEqual(locked, {
+    ingress: 18800,
+    agentServer: 18801,
+    automation: 18802,
+    frontend: 18803,
+    lockedCloud: 18804,
+  });
+  // The locked page is not the launcher's: whatever the editor answer, a
+  // restart keeps its port.
+  assert.equal(
+    portsAfterRestart(locked, launcher(null)).ports.lockedCloud,
+    18804,
+  );
+  assert.equal(
+    portsAfterRestart(locked, launcher(1000)).ports.lockedCloud,
+    18804,
+  );
+  assert.equal(
+    portsAfterRestart(runPorts(18800, null), launcher(null)).ports.lockedCloud,
+    undefined,
+  );
+  assert.equal(
+    lockedCloudOrigin("https://app.all-hands.dev/"),
+    "https://app.all-hands.dev",
+  );
+  assert.throws(() => lockedCloudOrigin("app.all-hands.dev"), /Cloud URL/);
+  assert.throws(() => lockedCloudOrigin("ftp://example.com"), /http\(s\)/);
+  // A bad or missing URL is a usage error before anything is built or started.
+  for (const flags of [
+    ["--lock-to-cloud", "ftp://example.com"],
+    ["--lock-to-cloud"],
+  ]) {
+    const result = run(["launch", "--new", ...flags]);
+    assert.equal(result.status, 2, JSON.stringify(result.json));
+    assert.match(result.json.hint, /--lock-to-cloud https:/);
+  }
+  const help = spawnSync(process.execPath, [cli, "help", "launch"], {
+    encoding: "utf8",
+  });
+  assert.match(help.stdout, /--mars-web/);
+  assert.match(help.stdout, /MARS_WEB=1/);
+  assert.match(help.stdout, /--lock-to-cloud URL/);
+});
+
 test("a restart follows the launcher's editor answer, or keeps its ports", () => {
   const without = runPorts(18800, null);
   const withEditor = runPorts(18800, 1000);
@@ -841,6 +901,11 @@ test("changed paths map to the families whose Source: lines own them", () => {
     "src/components/features/brand-new/page.tsx",
     "src/mocks/conversation-handlers.ts",
     ".agents/skills/verify-openhands/SKILL.md",
+    "src/icons/close.svg",
+    "hero.ts",
+    "eslint.config.js",
+    "vitest.setup.ts",
+    "playwright.live.config.ts",
   ]);
   assert.deepEqual(
     result.families.map((f) => [f.id, f.paths]),
@@ -856,6 +921,8 @@ test("changed paths map to the families whose Source: lines own them", () => {
   assert.deepEqual(result.shared, [
     "src/hooks/query/use-get-secrets.ts",
     "src/i18n/translation.json",
+    "src/icons/close.svg",
+    "hero.ts",
   ]);
   // A src/ path no family owns is a map gap.
   assert.deepEqual(result.unmapped, [
@@ -868,6 +935,9 @@ test("changed paths map to the families whose Source: lines own them", () => {
     "__tests__/components/secrets.test.tsx",
     "src/mocks/conversation-handlers.ts",
     ".agents/skills/verify-openhands/SKILL.md",
+    "eslint.config.js",
+    "vitest.setup.ts",
+    "playwright.live.config.ts",
   ]);
 });
 
@@ -892,6 +962,85 @@ test("map affected reads a path list and classifies its paths", () => {
   // line; the baseline test below covers both states.
 });
 
+test("a Server: line names Agent Server IDs, only in the file's head", () => {
+  assert.deepEqual(parseServerLine("Server: F13, F15.changes, F16."), {
+    ids: ["F13", "F15.changes", "F16"],
+    invalid: [],
+  });
+  assert.deepEqual(parseServerLine("Server: F15, `F14`, git"), {
+    ids: ["F15"],
+    invalid: ["`F14`", "git"],
+  });
+  const head = familyHead(
+    "# F08\n\nText.\n\nSource: `src/routes/files-tab.tsx`.\n\nServer: F15.\n\n## Sub-features\n\nServer: F99\n",
+  );
+  assert.deepEqual(head.server.ids, ["F15"]);
+  assert.deepEqual(familyHead("# F01\n\n## Sub-features\n").server, {
+    ids: [],
+    invalid: [],
+  });
+});
+
+test("the server map declares its families and sub-feature IDs", () => {
+  const ids = serverMapIds([
+    {
+      file: "F15-git.md",
+      text: "# Git\n\n## Sub-features\n\n- `F15.changes`: x\n- `F15.diff`: y\n\n## How to get to it (agent POV)\n\n- `F15.not-declared` in prose\n",
+    },
+    { file: "README.md", text: "- `F99.x`: index" },
+  ]);
+  assert.deepEqual([...ids].sort(), ["F15", "F15.changes", "F15.diff"]);
+});
+
+test("map check --server-map checks Server: IDs against the server map", () => {
+  const sdk = mkdtempSync(join(tmpdir(), "servermap-"));
+  const map = join(
+    sdk,
+    ".agents",
+    "skills",
+    "verify-agent-server",
+    "references",
+    "feature-map",
+  );
+  mkdirSync(map, { recursive: true });
+  // Every family a shipped Server: line names, except F16.
+  for (const n of Array.from({ length: 30 }, (_, i) => i + 1)) {
+    if (n === 16) continue;
+    const id = `F${String(n).padStart(2, "0")}`;
+    writeFileSync(
+      join(map, `${id}-x.md`),
+      `# ${id}\n\n## Sub-features\n\n- \`${id}.x\`: x\n`,
+    );
+  }
+  const res = spawnSync(
+    process.execPath,
+    [cli, "map", "check", "--server-map", sdk],
+    { encoding: "utf8" },
+  );
+  const json = JSON.parse(res.stdout);
+  assert.equal(res.status, 1, res.stdout);
+  assert.equal(json.serverMap, map);
+  assert.ok(
+    json.problems.includes(
+      "F08-workspace-files-and-changes.md: Server: F16 is not in the verify-agent-server map",
+    ),
+    res.stdout,
+  );
+  writeFileSync(join(map, "F16-x.md"), "# F16\n\n## Sub-features\n");
+  const ok = spawnSync(
+    process.execPath,
+    [cli, "map", "check", "--server-map", map],
+    { encoding: "utf8" },
+  );
+  assert.equal(ok.status, 0, ok.stdout);
+  const missing = spawnSync(
+    process.execPath,
+    [cli, "map", "check", "--server-map", join(sdk, "nope")],
+    { encoding: "utf8" },
+  );
+  assert.equal(missing.status, 2, missing.stdout + missing.stderr);
+});
+
 test("map check rejects a Source: path that is gone, and the shipped map is clean", () => {
   const dir = mkdtempSync(join(tmpdir(), "mapcheck-"));
   // The checker reads the real map dir; prove the rules on the parser level
@@ -906,6 +1055,89 @@ test("map check rejects a Source: path that is gone, and the shipped map is clea
   );
   assert.equal(head.sources[0].path, "src/does-not-exist.tsx");
   assert.ok(existsSync(dir));
+});
+
+test("map controls lists interactive elements whose test id the map never names", () => {
+  const root = mkdtempSync(join(tmpdir(), "oh-controls-"));
+  const dir = join(root, "src", "components", "features", "demo");
+  mkdirSync(dir, { recursive: true });
+  mkdirSync(join(root, "src", "mocks"), { recursive: true });
+  writeFileSync(
+    join(dir, "panel.tsx"),
+    [
+      "export function Panel({ items }) {",
+      "  return (",
+      '    <section data-testid="demo-panel">',
+      "      <button",
+      '        type="button"',
+      "        onClick={() => items.filter((i) => i > 1)}",
+      '        data-testid="demo-ask-agent"',
+      "      >",
+      "        Ask Agent",
+      "      </button>",
+      '      <BrandButton testId="demo-save">Save</BrandButton>',
+      "      <MenuItem",
+      "        icon={<EditIcon width={16} height={16} />}",
+      "        onClick={() => items.length > 1 && open()}",
+      '        testId="demo-edit"',
+      "      />",
+      '      <div role="menuitem" data-testid={"demo-menu-item"} />',
+      '      <span data-testid="demo-save-hint">Saved</span>',
+      "    </section>",
+      "  );",
+      "}",
+    ].join("\n"),
+  );
+  writeFileSync(
+    join(dir, "panel.test.tsx"),
+    '<button data-testid="only-in-a-test" />',
+  );
+  writeFileSync(
+    join(root, "src", "mocks", "page.tsx"),
+    '<button data-testid="only-in-mocks" />',
+  );
+  const controls = sourceControls(join(root, "src"), root);
+  assert.deepEqual(
+    controls.map((c) => [c.id, c.tag, c.interactive]),
+    [
+      ["demo-ask-agent", "button", true],
+      // The id follows an element passed as a prop: the row is the menu
+      // item, not the icon.
+      ["demo-edit", "MenuItem", true],
+      ["demo-menu-item", "div", true],
+      ["demo-panel", "section", false],
+      ["demo-save", "BrandButton", true],
+      ["demo-save-hint", "span", false],
+    ],
+  );
+  assert.equal(controls[0].file, "src/components/features/demo/panel.tsx");
+  // The map names a control by its whole id: `demo-save-hint` in a recipe
+  // does not account for `demo-save`, and prose about "Ask Agent" does not
+  // account for the button's id.
+  const words = mapWords(
+    "The form has **Ask Agent**. Run `browser text 'testid=demo-save-hint'` and `browser click 'testid=demo-menu-item >> nth=0'`.",
+  );
+  const result = unnamedControls(controls, words);
+  assert.equal(result.considered, 4);
+  assert.deepEqual(
+    result.unnamed.map((c) => c.id),
+    ["demo-ask-agent", "demo-edit", "demo-save"],
+  );
+  assert.deepEqual(
+    unnamedControls(controls, words, { all: true }).unnamed.map((c) => c.id),
+    ["demo-ask-agent", "demo-edit", "demo-panel", "demo-save"],
+  );
+  // On the live tree the command answers with counts and owning families.
+  const live = spawnSync(
+    process.execPath,
+    [cli, "map", "controls", "--family", "F28"],
+    { encoding: "utf8" },
+  );
+  assert.equal(live.status, 0, live.stderr);
+  const report = JSON.parse(live.stdout);
+  assert.ok(report.controls > 0);
+  assert.ok(report.list.every((c) => c.families.includes("F28")));
+  assert.equal(report.unnamed, report.list.length);
 });
 
 test("cited test ids resolve through literals and dynamic prefixes", () => {
@@ -924,6 +1156,23 @@ test("cited test ids resolve through literals and dynamic prefixes", () => {
   assert.equal(result.cited, 4);
   assert.deepEqual(result.unresolved, [
     { id: "renamed-away-button", files: ["F14-secrets.md"] },
+  ]);
+  // A one-word prefix accounts for an id only when the source builds ids
+  // from it; otherwise a removed id such as automation-setup-agent-profile
+  // would resolve through the plain word "automation".
+  const words = new Set(["automation", "edit"]);
+  words.heads = new Set(["edit"]);
+  words.tails = new Set(["message"]);
+  const strict = resolveTestids(
+    new Map([
+      ["automation-setup-agent-profile", new Set(["F28.md"])],
+      ["edit-automation-save", new Set(["F23.md"])],
+      ["agent-message", new Set(["F06.md"])],
+    ]),
+    words,
+  );
+  assert.deepEqual(strict.unresolved, [
+    { id: "automation-setup-agent-profile", files: ["F28.md"] },
   ]);
   // The live map against the live source tree: zero unresolved today, and
   // --strict makes any drift a failing exit.
@@ -1084,6 +1333,11 @@ test("help names every fixture kind and the new map verbs", () => {
   });
   assert.match(map.stdout, /map affected \[--base REF\]/);
   assert.match(map.stdout, /map testids \[--strict\]/);
+  assert.match(map.stdout, /map controls \[--family Fnn\]/);
+  const browserHelp = spawnSync(process.execPath, [cli, "help", "browser"], {
+    encoding: "utf8",
+  });
+  assert.match(browserHelp.stdout, /timezone <IANA name> \| --reset/);
   const evidence = spawnSync(process.execPath, [cli, "help", "evidence"], {
     encoding: "utf8",
   });
@@ -2465,6 +2719,42 @@ test("a fix is verified only by two reproductions and two passes under the same 
     ).reasons.join(),
     /same revision/,
   );
+  // A backend fix: same revision, a different backend on each side.
+  const vb = (baseline, fix) =>
+    proofVerdict({ baseline, fix, sha: "s1", vary: "backend" });
+  const newBackend = { backend: "local agent-server 1.58.1 automation 1.25.1" };
+  assert.equal(
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass", newBackend), row("xpass", newBackend)],
+    ).verdict,
+    "verified",
+  );
+  assert.match(
+    vb([row("xfail"), row("xfail")], [row("xpass"), row("xpass")]).reasons.join(),
+    /same backend versions/,
+  );
+  assert.match(
+    vb(
+      [row("xfail"), row("xfail")],
+      [fixRow("xpass", newBackend), fixRow("xpass", newBackend)],
+    ).reasons.join(),
+    /different revisions/,
+  );
+  assert.match(
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass", newBackend), row("xpass")],
+    ).reasons.join(),
+    /one side ran different backend/,
+  );
+  assert.equal(
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass", newBackend), row("xfail", newBackend)],
+    ).verdict,
+    "not-fixed",
+  );
   // Attempts of an older recipe do not count.
   const old = v(
     [row("xpass", { sha: "s0" }), row("xfail"), row("xfail")],
@@ -2833,6 +3123,29 @@ test("network plugin projection bounds complete UTF-8 JSON and omits non-JSON or
   );
 });
 
+test("network body projection keeps the start request's runtime choice past the display cap", () => {
+  const request = JSON.stringify({
+    agent_launch_additions: { system_message_suffix_append: "x".repeat(4000) },
+    llm: { api_key: "never-project-me" },
+    worktree: true,
+    worktree_options: { base: "current_head", branch_prefix: "qa/" },
+    conversation_runtime: "local",
+    container: { memory: "2g", cpus: 1 },
+  });
+  assert.deepEqual(redactBodyFields(request), {
+    bodyFields: {
+      conversation_runtime: "local",
+      worktree: true,
+      worktree_options: { base: "current_head", branch_prefix: "qa/" },
+      container: { memory: "2g", cpus: 1 },
+    },
+  });
+  assert.doesNotMatch(
+    JSON.stringify(redactBodyFields(request)),
+    /never-project-me|system_message/,
+  );
+});
+
 test("browser media validates motion before dispatch and preserves playback observation", async () => {
   const runDir = mkdtempSync(join(tmpdir(), "cov-media-motion-"));
   mkdirSync(join(runDir, "private"));
@@ -2874,4 +3187,79 @@ test("browser media validates motion before dispatch and preserves playback obse
     await new Promise((resolve) => server.close(resolve));
     rmSync(runDir, { recursive: true, force: true });
   }
+});
+
+test("browser network times responses and can list them in completion order", () => {
+  let clock = 1_000;
+  const timing = networkTiming(() => clock);
+  // Two schema requests leave together; the second one answers first.
+  const agent = { ts: "t0", path: "/api/settings/agent-schema" };
+  const conversation = { ts: "t0", path: "/api/settings/conversation-schema" };
+  const pending = { ts: "t0", path: "/sockets/events" };
+  for (const entry of [agent, conversation, pending]) timing.start(entry);
+  clock = 1_040;
+  timing.response(conversation);
+  clock = 1_050;
+  timing.complete(conversation, "finished");
+  clock = 1_120;
+  timing.response(agent);
+  timing.response(agent); // a second call does not move the first answer
+  clock = 1_130;
+  timing.complete(agent, "finished");
+  timing.complete(agent, "failed"); // nor does a late failure
+  assert.deepEqual(networkEntryForOutput(conversation, false), {
+    ts: "t0",
+    path: "/api/settings/conversation-schema",
+    responseMs: 40,
+    outcome: "finished",
+    durationMs: 50,
+    completedTs: new Date(1_050).toISOString(),
+    completedSeq: 1,
+  });
+  assert.equal(agent.responseMs, 120);
+  assert.equal(agent.outcome, "finished");
+  assert.equal(agent.completedSeq, 2);
+  const list = [agent, conversation, pending];
+  assert.deepEqual(orderNetworkEntries(list), list);
+  assert.deepEqual(
+    orderNetworkEntries(list, "completion").map((e) => e.path),
+    [
+      "/api/settings/conversation-schema",
+      "/api/settings/agent-schema",
+      "/sockets/events",
+    ],
+  );
+  assert.throws(() => orderNetworkEntries(list, "size"), /request or completion/);
+  // --last windows completed and pending rows separately: 15 open sockets
+  // must not push the two completions out of a --last 15 listing.
+  const sockets = Array.from({ length: 15 }, (_, i) => ({ path: `/ws/${i}` }));
+  const busy = orderNetworkEntries([...list, ...sockets], "completion", 15);
+  assert.deepEqual(
+    busy.slice(0, 2).map((e) => e.path),
+    ["/api/settings/conversation-schema", "/api/settings/agent-schema"],
+  );
+  assert.equal(busy.length, 17);
+  assert.deepEqual(
+    orderNetworkEntries([...list, ...sockets], "request", 2).map((e) => e.path),
+    ["/ws/13", "/ws/14"],
+  );
+  const help = spawnSync(process.execPath, [cli, "help", "browser"], {
+    encoding: "utf8",
+  });
+  assert.match(help.stdout, /--order request\|completion/);
+});
+
+test("bug run puts back the viewport a block changed", () => {
+  const desktop = { width: 1440, height: 1000 };
+  const phone = { width: 390, height: 844 };
+  // F07.overview-toggle phone-overview switches to phone: back to desktop.
+  assert.equal(viewportToRestore(desktop, phone), "1440x1000");
+  assert.equal(viewportToRestore(phone, desktop), "390x844");
+  // Unchanged, or nothing known before the block: nothing to restore.
+  assert.equal(viewportToRestore(desktop, { ...desktop }), null);
+  assert.equal(viewportToRestore(undefined, phone), null);
+  const help = spawnSync(process.execPath, [cli, "help", "bug"], {
+    encoding: "utf8",
+  });
+  assert.match(help.stdout, /viewportRestored/);
 });

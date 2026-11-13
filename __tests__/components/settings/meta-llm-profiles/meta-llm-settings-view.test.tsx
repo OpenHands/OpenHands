@@ -40,6 +40,10 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
   displaySuccessToast: vi.fn(),
 }));
+const routerPerProfileMock = vi.hoisted(() => vi.fn(() => false));
+vi.mock("#/api/agent-profiles-service/profile-field-support", () => ({
+  agentProfileSupportsRouter: () => routerPerProfileMock(),
+}));
 
 const mockMetaProfiles = [
   {
@@ -97,6 +101,7 @@ describe("MetaLlmSettingsView", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    routerPerProfileMock.mockReturnValue(false);
 
     vi.mocked(useMetaProfilesHook.useMetaProfiles).mockReturnValue({
       data: {
@@ -436,7 +441,10 @@ describe("MetaLlmSettingsView", () => {
     const user = userEvent.setup();
     // A router already exists (and is active), so this is not a 0 → 1 create.
     vi.mocked(useMetaProfilesHook.useMetaProfiles).mockReturnValue({
-      data: { meta_profiles: mockMetaProfiles, active_meta_profile: "balanced" },
+      data: {
+        meta_profiles: mockMetaProfiles,
+        active_meta_profile: "balanced",
+      },
       isLoading: false,
       error: null,
     } as unknown as ReturnType<typeof useMetaProfilesHook.useMetaProfiles>);
@@ -700,5 +708,69 @@ describe("MetaLlmSettingsView", () => {
     expect(
       screen.getByTestId("meta-profile-run-at-conversation-start-switch"),
     ).toBeChecked();
+  });
+
+  describe("when each agent profile picks its router", () => {
+    beforeEach(() => {
+      routerPerProfileMock.mockReturnValue(true);
+    });
+
+    it("lists routers without an active one or a Set active action", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<MetaLlmSettingsView />);
+
+      expect(
+        screen.queryByTestId("meta-profile-active-badge"),
+      ).not.toBeInTheDocument();
+      await user.click(
+        screen.getByTestId("meta-profile-menu-trigger-balanced"),
+      );
+      expect(screen.getByTestId("meta-profile-edit")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("meta-profile-set-active"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("meta-profile-delete")).toBeInTheDocument();
+    });
+
+    it("does not activate the first router after creating it", async () => {
+      const user = userEvent.setup();
+      vi.mocked(useMetaProfilesHook.useMetaProfiles).mockReturnValue({
+        data: { meta_profiles: [], active_meta_profile: null },
+        isLoading: false,
+        error: null,
+      } as unknown as ReturnType<typeof useMetaProfilesHook.useMetaProfiles>);
+      saveMutateAsync.mockResolvedValue({ name: "pareto" });
+      renderWithProviders(<MetaLlmSettingsView />);
+
+      await openRouterProTemplate(user);
+      await user.clear(screen.getByTestId("meta-profile-name-input"));
+      await user.type(screen.getByTestId("meta-profile-name-input"), "pareto");
+      fireEvent.change(screen.getByTestId("meta-profile-model-table"), {
+        target: { value: "" },
+      });
+      await user.click(screen.getByTestId("meta-profile-save"));
+
+      await waitFor(() => expect(saveMutateAsync).toHaveBeenCalled());
+      expect(activateMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it("enables Run on first message once any router exists", () => {
+      vi.mocked(useMetaProfilesHook.useMetaProfiles).mockReturnValue({
+        data: { meta_profiles: mockMetaProfiles, active_meta_profile: null },
+        isLoading: false,
+        error: null,
+      } as unknown as ReturnType<typeof useMetaProfilesHook.useMetaProfiles>);
+
+      renderWithProviders(<MetaLlmSettingsView />);
+
+      expect(
+        screen.getByTestId("meta-profile-run-at-conversation-start-switch"),
+      ).not.toBeDisabled();
+      expect(
+        screen.getByText(
+          "SETTINGS$META_PROFILE_RUN_AT_CONVERSATION_START_HELP_PROFILE",
+        ),
+      ).toBeInTheDocument();
+    });
   });
 });

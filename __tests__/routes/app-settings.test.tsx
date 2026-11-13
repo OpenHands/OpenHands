@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AppSettingsScreen from "#/routes/app-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
@@ -80,6 +80,10 @@ describe("AppSettingsScreen", () => {
     vi.restoreAllMocks();
     activeBackendState.id = "local";
     activeBackendState.kind = "local";
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("keeps edits after a failed save and lets the user retry successfully", async () => {
@@ -192,6 +196,21 @@ describe("AppSettingsScreen", () => {
 
     await userEvent.click(analyticsSwitch);
     expect(submitButton).toBeDisabled();
+  });
+
+  it("hides the Getting Started checklist switch on a canvas locked to its Cloud host", async () => {
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    activeBackendState.kind = "cloud";
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+
+    renderAppSettingsScreen();
+
+    expect(
+      await screen.findByTestId("enable-sound-notifications-switch"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("show-getting-started-checklist-switch"),
+    ).not.toBeInTheDocument();
   });
 
   it("does not submit analytics consent for cloud backends", async () => {

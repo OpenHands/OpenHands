@@ -1,3 +1,7 @@
+import {
+  sessionActivityKey,
+  useSessionActivityStore,
+} from "#/stores/session-activity-store";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { SuggestedTask } from "#/utils/types";
@@ -24,6 +28,7 @@ export interface CreateConversationVariables {
   query?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
   repository?: {
     name: string;
     gitProvider: Provider;
@@ -36,10 +41,20 @@ export interface CreateConversationVariables {
   plugins?: PluginSpec[];
   workingDir?: string;
   workspaceMode?: WorkspaceMode;
+  // Cloud only: start inside this existing sandbox instead of provisioning
+  // one (the sidebar's "New Conversation in Sandbox"). Local backends have no
+  // sandboxes, and the local launch path ignores it.
+  sandboxId?: string;
   // Launch from a specific AgentProfile (local backend). When omitted, the
   // active AgentProfile (if any) is used so home-composed conversations
   // launch from the user's selected profile (#3727).
   agentProfileId?: string;
+  // Cloud: run on this LLM profile (a member's home pick) without activating it.
+  llmProfile?: string;
+  // Home launcher only: a home-page LLM profile pick was made before the first
+  // message, so suppress "Run on first message" routing for this single launch.
+  // Non-home callers omit it so they route as usual.
+  suppressRouterAtStart?: boolean;
   entryPoint?: string; // analytics only; not forwarded to the service
 }
 
@@ -93,6 +108,7 @@ export const useCreateConversation = ({
         query,
         automationSetup,
         automationSetupTags,
+        automationSetupContext,
         conversationInstructions,
         plugins,
         repository,
@@ -101,11 +117,13 @@ export const useCreateConversation = ({
         parentConversationId,
         agentType,
         agentProfileId,
+        llmProfile,
+        sandboxId,
+        suppressRouterAtStart,
       } = variables;
 
       // The active AgentProfile is the default launch profile for new
-      // conversations (#3727), on both local and cloud. sandboxId is unused
-      // here.
+      // conversations (#3727), on both local and cloud.
       const conversation = await launchConversation(
         {
           queryClient,
@@ -118,6 +136,7 @@ export const useCreateConversation = ({
           initialUserMsg: query,
           automationSetup,
           ...(automationSetupTags ? { automationSetupTags } : {}),
+          automationSetupContext,
           conversationInstructions,
           plugins,
           metadata: repository
@@ -131,17 +150,26 @@ export const useCreateConversation = ({
           workspaceMode,
           parentConversationId,
           agentType,
-          // Only stamp the toggle when it's on so the default path stays
-          // byte-identical to the legacy launch (and the e2e snapshot tests
-          // that assert the exact createConversation payload). The active
-          // meta-profile gates the suffix: no router attached means no
-          // route-at-start instruction, even if the toggle was left on.
-          ...(settings?.run_router_at_conversation_start
+          ...(llmProfile ? { llmProfile } : {}),
+          ...(sandboxId ? { sandboxId } : {}),
+          // Cloud only; a local launch reads the toggle itself and gates it
+          // on the launched profile's router. Only stamped when on, so the
+          // e2e snapshot tests that assert the exact createConversation
+          // payload stay stable. The active meta-profile gates the suffix:
+          // no router attached means no route-at-start instruction.
+          ...(settings?.run_router_at_conversation_start &&
+          !suppressRouterAtStart
             ? {
                 runRouterAtConversationStart: true,
                 hasActiveMetaProfile: !!metaProfiles?.active_meta_profile,
               }
             : {}),
+          // Local: the builder gates the route-at-start suffix on this rather
+          // than reading the store, so child/`/new` launches (which don't pass
+          // it) are unaffected by a pending home pick. Only threaded when a
+          // pick was made so the payload-snapshot tests stay byte-identical
+          // otherwise.
+          ...(suppressRouterAtStart ? { suppressRouterAtStart } : {}),
         },
       );
 
@@ -199,6 +227,12 @@ export const useCreateConversation = ({
       const conversationId = conversation.app_conversation_id
         ? conversation.app_conversation_id
         : `task-${conversation.id}`;
+
+      const activity = useSessionActivityStore.getState();
+      const activityKey = sessionActivityKey(backend.id, orgId, conversationId);
+      activity.begin(activityKey, "initialize");
+      if (conversation.app_conversation_id)
+        activity.observe(activityKey, "READY");
 
       return {
         conversation_id: conversationId,

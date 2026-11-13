@@ -18,7 +18,7 @@ export function Probe() {
     <div className="text-unregistered-color" />
     <svg><path fill="#ec4899" /></svg>
     <div className="text-danger bg-surface text-foreground" />
-    <div className="bg-background bg-content1 text-primary-foreground text-medium" />
+    <div className="bg-background bg-content1 text-primary-foreground text-base" />
     <div className="bg-status-fail-bg text-status-fail-text text-content-muted text-modal-muted" />
     <div className="bg-content9" />
   </>;
@@ -26,7 +26,11 @@ export function Probe() {
 `;
 
 describe("Canvas raw color rollout", () => {
-  it("warns on palette classes reached through an adopted dynamic map", async () => {
+  it.each([
+    "src/components/features/backends/backend-status-dot.tsx",
+    "src/components/features/markdown/blockquote.tsx",
+    "src/components/features/mcp-page/mcp-server-health.tsx",
+  ])("rejects raw palette recipes in migrated owner %s", async (filePath) => {
     const [result] = await eslint.lintText(
       `
 const toneClasses = {
@@ -37,7 +41,7 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
   return <div className={toneClasses[tone]} />;
 }
 `,
-      { filePath: "src/components/features/markdown/blockquote.tsx" },
+      { filePath },
     );
 
     expect(
@@ -46,7 +50,7 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
       ),
     ).toEqual([
       expect.objectContaining({
-        severity: 1,
+        severity: 2,
         messageId: expect.stringMatching(/^paletteClass/),
       }),
     ]);
@@ -66,6 +70,22 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
     ).toEqual([]);
   });
 
+  it("keeps bracketed color literals under the separately staged arbitrary-value rule", async () => {
+    const [result] = await eslint.lintText(
+      'export function Probe() { return <div className="text-[#ec4899]" />; }',
+      { filePath: "src/routes/color-probe.tsx" },
+    );
+    expect(result.fatalErrorCount).toBe(0);
+    expect(
+      result.messages.filter(({ ruleId }) => ruleId === "shadcn/no-raw-colors"),
+    ).toEqual([]);
+    expect(
+      result.messages
+        .filter(({ ruleId }) => ruleId === "shadcn/no-arbitrary-values")
+        .map(({ severity }) => severity),
+    ).toEqual([1]);
+  });
+
   it("accepts SVG classes that disable paint", async () => {
     const [result] = await eslint.lintText(
       'export function Probe() { return <svg className="fill-none stroke-none" />; }',
@@ -81,7 +101,7 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
   });
 
   it.each(["src/routes/color-probe.tsx", "src/ui/color-probe.tsx"])(
-    "warns on raw colors and unknown tokens while accepting verified tokens in %s",
+    "rejects raw colors and unknown tokens while accepting verified tokens in %s",
     async (filePath) => {
       const [result] = await eslint.lintText(probe, { filePath });
       expect(result.fatalErrorCount).toBe(0);
@@ -90,10 +110,10 @@ export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
           .filter((message) => message.ruleId === "shadcn/no-raw-colors")
           .map(({ line, severity }) => ({ line, severity })),
       ).toEqual([
-        { line: 4, severity: 1 },
-        { line: 5, severity: 1 },
-        { line: 6, severity: 1 },
-        { line: 10, severity: 1 },
+        { line: 4, severity: 2 },
+        { line: 5, severity: 2 },
+        { line: 6, severity: 2 },
+        { line: 10, severity: 2 },
       ]);
     },
   );

@@ -21,9 +21,7 @@ export type ConversationSortField = "created" | "updated";
 export type ThreadScope = "all" | "relevant";
 export type OrganizeMode = "grouped" | "chronological";
 export type AutomationFilterMode =
-  | "all"
-  | "hide-automations"
-  | "only-automations";
+  "all" | "hide-automations" | "only-automations";
 export type OlderConversationCutoff = "1h" | "1d" | "7d" | "30d";
 
 export const OLDER_CONVERSATION_CUTOFFS = [
@@ -398,7 +396,7 @@ function buildGroupLaunch(
     const name = id.slice(5);
     const sample = conversations[0];
     const gitProvider = (sample?.git_provider ?? "github") as Provider;
-    const branch = sample?.selected_branch ?? "main";
+    const branch = sample?.selected_branch ?? undefined;
     return {
       repository: {
         name,
@@ -563,20 +561,45 @@ export function groupConversations(
     { label: string; conversations: AppConversation[] }
   >();
 
+  // Index the registered workspace folders by normalized path so legacy
+  // conversations created before workspace tags existed can be recovered by
+  // matching their runtime `working_dir` against a known workspace (#17386).
+  const knownWorkspacePaths = new Map<string, string>();
   if (backendKind === "local" && knownWorkspaces) {
     for (const ws of knownWorkspaces) {
       const normalized = ws.path.trim().replace(/\/+$/, "");
       if (normalized) {
+        knownWorkspacePaths.set(normalized, ws.name);
         byId.set(`ws:${normalized}`, { label: ws.name, conversations: [] });
       }
     }
   }
 
+  // A `local_repo` conversation runs directly in its workspace folder, so its
+  // `working_dir` equals a registered workspace path and can be recovered. A
+  // `new_worktree` conversation runs in a unique generated worktree that never
+  // matches a registered path, so only its server tag (read in
+  // `toAppConversation`) can regroup it — pre-tag worktree conversations stay
+  // under "No workspace".
+  const recoverWorkspaceGroup = (
+    c: AppConversation,
+  ): { id: string; label: string } | null => {
+    if (backendKind !== "local" || knownWorkspacePaths.size === 0) return null;
+    const runtimeDir = c.workspace?.working_dir?.trim().replace(/\/+$/, "");
+    if (!runtimeDir) return null;
+    const name = knownWorkspacePaths.get(runtimeDir);
+    return name ? { id: `ws:${runtimeDir}`, label: name } : null;
+  };
+
   for (const c of items) {
-    const { id, label: rawLabel } = getConversationGroupIdentity(
-      c,
-      backendKind,
-    );
+    let { id, label: rawLabel } = getConversationGroupIdentity(c, backendKind);
+    if (id === "__none_workspace") {
+      const recovered = recoverWorkspaceGroup(c);
+      if (recovered) {
+        id = recovered.id;
+        rawLabel = recovered.label;
+      }
+    }
     const label =
       id === "__none_workspace"
         ? labels.emptyWorkspace

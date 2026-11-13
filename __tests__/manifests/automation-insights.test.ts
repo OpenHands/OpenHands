@@ -281,6 +281,15 @@ describe("matchesAutomationSearch", () => {
   it("rejects an automation matching no field", () => {
     expect(matchesAutomationSearch(createAutomation(), "gadget")).toBe(false);
   });
+
+  it("matches the repositories the service returns", () => {
+    const automation = createAutomation({
+      repository: undefined,
+      repositories: [{ url: "fabrikam/Fabrikam Fiber/fabrikam-web" }],
+    });
+
+    expect(matchesAutomationSearch(automation, "fabrikam-web")).toBe(true);
+  });
 });
 
 describe("applyDashboardView", () => {
@@ -318,6 +327,7 @@ describe("applyDashboardView", () => {
     trigger: "all",
     createdBy: "all",
     currentUserId: null,
+    tag: null,
     sort: "name",
   } as const;
 
@@ -353,7 +363,7 @@ describe("applyDashboardView", () => {
     }).toEqual({ scheduled: ["healthy", "failing"], events: ["evented"] });
   });
 
-  it("splits automations by creator, counting a missing creator as someone else's", () => {
+  it("splits automations by who runs them, counting a missing identity as another person's", () => {
     // Arrange
     const mine = createAutomation({
       id: "mine",
@@ -366,25 +376,34 @@ describe("applyDashboardView", () => {
       user_id: "teammate",
     });
     const unowned = createAutomation({ id: "unowned", name: "C unowned" });
-    const automations = [unowned, theirs, mine];
+    const serviceRun = createAutomation({
+      id: "service-run",
+      name: "D service",
+      user_id: "svc-1",
+      run_as_kind: "service",
+    });
+    const automations = [serviceRun, unowned, theirs, mine];
 
     // Act
-    const view = (createdBy: "all" | "me" | "others") =>
+    const view = (createdBy: "all" | "me" | "others" | "service") =>
       applyDashboardView(
         automations,
         { ...neutral, createdBy, currentUserId: "me" },
         byId,
       ).map((a) => a.id);
 
-    // Assert
+    // Assert — me and others are people only; service is every
+    // service-account-run automation.
     expect({
       all: view("all"),
       me: view("me"),
       others: view("others"),
+      service: view("service"),
     }).toEqual({
-      all: ["mine", "theirs", "unowned"],
+      all: ["mine", "theirs", "unowned", "service-run"],
       me: ["mine"],
       others: ["theirs", "unowned"],
+      service: ["service-run"],
     });
   });
 
@@ -415,6 +434,27 @@ describe("applyDashboardView", () => {
       me: askingForMe.map((a) => a.id),
       others: askingForOthers.map((a) => a.id),
     }).toEqual({ me: ["mine"], others: ["mine"] });
+  });
+
+  it("keeps only automations carrying the selected tag", () => {
+    // Arrange — one tagged automation, one with other tags, and one from an
+    // automation service that sends no tags at all.
+    const tagged = createAutomation({
+      id: "tagged",
+      tags: ["software-factory", "ci"],
+    });
+    const otherTags = createAutomation({ id: "other", tags: ["ci"] });
+    const untagged = createAutomation({ id: "untagged" });
+
+    // Act
+    const visible = applyDashboardView(
+      [tagged, otherTags, untagged],
+      { ...neutral, tag: "software-factory" },
+      byId,
+    );
+
+    // Assert
+    expect(visible.map((a) => a.id)).toEqual(["tagged"]);
   });
 
   it("orders by lifetime run count under the runs sort", () => {

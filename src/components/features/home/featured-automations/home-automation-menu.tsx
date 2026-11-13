@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { KebabMenuItemContent } from "#/components/features/automations/kebab-menu-item-content";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
 import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
@@ -13,6 +12,7 @@ import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { MenuSeparator } from "#/components/features/conversation-panel/menu-separator";
 import { ContextMenu } from "#/ui/context-menu";
 import type { HomeAutomationMenuEntry } from "./build-home-automation-menu-items";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 interface HomeAutomationMenuProps {
   testId: string;
@@ -137,69 +137,68 @@ export function HomeAutomationMenu({
         }}
       />
 
-      {menuOpen && floatingStyle && portalTarget
-        ? createPortal(
-            <ContextMenu
-              ref={menuRef}
-              testId={panelTestId}
-              theme="popover"
-              position="none"
-              alignment="none"
-              spacing="none"
-              style={floatingStyle}
-              className="min-w-40"
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  closeMenu();
-                  return;
-                }
-                if (event.key === "ArrowDown") {
-                  event.preventDefault();
-                  moveActive(1);
-                  return;
-                }
-                if (event.key === "ArrowUp") {
-                  event.preventDefault();
-                  moveActive(-1);
-                }
-              }}
-            >
-              {items.map((entry, index) => {
-                if (entry.kind === "separator") {
-                  return <MenuSeparator key={entry.key} />;
-                }
+      {menuOpen && floatingStyle && portalTarget ? (
+        <AppearancePortal container={portalTarget}>
+          <ContextMenu
+            ref={menuRef}
+            testId={panelTestId}
+            theme="popover"
+            position="none"
+            alignment="none"
+            spacing="none"
+            style={floatingStyle}
+            className="min-w-40"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                closeMenu();
+                return;
+              }
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                moveActive(1);
+                return;
+              }
+              if (event.key === "ArrowUp") {
+                event.preventDefault();
+                moveActive(-1);
+              }
+            }}
+          >
+            {items.map((entry, index) => {
+              if (entry.kind === "separator") {
+                return <MenuSeparator key={entry.key} />;
+              }
 
-                return (
-                  <li key={entry.key}>
-                    <ContextMenuListItem
-                      ref={(node) => {
-                        itemRefs.current[index] = node;
-                      }}
-                      testId={entry.testId}
-                      isDisabled={entry.disabled}
-                      className="group"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        if (entry.disabled) return;
-                        entry.onClick();
-                        closeMenu();
-                      }}
-                    >
-                      <KebabMenuItemContent
-                        icon={entry.icon}
-                        label={entry.label}
-                      />
-                    </ContextMenuListItem>
-                  </li>
-                );
-              })}
-            </ContextMenu>,
-            portalTarget,
-          )
-        : null}
+              return (
+                <li key={entry.key}>
+                  <ContextMenuListItem
+                    ref={(node) => {
+                      itemRefs.current[index] = node;
+                    }}
+                    testId={entry.testId}
+                    isDisabled={entry.disabled}
+                    className="group"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (entry.disabled) return;
+                      entry.onClick();
+                      closeMenu();
+                    }}
+                  >
+                    <KebabMenuItemContent
+                      icon={entry.icon}
+                      label={entry.label}
+                    />
+                  </ContextMenuListItem>
+                </li>
+              );
+            })}
+          </ContextMenu>
+        </AppearancePortal>
+      ) : null}
     </div>
   );
 }

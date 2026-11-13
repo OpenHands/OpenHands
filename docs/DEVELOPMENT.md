@@ -77,6 +77,7 @@ directory before starting the Agent Server and preserve an explicit override.
 | `OH_AUTOMATION_LOCAL_PATH`   | Absolute `automation` checkout         | unset                          |
 | `OH_AUTOMATION_GIT_REF`      | Git ref for automation backend         | unset (`config/defaults.json`) |
 | `OH_AUTOMATION_VERSION`      | PyPI version for automation            | unset (`config/defaults.json`) |
+| `UV_PYTHON`                  | Python version/range for uvx services  | unset (`config/defaults.json`) |
 
 ### Alternative: Minimal Mode (without Automation)
 
@@ -390,10 +391,10 @@ The convention:
    the code/API design and a **before/after** of your change, grounded to the actual code.
    Keep it static, with no scripts: htmlpreview runs the page in the reviewer's browser.
 2. Commit it under the temporary **`.pr/`** directory, e.g. `.pr/design.html`. This directory
-   is for temporary PR-only artifacts. For both same-repository and fork PRs, it is
-   **removed automatically after the PR merges to `main`**, through a cleanup PR opened
-   or updated by `.github/workflows/pr-artifacts.yml`. Approval leaves review artifacts
-   available and avoids rerunning CI solely for their removal.
+   is for temporary PR-only artifacts. It stays on the PR branch for review. For both
+   same-repository and fork PRs, the **next release PR removes it from `main`** after the
+   PR merges (`cleanup-pr-artifacts` in `.github/workflows/release.yml`), so no separate
+   cleanup PR or CI run is needed.
 3. Link it near the top of the PR description via htmlpreview, at the commit that contains
    the page (`git rev-parse HEAD` after you push it):
 
@@ -401,7 +402,7 @@ The convention:
    https://htmlpreview.github.io/?https://github.com/<your-fork>/<repo>/blob/<commit-sha>/.pr/design.html
    ```
 
-   Use the commit SHA, not the branch name. Post-merge cleanup removes `.pr/` from `main`,
+   Use the commit SHA, not the branch name. The release PR removes `.pr/` from `main`,
    and PR branches may be deleted; a SHA link keeps resolving. Refresh the link when the
    page changes substantively.
 
@@ -419,6 +420,15 @@ for you.
 The standalone app and the exported provider/root wrapper now scope all bundled CSS under a dedicated shell element with the `data-agent-server-ui` attribute. That means Tailwind utilities, HeroUI component styles, xterm styles, and local CSS only apply inside the OpenHands UI subtree instead of leaking into a host app.
 
 ### Embedding strategy
+
+- Load the Canvas stylesheet once in the host app, next to the component imports:
+
+  ```tsx
+  import "@openhands/agent-canvas/styles.css";
+  import { AgentServerUIProviders } from "@openhands/agent-canvas";
+  ```
+
+  `npm run build:lib` emits it as `dist/styles.css`. It holds the Tailwind, HeroUI, xterm, and app CSS for every exported component, scoped under `[data-agent-server-ui]`, and it `@import`s the Outfit and IBM Plex Mono fonts from Google Fonts. The JavaScript entries do not import it, so a host without a CSS loader (server rendering, tests) can still import the components. Without the stylesheet the components render unstyled and `styleOverrides` has no visible effect.
 
 - Use `AgentServerUIProviders` in host apps. It renders a scoped style root by default.
 - For direct wrapper control, use `AgentServerUIRoot`.

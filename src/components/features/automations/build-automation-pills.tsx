@@ -9,11 +9,14 @@ import type { Automation } from "#/types/automation";
 import { cn } from "#/utils/utils";
 import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
 import { getMarketplaceEntryById } from "#/utils/mcp-marketplace-utils";
+import { automationRepositoryLabel } from "#/utils/automation-repo-sources";
+import { getIntegrationLogoId } from "#/utils/automation-catalog";
 import {
   formatTriggerSourceLabel,
   getTriggerEventLabel,
   getTriggerSource,
 } from "#/components/features/home/featured-automations/automation-run-health";
+import { AutomationTagPill } from "./automation-tag-pill";
 
 export function buildAutomationMetadataPills(
   automation: Automation,
@@ -21,17 +24,28 @@ export function buildAutomationMetadataPills(
 ): SkillCardPill[] {
   const pills: SkillCardPill[] = [];
 
-  if (automation.repository) {
+  // The service returns repositories, lifted from preset metadata; only an
+  // imported file shape carries the single `repository`.
+  const repositories = [...(automation.repositories ?? [])];
+  if (repositories.length === 0 && automation.repository) {
+    repositories.push({ url: automation.repository });
+  }
+  repositories.forEach((repository, index) => {
+    const { url } = repository;
+    const name = automationRepositoryLabel(repository);
     pills.push({
-      id: "repository",
+      id: index === 0 ? "repository" : `repository-${index}`,
       node: (
-        <span className={cn(extensionModuleCardPillClassName, "gap-1")}>
+        <span
+          className={cn(extensionModuleCardPillClassName, "gap-1")}
+          title={url}
+        >
           <FolderIcon className="size-3 shrink-0" />
-          {automation.repository}
+          {name}
         </span>
       ),
     });
-  }
+  });
 
   if (automation.trigger.type === "event") {
     const eventLabel = getTriggerEventLabel(automation);
@@ -50,7 +64,7 @@ export function buildAutomationMetadataPills(
     const source = getTriggerSource(automation);
     if (source) {
       const sourceEntry = getMarketplaceEntryById(
-        source.toLowerCase(),
+        getIntegrationLogoId(source.toLowerCase()),
         MCP_MARKETPLACE,
       );
       pills.push({
@@ -98,6 +112,10 @@ export function buildAutomationMetadataPills(
       ),
     });
   }
+
+  automation.tags?.forEach((tag) => {
+    pills.push({ id: `tag-${tag}`, node: <AutomationTagPill tag={tag} /> });
+  });
 
   return pills;
 }

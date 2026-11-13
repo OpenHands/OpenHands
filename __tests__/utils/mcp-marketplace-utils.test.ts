@@ -6,6 +6,7 @@ import {
   getDefaultMcpConnectionOption,
   getDefaultMcpTransport,
   getInstallableMcpConnectionOption,
+  getInstallableMcpConnectionOptions,
   getMarketplaceEntriesByPopularity,
   getMarketplaceEntryById,
   getMcpConnectionOptions,
@@ -103,7 +104,8 @@ describe("getInstallableMcpConnectionOption", () => {
     expect(option?.transport.kind).toBe("stdio");
   });
 
-  it("returns undefined for provider OAuth entries without a local MCP auth contract", () => {
+  // @spec MCP-006 — Library installs never dead-end
+  it("falls back to the server's own OAuth when the only option has no OAuth metadata", () => {
     const oauthOnlyEntry: Parameters<
       typeof getInstallableMcpConnectionOption
     >[0] = {
@@ -121,7 +123,44 @@ describe("getInstallableMcpConnectionOption", () => {
       ],
     };
     const option = getInstallableMcpConnectionOption(oauthOnlyEntry);
-    expect(option).toBeUndefined();
+    expect(option?.auth).toEqual({ strategy: "oauth2" });
+    expect(option?.transport).toEqual({
+      kind: "shttp",
+      url: "https://example.com/mcp",
+    });
+  });
+
+  // @spec MCP-006 — Library installs never dead-end
+  it("installs Sentry from the catalog through its MCP server's own OAuth", () => {
+    const sentry = MCP_MARKETPLACE.find((e) => e.id === "sentry")!;
+    const option = getInstallableMcpConnectionOption(sentry);
+    expect(option?.transport).toMatchObject({
+      kind: "shttp",
+      url: "https://mcp.sentry.dev/mcp",
+    });
+    expect(option?.auth.strategy).toBe("oauth2");
+    expect(option?.auth.oauth?.authorizationUrl).toBeUndefined();
+    expect(getMcpOAuthAuthenticationConfig(option!)?.scopes).toBeUndefined();
+  });
+
+  it("does not offer a stdio OAuth option", () => {
+    const entry = {
+      ...slackEntry,
+      connectionOptions: [
+        {
+          id: "oauth",
+          provider: "mcp",
+          auth: { strategy: "oauth2" },
+          transport: {
+            kind: "stdio",
+            serverName: "example",
+            command: "npx",
+            args: ["example-mcp"],
+          },
+        },
+      ],
+    } as typeof slackEntry;
+    expect(getInstallableMcpConnectionOption(entry)).toBeUndefined();
   });
 
   it("returns MCP-server-managed OAuth options", () => {
@@ -160,6 +199,66 @@ describe("getInstallableMcpConnectionOption", () => {
     };
     const option = getInstallableMcpConnectionOption(noOptionsEntry);
     expect(option).toBeUndefined();
+  });
+});
+
+describe("getInstallableMcpConnectionOptions", () => {
+  it("offers Sentry's OAuth and personal-token options, OAuth first", () => {
+    const sentry = MCP_MARKETPLACE.find((e) => e.id === "sentry")!;
+    const options = getInstallableMcpConnectionOptions(sentry);
+
+    expect(options.map((option) => option.id)).toEqual(["mcp", "api"]);
+    expect(options[0]).toMatchObject({
+      transport: { kind: "shttp", url: "https://mcp.sentry.dev/mcp" },
+      auth: { strategy: "oauth2" },
+    });
+    expect(options[1].transport).toMatchObject({
+      kind: "stdio",
+      command: "npx",
+      args: ["-y", "@sentry/mcp-server"],
+    });
+    expect(getInstallableMcpConnectionOption(sentry)).toBe(options[0]);
+  });
+
+  it("keeps a single option for entries with one installable option", () => {
+    expect(
+      getInstallableMcpConnectionOptions(slackEntry).map((o) => o.id),
+    ).toEqual(["api"]);
+  });
+
+  it("offers one OAuth fallback when no option is directly installable", () => {
+    const entry = {
+      ...slackEntry,
+      connectionOptions: [
+        {
+          id: "first",
+          provider: "mcp",
+          auth: {
+            strategy: "oauth2",
+            oauth: { authorizationUrl: "https://example.com/authorize" },
+          },
+          transport: { kind: "shttp", url: "https://example.com/mcp" },
+        },
+        {
+          id: "second",
+          provider: "mcp",
+          auth: {
+            strategy: "oauth2",
+            oauth: { tokenUrl: "https://example.com/token" },
+          },
+          transport: { kind: "shttp", url: "https://example.com/other" },
+        },
+      ],
+    } as typeof slackEntry;
+
+    const options = getInstallableMcpConnectionOptions(entry);
+
+    expect(options).toHaveLength(1);
+    expect(options[0]).toMatchObject({
+      id: "first",
+      auth: { strategy: "oauth2" },
+    });
+    expect(options[0].auth.oauth).toBeUndefined();
   });
 });
 
@@ -547,22 +646,31 @@ describe("marketplace option normalization", () => {
     "registrationUrl",
     "additionalAuthorizationParams",
     "additionalTokenParams",
-  ] as const)("rejects hosted OAuth metadata: %s", (field) => {
-    const option = {
-      id: field,
-      provider: "mcp",
-      auth: {
-        strategy: "oauth2",
-        oauth: { clientAuthentication: "none", [field]: "configured" },
-      },
-      transport: { kind: "shttp", url: "https://example.com/mcp" },
-    } as never;
-    const entry = {
-      ...slackEntry,
-      connectionOptions: [option],
-    } as typeof slackEntry;
-    expect(getInstallableMcpConnectionOption(entry)).toBeUndefined();
-  });
+  ] as const)(
+    "drops hosted OAuth metadata and uses the server's own OAuth: %s",
+    (field) => {
+      const option = {
+        id: field,
+        provider: "mcp",
+        auth: {
+          strategy: "oauth2",
+          oauth: {
+            clientAuthentication: "body",
+            scopes: ["project:read"],
+            [field]: "configured",
+          },
+        },
+        transport: { kind: "shttp", url: "https://example.com/mcp" },
+      } as never;
+      const entry = {
+        ...slackEntry,
+        connectionOptions: [option],
+      } as typeof slackEntry;
+      const installable = getInstallableMcpConnectionOption(entry);
+      expect(installable?.auth).toEqual({ strategy: "oauth2" });
+      expect(getMcpOAuthAuthenticationConfig(installable!)).toBeUndefined();
+    },
+  );
 });
 
 describe("URL and entry matching", () => {
