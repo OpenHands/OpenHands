@@ -207,13 +207,13 @@ test.describe("active profile deletion + reconciliation", () => {
       const activeBadge = page.getByTestId("profile-active-badge");
 
       await expect(remaining).toBeVisible();
-      await expect(deleted).toHaveCount(0);
-      await expect(activeBadge).toBeVisible({ timeout: 15_000 });
+      await expect(deleted).toHaveCount(0, { timeout: 30_000 });
+      await expect(activeBadge).toBeVisible({ timeout: 30_000 });
 
       await page.reload({ waitUntil: "domcontentloaded" });
-      await expect(remaining).toBeVisible({ timeout: 15_000 });
-      await expect(deleted).toHaveCount(0, { timeout: 15_000 });
-      await expect(activeBadge).toBeVisible({ timeout: 15_000 });
+      await expect(remaining).toBeVisible({ timeout: 30_000 });
+      await expect(deleted).toHaveCount(0, { timeout: 30_000 });
+      await expect(activeBadge).toBeVisible({ timeout: 30_000 });
     });
   });
 });

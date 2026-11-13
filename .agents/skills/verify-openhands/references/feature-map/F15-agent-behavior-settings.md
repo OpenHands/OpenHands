@@ -21,6 +21,8 @@ offers it) followed by only that runtime's options.
 
 Source: `src/routes/runtime-settings.tsx`, `src/routes/condenser-settings.tsx`, `src/routes/agent-context-settings.tsx`, `src/routes/verification-settings.tsx`, `src/components/features/settings/sdk-settings/`, `src/utils/sdk-settings-schema.ts`, `src/components/features/settings/agent-profiles/profile-behavior-form.ts`.
 
+Server: F18.
+
 ## Sub-features
 
 - `F15.condenser-page`: on a local backend `/settings/condenser` replaces itself with `/settings/agents` and no nav item or command leads to it; on a Cloud backend Condenser shows its subtitle, Basic and All tabs (no Advanced), and in Basic only the **Enable Memory Condensation** switch.
@@ -148,3 +150,4 @@ control-openhands assert --field total --equals 1 -- browser network --filter '/
 - Rejecting a pending action (Cancel), the lock chip above the composer and the ⌘↩ / ⇧⌘⌫ shortcuts belong to `F06.confirmation-mode` and `F06.confirmation-shortcuts`; this family only proves that the settings turn the prompt on.
 - The Runtime page saves the options of runtimes it is not showing: saving `Local` after editing the worktree fields keeps `worktree_base`/`worktree_branch_prefix`, and the next Local start still sends them as `worktree_options` (with `worktree: false`). Restore each runtime's options while it is selected.
 - `browser count 'role=status'` also counts the backend status dot (`backend-status-dot`); use `browser toasts` for toast texts.
+- Known issue [#19337](https://github.com/OpenHands/OpenHands/issues/19337) (`F15.profile-behavior`): with the default condenser (`llm_summarizing`, Keep First Events `2`) the first user message is never summarized, so in a long conversation that condenses after the user changes the task, the agent can follow the pinned opening message instead of the latest one. Live prerequisite: a conversation long enough to condense more than once (thousands of events) and a model-judged outcome; not driven within a daily LLM budget.

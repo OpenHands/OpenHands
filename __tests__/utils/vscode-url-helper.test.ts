@@ -53,9 +53,12 @@ describe("transformVSCodeUrl", () => {
     expect(transformVSCodeUrl(input)).toBe(input);
   });
 
-  it("should handle invalid URLs gracefully", () => {
-    const input = "not-a-valid-url";
-
-    expect(transformVSCodeUrl(input)).toBe(input);
+  it.each([
+    "not-a-valid-url",
+    "javascript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "file:///etc/passwd",
+  ])("should reject %s", (input) => {
+    expect(transformVSCodeUrl(input)).toBeNull();
   });
 });

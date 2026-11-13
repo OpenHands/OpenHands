@@ -43,7 +43,7 @@ export function SystemMessageModal({
         <ModalBody
           width="lg"
           className={cn(
-            "relative max-h-[80vh] flex flex-col items-start border border-border",
+            "relative dialog-content-height flex flex-col items-start border border-border",
             MODAL_MAX_WIDTH_VIEWPORT,
           )}
           testID="system-message-modal"
@@ -63,7 +63,7 @@ export function SystemMessageModal({
               }
             />
 
-            <div className="h-[60vh] overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always">
+            <div className="conversation-dialog-reading-height overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always">
               <TabContent
                 activeTab={activeTab}
                 systemMessage={systemMessage}

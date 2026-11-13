@@ -24,7 +24,7 @@ export function ComboboxCaretIcon({ className }: { className?: string }) {
 
 /** Matches HeroUI Autocomplete selectorButton styling. */
 export const comboboxCaretButtonClassName = cn(
-  "inline-flex items-center justify-center shrink-0 rounded-none bg-transparent px-1 min-w-0 w-auto h-auto text-medium cursor-pointer outline-none",
+  "inline-flex items-center justify-center shrink-0 rounded-none bg-transparent px-1 min-w-0 w-auto h-auto text-base cursor-pointer outline-none",
   formControlTransformTransitionClassName,
 );
 

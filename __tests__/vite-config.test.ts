@@ -24,6 +24,8 @@ describe("vite optimizeDeps", () => {
         "react/jsx-runtime",
         "react-dom/client",
         "react-router/dom",
+        "react-aria",
+        "react-aria-components",
       ]),
     );
   });
@@ -181,6 +183,12 @@ describe("vite library build", () => {
     };
 
     const css = file("styles.css");
+    // The library inlines the local font; its license must ship alongside it.
+    const fontLicense = file("assets/newsreader-OFL.txt");
+    expect(fontLicense).toContain(
+      "Copyright 2020 The Newsreader Project Authors",
+    );
+    expect(fontLicense).toContain("SIL OPEN FONT LICENSE Version 1.1");
     const stylesheet = parse(css);
     const declarations = (rule: Rule) => {
       const values: Record<string, string> = {};
@@ -236,12 +244,100 @@ describe("vite library build", () => {
       expect(matches, `Single scoped recipe: ${name}`).toHaveLength(1);
       return matches[0];
     };
+    // These aliases resolve the exact public Canvas variables, including host overrides.
+    expect(declarations(recipe("bg-canvas-background"))).toEqual({
+      "background-color": "var(--oh-background)",
+    });
+    expect(declarations(recipe("text-on-accent"))).toEqual({
+      color: "var(--oh-accent-foreground)",
+    });
+    expect(declarations(recipe("file-strip-scrollbar-hidden"))).toMatchObject({
+      "scrollbar-width": "none",
+      "-ms-overflow-style": "none",
+    });
+    expect(
+      declarations(
+        recipe("file-strip-scrollbar-hidden", "::-webkit-scrollbar"),
+      ),
+    ).toMatchObject({ display: "none" });
+    expect(declarations(recipe("file-discovery-viewport-height"))).toEqual({
+      "max-height": "90vh",
+    });
+
+    // A named gradient stop retains the existing ancestor override/fallback.
+    const scrollFade = recipe("from-scroll-fade");
+    expect(declarations(scrollFade)["--tw-gradient-from"]).toBe(
+      "var(--oh-scroll-fade-from,var(--oh-color-base))",
+    );
+    expect(declarations(recipe("scroll-fade-surface"))).toEqual({
+      "--oh-scroll-fade-from": "var(--oh-surface)",
+    });
+    expect(declarations(recipe("scroll-fade-tertiary"))).toEqual({
+      "--oh-scroll-fade-from": "var(--oh-color-tertiary)",
+    });
+    // Keep code padding relative to its own font size in embedded roots.
+    expect(declarations(recipe("px-code-inline-x"))).toEqual({
+      "padding-inline": ".4em",
+    });
+    expect(declarations(recipe("py-code-inline-y"))).toEqual({
+      "padding-block": ".2em",
+    });
+    expect(declarations(recipe("p-code-block"))).toEqual({ padding: "1em" });
+    // The drop illustration uses fixed SVG pixel coordinates even in embeds.
+    expect(declarations(recipe("file-drop-image"))).toEqual({
+      top: "-40px",
+      left: "-10px",
+      rotate: "-27deg",
+    });
+    expect(declarations(recipe("file-drop-arrow"))).toEqual({
+      top: "-16px",
+      left: "-20px",
+    });
+    // Typography recipes retain signed values and their original units.
+    for (const [name, value] of [
+      ["tracking-metadata", ".11px"],
+      ["tracking-label", ".01em"],
+      ["tracking-title", "-.01em"],
+      ["tracking-heading", "-.02em"],
+      ["tracking-auth-code", ".08em"],
+      ["tracking-device-code", ".3em"],
+    ]) {
+      expect(declarations(recipe(name))).toEqual({
+        "--tw-tracking": value,
+        "letter-spacing": value,
+      });
+    }
+    // Message wrapping must retain the legacy word-break behavior; the standard
+    // overflow utility controls the independent min-content wrapping contract.
+    expect(declarations(recipe("message-word-break"))).toEqual({
+      "word-break": "break-word",
+    });
+    expect(declarations(recipe("wrap-anywhere"))).toEqual({
+      "overflow-wrap": "anywhere",
+    });
     // Scoped to the Canvas root so it never restyles the host page.
     expect(css).toContain("[data-agent-server-ui] .flex{display:flex}");
     expect(css).not.toMatch(/(^|[{},])\.flex\{/);
     expect(css).toContain("[data-agent-server-ui] .xterm");
     expect(css).toContain("fonts.googleapis.com");
 
+    // Inset recipes retain direction, absolute pixels and public color hooks.
+    expect(
+      recipes("shadow-badge-inset")
+        .map((rule) => declarations(rule)["--tw-shadow"]?.replace(/,\s+/g, ","))
+        .filter(Boolean)
+        .at(-1),
+    ).toBe(
+      "inset 0 1px 0 var(--tw-shadow-color,color-mix(in srgb,var(--oh-contrast) 18%,transparent))",
+    );
+    for (const [name, offset] of [
+      ["shadow-reorder-before", "2px"],
+      ["shadow-reorder-after", "-2px"],
+    ]) {
+      expect(declarations(recipe(name))["--tw-shadow"]).toBe(
+        `inset 0 ${offset} 0 0 var(--tw-shadow-color,var(--oh-focus))`,
+      );
+    }
     // Extension dialogs keep their viewport limits in the shipped library.
     expect(declarations(recipe("extension-dialog-viewport"))).toMatchObject({
       "max-width": "90vw",
@@ -249,10 +345,15 @@ describe("vite library build", () => {
     });
     expect(css).not.toMatch(/(^|[{},])\.extension-dialog-viewport\{/);
 
+    expect(declarations(recipe("w-commit-sha")).width).toBe("7ch");
+    expect(declarations(recipe("h-(--editor-height)")).height).toBe(
+      "var(--editor-height)",
+    );
+
     // Require the setup rail and editor geometry in the extracted stylesheet;
     // every recipe must remain a scoped utility even inside media conditions.
     expect(declarations(recipe("automation-setup-content"))).toMatchObject({
-      "max-width": "800px",
+      "max-width": "56rem",
     });
     expect(
       declarations(recipe("automation-setup-scroll-gutter")),
@@ -322,7 +423,7 @@ describe("vite library build", () => {
       "--automation-setup-cron-width": "14rem",
       "--automation-setup-datetime-width": "15rem",
       "--automation-setup-time-width": "9.5rem",
-      "--automation-setup-timezone-width": "16rem",
+      "--automation-setup-timezone-width": "12.5rem",
     };
     expect(declarations(scheduleRow)).toMatchObject(scheduleWidths);
     for (const property of Object.keys(scheduleWidths)) {
@@ -406,8 +507,56 @@ describe("vite library build", () => {
       }
     }
 
+    const contextTrackMix =
+      "color-mix(in srgb,var(--oh-context-window-foreground) var(--oh-context-window-track-weight),transparent)";
+    for (const [className, property] of [
+      ["stroke-context-window-track", "stroke"],
+      ["border-context-window-track", "border-color"],
+    ] as const) {
+      const track = Object.assign({}, ...recipes(className).map(declarations));
+      expect(track[property]?.replace(/,\s*/g, ",")).toBe(contextTrackMix);
+    }
+    expect(declarations(recipe("w-(--context-fill-width)")).width).toBe(
+      "var(--context-fill-width)",
+    );
+
     // Connection chooser disclosures retain exact fractional tracks and their
     // motion override after extraction and library selector scoping.
+    const transitionProperties = {
+      "transition-control-shell":
+        "background-color,border-color,box-shadow,opacity",
+      "!transition-control-shell":
+        "background-color,border-color,box-shadow,opacity",
+      "transition-control-transform": "transform",
+      "transition-context-ring": "stroke-dashoffset,stroke",
+      "transition-panel-width": "width",
+      "transition-sidebar-width": "width,min-width",
+    };
+    for (const [name, properties] of Object.entries(transitionProperties)) {
+      const motion = recipe(name);
+      expect(declarations(motion)).toEqual({
+        "transition-property": properties,
+        "transition-timing-function":
+          "var(--tw-ease,var(--default-transition-timing-function))",
+        "transition-duration":
+          "var(--tw-duration,var(--default-transition-duration))",
+      });
+      motion.walkDecls((declaration) => {
+        expect(Boolean(declaration.important)).toBe(name.startsWith("!"));
+      });
+    }
+    expect(declarations(recipe("animate-chat-status-pulse"))).toEqual({
+      animation: "1.2s ease-in-out infinite pulse",
+    });
+    const pulseFrames: Record<string, Record<string, string>> = {};
+    stylesheet.walkAtRules("keyframes", (frames) => {
+      if (frames.params === "pulse")
+        frames.walkRules((frame) => {
+          pulseFrames[frame.selector] = declarations(frame);
+        });
+    });
+    expect(pulseFrames).toEqual({ "50%": { opacity: ".5" } });
+
     const disclosure = recipe("backend-chooser-disclosure");
     expect(declarations(disclosure)).toMatchObject({
       "transition-property": "grid-template-rows",
@@ -443,6 +592,10 @@ describe("vite library build", () => {
       disclosure.source?.start?.offset ?? Infinity,
     );
 
+    expect(
+      declarations(recipe("dark:border-git-control", ":is(.dark *)")),
+    ).toEqual({ "border-color": "#474a5480" });
+
     // Preserve relative typography/geometry and distinct Add/Edit viewport
     // semantics, including the Cloud panel's grayscale pseudo-element halo.
     expect(declarations(recipe("backend-chooser-cloud-panel"))).toMatchObject({
@@ -464,6 +617,176 @@ describe("vite library build", () => {
     expect(declarations(recipe("backend-chooser-edit-dialog"))).toMatchObject({
       "max-height": "92dvh",
     });
+
+    // Workspace selection keeps its mixed rem/px columns and viewport bounds.
+    const folderColumns = recipe("workspace-folder-columns");
+    expect(declarations(folderColumns)["grid-template-columns"]).toBe(
+      "minmax(0,1fr) 4rem",
+    );
+    const desktopColumns = recipe("md:workspace-folder-columns-desktop");
+    expect(declarations(desktopColumns)["grid-template-columns"]).toBe(
+      "1fr 120px",
+    );
+    expect(desktopColumns.parent).toMatchObject({
+      type: "atrule",
+      name: "media",
+      params: "(width>=48rem)",
+    });
+    expect(declarations(recipe("workspace-section-label"))).toMatchObject({
+      "font-size": "11px",
+    });
+    expect(declarations(recipe("workspace-manager-dialog"))).toMatchObject({
+      "max-height": "70vh",
+    });
+    expect(declarations(recipe("z-9999"))).toMatchObject({
+      "z-index": "9999",
+    });
+    expect(declarations(recipe("home-dropdown-sticky-list"))).toMatchObject({
+      "max-height": "12rem",
+    });
+
+    // Floating surfaces retain their stacking and compiled SVG stroke width.
+    expect(declarations(recipe("z-200"))).toMatchObject({ "z-index": "200" });
+    expect(declarations(recipe("context-menu-icon-stroke"))).toMatchObject({
+      "stroke-width": "1.75px",
+    });
+
+    // Preserve exact menu units and text metrics in the shipped scoped CSS.
+    const menuGeometryContracts = {
+      "tools-menu-offset": {
+        left: "-16px",
+      },
+      "tools-submenu-offset": {
+        top: "-4px",
+      },
+      "tools-git-submenu-offset": {
+        top: "-6px",
+      },
+      "profile-menu-height": {
+        "max-height": "60vh",
+      },
+      "menu-caption-text": {
+        "font-size": "11px",
+      },
+      "z-60": {
+        "z-index": "60",
+      },
+      "new-conversation-menu-height": {
+        "max-height": "40vh",
+      },
+      "menu-detail-text": {
+        "font-size": "10px",
+      },
+      "conversation-card-menu-width": {
+        "max-width": "min(280px,100vw - 16px)",
+      },
+      "-z-1": {
+        "z-index": "calc(1 * -1)",
+      },
+      "conversation-tag-popover-width": {
+        "min-width": "10rem",
+        "max-width": "16rem",
+      },
+      "conversation-tag-popover-columns": {
+        "grid-template-columns": "minmax(0,auto) minmax(0,1fr)",
+      },
+      "conversation-meta-text": {
+        "font-size": "10px",
+      },
+      "skill-pill-popover-width": {
+        "max-width": "20rem",
+      },
+      "conversation-git-actions-width": {
+        "min-width": "8rem",
+      },
+      "automation-actions-menu-width": {
+        "min-width": "10rem",
+      },
+      "dropdown-menu-width": {
+        "max-width": "min(26rem,100vw - 2rem)",
+      },
+      "dropdown-menu-viewport-height": {
+        "max-height": "min(60vh,100dvh - 5rem)",
+      },
+    };
+    for (const [name, expected] of Object.entries(menuGeometryContracts)) {
+      expect(declarations(recipe(name))).toMatchObject(expected);
+    }
+
+    const dialogContracts = {
+      "dialog-viewport-width": {
+        "max-width": "90vw",
+      },
+      "onboarding-viewport-height": {
+        "max-height": "90vh",
+      },
+      "dialog-content-height": {
+        "max-height": "80vh",
+      },
+      "setup-dialog-height": {
+        "max-height": "85vh",
+      },
+      "setup-dialog-width": {
+        width: "92vw",
+      },
+      "automation-import-width": {
+        width: "min(36rem,100vw - 2rem)",
+      },
+      "dialog-scroll-height": {
+        "max-height": "60vh",
+      },
+      "automation-log-min-height": {
+        "min-height": "12rem",
+      },
+      "conversation-dialog-reading-height": {
+        height: "60vh",
+      },
+      "conversation-options-bleed-width": {
+        width: "calc(100% + 3rem)",
+      },
+    };
+    for (const [name, expected] of Object.entries(dialogContracts)) {
+      expect(declarations(recipe(name))).toMatchObject(expected);
+    }
+
+    // Compact type tokens must not introduce a line-height default.
+    expect(declarations(recipe("text-2xs"))).toEqual({ "font-size": "11px" });
+    expect(declarations(recipe("text-3xs"))).toEqual({ "font-size": "10px" });
+
+    for (const [name, size] of Object.entries({
+      "text-4xs": "9px",
+      "text-xs-plus": "13px",
+      "text-sm-plus": "15px",
+      "text-title": "32px",
+    })) {
+      expect(declarations(recipe(name))).toEqual({ "font-size": size });
+    }
+
+    expect(declarations(recipe("metadata-grid-columns"))).toEqual({
+      "grid-template-columns": "auto 1fr",
+    });
+    expect(declarations(recipe("automation-summary-columns"))).toEqual({
+      "grid-template-columns": "auto minmax(0,1fr)",
+    });
+    const runDetails = recipe("sm:run-log-detail-columns");
+    expect(declarations(runDetails)).toEqual({
+      "grid-template-columns": "5rem minmax(0,1fr)",
+    });
+    expect(runDetails.parent).toMatchObject({
+      type: "atrule",
+      name: "media",
+      params: "(width>=40rem)",
+    });
+
+    const radiusContracts = {
+      "rounded-pill": "100px",
+      "rounded-composer": "15px",
+      "rounded-file-action": "7px",
+      "rounded-facet-control": "3px",
+    };
+    for (const [name, radius] of Object.entries(radiusContracts)) {
+      expect(declarations(recipe(name))).toEqual({ "border-radius": radius });
+    }
 
     // `package.json` routes `require` here; stripped CSS imports must not
     // leave it unparseable.

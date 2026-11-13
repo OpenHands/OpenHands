@@ -42,6 +42,8 @@ export interface PendingUserMessage {
   imageUrls: string[];
   fileUrls: string[];
   timestamp: string;
+  /** Composer edit submitted by this attempt; absent for non-composer sends. */
+  draftRevision?: string | null;
   afterTimestamp?: number;
   errorMessage?: string;
 }
@@ -63,6 +65,7 @@ export interface EnqueuePendingMessagePayload {
   imageUrls?: string[];
   fileUrls?: string[];
   timestamp?: string;
+  draftRevision?: string | null;
 }
 
 interface OptimisticUserMessageActions {
@@ -144,9 +147,10 @@ const scheduleSendTimeout = (
   get: () => OptimisticUserMessageStore,
   id: string,
 ): void => {
+  const attempt = get().pendingMessages.find((message) => message.id === id);
   setTimeout(() => {
     const current = get().pendingMessages.find((m) => m.id === id);
-    if (current?.status === "sending") {
+    if (current === attempt && current?.status === "sending") {
       get().markPendingMessageError(id, "Send timed out");
     }
   }, PENDING_MESSAGE_TIMEOUT_MS);
@@ -167,6 +171,7 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
         imageUrls: payload.imageUrls ?? [],
         fileUrls: payload.fileUrls ?? [],
         timestamp: payload.timestamp ?? new Date().toISOString(),
+        draftRevision: payload.draftRevision,
         afterTimestamp: latestServerTimestamp(payload.conversationId),
       };
       set((state) => ({
@@ -191,7 +196,7 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
         ),
       })),
 
-    markPendingMessageSending: (id) =>
+    markPendingMessageSending: (id) => {
       set((state) => ({
         pendingMessages: state.pendingMessages.map((message) =>
           message.id === id
@@ -203,7 +208,10 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
               }
             : message,
         ),
-      })),
+      }));
+
+      scheduleSendTimeout(get, id);
+    },
 
     removePendingMessage: (id) =>
       set((state) => ({

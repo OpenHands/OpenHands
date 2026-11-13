@@ -40,8 +40,7 @@ function deepMerge(
 
 const DEFAULT_AGENT_SETTINGS = DEFAULT_SETTINGS.agent_settings ?? {};
 const llmDefaults = (DEFAULT_AGENT_SETTINGS as Record<string, unknown>).llm as
-  | Record<string, unknown>
-  | undefined;
+  Record<string, unknown> | undefined;
 const DEFAULT_MODEL =
   typeof llmDefaults?.model === "string"
     ? llmDefaults.model
@@ -736,7 +735,7 @@ const MOCK_VERIFIED_MODELS_BY_PROVIDER = MOCK_MODELS.reduce<
 
 // Matches the pinned `@openhands/typescript-client`, so mock mode models a
 // server that actually ships this schema.
-const MOCK_AGENT_SERVER_VERSION = "1.58.1";
+const MOCK_AGENT_SERVER_VERSION = "1.59.0";
 
 // --- Handlers for options/config/settings ---
 // Uses wildcard "*" prefix to match both relative paths and absolute URLs
@@ -1131,8 +1130,7 @@ export const SETTINGS_HANDLERS = [
     // but always fall back to the default-empty block so the GUI sees a
     // deterministic shape on first read.
     const storedMisc = (settings as Record<string, unknown>).misc_settings as
-      | { app_preferences?: Record<string, unknown> }
-      | undefined;
+      { app_preferences?: Record<string, unknown> } | undefined;
     const appPreferences = {
       ...DEFAULT_APP_PREFERENCES,
       ...(storedMisc?.app_preferences ?? {}),
@@ -1208,8 +1206,7 @@ export const SETTINGS_HANDLERS = [
     if (body.misc_settings_diff) {
       const existingMisc = (current as Record<string, unknown>)
         .misc_settings as
-        | { app_preferences?: Record<string, unknown> }
-        | undefined;
+        { app_preferences?: Record<string, unknown> } | undefined;
       // Deep-merge: nested `app_preferences` overlays field-by-field;
       // `disabled_skills` lists are replaced wholesale. This mirrors the
       // SDK's `_deep_merge` behaviour for the two-level shape currently
@@ -1235,8 +1232,9 @@ export const SETTINGS_HANDLERS = [
       llm_api_key_is_set: nextSettings.llm_api_key_set ?? false,
       misc_settings: ((nextSettings as Record<string, unknown>)
         .misc_settings as
-        | { app_preferences?: Record<string, unknown> }
-        | undefined) ?? { app_preferences: {} },
+        { app_preferences?: Record<string, unknown> } | undefined) ?? {
+        app_preferences: {},
+      },
     });
   }),
 
@@ -1279,8 +1277,7 @@ export const SETTINGS_HANDLERS = [
       const nextSettings: Settings = { ...current };
 
       const agentSettingsPatch = body.agent_settings_diff as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       if (agentSettingsPatch) {
         const merged = deepMerge(
           (current.agent_settings ?? {}) as Record<string, unknown>,
@@ -1290,8 +1287,7 @@ export const SETTINGS_HANDLERS = [
       }
 
       const conversationSettingsPatch = body.conversation_settings_diff as
-        | Record<string, SettingsValue>
-        | undefined;
+        Record<string, SettingsValue> | undefined;
       if (conversationSettingsPatch) {
         nextSettings.conversation_settings = {
           ...(current.conversation_settings ?? {}),

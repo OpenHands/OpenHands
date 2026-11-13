@@ -8,7 +8,7 @@ interface SkillTypeBadgeProps {
 
 /** Theme-aware pill chrome for skill type badges only (not shared metadata pills). */
 const SKILL_TYPE_BADGE_CLASS_NAME =
-  "inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-text-secondary/35 bg-text-secondary/12 px-2 py-0.5 text-[11px] font-medium leading-4 text-tertiary-light";
+  "inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-text-secondary/35 bg-text-secondary/12 px-2 py-0.5 text-2xs font-medium leading-4 text-tertiary-light";
 
 const TYPE_CONFIG: Record<SkillType, { labelKey: I18nKey }> = {
   agentskills: {

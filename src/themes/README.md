@@ -4,6 +4,26 @@ Canvas has three rendering systems: scoped CSS/HeroUI for the interface, Prism
 and Monaco for code, and xterm for terminal output. A palette must cover all of
 them; changing the page background alone is not a complete theme.
 
+## Paper
+
+Paper (`paper`) is an optional light palette printed like an old newspaper:
+yellowed newsprint and one warm black ink. Every neutral is a screen of that
+ink, primary actions print in reverse (paper on solid ink), and a single spot
+red marks links, focus and danger. Status colors are dark olive, ochre and red
+inks that stay readable as text; there is no blue in the interface. Code,
+diffs and terminal output follow the same inks: reserved words in bold ink,
+comments faded, literals in the spot and status inks. Select it in Settings →
+Application → Color Theme. It uses the existing `setColorTheme` and browser
+preference; OpenHands-Neutral remains the default. Paper stays light
+regardless of the operating system's appearance.
+
+Newsreader is used only for `h1`, `h2`, and `.heading`. Dense controls, message
+body text, and smaller supporting headings retain their existing fonts; code and
+terminal output remain monospaced. The locally bundled roman variable font
+uses `font-display: swap`. See [font provenance and licensing](./color-theme/definitions/paper/README.md).
+Both app and library builds include the full SIL OFL 1.1 license as
+`assets/newsreader-OFL.txt`.
+
 ## Adding a palette
 
 1. Add a definition under `color-theme/definitions/`, including its appearance,
@@ -33,6 +53,13 @@ them; changing the page background alone is not a complete theme.
   wrapper. The application owns loading and applying its saved preference.
 - The head bootstrap uses the same CSS generator before hydration, including
   when storage is unavailable or contains an obsolete key.
+- `--oh-font-heading` controls the display-heading family (`h1`, `h2`, and
+  `.heading`). Its default is `inherit`, preserving existing palettes. Paper
+  selects the locally bundled Newsreader face with Georgia and serif fallbacks.
+  Embedding hosts can override the family through `styleOverrides`.
+- `--oh-modal-description-foreground` owns the legacy `modal-muted` text role.
+  Its default stays `#a3a3a3`; Paper supplies darker supporting ink for its light
+  dialog surface. Other palettes retain their previous description colors.
 - Use surface/foreground tokens for ordinary content. `contrast` is the
   high-emphasis ink (white in dark palettes, dark in light palettes); its
   paired `contrast-foreground` is for inverse pills and tooltips. Opacity and
