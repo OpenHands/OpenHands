@@ -918,6 +918,66 @@ describe("signing in with DigitalOcean (code + PKCE)", () => {
     });
   });
 
+  it("keeps a renewal the locked store could not save, then saves it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mars-locked-"));
+    const secrets = createEncryptedFileStore({ dir, secretKey: "host-key" });
+    const credentials = createCredentialStore({
+      userDataPath: dir,
+      secrets,
+      log: () => {},
+    });
+    const saved = credentials.save({
+      ...expiring,
+      accessExpiresAt: inMinutes(0.5),
+    });
+    // Another Canvas process holds the store's lock past its wait, once.
+    const updateGrant = credentials.updateGrant.bind(credentials);
+    let locked = true;
+    credentials.updateGrant = (...args) => {
+      if (locked) {
+        locked = false;
+        throw new Error(
+          "Another Canvas process is still saving a DigitalOcean sign-in. Try again.",
+        );
+      }
+      return updateGrant(...args);
+    };
+    const registry = fakeRegistry();
+    const bridge = createMarsTunnelBridge({
+      registry,
+      api: fakeApi(),
+      credentials,
+      env: { ...WITH_CLIENT.env, MARS_API_BASE_URL: API_URL },
+    });
+    vi.mocked(refreshGrant).mockResolvedValueOnce({
+      ...GRANT,
+      accessToken: "new-access",
+      refreshToken: "refresh-2",
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    try {
+      const getAccessToken = await dialToken(bridge, registry);
+      expect(await getAccessToken()).toBe("new-access");
+      // The spent refresh token is never offered again.
+      expect(await getAccessToken()).toBe("new-access");
+      expect(refreshGrant).toHaveBeenCalledTimes(1);
+      expect(credentials.getGrant(saved.id)?.refreshToken).toBe("refresh-2");
+
+      await vi.advanceTimersByTimeAsync(10_000);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(
+      createCredentialStore({
+        userDataPath: dir,
+        secrets,
+        log: () => {},
+      }).getGrant(saved.id)?.refreshToken,
+    ).toBe("refresh-2");
+  });
+
   it("renews a sign-in the keychain refused to save, instead of losing it", async () => {
     const refusing = {
       ...createMemoryStore(),

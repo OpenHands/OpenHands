@@ -605,6 +605,80 @@ describe("ManagedAgentsView", () => {
       expect(screen.getByTestId("managed-agents-oauth")).toBeEnabled();
     });
 
+    it("frees the controls when Cancel is answered, though the held call never is", async () => {
+      const { bridge } = oauthBridge();
+      // The call waiting on DigitalOcean stays out after the cancel.
+      vi.mocked(bridge.cancelSignIn!).mockImplementation(async () => {});
+      window.marsBridge = bridge;
+      vi.spyOn(window, "open").mockReturnValue(null);
+      renderView();
+      await userEvent.click(await screen.findByTestId("managed-agents-oauth"));
+      await screen.findByTestId("managed-agents-pending-sign-in");
+
+      await userEvent.click(screen.getByTestId("managed-agents-sign-in-abort"));
+
+      await waitFor(() =>
+        expect(screen.getByTestId("managed-agents-oauth")).toBeEnabled(),
+      );
+      expect(bridge.cancelSignIn).toHaveBeenCalledWith("a1");
+      expect(screen.queryByTestId("managed-agents-pending-sign-in")).toBeNull();
+    });
+
+    it("keeps waiting through a check that fails, and still finishes", async () => {
+      const { bridge, finish } = oauthBridge();
+      vi.mocked(bridge.awaitSignIn!).mockRejectedValueOnce(
+        new TypeError("Failed to fetch"),
+      );
+      window.marsBridge = bridge;
+      vi.spyOn(window, "open").mockReturnValue(null);
+      renderView();
+      await userEvent.click(await screen.findByTestId("managed-agents-oauth"));
+      await screen.findByTestId("managed-agents-pending-sign-in");
+
+      // Asked again after a short wait, with the paste field still there.
+      await waitFor(() => expect(bridge.awaitSignIn).toHaveBeenCalledTimes(2), {
+        timeout: 4000,
+      });
+      expect(
+        screen.getByTestId("managed-agents-pending-sign-in"),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("managed-agents-auth-error")).toBeNull();
+
+      vi.mocked(bridge.getAuthState).mockResolvedValue(SIGNED_IN);
+      finish();
+      expect(
+        await screen.findByTestId("managed-agents-session-sess_ready"),
+      ).toBeInTheDocument();
+      expect(bridge.cancelSignIn).not.toHaveBeenCalled();
+    });
+
+    it("gives a sign-in up after its checks keep failing, and ends it on the host too", async () => {
+      const { bridge } = oauthBridge();
+      vi.mocked(bridge.awaitSignIn!).mockRejectedValue(
+        new TypeError("Failed to fetch"),
+      );
+      window.marsBridge = bridge;
+      vi.spyOn(window, "open").mockReturnValue(null);
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const user = userEvent.setup({
+          advanceTimers: vi.advanceTimersByTime,
+        });
+        renderView();
+        await user.click(await screen.findByTestId("managed-agents-oauth"));
+        await vi.advanceTimersByTimeAsync(20_000);
+
+        expect(bridge.awaitSignIn).toHaveBeenCalledTimes(4);
+        expect(bridge.cancelSignIn).toHaveBeenCalledWith("a1");
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(
+        await screen.findByTestId("managed-agents-auth-error"),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("managed-agents-pending-sign-in")).toBeNull();
+    });
+
     it("stays on Add connection after a sign-in started there is cancelled", async () => {
       const { bridge } = oauthBridge();
       vi.mocked(bridge.getAuthState).mockResolvedValue({

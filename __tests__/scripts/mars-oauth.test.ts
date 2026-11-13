@@ -279,6 +279,31 @@ describe("createSignInAttempts", () => {
     await expect(waiting).resolves.toEqual({ status: "done", message: null });
   });
 
+  it("keeps a sign-in that finished just past its deadline until the page asks", async () => {
+    let now = 0;
+    const attempts = createSignInAttempts({ ttlMs: 1000, now: () => now });
+    const { attemptId, authorizeUrl } = attempts.begin({
+      clientId: "c",
+      redirectUri: REDIRECT,
+    });
+    now = 999;
+    attempts.claim(new URL(authorizeUrl).searchParams.get("state"));
+    // It finishes between two of the page's asks.
+    now = 1001;
+    attempts.succeed(attemptId);
+
+    now = 1500;
+    await expect(attempts.wait(attemptId)).resolves.toEqual({
+      status: "done",
+      message: null,
+    });
+    // Once a page has had its chance, the result goes.
+    now = 1001 + 61_000;
+    await expect(attempts.wait(attemptId)).resolves.toMatchObject({
+      status: "failed",
+    });
+  });
+
   it("tells a waiting page its sign-in expired", async () => {
     let now = 0;
     const attempts = createSignInAttempts({ ttlMs: 1000, now: () => now });
@@ -386,6 +411,35 @@ describe("signInWithDigitalOcean (desktop)", () => {
 
     await expect(signingIn).rejects.toThrow("The user denied access");
     expect(forgedStatus).toBe(400);
+  });
+
+  it("hands back a grant whose exchange outlasts the sign-in's own time limit", async () => {
+    const endpoint = fakeTokenEndpoint();
+    let exchanged = false;
+    const slow = (async (url: string, init: RequestInit) => {
+      // The return arrived in time; DigitalOcean answers after the limit.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      exchanged = true;
+      return endpoint.fetchImpl(url, init);
+    }) as typeof fetch;
+    let returned: Promise<Response> | undefined;
+    const signingIn = signInWithDigitalOcean({
+      clientId: "client-1",
+      fetchImpl: slow,
+      timeoutMs: 150,
+      openExternal: async (authorizeUrl) => {
+        const url = new URL(authorizeUrl);
+        returned = fetch(
+          `${url.searchParams.get("redirect_uri")}?code=code-1&state=${url.searchParams.get("state")}`,
+        );
+      },
+    });
+
+    await expect(signingIn).resolves.toMatchObject({
+      accessToken: "access-1",
+    });
+    expect(exchanged).toBe(true);
+    expect((await returned!).status).toBe(200);
   });
 
   it("explains that sign-in is not set up when no client is configured", async () => {

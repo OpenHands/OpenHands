@@ -38,6 +38,11 @@ const DESKTOP_CALLBACK_PATH = "/callback";
 const SIGN_IN_TIMEOUT_MS = 5 * 60 * 1000;
 /** A started sign-in can be finished for this long, and only once. */
 const ATTEMPT_TTL_MS = 10 * 60 * 1000;
+/**
+ * How long a finished sign-in's result stays readable after it settled, past
+ * its deadline if need be: a page asks again within one held poll.
+ */
+const RESULT_KEEP_MS = 60 * 1000;
 const TOKEN_TIMEOUT_MS = 15_000;
 
 /** A refusal from DigitalOcean's token endpoint, or a failure to reach it. */
@@ -244,20 +249,30 @@ export function createSignInAttempts({
   now = Date.now,
 } = {}) {
   /**
-   * @type {Map<string, { id: string, state: string, verifier: string, clientId: string, redirectUri: string, createdAt: number, status: "pending" | "working" | "done" | "failed", message: string | null, cancelled?: boolean, waiters: Set<() => void> }>}
+   * @type {Map<string, { id: string, state: string, verifier: string, clientId: string, redirectUri: string, createdAt: number, settledAt?: number, status: "pending" | "working" | "done" | "failed", message: string | null, cancelled?: boolean, waiters: Set<() => void> }>}
    */
   const attempts = new Map();
 
   function settle(attempt, status, message = null) {
     attempt.status = status;
     attempt.message = message;
+    attempt.settledAt = now();
     for (const wake of attempt.waiters) wake();
     attempt.waiters.clear();
   }
 
   function prune() {
     for (const [id, attempt] of attempts) {
-      if (now() - attempt.createdAt <= ttlMs) continue;
+      // A result that settled near the deadline is kept until a page has
+      // had the chance to read it.
+      const keptUntil =
+        attempt.settledAt === undefined
+          ? attempt.createdAt + ttlMs
+          : Math.max(
+              attempt.createdAt + ttlMs,
+              attempt.settledAt + RESULT_KEEP_MS,
+            );
+      if (now() <= keptUntil) continue;
       // A return claimed just in time is still being finished; it settles,
       // and is pruned, once its exchange answers.
       if (attempt.status === "working") continue;
@@ -489,6 +504,8 @@ export async function signInWithDigitalOcean({
   const attempts = createSignInAttempts({ ttlMs: timeoutMs });
   const server = createServer();
   let attemptId = null;
+  /** The overall wait; a claimed return's own exchange decides instead. */
+  let timer;
 
   const returned = new Promise((resolve, reject) => {
     server.on("request", (req, res) => {
@@ -516,6 +533,10 @@ export async function signInWithDigitalOcean({
         reject(new Error(error ?? "DigitalOcean did not return a code."));
         return;
       }
+      // The return is in hand: from here the exchange, which has its own
+      // time limit, decides. A grant it gets must reach the caller to be
+      // saved, not arrive after a timeout nobody is waiting on.
+      clearTimeout(timer);
       exchangeCode({
         clientId,
         code,
@@ -545,7 +566,6 @@ export async function signInWithDigitalOcean({
 
   const failed = new Promise((_, reject) => server.on("error", reject));
 
-  let timer;
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(
       () => reject(new Error("Timed out waiting for DigitalOcean sign-in.")),

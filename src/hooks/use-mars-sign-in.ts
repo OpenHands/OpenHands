@@ -6,11 +6,17 @@ import {
   getMarsErrorMessage,
   requireMarsBridge,
   type MarsAuthState,
+  type MarsSignInStatus,
 } from "#/api/mars/mars-tunnel-backend";
 import { MARS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { I18nKey } from "#/i18n/declaration";
 
 const MIN_AWAIT_INTERVAL_MS = 1_000;
+/**
+ * Asks in a row that may fail (a network blip, a Canvas restart, a proxy
+ * cutting the held call) before the page gives the sign-in up.
+ */
+const MAX_FAILED_AWAITS = 4;
 
 /** A browser sign-in waiting on DigitalOcean. */
 export interface PendingMarsSignIn {
@@ -38,12 +44,15 @@ export function useMarsSignIn({
   const attemptRef = React.useRef<string | null>(null);
   /** The tab opened for DigitalOcean's page. */
   const tabRef = React.useRef<Window | null>(null);
+  /** Ends this page's wait at once, without waiting on a call in flight. */
+  const releaseRef = React.useRef<(() => void) | null>(null);
 
   // Leaving stops the waiting, not the sign-in: a return that lands later
   // still signs the host in, and the next view shows it.
   React.useEffect(
     () => () => {
       attemptRef.current = null;
+      releaseRef.current?.();
     },
     [],
   );
@@ -88,18 +97,45 @@ export function useMarsSignIn({
       tab.opener = null;
       tab.location.href = attempt.authorizeUrl;
     }
+    // Cancel answers at once, even while a held call is still out.
+    const released = new Promise<null>((resolve) => {
+      releaseRef.current = () => resolve(null);
+    });
+    let failures = 0;
     for (;;) {
       const askedAt = Date.now();
-      const result = await bridge.awaitSignIn!(id);
-      if (attemptRef.current !== id) return null;
-      if (result.status === "done") return result.authState;
-      if (result.status === "failed") {
-        throw new Error(result.message ?? "DigitalOcean sign-in failed.");
+      let result: MarsSignInStatus | null | undefined;
+      try {
+        result = await Promise.race([bridge.awaitSignIn!(id), released]);
+      } catch (failure) {
+        if (attemptRef.current !== id) return null;
+        failures += 1;
+        if (failures >= MAX_FAILED_AWAITS) {
+          // Giving up ends the sign-in on the host too, so a return that
+          // lands later cannot sign in with nothing here showing it.
+          attemptRef.current = null;
+          void bridge.cancelSignIn?.(id);
+          throw failure;
+        }
       }
-      // The bridge holds each call open; one that answers at once is not
-      // asked again straight away.
-      const wait = MIN_AWAIT_INTERVAL_MS - (Date.now() - askedAt);
-      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      if (attemptRef.current !== id || result === null) return null;
+      if (result) {
+        failures = 0;
+        if (result.status === "done") return result.authState;
+        if (result.status === "failed") {
+          throw new Error(result.message ?? "DigitalOcean sign-in failed.");
+        }
+      }
+      // The bridge holds each call open; one that answers at once, or fails,
+      // is not asked again straight away. Failures back off.
+      const interval = MIN_AWAIT_INTERVAL_MS * 2 ** failures;
+      const wait = interval - (Date.now() - askedAt);
+      if (wait > 0) {
+        await Promise.race([
+          new Promise((resolve) => setTimeout(resolve, wait)),
+          released,
+        ]);
+      }
     }
   };
 
@@ -114,6 +150,7 @@ export function useMarsSignIn({
       } finally {
         setPending(null);
         tabRef.current = null;
+        releaseRef.current = null;
       }
     },
     onMutate,
@@ -165,6 +202,8 @@ export function useMarsSignIn({
     const id = attemptRef.current;
     attemptRef.current = null;
     setPending(null);
+    // The page stops waiting now, not when the call in flight answers.
+    releaseRef.current?.();
     // DigitalOcean's tab stays: once cut loose from Canvas, Canvas cannot
     // close it.
     if (id) void requireMarsBridge().cancelSignIn?.(id);
