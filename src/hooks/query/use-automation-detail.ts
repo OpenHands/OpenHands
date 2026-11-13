@@ -27,6 +27,8 @@ export function useAutomationDetail(options: UseAutomationDetailOptions) {
     queryFn: () => AutomationService.getAutomation(id),
     staleTime: 5 * 60 * 1000,
     enabled: !!id && enabled,
+    // The detail page shows its own not-found and error states.
+    meta: { disableToast: true },
   });
 }
 
