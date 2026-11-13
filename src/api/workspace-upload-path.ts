@@ -79,11 +79,13 @@ export async function resolveConversationUploadWorkingDir(
     return currentConversation.workspace.working_dir.trim();
   }
 
-  const stored = getStoredConversationMetadata(conversationId);
-  if (stored?.selected_workspace?.trim()) {
-    return stored.selected_workspace.trim();
-  }
-
+  // Ask the agent-server where the conversation actually lives before falling
+  // back to the workspace recorded when it was created. Those differ whenever
+  // creation moved the working dir — a Home composer conversation with
+  // "New worktree" is created from the selected repo path, and the server
+  // reports its own `/tmp/conversation-worktrees/<id>/<repo>` instead. Uploading
+  // against the recorded path then lands outside the conversation workspace
+  // and the server rejects it with 422.
   if (
     UUID_PATTERN.test(conversationId) ||
     /^[0-9a-f]{32}$/i.test(conversationId)
@@ -91,6 +93,11 @@ export async function resolveConversationUploadWorkingDir(
     return AgentServerConversationService.resolveConversationWorkingDir(
       conversationId,
     );
+  }
+
+  const stored = getStoredConversationMetadata(conversationId);
+  if (stored?.selected_workspace?.trim()) {
+    return stored.selected_workspace.trim();
   }
 
   return getAgentServerWorkingDir();
