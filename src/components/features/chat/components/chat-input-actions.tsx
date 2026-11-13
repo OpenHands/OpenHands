@@ -24,6 +24,7 @@ import { usePauseConversation } from "#/hooks/mutation/use-pause-conversation";
 import { useResumeConversation } from "#/hooks/mutation/use-resume-conversation";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
+import { useAgentProfileAvailability } from "#/hooks/use-agent-profile-availability";
 import { useChatInputModelState } from "#/hooks/use-chat-input-model-state";
 import { useChatInputLlmProfileState } from "#/hooks/use-chat-input-llm-profile-state";
 import { getLockedCloudHost } from "#/api/agent-server-config";
@@ -88,8 +89,10 @@ export function ChatInputActions({
   // limited to the pre-start window.
   const isPreStart = !conversationId || hasStartedConversation === false;
   const agentProfilesForStart = useAgentProfiles({ enabled: isPreStart });
+  const agentProfilesAvailable = useAgentProfileAvailability();
   const showAgentProfileSwitch =
     isPreStart &&
+    agentProfilesAvailable &&
     !(conversationId?.startsWith("task-") ?? false) &&
     (agentProfilesForStart.data?.profiles?.length ?? 0) > 0;
   // Code/Plan mode switching is a cloud OpenHands feature — it doesn't apply

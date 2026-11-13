@@ -1,7 +1,7 @@
 import type {
   AutomationUpdate,
   Automation,
-  AutomationCreatedByFilter,
+  AutomationRunAsFilter,
   AutomationRun,
   AutomationScriptBundle,
   AutomationSpec,
@@ -524,12 +524,13 @@ class AutomationService {
     params: {
       limit?: number;
       offset?: number;
-      createdBy?: AutomationCreatedByFilter;
+      /** Only automations that run as the caller, another person, or a service account. */
+      runAs?: AutomationRunAsFilter;
       /** Only automations carrying this tag. */
       tag?: string;
     } = {},
   ): Promise<AutomationsResponse> {
-    const { limit = 50, offset = 0, createdBy, tag } = params;
+    const { limit = 50, offset = 0, runAs, tag } = params;
     const active = getActiveBackend().backend;
 
     let response: AutomationsResponse;
@@ -537,13 +538,13 @@ class AutomationService {
       response = await callCloudProxy<AutomationsResponse>({
         backend: active,
         method: "GET",
-        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { created_by: createdBy, tag })}`,
+        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { run_as: runAs, tag })}`,
         headers: await buildAutomationRequestHeaders(),
       });
     } else {
       const { data } = await localAutomationAxios.get<AutomationsResponse>(
         `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
-        { params: { limit, offset, created_by: createdBy, tag } },
+        { params: { limit, offset, run_as: runAs, tag } },
       );
       response = data;
     }
@@ -555,16 +556,16 @@ class AutomationService {
   }
 
   /**
-   * One page of the org's automations. `createdBy` narrows it on the server;
-   * an automation service that predates the param ignores it.
+   * One page of the org's automations. `runAs` narrows it on the server; an
+   * automation service that predates the param ignores it.
    */
   static async getAutomations(
     limit = 50,
     offset = 0,
-    createdBy?: AutomationCreatedByFilter,
+    runAs?: AutomationRunAsFilter,
     tag?: string,
   ): Promise<AutomationsResponse> {
-    return AutomationService.listAutomations({ limit, offset, createdBy, tag });
+    return AutomationService.listAutomations({ limit, offset, runAs, tag });
   }
 
   /** The org's tags, each with how many live automations carry it. */

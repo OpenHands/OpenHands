@@ -15,11 +15,13 @@
 //   churn on existing `// eslint-disable-next-line import/...` comments.
 // - `eslint-plugin-i18next` still ships only legacy config, so it is pulled
 //   in via `FlatCompat` from `@eslint/eslintrc`.
-// - Targets ESLint 9, not 10. The original dependabot PR proposed eslint@10,
-//   but as of this commit `eslint-plugin-react` still calls
-//   `context.getFilename()` (removed in ESLint 10) at rule-load time, which
-//   makes a v10 bump explode on every file. Re-evaluate once that plugin
-//   ships an ESLint-10-compatible release.
+// - Targets ESLint 10. `eslint-plugin-react` (7.37.5) and
+//   `eslint-plugin-jsx-a11y` (6.10.2) still declare ESLint peer ranges that
+//   exclude 10, and `eslint-plugin-react` calls `context.getFilename()`
+//   (removed in ESLint 10) when resolving the React version. The peer ranges
+//   are widened via `overrides` in package.json, and the removed API is
+//   avoided by pinning the React version below instead of `"detect"`.
+//   Re-evaluate once those plugins ship ESLint-10-compatible releases.
 
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -130,6 +132,8 @@ export default [
 
   // Base JS recommended rules.
   js.configs.recommended,
+  // Keep the existing rule set while using @eslint/js 10's recommended config.
+  { rules: { "no-useless-assignment": "off", "preserve-caught-error": "off" } },
 
   // `eslint-plugin-import-x` ships flat configs directly. The rules are
   // registered under both `import-x/*` and `import/*` aliases so existing
@@ -185,7 +189,7 @@ export default [
       },
     },
     settings: {
-      react: { version: "detect" },
+      react: { version: "19.3.1" },
       // `eslint-import-resolver-typescript` resolves both TS path aliases
       // (via tsconfig) and regular node-style imports, so we don't also
       // configure the legacy `node` resolver shortcut here.
@@ -505,16 +509,34 @@ export default [
       "src/components/features/chat/user-message-body.tsx",
       "src/components/features/conversation/conversation-main/conversation-main.tsx",
       "src/components/features/chat/drag-over.tsx",
+      "src/components/features/chat/git-control-bar-branch-button.tsx",
+      "src/components/features/chat/git-control-bar-repo-button.tsx",
+      "src/components/features/chat/workspace-mode-selector.tsx",
       "src/components/features/chat/chat-markdown-path-code.tsx",
       "src/components/features/markdown/code.tsx",
       "src/components/shared/horizontal-scroll-fade.tsx",
       "src/components/features/markdown/markdown-table-scroll.tsx",
+      "src/components/features/diff-viewer/commit-row.tsx",
+      "src/components/features/diff-viewer/uncommitted-changes-row.tsx",
+      "src/components/features/diff-viewer/editor-container.tsx",
+      "src/components/features/files-tab/file-quick-row.tsx",
+      "src/components/features/files-tab/workspace-file-discovery-settings.tsx",
       "src/components/features/automations/recommended-automations-rail.tsx",
       "src/components/features/automations/automation-view-toggle.tsx",
       "src/components/features/automations/dashboard/automations-dashboard-controls.tsx",
       "src/components/features/automations/detail/run-phase.tsx",
       "src/components/features/conversation-panel/conversation-card/conversation-card.tsx",
       "src/utils/hover-reveal-classes.ts",
+      "src/components/conversation-events/chat/task-tracking/task-list-section.tsx",
+      "src/components/features/chat/tool-visualizers/primitives/markdown-file-preview.tsx",
+      "src/components/features/conversation-panel/skills-modal-section.tsx",
+      "src/components/features/home/featured-automations/pinned-automation-card.tsx",
+      "src/components/features/markdown/headings.tsx",
+      "src/components/features/mcp-page/mcp-logo-stack-badge.tsx",
+      "src/components/features/settings/llm-settings/openai-subscription-auth-card.tsx",
+      "src/components/features/skills/skill-icon-badge.tsx",
+      "src/routes/device-verify.tsx",
+      "src/utils/modal-classes.ts",
     ],
     rules: { "shadcn/no-arbitrary-values": "error" },
   },
@@ -550,6 +572,9 @@ export default [
       "src/ui/toggle-switch.tsx",
       "src/ui/combobox-caret.tsx",
       "src/components/features/backends/backend-status-dot.tsx",
+      "src/components/features/chat/components/context-window-meter.tsx",
+      "src/components/features/chat/components/context-window-ring.tsx",
+      "src/components/features/conversation/usage-panel/context-meter.tsx",
     ],
     rules: { "shadcn/no-inline-styles": "error" },
   },

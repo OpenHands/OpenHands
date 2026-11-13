@@ -3208,6 +3208,23 @@ describe("AgentServerConversationService", () => {
       );
       expect(requests[0].body).toEqual({ model: "claude-opus-4-7" });
     });
+
+    it("switches an ACP effort through the cloud app endpoint", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+      const requests = captureRequests(["post"], { success: true });
+
+      await AgentServerConversationService.switchAcpEffort(
+        "conv-cloud",
+        "high",
+      );
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0].url).toContain(
+        "/api/v1/app-conversations/conv-cloud/switch_acp_effort",
+      );
+      expect(requests[0].body).toEqual({ effort: "high" });
+    });
   });
 
   describe("mutation-strengthened conversation contracts", () => {

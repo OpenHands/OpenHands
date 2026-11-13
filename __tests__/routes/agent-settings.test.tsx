@@ -39,7 +39,11 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
 // What the provider's own server reports; empty unless a test sets it.
 const acpModelDiscoveryMock = vi.hoisted(() => vi.fn());
 vi.mock("#/hooks/query/use-acp-model-discovery", () => ({
-  useAcpModelDiscovery: (...args: unknown[]) => acpModelDiscoveryMock(...args),
+  useAcpModelDiscovery: (...args: unknown[]) => ({
+    effortsFor: () => [],
+    defaultEffort: null,
+    ...acpModelDiscoveryMock(...args),
+  }),
 }));
 const NO_DISCOVERY = {
   discovery: null,
@@ -277,6 +281,90 @@ describe("AgentSettingsScreen", () => {
     expect(control().buildAgentProfileFields()).toMatchObject({
       acp_model: "haiku",
     });
+  });
+
+  it("saves the reasoning effort the chosen model offers", async () => {
+    const efforts = [
+      { value: "low", label: "Low" },
+      { value: "high", label: "High" },
+    ];
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      discovery: { efforts_by_model: { default: [], haiku: [] } },
+      models: CLAUDE_MODELS,
+      source: "live",
+      defaultModelId: "default",
+      defaultEffort: "high",
+      effortsFor: (model: string | null) => (model === "haiku" ? [] : efforts),
+    });
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        acp_model: "default",
+        acp_effort: "low",
+      },
+    });
+
+    await screen.findByTestId("agent-effort-selector");
+    expect(
+      screen.getByLabelText("SCHEMA$LLM$REASONING_EFFORT$LABEL"),
+    ).toHaveValue("Low");
+
+    await user.click(
+      screen.getByLabelText("SCHEMA$LLM$REASONING_EFFORT$LABEL"),
+    );
+    await user.click(await screen.findByRole("option", { name: "High" }));
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_model: "default",
+      acp_effort: "high",
+    });
+
+    // Haiku offers no effort: the stored one is cleared explicitly.
+    await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
+    await user.click(await screen.findByRole("option", { name: "Haiku" }));
+    expect(screen.queryByTestId("agent-effort-selector")).toBeNull();
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_model: "haiku",
+      acp_effort: null,
+    });
+  });
+
+  it("preserves stored effort when discovery has no result for the model", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      discovery: { efforts_by_model: { haiku: [] } },
+      models: CLAUDE_MODELS,
+      source: "live",
+    });
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        acp_model: "default",
+        acp_effort: "high",
+      },
+    });
+
+    await screen.findByTestId("agent-model-selector");
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_effort: "high",
+    });
+  });
+
+  it("sends no effort for a profile that never had one", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      models: CLAUDE_MODELS,
+      source: "live",
+    });
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
+
+    await screen.findByTestId("agent-model-selector");
+    expect(control().buildAgentProfileFields()).not.toHaveProperty(
+      "acp_effort",
+    );
   });
 
   it("offers OpenCode and leaves its default command to the profile resolver", async () => {
