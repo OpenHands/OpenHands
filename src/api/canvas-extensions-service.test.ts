@@ -218,10 +218,7 @@ describe("CanvasExtensionsService", () => {
 
     await CanvasExtensionsService.setEnabled("a/b", true);
 
-    expect(patch).toHaveBeenCalledWith(
-      "/api/canvas-extensions/installed/a%2Fb",
-      { enabled: true },
-    );
+    expect(setEnabled).toHaveBeenCalledWith("a/b", true, undefined);
   });
 
   it("does not send the backend session key to an absolute request URL", async () => {
@@ -351,35 +348,33 @@ it("binds typed lifecycle calls to the captured backend", async () => {
     revision: "rev",
     secret_refs: ["DEMO_API_KEY"],
   });
-  remove.mockResolvedValue({ revision: "rev", secret_grant_revision: null });
+  revokeBackendSecrets.mockResolvedValue({
+    revision: "rev",
+    secret_grant_revision: null,
+  });
   await CanvasExtensionsService.backendStatus("demo", localBackend);
   await CanvasExtensionsService.revokeBackendSecrets("demo", localBackend);
   expect(AgentServerClient).toHaveBeenLastCalledWith(
     expect.objectContaining({ host: localBackend.host }),
   );
   expect(getBackendStatus).toHaveBeenCalledWith("demo");
-  expect(remove).toHaveBeenCalledWith(
-    "/api/canvas-extensions/installed/demo/backend/secret-grant",
-  );
+  expect(revokeBackendSecrets).toHaveBeenCalledWith("demo");
 });
 
 it("checks body-returning lifecycle capability before enabling a managed app", async () => {
   getServerInfo.mockResolvedValue({
     capabilities: ["canvas_app_backend_enable_lifecycle_v1"],
   });
-  patch.mockResolvedValue({ name: "demo", enabled: true });
+  setEnabled.mockResolvedValue({ name: "demo", enabled: true });
   const consent = { revision: "sha256:demo", secret_refs: ["DEMO_API_KEY"] };
   await CanvasExtensionsService.setEnabled("demo", true, consent, localBackend);
-  expect(patch).toHaveBeenCalledWith("/api/canvas-extensions/installed/demo", {
-    enabled: true,
-    ...consent,
-  });
-  patch.mockClear();
+  expect(setEnabled).toHaveBeenCalledWith("demo", true, consent);
+  setEnabled.mockClear();
   getServerInfo.mockResolvedValue({ capabilities: [] });
   await expect(
     CanvasExtensionsService.setEnabled("demo", true, consent, localBackend),
   ).rejects.toThrow("Upgrade Agent Server");
-  expect(patch).not.toHaveBeenCalled();
+  expect(setEnabled).not.toHaveBeenCalled();
 });
 
 it("does not borrow active-backend credentials for a captured keyless backend", async () => {
@@ -418,8 +413,8 @@ it.each(["status", "revoke", "enable"] as const)(
     });
     const endpoint = {
       status: getBackendStatus,
-      revoke: remove,
-      enable: patch,
+      revoke: revokeBackendSecrets,
+      enable: setEnabled,
     }[operation];
     endpoint.mockRejectedValueOnce(missing);
 
