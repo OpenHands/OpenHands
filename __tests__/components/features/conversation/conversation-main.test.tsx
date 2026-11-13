@@ -271,6 +271,16 @@ describe("ConversationMain - Layout Transition Stability", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps the back button in the non-scrolling mobile conversation header", () => {
+    mockIsMobile = true;
+    renderConversationMain();
+
+    expect(screen.getByTestId("chat-pane-header")).toHaveClass("shrink-0");
+    expect(
+      screen.getByTestId("conversation-mobile-back-button"),
+    ).toBeInTheDocument();
+  });
+
   it.each([
     ["desktop", false],
     ["mobile", true],
@@ -357,6 +367,10 @@ describe("ConversationMain - Layout Transition Stability", () => {
     renderConversationMain();
 
     expect(screen.getByTestId("automation-setup-topbar")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-mobile-back-button"),
+    ).toBeInTheDocument();
+
     expect(screen.getByTestId("automation-setup-panel")).toHaveAttribute(
       "data-conversation-id",
       "conv-1",

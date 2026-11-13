@@ -6,6 +6,7 @@ export interface NavigationOptions {
 
 export interface NavigationContextValue {
   currentPath: string;
+  currentSearch?: string;
   conversationId: string | null;
   isNavigating: boolean;
   navigate: (to: string, options?: NavigationOptions) => void;
@@ -15,6 +16,7 @@ const noop = () => {};
 
 const NavigationContext = React.createContext<NavigationContextValue>({
   currentPath: "/",
+  currentSearch: "",
   conversationId: null,
   isNavigating: false,
   navigate: noop,
