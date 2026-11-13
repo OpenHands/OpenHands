@@ -1,0 +1,304 @@
+
+> @openhands/agent-canvas@1.40.0 prelint
+> npm run make-i18n
+
+
+> @openhands/agent-canvas@1.40.0 make-i18n
+> node scripts/make-i18n-translations.cjs
+
+
+> @openhands/agent-canvas@1.40.0 lint
+> npm run typecheck && eslint src && prettier --check src/**/*.{ts,tsx}
+
+
+> @openhands/agent-canvas@1.40.0 typecheck
+> react-router typegen && tsc
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./src/styles/agent-server-ui-style-scope" without a file extension (vite.config.ts:16:8). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./src/styles/agent-server-ui-style-scope" without a file extension (vite.config.ts:16:8). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+<fix-checkout>/src/components/conversation-events/chat/event-message-components/corrective-nudge-message.tsx
+  19:19  warning  "mt-[5px]" hardcodes an off-token value. Use "mt-1.25" instead (same value, on the scale)  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/automations/add-automation-menu.tsx
+  145:23  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/automations/automation-view-toggle.tsx
+  155:23  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/automations/detail/run-logs-modal.tsx
+  256:26  warning  "border-[var(--oh-primary)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/automations/kebab-menu.tsx
+  141:23  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/backends/manage-backends-modal.tsx
+  171:41  warning  "h-[80vh]" hardcodes an off-token value. Use a theme token or scale value instead      shadcn/no-arbitrary-values
+  171:54  warning  "max-h-[70vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/chat/btw-messages.tsx
+  22:17  warning  "max-h-[40vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/chat/change-agent-button.tsx
+  172:15  warning  "border-[#597FF4]" hardcodes a color. Nearest theme tokens: border-info. Use one of those, or declare --color-<name> in src/styles.css            shadcn/no-arbitrary-values
+  172:15  warning  "bg-[#4A67BD]" hardcodes a color. Nearest theme tokens: bg-cool-grey-600, bg-info. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  178:13  warning  "hover:bg-[#597FF4]" hardcodes a color. Nearest theme tokens: hover:bg-info. Use one of those, or declare --color-<name> in src/styles.css        shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/chat/chat-message.tsx
+  173:11  warning  "border-[#597ff4]" hardcodes a color. Nearest theme tokens: border-info. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/chat/components/chat-input-actions.tsx
+  388:17  warning  "top-[-4px]" hardcodes an off-token value. Use a theme token or scale value instead    shadcn/no-arbitrary-values
+  454:15  warning  "top-[-4px]" hardcodes an off-token value. Use a theme token or scale value instead    shadcn/no-arbitrary-values
+  468:25  warning  "max-h-[60vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+  573:33  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only       shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/chat/components/chat-input-container.tsx
+  74:40  warning  "border-[#597FF4]" hardcodes a color. Nearest theme tokens: border-info. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/chat/components/chat-input-llm-profile-picker.tsx
+  257:31  warning  Inline style sets maxHeight. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/chat/components/chat-input-model.tsx
+  253:21  warning  "max-h-[60vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/chat/plan-preview.tsx
+   70:20  warning  "border-[#597FF4]" hardcodes a color. Nearest theme tokens: border-info. Use one of those, or declare --color-<name> in src/styles.css                  shadcn/no-arbitrary-values
+  108:27  warning  "text-[#4a67bd]" hardcodes a color. Nearest theme tokens: text-cool-grey-600, text-info. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/chat/tool-visualizers/primitives/code-block.tsx
+  55:14  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/conversation-panel/budget-progress-bar.tsx
+  24:18  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/conversation-panel/cloud-new-conversation-menu.tsx
+  244:21  warning  Inline style sets position. Style through classes; use CSS custom properties for dynamic values                                                                         shadcn/no-inline-styles
+  245:16  warning  Inline style sets top. Style through classes; use CSS custom properties for dynamic values                                                                              shadcn/no-inline-styles
+  246:17  warning  Inline style sets left. Style through classes; use CSS custom properties for dynamic values                                                                             shadcn/no-inline-styles
+  247:18  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values                                                                            shadcn/no-inline-styles
+  347:27  warning  "dark:text-[#F87171]" hardcodes a color. Nearest theme tokens: dark:text-status-error, dark:text-danger. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/conversation-panel/conversation-card/conversation-card-context-menu.tsx
+  98:27  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/conversation-panel/conversation-card/conversation-card-preview.tsx
+  160:17  warning  "max-w-[min(280px,90vw)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/conversation-panel/conversation-card/conversation-tag-chips.tsx
+  316:25  warning  Inline style sets position. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+  317:20  warning  Inline style sets top. Style through classes; use CSS custom properties for dynamic values       shadcn/no-inline-styles
+  318:21  warning  Inline style sets left. Style through classes; use CSS custom properties for dynamic values      shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/conversation-panel/conversation-panel.tsx
+  1270:13  warning  "w-[calc(100%+0.625rem)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/conversation-panel/exit-conversation-modal.tsx
+  34:23  warning  "bg-[#C63143]" hardcodes a color and no declared theme color is close to it. Use one of: accent, background, base-secondary, basic, border, border-input, border-subtle, canvas-background, canvas-base, content, content-2, context-window-track (+74 more), or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/conversation-panel/local-new-conversation-menu.tsx
+  156:21  warning  Inline style sets position. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+  157:16  warning  Inline style sets top. Style through classes; use CSS custom properties for dynamic values       shadcn/no-inline-styles
+  158:17  warning  Inline style sets left. Style through classes; use CSS custom properties for dynamic values      shadcn/no-inline-styles
+  159:18  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values     shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/conversation/conversation-git-actions-menu.tsx
+  111:16  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/conversation/conversation-main/conversation-main.tsx
+  304:37  warning  Inline style sets transitionProperty. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+  331:21  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values               shadcn/no-inline-styles
+  337:21  warning  Inline style sets transitionProperty. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+  417:22  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values               shadcn/no-inline-styles
+  422:35  warning  Inline style sets transitionProperty. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/conversation/conversation-name-context-menu.tsx
+   83:17  warning  "translate-x-[calc(1rem-1px)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+  200:35  warning  "translate-x-[34%]" hardcodes an off-token value. Use a theme token or scale value instead             shadcn/no-arbitrary-values
+  379:21  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only                       shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/conversation/conversation-name-with-status.tsx
+  135:25  warning  "ml-[3.5px]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/conversation/conversation-overview-context-menu.tsx
+  415:21  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/conversation/conversation-overview-drawer.tsx
+  51:52  warning  "max-h-[min(50vh,420px)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/conversation/conversation-overview-panel.tsx
+  51:23  warning  "max-w-[45%]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/conversation/conversation-overview-toggle.tsx
+  125:18  warning  Inline style sets top. Style through classes; use CSS custom properties for dynamic values    shadcn/no-inline-styles
+  126:19  warning  Inline style sets left. Style through classes; use CSS custom properties for dynamic values   shadcn/no-inline-styles
+  127:20  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/conversation/conversation-tabs/conversation-tabs-context-menu.tsx
+  275:21  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/conversation/conversation-tabs/conversation-tabs.tsx
+  321:21  warning  "left-[-10000px]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/files-tab/highlighted-source-view.tsx
+  53:16  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/home/featured-automations/automation-run-activity-sparkline.tsx
+   69:13  warning  "rounded-[1px]" hardcodes an off-token value. Nearest on the scale: rounded-xs (2px), rounded-facet-control (3px)      shadcn/no-arbitrary-values
+  133:13  warning  "rounded-[1px]" hardcodes an off-token value. Nearest on the scale: rounded-xs (2px), rounded-facet-control (3px)      shadcn/no-arbitrary-values
+  136:13  warning  "group-hover/spark-bar:scale-x-[1.4]" hardcodes an off-token value. Use a theme token or scale value instead           shadcn/no-arbitrary-values
+  136:13  warning  "group-hover/spark-bar:scale-y-[1.15]" hardcodes an off-token value. Use a theme token or scale value instead          shadcn/no-arbitrary-values
+  137:13  warning  "group-focus-visible/spark-bar:scale-x-[1.4]" hardcodes an off-token value. Use a theme token or scale value instead   shadcn/no-arbitrary-values
+  137:13  warning  "group-focus-visible/spark-bar:scale-y-[1.15]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/home/featured-automations/home-automation-menu.tsx
+  149:20  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/home/home-chat-launcher.tsx
+  449:48  warning  "pt-[max(4rem,28vh)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/home/shared/toggle-button.tsx
+  40:8  warning  Unused eslint-disable directive (no problems were reported from 'shadcn/require-static-classes')
+
+<fix-checkout>/src/components/features/images/image-lightbox.tsx
+  47:21  warning  "max-h-[90vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+  47:21  warning  "max-w-[90vw]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/markdown/code.tsx
+  59:16  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/mcp-logo-badge.tsx
+  71:26  warning  Inline style sets backgroundColor. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+  73:11  warning  Inline style sets color. Style through classes; use CSS custom properties for dynamic values            shadcn/no-inline-styles
+  86:24  warning  Inline style sets maskImage. Style through classes; use CSS custom properties for dynamic values        shadcn/no-inline-styles
+  87:23  warning  Inline style sets maskSize. Style through classes; use CSS custom properties for dynamic values         shadcn/no-inline-styles
+  88:25  warning  Inline style sets maskRepeat. Style through classes; use CSS custom properties for dynamic values       shadcn/no-inline-styles
+  89:27  warning  Inline style sets maskPosition. Style through classes; use CSS custom properties for dynamic values     shadcn/no-inline-styles
+  96:21  warning  "p-[22%]" hardcodes an off-token value. Use a theme token or scale value instead                        shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/mcp-page/custom-server-editor.tsx
+  242:21  warning  "max-w-[90vw]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+  242:21  warning  "max-h-[90vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/onboarding/steps/say-hello-step.tsx
+  82:17  warning  "max-h-[calc(90vh-7rem)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/onboarding/steps/setup-llm-step.tsx
+  344:17  warning  "max-h-[calc(90vh-7rem)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/settings/acp-credentials-section.tsx
+  49:36  warning  "dark:text-[#717888]" hardcodes a color. Nearest theme tokens: dark:text-cool-grey-600, dark:text-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/settings/agent-canvas-update-card.tsx
+  174:11  warning  "max-h-[80vh]" hardcodes an off-token value. Use a theme token or scale value instead                                                                                     shadcn/no-arbitrary-values
+  220:19  warning  "dark:border-[#3B82F6]/30" hardcodes a color. Nearest theme tokens: dark:border-info/30. Use one of those, or declare --color-<name> in src/styles.css                    shadcn/no-arbitrary-values
+  220:19  warning  "dark:bg-[#1E3A5F]" hardcodes a color. Nearest theme tokens: dark:bg-border-subtle, dark:bg-cool-grey-900. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  220:19  warning  "dark:text-[#3B82F6]" hardcodes a color. Nearest theme tokens: dark:text-info. Use one of those, or declare --color-<name> in src/styles.css                              shadcn/no-arbitrary-values
+  234:31  warning  "hover:text-[var(--oh-text)]" hardcodes an off-token value. Use a theme token or scale value instead                                                                      shadcn/no-arbitrary-values
+  256:31  warning  "hover:text-[var(--oh-text)]" hardcodes an off-token value. Use a theme token or scale value instead                                                                      shadcn/no-arbitrary-values
+  342:25  warning  "dark:bg-[#1E3A5F]" hardcodes a color. Nearest theme tokens: dark:bg-border-subtle, dark:bg-cool-grey-900. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  342:25  warning  "dark:text-[#3B82F6]" hardcodes a color. Nearest theme tokens: dark:text-info. Use one of those, or declare --color-<name> in src/styles.css                              shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/settings/agent-canvas-version-modal.tsx
+  111:25  warning  "dark:text-[#3B82F6]" hardcodes a color. Nearest theme tokens: dark:text-info. Use one of those, or declare --color-<name> in src/styles.css                              shadcn/no-arbitrary-values
+  130:17  warning  "dark:bg-[#1E3A5F]" hardcodes a color. Nearest theme tokens: dark:bg-border-subtle, dark:bg-cool-grey-900. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  130:17  warning  "dark:text-[#3B82F6]" hardcodes a color. Nearest theme tokens: dark:text-info. Use one of those, or declare --color-<name> in src/styles.css                              shadcn/no-arbitrary-values
+  141:26  warning  "text-[var(--oh-text)]" hardcodes an off-token value. Use a theme token or scale value instead                                                                            shadcn/no-arbitrary-values
+  150:27  warning  "hover:text-[var(--oh-text)]" hardcodes an off-token value. Use a theme token or scale value instead                                                                      shadcn/no-arbitrary-values
+  158:28  warning  "text-[var(--oh-text)]" hardcodes an off-token value. Use a theme token or scale value instead                                                                            shadcn/no-arbitrary-values
+  170:31  warning  "hover:text-[var(--oh-text)]" hardcodes an off-token value. Use a theme token or scale value instead                                                                      shadcn/no-arbitrary-values
+  235:25  warning  "hover:text-[var(--oh-text)]" hardcodes an off-token value. Use a theme token or scale value instead                                                                      shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/settings/agent-canvas-version-tile.tsx
+  77:23  warning  "dark:text-[#3B82F6]" hardcodes a color. Nearest theme tokens: dark:text-info. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/settings/agent-profiles/agent-profile-actions-menu.tsx
+  197:21  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/settings/llm-profiles/profile-actions-menu.tsx
+  222:21  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/settings/llm-profiles/profile-row.tsx
+  83:23  warning  "text-[var(--oh-warning-foreground)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/settings/llm-profiles/provider-connection-actions-menu.tsx
+  174:21  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/settings/meta-llm-profiles/meta-profile-actions-menu.tsx
+  179:9   warning  "w-[160px]" hardcodes an off-token value. Use "w-40" instead (same value, on the scale)  shadcn/no-arbitrary-values
+  227:21  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only         shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/settings/settings-switch.tsx
+  61:27  warning  "font-[500]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/setup-guide/super-admin-setup-guide.tsx
+  346:33  warning  Inline style sets width. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/features/sidebar/mars-session-panel.tsx
+  285:22  warning  "w-[calc(100%+0.625rem)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+  322:21  warning  "max-h-[40vh]" hardcodes an off-token value. Use a theme token or scale value instead             shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/sidebar/sidebar-rail-body.tsx
+  379:27  warning  "bottom-[-4px]" hardcodes an off-token value. Use a theme token or scale value instead            shadcn/no-arbitrary-values
+  412:15  warning  "w-[calc(100%+0.625rem)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/sidebar/sidebar.tsx
+  285:15  warning  "w-[min(300px,85vw)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/skills/build-skill-pills.tsx
+  144:13  warning  "dark:border-[rgba(248,113,113,0.35)]" hardcodes a color. Nearest theme tokens: dark:border-status-error, dark:border-danger. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  144:13  warning  "dark:bg-[rgba(248,113,113,0.12)]" hardcodes a color. Nearest theme tokens: dark:bg-status-error, dark:bg-danger. Use one of those, or declare --color-<name> in src/styles.css              shadcn/no-arbitrary-values
+  144:13  warning  "dark:text-[#fca5a5]" hardcodes a color. Nearest theme tokens: dark:text-markdown-alert-caution. Use one of those, or declare --color-<name> in src/styles.css                               shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/features/skills/skill-card-pill-row.tsx
+  258:25  warning  Inline style sets position. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+  259:20  warning  Inline style sets top. Style through classes; use CSS custom properties for dynamic values       shadcn/no-inline-styles
+  260:21  warning  Inline style sets left. Style through classes; use CSS custom properties for dynamic values      shadcn/no-inline-styles
+
+<fix-checkout>/src/components/shared/buttons/circle-plus-check-toggle.tsx
+   96:17  warning  "dark:bg-[rgba(248,113,113,0.14)]" hardcodes a color. Nearest theme tokens: dark:bg-status-error, dark:bg-danger. Use one of those, or declare --color-<name> in src/styles.css                    shadcn/no-arbitrary-values
+   96:17  warning  "dark:text-[#ef4444]" hardcodes a color. Nearest theme tokens: dark:text-danger, dark:text-status-error. Use one of those, or declare --color-<name> in src/styles.css                             shadcn/no-arbitrary-values
+   96:17  warning  "dark:hover:bg-[rgba(248,113,113,0.24)]" hardcodes a color. Nearest theme tokens: dark:hover:bg-status-error, dark:hover:bg-danger. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+   96:17  warning  "dark:hover:text-[#ef4444]" hardcodes a color. Nearest theme tokens: dark:hover:text-danger, dark:hover:text-status-error. Use one of those, or declare --color-<name> in src/styles.css           shadcn/no-arbitrary-values
+  110:25  warning  "stroke-[2.5]" hardcodes an off-token value. Use a theme token or scale value instead                                                                                                              shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/shared/modals/settings/model-selector.tsx
+  366:25  warning  Inline style sets left. Style through classes; use CSS custom properties for dynamic values  shadcn/no-inline-styles
+
+<fix-checkout>/src/components/shared/risk-alert.tsx
+  24:11  warning  "dark:border-[#FF0006]" hardcodes a color. Nearest theme tokens: dark:border-status-error, dark:border-danger. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  24:11  warning  "dark:bg-[#4A0709]" hardcodes a color. Nearest theme tokens: dark:bg-base-secondary. Use one of those, or declare --color-<name> in src/styles.css                            shadcn/no-arbitrary-values
+
+<fix-checkout>/src/components/shared/text-shimmer.tsx
+  72:7   warning  A <style> element injects CSS outside the design system. Use classes, or declare the rule in your theme CSS  shadcn/no-inline-styles
+  79:16  warning  Dynamic style object cannot be checked. Build it from CSS custom properties only                             shadcn/no-inline-styles
+
+<fix-checkout>/src/routes/agent-settings.tsx
+  1714:25  warning  "dark:border-[#717888]" hardcodes a color. Nearest theme tokens: dark:border-cool-grey-600, dark:border-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css                                shadcn/no-arbitrary-values
+  1714:25  warning  "dark:placeholder:text-[#717888]" hardcodes a color. Nearest theme tokens: dark:placeholder:text-cool-grey-600, dark:placeholder:text-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css  shadcn/no-arbitrary-values
+  1739:40  warning  "dark:text-[#717888]" hardcodes a color. Nearest theme tokens: dark:text-cool-grey-600, dark:text-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css                                      shadcn/no-arbitrary-values
+  1748:25  warning  "dark:border-[#3D4046]" hardcodes a color. Nearest theme tokens: dark:border-border-subtle, dark:border-git-control. Use one of those, or declare --color-<name> in src/styles.css                                  shadcn/no-arbitrary-values
+  1756:25  warning  "dark:border-[#3D4046]" hardcodes a color. Nearest theme tokens: dark:border-border-subtle, dark:border-git-control. Use one of those, or declare --color-<name> in src/styles.css                                  shadcn/no-arbitrary-values
+  1861:25  warning  "dark:text-[#717888]" hardcodes a color. Nearest theme tokens: dark:text-cool-grey-600, dark:text-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css                                      shadcn/no-arbitrary-values
+  1872:27  warning  "dark:text-[#717888]" hardcodes a color. Nearest theme tokens: dark:text-cool-grey-600, dark:text-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css                                      shadcn/no-arbitrary-values
+  1882:25  warning  "dark:text-[#717888]" hardcodes a color. Nearest theme tokens: dark:text-cool-grey-600, dark:text-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css                                      shadcn/no-arbitrary-values
+  1887:38  warning  "dark:text-[#717888]" hardcodes a color. Nearest theme tokens: dark:text-cool-grey-600, dark:text-cool-grey-500. Use one of those, or declare --color-<name> in src/styles.css                                      shadcn/no-arbitrary-values
+
+<fix-checkout>/src/routes/launch.tsx
+  196:11  warning  "max-h-[80vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/ui/pre.tsx
+  42:14  warning  "max-h-[60vh]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+<fix-checkout>/src/utils/settings-list-classes.ts
+  22:3  warning  "max-h-[min(70vh,39rem)]" hardcodes an off-token value. Use a theme token or scale value instead  shadcn/no-arbitrary-values
+
+✖ 140 problems (0 errors, 140 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+Checking formatting...
+All matched files use Prettier code style!

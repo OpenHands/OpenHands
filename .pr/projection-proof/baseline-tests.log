@@ -1,0 +1,331 @@
+
+> @openhands/agent-canvas@1.40.0 test
+> npm run make-i18n && vitest run __tests__/stores/use-event-store.test.ts
+
+
+> @openhands/agent-canvas@1.40.0 make-i18n
+> node scripts/make-i18n-translations.cjs
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./src/styles/agent-server-ui-style-scope" without a file extension (vite.config.ts:16:8). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.1.0 <fix-checkout>
+
+ ❯ |jsdom| __tests__/stores/use-event-store.test.ts (19 tests | 7 failed) 31ms
+   ❯ useEventStore (19)
+     × reconciles an older action across a earlier timestamp page boundary 3ms
+     × reconciles an older action across a equal timestamp page boundary 1ms
+     × reconciles an older action across a missing timestamp page boundary 1ms
+     × keeps an ACP completed result when its older start is loaded 1ms
+     × keeps an ACP failed result when its older start is loaded 0ms
+     × reconciles an out-of-order single durable action 0ms
+     × preserves main and planning slots between tied rows while replaying older history 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |jsdom| __tests__/stores/use-event-store.test.ts > useEventStore > reconciles an older action across a earlier timestamp page boundary
+ FAIL  |jsdom| __tests__/stores/use-event-store.test.ts > useEventStore > reconciles an older action across a equal timestamp page boundary
+AssertionError: expected [ Array(2) ] to deeply equal [ { id: 'test-observation-1', …(6) } ]
+
+- Expected
++ Received
+
+@@ -1,7 +1,38 @@
+  [
+    {
++     "action": {
++       "command": "echo hello",
++       "is_input": false,
++       "kind": "ExecuteBashAction",
++       "reset": false,
++       "timeout": null,
++     },
++     "id": "test-action-1",
++     "llm_response_id": "response_123",
++     "security_risk": "UNKNOWN",
++     "source": "agent",
++     "thinking_blocks": [],
++     "thought": [
++       {
++         "text": "I need to execute a bash command",
++         "type": "text",
++       },
++     ],
++     "timestamp": "2024-01-01T00:00:00Z",
++     "tool_call": {
++       "function": {
++         "arguments": "{\"command\": \"echo hello\"}",
++         "name": "execute_bash",
++       },
++       "id": "call_123",
++       "type": "function",
++     },
++     "tool_call_id": "call_123",
++     "tool_name": "execute_bash",
++   },
++   {
+      "action_id": "test-action-1",
+      "id": "test-observation-1",
+      "observation": {
+        "command": "echo hello",
+        "content": [
+
+ ❯ __tests__/stores/use-event-store.test.ts:329:47
+    327|
+    328|     expect(useEventStore.getState().events).toEqual([action, observati…
+    329|     expect(useEventStore.getState().uiEvents).toEqual([observation]);
+       |                                               ^
+    330|     expect(useEventStore.getState().historyPagination).toEqual({
+    331|       nextPageId: null,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  |jsdom| __tests__/stores/use-event-store.test.ts > useEventStore > reconciles an older action across a missing timestamp page boundary
+AssertionError: expected [ Array(2) ] to deeply equal [ { id: 'test-observation-1', …(6) } ]
+
+- Expected
++ Received
+
+@@ -1,7 +1,38 @@
+  [
+    {
++     "action": {
++       "command": "echo hello",
++       "is_input": false,
++       "kind": "ExecuteBashAction",
++       "reset": false,
++       "timeout": null,
++     },
++     "id": "test-action-1",
++     "llm_response_id": "response_123",
++     "security_risk": "UNKNOWN",
++     "source": "agent",
++     "thinking_blocks": [],
++     "thought": [
++       {
++         "text": "I need to execute a bash command",
++         "type": "text",
++       },
++     ],
++     "timestamp": undefined,
++     "tool_call": {
++       "function": {
++         "arguments": "{\"command\": \"echo hello\"}",
++         "name": "execute_bash",
++       },
++       "id": "call_123",
++       "type": "function",
++     },
++     "tool_call_id": "call_123",
++     "tool_name": "execute_bash",
++   },
++   {
+      "action_id": "test-action-1",
+      "id": "test-observation-1",
+      "observation": {
+        "command": "echo hello",
+        "content": [
+
+ ❯ __tests__/stores/use-event-store.test.ts:329:47
+    327|
+    328|     expect(useEventStore.getState().events).toEqual([action, observati…
+    329|     expect(useEventStore.getState().uiEvents).toEqual([observation]);
+       |                                               ^
+    330|     expect(useEventStore.getState().historyPagination).toEqual({
+    331|       nextPageId: null,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  |jsdom| __tests__/stores/use-event-store.test.ts > useEventStore > keeps an ACP completed result when its older start is loaded
+AssertionError: expected [ { kind: 'ACPToolCallEvent', …(12) } ] to deeply equal [ { kind: 'ACPToolCallEvent', …(12) } ]
+
+- Expected
++ Received
+
+  [
+    {
+      "content": null,
+-     "id": "acp-terminal",
++     "id": "acp-started",
+      "isFromPlanningAgent": true,
+      "is_error": false,
+      "kind": "ACPToolCallEvent",
+      "raw_input": null,
+      "raw_output": null,
+      "source": "agent",
+-     "status": "completed",
+-     "timestamp": "2024-01-02T00:00:00Z",
++     "status": "in_progress",
++     "timestamp": "2024-01-01T00:00:00Z",
+      "title": "Read a file",
+      "tool_call_id": "tool-page-boundary",
+      "tool_kind": "read",
+    },
+  ]
+
+ ❯ __tests__/stores/use-event-store.test.ts:367:47
+    365|     store.addEvents([{ ...started, isFromPlanningAgent: true }]);
+    366|
+    367|     expect(useEventStore.getState().uiEvents).toEqual([terminal]);
+       |                                               ^
+    368|   });
+    369|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  |jsdom| __tests__/stores/use-event-store.test.ts > useEventStore > keeps an ACP failed result when its older start is loaded
+AssertionError: expected [ { kind: 'ACPToolCallEvent', …(12) } ] to deeply equal [ { kind: 'ACPToolCallEvent', …(12) } ]
+
+- Expected
++ Received
+
+  [
+    {
+      "content": null,
+-     "id": "acp-terminal",
++     "id": "acp-started",
+      "isFromPlanningAgent": true,
+      "is_error": false,
+      "kind": "ACPToolCallEvent",
+      "raw_input": null,
+      "raw_output": null,
+      "source": "agent",
+-     "status": "failed",
+-     "timestamp": "2024-01-02T00:00:00Z",
++     "status": "in_progress",
++     "timestamp": "2024-01-01T00:00:00Z",
+      "title": "Read a file",
+      "tool_call_id": "tool-page-boundary",
+      "tool_kind": "read",
+    },
+  ]
+
+ ❯ __tests__/stores/use-event-store.test.ts:367:47
+    365|     store.addEvents([{ ...started, isFromPlanningAgent: true }]);
+    366|
+    367|     expect(useEventStore.getState().uiEvents).toEqual([terminal]);
+       |                                               ^
+    368|   });
+    369|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  |jsdom| __tests__/stores/use-event-store.test.ts > useEventStore > reconciles an out-of-order single durable action
+AssertionError: expected [ Array(2) ] to deeply equal [ { id: 'test-observation-1', …(6) } ]
+
+- Expected
++ Received
+
+@@ -1,7 +1,38 @@
+  [
+    {
++     "action": {
++       "command": "echo hello",
++       "is_input": false,
++       "kind": "ExecuteBashAction",
++       "reset": false,
++       "timeout": null,
++     },
++     "id": "test-action-1",
++     "llm_response_id": "response_123",
++     "security_risk": "UNKNOWN",
++     "source": "agent",
++     "thinking_blocks": [],
++     "thought": [
++       {
++         "text": "I need to execute a bash command",
++         "type": "text",
++       },
++     ],
++     "timestamp": "2024-01-01T00:00:00Z",
++     "tool_call": {
++       "function": {
++         "arguments": "{\"command\": \"echo hello\"}",
++         "name": "execute_bash",
++       },
++       "id": "call_123",
++       "type": "function",
++     },
++     "tool_call_id": "call_123",
++     "tool_name": "execute_bash",
++   },
++   {
+      "action_id": "test-action-1",
+      "id": "test-observation-1",
+      "observation": {
+        "command": "echo hello",
+        "content": [
+
+ ❯ __tests__/stores/use-event-store.test.ts:378:47
+    376|     store.addEvent(action);
+    377|
+    378|     expect(useEventStore.getState().uiEvents).toEqual([observation]);
+       |                                               ^
+    379|   });
+    380|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  |jsdom| __tests__/stores/use-event-store.test.ts > useEventStore > preserves main and planning slots between tied rows while replaying older history
+AssertionError: expected [ Array(6) ] to deeply equal [ …(5) ]
+
+- Expected
++ Received
+
+@@ -1,7 +1,38 @@
+  [
+    {
++     "action": {
++       "command": "echo hello",
++       "is_input": false,
++       "kind": "ExecuteBashAction",
++       "reset": false,
++       "timeout": null,
++     },
++     "id": "test-action-1",
++     "llm_response_id": "response_123",
++     "security_risk": "UNKNOWN",
++     "source": "agent",
++     "thinking_blocks": [],
++     "thought": [
++       {
++         "text": "I need to execute a bash command",
++         "type": "text",
++       },
++     ],
++     "timestamp": "2024-01-02T00:00:00Z",
++     "tool_call": {
++       "function": {
++         "arguments": "{\"command\": \"echo hello\"}",
++         "name": "execute_bash",
++       },
++       "id": "call_123",
++       "type": "function",
++     },
++     "tool_call_id": "call_123",
++     "tool_name": "execute_bash",
++   },
++   {
+      "action_id": "test-action-1",
+      "id": "test-observation-1",
+      "observation": {
+        "command": "echo hello",
+        "content": [
+
+ ❯ __tests__/stores/use-event-store.test.ts:396:47
+    394|     store.addEvents([{ ...mockActionEvent, timestamp }], { nextPageId:…
+    395|
+    396|     expect(useEventStore.getState().uiEvents).toEqual(before);
+       |                                               ^
+    397|     expect(useEventStore.getState().uiEvents[1]).toBe(before[1]);
+    398|     expect(useEventStore.getState().uiEvents[4]).toBe(before[4]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  7 failed | 12 passed (19)
+   Start at  10:15:32
+   Duration  874ms (environment 58%, transform 18%, setup 18%, tests 4%, import 1%)
+

@@ -1,0 +1,35 @@
+
+> @openhands/agent-canvas@1.40.0 build:lib
+> npm run make-i18n && react-router typegen && cross-env BUILD_LIB=true vite build && tsc -p tsconfig.lib.json
+
+
+> @openhands/agent-canvas@1.40.0 make-i18n
+> node scripts/make-i18n-translations.cjs
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./src/styles/agent-server-ui-style-scope" without a file extension (vite.config.ts:16:8). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+
+[Module listing omitted; complete sanitized log SHA256: 0c77d3a06241ac959b1d68869849006db5804707c6d13c686b65eb8c26e82679]
+
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/@heroui/react/dist/components/calendar/calendar-day-view-grid-body.js:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "node_modules/@radix-ui/react-primitive/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/@radix-ui/react-primitive/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+✓ built in 4.58s

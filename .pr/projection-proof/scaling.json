@@ -1,0 +1,66 @@
+{
+  "source_commit": "2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73",
+  "node": "v24.22.1",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "kind": "Local synthetic scaling probe of actual bundled production functions; not live browser latency",
+  "fixture": "Chronological alternating unique TerminalAction/TerminalObservation records. Store backfill seeds all but the oldest action, then loads that action through addEvents with prepend=true.",
+  "rows": [
+    {
+      "durable_events": 1000,
+      "projected_rows": 500,
+      "indexed_id_reads": 4000,
+      "sequential_id_reads": 126250,
+      "indexed_batch": {
+        "median_ms": 0.13512500000000216,
+        "min_ms": 0.12529099999999715,
+        "max_ms": 0.16037500000000193,
+        "samples": 21
+      },
+      "sequential_fold": {
+        "median_ms": 3.2729580000000027,
+        "min_ms": 2.904958999999991,
+        "max_ms": 3.441584000000006,
+        "samples": 7
+      },
+      "store_backfill": {
+        "median_ms": 0.2257499999999908,
+        "min_ms": 0.1629999999999967,
+        "max_ms": 0.30375000000000796,
+        "samples": 9
+      }
+    },
+    {
+      "durable_events": 10000,
+      "projected_rows": 5000,
+      "indexed_id_reads": 40000,
+      "sequential_id_reads": 12512500,
+      "indexed_batch": {
+        "median_ms": 1.1590830000000096,
+        "min_ms": 1.1560420000000136,
+        "max_ms": 1.1717919999999822,
+        "samples": 21
+      },
+      "sequential_fold": {
+        "median_ms": 209.21500000000015,
+        "min_ms": 203.39254200000005,
+        "max_ms": 215.6086250000003,
+        "samples": 7
+      },
+      "store_backfill": {
+        "median_ms": 1.5730830000002243,
+        "min_ms": 1.5178750000000036,
+        "max_ms": 1.9213749999998981,
+        "samples": 9
+      }
+    }
+  ],
+  "tenfold_growth": {
+    "indexed_id_reads": 10,
+    "sequential_id_reads": 99.10891089108911,
+    "indexed_median_time": 8.577857539315383,
+    "sequential_median_time": 63.922299033473685,
+    "store_backfill_median_time": 6.96825249169563
+  },
+  "limitations": "Wall-clock timings are local and noisy. ID getter reads show the measured fixture lookup work, not a general JS operation count. Canonical reordering includes stable sorts; normal token methods are untouched. No claim of bounded DOM, memory, or payload eviction."
+}

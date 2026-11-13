@@ -1,0 +1,26 @@
+
+> @openhands/agent-canvas@1.40.0 test:e2e:mock-llm
+> playwright test --config=playwright.mock-llm.config.ts --grep loads older events when scrolling up
+
+[WebServer] Mock LLM server ready on http://127.0.0.1:9993
+[WebServer] Trajectory: 2 scripted turns
+
+[WebServer] [mock-llm] GET / HTTP/1.1
+
+[WebServer] .env not found. Continuing without it.
+
+[WebServer] (node:44420) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:44512) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+
+Running 1 test using 1 worker
+
+(node:44518) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/1] [chromium] › tests/e2e/mock-llm/regressions/mock-llm-ui-regressions.spec.ts:526:3 › UI regressions › loads older events when scrolling up
+  1 passed (15.3s)

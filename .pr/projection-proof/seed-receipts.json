@@ -1,0 +1,160 @@
+{
+  "before": {
+    "seeded": true,
+    "cases": [
+      {
+        "kind": "PROJECTION",
+        "conversation": "c71c5aae-0843-49d3-b504-5033690e17bd",
+        "events": 100,
+        "boundary": [
+          {
+            "seq": 48,
+            "id": "a886b047-c80b-4a25-bde2-44d704086080",
+            "kind": "ObservationEvent",
+            "timestamp": "2026-11-13T08:00:00.048000",
+            "actionId": "00952499-5963-486d-a5a9-1bc05aa24cd6"
+          },
+          {
+            "seq": 49,
+            "id": "65368f1a-5864-4392-9095-892ab9d8df08",
+            "kind": "ActionEvent",
+            "timestamp": "2026-11-13T08:00:00.049000",
+            "actionId": null
+          },
+          {
+            "seq": 50,
+            "id": "cf5b1801-00a5-4ebe-a518-26fa92d3a354",
+            "kind": "ObservationEvent",
+            "timestamp": "2026-11-13T08:00:00.050000",
+            "actionId": "65368f1a-5864-4392-9095-892ab9d8df08"
+          },
+          {
+            "seq": 51,
+            "id": "9a91e182-dec4-481d-8324-04ac9d046ee8",
+            "kind": "ActionEvent",
+            "timestamp": "2026-11-13T08:00:00.051000",
+            "actionId": null
+          }
+        ],
+        "modelCalls": 0,
+        "commandsExecuted": 0
+      },
+      {
+        "kind": "TIED",
+        "conversation": "27451684-e62e-4506-b2cb-c96b608a3f17",
+        "events": 100,
+        "boundary": [
+          {
+            "seq": 48,
+            "id": "22f24b8c-fd57-4378-8888-70ee3c30ca96",
+            "kind": "MessageEvent",
+            "timestamp": "2026-11-13T08:00:00.049000",
+            "actionId": null
+          },
+          {
+            "seq": 49,
+            "id": "bcea43b5-ff37-4982-aa5e-8561b9129e5c",
+            "kind": "MessageEvent",
+            "timestamp": "2026-11-13T08:00:00.051000",
+            "actionId": null
+          },
+          {
+            "seq": 50,
+            "id": "ce5b42bf-58df-4739-aebd-7f9412563c2b",
+            "kind": "MessageEvent",
+            "timestamp": "2026-11-13T08:00:00.051000",
+            "actionId": null
+          },
+          {
+            "seq": 51,
+            "id": "b8b550e6-8d05-4007-80f7-23f6cae201ac",
+            "kind": "MessageEvent",
+            "timestamp": "2026-11-13T08:00:00.052000",
+            "actionId": null
+          }
+        ],
+        "modelCalls": 0,
+        "commandsExecuted": 0
+      }
+    ]
+  },
+  "after": {
+    "seeded": true,
+    "cases": [
+      {
+        "kind": "PROJECTION",
+        "conversation": "11e479cc-d655-409c-a70b-2fe75bc9489a",
+        "events": 100,
+        "boundary": [
+          {
+            "seq": 48,
+            "id": "34e7644c-6bfa-49cc-b7be-544bd60ae718",
+            "kind": "ObservationEvent",
+            "timestamp": "2026-11-13T08:00:00.048000",
+            "actionId": "e8ca2272-483f-4df6-9a9c-cedc066ccec1"
+          },
+          {
+            "seq": 49,
+            "id": "de97f69c-ecf2-4b05-9bae-5906a903560f",
+            "kind": "ActionEvent",
+            "timestamp": "2026-11-13T08:00:00.049000",
+            "actionId": null
+          },
+          {
+            "seq": 50,
+            "id": "9ac58c0b-bbde-417d-8200-cdf490fd3512",
+            "kind": "ObservationEvent",
+            "timestamp": "2026-11-13T08:00:00.050000",
+            "actionId": "de97f69c-ecf2-4b05-9bae-5906a903560f"
+          },
+          {
+            "seq": 51,
+            "id": "048256b5-d863-4c33-9612-9dbf1640457e",
+            "kind": "ActionEvent",
+            "timestamp": "2026-11-13T08:00:00.051000",
+            "actionId": null
+          }
+        ],
+        "modelCalls": 0,
+        "commandsExecuted": 0
+      },
+      {
+        "kind": "TIED",
+        "conversation": "61453a3d-5b28-4778-90d0-53e42ebeb2d1",
+        "events": 100,
+        "boundary": [
+          {
+            "seq": 48,
+            "id": "1660ebb6-86c5-486a-abfc-7e89bfed2142",
+            "kind": "MessageEvent",
+            "timestamp": "2026-11-13T08:00:00.049000",
+            "actionId": null
+          },
+          {
+            "seq": 49,
+            "id": "36de3209-5880-4953-993b-a25ca8aabd25",
+            "kind": "MessageEvent",
+            "timestamp": "2026-11-13T08:00:00.051000",
+            "actionId": null
+          },
+          {
+            "seq": 50,
+            "id": "3a980124-7e70-4ca6-83a4-4705e5d6eb8a",
+            "kind": "MessageEvent",
+            "timestamp": "2026-11-13T08:00:00.051000",
+            "actionId": null
+          },
+          {
+            "seq": 51,
+            "id": "18b0a0e4-95e1-472a-9a41-0ba87ba33952",
+            "kind": "MessageEvent",
+            "timestamp": "2026-11-13T08:00:00.052000",
+            "actionId": null
+          }
+        ],
+        "modelCalls": 0,
+        "commandsExecuted": 0
+      }
+    ]
+  }
+}
