@@ -14,13 +14,12 @@
  */
 
 import { useCallback, useRef } from "react";
+import { initializeAutomationFormSession } from "#/api/automation-form-session";
+import type { AutomationSetupDraft } from "#/api/automation-setup-types";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
-import { useConversationStore } from "#/stores/conversation-store";
-import {
-  setConversationState,
-  setPendingTaskDraft,
-} from "#/utils/conversation-local-storage";
+import { buildAutomationSetupContext } from "#/utils/automation-setup-context";
 import {
   buildAssistedMessage,
   buildCreatePayload,
@@ -74,9 +73,6 @@ async function uploadedTarballBytes(
 
 export function useSetupAction() {
   const createConversation = useCreateConversation();
-  const setMessageToSend = useConversationStore(
-    (state) => state.setMessageToSend,
-  );
 
   // The last archive uploaded, and what the service called it. An upload that
   // is followed by a create the service rejects cannot be taken back - the
@@ -86,27 +82,22 @@ export function useSetupAction() {
   // entry and the answers, which is what makes the key sound.
   const uploadedRef = useRef<{ key: string; path: string } | null>(null);
 
+  // An assisted template opens as an automation setup conversation: the seed
+  // is sent as its first message and the draft editor opens beside it.
   const startConversation = useCallback(
     async (message: string): Promise<SetupActionResult> => {
-      const conversation = await createConversation.mutateAsync({});
-
-      // Seed the message the same way the rest of the app does, so the
-      // conversation opens with it queued whichever launch path applies.
-      if (
-        conversation.conversation_id.startsWith("task-") &&
-        conversation.task_id
-      ) {
-        setPendingTaskDraft(conversation.task_id, message);
-      } else {
-        setConversationState(conversation.conversation_id, {
-          draftMessage: message,
-        });
-      }
-      window.setTimeout(() => setMessageToSend(message), 0);
-
+      const draft: AutomationSetupDraft = { kind: "prompt", prompt: "" };
+      const conversation = await createConversation.mutateAsync({
+        query: message,
+        automationSetup: true,
+        automationSetupContext: buildAutomationSetupContext(draft),
+        entryPoint: "automation_template",
+      });
+      initializeAutomationFormSession(conversation.conversation_id, draft);
+      markAutomationSetupHandoff(conversation.conversation_id);
       return { response: { ...conversation } };
     },
-    [createConversation, setMessageToSend],
+    [createConversation],
   );
 
   return useCallback(

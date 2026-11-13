@@ -436,6 +436,7 @@ export const INTERFACE_ICON_SLUGS = [
   "circle-alert",
   "activity",
   "timer",
+  "shield-check",
 ] as const;
 
 export type InterfaceIconSlug = (typeof INTERFACE_ICON_SLUGS)[number];

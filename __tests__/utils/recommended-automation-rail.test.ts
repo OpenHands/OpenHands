@@ -49,6 +49,7 @@ describe("recommended automation rail", () => {
     ]);
 
     expect(groups.suggested.map((entry) => entry.id)).toEqual([
+      "cve-remediation-factory",
       "custom-automation",
       "github-issue-to-pr",
       "slack-channel-monitor",
@@ -91,6 +92,7 @@ describe("recommended automation rail", () => {
     const conversationIds = groups.conversation.map((entry) => entry.id);
 
     expect(groups.suggested.map((entry) => entry.id)).toEqual([
+      "cve-remediation-factory",
       "github-pr-reviewer",
       "custom-automation",
       "github-issue-to-pr",
@@ -123,6 +125,7 @@ describe("recommended automation rail", () => {
 
   it("returns an empty rail when every recommended automation has been added", () => {
     const groups = getRecommendedRailGroups([
+      { name: "GitHub CVE Remediation Factory" },
       { name: "GitHub Code Review Agent" },
       { name: "GitHub Issue to PR Agent" },
       { name: "Custom automation" },

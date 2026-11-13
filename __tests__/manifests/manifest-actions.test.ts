@@ -1,6 +1,8 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getAutomationFormSession } from "#/api/automation-form-session";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { consumeAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 import { useSetupAction } from "#/manifests/manifest-actions";
 import type { SetupEntry } from "#/manifests/types";
 import { createSetup, createSetupEntry } from "./manifest-test-data";
@@ -12,6 +14,7 @@ import { createSetup, createSetupEntry } from "./manifest-test-data";
  */
 const mocks = vi.hoisted(() => ({
   packBundle: vi.fn(),
+  createConversation: vi.fn(),
 }));
 
 vi.mock("#/manifests/manifest-bundle", () => ({
@@ -26,12 +29,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
 }));
 
 vi.mock("#/hooks/mutation/use-create-conversation", () => ({
-  useCreateConversation: () => ({ mutateAsync: vi.fn() }),
-}));
-
-vi.mock("#/stores/conversation-store", () => ({
-  useConversationStore: (select: (state: unknown) => unknown) =>
-    select({ setMessageToSend: vi.fn() }),
+  useCreateConversation: () => ({ mutateAsync: mocks.createConversation }),
 }));
 
 const ENTRY: SetupEntry = createSetupEntry({
@@ -110,5 +108,36 @@ describe("useSetupAction for a bundle entry", () => {
     // Assert — the archive carries the answers, so a different answer is a
     // different archive.
     expect(AutomationService.uploadAutomationTarball).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("useSetupAction for an assisted entry", () => {
+  it("opens an automation setup conversation that starts with the seed message", async () => {
+    // Arrange
+    mocks.createConversation.mockResolvedValue({ conversation_id: "conv-1" });
+    const entry = createSetupEntry({
+      setup: createSetup({
+        mode: "assisted",
+        message: "Set it up for {{form.repository}}.",
+      }),
+    });
+    const { result } = renderHook(() => useSetupAction());
+
+    // Act
+    const { response } = await result.current(entry, VALUES, null);
+
+    // Assert
+    expect(response.conversation_id).toBe("conv-1");
+    expect(mocks.createConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.stringContaining("Set it up for OpenHands/automation."),
+        automationSetup: true,
+        entryPoint: "automation_template",
+      }),
+    );
+    expect(getAutomationFormSession("conv-1")).toMatchObject({
+      kind: "prompt",
+    });
+    expect(consumeAutomationSetupHandoff("conv-1")).toBe(true);
   });
 });
