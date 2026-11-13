@@ -80,10 +80,13 @@ function stripBasePath(origin: string): string {
   if (pathStart === -1) return origin;
 
   const path = origin.slice(pathStart);
-  const isWholePath = path === basePath;
-  const isTrailingSegment =
-    path.endsWith(basePath) && path[path.length - basePath.length - 1] === "/";
-  if (!isWholePath && !isTrailingSegment) return origin;
+  // `basePath` begins with `/`, so an endsWith match is segment-aligned on
+  // its own: `/foo/canvas` ends with `/canvas` but `/mycanvas` does not. The
+  // previous adjacency check could never hold for a multi-segment path —
+  // the character before the match is the last character of the preceding
+  // segment, not `/` — so origins already carrying the mount under a deeper
+  // path were double-prefixed instead of stripped once.
+  if (!path.endsWith(basePath)) return origin;
   return origin.slice(0, -basePath.length);
 }
 

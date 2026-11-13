@@ -82,6 +82,22 @@ describe("Agent Canvas absolute URLs", () => {
     ).toBe("https://app.example.com/canvas/settings");
   });
 
+  it("does not double-prefix an origin that carries the base path under a deeper path", () => {
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+
+    expect(
+      buildAgentCanvasUrl("/settings", "https://app.example.com/foo/canvas"),
+    ).toBe("https://app.example.com/foo/canvas/settings");
+  });
+
+  it("does not strip a non-segment suffix resembling the base path", () => {
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+
+    expect(
+      buildAgentCanvasUrl("/settings", "https://app.example.com/mycanvas"),
+    ).toBe("https://app.example.com/mycanvas/canvas/settings");
+  });
+
   it("does not treat a hostname matching the base path as the mount point", () => {
     vi.stubEnv("VITE_BASE_PATH", "/canvas");
 
@@ -121,6 +137,14 @@ describe("Agent Canvas base URL", () => {
 
     expect(getAgentCanvasBaseUrl("https://app.example.com/canvas")).toBe(
       "https://app.example.com/canvas",
+    );
+  });
+
+  it("does not add the base path twice when the origin carries it under a deeper path", () => {
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+
+    expect(getAgentCanvasBaseUrl("https://app.example.com/foo/canvas")).toBe(
+      "https://app.example.com/foo/canvas",
     );
   });
 
