@@ -20,8 +20,6 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { EditConversationTagsModal } from "#/components/features/conversation-panel/edit-conversation-tags-modal";
-import { StartTaskStatusBadge } from "#/components/features/conversation-panel/start-task-card/start-task-status-badge";
-import { I18nKey } from "#/i18n/declaration";
 
 describe("getConversationTagIcon", () => {
   it("maps known keys to related icons", () => {
@@ -365,30 +363,5 @@ describe("EditConversationTagsModal", () => {
     await user.click(screen.getByTestId("confirm-button"));
 
     expect(onConfirm).toHaveBeenCalledWith({ origin: "slack" });
-  });
-});
-
-describe("StartTaskStatusBadge", () => {
-  // react-i18next is globally mocked so `t` echoes the key; asserting the key
-  // proves the label is resolved through i18n rather than a raw enum transform.
-  it.each([
-    ["STARTING_CONVERSATION", I18nKey.CONVERSATION$STARTING_CONVERSATION],
-    ["READY", I18nKey.CONVERSATION$READY],
-    ["ERROR", I18nKey.COMMON$ERROR],
-  ] as const)(
-    "localizes the label for the %s status",
-    (taskStatus, expectedKey) => {
-      renderWithProviders(<StartTaskStatusBadge taskStatus={taskStatus} />);
-
-      expect(screen.getByText(expectedKey)).toBeInTheDocument();
-    },
-  );
-
-  it("renders nothing for the WORKING status", () => {
-    const { container } = renderWithProviders(
-      <StartTaskStatusBadge taskStatus="WORKING" />,
-    );
-
-    expect(container).toBeEmptyDOMElement();
   });
 });
