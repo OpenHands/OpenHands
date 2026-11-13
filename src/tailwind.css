@@ -155,6 +155,10 @@
   --color-on-accent: var(--oh-accent-foreground);
   --color-info: var(--oh-info);
   --color-warning: var(--oh-warning);
+  /* Existing update feedback colors and the version dialog's host text hook. */
+  --color-canvas-update: #3b82f6;
+  --color-canvas-update-surface: #1e3a5f;
+  --color-canvas-version-copy: var(--oh-text);
 
   /* Status badge / banner pairs (see status-tone-classes.ts) */
   --color-success-soft: var(--oh-success-soft);
