@@ -172,6 +172,58 @@ describe("MessageReactions", () => {
     expect(trigger).toHaveFocus();
   });
 
+  it("opens the picker above its button, inside the chat, when it would overflow a narrow screen", async () => {
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockResolvedValue(featureState(true));
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(390);
+    const box = (left: number, width: number) =>
+      ({
+        left,
+        right: left + width,
+        width,
+        top: 0,
+        bottom: 24,
+        height: 24,
+      }) as DOMRect;
+    const rect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function measure(this: HTMLElement) {
+        // Five chips push the button to x=226; beside it the picker would end at 418.
+        if (this.dataset.testid === "reaction-picker") return box(254, 164);
+        return box(226, 24);
+      });
+    const user = userEvent.setup();
+
+    renderWithProviders(<Row author="agent" />);
+    await user.click(await screen.findByTestId("add-reaction"));
+
+    const picker = screen.getByTestId("reaction-picker");
+    await waitFor(() =>
+      expect(picker).toHaveAttribute("data-placement", "above"),
+    );
+    // Right edge kept 8px inside the 390px window: 390 - 8 - 164 = 218.
+    expect(picker.style.getPropertyValue("--picker-shift")).toBe("-8px");
+    rect.mockRestore();
+  });
+
+  it("opens the picker beside its button when it fits", async () => {
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockResolvedValue(featureState(true));
+    const user = userEvent.setup();
+
+    renderWithProviders(<Row author="agent" />);
+    await user.click(await screen.findByTestId("add-reaction"));
+
+    expect(screen.getByTestId("reaction-picker")).toHaveAttribute(
+      "data-placement",
+      "beside",
+    );
+  });
+
   it("shows the server's reason when a reaction fails", async () => {
     vi.spyOn(
       experimentalFeaturesService,
