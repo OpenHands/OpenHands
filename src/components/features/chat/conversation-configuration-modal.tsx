@@ -5,9 +5,11 @@ import {
   INTEGRATION_CATALOG,
   type IntegrationCatalogEntry as MarketplaceEntry,
 } from "@openhands/extensions/integrations";
+import type { MCPConfig, MCPServer } from "@openhands/typescript-client";
 import {
-  changeConversationConfiguration,
-  type ConversationConfigurationOperation,
+  addConversationMcpServers,
+  selectConversationMcpServers,
+  updateConversationSecrets,
 } from "#/api/conversation-configuration-service";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
@@ -201,28 +203,39 @@ export function ConversationConfigurationModal({
   );
   const valueId = React.useId();
 
-  const applyChange = async (
-    operation: ConversationConfigurationOperation,
-    label: string,
-  ) => {
+  const applySecret = async (secretName: string, secretValue: string) => {
     setPending(true);
     setResult(null);
     try {
-      await changeConversationConfiguration(conversationId, {
-        operations: [operation],
+      await updateConversationSecrets(conversationId, {
+        secrets: { [secretName]: secretValue },
       });
-      if (operation.type === "secret.grant") {
-        setName("");
-        setValue("");
-        setShowValue(false);
-      } else {
-        setAttached((current) =>
-          new Set(current).add(
-            operation.type === "mcp.attach" ? operation.ref : operation.name,
-          ),
-        );
-      }
-      setResult({ type: "success", name: label });
+      setName("");
+      setValue("");
+      setShowValue(false);
+      setResult({ type: "success", name: secretName });
+      return true;
+    } catch {
+      setResult({ type: "error" });
+      return false;
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const applyMcpServers = async (mcpServers: MCPConfig, labels: string[]) => {
+    setPending(true);
+    setResult(null);
+    try {
+      await addConversationMcpServers(conversationId, {
+        mcp_servers: mcpServers,
+      });
+      setAttached((current) => {
+        const next = new Set(current);
+        for (const label of labels) next.add(label);
+        return next;
+      });
+      setResult({ type: "success", name: labels.join(", ") });
       return true;
     } catch {
       setResult({ type: "error" });
@@ -233,8 +246,14 @@ export function ConversationConfigurationModal({
   };
 
   const attachSelected = async (refs: string[]) => {
+    const mcpConfig = settings?.mcp_config as MCPConfig | undefined;
     for (const ref of refs) {
-      if (!(await applyChange({ type: "mcp.attach", ref }, ref))) break;
+      const mcpServers = selectConversationMcpServers(mcpConfig, [ref]);
+      if (Object.keys(mcpServers).length === 0) {
+        setResult({ type: "error" });
+        break;
+      }
+      if (!(await applyMcpServers(mcpServers, [ref]))) break;
     }
   };
 
@@ -248,9 +267,9 @@ export function ConversationConfigurationModal({
     for (let suffix = 1; attached.has(name); suffix += 1) {
       name = `${preferred}_${suffix}`;
     }
-    const installed = await applyChange(
-      { type: "mcp.install", name, server: toCanonicalMcpServer(server) },
-      name,
+    const installed = await applyMcpServers(
+      { [name]: toCanonicalMcpServer(server) as MCPServer },
+      [name],
     );
     if (!installed) throw new Error("MCP install failed");
   };
@@ -285,10 +304,7 @@ export function ConversationConfigurationModal({
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName || !value.trim() || pending) return;
-    void applyChange(
-      { type: "secret.grant", name: trimmedName, value },
-      trimmedName,
-    );
+    void applySecret(trimmedName, value);
   };
 
   if (installQueue.length > 0) {

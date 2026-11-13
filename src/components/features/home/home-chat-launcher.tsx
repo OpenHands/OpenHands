@@ -44,6 +44,7 @@ import {
 } from "#/utils/workspace-mode";
 import { useSettings } from "#/hooks/query/use-settings";
 import { WorkspaceModeSelector } from "#/components/features/chat/workspace-mode-selector";
+import { McpServerCheckboxSelector } from "#/components/features/mcp-page/mcp-server-checkbox-selector";
 import type { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 import { PluginPickerModal } from "#/components/features/plugins/plugin-picker-modal";
@@ -108,6 +109,9 @@ export function HomeChatLauncher() {
   const isRecommendedAutomationsDismissed =
     useHomeRecommendedAutomationsDismissed();
   const [selectedPlugins, setSelectedPlugins] = useState<PluginSpec[]>([]);
+  const [selectedMcpRefs, setSelectedMcpRefs] = useState(
+    () => new Set<string>(),
+  );
   const [isPluginPickerOpen, setIsPluginPickerOpen] = useState(false);
   const [launcherMode, setLauncherMode] = useState<HomeLauncherMode>("code");
   const displayedLauncherMode = launcherMode;
@@ -254,6 +258,10 @@ export function HomeChatLauncher() {
     // nothing attaches unless the user picked it.
     if (!isAutomateMode && selectedPlugins.length > 0) {
       variables = { ...variables, plugins: selectedPlugins };
+    }
+
+    if (!isAutomateMode && isLocal && selectedMcpRefs.size > 0) {
+      variables = { ...variables, mcpRefs: [...selectedMcpRefs] };
     }
 
     // A cloud member's home LLM pick (see useChatInputLlmProfileState), unless
@@ -586,6 +594,14 @@ export function HomeChatLauncher() {
             onClick={() => setIsPluginPickerOpen(true)}
             disabled={isCreating || isAutomateMode}
           />
+          {isLocal && !isAutomateMode ? (
+            <McpServerCheckboxSelector
+              selectedRefs={selectedMcpRefs}
+              onSelectedRefsChange={setSelectedMcpRefs}
+              disabled={isCreating}
+              testId="home-mcp-selector"
+            />
+          ) : null}
         </div>
 
         <div

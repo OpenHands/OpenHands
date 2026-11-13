@@ -43,13 +43,11 @@ describe("ConversationConfigurationModal", () => {
     let settingsWrites = 0;
     server.use(
       http.post(
-        "*/api/conversations/:id/configuration/changes",
+        "*/api/conversations/:id/secrets",
         async ({ request, params }) => {
           expect(params.id).toBe(conversationId);
           requests.push(await request.json());
-          return HttpResponse.json({
-            applied: [{ type: "secret.grant", name: "MY_TOKEN" }],
-          });
+          return HttpResponse.json({ success: true });
         },
       ),
       http.patch("*/api/settings", () => {
@@ -81,13 +79,7 @@ describe("ConversationConfigurationModal", () => {
     await waitFor(() =>
       expect(requests).toEqual([
         {
-          operations: [
-            {
-              type: "secret.grant",
-              name: "MY_TOKEN",
-              value: " private value ",
-            },
-          ],
+          secrets: { MY_TOKEN: " private value " },
         },
       ]),
     );
@@ -98,21 +90,16 @@ describe("ConversationConfigurationModal", () => {
     );
   });
 
-  it("attaches an enabled saved MCP ref, not its credentials or global settings", async () => {
+  it("attaches an enabled saved MCP server without persisting shared settings", async () => {
     savedServers();
     const user = userEvent.setup();
     const requests: unknown[] = [];
     let settingsWrites = 0;
     server.use(
-      http.post(
-        "*/api/conversations/:id/configuration/changes",
-        async ({ request }) => {
-          requests.push(await request.json());
-          return HttpResponse.json({
-            applied: [{ type: "mcp.attach", ref: "my-fetch" }],
-          });
-        },
-      ),
+      http.post("*/api/conversations/:id/mcp", async ({ request }) => {
+        requests.push(await request.json());
+        return HttpResponse.json({ success: true });
+      }),
       http.patch("*/api/settings", () => {
         settingsWrites += 1;
         return HttpResponse.json({});
@@ -137,7 +124,15 @@ describe("ConversationConfigurationModal", () => {
 
     await waitFor(() =>
       expect(requests).toEqual([
-        { operations: [{ type: "mcp.attach", ref: "my-fetch" }] },
+        {
+          mcp_servers: {
+            "my-fetch": {
+              transport: "stdio",
+              command: "python3",
+              args: ["-m", "fetch"],
+            },
+          },
+        },
       ]),
     );
     expect(settingsWrites).toBe(0);
@@ -151,20 +146,18 @@ describe("ConversationConfigurationModal", () => {
     const user = userEvent.setup();
     const refs: string[] = [];
     server.use(
-      http.post(
-        "*/api/conversations/:id/configuration/changes",
-        async ({ request }) => {
-          const body = (await request.json()) as {
-            operations: { type: string; ref: string }[];
-          };
-          expect(body.operations).toHaveLength(1);
-          refs.push(body.operations[0].ref);
-          if (body.operations[0].ref === "my-time" && refs.length === 2) {
-            return HttpResponse.json({ detail: "Try again" }, { status: 409 });
-          }
-          return HttpResponse.json({ applied: body.operations });
-        },
-      ),
+      http.post("*/api/conversations/:id/mcp", async ({ request }) => {
+        const body = (await request.json()) as {
+          mcp_servers: Record<string, unknown>;
+        };
+        const ref = Object.keys(body.mcp_servers)[0];
+        expect(Object.keys(body.mcp_servers)).toHaveLength(1);
+        refs.push(ref);
+        if (ref === "my-time" && refs.length === 2) {
+          return HttpResponse.json({ detail: "Try again" }, { status: 409 });
+        }
+        return HttpResponse.json({ success: true });
+      }),
     );
 
     renderWithProviders(
@@ -211,15 +204,10 @@ describe("ConversationConfigurationModal", () => {
       http.post("*/api/mcp/test", () =>
         HttpResponse.json({ ok: true, tools: ["slack_post_message"] }),
       ),
-      http.post(
-        "*/api/conversations/:id/configuration/changes",
-        async ({ request }) => {
-          requests.push(await request.json());
-          return HttpResponse.json({
-            applied: [{ type: "mcp.install", name: "slack" }],
-          });
-        },
-      ),
+      http.post("*/api/conversations/:id/mcp", async ({ request }) => {
+        requests.push(await request.json());
+        return HttpResponse.json({ success: true });
+      }),
       http.patch("*/api/settings", () => {
         settingsWrites += 1;
         return HttpResponse.json({});
@@ -258,16 +246,12 @@ describe("ConversationConfigurationModal", () => {
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(requests).toEqual([
       {
-        operations: [
-          {
-            type: "mcp.install",
-            name: "slack",
-            server: expect.objectContaining({
-              transport: "stdio",
-              env: { SLACK_BOT_TOKEN: "scoped-token", SLACK_TEAM_ID: "T02" },
-            }),
-          },
-        ],
+        mcp_servers: {
+          slack: expect.objectContaining({
+            transport: "stdio",
+            env: { SLACK_BOT_TOKEN: "scoped-token", SLACK_TEAM_ID: "T02" },
+          }),
+        },
       },
     ]);
     expect(settingsWrites).toBe(0);
@@ -281,15 +265,10 @@ describe("ConversationConfigurationModal", () => {
     const requests: unknown[] = [];
     let settingsWrites = 0;
     server.use(
-      http.post(
-        "*/api/conversations/:id/configuration/changes",
-        async ({ request }) => {
-          requests.push(await request.json());
-          return HttpResponse.json({
-            applied: [{ type: "mcp.install", name: "ephemeral" }],
-          });
-        },
-      ),
+      http.post("*/api/conversations/:id/mcp", async ({ request }) => {
+        requests.push(await request.json());
+        return HttpResponse.json({ success: true });
+      }),
       http.patch("*/api/settings", () => {
         settingsWrites += 1;
         return HttpResponse.json({});
@@ -317,13 +296,9 @@ describe("ConversationConfigurationModal", () => {
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(requests).toEqual([
       {
-        operations: [
-          {
-            type: "mcp.install",
-            name: "ephemeral",
-            server: { transport: "sse", url: "https://mcp.example.com/api" },
-          },
-        ],
+        mcp_servers: {
+          ephemeral: { transport: "sse", url: "https://mcp.example.com/api" },
+        },
       },
     ]);
     expect(settingsWrites).toBe(0);
@@ -331,20 +306,17 @@ describe("ConversationConfigurationModal", () => {
 
   it("installs multiple selected marketplace MCPs with one operation per request", async () => {
     const user = userEvent.setup();
-    const requests: { operations: { type: string; name: string }[] }[] = [];
+    const requests: { mcp_servers: Record<string, unknown> }[] = [];
     server.use(
       http.post("*/api/mcp/test", () =>
         HttpResponse.json({ ok: true, tools: [] }),
       ),
-      http.post(
-        "*/api/conversations/:id/configuration/changes",
-        async ({ request, params }) => {
-          expect(params.id).toBe(conversationId);
-          const body = (await request.json()) as (typeof requests)[number];
-          requests.push(body);
-          return HttpResponse.json({ applied: body.operations });
-        },
-      ),
+      http.post("*/api/conversations/:id/mcp", async ({ request, params }) => {
+        expect(params.id).toBe(conversationId);
+        const body = (await request.json()) as (typeof requests)[number];
+        requests.push(body);
+        return HttpResponse.json({ success: true });
+      }),
     );
     renderWithProviders(
       <ConversationConfigurationModal
@@ -373,10 +345,9 @@ describe("ConversationConfigurationModal", () => {
     );
     await user.click(screen.getByTestId("mcp-install-submit"));
     await waitFor(() => expect(requests).toHaveLength(2));
-    expect(requests.map(({ operations }) => operations)).toMatchObject([
-      [{ type: "mcp.install", name: "fetch" }],
-      [{ type: "mcp.install", name: "time" }],
-    ]);
+    expect(
+      requests.map(({ mcp_servers: mcpServers }) => Object.keys(mcpServers)),
+    ).toEqual([["fetch"], ["time"]]);
     expect(
       await screen.findByTestId("conversation-mcp-install-selected"),
     ).toBeDisabled();
@@ -386,13 +357,11 @@ describe("ConversationConfigurationModal", () => {
     const user = userEvent.setup();
     let attempts = 0;
     server.use(
-      http.post("*/api/conversations/:id/configuration/changes", () => {
+      http.post("*/api/conversations/:id/secrets", () => {
         attempts += 1;
         return attempts === 1
           ? HttpResponse.json({ detail: "Secret not allowed" }, { status: 403 })
-          : HttpResponse.json({
-              applied: [{ type: "secret.grant", name: "MY_TOKEN" }],
-            });
+          : HttpResponse.json({ success: true });
       }),
     );
 

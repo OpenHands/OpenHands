@@ -5,6 +5,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { SuggestedTask } from "#/utils/types";
+import type { MCPConfig } from "@openhands/typescript-client";
 import { Provider } from "#/types/settings";
 import { useTracking } from "#/hooks/use-tracking";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
@@ -17,6 +18,12 @@ import PluginsManagementService, {
 } from "#/api/plugins-management-service";
 import { PLUGINS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { launchConversation } from "#/hooks/mutation/resolve-conversation-launch";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import {
+  addConversationMcpServers,
+  selectConversationMcpServers,
+} from "#/api/conversation-configuration-service";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import { pluginReferenceKey } from "#/utils/plugin-display";
 import {
   mergeStoredConversationMetadata,
@@ -39,6 +46,7 @@ export interface CreateConversationVariables {
   parentConversationId?: string;
   agentType?: "default" | "plan";
   plugins?: PluginSpec[];
+  mcpRefs?: string[];
   workingDir?: string;
   workspaceMode?: WorkspaceMode;
   // Cloud only: start inside this existing sandbox instead of provisioning
@@ -111,6 +119,7 @@ export const useCreateConversation = ({
         automationSetupContext,
         conversationInstructions,
         plugins,
+        mcpRefs,
         repository,
         workingDir,
         workspaceMode,
@@ -121,6 +130,10 @@ export const useCreateConversation = ({
         sandboxId,
         suppressRouterAtStart,
       } = variables;
+
+      const selectedMcpRefs = mcpRefs?.filter(Boolean) ?? [];
+      const shouldDeferInitialMessageForMcp =
+        backend.kind === "local" && selectedMcpRefs.length > 0 && !!query;
 
       // The active AgentProfile is the default launch profile for new
       // conversations (#3727), on both local and cloud.
@@ -133,7 +146,7 @@ export const useCreateConversation = ({
           agentProfileId,
         },
         {
-          initialUserMsg: query,
+          initialUserMsg: shouldDeferInitialMessageForMcp ? undefined : query,
           automationSetup,
           ...(automationSetupTags ? { automationSetupTags } : {}),
           automationSetupContext,
@@ -176,6 +189,27 @@ export const useCreateConversation = ({
       // Cloud conversations have no app_conversation_id until the sandbox is
       // READY.
       const localConversationId = conversation.app_conversation_id;
+
+      if (localConversationId && selectedMcpRefs.length > 0) {
+        const { agentSettings } =
+          await SettingsService.getSettingsForConversation();
+        const mcpServers = selectConversationMcpServers(
+          agentSettings.mcp_config as unknown as MCPConfig | undefined,
+          selectedMcpRefs,
+        );
+        if (Object.keys(mcpServers).length > 0) {
+          await addConversationMcpServers(localConversationId, {
+            mcp_servers: mcpServers,
+          });
+        }
+      }
+
+      if (localConversationId && shouldDeferInitialMessageForMcp && query) {
+        await AgentServerConversationService.sendMessage(localConversationId, {
+          role: "user",
+          content: [{ type: "text", text: query }],
+        });
+      }
       // Snapshot the conversation's plugins into client-side metadata so the
       // in-conversation plugins view can show what's loaded (coordinates only
       // — strip parameters, which may carry secrets). The agent-server doesn't

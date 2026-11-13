@@ -1,19 +1,33 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { SuggestedTask } from "#/utils/types";
 import {
   getStoredConversationMetadata,
   removeStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
-import { AGENT_PROFILES_QUERY_KEYS } from "#/hooks/query/query-keys";
 import {
   clearPendingHomeModelPick,
   hasPendingHomeModelPick,
   markHomeModelPick,
 } from "#/hooks/use-chat-input-llm-profile-state";
+
+const { addConversationMcpServersMock } = vi.hoisted(() => ({
+  addConversationMcpServersMock: vi.fn(),
+}));
+vi.mock("#/api/conversation-configuration-service", () => ({
+  addConversationMcpServers: addConversationMcpServersMock,
+  selectConversationMcpServers: (
+    mcpConfig: Record<string, unknown> | undefined,
+    refs: string[],
+  ) =>
+    Object.fromEntries(
+      refs.flatMap((ref) => (mcpConfig?.[ref] ? [[ref, mcpConfig[ref]]] : [])),
+    ),
+}));
 
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
@@ -127,6 +141,8 @@ listLlmProfilesMock.mockResolvedValue({ profiles: [], active_profile: null });
 
 describe("useCreateConversation", () => {
   afterEach(() => {
+    vi.restoreAllMocks();
+
     // Restore the default (`default` active) so the overrides below don't
     // leak into the other create-call assertions.
     mockUseActiveBackend.mockReturnValue({
@@ -143,6 +159,9 @@ describe("useCreateConversation", () => {
       name: "default",
       profile: DEFAULT_PROFILE,
     });
+    addConversationMcpServersMock.mockReset();
+    addConversationMcpServersMock.mockResolvedValue({ success: true });
+
     listLlmProfilesMock.mockReset();
     listLlmProfilesMock.mockResolvedValue({
       profiles: [],
@@ -235,6 +254,67 @@ describe("useCreateConversation", () => {
         agentLlmProfileRef: "default",
       });
     });
+  });
+
+  it("attaches selected MCP refs before sending the deferred first message", async () => {
+    addConversationMcpServersMock.mockResolvedValue({ success: true });
+    vi.spyOn(SettingsService, "getSettingsForConversation").mockResolvedValue({
+      agentSettings: {
+        mcp_config: {
+          fetch: { transport: "stdio", command: "fetch" },
+          time: { transport: "stdio", command: "time" },
+        },
+      },
+      conversationSettings: {},
+      secretsEncrypted: true,
+      skillEnablement: {},
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: "conv-with-mcps",
+        agent_server_url: "http://agent-server.local",
+      } as never);
+    const sendMessageSpy = vi
+      .spyOn(AgentServerConversationService, "sendMessage")
+      .mockResolvedValue({
+        role: "user",
+        content: [{ type: "text", text: "use these tools" }],
+      });
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({
+      query: "use these tools",
+      mcpRefs: ["fetch", "time"],
+    });
+
+    expect(createConversationSpy.mock.lastCall?.[0]?.initialUserMsg).toBe(
+      undefined,
+    );
+    expect(addConversationMcpServersMock).toHaveBeenCalledWith(
+      "conv-with-mcps",
+      {
+        mcp_servers: {
+          fetch: { transport: "stdio", command: "fetch" },
+          time: { transport: "stdio", command: "time" },
+        },
+      },
+    );
+    expect(sendMessageSpy).toHaveBeenCalledWith("conv-with-mcps", {
+      role: "user",
+      content: [{ type: "text", text: "use these tools" }],
+    });
+    expect(
+      addConversationMcpServersMock.mock.invocationCallOrder[0],
+    ).toBeLessThan(sendMessageSpy.mock.invocationCallOrder[0]);
   });
 
   it("suppresses route-at-start on cloud when suppressRouterAtStart is passed by the home launcher", async () => {
@@ -353,7 +433,6 @@ describe("useCreateConversation", () => {
     // The home composer's pending pick is still intact for the actual home send.
     expect(hasPendingHomeModelPick("cloud-1", null)).toBe(true);
   });
-
 
   it("launches new local conversations from the active AgentProfile (#3727)", async () => {
     listAgentProfilesMock.mockResolvedValue({
