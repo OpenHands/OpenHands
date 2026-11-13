@@ -1,41 +1,38 @@
 import type { OpenHandsEvent } from "#/types/agent-server/core";
+import type {
+  ConversationErrorEvent,
+  ServerErrorEvent,
+} from "#/types/agent-server/core/events/conversation-state-event";
 import {
   isActionEvent,
-  isDisplayableErrorEvent,
+  isConversationErrorEvent,
   isMessageEvent,
+  isServerErrorEvent,
 } from "#/types/agent-server/type-guards";
 
 /**
- * Decide whether the conversation's last visible outcome is a failure that the
- * user never saw acknowledged.
- *
- * The REST history preload is the only durable record the UI has after a
- * reload: streaming deltas are transient and the error banner lives in an
- * in-memory store. When the newest event in the loaded tail is a
- * `ConversationErrorEvent` (or `ServerErrorEvent`) with no agent reply or
- * finish after it, the run died unacknowledged and the live-path banner
- * should be re-seeded. Any later agent `MessageEvent` or `FinishAction` means
- * the run recovered (or a later run succeeded) and the banner must stay quiet.
- *
- * Only the loaded history tail is scanned: this matches the data the UI
- * actually has. Older failures outside the window stay quiet.
+ * The error a reloaded conversation should still show in the failure banner:
+ * the newest `ConversationErrorEvent`/`ServerErrorEvent` in the loaded history
+ * with no agent reply or `FinishAction` after it. The banner store is
+ * in-memory and only the live socket writes it, so without this the failure
+ * vanishes on reload. Only the loaded tail is scanned.
  */
-export const shouldSeedHistoryErrorBanner = (
-  events: OpenHandsEvent[],
-): boolean => {
+export const findUnacknowledgedHistoryError = (
+  events: readonly OpenHandsEvent[],
+): ConversationErrorEvent | ServerErrorEvent | null => {
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i];
+    if (isConversationErrorEvent(event) || isServerErrorEvent(event)) {
+      return event;
+    }
     const isAgentReply =
       (isMessageEvent(event) &&
         event.source === "agent" &&
         event.llm_message.role === "assistant") ||
       (isActionEvent(event) && event.action?.kind === "FinishAction");
     if (isAgentReply) {
-      return false;
-    }
-    if (isDisplayableErrorEvent(event)) {
-      return true;
+      return null;
     }
   }
-  return false;
+  return null;
 };

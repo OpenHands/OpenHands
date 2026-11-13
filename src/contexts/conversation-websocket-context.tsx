@@ -89,7 +89,7 @@ import {
   seedModelSwitchesFromHistory,
   stampActiveLlmProfile,
 } from "#/hooks/chat/record-model-switch-message";
-import { shouldSeedHistoryErrorBanner } from "#/utils/history-error-banner";
+import { findUnacknowledgedHistoryError } from "#/utils/history-error-banner";
 import {
   invalidateConversationQueries,
   updateConversationLlmModelInCache,
@@ -448,6 +448,7 @@ export function ConversationWebSocketProvider({
   // user scrolls to the top of the chat. The WebSocket connection waits for
   // this query so it can subscribe with `resend_mode='since'` and avoid
   // re-streaming everything REST already returned.
+  const seededHistoryErrorIdRef = useRef<string | undefined>(undefined);
   const {
     data: preloadedHistory,
     isPending: isPreloadingHistory,
@@ -537,6 +538,10 @@ export function ConversationWebSocketProvider({
     // records the new loaded id in one `set`, so no subscriber can observe a
     // half-applied state (events gone but the old id still reported).
     clearEventsForConversation(nextId, historyScope);
+    // Cleared here, not in the route, so the history re-seed below can
+    // restore this conversation's persisted failure banner.
+    removeErrorMessage();
+    seededHistoryErrorIdRef.current = undefined;
     resetBrowserStore();
     // The metrics store is conversation-scoped state too: without a reset the
     // previous conversation's usage/cost keeps rendering in the new
@@ -547,6 +552,7 @@ export function ConversationWebSocketProvider({
     conversationId,
     historyScope,
     clearEventsForConversation,
+    removeErrorMessage,
     resetBrowserStore,
   ]);
 
@@ -587,38 +593,20 @@ export function ConversationWebSocketProvider({
         }
       }
 
-      // A run that ended in an LLM/tool failure is persisted server-side as a
-      // ConversationErrorEvent, but the failure banner lives in an in-memory
-      // store, so after a reload the failure becomes invisible: the user sees
-      // their message with no reply and no error. If the last outcome in the
-      // loaded history tail is an error (nothing recovered after it), re-seed
-      // the same banner the live WS path would have shown.
-      if (shouldSeedHistoryErrorBanner(preloadedHistory.events)) {
-        const lastError = [...preloadedHistory.events].reverse() as (
-          | ConversationErrorEvent
-          | ServerErrorEvent
-        )[];
-        const errorEvent = lastError.find((event) =>
-          isDisplayableErrorEvent(event),
+      // The failure banner store is in-memory, so re-show a persisted run
+      // failure after a reload. Seed each error once per conversation visit so
+      // a background history refetch does not resurrect a dismissed banner.
+      const historyError = findUnacknowledgedHistoryError(
+        visibleHistory.events,
+      );
+      if (historyError && seededHistoryErrorIdRef.current !== historyError.id) {
+        seededHistoryErrorIdRef.current = historyError.id;
+        setErrorMessage(
+          historyError.detail,
+          "conversation",
+          historyError.code,
+          "classification" in historyError ? historyError.classification : null,
         );
-        if (errorEvent) {
-          const classification =
-            "classification" in errorEvent ? errorEvent.classification : null;
-          trackError({
-            source: "conversation",
-            metadata: {
-              eventId: errorEvent.id,
-              errorCode: errorEvent.code,
-            },
-            classification,
-          });
-          setErrorMessage(
-            errorEvent.detail,
-            "conversation",
-            errorEvent.code,
-            classification,
-          );
-        }
       }
     }
   }, [

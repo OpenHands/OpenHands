@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { shouldSeedHistoryErrorBanner } from "./history-error-banner";
+import { findUnacknowledgedHistoryError } from "./history-error-banner";
 
 import type { OpenHandsEvent } from "#/types/agent-server/core";
 
@@ -46,10 +46,10 @@ const makeFinishAction = (id: string): OpenHandsEvent =>
     tool_call_id: "call_1",
   }) as unknown as OpenHandsEvent;
 
-describe("history error banner seeding", () => {
+describe("findUnacknowledgedHistoryError", () => {
   it("seeds when the last outcome is an error", () => {
     const events = [makeUserMessage("1"), makeError("2")];
-    expect(shouldSeedHistoryErrorBanner(events)).toBe(true);
+    expect(findUnacknowledgedHistoryError(events)?.id).toBe("2");
   });
 
   it("stays quiet when the run recovered after the error", () => {
@@ -58,7 +58,7 @@ describe("history error banner seeding", () => {
       makeError("2"),
       makeAgentMessage("3"),
     ];
-    expect(shouldSeedHistoryErrorBanner(events)).toBe(false);
+    expect(findUnacknowledgedHistoryError(events)).toBeNull();
   });
 
   it("stays quiet when the run finished after the error", () => {
@@ -67,17 +67,22 @@ describe("history error banner seeding", () => {
       makeError("2"),
       makeFinishAction("3"),
     ];
-    expect(shouldSeedHistoryErrorBanner(events)).toBe(false);
+    expect(findUnacknowledgedHistoryError(events)).toBeNull();
   });
 
   it("stays quiet on a healthy conversation", () => {
     const events = [makeUserMessage("1"), makeAgentMessage("2")];
-    expect(shouldSeedHistoryErrorBanner(events)).toBe(false);
+    expect(findUnacknowledgedHistoryError(events)).toBeNull();
   });
 
   it("stays quiet when there is no error at all", () => {
     const events = [makeUserMessage("1")];
-    expect(shouldSeedHistoryErrorBanner(events)).toBe(false);
+    expect(findUnacknowledgedHistoryError(events)).toBeNull();
+  });
+
+  it("returns the newest of two failures in a row", () => {
+    const events = [makeUserMessage("1"), makeError("2"), makeError("3")];
+    expect(findUnacknowledgedHistoryError(events)?.id).toBe("3");
   });
 
   it("seeds when a new failure follows an earlier recovered run", () => {
@@ -88,6 +93,6 @@ describe("history error banner seeding", () => {
       makeUserMessage("4"),
       makeError("5"),
     ];
-    expect(shouldSeedHistoryErrorBanner(events)).toBe(true);
+    expect(findUnacknowledgedHistoryError(events)?.id).toBe("5");
   });
 });
