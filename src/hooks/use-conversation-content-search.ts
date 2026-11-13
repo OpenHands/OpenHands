@@ -2,12 +2,17 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
+  isContentSearchEnabled,
   searchConversationContent,
   type ContentSearchHit,
 } from "#/api/conversation-service/content-search.api";
 
 export const CONVERSATION_CONTENT_SEARCH_QUERY_KEY = [
   "conversation-content-search",
+] as const;
+
+const CONTENT_SEARCH_ENABLED_QUERY_KEY = [
+  "conversation-content-search-enabled",
 ] as const;
 
 const DEBOUNCE_MS = 300;
@@ -17,6 +22,8 @@ export interface ContentSearchState {
   /** Raw input value; the owner renders it in the search box. */
   query: string;
   setQuery: (query: string) => void;
+  /** True when the backend probe confirms the feature is on. */
+  isAvailable: boolean;
   isPending: boolean;
   error: boolean;
   hits: ContentSearchHit[];
@@ -53,6 +60,21 @@ export function useConversationContentSearch(): ContentSearchState {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const isLocal = backend.kind === "local";
 
+  // Feature probe: on local backends, /search/enabled exists only when the
+  // server runs the content search service. A 404 (or transport failure)
+  // means "off by configuration" → the box is hidden, no error line shown.
+  // The backend id in the key makes a backend switch refetch the probe.
+  const { data: probeData, isPending: probePending } = useQuery({
+    queryKey: [...CONTENT_SEARCH_ENABLED_QUERY_KEY, backend.id],
+    queryFn: isContentSearchEnabled,
+    enabled: isLocal,
+    // Feature toggles are rare; five minutes is plenty for one mount.
+    staleTime: 5 * 60_000,
+    retry: false,
+    meta: { disableToast: true },
+  });
+  const isAvailable = isLocal && !probePending && probeData === true;
+
   useEffect(() => {
     const trimmed = input.trim();
     const handle = setTimeout(() => {
@@ -61,7 +83,7 @@ export function useConversationContentSearch(): ContentSearchState {
     return () => clearTimeout(handle);
   }, [input]);
 
-  const enabled = isLocal && debouncedQuery.length > 0;
+  const enabled = isAvailable && debouncedQuery.length > 0;
 
   const { data, isPending, isError } = useQuery({
     queryKey: [...CONVERSATION_CONTENT_SEARCH_QUERY_KEY, debouncedQuery],
@@ -89,6 +111,7 @@ export function useConversationContentSearch(): ContentSearchState {
   return {
     query: input,
     setQuery: setInput,
+    isAvailable,
     isPending: enabled && isPending,
     error: enabled && isError,
     hits: data?.hits ?? [],

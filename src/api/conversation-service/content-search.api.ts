@@ -7,13 +7,10 @@ import {
 import { getEffectiveLocalBackend } from "../backend-registry/active-store";
 import { NoBackendAvailableError } from "../agent-server-client-options";
 
-// Content search is a local agent-server feature: the endpoint lives on the
-// local backend only, so cloud users must never see it. The guard test
-// (no-direct-agent-server-calls.test.ts) forbids ad-hoc HTTP except for
-// allow-listed files; this file follows the automation-service precedent:
-// a dedicated axios instance that resolves the *local* backend from the
-// registry on every call (so it tracks host/key edits made in the
-// manage-backends UI) and attaches the session key.
+// Content search is a local agent-server feature; cloud users never see
+// it. This dedicated axios instance resolves the *local* backend from the
+// registry on every call (so host/key edits made in the manage-backends
+// UI apply) and attaches the session key.
 
 const localContentSearchAxios = axios.create();
 
@@ -67,4 +64,22 @@ export async function searchConversationContent(
     },
   );
   return data;
+}
+
+/**
+ * Feature probe: the backend mounts /search/enabled only when the content
+ * search service is constructed (OH_CONTENT_SEARCH_ENABLED and local). A
+ * 404 or a transport error means the feature is off, so callers treat any
+ * failure as "unavailable" — the UI then hides the box instead of showing
+ * an error line.
+ */
+export async function isContentSearchEnabled(): Promise<boolean> {
+  try {
+    const { data } = await localContentSearchAxios.get<{ enabled: boolean }>(
+      "/api/conversations/search/enabled",
+    );
+    return data?.enabled === true;
+  } catch {
+    return false;
+  }
 }

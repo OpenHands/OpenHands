@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { ConversationContentSearchResults } from "./conversation-content-search-results";
+import { ConversationContentSearchResults } from "#/components/features/conversation-panel/conversation-content-search-results";
 import type { ContentSearchHit } from "#/api/conversation-service/content-search.api";
 
 // The real I18nKey enum is generated; the component uses a handful of

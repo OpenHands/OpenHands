@@ -1,5 +1,5 @@
 import { screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   setActiveSelection,
@@ -11,11 +11,15 @@ import {
   cloudBackend,
   setupConversationPanelTest,
 } from "./conversation-panel-test-utils";
-import { searchConversationContent } from "#/api/conversation-service/content-search.api";
+import {
+  isContentSearchEnabled,
+  searchConversationContent,
+} from "#/api/conversation-service/content-search.api";
 import type { Backend } from "#/api/backend-registry/types";
 
 vi.mock("#/api/conversation-service/content-search.api", () => ({
   searchConversationContent: vi.fn(),
+  isContentSearchEnabled: vi.fn(),
 }));
 
 const localBackend: Backend = {
@@ -25,6 +29,11 @@ const localBackend: Backend = {
   apiKey: "local-key",
   kind: "local",
 } as const;
+
+beforeEach(() => {
+  // The box only renders when the availability probe resolves true.
+  vi.mocked(isContentSearchEnabled).mockResolvedValue(true);
+});
 
 describe("ConversationPanel content search visibility", () => {
   setupConversationPanelTest();

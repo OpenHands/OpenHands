@@ -277,6 +277,12 @@ export const CONVERSATION_HANDLERS = [
 
   // Content search (local-only backend feature, disabled in mock mode by
   // default so the conversation panel matches a backend without the feature).
+  http.get("*/api/conversations/search/enabled", () => {
+    if (!MOCK_CONTENT_SEARCH_ENABLED) {
+      return passthrough();
+    }
+    return HttpResponse.json({ enabled: true });
+  }),
   http.get("*/api/conversations/search-content", async ({ request }) => {
     if (!MOCK_CONTENT_SEARCH_ENABLED) {
       return passthrough();

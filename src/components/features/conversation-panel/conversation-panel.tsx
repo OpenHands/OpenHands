@@ -104,7 +104,10 @@ export function ConversationPanel({
   const backendScopedPath = useBackendScopedPath();
   const prefetchConversation = usePrefetchUserConversation();
   const contentSearch = useConversationContentSearch();
-  const isContentSearchAvailable = activeBackend.kind === "local" && !compact;
+  // The hook probes /search/enabled: the box renders only when the local
+  // backend actually runs the search service, so deployments with the
+  // feature off see nothing (no box, no error line).
+  const isContentSearchAvailable = contentSearch.isAvailable && !compact;
   // Click-outside is only relevant in the legacy drawer mode where an
   // onClose handler is provided. When the panel is rendered inline (e.g.
   // as the always-visible conversation list pane), clicking outside should

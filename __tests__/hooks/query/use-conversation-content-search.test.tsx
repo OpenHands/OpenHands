@@ -1,9 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Backend } from "#/api/backend-registry/types";
-import { searchConversationContent } from "#/api/conversation-service/content-search.api";
+import {
+  searchConversationContent,
+  isContentSearchEnabled,
+} from "#/api/conversation-service/content-search.api";
 import { useConversationContentSearch } from "#/hooks/use-conversation-content-search";
 
 const activeBackend = vi.hoisted(() => ({ current: null as Backend | null }));
@@ -29,6 +32,7 @@ const cloud: Backend = {
 
 vi.mock("#/api/conversation-service/content-search.api", () => ({
   searchConversationContent: vi.fn(),
+  isContentSearchEnabled: vi.fn(),
 }));
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -46,9 +50,13 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 const searchMock = vi.mocked(searchConversationContent);
+const probeMock = vi.mocked(isContentSearchEnabled);
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  // The probe gates searching; default it to "on" so the search-focused
+  // tests exercise the query path. Individual tests override this.
+  probeMock.mockResolvedValue(true);
   vi.mocked(searchConversationContent).mockImplementation(
     vi.fn(async (query: string, _limit?: number) => ({
       results: [
@@ -114,6 +122,8 @@ it("never queries for cloud backends", async () => {
 
   expect(result.current.isSearching).toBe(false);
   expect(searchMock).not.toHaveBeenCalled();
+  // The probe is local-only too: a cloud backend never reaches the server.
+  expect(probeMock).not.toHaveBeenCalled();
 });
 
 it("whitespace-only input does not query", async () => {
@@ -190,4 +200,67 @@ it("maps the API response into the hook state", async () => {
   expect(result.current.capped).toBe(true);
   expect(result.current.isPending).toBe(false);
   expect(result.current.error).toBe(false);
+});
+
+describe("content search availability probe", () => {
+  it("stays hidden while the probe is in flight", () => {
+    let resolveProbe: (v: boolean) => void = () => {};
+    probeMock.mockReturnValue(
+      new Promise<boolean>((r) => {
+        resolveProbe = r;
+      }),
+    );
+    const { result } = renderHook(() => useConversationContentSearch(), {
+      wrapper,
+    });
+    expect(result.current.isAvailable).toBe(false);
+    act(() => resolveProbe(true));
+  });
+
+  it("reports unavailable and never searches when the probe says off", async () => {
+    vi.useFakeTimers();
+    probeMock.mockResolvedValue(false);
+    const { result } = renderHook(() => useConversationContentSearch(), {
+      wrapper,
+    });
+    await act(async () => {
+      await vi.runOnlyPendingTimersAsync();
+    });
+
+    expect(result.current.isAvailable).toBe(false);
+    expect(probeMock).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.setQuery("garage door"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    expect(searchMock).not.toHaveBeenCalled();
+    expect(result.current.isSearching).toBe(false);
+  });
+
+  it("becomes available after a successful probe", async () => {
+    vi.useFakeTimers();
+    probeMock.mockResolvedValue(true);
+    searchMock.mockResolvedValue({
+      results: [],
+      total: 0,
+      capped: false,
+    });
+    const { result } = renderHook(() => useConversationContentSearch(), {
+      wrapper,
+    });
+    await act(async () => {
+      await vi.runOnlyPendingTimersAsync();
+    });
+    expect(result.current.isAvailable).toBe(true);
+
+    act(() => {
+      result.current.setQuery("wombat");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    expect(searchMock).toHaveBeenCalledWith("wombat", 50);
+    expect(result.current.isSearching).toBe(true);
+  });
 });
