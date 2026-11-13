@@ -36,7 +36,8 @@
 #                          DigitalOcean web bridge on $PORT (off by default).
 #                          The public-mode server never hosts it.
 #   MARS_WEB_KEY         – Key the bridge's /mars/* routes require (defaults to
-#                          the session API key)
+#                          the session API key; a different key turns off
+#                          pairing another device)
 #   MARS_TOKEN           – DigitalOcean personal access token to sign the bridge
 #                          in with at start (needs MARS_WEB=1)
 #   AGENT_CANVAS_ALLOW_LAN_SESSION_KEY – Set to true only when the published
