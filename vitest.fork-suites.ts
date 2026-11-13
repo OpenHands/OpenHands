@@ -1,5 +1,7 @@
 // Native loader hooks and cross-realm identity assertions require ordinary forks.
 export const FORK_TEST_SUITES = [
+  "__tests__/api/option-service.test.ts",
+  "__tests__/themes/heroui-css.test.ts",
   "__tests__/components/backends/backend-form-modal.test.tsx",
   "__tests__/components/automations/automation-setup-panel.test.tsx",
   "__tests__/components/backends/add-backend-modal.test.tsx",
