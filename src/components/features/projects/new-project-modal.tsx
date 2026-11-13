@@ -20,6 +20,8 @@ import {
 import { cn } from "#/utils/utils";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { resolveNewConversationWorkspace } from "#/api/conversation-workspace";
+import { buildConversationLaunchPolicies } from "#/api/agent-server-adapter";
+import SettingsService from "#/api/settings-service/settings-service.api";
 
 interface NewProjectModalProps {
   onClose: () => void;
@@ -46,14 +48,23 @@ export function NewProjectModal({ onClose, onCreated }: NewProjectModalProps) {
     mutationFn: async () => {
       // The coordinator is a normal conversation, so it needs a workspace:
       // the one picked, or a new folder like any new conversation gets.
-      const { workingDir } = await resolveNewConversationWorkspace({
-        conversationId: uuidv4(),
-        workingDir: workspace || undefined,
-      });
+      // It also asks for approval as the user's settings say, like any chat;
+      // the workers it starts inherit that from it.
+      const [{ workingDir }, settings] = await Promise.all([
+        resolveNewConversationWorkspace({
+          conversationId: uuidv4(),
+          workingDir: workspace || undefined,
+        }),
+        SettingsService.getSettings(),
+      ]);
       return ProjectsService.createProject({
         name: name.trim(),
         description: goal.trim(),
-        coordinator: { working_dir: workingDir, title: name.trim() },
+        coordinator: {
+          working_dir: workingDir,
+          title: name.trim(),
+          ...buildConversationLaunchPolicies(settings),
+        },
         ...(workerProfileId
           ? { worker_agent_profile_id: workerProfileId }
           : {}),

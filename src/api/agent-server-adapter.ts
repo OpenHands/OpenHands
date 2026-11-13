@@ -865,6 +865,24 @@ function getConversationSecurityAnalyzer(conversationSettings: SettingsRecord) {
 }
 
 /**
+ * The user's approval and iteration settings, as a start request carries them.
+ * A conversation the server starts for Canvas, such as a project's
+ * coordinator, needs the same ones an ordinary chat gets; its workers then
+ * inherit them from the coordinator.
+ */
+export function buildConversationLaunchPolicies(settings: Settings) {
+  const conversationSettings = toRecord(settings.conversation_settings);
+  const securityAnalyzer =
+    getConversationSecurityAnalyzer(conversationSettings);
+  return {
+    confirmation_policy:
+      getConversationConfirmationPolicy(conversationSettings),
+    ...(securityAnalyzer ? { security_analyzer: securityAnalyzer } : {}),
+    max_iterations: resolveMaxIterations(conversationSettings.max_iterations),
+  };
+}
+
+/**
  * The Settings → Runtime options a start request carries. Only non-defaults
  * are sent, so servers without the fields see the request they always did.
  */

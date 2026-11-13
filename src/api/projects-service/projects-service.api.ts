@@ -79,6 +79,10 @@ export interface NewProjectCoordinator {
   working_dir: string;
   agent_profile_id?: string;
   title?: string;
+  /** As in a conversation start request; unset, the server never asks. */
+  confirmation_policy?: Record<string, unknown>;
+  security_analyzer?: Record<string, unknown>;
+  max_iterations?: number;
 }
 
 export interface CreateProjectInput {
