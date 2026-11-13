@@ -6,6 +6,9 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 
 export type { AcpAuthStatus };
 
+/** Re-probes within this window reuse the last result. */
+const AUTH_PROBE_STALE_MS = 5_000;
+
 /**
  * Probe whether the selected ACP provider is already authenticated on the
  * (local) agent-server — by a subscription login (Claude Pro/Max, ChatGPT,
@@ -53,9 +56,12 @@ interface UseAcpAuthStatusOptions {
  * unknown ``providerKey`` simply classifies as ``"unknown"``. The caller renders
  * this hook only for ACP providers, so any local backend is probeable.
  *
- * The probe runs a subprocess on the agent-server, so the result is cached for
- * the session (``staleTime: Infinity``, no refetch on focus/mount) — one probe
- * per provider per backend.
+ * Login state changes outside Canvas (``claude auth login`` in a terminal,
+ * switching accounts), so the result must not be cached for the session: it is
+ * re-probed whenever the window regains focus or a consuming surface mounts
+ * again, once the brief {@link AUTH_PROBE_STALE_MS} window has passed. That
+ * window only dedupes bursts (several consumers mounting together) of the
+ * cheap local status command.
  */
 export function useAcpAuthStatus(
   providerKey: string | null | undefined,
@@ -74,18 +80,14 @@ export function useAcpAuthStatus(
     queryKey: ["acp-auth-status", active.backend.id, providerKey],
     queryFn: () => probeAcpAuth(providerKey as string),
     enabled: queryEnabled,
-    // ``staleTime: Infinity`` = never re-probe while the result stays cached;
-    // ``gcTime`` then bounds that to ~15 min after the hook unmounts. So a
-    // user who dismisses and reopens onboarding >15 min later re-probes —
-    // intentional: it's a cheap one-off and their login state may have changed.
-    staleTime: Infinity,
-    gcTime: 1000 * 60 * 15,
+    staleTime: AUTH_PROBE_STALE_MS,
+    // Picks up a sign-in/out done in a terminal while Canvas was open.
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
     // ``probeAcpAuth`` always resolves (it catches internally → "unknown"), so
     // this is redundant today — kept as a guard so the probe still never retries
     // if that inner catch is ever removed.
     retry: false,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
   });
 
   return {
