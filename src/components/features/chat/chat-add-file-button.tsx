@@ -49,7 +49,7 @@ export function ChatAddFileButton({
   const { data: canConfigure } = useConversationConfigurationCapability(
     canConfigureConversation,
   );
-  const { canInstall, canListTools } = useConversationMcpCapabilities(
+  const { canInstall } = useConversationMcpCapabilities(
     canConfigureConversation,
   );
   const [configurationOpen, setConfigurationOpen] = React.useState(false);
@@ -154,7 +154,6 @@ export function ChatAddFileButton({
               conversationId={conversationId}
               isAcp={conversation?.agent_kind === "acp"}
               canInstallMcp={canInstall}
-              canListTools={canListTools}
               onClose={() => setConfigurationOpen(false)}
             />
           </React.Suspense>
@@ -164,7 +163,6 @@ export function ChatAddFileButton({
         isOpen={systemModalVisible}
         onClose={() => setSystemModalVisible(false)}
         systemMessage={systemMessage || null}
-        conversationId={conversationId ?? undefined}
       />
       {skillsModalVisible && (
         <SkillsModal onClose={() => setSkillsModalVisible(false)} />

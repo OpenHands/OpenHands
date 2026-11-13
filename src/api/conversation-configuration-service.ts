@@ -20,18 +20,6 @@ export interface ConversationConfigurationChangesResponse {
   ];
 }
 
-export interface ConversationTool {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  source: "conversation" | "global" | "builtin";
-  server_name?: string;
-}
-
-export interface ConversationToolsResponse {
-  tools: ConversationTool[];
-}
-
 export async function changeConversationConfiguration(
   conversationId: string,
   request: ConversationConfigurationChangesRequest,
@@ -41,19 +29,6 @@ export async function changeConversationConfiguration(
     return await client.post<ConversationConfigurationChangesResponse>(
       `/api/conversations/${encodeURIComponent(conversationId)}/configuration/changes`,
       request,
-    );
-  } finally {
-    client.close();
-  }
-}
-
-export async function getConversationTools(
-  conversationId: string,
-): Promise<ConversationToolsResponse> {
-  const client = new AgentServerClient(getAgentServerClientOptions());
-  try {
-    return await client.get<ConversationToolsResponse>(
-      `/api/conversations/${encodeURIComponent(conversationId)}/tools`,
     );
   } finally {
     client.close();

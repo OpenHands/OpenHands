@@ -7,7 +7,6 @@ import { CONVERSATION_CONFIGURATION_QUERY_KEYS } from "./query-keys";
 const CONFIGURATION_ADDITIONS_CAPABILITY =
   "conversation_configuration_additions_v1";
 const MCP_INSTALL_CAPABILITY = "conversation_mcp_install_v1";
-const LIVE_TOOLS_CAPABILITY = "conversation_live_tools_v1";
 
 function useConfigurationCapabilities(enabled: boolean) {
   const { backend } = useActiveBackend();
@@ -40,11 +39,6 @@ export function useConversationConfigurationCapability(enabled: boolean) {
 }
 
 export function useConversationMcpCapabilities(enabled: boolean) {
-  const { backend } = useActiveBackend();
-  const { data, isError } = useConfigurationCapabilities(enabled);
-  return {
-    canInstall: data?.includes(MCP_INSTALL_CAPABILITY) === true,
-    canListTools: data?.includes(LIVE_TOOLS_CAPABILITY) === true,
-    isLoading: enabled && backend.kind === "local" && !data && !isError,
-  };
+  const { data } = useConfigurationCapabilities(enabled);
+  return { canInstall: data?.includes(MCP_INSTALL_CAPABILITY) === true };
 }

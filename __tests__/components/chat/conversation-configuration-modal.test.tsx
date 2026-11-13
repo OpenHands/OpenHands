@@ -21,6 +21,11 @@ function savedServers() {
               args: ["-m", "fetch"],
               enabled: true,
             },
+            "my-time": {
+              command: "python3",
+              args: ["-m", "time"],
+              enabled: true,
+            },
             disabled: { url: "https://mcp.example.com", enabled: false },
           },
         },
@@ -125,7 +130,10 @@ describe("ConversationConfigurationModal", () => {
     expect(
       screen.queryByTestId("conversation-mcp-disabled"),
     ).not.toBeInTheDocument();
-    await user.click(within(item).getByRole("button"));
+    expect(screen.getByTestId("conversation-mcp-add-selected")).toBeDisabled();
+    await user.click(within(item).getByRole("checkbox"));
+    expect(requests).toHaveLength(0);
+    await user.click(screen.getByTestId("conversation-mcp-add-selected"));
 
     await waitFor(() =>
       expect(requests).toEqual([
@@ -136,6 +144,62 @@ describe("ConversationConfigurationModal", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       I18nKey.CHAT$CONVERSATION_CONFIGURATION_SUCCESS,
     );
+  });
+
+  it("attaches checked MCPs individually and retries only a failed attachment", async () => {
+    savedServers();
+    const user = userEvent.setup();
+    const refs: string[] = [];
+    server.use(
+      http.post(
+        "*/api/conversations/:id/configuration/changes",
+        async ({ request }) => {
+          const body = (await request.json()) as {
+            operations: { type: string; ref: string }[];
+          };
+          expect(body.operations).toHaveLength(1);
+          refs.push(body.operations[0].ref);
+          if (body.operations[0].ref === "my-time" && refs.length === 2) {
+            return HttpResponse.json({ detail: "Try again" }, { status: 409 });
+          }
+          return HttpResponse.json({ applied: body.operations });
+        },
+      ),
+    );
+
+    renderWithProviders(
+      <ConversationConfigurationModal
+        conversationId={conversationId}
+        isAcp={false}
+        onClose={() => {}}
+      />,
+    );
+    await user.click(
+      within(await screen.findByTestId("conversation-mcp-my-fetch")).getByRole(
+        "checkbox",
+      ),
+    );
+    await user.click(
+      within(screen.getByTestId("conversation-mcp-my-time")).getByRole(
+        "checkbox",
+      ),
+    );
+    expect(refs).toEqual([]);
+    await user.click(screen.getByTestId("conversation-mcp-add-selected"));
+    await waitFor(() => expect(refs).toEqual(["my-fetch", "my-time"]));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      I18nKey.CHAT$CONVERSATION_CONFIGURATION_FAILED,
+    );
+    expect(
+      within(screen.getByTestId("conversation-mcp-my-fetch")).getByRole(
+        "checkbox",
+      ),
+    ).toBeDisabled();
+    await user.click(screen.getByTestId("conversation-mcp-add-selected"));
+    await waitFor(() =>
+      expect(refs).toEqual(["my-fetch", "my-time", "my-time"]),
+    );
+    expect(screen.getByTestId("conversation-mcp-add-selected")).toBeDisabled();
   });
 
   it("installs a marketplace server only into the current conversation without writing settings", async () => {
@@ -174,7 +238,13 @@ describe("ConversationConfigurationModal", () => {
         onClose={() => {}}
       />,
     );
-    await user.click(await screen.findByTestId("mcp-marketplace-card-slack"));
+    await user.click(
+      within(await screen.findByTestId("mcp-marketplace-card-slack")).getByRole(
+        "checkbox",
+      ),
+    );
+    expect(requests).toHaveLength(0);
+    await user.click(screen.getByTestId("conversation-mcp-install-selected"));
     await user.type(
       screen.getByTestId("mcp-install-field-SLACK_BOT_TOKEN"),
       "scoped-token",
@@ -259,33 +329,20 @@ describe("ConversationConfigurationModal", () => {
     expect(settingsWrites).toBe(0);
   });
 
-  it("recognizes already installed conversation MCP names after reopening", async () => {
+  it("installs multiple selected marketplace MCPs with one operation per request", async () => {
     const user = userEvent.setup();
-    let operationName = "";
+    const requests: { operations: { type: string; name: string }[] }[] = [];
     server.use(
-      http.get("*/api/conversations/:id/tools", () =>
-        HttpResponse.json({
-          tools: [
-            {
-              name: "ephemeral_search",
-              description: "Search",
-              parameters: {},
-              source: "conversation",
-              server_name: "ephemeral",
-            },
-          ],
-        }),
+      http.post("*/api/mcp/test", () =>
+        HttpResponse.json({ ok: true, tools: [] }),
       ),
       http.post(
         "*/api/conversations/:id/configuration/changes",
-        async ({ request }) => {
-          const body = (await request.json()) as {
-            operations: { name: string }[];
-          };
-          operationName = body.operations[0].name;
-          return HttpResponse.json({
-            applied: [{ type: "mcp.install", name: operationName }],
-          });
+        async ({ request, params }) => {
+          expect(params.id).toBe(conversationId);
+          const body = (await request.json()) as (typeof requests)[number];
+          requests.push(body);
+          return HttpResponse.json({ applied: body.operations });
         },
       ),
     );
@@ -294,21 +351,35 @@ describe("ConversationConfigurationModal", () => {
         conversationId={conversationId}
         isAcp={false}
         canInstallMcp
-        canListTools
         onClose={() => {}}
       />,
     );
     await user.click(
-      screen.getByRole("button", { name: I18nKey.MCP$ADD_CUSTOM }),
+      within(await screen.findByTestId("mcp-marketplace-card-fetch")).getByRole(
+        "checkbox",
+      ),
     );
-    await user.type(screen.getByTestId("server-name-input"), "ephemeral");
-    await user.type(
-      screen.getByTestId("url-input"),
-      "https://mcp.example.com/api",
+    await user.click(
+      within(screen.getByTestId("mcp-marketplace-card-time")).getByRole(
+        "checkbox",
+      ),
     );
-    await user.click(screen.getByTestId("submit-button"));
-
-    await waitFor(() => expect(operationName).toBe("ephemeral_1"));
+    expect(requests).toEqual([]);
+    await user.click(screen.getByTestId("conversation-mcp-install-selected"));
+    await user.click(await screen.findByTestId("mcp-install-submit"));
+    await waitFor(() => expect(requests).toHaveLength(1));
+    await waitFor(() =>
+      expect(screen.getByTestId("mcp-install-modal")).toHaveTextContent("Time"),
+    );
+    await user.click(screen.getByTestId("mcp-install-submit"));
+    await waitFor(() => expect(requests).toHaveLength(2));
+    expect(requests.map(({ operations }) => operations)).toMatchObject([
+      [{ type: "mcp.install", name: "fetch" }],
+      [{ type: "mcp.install", name: "time" }],
+    ]);
+    expect(
+      await screen.findByTestId("conversation-mcp-install-selected"),
+    ).toBeDisabled();
   });
 
   it("keeps secret entry after an access error and permits retry without displaying the value", async () => {

@@ -1,5 +1,4 @@
 import React from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, EyeOff, Puzzle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -8,7 +7,6 @@ import {
 } from "@openhands/extensions/integrations";
 import {
   changeConversationConfiguration,
-  getConversationTools,
   type ConversationConfigurationOperation,
 } from "#/api/conversation-configuration-service";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -26,8 +24,6 @@ import { ModalCloseButton } from "#/components/shared/modals/modal-close-button"
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { useSettings } from "#/hooks/query/use-settings";
 import McpService from "#/api/mcp-service/mcp-service.api";
-import { useActiveBackend } from "#/contexts/active-backend-context";
-import { CONVERSATION_CONFIGURATION_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { I18nKey } from "#/i18n/declaration";
 import type { MCPServerConfig } from "#/types/mcp-server";
 import {
@@ -46,7 +42,6 @@ interface ConversationConfigurationModalProps {
   conversationId: string;
   isAcp: boolean;
   canInstallMcp?: boolean;
-  canListTools?: boolean;
   onClose: () => void;
 }
 
@@ -61,13 +56,14 @@ function SavedMcpSection({
   attached,
   canInstallMcp,
 }: {
-  onAttach: (ref: string) => void;
+  onAttach: (refs: string[]) => void;
   pending: boolean;
   attached: Set<string>;
   canInstallMcp: boolean;
 }) {
   const { t } = useTranslation("openhands");
   const { data: settings, isLoading, isError, refetch } = useSettings();
+  const [selected, setSelected] = React.useState(() => new Set<string>());
   const catalog = React.useMemo(
     () => getMcpMarketplaceCatalog(INTEGRATION_CATALOG),
     [],
@@ -75,6 +71,18 @@ function SavedMcpSection({
   const servers = flattenMcpConfig(settings?.mcp_config ?? {}).filter(
     (server) => server.enabled !== false,
   );
+  const pendingRefs = servers
+    .filter((server) => selected.has(server.id) && !attached.has(server.id))
+    .map((server) => server.id);
+
+  const toggle = (ref: string, checked: boolean) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (checked) next.add(ref);
+      else next.delete(ref);
+      return next;
+    });
+  };
 
   return (
     <section
@@ -99,39 +107,57 @@ function SavedMcpSection({
           {t(I18nKey.MCP$INSTALLED_EMPTY_TITLE)}
         </p>
       ) : (
-        <ul className="max-h-44 space-y-2 overflow-y-auto">
-          {servers.map((server) => {
-            const entry = findCatalogEntryForServer(server, catalog);
-            const title = getInstalledServerTitle(server, entry);
-            return (
-              <li
-                key={server.id}
-                data-testid={`conversation-mcp-${server.id}`}
-                className="flex items-center gap-3 rounded-lg border border-border p-2"
-              >
-                <McpLogoBadge
-                  entry={entry}
-                  size="base"
-                  fallback={<Puzzle size={16} />}
-                />
-                <span className="min-w-0 flex-1 truncate text-sm" title={title}>
-                  {title}
-                </span>
-                <BrandButton
-                  variant="secondary"
-                  type="button"
-                  isDisabled={pending || attached.has(server.id)}
-                  ariaLabel={t(I18nKey.MCP$ATTACH_TO_CONVERSATION, {
-                    name: title,
-                  })}
-                  onClick={() => onAttach(server.id)}
+        <>
+          <ul className="max-h-44 space-y-2 overflow-y-auto">
+            {servers.map((server) => {
+              const entry = findCatalogEntryForServer(server, catalog);
+              const title = getInstalledServerTitle(server, entry);
+              return (
+                <li
+                  key={server.id}
+                  data-testid={`conversation-mcp-${server.id}`}
                 >
-                  {t(I18nKey.BUTTON$ADD)}
-                </BrandButton>
-              </li>
-            );
-          })}
-        </ul>
+                  <label className="flex items-center gap-3 rounded-lg border border-border p-2">
+                    <input
+                      type="checkbox"
+                      className="size-4 shrink-0 accent-primary"
+                      checked={
+                        attached.has(server.id) || selected.has(server.id)
+                      }
+                      disabled={pending || attached.has(server.id)}
+                      onChange={(event) =>
+                        toggle(server.id, event.target.checked)
+                      }
+                      aria-label={t(I18nKey.MCP$ATTACH_TO_CONVERSATION, {
+                        name: title,
+                      })}
+                    />
+                    <McpLogoBadge
+                      entry={entry}
+                      size="base"
+                      fallback={<Puzzle size={16} />}
+                    />
+                    <span
+                      className="min-w-0 flex-1 truncate text-sm"
+                      title={title}
+                    >
+                      {title}
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+          <BrandButton
+            testId="conversation-mcp-add-selected"
+            variant="secondary"
+            type="button"
+            isDisabled={pending || pendingRefs.length === 0}
+            onClick={() => onAttach(pendingRefs)}
+          >
+            {t(I18nKey.BUTTON$ADD)} ({pendingRefs.length})
+          </BrandButton>
+        </>
       )}
       {!canInstallMcp && (
         <NavigationLink
@@ -151,15 +177,16 @@ export function ConversationConfigurationModal({
   conversationId,
   isAcp,
   canInstallMcp = false,
-  canListTools = false,
   onClose,
 }: ConversationConfigurationModalProps) {
   const { t } = useTranslation("openhands");
-  const queryClient = useQueryClient();
-  const { backend } = useActiveBackend();
   const { data: settings } = useSettings();
-  const [installEntry, setInstallEntry] =
-    React.useState<MarketplaceEntry | null>(null);
+  const [installQueue, setInstallQueue] = React.useState<MarketplaceEntry[]>(
+    [],
+  );
+  const [selectedMarketplace, setSelectedMarketplace] = React.useState(
+    () => new Set<string>(),
+  );
   const [editingCustom, setEditingCustom] = React.useState(false);
   const [marketplaceSearch, setMarketplaceSearch] = React.useState("");
   const [name, setName] = React.useState("");
@@ -168,25 +195,10 @@ export function ConversationConfigurationModal({
   const [pending, setPending] = React.useState(false);
   const [result, setResult] = React.useState<AppliedChange | null>(null);
   const [attached, setAttached] = React.useState(() => new Set<string>());
-  const { data: liveTools } = useQuery({
-    queryKey: CONVERSATION_CONFIGURATION_QUERY_KEYS.tools(
-      backend.id,
-      backend.connectionRevision,
-      conversationId,
-    ),
-    queryFn: () => getConversationTools(conversationId),
-    enabled: !isAcp && canListTools,
-    retry: false,
-    meta: { disableToast: true },
-  });
-  const attachedNames = new Set([
-    ...attached,
-    ...(liveTools?.tools.flatMap((tool) =>
-      tool.source === "conversation" && tool.server_name
-        ? [tool.server_name]
-        : [],
-    ) ?? []),
-  ]);
+  const catalog = React.useMemo(
+    () => getMcpMarketplaceCatalog(INTEGRATION_CATALOG),
+    [],
+  );
   const valueId = React.useId();
 
   const applyChange = async (
@@ -209,13 +221,6 @@ export function ConversationConfigurationModal({
             operation.type === "mcp.attach" ? operation.ref : operation.name,
           ),
         );
-        void queryClient.invalidateQueries({
-          queryKey: CONVERSATION_CONFIGURATION_QUERY_KEYS.tools(
-            backend.id,
-            backend.connectionRevision,
-            conversationId,
-          ),
-        });
       }
       setResult({ type: "success", name: label });
       return true;
@@ -227,6 +232,12 @@ export function ConversationConfigurationModal({
     }
   };
 
+  const attachSelected = async (refs: string[]) => {
+    for (const ref of refs) {
+      if (!(await applyChange({ type: "mcp.attach", ref }, ref))) break;
+    }
+  };
+
   const installMcp = async (server: MCPServerConfig) => {
     const preferred = allocateMcpSettingsKey(
       settings?.mcp_config ?? {},
@@ -234,7 +245,7 @@ export function ConversationConfigurationModal({
       server.type,
     );
     let name = preferred;
-    for (let suffix = 1; attachedNames.has(name); suffix += 1) {
+    for (let suffix = 1; attached.has(name); suffix += 1) {
       name = `${preferred}_${suffix}`;
     }
     const installed = await applyChange(
@@ -280,13 +291,22 @@ export function ConversationConfigurationModal({
     );
   };
 
-  if (installEntry) {
+  if (installQueue.length > 0) {
+    const entry = installQueue[0];
     return (
       <InstallServerModal
-        entry={installEntry}
+        key={entry.id}
+        entry={entry}
         existingServers={[]}
         onInstall={installMcp}
-        onClose={() => setInstallEntry(null)}
+        onSuccess={() =>
+          setSelectedMarketplace((current) => {
+            const next = new Set(current);
+            next.delete(entry.id);
+            return next;
+          })
+        }
+        onClose={() => setInstallQueue((current) => current.slice(1))}
       />
     );
   }
@@ -372,11 +392,9 @@ export function ConversationConfigurationModal({
         </form>
         {!isAcp && (
           <SavedMcpSection
-            onAttach={(ref) =>
-              void applyChange({ type: "mcp.attach", ref }, ref)
-            }
+            onAttach={(refs) => void attachSelected(refs)}
             pending={pending}
-            attached={attachedNames}
+            attached={attached}
             canInstallMcp={canInstallMcp}
           />
         )}
@@ -402,18 +420,44 @@ export function ConversationConfigurationModal({
                 <div className="max-h-64 overflow-y-auto">
                   <MarketplaceSection
                     query={marketplaceSearch}
-                    onSelect={setInstallEntry}
-                    onAdd={setInstallEntry}
+                    onSelect={(entry) => setInstallQueue([entry])}
+                    onAdd={(entry) => setInstallQueue([entry])}
+                    selectedEntryIds={selectedMarketplace}
+                    onToggleEntry={(entry, checked) =>
+                      setSelectedMarketplace((current) => {
+                        const next = new Set(current);
+                        if (checked) next.add(entry.id);
+                        else next.delete(entry.id);
+                        return next;
+                      })
+                    }
                   />
                 </div>
-                <BrandButton
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setEditingCustom(true)}
-                  isDisabled={pending}
-                >
-                  {t(I18nKey.MCP$ADD_CUSTOM)}
-                </BrandButton>
+                <div className="flex flex-wrap gap-2">
+                  <BrandButton
+                    testId="conversation-mcp-install-selected"
+                    type="button"
+                    variant="primary"
+                    isDisabled={pending || selectedMarketplace.size === 0}
+                    onClick={() =>
+                      setInstallQueue(
+                        catalog.filter((entry) =>
+                          selectedMarketplace.has(entry.id),
+                        ),
+                      )
+                    }
+                  >
+                    {t(I18nKey.MCP$INSTALL_BUTTON)} ({selectedMarketplace.size})
+                  </BrandButton>
+                  <BrandButton
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setEditingCustom(true)}
+                    isDisabled={pending}
+                  >
+                    {t(I18nKey.MCP$ADD_CUSTOM)}
+                  </BrandButton>
+                </div>
               </>
             )}
           </section>
