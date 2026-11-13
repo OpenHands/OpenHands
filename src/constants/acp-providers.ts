@@ -1,5 +1,6 @@
 import {
   getAcpProvider as getClientAcpProvider,
+  type ACPEffortOption,
   type ACPModelInfo,
 } from "@openhands/typescript-client";
 import type { BackendKind } from "#/api/backend-registry/types";
@@ -516,6 +517,46 @@ export function toAcpModelOptions(
  * the save (the UI shouldn't surface unknown options, but the defensive
  * path keeps a buggy preset list from corrupting settings).
  */
+export interface ACPEffortChoice {
+  /** Exact effort value sent as ``acp_effort``. */
+  value: string;
+  /** The label the agent gave the level. */
+  label: string;
+}
+
+function fallbackEffortLabel(effort: string): string {
+  return effort.charAt(0).toUpperCase() + effort.slice(1);
+}
+
+export function toAcpEffortChoices(
+  options: readonly ACPEffortOption[] | null | undefined,
+): ACPEffortChoice[] {
+  return (options ?? [])
+    .filter(({ value }) => value)
+    .map(({ value, name }) => ({
+      value,
+      label: name?.trim() || fallbackEffortLabel(value),
+    }));
+}
+
+export function labelForAcpEffort(
+  effort: string | null | undefined,
+  choices: readonly ACPEffortChoice[],
+): string | null {
+  if (!effort) return null;
+  return (
+    choices.find(({ value }) => value === effort)?.label ??
+    fallbackEffortLabel(effort)
+  );
+}
+
+export function acpEffortOf(
+  profile: { acp_effort?: unknown } | null | undefined,
+): string | null {
+  const effort = profile?.acp_effort;
+  return typeof effort === "string" && effort ? effort : null;
+}
+
 export function buildAcpAgentSettingsDiff(
   providerKey: string,
 ): Record<string, unknown> | null {
