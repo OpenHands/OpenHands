@@ -136,6 +136,17 @@ export const renderedItemKey = (item: RenderedItem): string => {
 };
 
 /**
+ * True for the rows that render a tool step: a collapsed `EventGroup` and a
+ * hoisted `thought`. Agent text that follows one of these trims its top margin
+ * so the tool row and the reply sit evenly; the message list applies that trim
+ * to the following row (see `Messages`), because each row now has its own
+ * wrapper element and the `<article>` is no longer a DOM sibling of the tool
+ * row for the `[&+article]` selector to match.
+ */
+export const isToolRowItem = (item: RenderedItem): boolean =>
+  item.kind === "group" || item.kind === "thought";
+
+/**
  * Walk a list of UI events and bucket consecutive groupable events into
  * `group` items. Anything that breaks the run, or runs shorter than
  * `EVENT_GROUP_MIN_SIZE`, is emitted as `single` items so they keep rendering

@@ -7,6 +7,7 @@ import { completeSecretRequest } from "#/services/secret-request";
 import {
   secretRequestMutationKey,
   type SecretRequest,
+  useSecretRequestDraftStore,
   useSecretRequestStore,
 } from "#/stores/secret-request-store";
 
@@ -28,8 +29,8 @@ export function usePendingSecretRequests(): SecretRequest[] {
  */
 export function SecretRequestCard({ request }: { request: SecretRequest }) {
   const { t } = useTranslation("openhands");
-  const draft = useSecretRequestStore((s) => s.drafts[request.toolCallId]);
-  const setDraft = useSecretRequestStore((s) => s.setDraft);
+  const draft = useSecretRequestDraftStore((s) => s.drafts[request.toolCallId]);
+  const setDraft = useSecretRequestDraftStore((s) => s.setDraft);
 
   return (
     <section

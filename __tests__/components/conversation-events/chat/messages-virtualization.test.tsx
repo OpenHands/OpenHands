@@ -1558,4 +1558,70 @@ describe("Messages virtualization", () => {
       agentState.current = AgentState.LOADING;
     }
   });
+
+  it("trims the top margin of agent text that follows a tool row, below the threshold", () => {
+    // Each row now has its own wrapper, so the `<article>` is no longer a DOM
+    // sibling of the tool row the way `EventGroup`'s `[&+article]:mt-2` (and
+    // the standalone tool row class) assumed. The list must pass the trim to
+    // the following row itself, or agent text after a group keeps its default
+    // `mt-6` and the spacing grows from 8px to 24px.
+    const bashAction = (id: string): ActionEvent<ExecuteBashAction> => ({
+      id,
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      thought: [],
+      thinking_blocks: [],
+      action: {
+        kind: "ExecuteBashAction",
+        command: `echo ${id}`,
+        is_input: false,
+        timeout: null,
+        reset: false,
+      },
+      tool_name: "execute_bash",
+      tool_call_id: `call_${id}`,
+      tool_call: {
+        id: `call_${id}`,
+        type: "function",
+        function: {
+          name: "execute_bash",
+          arguments: JSON.stringify({ command: `echo ${id}` }),
+        },
+      },
+      llm_response_id: `response_${id}`,
+      security_risk: SecurityRisk.UNKNOWN,
+    });
+    const agentMessage = (id: string): OpenHandsEvent => ({
+      id,
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      llm_message: {
+        role: "assistant",
+        content: [{ type: "text", text: `Reply ${id}` }],
+      },
+      activated_skills: [],
+      extended_content: [],
+    });
+
+    // Two tool steps fold into a group; the agent reply after it is the row
+    // that must trim. Short enough to stay in the plain list.
+    const events: OpenHandsEvent[] = [
+      createUserMessageEvent("message-0"),
+      bashAction("a1"),
+      bashAction("a2"),
+      agentMessage("reply"),
+    ];
+    renderMessages(events, false);
+
+    const replyRow = document.querySelector('[data-row-key^="single-reply"]');
+    const groupRow = document.querySelector('[data-row-key^="group-"]');
+    expect(groupRow).not.toBeNull();
+    expect(replyRow?.className).toContain("[&>article]:mt-2");
+
+    // A row that does not follow a tool row keeps the default spacing.
+    const userRow = document.querySelector(
+      '[data-row-key^="single-message-0"]',
+    );
+    expect(userRow?.className).not.toContain("[&>article]:mt-2");
+  });
 });

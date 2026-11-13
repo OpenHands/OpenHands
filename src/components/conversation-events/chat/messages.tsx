@@ -26,6 +26,7 @@ import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
 import {
   getGroupKey,
   groupEvents,
+  isToolRowItem,
   renderedItemKey,
   RenderedItem,
 } from "./group-events";
@@ -42,6 +43,7 @@ import {
   EventExpansionContext,
   RowExpansionContext,
 } from "#/components/features/chat/row-expansion-context";
+import { cn } from "#/utils/utils";
 import { useMessageExpansionStore } from "#/stores/message-expansion-store";
 import {
   applyBufferedScrollCorrection,
@@ -154,8 +156,12 @@ const getLastEvent = (events: OpenHandsEvent[]) => events.at(-1);
  * open flag, its `detailsOnly`, and the stable `setRowOpen` — keeps it stable
  * across those renders. The provider is keyed by step key, so the memo is
  * per row.
+ *
+ * The component itself is deliberately not wrapped in `React.memo`: `children`
+ * is a fresh element on every `Messages` render, so the props compare would
+ * always fail. The `useMemo` above is what keeps the rows from re-rendering.
  */
-const StepDisclosureProvider = React.memo(function StepDisclosureProvider({
+function StepDisclosureProvider({
   stepKey,
   open,
   detailsOnly,
@@ -181,7 +187,7 @@ const StepDisclosureProvider = React.memo(function StepDisclosureProvider({
       {children}
     </StepDisclosureContext.Provider>
   );
-});
+}
 
 export const Messages: React.FC<MessagesProps> = React.memo(
   ({
@@ -1037,6 +1043,25 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       flushScrollCorrection();
     }, [scrollParent, totalSize]);
 
+    // Cancel a correction frame still scheduled when the list unmounts. The
+    // scroll container outlives `Messages` (it is owned by the chat interface),
+    // so a callback that fires after unmount would write `scrollTop` on the live
+    // container for rows that no longer exist. `clearPendingScrollCorrection`
+    // cancels the frame for the "load older" restore; this covers every other
+    // unmount (a conversation switch, the empty-state skeleton).
+    React.useEffect(
+      () => () => {
+        if (
+          scrollCorrectionFrameRef.current !== null &&
+          typeof cancelAnimationFrame !== "undefined"
+        ) {
+          cancelAnimationFrame(scrollCorrectionFrameRef.current);
+          scrollCorrectionFrameRef.current = null;
+        }
+      },
+      [],
+    );
+
     // A manual scroll means the reader has taken over. A correction buffered
     // from a resize in the same frame would fight the gesture, so drop it. The
     // clear only ever removes a *pending* correction; our own writes run
@@ -1097,10 +1122,24 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             the scroll column's own flex gap and the column's bottom padding.
           */}
           <div ref={plainListRef} className="contents">
-            {renderedItems.map((item) => {
+            {renderedItems.map((item, index) => {
               const itemKey = renderedItemKey(item);
+              // Agent text trims its top margin when it follows a tool row, the
+              // way `EventGroup`'s own `[&+article]:mt-2` did when rows were
+              // direct children of the scroll column. Each row now has its own
+              // wrapper, so the `<article>` is no longer a sibling of the tool
+              // row and the trim is applied from the wrapper instead.
+              const trimsFollowingText =
+                index > 0 && isToolRowItem(renderedItems[index - 1]);
               return (
-                <div key={itemKey} data-row-key={itemKey} className="contents">
+                <div
+                  key={itemKey}
+                  data-row-key={itemKey}
+                  className={cn(
+                    "contents",
+                    trimsFollowingText && "[&>article]:mt-2",
+                  )}
+                >
                   {persistExpansion ? (
                     <RowExpansionContext.Provider value={itemKey}>
                       {renderItem(item)}
@@ -1135,6 +1174,12 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         >
           {rowVirtualizer.getVirtualItems().map((virtualRow) => {
             const item = renderedItems[virtualRow.index];
+            // See the plain list: agent text trims its top margin when it
+            // follows a tool row, applied here because the row wrapper breaks
+            // the sibling relationship `[&+article]` relied on.
+            const trimsFollowingText =
+              virtualRow.index > 0 &&
+              isToolRowItem(renderedItems[virtualRow.index - 1]);
             return (
               <div
                 key={virtualRow.key}
@@ -1153,7 +1198,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 // from the scroll column's own flex gap (its row wrapper is
                 // `display: contents`, so a row's siblings are spaced by the
                 // column).
-                className="flex flex-col gap-2"
+                className={cn(
+                  "flex flex-col gap-2",
+                  trimsFollowingText && "[&>article]:mt-2",
+                )}
                 style={{
                   position: "absolute",
                   top: 0,

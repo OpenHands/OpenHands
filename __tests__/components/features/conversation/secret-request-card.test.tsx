@@ -9,6 +9,7 @@ import {
 } from "#/components/features/conversation/secret-request-card";
 import {
   type SecretRequest,
+  useSecretRequestDraftStore,
   useSecretRequestStore,
 } from "#/stores/secret-request-store";
 import { renderWithProviders } from "../../../../test-utils";
@@ -43,7 +44,8 @@ function RemountableSecretRequestCards({ remountKey }: { remountKey: number }) {
 }
 
 const renderCards = async (requests: SecretRequest[] = [request]) => {
-  useSecretRequestStore.setState({ requests, drafts: {} });
+  useSecretRequestStore.setState({ requests });
+  useSecretRequestDraftStore.setState({ drafts: {} });
   const result = renderWithProviders(<PendingSecretRequestCards />);
   if (requests.some((r) => r.conversationId === request.conversationId)) {
     await screen.findAllByTestId("secret-request-card");
@@ -151,14 +153,14 @@ describe("SecretRequestCard", () => {
     const { unmount } = await renderCards();
 
     await user.type(screen.getByTestId("value-input"), "ghp_example");
-    expect(useSecretRequestStore.getState().drafts[request.toolCallId]).toEqual(
-      {
-        name: "GITHUB_TOKEN",
-        description: "",
-        value: "ghp_example",
-        showValue: false,
-      },
-    );
+    expect(
+      useSecretRequestDraftStore.getState().drafts[request.toolCallId],
+    ).toEqual({
+      name: "GITHUB_TOKEN",
+      description: "",
+      value: "ghp_example",
+      showValue: false,
+    });
 
     // Simulate the remount by tearing the tree down and mounting a fresh one
     // from the same store state.
@@ -176,7 +178,7 @@ describe("SecretRequestCard", () => {
     await user.click(screen.getByTestId("cancel-button"));
 
     expect(
-      useSecretRequestStore.getState().drafts[request.toolCallId],
+      useSecretRequestDraftStore.getState().drafts[request.toolCallId],
     ).toBeUndefined();
   });
 
@@ -195,7 +197,8 @@ describe("SecretRequestCard", () => {
             resolveCreate = resolve;
           }),
       );
-    useSecretRequestStore.setState({ requests: [request], drafts: {} });
+    useSecretRequestStore.setState({ requests: [request] });
+    useSecretRequestDraftStore.setState({ drafts: {} });
     // A client created once and kept across the remount: the mutation cache it
     // holds is what the remounted form reads the in-flight state from.
     const queryClient = new QueryClient({
