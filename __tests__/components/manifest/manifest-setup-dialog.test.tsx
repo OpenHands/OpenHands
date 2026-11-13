@@ -5,6 +5,9 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { SetupDialog } from "#/components/features/manifest/manifest-setup-dialog";
+import type { useNativeGitIntegrations } from "#/hooks/query/use-native-git-integrations";
+import { SUPER_ADMIN_SETUP_STEP_EVENT } from "#/components/features/setup-guide/super-admin-setup-step-event";
+import { I18nKey } from "#/i18n/declaration";
 import type { SetupPrerequisitesResult } from "#/hooks/query/use-manifest-prerequisites";
 import type { DeploymentCapabilities, SetupEntry } from "#/manifests/types";
 import {
@@ -24,6 +27,8 @@ const mocks = vi.hoisted(() => ({
   prerequisites: vi.fn(),
   capabilities: vi.fn(),
   llmProfiles: vi.fn(),
+  nativeIntegrations: vi.fn(),
+  instanceConfig: vi.fn(),
   missingCreateEndpoints: vi.fn<(entry: SetupEntry) => string[]>(() => []),
   tracking: {
     trackAutomationSetupOpened: vi.fn(),
@@ -47,6 +52,11 @@ vi.mock("#/contexts/active-backend-context", () => ({
   }),
 }));
 
+// External deployment configuration is controlled; the availability hook runs for real.
+vi.mock("#/hooks/query/use-cloud-integrations-config", () => ({
+  useCloudIntegrationsConfig: () => mocks.instanceConfig(),
+}));
+
 vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
   useSetupCapabilities: () => mocks.capabilities(),
 }));
@@ -65,6 +75,10 @@ vi.mock("#/hooks/query/use-agent-profiles", () => ({
 vi.mock("#/hooks/query/use-llm-profiles", () => ({
   useLlmProfiles: (options: { enabled?: boolean } = {}) =>
     mocks.llmProfiles(options),
+}));
+
+vi.mock("#/hooks/query/use-native-git-integrations", () => ({
+  useNativeGitIntegrations: () => mocks.nativeIntegrations(),
 }));
 
 // Which endpoints an entry cannot be created without is read off the published
@@ -95,23 +109,59 @@ const NOTHING_TO_CONNECT: SetupPrerequisitesResult = {
   isLoading: false,
 };
 
+type NativeGitIntegrations = ReturnType<typeof useNativeGitIntegrations>;
+
+/** A backend with no native git integration to use: local, or cloud with none. */
+const NO_NATIVE_INTEGRATIONS: NativeGitIntegrations = {
+  getNativeIntegration: () => null,
+  builtInIntegrations: null,
+  isJiraEnabled: false,
+  isLinearEnabled: false,
+  isSlackEnabled: false,
+  deploymentMode: null,
+  isLoading: false,
+};
+
+/** An Enterprise instance offering GitHub natively, connected when `connected`. */
+function selfHostedGithub(connected: boolean): NativeGitIntegrations {
+  return {
+    ...NO_NATIVE_INTEGRATIONS,
+    deploymentMode: "self_hosted",
+    getNativeIntegration: (entryId) =>
+      entryId === "github"
+        ? { provider: "github", isConnected: connected }
+        : null,
+  };
+}
+
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    parse: vi.fn().mockResolvedValue({ diagramType: "flowchart" }),
+    render: vi.fn().mockResolvedValue({
+      svg: '<svg data-testid="entry-diagram-svg"></svg>',
+    }),
+  },
+}));
+
 const ENTRY: SetupEntry = createSetupEntry();
+const ENTRY_DIAGRAM = "flowchart TD\n  A --> B";
 const CUSTOM_AUTOMATION_ENTRY = AUTOMATION_CATALOG.find(
   (entry) => entry.id === "custom-automation",
 ) as SetupEntry;
 
 function renderDialog(entry: SetupEntry = ENTRY) {
   const user = userEvent.setup();
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const view = () => (
+    <QueryClientProvider client={client}>
       <SetupDialog entry={entry} onClose={vi.fn()} />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return { user };
+  const rendered = render(view());
+  return { user, rerender: () => rendered.rerender(view()) };
 }
 
 /** Answer the two required fields the entry ships without a default. */
@@ -128,7 +178,9 @@ beforeEach(() => {
   // clearAllMocks resets calls, not implementations, so the one case that
   // stubs a manifest without the bundle endpoints would leak into the rest.
   mocks.missingCreateEndpoints.mockReturnValue([]);
+  mocks.instanceConfig.mockReturnValue({ data: undefined });
   mocks.prerequisites.mockReturnValue(NOTHING_TO_CONNECT);
+  mocks.nativeIntegrations.mockReturnValue(NO_NATIVE_INTEGRATIONS);
   mocks.capabilities.mockReturnValue({
     capabilities: null,
     supported: "unknown",
@@ -173,6 +225,38 @@ const BUNDLE_ENTRY: SetupEntry = createSetupEntry({
     },
   }),
 });
+
+/** A bundle naming the secret that holds its GitHub token, as the GitHub entries do. */
+const SECRET_NAME_BUNDLE_ENTRY: SetupEntry = (() => {
+  const { form } = createSetup();
+  return createSetupEntry({
+    setup: createSetup({
+      prompt: undefined,
+      form: {
+        ...form,
+        args: {
+          ...form.args,
+          githubTokenSecret: {
+            type: "text",
+            label: "GitHub token secret",
+            help: "Name of the secret holding the GitHub token.",
+            default: "GITHUB_PERSONAL_ACCESS_TOKEN",
+            required: true,
+          },
+        },
+      },
+      bundle: {
+        version: "1.0.0",
+        entrypoint: "python3 main.py",
+        files: { "main.py": "skills/widget-monitor/scripts/main.py" },
+        config: {
+          repos: ["{{form.repository}}"],
+          github_token_secret: "{{form.githubTokenSecret}}",
+        },
+      },
+    }),
+  });
+})();
 
 /** A deployment that answered discovery and came up short. */
 const UNSUPPORTED = {
@@ -297,6 +381,75 @@ describe("SetupDialog", () => {
     });
   });
 
+  it("shows Default after a pass through Prompt and back to Upload tarball", async () => {
+    mocks.capabilities.mockReturnValue({
+      capabilities: ACTION_CAPABILITIES,
+      supported: true,
+      unmet: [],
+      isLoading: false,
+    });
+    const { user } = renderDialog(CUSTOM_AUTOMATION_ENTRY);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-action-kind")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId("setup-action-kind"));
+    await user.click(await screen.findByText("Upload tarball"));
+    await screen.findByTestId("automation-agent-profile");
+
+    // The pass through Prompt clears the profile; back on Upload tarball the
+    // field must read Default rather than blank.
+    await user.click(screen.getByTestId("setup-action-kind"));
+    await user.click(await screen.findByText("Prompt"));
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("automation-agent-profile"),
+      ).not.toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId("setup-action-kind"));
+    await user.click(await screen.findByText("Upload tarball"));
+
+    const selector = await screen.findByTestId("automation-agent-profile");
+    await waitFor(() =>
+      expect(selector).toHaveValue(I18nKey.SETTINGS$PROFILE_DEFAULT),
+    );
+    await user.click(selector);
+    expect(
+      await screen.findByRole("option", {
+        name: I18nKey.SETTINGS$PROFILE_DEFAULT,
+      }),
+    ).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("keeps Default selected after choosing it from the list", async () => {
+    mocks.capabilities.mockReturnValue({
+      capabilities: ACTION_CAPABILITIES,
+      supported: true,
+      unmet: [],
+      isLoading: false,
+    });
+    const { user } = renderDialog(CUSTOM_AUTOMATION_ENTRY);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-action-kind")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId("setup-action-kind"));
+    await user.click(await screen.findByText("Upload tarball"));
+
+    // Choose a saved profile first, so the return to Default is a real
+    // selection change rather than the form's initial state.
+    const selector = await screen.findByTestId("automation-agent-profile");
+    await user.click(selector);
+    await user.click(await screen.findByText("Reviewer"));
+    await waitFor(() => expect(selector).toHaveValue("Reviewer"));
+
+    await user.click(selector);
+    await user.click(await screen.findByText(I18nKey.SETTINGS$PROFILE_DEFAULT));
+    await waitFor(() =>
+      expect(selector).toHaveValue(I18nKey.SETTINGS$PROFILE_DEFAULT),
+    );
+  });
+
   it("asks about an unconnected integration before it asks anything else", async () => {
     // Arrange — an advisory integration, which is shown but does not block.
     mocks.prerequisites.mockReturnValue({
@@ -353,6 +506,26 @@ describe("SetupDialog", () => {
     expect(mocks.runAction.mock.calls[0][3]).toBe("cron");
   });
 
+  it("draws the entry's diagram under its description", async () => {
+    // Act
+    renderDialog({ ...ENTRY, diagram: ENTRY_DIAGRAM });
+
+    // Assert
+    expect(await screen.findByTestId("mermaid-diagram")).toContainElement(
+      screen.getByTestId("entry-diagram-svg"),
+    );
+  });
+
+  it("draws no diagram for an entry without one", () => {
+    // Act
+    renderDialog();
+
+    // Assert
+    expect(screen.getByTestId("setup-continue-button")).toBeInTheDocument();
+    expect(screen.queryByTestId("mermaid-diagram-pending")).toBeNull();
+    expect(screen.queryByTestId("mermaid-diagram")).toBeNull();
+  });
+
   it("holds an unanswered required field back from the service", async () => {
     // Arrange — nothing typed, so two required fields are still empty.
     const { user } = renderDialog();
@@ -393,6 +566,38 @@ describe("SetupDialog", () => {
       name: "Widget monitor - OpenHands/agent-server-gui",
       prompt: "Report on Widgets in OpenHands/agent-server-gui.",
       repos: [{ url: "OpenHands/agent-server-gui", provider: "github" }],
+      trigger: { type: "cron", schedule: "*/15 * * * *" },
+    });
+  });
+
+  it("leaves a repository the deployment's runs cannot clone out of repos", async () => {
+    // Arrange — the entry picks a GitHub repository and this service's runs
+    // clone GitLab ones only, so the repository reaches the prompt alone.
+    mocks.capabilities.mockReturnValue({
+      capabilities: { ...CRON_ONLY_CAPABILITIES, repoProviders: ["gitlab"] },
+      supported: true,
+      unmet: [],
+      isLoading: false,
+    });
+    mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert — neither preflight nor creation is sent the repository.
+    await waitFor(() => expect(mocks.runAction).toHaveBeenCalled());
+    expect(
+      vi.mocked(AutomationService.validateDraft).mock.calls[0][0].draft,
+    ).not.toHaveProperty("repos");
+    expect(mocks.runAction.mock.calls[0][2]).toEqual({
+      name: "Widget monitor - OpenHands/agent-server-gui",
+      prompt: "Report on Widgets in OpenHands/agent-server-gui.",
       trigger: { type: "cron", schedule: "*/15 * * * *" },
     });
   });
@@ -445,6 +650,54 @@ describe("SetupDialog", () => {
       repos: [{ url: "OpenHands/agent-server-gui", provider: "github" }],
       trigger: { type: "cron", schedule: "*/15 * * * *" },
     });
+  });
+
+  it("tells the Super Admin setup guide when it creates an automation", async () => {
+    // Arrange
+    const onSetupStep = vi.fn();
+    window.addEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
+    mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    await waitFor(() => expect(onSetupStep).toHaveBeenCalledTimes(1));
+    expect((onSetupStep.mock.calls[0][0] as CustomEvent).detail).toEqual({
+      id: "first-automation",
+    });
+    window.removeEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
+  });
+
+  it("does not report an automation that a conversation will create", async () => {
+    // Arrange
+    const onSetupStep = vi.fn();
+    window.addEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
+    mocks.capabilities.mockReturnValue(UNSUPPORTED);
+    mocks.runAction.mockResolvedValue({
+      response: { conversation_id: "conv-1" },
+    });
+    const { user } = renderDialog(
+      createSetupEntry({
+        setup: createSetup({
+          message: "Set this up in a conversation instead.",
+        }),
+      }),
+    );
+
+    // Act
+    await user.click(screen.getByTestId("setup-fallback-conversation"));
+
+    // Assert
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalled());
+    expect(onSetupStep).not.toHaveBeenCalled();
+    window.removeEventListener(SUPER_ADMIN_SETUP_STEP_EVENT, onSetupStep);
   });
 
   it("offers the conversation fallback when the deployment cannot run a direct entry", async () => {
@@ -563,6 +816,72 @@ describe("SetupDialog", () => {
     expect(screen.queryByTestId("setup-review")).toBeNull();
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
+
+  it("omits a connected provider's secret-name field on a self-hosted instance and still names the default", async () => {
+    // Arrange — OpenHands Enterprise with GitHub connected under
+    // Settings > Integrations: the bundle will use that account's token, so
+    // there is nothing to ask, but its config must still name a secret.
+    mocks.nativeIntegrations.mockReturnValue(selfHostedGithub(true));
+    mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
+    const { user } = renderDialog(SECRET_NAME_BUNDLE_ENTRY);
+
+    // Assert — not asked, on the form or on the review step.
+    expect(screen.queryByTestId("setup-field-githubTokenSecret")).toBeNull();
+    await fillForm(user);
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("setup-review")).not.toHaveTextContent(
+      "GitHub token secret",
+    );
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert — the declared default still reaches the bundle and its config.
+    await waitFor(() => expect(mocks.runAction).toHaveBeenCalled());
+    expect(mocks.runAction.mock.calls[0][1]).toMatchObject({
+      githubTokenSecret: "GITHUB_PERSONAL_ACCESS_TOKEN",
+    });
+    expect(mocks.runAction.mock.calls[0][2]).toMatchObject({
+      template: {
+        config: { github_token_secret: "GITHUB_PERSONAL_ACCESS_TOKEN" },
+      },
+    });
+  });
+
+  it.each([
+    [
+      "GitHub is not connected on a self-hosted instance",
+      selfHostedGithub(false),
+    ],
+    [
+      "GitHub is connected on OpenHands Cloud",
+      { ...selfHostedGithub(true), deploymentMode: "cloud" },
+    ],
+  ])(
+    "keeps asking for the secret name when %s",
+    async (_case, integrations) => {
+      // Arrange — without the connected account's token to fall back on, or
+      // outside Enterprise, the field is shown as the manifest declares it.
+      mocks.nativeIntegrations.mockReturnValue(integrations);
+      const { user } = renderDialog(SECRET_NAME_BUNDLE_ENTRY);
+
+      // Assert
+      expect(screen.getByTestId("setup-field-githubTokenSecret")).toHaveValue(
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+      );
+      await fillForm(user);
+      await user.click(screen.getByTestId("setup-continue-button"));
+      await waitFor(() =>
+        expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+      );
+      expect(screen.getByTestId("setup-review")).toHaveTextContent(
+        "GitHub token secret",
+      );
+    },
+  );
 });
 
 it("creates a bundle with an optional selected agent profile", async () => {
@@ -594,4 +913,93 @@ it("creates a bundle with an optional selected agent profile", async () => {
   expect(mocks.runAction.mock.calls[0][1]).toMatchObject({
     agent_profile_id: "review-profile",
   });
+});
+
+it.each([false, true])(
+  "respects backend profile availability (%s) in template setup",
+  async (enabled) => {
+    mocks.instanceConfig.mockReturnValue({
+      data: { deploymentMode: "self_hosted", isAgentProfilesEnabled: enabled },
+    });
+    mocks.capabilities.mockReturnValue({
+      capabilities: ACTION_CAPABILITIES,
+      supported: true,
+      unmet: [],
+      isLoading: false,
+    });
+    renderDialog(BUNDLE_ENTRY);
+    expect(Boolean(screen.queryByTestId("automation-agent-profile"))).toBe(
+      enabled,
+    );
+  },
+);
+
+it("drops a selected profile from review and submission when backend availability changes", async () => {
+  mocks.capabilities.mockReturnValue({
+    capabilities: ACTION_CAPABILITIES,
+    supported: true,
+    unmet: [],
+    isLoading: false,
+  });
+  const { user } = renderDialog(BUNDLE_ENTRY);
+  await fillForm(user);
+  await user.click(screen.getByTestId("automation-agent-profile"));
+  await user.click(await screen.findByRole("option", { name: "Reviewer" }));
+  mocks.instanceConfig.mockReturnValue({
+    data: { deploymentMode: "self_hosted", isAgentProfilesEnabled: false },
+  });
+  await user.type(screen.getByTestId("setup-field-widgetName"), " updated");
+  expect(
+    screen.queryByTestId("automation-agent-profile"),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByTestId("setup-continue-button"));
+  await screen.findByTestId("setup-review");
+  await user.click(screen.getByTestId("setup-continue-button"));
+  expect(mocks.runAction.mock.calls[0][1].agent_profile_id).toBe("");
+  expect(mocks.runAction.mock.calls[0][2]).not.toHaveProperty(
+    "agent_profile_id",
+  );
+});
+
+it("cancels queued profile preflight when eligibility changes", async () => {
+  mocks.capabilities.mockReturnValue({
+    capabilities: ACTION_CAPABILITIES,
+    supported: true,
+    unmet: [],
+    isLoading: false,
+  });
+  const { user, rerender } = renderDialog(BUNDLE_ENTRY);
+  await fillForm(user);
+  await user.click(screen.getByTestId("automation-agent-profile"));
+  await user.click(await screen.findByRole("option", { name: "Reviewer" }));
+  await user.click(screen.getByTestId("setup-field-widgetName"));
+  await user.tab();
+  vi.mocked(AutomationService.validateDraft).mockClear();
+  mocks.instanceConfig.mockReturnValue({
+    data: { deploymentMode: "self_hosted", isAgentProfilesEnabled: false },
+  });
+  rerender();
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  expect(AutomationService.validateDraft).not.toHaveBeenCalled();
+});
+
+it("returns to form when reviewed execution inputs change", async () => {
+  mocks.capabilities.mockReturnValue({
+    capabilities: ACTION_CAPABILITIES,
+    supported: true,
+    unmet: [],
+    isLoading: false,
+  });
+  const { user, rerender } = renderDialog(BUNDLE_ENTRY);
+  await fillForm(user);
+  await user.click(screen.getByTestId("automation-agent-profile"));
+  await user.click(await screen.findByRole("option", { name: "Reviewer" }));
+  await user.click(screen.getByTestId("setup-continue-button"));
+  await screen.findByTestId("setup-review");
+  mocks.instanceConfig.mockReturnValue({
+    data: { deploymentMode: "self_hosted", isAgentProfilesEnabled: false },
+  });
+  rerender();
+  expect(screen.queryByTestId("setup-review")).not.toBeInTheDocument();
+  expect(mocks.runAction).not.toHaveBeenCalled();
 });

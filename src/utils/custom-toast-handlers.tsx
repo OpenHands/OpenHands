@@ -1,7 +1,6 @@
 import React, { CSSProperties, ReactNode } from "react";
 import { CircleX } from "lucide-react";
 import toast, { ToastOptions } from "react-hot-toast";
-import { OH_STATUS_ERROR_COLOR } from "#/constants/status-colors";
 import { calculateToastDuration } from "./toast-duration";
 import { cn } from "#/utils/utils";
 import i18n from "#/i18n";
@@ -17,10 +16,11 @@ import {
 } from "./api-error-message";
 
 // react-hot-toast accepts only CSSProperties via the style option — cannot use className
+// @spec TN-001 — Every toast uses the theme's high-emphasis ink on its surface
 const TOAST_STYLE: CSSProperties = {
   background: "var(--oh-color-tertiary)",
   border: "1px solid var(--oh-border-input)",
-  color: "#fff",
+  color: "var(--oh-contrast)",
   borderRadius: "var(--oh-radius)",
   maxWidth: "400px",
   wordBreak: "break-word",
@@ -31,11 +31,6 @@ const TOAST_STYLE: CSSProperties = {
 export const TOAST_OPTIONS: ToastOptions = {
   position: "top-right",
   style: TOAST_STYLE,
-};
-
-const ERROR_TOAST_STYLE: CSSProperties = {
-  ...TOAST_STYLE,
-  color: "var(--oh-muted)",
 };
 
 /** Icon + message row; center icon for single-line text, top-align when wrapped. */
@@ -78,13 +73,12 @@ export function ErrorToastContent({ message }: { message: ReactNode }) {
     >
       <CircleX
         aria-hidden
-        className="h-4 w-4 shrink-0"
+        className="h-4 w-4 shrink-0 text-status-error"
         strokeWidth={2}
-        style={{ color: OH_STATUS_ERROR_COLOR }}
       />
       <span
         ref={contentRef}
-        className="min-w-0 flex-1 text-sm leading-5 [word-break:break-word] [overflow-wrap:anywhere]"
+        className="min-w-0 flex-1 text-sm leading-5 message-word-break wrap-anywhere"
       >
         {message}
       </span>
@@ -95,7 +89,6 @@ export function ErrorToastContent({ message }: { message: ReactNode }) {
 export const ERROR_TOAST_OPTIONS: ToastOptions = {
   ...TOAST_OPTIONS,
   icon: null,
-  style: ERROR_TOAST_STYLE,
 };
 
 function showErrorToast(message: string) {
@@ -134,9 +127,7 @@ export const displayApiErrorToast = (error: unknown, fallback: string) => {
 export const displaySuccessToast = (message: string) => {
   const duration = calculateToastDuration(message, 5000);
   toast.success(
-    <span className="[word-break:break-word] [overflow-wrap:anywhere]">
-      {message}
-    </span>,
+    <span className="message-word-break wrap-anywhere">{message}</span>,
     { ...TOAST_OPTIONS, duration },
   );
 };
@@ -148,7 +139,7 @@ export const displaySuccessToastWithLink = (
 ) => {
   const duration = calculateToastDuration(`${message} ${linkLabel}`, 5000);
   toast.success(
-    <span className="[word-break:break-word] [overflow-wrap:anywhere]">
+    <span className="message-word-break wrap-anywhere">
       {message}{" "}
       <a
         className="underline hover:no-underline"
@@ -168,10 +159,9 @@ export const displaySuccessToastWithLink = (
  */
 export const displayWarningToast = (message: string) => {
   const duration = calculateToastDuration(message, 6000);
-  toast(
-    <span className="[word-break:break-word] [overflow-wrap:anywhere]">
-      {message}
-    </span>,
-    { ...TOAST_OPTIONS, icon: "⚠️", duration },
-  );
+  toast(<span className="message-word-break wrap-anywhere">{message}</span>, {
+    ...TOAST_OPTIONS,
+    icon: "⚠️",
+    duration,
+  });
 };

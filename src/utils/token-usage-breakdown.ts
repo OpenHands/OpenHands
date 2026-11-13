@@ -6,8 +6,14 @@ import {
   isMessageEvent,
 } from "#/types/agent-server/type-guards";
 
-/** The `usage_id` the SDK gives the condenser's LLM. */
-export const CONDENSER_USAGE_ID = "condenser";
+/**
+ * The `usage_id`s the condenser's LLM can have: the SDK default, and the one
+ * the planning preset sets (see `agent-server-adapter.ts`).
+ */
+export const CONDENSER_USAGE_IDS: ReadonlySet<string> = new Set([
+  "condenser",
+  "planning_condenser",
+]);
 
 /**
  * What a group of LLM calls did. Calls are matched to activities through the
@@ -143,7 +149,7 @@ export function buildTokenUsageBreakdown(
       let activity: TokenUsageActivity;
       if (matched) {
         activity = matched;
-      } else if (usageId === CONDENSER_USAGE_ID) {
+      } else if (CONDENSER_USAGE_IDS.has(usageId)) {
         activity = { kind: "condensation" };
       } else {
         unmatchedCalls += 1;

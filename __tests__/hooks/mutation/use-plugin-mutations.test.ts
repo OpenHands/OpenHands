@@ -153,4 +153,20 @@ describe("plugin mutations", () => {
       i18n.t(I18nKey.ERROR$CORS_OR_NETWORK),
     ]);
   });
+
+  it("points to the plugin's dialog when the plugin is already installed", async () => {
+    vi.spyOn(PluginsManagementService, "installPlugin").mockRejectedValue(
+      new HttpError(
+        409,
+        "Plugin already installed. Use force=true to overwrite.",
+      ),
+    );
+
+    const result = failingMutations[0].run();
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(errorToastMessages()).toEqual([
+      I18nKey.SETTINGS$PLUGINS_ALREADY_INSTALLED,
+    ]);
+  });
 });

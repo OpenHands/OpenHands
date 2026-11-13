@@ -3,31 +3,18 @@ import { describe, expect, it } from "vitest";
 import {
   ACP_MANAGED_SENTINEL,
   ACP_PROVIDERS,
+  getAcpProvidersForBackend,
   getAcpProviderSecrets,
   SURFACED_ACP_PROVIDERS,
   resolveEffectiveAcpModel,
 } from "./acp-providers";
 
 describe("ACP_PROVIDERS", () => {
-  it("passes every codex data field through from the pinned client registry", () => {
-    // No local override may sit between the registry and the picker: a
-    // hand-maintained model entry survives an upstream *removal*, so Canvas
-    // would keep offering an id the live ACP server has started rejecting.
+  it("passes the codex launch command through from the pinned client registry", () => {
     const codex = ACP_PROVIDERS.find(({ key }) => key === "codex");
-    const client = CLIENT_ACP_PROVIDERS.codex;
-    expect(codex?.default_command).toEqual([...client.default_command]);
-    expect(codex?.available_models).toEqual(
-      client.available_models.map(({ id, label }) => ({ id, label })),
-    );
-  });
-
-  it("carries GPT-6 Astra, so the pin is new enough to launch it", () => {
-    // Canary for the pin's freshness, not a catalog Canvas maintains: Astra
-    // needs codex-acp >= 1.10.0, which only client >= 1.45.0 mirrors.
-    const codex = ACP_PROVIDERS.find(({ key }) => key === "codex");
-    expect(codex?.available_models?.map(({ id }) => id)).toContain(
-      "gpt-6-astra",
-    );
+    expect(codex?.default_command).toEqual([
+      ...CLIENT_ACP_PROVIDERS.codex.default_command,
+    ]);
   });
 });
 
@@ -90,12 +77,22 @@ describe("surfaced ACP providers", () => {
     (key) => !SURFACED_ACP_PROVIDERS.includes(key),
   );
 
-  it("surfaces only Claude Code, Codex and Gemini CLI", () => {
+  it("surfaces Claude Code, Codex, Gemini CLI, Pi and OpenCode", () => {
     expect([...SURFACED_ACP_PROVIDERS]).toEqual([
       "claude-code",
       "codex",
       "gemini-cli",
+      "pi",
+      "opencode",
     ]);
+  });
+
+  it("offers Pi and OpenCode on local backends only", () => {
+    const keys = (kind: "local" | "cloud") =>
+      getAcpProvidersForBackend(kind).map(({ key }) => key);
+
+    expect(keys("local")).toEqual([...SURFACED_ACP_PROVIDERS]);
+    expect(keys("cloud")).toEqual(["claude-code", "codex", "gemini-cli"]);
   });
 
   it("surfaces nothing the pinned client registry has dropped", () => {

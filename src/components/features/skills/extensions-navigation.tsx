@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Blocks, ExternalLink } from "lucide-react";
+import { CompactSectionNavigation } from "#/components/shared/compact-section-navigation";
+import { useNavigation } from "#/context/navigation-context";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { cn } from "#/utils/utils";
 import SkillsIcon from "#/icons/skills.svg?react";
@@ -12,8 +14,12 @@ import {
 import { I18nKey } from "#/i18n/declaration";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { isNoBackend } from "#/api/backend-registry/active-store";
+import { useCloudMcpSettingsUrl } from "#/hooks/use-cloud-mcp-settings-url";
 
-/** Only the Skills item points to a cloud-hosted page today. */
+/**
+ * The Skills item points to a cloud-hosted page; so does the MCP Servers item
+ * on an OpenHands Enterprise instance with organization MCP servers on.
+ */
 const CLOUD_LINKED_EXTENSION_PATH = "/skills";
 /** Backend-installed artifacts are not available on Cloud backends yet. */
 const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/apps"]);
@@ -72,9 +78,6 @@ export const EXTENSIONS_NAV_ITEMS: ExtensionNavItem[] = [
 
 export function ExtensionsNavigation() {
   const { t } = useTranslation("openhands");
-  const { active } = useActiveBackendContext();
-  const { backend } = active;
-  const isCloudBackend = !isNoBackend(backend) && backend.kind === "cloud";
 
   return (
     <aside
@@ -84,82 +87,116 @@ export function ExtensionsNavigation() {
       <span className="px-2 text-sm font-normal text-contrast">
         {t(I18nKey.NAV$CUSTOMIZE)}
       </span>
-      <div className="flex flex-col gap-0.5 pt-0.5">
-        {EXTENSIONS_NAV_ITEMS.filter(
-          (item) =>
-            !(CLOUD_HIDDEN_EXTENSION_PATHS.has(item.to) && isCloudBackend),
-        ).map((item) => {
-          const isCloudSkillsLink =
-            item.to === CLOUD_LINKED_EXTENSION_PATH && isCloudBackend;
-          const baseRow = (
-            <span className="shrink-0 flex items-center justify-center">
-              {item.icon}
-            </span>
-          );
-          const label = (
-            <span className="truncate">
-              {isCloudSkillsLink
-                ? t(I18nKey.SIDEBAR$SKILLS_AND_PLUGINS_CLOUD_LINK)
-                : item.label}
-            </span>
-          );
-          const comingSoonBadge = item.comingSoon && (
-            <span className="ml-auto shrink-0 rounded-full border border-contrast/20 bg-contrast/5 px-1.5 py-0.5 text-[10px] font-medium text-text-dim">
-              {t(I18nKey.NAV$COMING_SOON)}
-            </span>
-          );
-
-          if (isCloudSkillsLink) {
-            const cloudSkillsUrl = `${backend.host.replace(/\/+$/, "")}/settings/skills`;
-            return (
-              <a
-                key={item.to}
-                data-testid={`sidebar-extensions-${item.to}`}
-                href={cloudSkillsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={cn(
-                  sidebarNavRowClassName(),
-                  "truncate",
-                  SIDEBAR_ROW_INTERACTIVE_CLASS.idle,
-                )}
-              >
-                {baseRow}
-                {label}
-                <ExternalLink
-                  className="ml-auto size-4 shrink-0 text-muted"
-                  aria-hidden
-                />
-              </a>
-            );
-          }
-
-          return (
-            <NavigationLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              data-testid={`sidebar-extensions-${item.to}`}
-              className={({ isActive }) =>
-                cn(
-                  sidebarNavRowClassName(),
-                  "truncate",
-                  isActive
-                    ? SIDEBAR_ROW_INTERACTIVE_CLASS.active
-                    : SIDEBAR_ROW_INTERACTIVE_CLASS.idle,
-                )
-              }
-            >
-              {baseRow}
-              {label}
-              {comingSoonBadge}
-            </NavigationLink>
-          );
-        })}
-      </div>
+      <ExtensionsNavigationLinks />
       <div className="px-2 pt-3">
         <BackendSyncedSettingsBadge />
       </div>
     </aside>
+  );
+}
+
+function ExtensionsNavigationLinks() {
+  const { t } = useTranslation("openhands");
+  const { active } = useActiveBackendContext();
+  const { backend } = active;
+  const isCloudBackend = !isNoBackend(backend) && backend.kind === "cloud";
+  const { url: cloudMcpSettingsUrl } = useCloudMcpSettingsUrl();
+  return (
+    <div className="flex flex-col gap-0.5 pt-0.5">
+      {EXTENSIONS_NAV_ITEMS.filter(
+        (item) =>
+          !(CLOUD_HIDDEN_EXTENSION_PATHS.has(item.to) && isCloudBackend),
+      ).map((item) => {
+        const isCloudSkillsLink =
+          item.to === CLOUD_LINKED_EXTENSION_PATH && isCloudBackend;
+        let externalUrl: string | null = null;
+        if (isCloudSkillsLink) {
+          externalUrl = `${backend.host.replace(/\/+$/, "")}/settings/skills`;
+        } else if (item.to === "/mcp") {
+          externalUrl = cloudMcpSettingsUrl;
+        }
+        const baseRow = (
+          <span className="shrink-0 flex items-center justify-center">
+            {item.icon}
+          </span>
+        );
+        const label = (
+          <span className="truncate">
+            {isCloudSkillsLink
+              ? t(I18nKey.SIDEBAR$SKILLS_AND_PLUGINS_CLOUD_LINK)
+              : item.label}
+          </span>
+        );
+        const comingSoonBadge = item.comingSoon && (
+          <span className="ml-auto shrink-0 rounded-full border border-contrast/20 bg-contrast/5 px-1.5 py-0.5 text-3xs font-medium text-text-dim">
+            {t(I18nKey.NAV$COMING_SOON)}
+          </span>
+        );
+
+        if (externalUrl) {
+          return (
+            <a
+              key={item.to}
+              data-testid={`sidebar-extensions-${item.to}`}
+              href={externalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                sidebarNavRowClassName(),
+                "truncate",
+                SIDEBAR_ROW_INTERACTIVE_CLASS.idle,
+              )}
+            >
+              {baseRow}
+              {label}
+              <ExternalLink
+                className="ml-auto size-4 shrink-0 text-muted"
+                aria-hidden
+              />
+            </a>
+          );
+        }
+
+        return (
+          <NavigationLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            data-testid={`sidebar-extensions-${item.to}`}
+            className={({ isActive }) =>
+              cn(
+                sidebarNavRowClassName(),
+                "truncate",
+                isActive
+                  ? SIDEBAR_ROW_INTERACTIVE_CLASS.active
+                  : SIDEBAR_ROW_INTERACTIVE_CLASS.idle,
+              )
+            }
+          >
+            {baseRow}
+            {label}
+            {comingSoonBadge}
+          </NavigationLink>
+        );
+      })}
+    </div>
+  );
+}
+
+export function ExtensionsCompactNavigation() {
+  const { t } = useTranslation("openhands");
+  const { currentPath } = useNavigation();
+  const currentItem = EXTENSIONS_NAV_ITEMS.find(
+    (item) => currentPath === item.to || currentPath.startsWith(`${item.to}/`),
+  );
+
+  return (
+    <CompactSectionNavigation
+      label={t(I18nKey.NAV$CUSTOMIZE)}
+      currentLabel={currentItem?.label}
+      testId="extensions-compact-navigation"
+    >
+      <ExtensionsNavigationLinks />
+    </CompactSectionNavigation>
   );
 }

@@ -25,6 +25,7 @@ import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { useFreeModelsStore } from "#/stores/free-models-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import ConversationService from "#/api/conversation-service/conversation-service.api";
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -38,7 +39,6 @@ vi.mock("react-i18next", async () => {
         const translations: Record<string, string> = {
           CONVERSATION$CREATED: "Created",
           CONVERSATION$AGO: "ago",
-          CONVERSATION$UPDATED: "Updated",
           COMMON$NO_REPOSITORY: "No repository",
           CONVERSATION$ACP_AGENT_GENERIC: "ACP",
           CONVERSATION_PANEL$PIN_CONVERSATION: "Pin conversation",
@@ -53,6 +53,13 @@ vi.mock("react-i18next", async () => {
   };
 });
 
+const useRememberedAcpModels = vi.hoisted(() =>
+  vi.fn((): { id: string; label: string }[] => []),
+);
+vi.mock("#/hooks/use-remembered-acp-models", () => ({
+  useRememberedAcpModels,
+}));
+
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
     trackDownloadVsCodeButtonClicked: vi.fn(),
@@ -66,12 +73,7 @@ describe("ConversationCard", () => {
   const onChangeTitle = vi.fn();
 
   beforeAll(() => {
-    vi.stubGlobal("window", {
-      open: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      location: { origin: "http://localhost:3000" },
-    });
+    vi.spyOn(window, "open").mockImplementation(() => null);
   });
 
   afterEach(() => {
@@ -79,7 +81,7 @@ describe("ConversationCard", () => {
   });
 
   afterAll(() => {
-    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("should render the conversation card", () => {
@@ -468,6 +470,40 @@ describe("ConversationCard", () => {
     );
   });
 
+  it("opens the VS Code URL without an opener reference", async () => {
+    const user = userEvent.setup();
+    const vscodeUrl = "https://vscode.example.dev/?tkn=abc&folder=workspace";
+    vi.spyOn(ConversationService, "getVSCodeUrl").mockResolvedValue({
+      vscode_url: vscodeUrl,
+    });
+    renderWithProviders(
+      <ConversationCard
+        conversationId="conv-1"
+        onDelete={onDelete}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        showOptions
+        contextMenuOpen
+        onContextMenuToggle={vi.fn()}
+      />,
+    );
+
+    await user.click(
+      within(screen.getByTestId("context-menu")).getByTestId(
+        "download-vscode-button",
+      ),
+    );
+
+    await vi.waitFor(() =>
+      expect(window.open).toHaveBeenCalledWith(
+        vscodeUrl,
+        "_blank",
+        "noopener,noreferrer",
+      ),
+    );
+  });
+
   test("clicking the selectedRepository should not trigger the onClick handler", async () => {
     const user = userEvent.setup();
     renderWithProviders(
@@ -755,6 +791,20 @@ describe("ConversationCard", () => {
     },
   );
 
+  it("keeps Stop for a running cloud sandbox after the agent is interrupted", () => {
+    renderWithProviders(
+      <ConversationCardActions
+        contextMenuOpen={true}
+        onContextMenuToggle={vi.fn()}
+        onStop={vi.fn()}
+        executionStatus={ExecutionStatus.PAUSED}
+        sandboxStatus="RUNNING"
+      />,
+    );
+
+    expect(screen.getByTestId("stop-button")).toBeInTheDocument();
+  });
+
   describe("stop button label by active backend", () => {
     const cloudBackend: Backend = {
       id: "prod",
@@ -785,7 +835,7 @@ describe("ConversationCard", () => {
       );
     });
 
-    it("uses COMMON$CLOSE_CONVERSATION_STOP_RUNTIME on a cloud backend", () => {
+    it("uses COMMON$STOP_SANDBOX on a cloud backend", () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
 
@@ -801,7 +851,7 @@ describe("ConversationCard", () => {
       );
 
       expect(screen.getByTestId("stop-button")).toHaveTextContent(
-        "COMMON$CLOSE_CONVERSATION_STOP_RUNTIME",
+        "COMMON$STOP_SANDBOX",
       );
     });
   });
@@ -1061,10 +1111,11 @@ describe("ConversationCard", () => {
       ).toBeInTheDocument();
     });
 
-    it("shows the provider's picker label for a known model ID", () => {
-      // When ``llm_model`` is a registry-known ID, the chip renders the
-      // human label ("Claude Opus (1M)") instead of the raw ID — matching
-      // what the Settings → Agent picker shows for the same value.
+    it("labels a model with the name the agent last reported for it", () => {
+      useRememberedAcpModels.mockReturnValue([
+        { id: "opus[1m]", label: "Claude Opus (1M)" },
+      ]);
+
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -1080,6 +1131,32 @@ describe("ConversationCard", () => {
       const chip = screen.getByTestId("conversation-card-agent-chip");
       expect(chip).toHaveTextContent("Claude Opus (1M)");
       expect(chip).toHaveAttribute("title", "Claude Code · Claude Opus (1M)");
+      expect(useRememberedAcpModels).toHaveBeenCalledWith("claude-code");
+      useRememberedAcpModels.mockReturnValue([]);
+    });
+
+    it("prefers the models the conversation's own session reported", () => {
+      useRememberedAcpModels.mockReturnValue([
+        { id: "opus[1m]", label: "Stale label" },
+      ]);
+
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          showLlmProfiles
+          agentKind="acp"
+          acpServer="claude-code"
+          llmModel="opus[1m]"
+          acpModels={[{ id: "opus[1m]", label: "Claude Opus (1M)" }]}
+        />,
+      );
+
+      expect(
+        screen.getByTestId("conversation-card-agent-chip"),
+      ).toHaveTextContent("Claude Opus (1M)");
+      useRememberedAcpModels.mockReturnValue([]);
     });
 
     it("falls back to the provider display name for an ACP conversation with no model", () => {
@@ -1263,5 +1340,60 @@ describe("ConversationCard", () => {
       screen.getByTestId("conversation-pin-toggle-conversation-1"),
     ).toBeVisible();
     expect(screen.getByRole("time")).toBeInTheDocument();
+  });
+
+  it("dims the title and grays the dot for an explicitly archived row with a present runtime", () => {
+    // A RUNNING conversation archived through the menu: the chip, the dimmed
+    // title, and the archive dot must agree even though the runtime is fine.
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        executionStatus={ExecutionStatus.RUNNING}
+        sandboxStatus="RUNNING"
+        isArchived
+      />,
+    );
+
+    const card = screen.getByTestId("conversation-card");
+    expect(
+      within(card).getByTestId("conversation-card-archived-chip"),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(within(card).getByTestId("conversation-card-title")).toHaveClass(
+      "opacity-60",
+    );
+  });
+
+  it("infers the archived presentation from a missing runtime when isArchived is omitted", () => {
+    // Standalone callers that only know the sandbox status must still see the
+    // archive dot, the dimmed title, and the chip — the false default used to
+    // override the header's missing-runtime fallback.
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        executionStatus={ExecutionStatus.FINISHED}
+        sandboxStatus="MISSING"
+      />,
+    );
+
+    const card = screen.getByTestId("conversation-card");
+    expect(
+      within(card).getByTestId("conversation-status-archived"),
+    ).toBeInTheDocument();
+    expect(
+      within(card).queryByTestId("conversation-status-check"),
+    ).not.toBeInTheDocument();
+    expect(within(card).getByTestId("conversation-card-title")).toHaveClass(
+      "opacity-60",
+    );
+    expect(
+      within(card).getByTestId("conversation-card-archived-chip"),
+    ).toBeInTheDocument();
   });
 });

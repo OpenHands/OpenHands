@@ -29,13 +29,14 @@ export async function callCloudProxy<TResponse = unknown>(
   // The org this request is scoped to, read when the client is built so a
   // later org switch can't be blamed for this response.
   const orgId = activeOrgForBackend(req.backend);
+  const headers = orgId ? { ...req.headers, "X-Org-Id": orgId } : req.headers;
 
   try {
     return await client.request<TResponse>({
       method: req.method,
       path: req.path,
       body: req.body,
-      headers: req.headers,
+      headers,
       timeoutSeconds: req.timeoutSeconds,
       hostOverride: req.hostOverride,
       authMode:

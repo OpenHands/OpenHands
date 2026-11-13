@@ -63,7 +63,7 @@ export function CloudOrganizationBoundary({
     return <CloudOrganizationRecovery entry={entry} />;
   }
   return (
-    <div className="min-h-full flex items-center justify-center bg-base">
+    <div className="min-h-full flex items-center justify-center bg-canvas-base">
       <LoadingSpinner size="large" />
     </div>
   );
@@ -77,7 +77,7 @@ function CloudOrganizationRecovery({
   const { t } = useTranslation("openhands");
   const { active, backends, setActive } = useActiveBackendContext();
   return (
-    <div className="min-h-full flex flex-col items-center justify-center gap-4 bg-base px-6 text-contrast">
+    <div className="min-h-full flex flex-col items-center justify-center gap-4 bg-canvas-base px-6 text-contrast">
       <p role="alert">
         {t(
           entry.isError
@@ -97,7 +97,7 @@ function CloudOrganizationRecovery({
           aria-label={t(I18nKey.BACKEND$CHOOSER_TITLE)}
           value={active.backend.id}
           onChange={(event) => setActive(event.target.value, null)}
-          className="rounded border border-border bg-base px-3 py-2"
+          className="rounded border border-border bg-canvas-base px-3 py-2"
         >
           {backends.map((backend) => (
             <option key={backend.id} value={backend.id}>
@@ -125,7 +125,7 @@ function SuspendedOrganizationScreen({
   const suspendedOrg = orgs.find((org) => org.id === active.orgId);
   const otherOrgs = orgs.filter((org) => org.id !== active.orgId);
   return (
-    <div className="min-h-full flex flex-col items-center justify-center gap-4 bg-base px-6 text-contrast">
+    <div className="min-h-full flex flex-col items-center justify-center gap-4 bg-canvas-base px-6 text-contrast">
       <p role="alert" className="max-w-md text-center">
         {t(
           suspension === "organization"

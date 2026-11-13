@@ -1,4 +1,5 @@
 import { http, delay, HttpResponse, passthrough } from "msw";
+import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import type { DirectConversationInfo } from "#/api/agent-server-adapter";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import {
@@ -137,7 +138,10 @@ function createPaginationEvent(
 ): OpenHandsEvent {
   return {
     id: `${messagePrefix.toLowerCase().replaceAll(" ", "-")}-${index}`,
-    timestamp: new Date(PAGINATION_BASE_TIME + index * 60_000).toISOString(),
+    // Split an equal-timestamp pair across the 50-event initial page.
+    timestamp: new Date(
+      PAGINATION_BASE_TIME + (index === 51 ? 50 : index) * 60_000,
+    ).toISOString(),
     source: "agent",
     llm_message: {
       role: "assistant",
@@ -165,14 +169,21 @@ function searchPaginationEvents(
     ? events.filter((event) => (event.timestamp ?? "") < timestampLt)
     : events;
   const sorted = [...filtered].sort((a, b) =>
-    sortOrder === "TIMESTAMP_DESC"
-      ? (b.timestamp ?? "").localeCompare(a.timestamp ?? "")
-      : (a.timestamp ?? "").localeCompare(b.timestamp ?? ""),
+    (a.timestamp ?? "").localeCompare(b.timestamp ?? ""),
   );
+  // Agent Server walks the ordered log backwards, including timestamp ties.
+  if (sortOrder === "TIMESTAMP_DESC") sorted.reverse();
 
+  const pageId = searchParams.get("page_id");
+  const start = pageId
+    ? Math.max(
+        0,
+        sorted.findIndex((event) => event.id === pageId),
+      )
+    : 0;
   return {
-    items: sorted.slice(0, limit),
-    next_page_id: sorted.length > limit ? "next-page" : null,
+    items: sorted.slice(start, start + limit),
+    next_page_id: sorted[start + limit]?.id ?? null,
   };
 }
 
@@ -182,7 +193,7 @@ async function maybeReturnPaginationEvents(
 ) {
   const events = paginationEventsByConversation.get(conversationId);
   if (!events) return null;
-  if (searchParams.has("timestamp__lt")) {
+  if (searchParams.has("timestamp__lt") || searchParams.has("page_id")) {
     await delay(PAGINATION_PAGE_DELAY_MS);
   }
   return searchPaginationEvents(events, searchParams);
@@ -480,6 +491,20 @@ export const CONVERSATION_HANDLERS = [
   http.get("*/api/vscode/url", async () => HttpResponse.json({ url: null })),
 
   http.post("*/api/skills", async () => HttpResponse.json({ skills: [] })),
+
+  http.get("*/api/skills/catalog", async () =>
+    HttpResponse.json({
+      skills: SKILLS_CATALOG.map((entry) => ({
+        name: entry.name,
+        type: "knowledge",
+        content: entry.content,
+        triggers: entry.triggers ?? [],
+        source: null,
+        description: entry.description,
+        origin: "public",
+      })),
+    }),
+  ),
 
   http.post(
     "/api/v1/conversations/:conversationId/pending-messages",

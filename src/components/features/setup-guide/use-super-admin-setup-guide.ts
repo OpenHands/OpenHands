@@ -1,6 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCloudOrganizationMe } from "#/api/cloud/organization-service.api";
-import { getCloudSetupState } from "#/api/cloud/setup-state-service.api";
+import {
+  dismissCloudSetupGuide,
+  getCloudSetupState,
+} from "#/api/cloud/setup-state-service.api";
 import type { CloudSetupGuideSteps } from "#/api/cloud/types";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
@@ -31,6 +34,13 @@ function isStepDone(
   return guideSteps[step.completion];
 }
 
+/** The first required step the server does not report as done, if any. */
+export function getNextSetupStep(
+  guideSteps: CloudSetupGuideSteps | null,
+): SuperAdminSetupStep | null {
+  return REQUIRED_STEPS.find((step) => !isStepDone(step, guideSteps)) ?? null;
+}
+
 /**
  * The enterprise Super Admin setup guide for the active cloud backend.
  *
@@ -39,8 +49,13 @@ function isStepDone(
  * an organization and is not dismissed. Local backends never see it.
  */
 export function useSuperAdminSetupGuide() {
+  const queryClient = useQueryClient();
   const { backend, orgId } = useActiveBackend();
   const isCloud = backend.kind === "cloud";
+  const setupStateQueryKey = SUPER_ADMIN_SETUP_QUERY_KEYS.state(
+    backend.id,
+    backend.connectionRevision ?? 0,
+  );
 
   // Same query as `useAutomationPermissions`, so no extra request is issued.
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
@@ -63,15 +78,19 @@ export function useSuperAdminSetupGuide() {
 
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
   const setupStateQuery = useQuery({
-    queryKey: SUPER_ADMIN_SETUP_QUERY_KEYS.state(
-      backend.id,
-      backend.connectionRevision ?? 0,
-    ),
+    queryKey: setupStateQueryKey,
     queryFn: () => getCloudSetupState(backend),
     enabled: isCloud && isSuperAdmin,
     ...CONFIG_CACHE_OPTIONS,
     retry: false,
     meta: { disableToast: true },
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: () => dismissCloudSetupGuide(backend),
+    onSuccess: (state) => {
+      queryClient.setQueryData(setupStateQueryKey, state);
+    },
   });
 
   const setupState = isSuperAdmin ? setupStateQuery.data : undefined;
@@ -82,8 +101,7 @@ export function useSuperAdminSetupGuide() {
   const completedCount = REQUIRED_STEPS.filter((step) =>
     isStepDone(step, guideSteps),
   ).length;
-  const nextStep =
-    REQUIRED_STEPS.find((step) => !isStepDone(step, guideSteps)) ?? null;
+  const nextStep = getNextSetupStep(guideSteps);
   const guideOrgId = setupState?.guide_org_id ?? null;
   // Only the first Super Admin's guide has an organization; it stays until dismissed.
   const active = Boolean(guideOrgId) && !setupState?.guide_dismissed;
@@ -97,5 +115,6 @@ export function useSuperAdminSetupGuide() {
     visible: active && nextStep !== null,
     isLoading: meQuery.isLoading || setupStateQuery.isLoading,
     refetch: setupStateQuery.refetch,
+    dismiss: dismissMutation.mutate,
   };
 }

@@ -28,7 +28,7 @@ function ActivityLabel({ activity }: { activity: TokenUsageActivity }) {
         <span>{t(I18nKey.CONVERSATION$TOKEN_ACTIVITY_AGENT_MESSAGES)}</span>
       );
     case "condensation":
-      return <span>{t(I18nKey.ACTION_MESSAGE$CONDENSATION)}</span>;
+      return <span>{t(I18nKey.CONVERSATION$TOKEN_ACTIVITY_CONDENSATION)}</span>;
     case "unattributed":
       return <span>{t(I18nKey.CONVERSATION$TOKEN_ACTIVITY_UNATTRIBUTED)}</span>;
     case "other_llm":

@@ -83,6 +83,7 @@ function mockRuntimeStats(tokenUsages: RuntimeTokenUsage[]) {
     created_at: "2026-10-06T00:00:00Z",
     updated_at: "2026-10-06T00:00:00Z",
     status: ExecutionStatus.IDLE,
+    available_models: [],
     stats: {
       usage_to_metrics: {
         default: {

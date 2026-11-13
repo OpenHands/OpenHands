@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { useRef } from "react";
+import { renderHook, render, fireEvent, act } from "@testing-library/react";
 import {
   HOME_PROMPT_DRAFT_KEY,
   useDraftPersistence,
@@ -12,6 +13,7 @@ vi.mock("#/utils/conversation-local-storage", () => ({
   useConversationLocalStorageState: vi.fn(),
   getConversationState: vi.fn(),
   setConversationState: vi.fn(),
+  markConversationDraftEdited: vi.fn(() => "draft-edit"),
 }));
 
 // Mock the chat-input utilities. The hook uses both `getTextContent`
@@ -179,7 +181,10 @@ describe("useDraftPersistence", () => {
       });
 
       // Assert - should save after debounce
-      expect(mockSetDraftMessage).toHaveBeenCalledWith("New draft content");
+      expect(mockSetDraftMessage).toHaveBeenCalledWith(
+        "New draft content",
+        expect.any(String),
+      );
     });
 
     it("cancels pending save when new input arrives before debounce", () => {
@@ -215,7 +220,10 @@ describe("useDraftPersistence", () => {
 
       // Assert - should only save the final value once
       expect(mockSetDraftMessage).toHaveBeenCalledTimes(1);
-      expect(mockSetDraftMessage).toHaveBeenCalledWith("First Second");
+      expect(mockSetDraftMessage).toHaveBeenCalledWith(
+        "First Second",
+        expect.any(String),
+      );
     });
 
     it("does not save if content matches existing draft", () => {
@@ -283,7 +291,10 @@ describe("useDraftPersistence", () => {
         vi.advanceTimersByTime(500);
       });
 
-      expect(mockSetDraftMessage).toHaveBeenCalledWith("Stryker was here!");
+      expect(mockSetDraftMessage).toHaveBeenCalledWith(
+        "Stryker was here!",
+        expect.any(String),
+      );
     });
   });
 
@@ -499,7 +510,10 @@ describe("useDraftPersistence", () => {
       });
 
       expect(setDraftForA).not.toHaveBeenCalled();
-      expect(setDraftForB).toHaveBeenCalledWith("draft for B");
+      expect(setDraftForB).toHaveBeenCalledWith(
+        "draft for B",
+        expect.any(String),
+      );
     });
 
     it("clears the current conversation after leaving the home page", () => {
@@ -1017,7 +1031,10 @@ describe("useDraftPersistence", () => {
         vi.advanceTimersByTime(500);
       });
 
-      expect(mockSetDraftMessage).toHaveBeenCalledWith(null);
+      expect(mockSetDraftMessage).toHaveBeenCalledWith(
+        null,
+        expect.any(String),
+      );
     });
   });
 
@@ -1057,8 +1074,314 @@ describe("useDraftPersistence", () => {
         vi.advanceTimersByTime(500);
       });
 
-      // Assert - save should not have been called after unmount
+      // Assert - cleanup flushes once without running the debounced setter later.
+      expect(
+        conversationLocalStorage.setConversationState,
+      ).toHaveBeenCalledWith(
+        conversationId,
+        { draftMessage: "Draft" },
+        expect.any(String),
+      );
       expect(mockSetDraftMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("conversation draft persistence across navigation", () => {
+    beforeEach(async () => {
+      const actual = await vi.importActual<typeof conversationLocalStorage>(
+        "#/utils/conversation-local-storage",
+      );
+      vi.mocked(
+        conversationLocalStorage.useConversationLocalStorageState,
+      ).mockImplementation(actual.useConversationLocalStorageState);
+      vi.mocked(
+        conversationLocalStorage.getConversationState,
+      ).mockImplementation(actual.getConversationState);
+      vi.mocked(
+        conversationLocalStorage.setConversationState,
+      ).mockImplementation(actual.setConversationState);
+      vi.mocked(
+        conversationLocalStorage.markConversationDraftEdited,
+      ).mockImplementation(actual.markConversationDraftEdited);
+    });
+
+    afterEach(() => {
+      vi.mocked(conversationLocalStorage.setConversationState).mockReset();
+      vi.mocked(
+        conversationLocalStorage.markConversationDraftEdited,
+      ).mockReset();
+    });
+
+    it("protects a same-text new edit from an earlier confirmation before debounce", async () => {
+      const actual = await vi.importActual<typeof conversationLocalStorage>(
+        "#/utils/conversation-local-storage",
+      );
+      const conversationId = "conv-same-text-new-edit";
+      conversationLocalStorage.setConversationState(conversationId, {
+        draftMessage: "Repeat this request",
+      });
+      const submitted = {
+        text: "Repeat this request",
+        draftRevision: actual.getConversationDraftRevision(conversationId),
+      };
+      const input = createMockChatInputRef();
+      const { result, unmount } = renderHook(() =>
+        useDraftPersistence(conversationId, input),
+      );
+
+      // Re-entering identical text is still a new composer edit. Its revision
+      // must change on input, before the debounced text save can run.
+      act(() => result.current.saveDraft());
+      act(() =>
+        actual.clearConfirmedConversationDraft(conversationId, submitted),
+      );
+      expect(
+        conversationLocalStorage.getConversationState(conversationId)
+          .draftMessage,
+      ).toBe("Repeat this request");
+      act(() => vi.advanceTimersByTime(500));
+      unmount();
+      const restored = createMockChatInputRef();
+      renderHook(() => useDraftPersistence(conversationId, restored));
+      expect(restored.current.textContent).toBe("Repeat this request");
+    });
+
+    it("restores the latest input after leaving before the debounce completes", () => {
+      // Arrange
+      const conversationId = "conv-leave-early";
+      conversationLocalStorage.setConversationState(conversationId, {
+        draftMessage: "Older saved draft",
+      });
+      sessionStorage.setItem(HOME_PROMPT_DRAFT_KEY, "Home prompt");
+      const chatInputRef: { current: HTMLDivElement | null } =
+        createMockChatInputRef();
+      const { result, unmount } = renderHook(() =>
+        useDraftPersistence(conversationId, chatInputRef),
+      );
+
+      // Act: multiple inputs followed by navigation within 500ms of the last input.
+      chatInputRef.current!.textContent = "First input";
+      act(() => result.current.saveDraft());
+      act(() => vi.advanceTimersByTime(200));
+      chatInputRef.current!.textContent = "  Latest input  ";
+      act(() => result.current.saveDraft());
+      act(() => vi.advanceTimersByTime(100));
+      expect(
+        conversationLocalStorage.getConversationState(conversationId)
+          .draftMessage,
+      ).toBe("Older saved draft");
+      // React clears DOM refs before passive unmount cleanup runs.
+      chatInputRef.current = null;
+      unmount();
+
+      const restoredInputRef = createMockChatInputRef();
+      renderHook(() => useDraftPersistence(conversationId, restoredInputRef));
+
+      // Assert: the real store survives remount, without a stale timer overwrite.
+      expect(restoredInputRef.current.textContent).toBe("Latest input");
+      act(() => vi.advanceTimersByTime(500));
+      expect(
+        conversationLocalStorage.getConversationState(conversationId)
+          .draftMessage,
+      ).toBe("Latest input");
+      expect(sessionStorage.getItem(HOME_PROMPT_DRAFT_KEY)).toBe("Home prompt");
+    });
+
+    it("keeps pending drafts with their owning conversation when switching", () => {
+      // Arrange
+      conversationLocalStorage.setConversationState("conv-B", {
+        draftMessage: "Saved draft for B",
+      });
+      const chatInputRef = createMockChatInputRef();
+      const { result, rerender } = renderHook(
+        ({ conversationId }) =>
+          useDraftPersistence(conversationId, chatInputRef),
+        { initialProps: { conversationId: "conv-A" } },
+      );
+
+      // Act
+      chatInputRef.current.textContent = "Latest draft for A";
+      act(() => result.current.saveDraft());
+      act(() => vi.advanceTimersByTime(100));
+      rerender({ conversationId: "conv-B" });
+
+      // Assert: A is saved before the input restores B, and B is untouched.
+      expect(
+        conversationLocalStorage.getConversationState("conv-A").draftMessage,
+      ).toBe("Latest draft for A");
+      expect(chatInputRef.current.textContent).toBe("Saved draft for B");
+
+      chatInputRef.current.textContent = "Latest draft for B";
+      act(() => result.current.saveDraft());
+      act(() => vi.advanceTimersByTime(100));
+      rerender({ conversationId: "conv-A" });
+      act(() => vi.advanceTimersByTime(500));
+
+      expect(chatInputRef.current.textContent).toBe("Latest draft for A");
+      expect(
+        conversationLocalStorage.getConversationState("conv-B").draftMessage,
+      ).toBe("Latest draft for B");
+    });
+
+    it("does not revive a draft cleared after confirmed delivery", () => {
+      // Arrange
+      const conversationId = "conv-delivered";
+      conversationLocalStorage.setConversationState(conversationId, {
+        draftMessage: "Previously saved draft",
+      });
+      const chatInputRef = createMockChatInputRef();
+      const { result, unmount } = renderHook(() =>
+        useDraftPersistence(conversationId, chatInputRef),
+      );
+
+      // Act
+      chatInputRef.current.textContent = "Delivered message";
+      act(() => result.current.saveDraft());
+      act(() => vi.advanceTimersByTime(100));
+      act(() => result.current.clearDraft());
+      unmount();
+      act(() => vi.advanceTimersByTime(500));
+      const restoredInputRef = createMockChatInputRef();
+      renderHook(() => useDraftPersistence(conversationId, restoredInputRef));
+
+      // Assert
+      expect(restoredInputRef.current.textContent).toBe("");
+      expect(
+        conversationLocalStorage.getConversationState(conversationId)
+          .draftMessage,
+      ).toBeNull();
+    });
+
+    it("flushes a pending conversation draft when switching to the home page", () => {
+      // Arrange
+      sessionStorage.setItem(HOME_PROMPT_DRAFT_KEY, "Home prompt");
+      const chatInputRef = createMockChatInputRef();
+      const { result, rerender } = renderHook(
+        ({ conversationId }: { conversationId: string | undefined }) =>
+          useDraftPersistence(conversationId, chatInputRef),
+        {
+          initialProps: {
+            conversationId: "conv-to-home" as string | undefined,
+          },
+        },
+      );
+
+      // Act
+      chatInputRef.current.textContent = "Conversation draft";
+      act(() => result.current.saveDraft());
+      rerender({ conversationId: undefined });
+
+      // Assert
+      expect(
+        conversationLocalStorage.getConversationState("conv-to-home")
+          .draftMessage,
+      ).toBe("Conversation draft");
+      expect(sessionStorage.getItem(HOME_PROMPT_DRAFT_KEY)).toBe("Home prompt");
+    });
+
+    it("does not revive text cleared by submission and its delivery event", () => {
+      // Arrange
+      const conversationId = "conv-submitted";
+      const chatInputRef: { current: HTMLDivElement | null } =
+        createMockChatInputRef();
+      const { result, unmount } = renderHook(() =>
+        useDraftPersistence(conversationId, chatInputRef),
+      );
+
+      // Act: submission clears the DOM; delivery clears the store directly.
+      chatInputRef.current!.textContent = "Submitted message";
+      act(() => result.current.saveDraft());
+      act(() => vi.advanceTimersByTime(100));
+      chatInputRef.current!.textContent = "";
+      act(() =>
+        conversationLocalStorage.setConversationState(conversationId, {
+          draftMessage: null,
+        }),
+      );
+      chatInputRef.current = null;
+      unmount();
+      act(() => vi.advanceTimersByTime(500));
+      const restoredInputRef = createMockChatInputRef();
+      renderHook(() => useDraftPersistence(conversationId, restoredInputRef));
+
+      // Assert
+      expect(restoredInputRef.current.textContent).toBe("");
+      expect(
+        conversationLocalStorage.getConversationState(conversationId)
+          .draftMessage,
+      ).toBeNull();
+    });
+
+    it("persists only the latest input after the usual 500ms debounce", () => {
+      // Arrange
+      const conversationId = "conv-normal-debounce";
+      const chatInputRef = createMockChatInputRef();
+      const { result } = renderHook(() =>
+        useDraftPersistence(conversationId, chatInputRef),
+      );
+
+      // Act
+      chatInputRef.current.textContent = "First input";
+      act(() => result.current.saveDraft());
+      act(() => vi.advanceTimersByTime(200));
+      chatInputRef.current.textContent = "Latest input";
+      act(() => result.current.saveDraft());
+      act(() => vi.advanceTimersByTime(499));
+
+      // Assert
+      expect(
+        conversationLocalStorage.getConversationState(conversationId)
+          .draftMessage,
+      ).toBeNull();
+      act(() => vi.advanceTimersByTime(1));
+      expect(
+        conversationLocalStorage.getConversationState(conversationId)
+          .draftMessage,
+      ).toBe("Latest input");
+    });
+
+    it("flushes multiline input before React detaches its DOM node", () => {
+      // Arrange: the component owns both the hook and the actual React ref.
+      const conversationId = "conv-multiline-unmount";
+      function DraftInput() {
+        const inputRef = useRef<HTMLDivElement>(null);
+        const { saveDraft } = useDraftPersistence(conversationId, inputRef);
+        return (
+          <div
+            ref={inputRef}
+            contentEditable
+            onInput={saveDraft}
+            data-testid="draft-input"
+          />
+        );
+      }
+      const { getByTestId, unmount } = render(<DraftInput />);
+      const input = getByTestId("draft-input");
+      input.innerHTML = "<div>First line</div><div>Second line</div>";
+      const connectionStates: boolean[] = [];
+      // jsdom omits innerText. Model the browser's rendered block line breaks,
+      // which become concatenated textContent once the node is detached.
+      vi.mocked(chatInputUtils.getTextContent).mockImplementation((element) => {
+        connectionStates.push(!!element?.isConnected);
+        return element?.isConnected
+          ? "First line\nSecond line"
+          : element?.textContent || "";
+      });
+
+      // Act
+      fireEvent.input(input);
+      act(() => vi.advanceTimersByTime(100));
+      unmount();
+      vi.mocked(chatInputUtils.getTextContent).mockImplementation(
+        (element) => element?.textContent || "",
+      );
+
+      // Assert: cleanup reads the real node while its rendered text is available.
+      expect(connectionStates).toEqual([true]);
+      expect(
+        conversationLocalStorage.getConversationState(conversationId)
+          .draftMessage,
+      ).toBe("First line\nSecond line");
     });
   });
 

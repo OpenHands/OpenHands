@@ -106,6 +106,21 @@ describe("buildTokenUsageBreakdown", () => {
     expect(breakdown.unmatchedCalls).toBe(0);
   });
 
+  it("counts the planning condenser as condensation", () => {
+    const stats: RuntimeConversationStats = {
+      usage_to_metrics: {
+        planning_condenser: metrics([call("c1", 300, 40)]),
+      },
+    };
+
+    const breakdown = buildTokenUsageBreakdown(stats, []);
+
+    expect(breakdown.rows.map((row) => row.activity)).toEqual([
+      { kind: "condensation" },
+    ]);
+    expect(breakdown.unmatchedCalls).toBe(0);
+  });
+
   it("labels calls that no event explains by the LLM that made them", () => {
     // Arrange: the agent LLM has one matched and one unmatched call; the
     // condenser and a hook LLM never produce matching events.

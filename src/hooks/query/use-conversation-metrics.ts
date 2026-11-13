@@ -7,7 +7,17 @@ import type {
   RuntimeConversationStats,
 } from "#/api/conversation-service/agent-server-conversation-service.types";
 
-const selectStats = (stats: RuntimeConversationStats) => stats;
+/** What one REST read keeps: the raw runtime stats and the run's budget. */
+interface RuntimeStatsSnapshot {
+  stats: RuntimeConversationStats | null | undefined;
+  maxBudget: number | null;
+}
+
+const selectMetrics = ({ stats, maxBudget }: RuntimeStatsSnapshot) => ({
+  metrics: combineUsageMetrics(stats),
+  maxBudget,
+});
+const selectStats = ({ stats }: RuntimeStatsSnapshot) => stats;
 
 /**
  * One cached REST read of the conversation's runtime stats, shared by every
@@ -18,7 +28,7 @@ function useConversationStatsQuery<TData>(
   conversationUrl: string | null | undefined,
   sessionApiKey: string | null | undefined,
   enabled: boolean,
-  select: (stats: RuntimeConversationStats) => TData,
+  select: (snapshot: RuntimeStatsSnapshot) => TData,
 ) {
   const { backend } = useActiveBackend();
   const runtimeEndpointReady =
@@ -39,7 +49,10 @@ function useConversationStatsQuery<TData>(
           conversationUrl,
           sessionApiKey,
         );
-      return conversationInfo.stats;
+      return {
+        stats: conversationInfo.stats,
+        maxBudget: conversationInfo.max_budget_per_run ?? null,
+      };
     },
     select,
     // conversation_url is only set for cloud conversations; local ones are
@@ -63,6 +76,7 @@ export const useConversationMetrics = (
   enabled: boolean = true,
 ): {
   data: MetricsSnapshot | undefined;
+  maxBudget: number | null;
   isLoading: boolean;
   error: unknown;
 } => {
@@ -71,11 +85,12 @@ export const useConversationMetrics = (
     conversationUrl,
     sessionApiKey,
     enabled,
-    combineUsageMetrics,
+    selectMetrics,
   );
 
   return {
-    data: query.data,
+    data: query.data?.metrics,
+    maxBudget: query.data?.maxBudget ?? null,
     isLoading: query.isLoading,
     error: query.error,
   };

@@ -99,7 +99,9 @@ describe("ConversationTagChips", () => {
     const popover = screen.getByTestId(
       "conversation-card-tag-overflow-popover",
     );
-    expect(popover.parentElement).toBe(document.body);
+    // The appearance wrapper is display: contents, so the popover still lays out at body level.
+    expect(popover.parentElement).toHaveClass("contents");
+    expect(popover.parentElement?.parentElement).toBe(document.body);
     const rows = within(popover).getAllByTestId(
       "conversation-card-tag-overflow-row",
     );
@@ -202,6 +204,17 @@ describe("ConversationTagChips", () => {
     const chip = screen.getByTestId("conversation-card-tag-chip");
     expect(chip.textContent).toBe("Work");
     expect(chip).toHaveAttribute("title", "Work");
+  });
+
+  it("shows automation setup draft as a readable key/value chip", () => {
+    renderWithProviders(
+      <ConversationTagChips tags={[["automationsetup", "draft"]]} />,
+    );
+
+    const chip = screen.getByTestId("conversation-card-tag-chip");
+    const expected = "AUTOMATION_SETUP$TITLE: AUTOMATIONS$DETAIL$DRAFT";
+    expect(chip).toHaveTextContent(expected);
+    expect(chip).toHaveAttribute("title", expected);
   });
 
   it("safely truncates emoji values while preserving the full tooltip", () => {

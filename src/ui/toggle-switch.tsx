@@ -38,13 +38,15 @@ export function ToggleSwitchVisual({
           "inline-block rounded-full",
           "transition-transform duration-200 ease-in-out motion-reduce:transition-none",
           compact ? "size-2" : "size-4",
+          // The thumb starts at the inline start, which is the right edge in
+          // RTL, so it travels towards the left there.
           enabled
             ? compact
-              ? "translate-x-2.5 bg-base-secondary"
-              : "translate-x-5.25 bg-base-secondary"
+              ? "translate-x-2.5 rtl:-translate-x-2.5 bg-base-secondary"
+              : "translate-x-5.25 rtl:-translate-x-5.25 bg-base-secondary"
             : compact
               ? "translate-x-0 bg-muted"
-              : "translate-x-0.5 bg-muted",
+              : "translate-x-0.5 rtl:-translate-x-0.5 bg-muted",
         )}
       />
     </span>

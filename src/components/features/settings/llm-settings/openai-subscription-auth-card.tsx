@@ -204,7 +204,7 @@ export function OpenAISubscriptionAuthCard({
           <div className="flex items-center gap-2 rounded-lg bg-surface-deep px-3 py-2 font-mono text-base font-semibold text-contrast">
             <span
               data-testid="subscription-user-code"
-              className="flex-1 select-all tracking-[0.08em]"
+              className="flex-1 select-all tracking-auth-code"
             >
               {challenge.userCode}
             </span>

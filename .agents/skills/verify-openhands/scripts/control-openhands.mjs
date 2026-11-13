@@ -15,6 +15,7 @@ import {
   readFileSync,
   readdirSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   unlinkSync,
@@ -26,22 +27,50 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateSync, gunzipSync } from "node:zlib";
 import { buildIdentity } from "./lib/build-id.mjs";
+import { groupAlive, privatePurgeAllowed } from "./lib/process-groups.mjs";
 import {
   editorOffset,
   launcherEnvFor,
+  lockedCloudOrigin,
   portsAfterRestart,
   runPorts,
 } from "./lib/launcher-env.mjs";
 import { baselineLines, parseBaseline, withBaseline } from "./lib/baseline.mjs";
-import { affectedFamilies, familyHead } from "./lib/map-sources.mjs";
+import {
+  affectedFamilies,
+  familyHead,
+  serverMapIds,
+  specMatches,
+} from "./lib/map-sources.mjs";
+import {
+  classifyAttempt,
+  judgeAssertion,
+  knownBugBlocks,
+  parseBugPredicate,
+  proofVerdict,
+  viewportToRestore,
+} from "./lib/known-bug.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
 import {
   citedTestids,
   resolveTestids,
   sourceLiterals,
+  sourceControls,
+  mapWords,
+  unnamedControls,
 } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
+import { keyDownArguments } from "./lib/held-keys.mjs";
+import {
+  DEFAULT_AGENT_PROFILE,
+  agentProfileRepoint,
+} from "./lib/agent-profile-repoint.mjs";
+import {
+  PAGE_LIMIT,
+  collectEvents,
+  countImages,
+} from "./lib/events-paging.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const skillDir = resolve(here, "..");
@@ -207,16 +236,6 @@ function processAlive(pid) {
   }
 }
 
-function groupAlive(pgid) {
-  if (!pgid) return false;
-  try {
-    process.kill(-pgid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM";
-  }
-}
-
 function commandLine(pid) {
   try {
     if (existsSync(`/proc/${pid}/cmdline`)) {
@@ -282,13 +301,14 @@ function releaseClaim(run) {
   }
 }
 
-async function findPortBlock(start, runDir, editor) {
+async function findPortBlock(start, runDir, editor, options) {
   // The launcher needs ingress P, agent-server P+1, automation P+2, static
   // frontend P+3, and the editor port only when it serves VS Code (`editor`
   // is its offset from the agent-server port, or null; see editorOffset).
+  // A --lock-to-cloud run also needs P+4.
   mkdirSync(verifyHome, { recursive: true });
   for (let base = start; base < start + 900; base += 10) {
-    const ports = Object.values(runPorts(base, editor));
+    const ports = Object.values(runPorts(base, editor, options));
     const busy = await Promise.all(ports.map((p) => portOpen(p)));
     if (busy.some(Boolean)) continue;
     if (tryClaim(base, runDir)) return base;
@@ -343,6 +363,7 @@ function defaults() {
 }
 
 function availableMemoryBytes() {
+  if (process.platform === "darwin") return process.availableMemory();
   // MemAvailable counts reclaimable cache; os.freemem() alone understates it.
   try {
     const line = readFileSync("/proc/meminfo", "utf8").match(
@@ -389,7 +410,7 @@ async function browserCall(run, cmd, args = {}, { timeout = 120_000 } = {}) {
   const result = await response.json();
   if (!result.ok) {
     throw new CliError(result.error, {
-      code: 1,
+      code: Number.isInteger(result.code) ? result.code : 1,
       hint: result.hint,
       extra: { url: result.url, failureScreenshot: result.failureScreenshot },
     });
@@ -410,6 +431,8 @@ async function startBrowser(run) {
       ...process.env,
       OH_VERIFY_RUN: run.dir,
       OH_VERIFY_BASE_URL: run.baseUrl,
+      // `browser goto` may also open the run's own locked-to-Cloud page.
+      OH_VERIFY_EXTRA_ORIGINS: run.lockedCloud?.url ?? "",
     },
   });
   child.unref();
@@ -520,6 +543,19 @@ async function cmdLaunch({ flags }) {
   // and run.json of a run that may still be live. `restart` reuses a run.
   const requestedRunId = flags["run-id"];
   if (requestedRunId !== undefined) checkNewRunId(requestedRunId);
+  let lockedCloud;
+  if (flags["lock-to-cloud"] !== undefined) {
+    try {
+      lockedCloud = lockedCloudOrigin(
+        flags["lock-to-cloud"] === true ? "" : flags["lock-to-cloud"],
+      );
+    } catch (error) {
+      usage(
+        error.message,
+        "control-openhands launch --new --lock-to-cloud https://app.all-hands.dev",
+      );
+    }
+  }
   if (nodeMajor() < 24) {
     throw new CliError(
       `Node >=24 is required by the launcher; this is ${process.version}.`,
@@ -690,18 +726,22 @@ async function cmdLaunch({ flags }) {
   if (flags["automation-version"])
     env.OH_AUTOMATION_VERSION = flags["automation-version"];
   if (flags.vscode) env.OH_CANVAS_ENABLE_VSCODE = "true";
+  // The ingress hosts the DigitalOcean Managed Agents web bridge (/mars/*)
+  // only with exactly MARS_WEB=1 (OpenHands/OpenHands#18783).
+  if (flags["mars-web"]) env.MARS_WEB = "1";
   // Only PASS_ENV and the flags above reach the launcher, so a version pin
   // exported in the caller's shell would be dropped without a word.
   const ignoredEnv = Object.keys(process.env).filter(
     (k) =>
       (/^OH_(AGENT_SERVER|AUTOMATION)_/.test(k) ||
-        k === "OH_CANVAS_ENABLE_VSCODE") &&
+        k === "OH_CANVAS_ENABLE_VSCODE" ||
+        k === "MARS_WEB") &&
       !(k in env),
   );
   const warnings = [];
   if (ignoredEnv.length)
     warnings.push(
-      `Ignored ${ignoredEnv.join(", ")} from your shell: runs are isolated. Use --sdk-version/--sdk-ref/--sdk-path, --automation-version/--automation-ref/--automation-path or --vscode.`,
+      `Ignored ${ignoredEnv.join(", ")} from your shell: runs are isolated. Use --sdk-version/--sdk-ref/--sdk-path, --automation-version/--automation-ref/--automation-path, --vscode or --mars-web.`,
     );
 
   // 4. Ports. The editor port is reserved only when this checkout's launcher
@@ -712,14 +752,16 @@ async function cmdLaunch({ flags }) {
     warnings.push(
       `Could not ask scripts/dev-with-automation.mjs whether it serves VS Code (${editor.reason}); reserving the editor port as before.`,
     );
+  const portOptions = { lockedCloud: lockedCloud !== undefined };
   const base = flags.port
     ? intFlag(flags.port)
     : await findPortBlock(
         intFlag(flags["port-from"], 18800),
         dir,
         editor.offset,
+        portOptions,
       );
-  const ports = runPorts(base, editor.offset);
+  const ports = runPorts(base, editor.offset, portOptions);
   if (flags.port) {
     const busy = [];
     for (const [name, port] of Object.entries(ports))
@@ -734,9 +776,8 @@ async function cmdLaunch({ flags }) {
     OH_CANVAS_SAFE_BACKEND_PORT: String(ports.agentServer),
     OH_CANVAS_SAFE_AUTOMATION_PORT: String(ports.automation),
     OH_CANVAS_SAFE_VITE_PORT: String(ports.frontend),
-    // A private tmux server per run (OpenHands/OpenHands#17946: the launcher's
-    // <stateDir>/tmux is never created, so runs would share one server). It
-    // lives under /tmp because a socket below the long run path would exceed
+    // A private tmux socket directory per run. It lives under /tmp, not the launcher's
+    // <stateDir>/tmux, because a socket below the long run path would exceed
     // the 108-byte Unix socket limit.
     TMUX_TMPDIR: tmuxDirFor(dir),
   });
@@ -771,23 +812,28 @@ async function cmdLaunch({ flags }) {
     pins: defaults().versions,
     overrides: Object.fromEntries(
       Object.entries(env).filter(([k]) =>
-        /^OH_(AGENT_SERVER_|AUTOMATION_|CANVAS_ENABLE_VSCODE$)/.test(k),
+        /^(OH_(AGENT_SERVER_|AUTOMATION_|CANVAS_ENABLE_VSCODE$)|MARS_WEB$)/.test(
+          k,
+        ),
       ),
     ),
+    ...(lockedCloud
+      ? {
+          lockedCloud: {
+            cloud: lockedCloud,
+            url: `http://127.0.0.1:${ports.lockedCloud}`,
+          },
+        }
+      : {}),
   };
   spawnLauncher(run);
   saveRun(run);
-  try {
-    if (
-      existsSync(join(verifyHome, "current")) ||
-      lstatSync(join(verifyHome, "current"), { throwIfNoEntry: false })
-    ) {
-      unlinkSync(join(verifyHome, "current"));
-    }
-  } catch {
-    // no previous pointer
-  }
-  symlinkSync(dir, join(verifyHome, "current"));
+  // Swap the pointer atomically: concurrent `launch --new` calls each write a
+  // private temporary link and rename it over `current`, so none of them
+  // races another's unlink/symlink pair (EEXIST).
+  const pointerTmp = join(verifyHome, `.current-${process.pid}-${randomBytes(4).toString("hex")}`);
+  symlinkSync(dir, pointerTmp);
+  renameSync(pointerTmp, join(verifyHome, "current"));
 
   // 6. Wait for readiness: authenticated settings, automation health and SPA.
   await waitForStack(run, intFlag(flags.timeout, 600));
@@ -798,6 +844,7 @@ async function cmdLaunch({ flags }) {
   };
   run.readyAt = new Date().toISOString();
   saveRun(run);
+  if (run.lockedCloud) await startLockedCloud(run, intFlag(flags.timeout, 600));
 
   let browser;
   if (!flags["no-browser"]) {
@@ -829,6 +876,7 @@ async function cmdLaunch({ flags }) {
     revision,
     builtThisRun: built,
     ports,
+    ...(run.lockedCloud ? { lockedCloud: run.lockedCloud } : {}),
     versions: run.versions,
     browser,
     next: [
@@ -906,6 +954,102 @@ function spawnLauncher(run) {
   return child;
 }
 
+// A page locked to one OpenHands Cloud host (F01.locked-cloud-first-run,
+// F25.locked-cloud). bin/agent-canvas.mjs has no option for it; only
+// scripts/static-server.mjs --lock-to-cloud has. So a --lock-to-cloud run
+// serves the same build from a second static server on P+4, in its own
+// process group, which `stop` ends with the run. The locked page talks only
+// to that Cloud host, so it gets no session key.
+async function startLockedCloud(run, timeoutSec) {
+  const priv = join(run.dir, "private");
+  const env = {};
+  for (const name of PASS_ENV)
+    if (process.env[name] !== undefined) env[name] = process.env[name];
+  Object.assign(env, {
+    HOME: join(priv, "home"),
+    DO_NOT_TRACK: "1",
+    // One bridge per stack at most: this page never hosts /mars/*.
+    MARS_WEB: "0",
+  });
+  const logPath = join(priv, "locked-cloud.log");
+  const logFd = openSync(logPath, "a", 0o600);
+  const child = spawn(
+    process.execPath,
+    [
+      join(repoRoot, "scripts", "static-server.mjs"),
+      "--dir",
+      join(repoRoot, "build"),
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(run.ports.lockedCloud),
+      "--lock-to-cloud",
+      run.lockedCloud.cloud,
+    ],
+    { cwd: repoRoot, env, detached: true, stdio: ["ignore", logFd, logFd] },
+  );
+  child.unref();
+  run.lockedCloud.pgid = child.pid;
+  saveRun(run);
+  const deadline = Date.now() + timeoutSec * 1000;
+  let last = "";
+  for (;;) {
+    if (!groupAlive(child.pid)) {
+      throw new CliError("The locked-to-Cloud static server exited.", {
+        code: 3,
+        hint: "The stack is running; `control-openhands stop` it and retry.",
+        extra: {
+          run: run.dir,
+          logTail: readFileSync(logPath, "utf8")
+            .split("\n")
+            .slice(-15)
+            .join("\n"),
+        },
+      });
+    }
+    try {
+      const response = await fetch(`${run.lockedCloud.url}/`, {
+        signal: AbortSignal.timeout(4000),
+      });
+      const html = await response.text();
+      last = `status=${response.status}`;
+      if (response.ok && html.includes("__AGENT_CANVAS_LOCK_TO_CLOUD__"))
+        return;
+    } catch (error) {
+      last = String(error.message);
+    }
+    if (Date.now() > deadline)
+      throw new CliError(
+        `The locked-to-Cloud page is not ready after ${timeoutSec}s (${last}).`,
+        { code: 3, extra: { run: run.dir } },
+      );
+    await delay(500);
+  }
+}
+
+async function stopLockedCloud(run) {
+  const pgid = run.lockedCloud?.pgid;
+  if (!groupAlive(pgid)) return { stopped: true };
+  const cmd = commandLine(pgid);
+  if (cmd && !cmd.includes("static-server.mjs")) {
+    throw new CliError(
+      `PID ${pgid} is no longer this run's locked-to-Cloud server (${cmd.slice(0, 80)}); refusing to signal it.`,
+      { code: 3 },
+    );
+  }
+  let forced = false;
+  process.kill(-pgid, "SIGTERM");
+  for (let i = 0; i < 20 && groupAlive(pgid); i += 1) await delay(500);
+  if (groupAlive(pgid)) {
+    process.kill(-pgid, "SIGKILL");
+    forced = true;
+    await delay(1000);
+  }
+  for (let i = 0; i < 20 && (await portOpen(run.ports.lockedCloud)); i += 1)
+    await delay(500);
+  return { stopped: !groupAlive(pgid), forced };
+}
+
 async function stopLauncher(run) {
   const pgid = run.launcherPgid;
   let forced = false;
@@ -942,7 +1086,9 @@ async function stopLauncher(run) {
     }
   }
   // Give sockets a moment to close before callers check or reuse the ports.
-  for (const port of Object.values(run.ports)) {
+  // The locked-to-Cloud page is not the launcher's: a restart keeps it.
+  for (const [name, port] of Object.entries(run.ports)) {
+    if (name === "lockedCloud") continue;
     for (let i = 0; i < 20 && (await portOpen(port)); i += 1) await delay(500);
   }
   return { stopped: !groupAlive(pgid), forced };
@@ -1052,7 +1198,7 @@ async function cmdService({ positional, flags }) {
     out({ ok: true, launcherAlive: groupAlive(run.launcherPgid), services });
     return;
   }
-  if (sub === "stop") {
+  if (["stop", "pause", "resume"].includes(sub)) {
     const pattern = SERVICES[name];
     if (!pattern) {
       usage(
@@ -1060,7 +1206,7 @@ async function cmdService({ positional, flags }) {
         "control-openhands service stop automation",
       );
     }
-    // Only processes inside this run's own process group are candidates.
+    // Only descendants of this run's launcher are candidates.
     const targets = procs.filter(
       (p) => pattern.test(p.args) && p.pid !== run.launcherPid,
     );
@@ -1073,10 +1219,22 @@ async function cmdService({ positional, flags }) {
     // Signal each service's own process group (uv and its Python child).
     for (const pgid of new Set(targets.map((t) => t.pgid))) {
       try {
-        process.kill(-pgid, "SIGTERM");
+        process.kill(
+          -pgid,
+          { stop: "SIGTERM", pause: "SIGSTOP", resume: "SIGCONT" }[sub],
+        );
       } catch {
         // already gone
       }
+    }
+    if (sub !== "stop") {
+      out({
+        ok: true,
+        action: sub,
+        signalled: targets.map((t) => t.pid),
+        launcherAlive: groupAlive(run.launcherPgid),
+      });
+      return;
     }
     await delay(2000);
     out({
@@ -1088,7 +1246,7 @@ async function cmdService({ positional, flags }) {
     return;
   }
   usage(
-    "Usage: control-openhands service status | service stop automation|agent-server|frontend",
+    "Usage: control-openhands service status | service stop|pause|resume automation|agent-server|frontend",
     "control-openhands service stop automation",
   );
 }
@@ -1104,6 +1262,14 @@ async function cmdStatus({ flags }) {
     launcherAlive: groupAlive(run.launcherPgid),
     browserAlive: Boolean(daemonInfo(run)),
     ports: run.ports,
+    ...(run.lockedCloud
+      ? {
+          lockedCloud: {
+            ...run.lockedCloud,
+            alive: groupAlive(run.lockedCloud.pgid),
+          },
+        }
+      : {}),
     versions: run.versions,
     startedAt: run.startedAt,
   });
@@ -1211,8 +1377,38 @@ async function cmdDoctor({ flags }) {
         automation.status === 200,
         `status=${automation.status}`,
       );
+      if (run.overrides?.MARS_WEB === "1") {
+        const mars = await http(run, "GET", "/mars/health", { auth: false });
+        add(
+          "Managed Agents web bridge mounted (--mars-web)",
+          mars.status === 200 && mars.json?.ok === true,
+          `GET /mars/health status=${mars.status} ${mars.text.slice(0, 80)}`,
+        );
+      }
     } catch (error) {
       add("HTTP checks", false, String(error.message));
+    }
+  }
+  if (run.lockedCloud) {
+    try {
+      const response = await fetch(`${run.lockedCloud.url}/`, {
+        signal: AbortSignal.timeout(4000),
+      });
+      const html = await response.text();
+      const locked = html.match(/__AGENT_CANVAS_LOCK_TO_CLOUD__=([^;<]*)/);
+      add(
+        "locked-to-Cloud page serves the lock (--lock-to-cloud)",
+        response.ok &&
+          Boolean(locked) &&
+          locked[1].includes(run.lockedCloud.cloud),
+        `${run.lockedCloud.url}/ status=${response.status} lock=${locked?.[1] ?? "missing"}`,
+      );
+    } catch (error) {
+      add(
+        "locked-to-Cloud page serves the lock (--lock-to-cloud)",
+        false,
+        String(error.message),
+      );
     }
   }
   if (!flags["skip-ui"]) {
@@ -1268,11 +1464,16 @@ async function cmdStop({ flags }) {
   const pgid = run.launcherPgid;
   const launcher = await stopLauncher(run);
   if (launcher.forced) result.forced = true;
+  if (run.lockedCloud) {
+    const locked = await stopLockedCloud(run);
+    if (locked.forced) result.forced = true;
+  }
   const ports = {};
   for (const [name, port] of Object.entries(run.ports))
     ports[name] = (await portOpen(port)) ? "still open" : "closed";
-  result.launcherStopped = !groupAlive(pgid);
-  if (result.launcherStopped) {
+  result.launcherStopped =
+    !groupAlive(pgid) && !groupAlive(run.lockedCloud?.pgid);
+  if (privatePurgeAllowed(result.launcherStopped, ports)) {
     releaseClaim(run);
     rmSync(tmuxPathFor(run.dir), { recursive: true, force: true });
   }
@@ -1282,9 +1483,9 @@ async function cmdStop({ flags }) {
   const evidence = listFiles(join(run.dir, "evidence"));
   result.evidenceFiles = evidence.length;
   if (flags["purge-private"]) {
-    if (!result.launcherStopped)
+    if (!privatePurgeAllowed(result.launcherStopped, ports))
       throw new CliError(
-        "Refusing to purge private state while processes are alive.",
+        "Refusing to purge private state while processes or ports are alive.",
         { code: 3 },
       );
     const privateDir = join(run.dir, "private");
@@ -1487,6 +1688,30 @@ async function activateProfile(run, name) {
     );
 }
 
+// Onboarding pins the `default` agent profile to the LLM profile it created;
+// `llm preset` moves it to the one it activates (see
+// lib/agent-profile-repoint.mjs). `llm set` leaves it: its throwaway profiles
+// would otherwise become `default`'s and refuse deletion.
+async function repointDefaultAgentProfile(run, target) {
+  const path = `/api/agent-profiles/${DEFAULT_AGENT_PROFILE}`;
+  const detail = await http(run, "GET", path);
+  if (detail.status === 404) return undefined;
+  if (!detail.ok)
+    throw new CliError(
+      `Reading agent profile ${DEFAULT_AGENT_PROFILE} failed: ${detail.status} ${detail.text.slice(0, 300)}`,
+    );
+  const llm = await http(run, "GET", "/api/profiles");
+  const names = (llm.json?.profiles ?? []).map((p) => p.name);
+  const plan = agentProfileRepoint(detail.json?.profile, names, target);
+  if (!plan) return undefined;
+  const saved = await http(run, "POST", path, { body: plan.body });
+  if (!saved.ok)
+    throw new CliError(
+      `Pointing agent profile ${DEFAULT_AGENT_PROFILE} at ${target} failed: ${saved.status} ${saved.text.slice(0, 300)}`,
+    );
+  return { agentProfile: DEFAULT_AGENT_PROFILE, from: plan.from, to: target };
+}
+
 const PRESETS = {
   deepseek: {
     envVar: "DEEPSEEK_API_KEY",
@@ -1566,7 +1791,11 @@ async function cmdLlm({ positional, flags }) {
       created.push(profile.name);
     }
     const active = preset.profiles.find((p) => p.activate);
-    if (active) await activateProfile(run, active.name);
+    let repointed;
+    if (active) {
+      await activateProfile(run, active.name);
+      repointed = await repointDefaultAgentProfile(run, active.name);
+    }
     const settings = await http(run, "GET", "/api/settings");
     out({
       ok: true,
@@ -1574,6 +1803,7 @@ async function cmdLlm({ positional, flags }) {
       profiles: created,
       active: active?.name,
       activeModel: settings.json?.agent_settings?.llm?.model,
+      ...(repointed ? { repointed } : {}),
     });
     return;
   }
@@ -1837,7 +2067,14 @@ function eventText(event) {
 }
 
 // The Open Workspace folder browser has no path field: walk it to PATH.
-async function openWorkspace(run, name, { stay } = {}) {
+const WORKSPACE_MODES = ["local_repo", "new_worktree"];
+
+async function openWorkspace(run, name, { stay, mode } = {}) {
+  if (mode !== undefined && !WORKSPACE_MODES.includes(String(mode)))
+    usage(
+      `Unknown workspace mode ${mode}`,
+      "control-openhands workspace open qa-repo --mode new_worktree",
+    );
   // A bare name resolves inside <run>/workspace, where fixtures live.
   const inRun = join(run.dir, "workspace", name);
   const path = !existsSync(name) && existsSync(inRun) ? inRun : name;
@@ -1863,7 +2100,28 @@ async function openWorkspace(run, name, { stay } = {}) {
     selector: "testid=workspace-launch-button",
     timeout: 30_000,
   });
-  return { workspace: want, steps: walked.steps };
+  // The mode selector (Local / Worktree) sits in the preview bar
+  // the launch click leaves behind.
+  let preview;
+  if (mode !== undefined) {
+    await browserCall(run, "click", {
+      selector: "testid=workspace-mode-selector",
+      timeout: 30_000,
+    });
+    await browserCall(run, "click", {
+      selector: `testid=workspace-mode-selector-option-${mode}`,
+    });
+    preview = (
+      await browserCall(run, "text", {
+        selector: "testid=home-git-control-bar-preview",
+      })
+    ).text;
+  }
+  return {
+    workspace: want,
+    steps: walked.steps,
+    ...(mode !== undefined ? { mode: String(mode), preview } : {}),
+  };
 }
 
 async function cmdWorkspace({ positional, flags }) {
@@ -1871,10 +2129,13 @@ async function cmdWorkspace({ positional, flags }) {
   const [sub, path] = positional;
   if (sub !== "open" || !path)
     usage(
-      "Usage: control-openhands workspace open PATH [--stay]",
+      "Usage: control-openhands workspace open PATH [--stay] [--mode local_repo|new_worktree]",
       "control-openhands workspace open qa-repo   # a name resolves in <run>/workspace",
     );
-  out({ ok: true, ...(await openWorkspace(run, path, { stay: flags.stay })) });
+  out({
+    ok: true,
+    ...(await openWorkspace(run, path, { stay: flags.stay, mode: flags.mode })),
+  });
 }
 
 async function cmdConversation({ positional, flags }) {
@@ -1892,6 +2153,7 @@ async function cmdConversation({ positional, flags }) {
     if (flags.workspace && flags.workspace !== true)
       picked = await openWorkspace(run, String(flags.workspace), {
         stay: flags.stay,
+        mode: flags.mode,
       });
     else if (!flags["stay"]) await browserCall(run, "goto", { target: "/" });
     // Home and conversation pages share the composer: a contenteditable
@@ -1905,11 +2167,13 @@ async function cmdConversation({ positional, flags }) {
       value: prompt,
     });
     await browserCall(run, "click", { selector: "testid=submit-button" });
+    // Some launches (the automation setup page) show a temporary
+    // /conversations/launch-<id> page first; wait for the real id.
     const { url } = await browserCall(run, "wait-url", {
-      pattern: "/conversations/[^/?#]+",
+      pattern: "/conversations/(?!launch-)[^/?#]+",
       timeout: 60_000,
     });
-    const conversationId = /\/conversations\/([^/?#]+)/.exec(url)[1];
+    const conversationId = /\/conversations\/((?!launch-)[^/?#]+)/.exec(url)[1];
     const result = {
       ok: true,
       id: conversationId,
@@ -1961,19 +2225,6 @@ async function cmdConversation({ positional, flags }) {
   if (sub === "events") {
     if (!id) usage("conversation events <id> [--last N]");
     const last = intFlag(flags.last, 25);
-    const res = await http(
-      run,
-      "GET",
-      `/api/conversations/${encodeURIComponent(id)}/events/search?limit=100&sort_order=${flags["from-start"] ? "TIMESTAMP" : "TIMESTAMP_DESC"}`,
-    );
-    if (!res.ok)
-      throw new CliError(
-        `events: HTTP ${res.status} ${res.text.slice(0, 200)}`,
-      );
-    const fetched = res.json?.items ?? [];
-    const items = flags["from-start"]
-      ? fetched.slice(0, last)
-      : fetched.slice(0, last).reverse();
     const grep =
       flags.grep && flags.grep !== true
         ? String(flags.grep).toLowerCase()
@@ -1982,48 +2233,80 @@ async function cmdConversation({ positional, flags }) {
       flags.kinds && flags.kinds !== true
         ? String(flags.kinds).split(",")
         : null;
-    const shown = items
-      .filter((e) => !kinds || kinds.includes(e.kind))
-      .map((e) => {
-        const text = eventText(e);
-        const max = flags.full ? 4000 : 160;
-        const row = {
-          kind: e.kind,
-          source: e.source,
-          tool: e.tool_name ?? e.action?.kind,
-          text: text.slice(0, max),
-          truncated: text.length > max || undefined,
-          skills: e.activated_skills?.length ? e.activated_skills : undefined,
-          tools: Array.isArray(e.tools)
-            ? e.tools.map((tool) => tool.title || tool.name || tool.kind)
-            : undefined,
-          ts: e.timestamp,
-        };
-        if (grep) {
-          // Search the whole event (system prompt, tool args, extended
-          // content), not only the summarized text.
-          const raw = JSON.stringify(e);
-          const lower = raw.toLowerCase();
-          const excerpts = [];
-          let at = lower.indexOf(grep);
-          let matches = 0;
-          while (at >= 0) {
-            matches += 1;
-            if (excerpts.length < 3)
-              excerpts.push(
-                raw.slice(Math.max(0, at - 60), at + grep.length + 60),
-              );
-            at = lower.indexOf(grep, at + grep.length);
-          }
-          row.matches = matches;
-          row.excerpts = excerpts.length ? excerpts : undefined;
+    // --kinds and --grep filter before --last counts: `--kinds MessageEvent
+    // --last 3` is the three newest messages. The server pages at 100
+    // events; pages are read until `last` matching rows are in hand
+    // (lib/events-paging.mjs), so a grep reaches past the newest page.
+    const keep = (e) =>
+      (!kinds || kinds.includes(e.kind)) &&
+      (!grep || JSON.stringify(e).toLowerCase().includes(grep));
+    const order = flags["from-start"] ? "TIMESTAMP" : "TIMESTAMP_DESC";
+    const {
+      items: fetched,
+      more,
+      pages,
+    } = await collectEvents(
+      async (pageId) => {
+        const res = await http(
+          run,
+          "GET",
+          `/api/conversations/${encodeURIComponent(id)}/events/search?limit=${PAGE_LIMIT}&sort_order=${order}${pageId ? `&page_id=${encodeURIComponent(pageId)}` : ""}`,
+        );
+        if (!res.ok)
+          throw new CliError(
+            `events: HTTP ${res.status} ${res.text.slice(0, 200)}`,
+          );
+        return res.json ?? {};
+      },
+      last,
+      keep,
+    );
+    const selected = fetched.filter(keep).slice(0, last);
+    const items = flags["from-start"] ? selected : selected.reverse();
+    const shown = items.map((e) => {
+      const text = eventText(e);
+      const max = flags.full ? 4000 : 160;
+      const row = {
+        kind: e.kind,
+        source: e.source,
+        tool: e.tool_name ?? e.action?.kind,
+        text: text.slice(0, max),
+        truncated: text.length > max || undefined,
+        skills: e.activated_skills?.length ? e.activated_skills : undefined,
+        images:
+          countImages(e.llm_message?.content ?? e.message?.content) ||
+          undefined,
+        tools: Array.isArray(e.tools)
+          ? e.tools.map((tool) => tool.title || tool.name || tool.kind)
+          : undefined,
+        ts: e.timestamp,
+      };
+      if (grep) {
+        // Search the whole event (system prompt, tool args, extended
+        // content), not only the summarized text.
+        const raw = JSON.stringify(e);
+        const lower = raw.toLowerCase();
+        const excerpts = [];
+        let at = lower.indexOf(grep);
+        let matches = 0;
+        while (at >= 0) {
+          matches += 1;
+          if (excerpts.length < 3)
+            excerpts.push(
+              raw.slice(Math.max(0, at - 60), at + grep.length + 60),
+            );
+          at = lower.indexOf(grep, at + grep.length);
         }
-        return row;
-      })
-      .filter((row) => !grep || row.matches > 0);
+        row.matches = matches;
+        row.excerpts = excerpts.length ? excerpts : undefined;
+      }
+      return row;
+    });
     out({
       ok: true,
       total: fetched.length,
+      pages,
+      more,
       count: shown.length,
       events: shown,
     });
@@ -2081,7 +2364,12 @@ async function cmdConversation({ positional, flags }) {
       value: String(prompt),
     });
     await browserCall(run, "click", { selector: "testid=submit-button" });
-    const result = { ok: true, id, sent: String(prompt).length };
+    const result = {
+      ok: true,
+      id,
+      prompt: String(prompt).slice(0, 160),
+      chars: String(prompt).length,
+    };
     if (flags.wait)
       Object.assign(
         result,
@@ -2362,10 +2650,78 @@ async function cmdFixture({ positional, flags }) {
       path,
       `---\nname: ${skillName}\ndescription: QA fixture skill created by control-openhands.\n${trigger ? `triggers:\n- ${trigger}\n` : ""}---\n\n${body}\n`,
     );
+    // --commit records the project skill in the fixture repo, which a New
+    // Worktree conversation checks out from its commits.
+    let committed;
+    if (flags.commit) {
+      if (!flags.repo)
+        usage(
+          "fixture skill --commit needs --repo NAME (a personal skill has no repo)",
+          "control-openhands fixture skill --repo qa-repo --name qa-ping --commit",
+        );
+      const gitEnv = {
+        ...process.env,
+        GIT_AUTHOR_NAME: "QA Fixture",
+        GIT_AUTHOR_EMAIL: "qa@example.invalid",
+        GIT_COMMITTER_NAME: "QA Fixture",
+        GIT_COMMITTER_EMAIL: "qa@example.invalid",
+      };
+      const message = `Add ${skillName} skill`;
+      const head = () =>
+        execFileSync("git", ["rev-parse", "HEAD"], { cwd: root })
+          .toString()
+          .trim();
+      try {
+        execFileSync(
+          "git",
+          ["add", "-A", "--", `.agents/skills/${skillName}`],
+          {
+            cwd: root,
+            env: gitEnv,
+          },
+        );
+        const pending = execFileSync(
+          "git",
+          ["status", "--porcelain", "--", `.agents/skills/${skillName}`],
+          { cwd: root, env: gitEnv },
+        )
+          .toString()
+          .trim();
+        if (pending) {
+          // Only the skill's path: whatever else is staged in the fixture
+          // repo (F08 stages files there) stays staged.
+          execFileSync(
+            "git",
+            [
+              "commit",
+              "-q",
+              "-m",
+              message,
+              "--",
+              `.agents/skills/${skillName}`,
+            ],
+            { cwd: root, env: gitEnv },
+          );
+          committed = { sha: head(), message };
+        } else {
+          // A re-run of the recipe: the skill is already in the history.
+          committed = { sha: head(), unchanged: true };
+        }
+      } catch (error) {
+        const reason =
+          error.stderr?.toString().trim().split("\n")[0] ||
+          String(error.message).split("\n")[0];
+        throw new CliError(`Could not commit the skill in ${root}: ${reason}`, {
+          code: 1,
+          hint: "The repo must be a git checkout (control-openhands fixture git-repo --name NAME).",
+        });
+      }
+    }
     out({
       ok: true,
       path,
       scope: flags.repo ? "project" : "user",
+      committed,
       hint: "Reload the page: the skills list is cached.",
     });
     return;
@@ -2458,6 +2814,15 @@ function inspectDownload(path, needle) {
   return info;
 }
 
+function networkOrder(value) {
+  if (value === undefined) return undefined;
+  if (value === "request" || value === "completion") return value;
+  usage(
+    `--order must be request or completion, got ${value === true ? "nothing" : value}`,
+    "control-openhands browser network --filter 'schema' --order completion",
+  );
+}
+
 async function cmdBrowser({ positional, flags }) {
   const run = loadRun(flags);
   const [verb, ...rest] = positional;
@@ -2547,9 +2912,23 @@ async function cmdBrowser({ positional, flags }) {
       );
       result = await browserCall(run, "tooltip", { selector: sel, timeout });
       break;
-    case "media":
-      result = await browserCall(run, "media", { clear: Boolean(flags.clear) });
+    case "media": {
+      const reducedMotion = flags["reduced-motion"];
+      if (
+        rest.length ||
+        (reducedMotion !== undefined &&
+          !["reduce", "no-preference"].includes(reducedMotion))
+      )
+        usage(
+          "browser media --reduced-motion needs reduce | no-preference",
+          "control-openhands browser media --reduced-motion no-preference",
+        );
+      result = await browserCall(run, "media", {
+        clear: Boolean(flags.clear),
+        reducedMotion,
+      });
       break;
+    }
     case "toasts":
       result = await browserCall(run, "toasts", {
         history: Boolean(flags.history),
@@ -2639,13 +3018,25 @@ async function cmdBrowser({ positional, flags }) {
       result = { stopped, profileCleared: true, ...(await startBrowser(run)) };
       break;
     }
+    case "network-state": {
+      const state = rest[0];
+      if (rest.length !== 1 || !["offline", "online", "status"].includes(state))
+        usage(
+          "browser network-state needs offline | online | status",
+          "control-openhands browser network-state offline",
+        );
+      result = await browserCall(run, "network-state", { state });
+      break;
+    }
     case "network":
       result = await browserCall(run, "network", {
         clear: Boolean(flags.clear),
         external: Boolean(flags.external),
+        bodies: Boolean(flags.bodies),
         last: flags.last,
         filter:
           flags.filter && flags.filter !== true ? flags.filter : undefined,
+        order: networkOrder(flags.order),
       });
       break;
     case "hover":
@@ -2690,6 +3081,28 @@ async function cmdBrowser({ positional, flags }) {
         timeout,
       });
       break;
+    case "key": {
+      const [action, key] = rest;
+      const example = "control-openhands browser key down Control";
+      if (action === "down") {
+        need(2, example);
+        let args;
+        try {
+          args = keyDownArguments(key, flags);
+        } catch (error) {
+          usage(error.message, error.hint);
+        }
+        result = await browserCall(run, "key-down", args);
+      } else if (action === "up") {
+        need(2, "control-openhands browser key up Control");
+        result = await browserCall(run, "key-up", { key });
+      } else if (action === "release-all") {
+        result = await browserCall(run, "key-release-all");
+      } else {
+        usage("browser key down|up <Key> | browser key release-all", example);
+      }
+      break;
+    }
     case "select":
       need(2, "control-openhands browser select 'testid=x' value");
       result = await browserCall(run, "select", {
@@ -2712,6 +3125,8 @@ async function cmdBrowser({ positional, flags }) {
         by: flags.by,
         x: flags.x,
         timeout,
+        observe: flags.observe,
+        observeMs: flags["observe-ms"],
       });
       break;
     case "wait":
@@ -2776,6 +3191,44 @@ async function cmdBrowser({ positional, flags }) {
         fullPage: Boolean(flags["full-page"]),
       });
       break;
+    case "record": {
+      const action = rest[0];
+      if (action === "start") {
+        if (!flags.feature || !flags.name)
+          usage(
+            "browser record start needs --feature <ID> and --name <label>",
+            "control-openhands browser record start --feature F05.overflow-menu --name escape",
+          );
+        result = await browserCall(run, "record-start", {
+          feature: flags.feature,
+          name: flags.name,
+          fps: flags.fps === undefined ? undefined : intFlag(flags.fps),
+          maxSeconds:
+            flags["max-seconds"] === undefined
+              ? undefined
+              : intFlag(flags["max-seconds"]),
+        });
+      } else if (action === "stop") {
+        result = await browserCall(
+          run,
+          "record-stop",
+          {
+            gif: Boolean(flags.gif),
+            keepFrames: Boolean(flags["keep-frames"]),
+            discard: Boolean(flags.discard),
+          },
+          { timeout: 600_000 },
+        );
+      } else if (["pause", "resume", "status"].includes(action)) {
+        result = await browserCall(run, `record-${action}`);
+      } else {
+        usage(
+          "browser record start|pause|resume|stop|status",
+          "control-openhands browser record start --feature F05.overflow-menu --name escape",
+        );
+      }
+      break;
+    }
     case "clock":
       if (
         !flags["offset-ms"] &&
@@ -2790,6 +3243,17 @@ async function cmdBrowser({ positional, flags }) {
         offsetMs: flags["offset-ms"],
         system: flags.system,
         fixed: flags.fixed,
+      });
+      break;
+    case "timezone":
+      if (!flags.reset)
+        need(
+          1,
+          "control-openhands browser timezone America/Sao_Paulo   # an IANA name, or --reset",
+        );
+      result = await browserCall(run, "timezone", {
+        zone: rest[0],
+        reset: Boolean(flags.reset),
       });
       break;
     case "viewport":
@@ -2815,6 +3279,7 @@ async function cmdBrowser({ positional, flags }) {
       result = await browserCall(run, "wait-tab", {
         pattern: rest[0],
         timeout,
+        excludeActive: Boolean(flags.new),
       });
       break;
     case "events":
@@ -2828,8 +3293,14 @@ async function cmdBrowser({ positional, flags }) {
       result = await browserCall(run, "eval", { expression: rest[0] });
       break;
     case "tab":
-      need(1, "control-openhands browser tab 1");
-      result = await browserCall(run, "tab", { index: rest[0] });
+      need(1, "control-openhands browser tab 1 | tab new [/path]");
+      result =
+        rest[0] === "new"
+          ? await browserCall(run, "new-tab", {
+              target: rest[1],
+              allowExternal: Boolean(flags["allow-external"]),
+            })
+          : await browserCall(run, "tab", { index: rest[0] });
       break;
     case "close-tab":
       need(1, "control-openhands browser close-tab 1");
@@ -2857,6 +3328,10 @@ async function cmdBrowser({ positional, flags }) {
 // Commands: evidence ledger.
 // ---------------------------------------------------------------------------
 const RESULTS = ["pass", "fail", "blocked", "not-run"];
+// `bug run` adds two results of its own: xfail (a known bug reproduced at
+// its marked assertion) and xpass (a known bug no longer reproduces).
+const BUG_RESULTS = ["xfail", "xpass"];
+const REPORT_RESULTS = [...RESULTS, ...BUG_RESULTS];
 
 // The ledger is append-only: the report shows each check's latest row,
 // keyed by feature and entry point, minus retractions.
@@ -2983,14 +3458,14 @@ async function cmdEvidence({ positional, flags }) {
   }
   if (sub === "report") {
     const latest = latestRows(rows);
-    const counts = Object.fromEntries(RESULTS.map((r) => [r, 0]));
+    const counts = Object.fromEntries(REPORT_RESULTS.map((r) => [r, 0]));
     for (const row of latest.values()) counts[row.result] += 1;
     // Per family: the denominator the report contract asks for.
     const families = new Map();
     for (const row of latest.values()) {
       const id = row.feature.slice(0, 3);
       if (!families.has(id))
-        families.set(id, Object.fromEntries(RESULTS.map((r) => [r, 0])));
+        families.set(id, Object.fromEntries(REPORT_RESULTS.map((r) => [r, 0])));
       families.get(id)[row.result] += 1;
     }
     // --baseline PATH: another run's ledger.jsonl (or run directory). Rows
@@ -3035,7 +3510,7 @@ async function cmdEvidence({ positional, flags }) {
       "",
       `Revision \`${run.revision}\`, ${run.mode} mode, Agent Server ${run.versions?.agentServer ?? "?"}, base ${run.baseUrl}.`,
       "",
-      `Checks: ${latest.size} — ${RESULTS.map((r) => `${r} ${counts[r]}`).join(", ")}. Families: ${families.size}.`,
+      `Checks: ${latest.size} — ${REPORT_RESULTS.map((r) => `${r} ${counts[r]}`).join(", ")}. Families: ${families.size}.`,
       "",
     ];
     if (changes) {
@@ -3064,14 +3539,14 @@ async function cmdEvidence({ positional, flags }) {
     lines.push(
       "## Families",
       "",
-      "| Family | pass | fail | blocked | not-run |",
-      "|---|---|---|---|---|",
+      "| Family | pass | fail | blocked | not-run | xfail | xpass |",
+      "|---|---|---|---|---|---|---|",
     );
     for (const [id, c] of [...families.entries()].sort(([a], [b]) =>
       a.localeCompare(b),
     ))
       lines.push(
-        `| ${id} | ${c.pass} | ${c.fail} | ${c.blocked} | ${c["not-run"]} |`,
+        `| ${id} | ${c.pass} | ${c.fail} | ${c.blocked} | ${c["not-run"]} | ${c.xfail} | ${c.xpass} |`,
       );
     lines.push(
       "",
@@ -3080,8 +3555,16 @@ async function cmdEvidence({ positional, flags }) {
       "| Feature/check | Entry point | Expected → actual | Result | Note | Evidence |",
       "|---|---|---|---|---|---|",
     );
-    // Fail and blocked rows first (report.md), then by feature ID.
-    const order = { fail: 0, blocked: 1, "not-run": 2, pass: 3 };
+    // Fail, xpass (a known bug stopped reproducing: review the map) and
+    // blocked rows first (report.md), then by feature ID.
+    const order = {
+      fail: 0,
+      xpass: 1,
+      blocked: 2,
+      "not-run": 3,
+      xfail: 4,
+      pass: 5,
+    };
     for (const row of [...latest.values()].sort(
       (a, b) =>
         order[a.result] - order[b.result] || a.feature.localeCompare(b.feature),
@@ -3096,6 +3579,471 @@ async function cmdEvidence({ positional, flags }) {
   usage(
     "Usage: control-openhands evidence add|list|report",
     "control-openhands evidence report > report.md",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Commands: assert and known bugs (executable expected failures).
+// ---------------------------------------------------------------------------
+const cliPath = fileURLToPath(import.meta.url);
+
+// Runs another control-openhands command in a child process, as a recipe
+// would, and returns its exit code and parsed JSON output.
+function runSelf(args, { env = process.env, timeout = 300_000 } = {}) {
+  const child = spawnSync(process.execPath, [cliPath, ...args], {
+    env,
+    encoding: "utf8",
+    timeout,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  let json;
+  try {
+    json = JSON.parse(child.stdout);
+  } catch {
+    json = undefined;
+  }
+  return { code: child.status ?? 1, json, stdout: child.stdout ?? "" };
+}
+
+async function cmdAssert({ positional, flags }) {
+  const hasEquals = flags.equals !== undefined && flags.equals !== true;
+  const hasMatches = flags.matches !== undefined && flags.matches !== true;
+  if (
+    !flags.field ||
+    flags.field === true ||
+    hasEquals === hasMatches ||
+    !positional.length
+  )
+    usage(
+      "assert needs --field PATH, one of --equals VALUE or --matches REGEX, and -- <control-openhands command>",
+      "control-openhands assert --field enabled --equals true --bug-shows false -- browser enabled 'testid=submit-button'",
+    );
+  const bug =
+    flags.bug === undefined || flags.bug === true
+      ? undefined
+      : String(flags.bug);
+  const bugProblems = bug === undefined ? [] : parseBugPredicate(bug).problems;
+  if (bugProblems.length)
+    usage(
+      `--bug ${bugProblems.join("; ")}`,
+      `control-openhands assert --field status --equals 200 --bug 'status eq 500 && body.error contains "has no attribute"' -- api GET /api/...`,
+    );
+  const env = { ...process.env };
+  if (flags.run && flags.run !== true) env.OH_VERIFY_RUN = resolve(flags.run);
+  const child = runSelf(positional.map(String), { env });
+  const judged = judgeAssertion({
+    exitCode: child.code,
+    json: child.json,
+    field: flags.field,
+    equals: hasEquals ? String(flags.equals) : undefined,
+    matches: hasMatches ? String(flags.matches) : undefined,
+    bugShows:
+      flags["bug-shows"] === undefined || flags["bug-shows"] === true
+        ? undefined
+        : String(flags["bug-shows"]),
+    bug,
+  });
+  const result = {
+    ok: judged.kind === "hold",
+    ...judged,
+    field: flags.field,
+    expected: hasEquals ? String(flags.equals) : `/${flags.matches}/`,
+    bugShows: flags["bug-shows"] === true ? undefined : flags["bug-shows"],
+    bug,
+    command: positional.join(" "),
+    output:
+      judged.kind === "error"
+        ? (child.json ?? child.stdout.slice(-2000))
+        : undefined,
+  };
+  // Under `bug run` every assertion is logged with the recipe line that ran
+  // it, so the runner reads the marked command's own result, never one a
+  // later cleanup step logged.
+  if (process.env.OH_VERIFY_ASSERT_LOG)
+    appendFileSync(
+      process.env.OH_VERIFY_ASSERT_LOG,
+      `${JSON.stringify({ ts: new Date().toISOString(), line: process.env.OH_VERIFY_LINE, ...result, output: undefined })}\n`,
+    );
+  out(result);
+  if (judged.kind === "error") process.exitCode = child.code || 1;
+  else if (judged.kind !== "hold") process.exitCode = 1;
+}
+
+function knownBugsIn(file) {
+  const files = file
+    ? [resolve(String(file))]
+    : featureFiles().map((f) => join(mapDir, f));
+  return files.flatMap((path) =>
+    knownBugBlocks(readFileSync(path, "utf8")).map((b) => ({
+      ...b,
+      file: relative(skillDir, path),
+    })),
+  );
+}
+
+function selectBlocks(id, flags) {
+  const blocks = knownBugsIn(
+    flags.file === true ? undefined : flags.file,
+  ).filter(
+    (b) =>
+      b.id === id &&
+      (!flags.name || flags.name === true || b.name === flags.name),
+  );
+  if (!blocks.length)
+    throw new CliError(
+      `No known-bug block for ${id}${flags.name && flags.name !== true ? ` named ${flags.name}` : ""}`,
+      { code: 2, hint: "control-openhands bug list" },
+    );
+  const broken = blocks.filter((b) => b.problems.length);
+  if (broken.length)
+    throw new CliError(`Malformed known-bug block for ${id}`, {
+      code: 2,
+      extra: {
+        problems: broken.map(
+          (b) => `${b.file}:${b.line} ${b.problems.join("; ")}`,
+        ),
+      },
+    });
+  return blocks;
+}
+
+function runBlock(run, block, { timeoutMs, logFile, failureFile, scriptFile }) {
+  // The DEBUG trap tags every command (and the asserts it runs) with its
+  // line. The ERR trap keeps the first failure only, and retags what runs
+  // after it (an EXIT trap's cleanup), so neither overwrites the observation.
+  const preamble = [
+    "set -eo pipefail",
+    `cd ${JSON.stringify(repoRoot)}`,
+    "export OH_VERIFY_LINE=",
+    "trap 'OH_VERIFY_LINE=$LINENO' DEBUG",
+    `trap '[ -e ${JSON.stringify(failureFile)} ] || printf "%s\\t%s\\n" "$LINENO" "$BASH_COMMAND" > ${JSON.stringify(failureFile)}; OH_VERIFY_LINE=after-failure' ERR`,
+  ];
+  writeFileSync(scriptFile, `${preamble.join("\n")}\n${block.script}\n`);
+  const env = {
+    ...process.env,
+    OH_VERIFY_RUN: run.dir,
+    OH_VERIFY_ASSERT_LOG: logFile,
+    PATH: `${here}:${dirname(process.execPath)}:${process.env.PATH ?? ""}`,
+  };
+  return new Promise((done) => {
+    const started = Date.now();
+    const child = spawn("bash", [scriptFile], {
+      env,
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d) => (stdout += d));
+    child.stderr.on("data", (d) => (stderr += d));
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {}
+    }, timeoutMs);
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      // Nothing a recipe started outlives it.
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {}
+      let failedLine = null;
+      let failedCommand;
+      if (code !== 0 && existsSync(failureFile)) {
+        const [line, ...cmd] = readFileSync(failureFile, "utf8")
+          .trimEnd()
+          .split("\t");
+        if (/^\d+$/.test(line)) failedLine = Number(line) - preamble.length;
+        failedCommand = cmd.join("\t").slice(0, 500);
+      }
+      done({
+        lineOffset: preamble.length,
+        exitCode: timedOut ? null : code,
+        timedOut,
+        failedLine,
+        failedCommand,
+        stdout,
+        stderr,
+        elapsedMs: Date.now() - started,
+      });
+    });
+  });
+}
+
+function readJsonl(path) {
+  return existsSync(path)
+    ? readFileSync(path, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => JSON.parse(l))
+    : [];
+}
+
+const attemptsFile = (dir) =>
+  join(dir, "evidence", "known-bugs", "attempts.jsonl");
+
+async function cmdBug({ positional, flags }) {
+  const [sub, id] = positional;
+  if (sub === "list") {
+    const blocks = knownBugsIn(flags.file === true ? undefined : flags.file);
+    out({
+      ok: blocks.every((b) => !b.problems.length),
+      count: blocks.length,
+      blocks: blocks.map(({ script, ...b }) => b),
+    });
+    return;
+  }
+  if (sub === "run") {
+    if (!id)
+      usage(
+        "bug run needs a sub-feature ID",
+        "control-openhands bug run F05.prefill-send --attempts 2 --label baseline",
+      );
+    const run = loadRun(flags);
+    if (!run) throw new CliError("No run: launch one first", { code: 3 });
+    const blocks = selectBlocks(id, flags);
+    const attempts = intFlag(flags.attempts, 1);
+    const timeoutMs = intFlag(flags.timeout, 180) * 1000;
+    const label = flags.label === true ? undefined : flags.label;
+    const skipDoctor = Boolean(flags["no-doctor"]);
+    const dir = join(run.dir, "evidence", "known-bugs");
+    const work = join(run.dir, "private", "known-bugs");
+    mkdirSync(dir, { recursive: true });
+    mkdirSync(work, { recursive: true });
+    const env = { ...process.env, OH_VERIFY_RUN: run.dir };
+    const doctor = () =>
+      skipDoctor
+        ? undefined
+        : runSelf(["doctor"], { env, timeout: 180_000 }).code === 0;
+    const results = [];
+    for (const block of blocks) {
+      for (let n = 1; n <= attempts; n += 1) {
+        const stamp = `${id}-${block.name}-${Date.now()}-${n}`;
+        const logFile = join(work, `${stamp}.asserts.jsonl`);
+        const failureFile = join(work, `${stamp}.failed`);
+        const doctorBefore = doctor();
+        // Every attempt starts at the viewport the caller had, and leaves it so.
+        const viewportBefore = daemonInfo(run)
+          ? (await browserCall(run, "url").catch(() => ({}))).viewport
+          : undefined;
+        let exec = {
+          exitCode: null,
+          timedOut: false,
+          failedLine: null,
+          stdout: "",
+          stderr: "",
+          elapsedMs: 0,
+        };
+        if (doctorBefore !== false)
+          exec = await runBlock(run, block, {
+            timeoutMs,
+            logFile,
+            failureFile,
+            scriptFile: join(work, `${stamp}.sh`),
+          });
+        const asserts = readJsonl(logFile).map((a) => ({
+          ...a,
+          line: /^\d+$/.test(a.line ?? "")
+            ? Number(a.line) - exec.lineOffset
+            : a.line,
+        }));
+        const [start, end] = block.bugRanges[0];
+        const assertion = asserts
+          .filter((a) => a.line >= start && a.line <= end)
+          .at(-1);
+        const doctorAfter =
+          exec.exitCode !== 0 && doctorBefore !== false ? doctor() : undefined;
+        const { status, reason } = classifyAttempt({
+          doctorBefore,
+          doctorAfter,
+          exitCode: exec.exitCode,
+          timedOut: exec.timedOut,
+          failedLine: exec.failedLine,
+          bugLines: block.bugLines,
+          bugRanges: block.bugRanges,
+          assertion,
+        });
+        const page = daemonInfo(run)
+          ? await browserCall(run, "url").catch(() => ({}))
+          : {};
+        const restore = viewportToRestore(viewportBefore, page.viewport);
+        let viewportRestored;
+        if (restore) {
+          viewportRestored = await browserCall(run, "viewport", {
+            size: restore,
+          })
+            .then(() => restore)
+            .catch((error) => `failed: ${error.message}`);
+        }
+        const transcript = join(dir, `${stamp}.json`);
+        writeFileSync(
+          transcript,
+          `${JSON.stringify(
+            {
+              id,
+              name: block.name,
+              file: block.file,
+              script: block.script,
+              ...exec,
+              stdout: exec.stdout.slice(-8000),
+              stderr: exec.stderr.slice(-8000),
+              asserts,
+            },
+            null,
+            2,
+          )}\n`,
+        );
+        const attempt = {
+          ts: new Date().toISOString(),
+          id,
+          name: block.name,
+          label,
+          attempt: n,
+          status,
+          reason,
+          sha: block.sha,
+          file: `${block.file}:${block.line}`,
+          exitCode: exec.exitCode,
+          failedLine: exec.failedLine,
+          failedCommand: exec.failedCommand,
+          assertion: assertion
+            ? {
+                kind: assertion.kind,
+                expected: assertion.expected,
+                actual: assertion.actual,
+                bugShows: assertion.bugShows,
+                bug: assertion.bug,
+                bugChecks: assertion.bugChecks,
+              }
+            : undefined,
+          doctorBefore,
+          doctorAfter,
+          elapsedMs: exec.elapsedMs,
+          revision: run.revision,
+          backend: `${run.mode} agent-server ${run.versions?.agentServer ?? "?"} automation ${run.pins?.automation ?? "?"}`,
+          viewport: page.viewport
+            ? `${page.viewport.width}x${page.viewport.height}`
+            : undefined,
+          ...(viewportRestored ? { viewportRestored } : {}),
+          transcript: relative(run.dir, transcript),
+        };
+        appendFileSync(attemptsFile(run.dir), `${JSON.stringify(attempt)}\n`);
+        appendFileSync(
+          join(run.dir, "evidence", "ledger.jsonl"),
+          `${JSON.stringify({
+            ts: attempt.ts,
+            feature: id,
+            entry: `known bug: ${block.name}`,
+            result: status,
+            expected: assertion?.expected,
+            actual: assertion?.actual,
+            artifacts: [attempt.transcript],
+            note: [
+              status === "xfail"
+                ? "known bug reproduced at its marked assertion"
+                : status === "xpass"
+                  ? "known bug no longer reproduces: review the map note"
+                  : reason,
+              label && `${label} attempt ${n}`,
+            ]
+              .filter(Boolean)
+              .join("; "),
+            revision: attempt.revision,
+            backend: attempt.backend,
+            viewport: attempt.viewport,
+          })}\n`,
+        );
+        results.push(attempt);
+      }
+    }
+    const xpassed = results.some((r) => r.status === "xpass");
+    out({
+      ok: results.every((r) => r.status === "xfail"),
+      run: run.runId,
+      revision: run.revision,
+      summary: Object.fromEntries(
+        ["xfail", "xpass", "fail"].map((s) => [
+          s,
+          results.filter((r) => r.status === s).length,
+        ]),
+      ),
+      attempts: results,
+      hint: xpassed
+        ? "The known bug did not reproduce. On a fix under verification that is the goal: compare with `bug proof`. Otherwise review the map note: once the fix is confirmed, drop the note and keep the assertion as the bullet's normal expected result."
+        : results.some((r) => r.status === "fail")
+          ? "A fail is not a reproduction: read the reason and the transcript, doctor the run, and retry or fix the recipe."
+          : undefined,
+    });
+    if (!results.every((r) => r.status === "xfail")) process.exitCode = 1;
+    return;
+  }
+  if (sub === "proof") {
+    if (
+      !id ||
+      !flags.baseline ||
+      flags.baseline === true ||
+      !flags.fix ||
+      flags.fix === true
+    )
+      usage(
+        "bug proof needs a sub-feature ID, --baseline RUN_DIR and --fix RUN_DIR",
+        "control-openhands bug proof F05.prefill-send --baseline $BASE_RUN --fix $FIX_RUN",
+      );
+    const vary = flags.vary === undefined ? "revision" : String(flags.vary);
+    if (vary !== "revision" && vary !== "backend")
+      usage(
+        "bug proof --vary takes revision or backend",
+        "control-openhands bug proof F08.diff-view-modes --vary backend --baseline $OLD_SDK_RUN --fix $RUN",
+      );
+    const blocks = selectBlocks(id, flags);
+    const read = (dir) => {
+      const path = attemptsFile(resolve(String(dir)));
+      if (!existsSync(path))
+        throw new CliError(`No known-bug attempts at ${path}`, {
+          code: 2,
+          hint: "Run `control-openhands bug run ID --attempts 2` on that run first.",
+        });
+      return readJsonl(path).filter((r) => r.id === id);
+    };
+    // --baseline-label / --fix-label keep only the attempts given that
+    // --label, so a deliberate negative check on the same run is set aside.
+    const labelled = (rows, label) =>
+      label && label !== true ? rows.filter((r) => r.label === label) : rows;
+    const baseline = labelled(read(flags.baseline), flags["baseline-label"]);
+    const fix = labelled(read(flags.fix), flags["fix-label"]);
+    const verdicts = blocks.map((block) => ({
+      name: block.name,
+      sha: block.sha,
+      ...proofVerdict({
+        baseline: baseline.filter((r) => r.name === block.name),
+        fix: fix.filter((r) => r.name === block.name),
+        sha: block.sha,
+        min: intFlag(flags.min, 2),
+        vary,
+      }),
+    }));
+    const verified = verdicts.every((v) => v.verdict === "verified");
+    out({
+      ok: verified,
+      id,
+      verdict: verified
+        ? "verified"
+        : verdicts.some((v) => v.verdict === "not-fixed")
+          ? "not-fixed"
+          : "inconclusive",
+      blocks: verdicts,
+      hint: verified
+        ? "Drop the Known failure note and the block's `# bug` marker in the fix's PR: the assertion now guards the corrected behavior as a normal recipe step."
+        : "Only a verified verdict proves the fix. An inconclusive baseline never counts as fixed.",
+    });
+    if (!verified) process.exitCode = 1;
+    return;
+  }
+  usage(
+    "Usage: control-openhands bug list | run ID [--attempts N] [--label L] | proof ID --baseline RUN --fix RUN",
+    "control-openhands bug run F05.prefill-send --attempts 2 --label baseline",
   );
 }
 
@@ -3126,6 +4074,8 @@ const KNOWN_COMMANDS = new Set([
   "workspace",
   "browser",
   "evidence",
+  "assert",
+  "bug",
   "map",
   "help",
 ]);
@@ -3157,6 +4107,7 @@ const BROWSER_VERBS = new Set([
   "fill",
   "type",
   "press",
+  "key",
   "select",
   "upload",
   "scroll",
@@ -3167,8 +4118,10 @@ const BROWSER_VERBS = new Set([
   "snapshot",
   "testids",
   "screenshot",
+  "record",
   "viewport",
   "clock",
+  "timezone",
   "errors",
   "events",
   "eval",
@@ -3178,6 +4131,7 @@ const BROWSER_VERBS = new Set([
   "tooltip",
   "media",
   "network",
+  "network-state",
   "toasts",
   "reset",
   "clipboard",
@@ -3196,7 +4150,7 @@ function featureFiles() {
     .sort();
 }
 
-function mapCheck({ only } = {}) {
+function mapCheck({ only, serverIds } = {}) {
   const problems = [];
   const ids = new Map();
   const index = existsSync(join(mapDir, "README.md"))
@@ -3259,6 +4213,25 @@ function mapCheck({ only } = {}) {
       if (m[1] === "browser" && m[2] && !BROWSER_VERBS.has(m[2]))
         problems.push(`${file}: unknown browser verb \`${m[2]}\``);
     }
+    // Known-bug blocks: one `# bug` assertion naming the bug's value, a
+    // declared ID, one block per ID and name.
+    const blockNames = new Set();
+    for (const block of knownBugBlocks(text)) {
+      for (const problem of block.problems)
+        problems.push(
+          `${file}:${block.line}: known-bug ${block.id}: ${problem}`,
+        );
+      if (!declared.includes(block.id))
+        problems.push(
+          `${file}:${block.line}: known-bug ${block.id} is not a sub-feature of this file`,
+        );
+      const key = `${block.id} ${block.name}`;
+      if (blockNames.has(key))
+        problems.push(
+          `${file}:${block.line}: duplicate known-bug block ${key}`,
+        );
+      blockNames.add(key);
+    }
     for (const m of text.matchAll(/\]\((\.\.\/[^)#]+)/g)) {
       const target = resolve(mapDir, m[1]);
       if (!existsSync(target)) problems.push(`${file}: dead link ${m[1]}`);
@@ -3272,6 +4245,22 @@ function mapCheck({ only } = {}) {
       if (s.path.startsWith("node_modules/")) continue;
       if (!sourcePathExists(s))
         problems.push(`${file}: Source: path ${s.path} does not exist`);
+    }
+    // The Server: line names verify-agent-server IDs; with --server-map each
+    // one must exist in that map.
+    for (const token of head.server.invalid)
+      problems.push(
+        `${file}: Server: ${token} is not an Agent Server ID like F15 or F15.changes`,
+      );
+    const serverSeen = new Set();
+    for (const id of head.server.ids) {
+      if (serverSeen.has(id))
+        problems.push(`${file}: Server: ${id} is listed twice`);
+      serverSeen.add(id);
+      if (serverIds && !serverIds.has(id))
+        problems.push(
+          `${file}: Server: ${id} is not in the verify-agent-server map`,
+        );
     }
   }
   // References (`Fnn.slug` in prose, --feature Fnn.slug in recipes) must name
@@ -3361,6 +4350,30 @@ function sourcePathExists(s) {
   return readdirSync(dir).some(
     (name) => name.startsWith(head) && name.endsWith(tail),
   );
+}
+
+// A software-agent-sdk checkout, or the verify-agent-server feature-map
+// directory itself.
+function resolveServerMap(dir) {
+  const root = resolve(dir);
+  for (const candidate of [
+    join(
+      root,
+      ".agents",
+      "skills",
+      "verify-agent-server",
+      "references",
+      "feature-map",
+    ),
+    root,
+  ]) {
+    if (
+      existsSync(candidate) &&
+      readdirSync(candidate).some((f) => /^F\d{2}-.*\.md$/.test(f))
+    )
+      return candidate;
+  }
+  return null;
 }
 
 // Families with their parsed Source: lines.
@@ -3613,7 +4626,26 @@ async function cmdMap({ positional, flags }) {
         ? basename(String(flags.file))
         : undefined;
     if (flags["fix-counts"] && !only) fixIndexCounts();
-    const result = mapCheck({ only });
+    let serverIds;
+    let serverMap;
+    if (flags["server-map"]) {
+      serverMap = resolveServerMap(String(flags["server-map"]));
+      if (!serverMap)
+        usage(
+          `No verify-agent-server feature map under ${flags["server-map"]}`,
+          "control-openhands map check --server-map ../software-agent-sdk",
+        );
+      serverIds = serverMapIds(
+        readdirSync(serverMap)
+          .filter((f) => /^F\d{2}-.*\.md$/.test(f))
+          .map((file) => ({
+            file,
+            text: readFileSync(join(serverMap, file), "utf8"),
+          })),
+      );
+    }
+    const result = mapCheck({ only, serverIds });
+    if (serverMap) result.serverMap = serverMap;
     if (only) {
       result.problems = result.problems.filter(
         (p) => p.startsWith(`${only}:`) || p.includes(`(also in ${only})`),
@@ -3743,8 +4775,69 @@ async function cmdMap({ positional, flags }) {
     if (!ok) process.exitCode = 1;
     return;
   }
+  if (sub === "controls") {
+    // The reverse of `map testids`: controls the source renders that no
+    // bullet names. Candidates to operate or to leave out on purpose.
+    const families = familyList();
+    let controls = sourceControls(join(repoRoot, "src"), repoRoot);
+    let range;
+    if (flags.base && flags.base !== true) {
+      const target =
+        flags.target && flags.target !== true ? String(flags.target) : "HEAD";
+      const changed = new Set(
+        git(["diff", "--name-only", `${flags.base}..${target}`])
+          .split("\n")
+          .filter(Boolean),
+      );
+      controls = controls.filter((c) => changed.has(c.file));
+      range = { base: String(flags.base), target };
+    }
+    const owners = (file) => {
+      const ids = families
+        .filter((f) => f.sources.some((s) => specMatches(s, file)))
+        .map((f) => f.id);
+      return ids.length ? ids : ["unowned"];
+    };
+    const corpus = featureFiles()
+      .map((f) => readFileSync(join(mapDir, f), "utf8"))
+      .join("\n");
+    const result = unnamedControls(controls, mapWords(corpus), {
+      all: Boolean(flags.all),
+    });
+    let unnamed = result.unnamed.map((c) => ({
+      id: c.id,
+      tag: c.tag,
+      file: c.file,
+      families: owners(c.file),
+    }));
+    let considered = result.considered;
+    if (flags.family && flags.family !== true) {
+      const family = String(flags.family);
+      unnamed = unnamed.filter((c) => c.families.includes(family));
+      considered = controls.filter(
+        (c) => (flags.all || c.interactive) && owners(c.file).includes(family),
+      ).length;
+    }
+    const byFamily = {};
+    for (const c of unnamed)
+      for (const f of c.families) byFamily[f] = (byFamily[f] ?? 0) + 1;
+    const ok = !flags.strict || unnamed.length === 0;
+    out({
+      ok,
+      ...(range ? { range } : {}),
+      controls: considered,
+      unnamed: unnamed.length,
+      byFamily: Object.fromEntries(
+        Object.entries(byFamily).sort(([a], [b]) => a.localeCompare(b)),
+      ),
+      list: unnamed,
+      note: "Candidates, not defects: each is a control with a literal test id that no map file mentions. Operate it in a bullet (what it does, and what it does on a second use), or confirm a recipe already reaches it by role or label. `unowned` files belong to no family's Source: line.",
+    });
+    if (!ok) process.exitCode = 1;
+    return;
+  }
   usage(
-    "Usage: control-openhands map check|coverage|ids|routes|affected|testids|baseline",
+    "Usage: control-openhands map check|coverage|ids|routes|affected|testids|controls|baseline",
     "control-openhands map coverage",
   );
 }
@@ -3770,7 +4863,10 @@ first, so the browser's stored key becomes stale (public mode then shows the
 API-key prompt again). Reload the browser afterwards.
 `,
   service: `control-openhands service status
-control-openhands service stop automation|agent-server|frontend
+control-openhands service stop|pause|resume automation|agent-server|frontend
+
+Pause queues real requests without replacing responses; resume lets the service process them.
+Always resume a paused service before stopping the run.
 
 Stops one service inside this run's own process group so unavailable/backend-down
 states can be driven through the UI. Bring everything back with restart.
@@ -3790,7 +4886,7 @@ Lifecycle
   doctor        Read-only health check; run first and after any surprise
   status        Show the current run's ports, revision and liveness
   restart       Restart this run's stack in place (same state); --rotate-key for stale-key states
-  service       status | stop automation|agent-server|frontend (drive backend-down states)
+  service       status | stop|pause|resume automation|agent-server|frontend (unavailable/slow states)
   stop          Stop this run's browser and launcher process group (keeps evidence)
   runs          List runs under $OH_VERIFY_HOME
   env           Print export lines for this run
@@ -3811,7 +4907,9 @@ Drive and observe
 
 Evidence and map
   evidence      add | list | report — the run's pass/fail/blocked/not-run ledger
-  map           check | coverage | ids | routes | affected | testids | baseline — keep the feature map honest
+  assert        --field F --equals V [--bug-shows B | --bug P] -- <command> — check one value of a command's output
+  bug           list | run ID --attempts 2 | proof ID — known bugs as executable expected failures
+  map           check | coverage | ids | routes | affected | testids | controls | baseline — keep the feature map honest
 
 Run state lives in $OH_VERIFY_HOME (default: $TMPDIR/openhands-verify); the
 current run is the 'current' symlink there, or --run / $OH_VERIFY_RUN.
@@ -3831,6 +4929,7 @@ Examples:
   launch: `control-openhands launch [--public] [--new] [--print-run] [--port N | --port-from N] [--build auto|always|never] [--min-free-mb 2000]
                          [--no-browser] [--timeout SEC] [--sdk-path DIR | --sdk-ref REF | --sdk-version V]
                          [--automation-path DIR | --automation-ref REF | --automation-version V] [--run-id ID] [--vscode]
+                         [--mars-web] [--lock-to-cloud URL]
 
 Builds the checkout when build/verify-revision.txt does not match HEAD, then
 starts bin/agent-canvas.mjs with a private HOME, state dir, session key and
@@ -3841,14 +4940,25 @@ ports, only when the checkout's launcher serves VS Code. Where that is opt-in
 is bundled (before #17660, or since #18048), it is always reserved and --vscode
 changes nothing. Waits for authenticated settings, automation health and the
 SPA, then starts the browser daemon.
+--mars-web starts the launcher with MARS_WEB=1, so the run's ingress hosts the
+DigitalOcean Managed Agents web bridge (/mars/*) and Add Backend offers the
+Providers tab; doctor checks /mars/health.
+--lock-to-cloud URL also serves this build locked to that OpenHands Cloud host
+(scripts/static-server.mjs --lock-to-cloud; bin/agent-canvas.mjs has no such
+option) on P+4, listed as ports.lockedCloud and lockedCloud.url. The locked page
+talks only to that Cloud host, never to the run's backend. \`browser goto
+<lockedCloud.url>/\` opens it without --allow-external, doctor checks the lock is
+injected, and stop ends it with the run.
 Idempotent: an alive current run is reused unless --new is given.
 --print-run prints only the run directory, for
   export OH_VERIFY_RUN=$(control-openhands launch --new --print-run)
 Every other command uses --run, else $OH_VERIFY_RUN, else the only live run;
 with several live runs it refuses to guess (several agents on one machine).
-Backend versions and VS Code come only from the flags: OH_AGENT_SERVER_*,
-OH_AUTOMATION_* and OH_CANVAS_ENABLE_VSCODE in your shell are not forwarded
-(launch warns). An Agent Server below
+Backend versions, VS Code and the bridge come only from the flags:
+OH_AGENT_SERVER_*, OH_AUTOMATION_*, OH_CANVAS_ENABLE_VSCODE and MARS_WEB in your
+shell are not forwarded (launch warns). TZ is forwarded: TZ=America/Sao_Paulo
+control-openhands launch --new runs the stack's services in that zone (a server
+host that is not in UTC; browser timezone moves the browser instead). An Agent Server below
 config/defaults.json compatibility.minimumAgentServer never gets
 past the UI's backend-compatibility gate.
 
@@ -3861,6 +4971,8 @@ Examples:
   control-openhands launch
   control-openhands launch --public --new
   control-openhands launch --sdk-path ../software-agent-sdk --build always
+  control-openhands launch --new --mars-web
+  control-openhands launch --new --lock-to-cloud https://app.all-hands.dev
 `,
   doctor: `control-openhands doctor [--skip-ui]
 
@@ -3873,7 +4985,9 @@ Exit 3 when any check fails.
 
 Stops the browser daemon and SIGTERMs the launcher's process group (SIGKILL
 after 30 s), verifies every run port closed and counts evidence files.
---purge-private then deletes private/ (keys, state, logs) and recounts evidence.
+On Linux, a group containing only defunct processes counts as stopped.
+--purge-private requires the group stopped and every run port closed, then
+deletes private/ (keys, state, logs) and recounts evidence.
 `,
   api: `control-openhands api <METHOD> </path> [--data JSON|@file | --data-file F --content-type T] [--write] [--pick a.b.c] [--max-bytes N]
 
@@ -3894,6 +5008,10 @@ set/preset validate with a 1-token completion first (skip with --no-validate).
 Keys are read from an environment variable or file, never from argv.
 'preset deepseek' saves deepseek-flash (deepseek/deepseek-flash, activated) and
 deepseek-pro (deepseek/deepseek-v4-pro). Prefer flash; it is cheaper.
+'preset' also points the 'default' agent profile at deepseek-flash when it
+references another LLM profile that exists, as onboarding leaves it; the output
+then has 'repointed'. A reference to a missing profile (a fresh run's seed),
+named agent profiles and 'set' leave agent profiles as they are.
 
 Examples:
   DEEPSEEK_API_KEY=... control-openhands llm preset deepseek
@@ -3905,10 +5023,11 @@ Answers the telemetry consent form (analytics off by default) and then either
 skips the onboarding modal (--skip) or walks it: choose agent → keep current LLM
 settings → close at say-hello. Skipping is not proof that onboarding works.
 `,
-  conversation: `control-openhands conversation start --prompt TEXT [--wait] [--until STATES] [--timeout SEC] [--stay] [--workspace PATH]
+  conversation: `control-openhands conversation start --prompt TEXT [--wait] [--until STATES] [--timeout SEC] [--stay] [--workspace PATH [--mode local_repo|new_worktree]]
 control-openhands conversation wait ID [--until finished,idle] [--timeout SEC] [--fresh]
         (--fresh after sending a message: ignore the previous run's terminal status)
 control-openhands conversation send ID --prompt TEXT [--wait]   follow-up message through the composer
+        (prints the prompt it typed and its length in chars, then the wait's status with --wait)
 control-openhands conversation pause ID   arrange an interrupted conversation (API, as local Stop Runtime; not UI proof)
 control-openhands conversation status ID
 control-openhands conversation list
@@ -3916,13 +5035,18 @@ control-openhands conversation events ID [--last N] [--kinds MessageEvent,Action
         [--grep TEXT] [--from-start]
         (texts are cut at 160 chars with truncated:true; --full keeps up to 4000;
          --grep searches whole events, e.g. the SystemPromptEvent with --from-start;
-         rows show activated skills and, for the system prompt, the tool names)
+         rows show activated skills, image attachments (images: N) and, for the
+         system prompt, the tool names; --kinds and --grep filter before --last
+         counts (--kinds MessageEvent --last 3 is the three newest messages); the
+         server pages at 100 events and the verb reads pages until --last matching
+         rows are in hand: total is the number of events read, more:true says further
+         pages exist (older, or newer with --from-start))
 
 'start' types into the home composer (testid=chat-input), presses
 testid=submit-button and returns the new /conversations/<id>. --stay uses the
 current page's composer instead of navigating home first. --workspace PATH
 first picks that folder through Open Workspace (see 'workspace open'), so the
-conversation runs in it. 'wait' polls the
+conversation runs in it; --mode picks Local or Worktree there. 'wait' polls the
 conversation's execution_status until one of --until (default: any terminal).
 
 Examples:
@@ -3938,16 +5062,19 @@ control-openhands fixture folder [--name qa-folder]
 control-openhands fixture image [--name qa-image] [--width 160 --height 96]   # PNG under evidence/_fixtures
 control-openhands fixture file [--name qa-note.txt] [--content TEXT]
 control-openhands fixture tarball [--name qa-tarball]   # evidence/_fixtures/qa-tarball.tar.gz (main.py prints pong)
-control-openhands fixture skill [--name qa-hello] [--repo qa-repo] [--trigger qa-ping] [--body TEXT]
-        # SKILL.md in the run's private ~/.agents/skills, or in a fixture repo's .agents/skills
+control-openhands fixture skill [--name qa-hello] [--repo qa-repo] [--trigger qa-ping] [--body TEXT] [--commit]
+        # SKILL.md in the run's private ~/.agents/skills, or in a fixture repo's .agents/skills;
+        # --commit records it in the repo (a Worktree conversation checks out commits only)
 `,
-  workspace: `control-openhands workspace open PATH|NAME [--stay]
+  workspace: `control-openhands workspace open PATH|NAME [--stay] [--mode local_repo|new_worktree]
 
 NAME (no slash) resolves inside <run>/workspace, where 'fixture' creates repos.
 
 Drives Home > Open Workspace > workspace dropdown > + Add Workspace, walks the
 folder browser (folder-browser-up / folder-browser-entry-<name>) to PATH,
-clicks Use and Launch. The composer then carries the workspace chip; follow
+clicks Use and Launch, then with --mode picks Local or Worktree in the
+preview bar's mode selector (printed back as mode and preview). The composer then
+carries the workspace chip; follow
 with 'conversation start --stay', or use 'conversation start --workspace PATH'.
 
 Example:
@@ -3977,7 +5104,12 @@ Verbs
   tooltip <sel>                          hover and return the role=tooltip text (or the title attribute)
   fill|type <sel> [<value> | --value-file F | --value-env VAR]   (prefer the file/env forms for keys)
   press <Key> [--selector S]            e.g. Escape, Enter, Control+k, Meta+k
+  key down <Key> [--repeat N [--interval-ms 30]]   press and hold; N more keydowns with event.repeat set
+  key up <Key> | key release-all          release one held key | all of them (last pressed first)
+                                         (held keys stay down across commands, and held modifiers apply
+                                          to later clicks and presses; browser reset or stop ends them)
   select <sel> <value> | upload <sel> <file...> | scroll [<sel>] [--by PX] [--x PX]
+        [--observe SEL [--observe-ms 3000]]   (scroll: record what SEL shows while the effects play out, e.g. a loading row)
   upload-via <trigger-sel> <file...>     click a button/menu item and answer the real file chooser
   drop-files <sel> <file...> [--stage enter|over]   files dragged in from the desktop
   paste <sel> [--text T] [--file F]...   a paste event carrying text and/or files
@@ -3990,20 +5122,48 @@ Verbs
   snapshot [<sel>] [--max-lines N] [--feature ID --name N]   ARIA tree (saved as evidence)
   testids [<sel>] [--hidden] [--filter part]                 discover on-screen data-testid handles (--hidden adds hidden/off-screen)
   screenshot [<sel>] --feature ID --name N [--full-page]     PNG under evidence/<ID>/
+  record start --feature ID --name N [--fps 10] [--max-seconds 600]   video of the active tab
+  record pause | record resume            cut a wait (the agent working) out of the video
+  record stop [--gif] [--keep-frames] [--discard] | record status
+        (MP4 under evidence/<ID>/ when ffmpeg has libx264, else WebM with Playwright's ffmpeg;
+         --gif adds a GIF at most 960 px wide; the still lead-in is cut to 1 s, the end held 1 s;
+         --max-seconds is wall time; browser stop or reset ends the daemon and the recording)
   viewport desktop|phone|narrow|tablet|WxH                    1440x1000, 390x844, 320x700, 820x1180
   clock --offset-ms N | --system ISO|+MS | --fixed ISO|+MS    skew the page's clock (install before the goto
                                          whose page should see it; the server's clock is untouched)
+  timezone <IANA name> | --reset         put the active tab in another time zone (America/Sao_Paulo, Asia/Tokyo);
+                                         it holds across reloads until --reset, and the server's zone is untouched
+                                         (timestamps, "N minutes ago", ordering by time: reload after setting it)
   errors [--clear] [--all] [--app-only] [--no-warnings]        page/console/HTTP errors since last clear
                                          (--clear prints the list, then empties it: run it before the action)
-  events [--kinds pageerror,dialog,download] [--last N]
+  events [--kinds pageerror,dialog,download,websocket-created,websocket-open,websocket-close,websocket-error] [--last N]
+        (WebSocket metadata: redacted URLs/pages, numeric after_seq, timestamps and frame counts; no bodies/headers)
+        (websocket-open is the first observed frame, not the handshake timestamp; counts update at lifecycle entries)
   eval <js expression>                   read-only inspection; never mutate app state with it
-  tabs | tab <i> | close-tab <i> | dialogs [--policy accept|dismiss]
-  wait-tab <url-regex> [--timeout MS]   wait for a pop-up (window.open) whose URL matches; prints its index
+  tabs | tab <i> | tab new [/path] [--allow-external] | close-tab <i> | dialogs [--policy accept|dismiss]
+        (tab new: a plain second tab, no opener and no sessionStorage, as a user opening the app again)
+  wait-tab <url-regex> [--timeout MS] [--new]   wait for a pop-up (window.open) whose URL matches; prints its index
+        (--new ignores the tab the daemon is on, for a second tab at the current URL)
   downloads [--last N] [--inspect] [--contains TEXT]   saved files; --inspect adds a text head or zip entry names
   storage [--session] [--values]         localStorage (or sessionStorage) keys; values only on request
                                          (keys, tokens and secrets inside values are redacted)
-  media [--clear]                        media playback recorded since load (sound features)
-  network [--external] [--filter REGEX] [--clear] [--last N]   requests with status and redacted query (rows under "recent")
+  media [--clear] [--reduced-motion reduce|no-preference]
+                                         observe playback; optionally emulate active-page motion preference
+  network-state offline|online|status     interrupt or restore this browser context's real network; status is read-only
+                                         (all its tabs; restore online before doctor/cleanup; no request interception)
+  network [--external] [--filter REGEX] [--clear] [--last N] [--bodies] [--order request|completion]
+                                        requests with status and redacted query (rows under "recent"); each row
+                                        also has responseMs (headers), durationMs and completedTs (body done or
+                                        failed), outcome and completedSeq. --order completion lists the last N
+                                        rows in the order they completed, then the last N still pending: use it
+                                        for response races
+        (--bodies adds each app-origin write's body, JSON with credential values and env/header maps
+         replaced by their length, URL userinfo and secret-named query values redacted in any string;
+         the settings API's ********** placeholder is kept as is; body is capped at 2000 chars.
+         bodyFields projects only the top-level plugins, conversation_runtime, worktree,
+         worktree_options and container before that cap, recursively redacted, at most 16384
+         UTF-8 bytes; oversized values are omitted with bodyFieldsOmitted.<field>.
+         Body fields and omission metadata are absent without --bodies)
                                          (privacy/telemetry checks; --clear as for errors)
   toasts [--history [--clear]]          toasts on screen now (with links); --history adds every
                                          status/alert text seen since this page loaded
@@ -4027,9 +5187,67 @@ table, then every check with fail and blocked rows first and the --note column
 (where blocked rows name their missing prerequisite). --baseline compares with
 another run's ledger and lists newly failing, newly passing and unchecked rows
 first (a daily pass against yesterday's run). --json prints the same data.
+Rows from \`bug run\` add xfail (a known bug reproduced) and xpass (it stopped
+reproducing); xpass rows sort right after fail rows.
+`,
+  assert: `control-openhands assert --field PATH (--equals VALUE | --matches REGEX) [--bug-shows VALUE] [--bug PREDICATE] -- <control-openhands command...>
+
+Runs the command, reads PATH (dotted, e.g. value, viewport.width) from its JSON
+output and compares it: strings as they are, other values as JSON. Exit 0 when
+it holds; 1 on a mismatch; the command's own code when it fails or has no such
+field (kind "error": no value was compared). --bug-shows and --bug name what a
+known bug produces; a mismatch that does not match them is kind "other-symptom".
+--bug-shows V is short for "--bug 'PATH eq V'". --bug takes "PATH OP [VALUE]"
+clauses joined by "&&", on any field of the output, with OP one of eq, ne,
+contains, not-contains, matches (regex), exists, missing; quote a VALUE with
+spaces. The result lists each clause under bugChecks.
+
+  control-openhands assert --field enabled --equals true -- browser enabled 'testid=submit-button'
+  control-openhands assert --field text --equals Saved --bug 'text contains "An error occurred"' -- browser text 'testid=toast'
+`,
+  bug: `control-openhands bug list [--file PATH]
+control-openhands bug run ID [--name N] [--attempts N] [--label L] [--timeout SEC] [--no-doctor] [--file PATH]
+control-openhands bug proof ID --baseline RUN_DIR --fix RUN_DIR [--baseline-label L] [--fix-label L] [--min 2] [--vary revision|backend]
+
+A known bug in the map can carry a fenced block, opened with
+"\`\`\`sh known-bug <ID> [name]", whose commands assert the correct behavior. Its one
+command ending in "# bug" (continued lines ending in "\\" count as one) is a
+"control-openhands assert ... --bug-shows <value>" or "... --bug <predicate>".
+
+'run' executes the block in bash (set -eo pipefail) against the run, each
+attempt after a passing doctor, and classifies it:
+  xfail  the "# bug" assertion failed and saw the bug's symptom (reproduced)
+  xpass  every command held (the bug did not reproduce: review the map note)
+  fail   anything else: doctor failed before (setup) or after (backend), a
+         timeout, an earlier line (setup) or a later one, the bug line's command
+         erroring, or a different value (wrong symptom)
+Each attempt is appended to evidence/known-bugs/attempts.jsonl (revision,
+backend, viewport, recipe hash, failing line, assertion, transcript) and to the
+ledger as an xfail/xpass/fail row. Exit 0 only when every attempt is xfail.
+Every attempt starts at the viewport the browser had before 'run': a block that
+switches it (browser viewport phone) is put back afterwards, and the attempt
+records the size it ran at (viewport) and what it restored (viewportRestored).
+Each assertion is logged with the recipe line that ran it, and the first
+failure is the one kept, so a cleanup step (an EXIT trap) cannot replace the
+marked command's observation.
+
+'proof' compares the attempts of the current recipe on a baseline run and a fix
+run: verified only when the baseline has at least two attempts, all xfail, the
+fix at least two, all xpass, on different revisions with the same viewport and
+backend. A fix that still reproduces is not-fixed; anything else is inconclusive.
+--vary backend proves an Agent Server or automation fix instead: both runs serve
+the same revision at the same viewport, and each side has its own backend
+versions (the baseline launched with --sdk-version or --automation-version set
+to a release before the fix).
+
+  control-openhands bug run F25.selector-dropdown --attempts 2 --label baseline --run $BASE_RUN
+  control-openhands bug run F25.selector-dropdown --attempts 2 --label fix --run $FIX_RUN
+  control-openhands bug proof F25.selector-dropdown --baseline $BASE_RUN --baseline-label baseline --fix $FIX_RUN --fix-label fix
+  control-openhands bug proof F08.diff-view-modes --vary backend --baseline $OLD_SDK_RUN --baseline-label baseline --fix $RUN --fix-label fix
 `,
   map: `control-openhands map check [--file Fnn-name.md]   lint the map (or one entry, skipping index links): four H2s, unique IDs, links, known commands, index counts
 control-openhands map check --fix-counts   rewrite the index's sub-feature counts and total from the files, then lint
+control-openhands map check --server-map ../software-agent-sdk   also check every Server: ID against that checkout's verify-agent-server map
 control-openhands map coverage   routes in src/routes.ts and src/components/features/* dirs not yet mapped
 control-openhands map ids        every sub-feature ID with its file
 control-openhands map routes     the route registry as path → route module
@@ -4047,6 +5265,13 @@ control-openhands map baseline [--set TARGET [--force]]
 control-openhands map testids [--strict]
                                  test ids the map drives that no literal or prefix in src/ accounts for
                                  (a cheap drift check before launching; --strict exits 1 on any)
+
+control-openhands map controls [--family Fnn] [--base REF [--target REF]] [--all] [--strict]
+                                 the reverse check: interactive elements in src/ with a literal test id
+                                 that no map file mentions, with the families whose Source: lines own
+                                 the file. A page can be mapped while a button on it is never operated;
+                                 this lists those buttons. --base limits it to files changed in a range
+                                 (the day's new controls), --all adds non-interactive elements
 
 check also verifies every Source: path exists and the baseline line's shape.
 `,
@@ -4070,6 +5295,8 @@ const COMMANDS = {
   workspace: cmdWorkspace,
   browser: cmdBrowser,
   evidence: cmdEvidence,
+  assert: cmdAssert,
+  bug: cmdBug,
   map: cmdMap,
 };
 

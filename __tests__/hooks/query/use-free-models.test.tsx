@@ -1,4 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HttpError } from "@openhands/typescript-client";
+import { LLMMetadataClient } from "@openhands/typescript-client/clients";
 import { renderHook, waitFor } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -134,19 +136,47 @@ describe("useHydrateFreeModels", () => {
     expect(useFreeModelsStore.getState().defaultModel).toBeNull();
   });
 
-  it("still toasts a real backend failure once a backend is configured", async () => {
+  it.each(["local", "cloud"] as const)(
+    "settles quietly when the registered %s backend is unreachable",
+    async (kind) => {
+      const toastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
+      const backend: Backend = { ...cloudBackend, kind };
+      setRegisteredBackends([backend]);
+      setActiveSelection({ backendId: backend.id, orgId: null });
+      const unavailable = new HttpError(503, "Service Unavailable", {
+        detail: `${kind} backend unavailable`,
+      });
+      vi.spyOn(
+        LLMMetadataClient.prototype,
+        "getVerifiedModels",
+      ).mockRejectedValue(unavailable);
+      vi.mocked(callCloudProxy).mockRejectedValue(unavailable);
+
+      renderHook(() => useHydratedFreeModelState(), {
+        wrapper: appProvidersWrapper(),
+      });
+
+      await waitFor(() =>
+        expect(useFreeModelsStore.getState().defaultModelReady).toBe(true),
+      );
+      expect(toastSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still toasts ordinary post-bootstrap query failures", async () => {
     const toastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
-    vi.mocked(callCloudProxy).mockRejectedValue(
-      new Error("Model search is unavailable"),
-    );
-
-    renderHook(() => useHydratedFreeModelState(), {
-      wrapper: appProvidersWrapper(),
-    });
-
-    await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith("Model search is unavailable"),
-    );
-    expect(useFreeModelsStore.getState().defaultModelReady).toBe(true);
+    const client = createAgentServerQueryClient();
+    const error = new Error("Conversation action failed");
+    await expect(
+      client.fetchQuery({
+        queryKey: ["conversation-action-test"],
+        queryFn: async () => {
+          throw error;
+        },
+        retry: false,
+      }),
+    ).rejects.toBe(error);
+    expect(toastSpy).toHaveBeenCalledWith(error.message);
+    client.clear();
   });
 });

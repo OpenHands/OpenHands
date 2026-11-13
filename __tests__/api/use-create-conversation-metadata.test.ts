@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
 
 const {
   mockHttpPost,
@@ -28,6 +29,16 @@ const {
   mockListInstalledPlugins: vi.fn(),
   mockGetTelemetryDistinctId: vi.fn(),
 }));
+
+vi.mock(
+  "#/hooks/use-migrate-default-agent-profile",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("#/hooks/use-migrate-default-agent-profile")
+    >()),
+    ensureDefaultAgentProfileMigrated: vi.fn().mockResolvedValue(true),
+  }),
+);
 
 vi.mock("@openhands/typescript-client/clients", async () => {
   const actual = await vi.importActual<
@@ -141,6 +152,7 @@ describe("useCreateConversation persists selected repository metadata", () => {
 
   afterEach(() => {
     window.localStorage.clear();
+    vi.restoreAllMocks();
   });
 
   it("stores the selected repo/branch/provider in the metadata store after a successful create", async () => {
@@ -163,6 +175,7 @@ describe("useCreateConversation persists selected repository metadata", () => {
       git_provider: "github",
       selected_workspace: null,
       workspace_mode: "new_worktree",
+      active_profile: "default",
     });
   });
 
@@ -184,23 +197,30 @@ describe("useCreateConversation persists selected repository metadata", () => {
       git_provider: null,
       selected_workspace: "/home/me/code/some-project",
       workspace_mode: "local_repo",
+      active_profile: "default",
     });
   });
 
-  it("does not write metadata when neither a repository nor a workspace is attached", async () => {
+  it("writes no source metadata when neither a repository nor a workspace is attached", async () => {
     const { result } = renderHook(() => useCreateConversation(), { wrapper });
 
     result.current.mutate({ query: "scratch session" });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(getStoredConversationMetadata("conv-new")).toBeNull();
+    expect(getStoredConversationMetadata("conv-new")).toEqual({
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      active_profile: "default",
+    });
   });
 
   it("stamps the active LLM profile even when no repo or workspace is attached (#1082)", async () => {
-    mockUseLlmProfiles.mockReturnValue({
-      data: { active_profile: "team-default" },
-    });
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [{ name: "team-default" }],
+      active_profile: "team-default",
+    } as never);
 
     const { result } = renderHook(() => useCreateConversation(), { wrapper });
 
@@ -212,10 +232,7 @@ describe("useCreateConversation persists selected repository metadata", () => {
       selected_repository: null,
       selected_branch: null,
       git_provider: null,
-      selected_workspace: null,
-      workspace_mode: null,
       active_profile: "team-default",
-      plugins: null,
     });
   });
 

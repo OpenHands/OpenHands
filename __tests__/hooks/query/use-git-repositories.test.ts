@@ -241,7 +241,7 @@ describe("useGitRepositories", () => {
   it.each([
     ["explicitly disabled", false, ["github"], ["installation"], false],
     ["no connected providers", true, [], ["installation"], false],
-    ["empty installations", true, ["github"], [], false],
+    ["empty installations", true, ["github"], [], true],
     ["ready", true, ["github"], ["installation"], true],
   ])(
     "sets enabled=false when %s",
@@ -280,6 +280,17 @@ describe("useGitRepositories", () => {
     renderHook(() => useGitRepositories({ provider: "github" }));
 
     expect(config().enabled).toBe(false);
+  });
+
+  it("can query local repositories before provider settings report a token", () => {
+    setupMocks();
+    mocks.providers = [];
+
+    renderHook(() =>
+      useGitRepositories({ provider: "github", allowMissingProvider: true }),
+    );
+
+    expect(config().enabled).toBe(true);
   });
 
   it("loads more only when another page exists and no request is active", () => {

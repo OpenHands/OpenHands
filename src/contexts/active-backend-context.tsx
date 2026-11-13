@@ -19,6 +19,7 @@ import {
   type BackendSelection,
   type ResolvedActiveBackend,
 } from "#/api/backend-registry/types";
+import { getMarsBridge } from "#/api/mars/mars-tunnel-backend";
 import { QUERY_KEYS } from "#/hooks/query/query-keys";
 import { queryClient } from "#/query-client-config";
 import {
@@ -189,6 +190,13 @@ export function ActiveBackendProvider({
         getSnapshot().active.backend.id === removed.id;
       const list = getRegisteredBackends().filter((b) => b.id !== id);
       setRegisteredBackends(list);
+      // Left open, the tunnel would keep a session awake that nothing is
+      // attached to any more.
+      if (removed?.marsSessionId) {
+        void getMarsBridge()
+          ?.closeTunnel(removed.marsSessionId)
+          .catch(() => {});
+      }
       if (wasActiveCloud) {
         setTelemetryCloudContext(null);
         void setTelemetryIdentity(null);

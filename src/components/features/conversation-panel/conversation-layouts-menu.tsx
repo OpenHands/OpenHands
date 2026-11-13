@@ -246,7 +246,7 @@ export function ConversationLayoutsMenu({
                 <MenuRow
                   key={facet}
                   icon={Tag}
-                  label={formatTagFacetLabel(facet)}
+                  label={formatTagFacetLabel(facet, t)}
                   selected={preferences.selectedTagFacets.includes(facet)}
                   testId={`tag-facet-row-${facet}`}
                   onClick={() => preferences.toggleTagFacet(facet)}
@@ -255,7 +255,7 @@ export function ConversationLayoutsMenu({
             ) : (
               <p
                 data-testid="tag-filters-empty"
-                className="px-2 py-1 text-[11px] text-muted/70"
+                className="px-2 py-1 menu-caption-text text-muted/70"
               >
                 {t(I18nKey.CONVERSATION_PANEL$NO_VISIBLE_TAGS)}
               </p>

@@ -10,7 +10,10 @@ import {
   ACP_PROVIDER_FALLBACK_ICON,
   ACP_PROVIDERS,
   buildAcpAgentSettingsDiff,
+  getAcpProvidersForBackend,
 } from "#/constants/acp-providers";
+import type { BackendKind } from "#/api/backend-registry/types";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   AgentBrandIcon,
   type AgentBrandIconKind,
@@ -22,10 +25,7 @@ import {
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 
 export type OnboardingAgentId =
-  | "openhands"
-  | "claude-code"
-  | "codex"
-  | "gemini-cli";
+  "openhands" | "claude-code" | "codex" | "gemini-cli" | "pi" | "opencode";
 
 function getAgentOptionIcon(id: string): AgentBrandIconKind {
   if (id === "openhands") return "openhands";
@@ -73,14 +73,14 @@ interface AgentOption {
 // new provider (or changing a display name) only needs one edit in
 // ``acp-providers.ts``. The OpenHands tile is the only synthetic
 // entry — it isn't an ACP provider, just the canonical default.
-function getAgentOptions(): AgentOption[] {
+function getAgentOptions(backendKind: BackendKind): AgentOption[] {
   return [
     {
       id: "openhands",
       label: "OpenHands",
       descriptionKey: I18nKey.ONBOARDING$AGENT_OPENHANDS_DESCRIPTION,
     },
-    ...ACP_PROVIDERS.map<AgentOption>((provider) => ({
+    ...getAcpProvidersForBackend(backendKind).map<AgentOption>((provider) => ({
       id: provider.key as OnboardingAgentId,
       label: provider.display_name,
       descriptionKey: provider.description_key,
@@ -103,8 +103,24 @@ export function ChooseAgentStep({
 }: ChooseAgentStepProps) {
   const { t } = useTranslation("openhands");
   const { mutate: saveSettings, isPending: isSaving } = useSaveSettings();
+  const backendKind = useActiveBackend().backend.kind;
+  const options = getAgentOptions(backendKind);
+  const isSelectionOffered = options.some(({ id }) => id === selectedAgentId);
+
+  // Switching to a backend that can't run the chosen agent (e.g. back to the
+  // backend step, then to Cloud) must not leave a hidden tile selected.
+  React.useEffect(() => {
+    if (!isSelectionOffered) onSelect("openhands");
+  }, [isSelectionOffered, onSelect]);
 
   const handleNext = () => {
+    // Local launches read the active agent profile, so an ACP pick has nothing
+    // to write here. OpenHands still writes: it restores settings left on ACP.
+    if (backendKind !== "cloud" && selectedAgentId !== "openhands") {
+      onNext();
+      return;
+    }
+
     // The diff builder seeds the preferred default model (Vertex-safe for
     // Gemini) when none is passed.
     const diff = buildAcpAgentSettingsDiff(selectedAgentId);
@@ -150,7 +166,7 @@ export function ChooseAgentStep({
         aria-label={t(I18nKey.ONBOARDING$AGENT_TITLE)}
         className="flex flex-col gap-3"
       >
-        {getAgentOptions().map((option) => {
+        {options.map((option) => {
           const isSelected = option.id === selectedAgentId;
           return (
             <button

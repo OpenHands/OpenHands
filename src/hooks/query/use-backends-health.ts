@@ -7,10 +7,12 @@ import {
   getCurrentCloudApiKey,
 } from "#/api/cloud/organization-service.api";
 import {
+  isDefinitiveLocalBackendError,
   validateLocalBackend,
   INVALID_BACKEND_API_KEY_ERROR,
 } from "#/api/agent-server-compatibility";
 import type { Backend } from "#/api/backend-registry/types";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   isCorsOrNetworkError,
   isCorsOrNetworkErrorMessage,
@@ -141,14 +143,15 @@ const PROBE_RETRY_DELAY_MS = 300;
  * Retrying at the query level instead would call `recordBackendFailure` on
  * every internal attempt and reach the disabled cap several times too fast.
  *
- * Definitive auth failures (logged out, invalid/missing key) are NOT retried:
- * they are a decided server response, not a transient miss, so retrying only
- * delays surfacing the correct "disconnected" state (and the recovery UI).
+ * Definitive failures (logged out, invalid/missing key, unsupported version)
+ * are NOT retried: they are a decided server response, not a transient miss,
+ * so retrying only delays surfacing the correct "disconnected" state (and the
+ * recovery UI).
  */
 function isRetryableProbeError(error: unknown): boolean {
   if (!(error instanceof Error)) return true;
   return (
-    error.message !== INVALID_BACKEND_API_KEY_ERROR &&
+    !isDefinitiveLocalBackendError(error) &&
     error.message !== MISSING_BACKEND_API_KEY_ERROR &&
     error.message !== CLOUD_BACKEND_LOGGED_OUT_ERROR
   );
@@ -220,10 +223,18 @@ export function useBackendsHealth(
     getHealthSnapshot,
   );
 
+  const activeBackendId = useActiveBackend().backend.id;
+
   const results = useQueries({
     queries: backends.map((b) => {
       const entry = healthMap[b.id];
       const hasMissingCloudApiKey = hasMissingBackendApiKey(b);
+      // Every probe of a MARS session travels its tunnel into the sandbox;
+      // polling sessions the user is not on would keep them from ever
+      // idle-pausing (and billing), so those are probed once on mount and
+      // only the active one is watched.
+      const isIdleMarsSession =
+        Boolean(b.marsSessionId) && b.id !== activeBackendId;
       const isDisabled = entry?.disabled === true;
       const refreshInterval =
         b.kind === "cloud" ? CLOUD_REFRESH_INTERVAL_MS : REFRESH_INTERVAL_MS;
@@ -256,15 +267,21 @@ export function useBackendsHealth(
         },
         enabled: shouldProbe,
         refetchInterval:
-          isDisabled || hasMissingCloudApiKey
+          isDisabled || hasMissingCloudApiKey || isIdleMarsSession
             ? (false as const)
             : refreshInterval,
         refetchIntervalInBackground: false,
         refetchOnMount: isDisabled && probeDisabledOnce ? "always" : true,
         refetchOnReconnect:
-          b.kind !== "cloud" && !isDisabled && !hasMissingCloudApiKey,
+          b.kind !== "cloud" &&
+          !isDisabled &&
+          !hasMissingCloudApiKey &&
+          !isIdleMarsSession,
         refetchOnWindowFocus:
-          b.kind !== "cloud" && !isDisabled && !hasMissingCloudApiKey,
+          b.kind !== "cloud" &&
+          !isDisabled &&
+          !hasMissingCloudApiKey &&
+          !isIdleMarsSession,
         retry: false,
         // Keep the previous verdict visible while the next probe is in
         // flight so the indicator doesn't flicker on routine polling.
