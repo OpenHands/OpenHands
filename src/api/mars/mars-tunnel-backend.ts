@@ -334,9 +334,10 @@ export function buildNewSessionName(configName: string | null | undefined) {
 }
 
 /**
- * The in-guest agent-server's session key is set by the sandbox template, not
- * by us. The DigitalOcean token is the authorization boundary instead:
- * dialing the tunnel requires it.
+ * The renderer sends a session no key. The guest agent-server's own key, which
+ * DigitalOcean's template sets, is added on the host by the tunnel's front
+ * (scripts/mars-guest-front.mjs), so it never reaches a page. Reaching the
+ * front takes the DigitalOcean credential that dials the tunnel.
  */
 export const MARS_GUEST_API_KEY = "";
 

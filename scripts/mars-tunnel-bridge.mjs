@@ -22,6 +22,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createTunnelRegistry } from "./tunnel-registry.mjs";
 import { ensureSessionAwake } from "./mars-session.mjs";
+import { startGuestTunnel } from "./mars-guest-front.mjs";
 import {
   AGENT_SERVER_GUEST_PORT,
   DEFAULT_MARS_API_BASE_URL,
@@ -141,6 +142,8 @@ export function readMarsConfig(
  *   Where the Agent Canvas server keeps tokens (keychain, encrypted file, memory)
  * @param {(url: string) => Promise<void>} [options.openExternal] Opens the OAuth page
  * @param {typeof ensureSessionAwake} [options.ensureAwake] Override for tests
+ * @param {typeof startGuestTunnel} [options.startTunnel] Override for tests:
+ *   opens a session's tunnel for the bridge's own registry
  * @param {Record<string, string | undefined>} [options.env]
  */
 export function createMarsTunnelBridge({
@@ -152,6 +155,7 @@ export function createMarsTunnelBridge({
   secrets = null,
   openExternal = async () => {},
   ensureAwake = ensureSessionAwake,
+  startTunnel = startGuestTunnel,
   env = process.env,
 } = {}) {
   const config = readMarsConfig(env);
@@ -304,6 +308,9 @@ export function createMarsTunnelBridge({
   const registry =
     registryOverride ??
     createTunnelRegistry({
+      // Through the front, which adds the guest's own session key: see
+      // mars-guest-front.mjs.
+      startTunnel,
       ensureAwake: async ({ sessionId, getAccessToken }) => {
         // Consumed by the first open after createSession, never refreshed.
         const at = readyAt.get(sessionId);

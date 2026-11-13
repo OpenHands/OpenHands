@@ -158,6 +158,7 @@ COPY scripts/mars-secret-store.mjs /opt/agent-canvas/mars-secret-store.mjs
 COPY scripts/mars-lock-file.mjs /opt/agent-canvas/mars-lock-file.mjs
 COPY scripts/mars-oauth.mjs /opt/agent-canvas/mars-oauth.mjs
 COPY scripts/mars-session.mjs /opt/agent-canvas/mars-session.mjs
+COPY scripts/mars-guest-front.mjs /opt/agent-canvas/mars-guest-front.mjs
 COPY scripts/tunnel-client.mjs /opt/agent-canvas/tunnel-client.mjs
 COPY scripts/tunnel-registry.mjs /opt/agent-canvas/tunnel-registry.mjs
 COPY --from=frontend-build /build/node_modules/ws /opt/agent-canvas/node_modules/ws

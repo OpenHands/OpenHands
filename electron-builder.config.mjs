@@ -76,7 +76,9 @@ const isUniversal = ELECTRON_ARCH === "universal";
 // npm packages imported at runtime by code that isn't bundled through Vite
 // (main.mjs itself, and the child-process scripts it spawns):
 //   scripts/static-server.mjs  → sirv
-//   scripts/proxy-utils.mjs    → httpxy   (imported by ingress.mjs)
+//   scripts/proxy-utils.mjs    → httpxy   (imported by ingress.mjs, and by
+//                                          the MARS bridge main.mjs loads,
+//                                          through mars-guest-front.mjs)
 //   scripts/tunnel-client.mjs  → ws       (imported directly by main.mjs,
 //                                          not spawned — the MARS
 //                                          port-forward tunnel client)
@@ -144,7 +146,15 @@ async function stripBundledNodeModules(context) {
       sizeMb = Math.round(getDirSizeBytes(nm) / (1024 * 1024));
     } catch {}
 
-    await rm(nm, { recursive: true, force: true });
+    // On Windows a file another process still holds (a virus scan of the
+    // freshly copied tree) fails rmdir with ENOTEMPTY or EBUSY; Node retries
+    // those only when asked to.
+    await rm(nm, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 200,
+    });
 
     const rel = relative(process.cwd(), nm);
     const human = sizeMb != null ? ` (~${sizeMb} MB)` : "";
