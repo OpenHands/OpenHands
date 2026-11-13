@@ -19,7 +19,7 @@ interface MatchWithParams {
 export function ReactRouterNavigationProvider({
   children,
 }: React.PropsWithChildren) {
-  const { pathname, search } = useLocation();
+  const { pathname } = useLocation();
   const navigate = useReactRouterNavigate();
   const routerNavigation = useReactRouterNavigation();
   const matches = useMatches() as MatchWithParams[];
@@ -38,12 +38,11 @@ export function ReactRouterNavigationProvider({
   const value = React.useMemo<NavigationContextValue>(
     () => ({
       currentPath: pathname,
-      currentSearch: search,
       conversationId,
       isNavigating: Boolean(routerNavigation.location),
       navigate,
     }),
-    [pathname, search, conversationId, routerNavigation.location, navigate],
+    [pathname, conversationId, routerNavigation.location, navigate],
   );
 
   return <NavigationProvider value={value}>{children}</NavigationProvider>;

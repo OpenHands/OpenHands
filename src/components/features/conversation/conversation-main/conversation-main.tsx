@@ -30,7 +30,6 @@ import {
   SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
 } from "#/hooks/use-breakpoint";
 import { SidebarMobileMenuToggle } from "#/components/features/sidebar/sidebar-mobile-menu-toggle";
-import { ConversationMobileBackButton } from "./conversation-mobile-back-button";
 import { ConversationOverviewDrawer } from "../conversation-overview-drawer";
 import { useConversationOverviewDrawerOptional } from "../conversation-overview-drawer-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -214,12 +213,7 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
             )}
           >
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              {isSidebarRailHidden ? (
-                <>
-                  <SidebarMobileMenuToggle />
-                  <ConversationMobileBackButton />
-                </>
-              ) : null}
+              {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}
               <h2
                 data-testid="automation-setup-conversation-title"
                 className="min-w-0 truncate text-sm font-medium text-content"
@@ -353,12 +347,7 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
                 isSidebarRailHidden && "h-12 min-h-12 gap-2 pl-2.5",
               )}
             >
-              {isSidebarRailHidden ? (
-                <>
-                  <SidebarMobileMenuToggle />
-                  <ConversationMobileBackButton />
-                </>
-              ) : null}
+              {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}
               <div className="min-w-0 flex-1" inert={!!children}>
                 <ConversationNameWithStatus />
               </div>
