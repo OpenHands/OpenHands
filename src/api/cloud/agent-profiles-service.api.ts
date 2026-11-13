@@ -34,9 +34,26 @@ function activeCloudBackend(): Backend {
   return active;
 }
 
-export async function listCloudAgentProfiles(): Promise<AgentProfileListResponse> {
+/**
+ * The active cloud backend, or an explicit one.
+ *
+ * Child launches call this with the picked cloud backend while the parent
+ * conversation's active backend is still local. The active-backend helpers
+ * would otherwise read the local server's profiles.
+ */
+function resolveCloudBackend(backend?: Backend): Backend {
+  if (!backend) return activeCloudBackend();
+  if (backend.kind !== "cloud") {
+    throw new Error("Cloud agent-profile call requires a cloud backend.");
+  }
+  return backend;
+}
+
+export async function listCloudAgentProfiles(
+  backend?: Backend,
+): Promise<AgentProfileListResponse> {
   return callCloudProxy<AgentProfileListResponse>({
-    backend: activeCloudBackend(),
+    backend: resolveCloudBackend(backend),
     method: "GET",
     path: BASE,
   });
@@ -44,9 +61,10 @@ export async function listCloudAgentProfiles(): Promise<AgentProfileListResponse
 
 export async function getCloudAgentProfile(
   name: string,
+  backend?: Backend,
 ): Promise<AgentProfileDetailResponse> {
   return callCloudProxy<AgentProfileDetailResponse>({
-    backend: activeCloudBackend(),
+    backend: resolveCloudBackend(backend),
     method: "GET",
     path: `${BASE}/${encodeURIComponent(name)}`,
   });

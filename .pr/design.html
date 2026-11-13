@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Child conversations can pin a saved agent profile</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a; --crit:#a02020;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:4px 0}
+  nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:34px;margin:6px 0 4px;letter-spacing:-.01em}
+  header.title .sub{color:var(--muted);max-width:740px}
+  h2{font-size:22px;margin:44px 0 10px} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  h3{font-size:16px;margin:22px 0 8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  pre{font-family:var(--mono);font-size:13px;background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;border:1px solid var(--rule)}
+  pre code{background:transparent;padding:0}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6} .callout.note{border-color:var(--muted);background:#f3f1ec}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  details{border:1px solid var(--rule);border-radius:6px;margin:12px 0}
+  details>summary{cursor:pointer;padding:8px 12px;color:var(--muted);font-size:13px;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸ "} details[open]>summary::before{content:"▾ "}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  .card{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:16px 18px;margin:18px 0}
+  .tag{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+  @media(max-width:760px){.wrap{grid-template-columns:1fr}.ba{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="toc"><h2>Contents</h2><ol>
+    <li><a href="#decision">Pin the child, or launch nothing</a></li>
+    <li><a href="#api">Tool parameter before → after</a></li>
+    <li><a href="#flow">Launch path before → after</a></li>
+    <li><a href="#files">Where to read</a></li>
+    <li><a href="#resolver">Resolver rejects before create</a></li>
+    <li><a href="#launch">Both targets reuse the profile path</a></li>
+    <li><a href="#docs">What the agent is told</a></li>
+    <li><a href="#risk">Risk</a></li>
+  </ol></nav>
+  <main>
+    <header class="title">
+      <div class="eyebrow">Feature · issue 18430 · additive</div>
+      <h1>Child conversations can pin a saved agent profile</h1>
+      <p class="sub"><code>launch_child_conversation</code> accepts an optional <code>agent_profile</code> name or id. A valid profile launches the child through the existing <code>agentProfileId</code> / <code>agent_profile_id</code> path, so that profile’s model is the one that runs. An unknown or unreadable profile returns guidance and creates nothing. Omitting the field keeps today’s default settings path.</p>
+    </header>
+
+    <section id="decision">
+      <h2><span class="num">1</span>Pin the child, or launch nothing</h2>
+      <div class="callout">★ A selected profile never falls back to the parent’s <code>agent_settings</code>. Restricted <code>secret_refs</code> stay on the server-resolved profile path, which is what drops secrets outside the allow-list. <a class="src" href="https://github.com/MdTanwer/OpenHands/blob/10588d3c723c022f6aec99e83e9f6f67b8df1fd3/src/services/child-conversation-launch.ts#L257">child-conversation-launch.ts:257</a></div>
+      <p>11 files · +970 / −12. No new Agent Server field and no <code>compatibility.minimumAgentServer</code> bump: local create already honors <code>agentProfileId</code>, and the cloud start request already accepts <code>agent_profile_id</code>.</p>
+      <p>Compatibility is additive. Calls that omit <code>agent_profile</code> still build the same start request they did before this change.</p>
+    </section>
+
+    <section id="api">
+      <h2><span class="num">2</span>Tool parameter before → after</h2>
+      <div class="ba">
+        <div>
+          <h3>Before</h3>
+          <pre><code>target, task, title?,
+repository?, branch?, isolation?
+required: target, task</code></pre>
+          <p><a class="src" href="https://github.com/OpenHands/OpenHands/blob/1c75a05d587bcb502cd3f63d7e13eaa98ca84d53/src/api/launch-child-conversation-client-tool.ts#L64">launch-child-conversation-client-tool.ts:64</a> at <code>1c75a05d58</code></p>
+        </div>
+        <div>
+          <h3>After</h3>
+          <pre><code>target, task, title?,
+repository?, branch?, isolation?,
+agent_profile?
+required: target, task</code></pre>
+          <p><a class="src" href="https://github.com/MdTanwer/OpenHands/blob/10588d3c723c022f6aec99e83e9f6f67b8df1fd3/src/api/launch-child-conversation-client-tool.ts#L153">launch-child-conversation-client-tool.ts:153</a></p>
+        </div>
+      </div>
+      <p><code>agent_profile</code> is a saved agent profile’s name or stable id. It is not an LLM-profile name and not a raw model string. The action field mirrors the schema name: <a class="src" href="https://github.com/MdTanwer/OpenHands/blob/10588d3c723c022f6aec99e83e9f6f67b8df1fd3/src/types/agent-server/core/base/action.ts#L360">LaunchChildConversationAction.agent_profile</a>.</p>
+      <p>The follow-up result now always names the outcome: <code>profile_source: "selected" | "inherited"</code>, plus <code>agent_profile_id</code>, <code>agent_profile_name</code>, <code>agent_kind</code>, and <code>model</code>. A restricted allow-list also sets <code>secret_scope: "restricted"</code>.</p>
+    </section>
+
+    <section id="flow">
+      <h2><span class="num">3</span>Launch path before → after</h2>
+      <figure class="fig">
+        <svg viewBox="0 0 960 420" role="img" aria-labelledby="f1-t f1-d">
+          <title id="f1-t">Child launch before and after agent_profile</title>
+          <desc id="f1-d">Before, both targets created a conversation with no profile id. After, an explicit selector is resolved first and either fails closed or is passed as agentProfileId or agent_profile_id.</desc>
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 Z" fill="var(--subtle)"/></marker>
+            <marker id="arr-chg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 Z" fill="var(--warn)"/></marker>
+            <linearGradient id="subj" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="var(--accent)" stop-opacity=".10"/>
+              <stop offset="1" stop-color="var(--accent)" stop-opacity=".02"/></linearGradient>
+            <style>
+              .existing{fill:var(--code-bg);stroke:var(--subtle);stroke-width:1.4;stroke-dasharray:5 3}
+              .ex-title{font:700 13px var(--sans);fill:var(--muted)}
+              .ex-detail{font:11px var(--mono);fill:var(--subtle)}
+              .new{fill:url(#subj);stroke:var(--accent);stroke-width:2}
+              .new-title{font:800 13px var(--sans);fill:var(--accent)}
+              .detail{font:11px var(--mono);fill:var(--fg)}
+              .edge{stroke:var(--subtle);stroke-width:1.5;stroke-dasharray:5 3;fill:none}
+              .edge-chg{stroke:var(--warn);stroke-width:1.8;fill:none}
+              .lbl{font:600 11px var(--mono);fill:var(--muted)}
+              .gap{font:700 11px var(--mono);fill:var(--warn)}
+              .col{font:700 12px var(--sans);fill:var(--muted)}
+            </style>
+          </defs>
+          <text class="col" x="40" y="28">Before · 1c75a05d58</text>
+          <text class="col" x="500" y="28">After · 10588d3c72</text>
+          <g>
+            <rect class="existing" x="40" y="48" width="200" height="58" rx="6"/>
+            <text class="ex-title" x="140" y="72" text-anchor="middle">validateLaunchParams</text>
+            <text class="ex-detail" x="140" y="90" text-anchor="middle">target, task, isolation</text>
+            <path class="edge" d="M140,106 L140,132" marker-end="url(#arr)"/>
+            <rect class="existing" x="40" y="140" width="200" height="64" rx="6"/>
+            <text class="ex-title" x="140" y="166" text-anchor="middle">launchLocalChild</text>
+            <text class="ex-detail" x="140" y="184" text-anchor="middle">createConversation()</text>
+            <text class="ex-detail" x="140" y="248" text-anchor="middle">no agentProfileId</text>
+            <rect class="existing" x="260" y="140" width="200" height="64" rx="6"/>
+            <text class="ex-title" x="360" y="166" text-anchor="middle">launchCloudChild</text>
+            <text class="ex-detail" x="360" y="184" text-anchor="middle">createCloudAppConversation</text>
+          </g>
+          <g>
+            <rect class="existing" x="500" y="48" width="200" height="58" rx="6"/>
+            <text class="ex-title" x="600" y="72" text-anchor="middle">validateLaunchParams</text>
+            <text class="ex-detail" x="600" y="90" text-anchor="middle">+ agentProfile</text>
+            <path class="edge-chg" d="M600,106 L600,128" marker-end="url(#arr-chg)"/>
+            <rect class="new" x="500" y="136" width="420" height="72" rx="6"/>
+            <text class="new-title" x="710" y="164" text-anchor="middle">resolveChildAgentProfile</text>
+            <text class="detail" x="710" y="184" text-anchor="middle">resolve-child-agent-profile.ts:114</text>
+            <path class="edge-chg" d="M620,208 L560,248" marker-end="url(#arr-chg)"/>
+            <path class="edge" d="M800,208 L860,248" marker-end="url(#arr)"/>
+            <rect class="new" x="500" y="256" width="190" height="70" rx="6"/>
+            <text class="new-title" x="595" y="284" text-anchor="middle">failure()</text>
+            <text class="detail" x="595" y="304" text-anchor="middle">no conversation created</text>
+            <rect class="existing" x="760" y="256" width="160" height="70" rx="6"/>
+            <text class="ex-title" x="840" y="284" text-anchor="middle">create*</text>
+            <text class="ex-detail" x="840" y="304" text-anchor="middle">id only if resolved</text>
+          </g>
+          <text class="gap" x="500" y="400">Unknown or unreadable profiles stop on the left. A cloud model that cannot be confirmed still launches.</text>
+        </svg>
+        <figcaption>The new resolver sits in front of both create calls. Only a resolved profile is forwarded, and only when the caller passed one.</figcaption>
+      </figure>
+    </section>
+
+    <section id="files">
+      <h2><span class="num">4</span>Where to read</h2>
+      <table>
+        <thead><tr><th>File</th><th></th><th>What changed</th></tr></thead>
+        <tbody>
+          <tr><td><code>src/services/resolve-child-agent-profile.ts</code></td><td>🟢 added</td><td>Match name or id, confirm the LLM profile, mark <code>secret_refs</code>.</td></tr>
+          <tr><td><code>src/services/child-conversation-launch.ts</code></td><td>✏️ changed</td><td>Thread the resolved id into local and cloud create. Report profile and model.</td></tr>
+          <tr><td><code>src/api/launch-child-conversation-client-tool.ts</code></td><td>✏️ changed</td><td>Schema field plus a concrete example and the sub-agent distinction.</td></tr>
+          <tr><td><code>src/types/.../action.ts</code></td><td>⚙️ mechanical</td><td><code>agent_profile?: string | null</code> on the action.</td></tr>
+          <tr><td><code>src/api/cloud/agent-profiles-service.api.ts</code></td><td>⚙️ mechanical</td><td>List/get accept the picked cloud backend, not only the active one.</td></tr>
+          <tr><td><code>src/api/cloud/profiles-service.api.ts</code></td><td>⚙️ mechanical</td><td><code>fetchCloudProfilesForBackend</code> confirms the cloud model.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="resolver">
+      <h2><span class="num">5</span>Resolver rejects before create</h2>
+      <div class="card">
+        <p><span class="tag">🟢 added</span> <code>resolveChildAgentProfile</code></p>
+        <p>Local reads go through <code>AgentProfilesService</code> and <code>ProfilesService</code>. Cloud reads go through the picked backend from <code>pickCloudBackendForLaunch</code>, because the parent conversation is usually still on the local backend.</p>
+        <p>Match order is id, then name (<a class="src" href="https://github.com/MdTanwer/OpenHands/blob/10588d3c723c022f6aec99e83e9f6f67b8df1fd3/src/services/resolve-child-agent-profile.ts#L61">matchProfile:61</a>). A local OpenHands profile whose <code>llm_profile_ref</code> is missing from local LLM profiles is invalid. On cloud, the same miss — or an LLM list that cannot be read — still resolves: <code>model</code> is null and <code>modelNote</code> says the model was not confirmed, because a local parent only sees the per-user LLM list and an organization-only profile would otherwise be rejected. An ACP profile uses <code>acp_model</code> and does not consult LLM profiles. <code>Array.isArray(secret_refs)</code> — including <code>[]</code> — sets <code>secretRefsRestricted</code>.</p>
+        <details>
+          <summary>Cases the tests lock</summary>
+          <ul>
+            <li>Unknown name: guidance lists saved profiles, and <code>getProfile</code> is not called.</li>
+            <li>Agent-profile list throws: guidance names the read failure. Nothing is created.</li>
+            <li>Local LLM profile absent: guidance names the dangling ref. Nothing is created.</li>
+            <li>Cloud LLM profile absent or unreadable: the profile still resolves with <code>model: null</code> and a note. The launch sends <code>agent_profile_id</code> only.</li>
+            <li>Cloud unknown agent profile: no profile detail read and no LLM list.</li>
+          </ul>
+        </details>
+      </div>
+    </section>
+
+    <section id="launch">
+      <h2><span class="num">6</span>Both targets reuse the profile path</h2>
+      <div class="card">
+        <p><span class="tag">✏️ changed</span> <code>launchLocalChild</code> / <code>launchCloudChild</code></p>
+        <p>Before, <code>launchLocalChild</code> called <code>createConversation</code> with task, workspace, and parent id only (<a class="src" href="https://github.com/OpenHands/OpenHands/blob/1c75a05d587bcb502cd3f63d7e13eaa98ca84d53/src/services/child-conversation-launch.ts#L244">:244</a> on main). After, a resolved profile adds <code>agentProfileId</code>, <code>agentProfileKind</code>, and <code>agentLlmProfileRef</code> (<a class="src" href="https://github.com/MdTanwer/OpenHands/blob/10588d3c723c022f6aec99e83e9f6f67b8df1fd3/src/services/child-conversation-launch.ts#L356">:356</a>). That is the same local start-request field <code>buildStartConversationRequest</code> already turns into <code>agent_profile_id</code> and uses to omit <code>agent_settings</code>.</p>
+        <p>Cloud adds <code>agent_profile_id</code> on the existing <code>AppConversationStartRequest</code> (<a class="src" href="https://github.com/MdTanwer/OpenHands/blob/10588d3c723c022f6aec99e83e9f6f67b8df1fd3/src/services/child-conversation-launch.ts#L505">:505</a>). Resolution runs after the “no cloud backend” check and before <code>createCloudAppConversation</code>, so a bad selector does not open a start task and does not read settings.</p>
+        <p>With no selector, <code>resolveChildAgentProfile</code> is not called and the create payload stays the previous object. The result says <code>profile_source: "inherited"</code>, <code>agent_profile_id: null</code>, <code>model: null</code>.</p>
+      </div>
+    </section>
+
+    <section id="docs">
+      <h2><span class="num">7</span>What the agent is told</h2>
+      <div class="card">
+        <p>The tool description at <a class="src" href="https://github.com/MdTanwer/OpenHands/blob/10588d3c723c022f6aec99e83e9f6f67b8df1fd3/src/api/launch-child-conversation-client-tool.ts#L54">launch-child-conversation-client-tool.ts:54</a> now includes:</p>
+        <ol>
+          <li>Omit <code>agent_profile</code> to keep the current default settings path.</li>
+          <li>Pass a saved profile name or id to pin that profile’s model on local or cloud.</li>
+          <li>A copyable local example (<code>target</code>, <code>task</code>, <code>agent_profile: "fast"</code>) and a cloud example that inherits the default (<code>repository</code>, <code>branch</code>, no profile).</li>
+          <li>The split from in-conversation sub-agents: those stay inside the parent and do not take <code>agent_profile</code>.</li>
+          <li>On cloud, a saved profile whose model is not on the visible per-user LLM list still launches. The follow-up sets <code>model</code> to null and says the model was not confirmed.</li>
+        </ol>
+        <div class="callout note">ⓘ The public page <code>openhands/usage/agent-canvas/conversations.mdx</code> lives in <code>OpenHands/docs</code>, which this pull request does not modify. The agent-facing contract in this repository is the tool description above.</div>
+      </div>
+    </section>
+
+    <section id="risk">
+      <h2><span class="num">8</span>Risk</h2>
+      <div class="callout note">ⓘ When the parent is local, cloud LLM-profile confirmation uses the per-user settings route, because the connected cloud backend is not the active org. An org-only LLM profile missing from that route still launches: the result sets <code>model</code> to null and <code>model_note</code> says the model was not confirmed. The start request carries <code>agent_profile_id</code> and omits <code>agent_settings</code>.</div>
+      <p>Secret filtering stays on the agent server: sending <code>agent_profile_id</code> is what makes <code>secret_refs</code> drop the other names. This change does not rebuild the secrets map in Canvas.</p>
+      <p>This is a fork pull request. <code>.pr/design.html</code> is a review aid and must be removed before merge; the repository’s cleanup workflow skips fork heads.</p>
+    </section>
+  </main>
+</div>
+</body>
+</html>
