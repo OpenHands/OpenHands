@@ -241,6 +241,15 @@ export function useActiveBackendContext(): ActiveBackendContextValue {
 }
 
 /**
+ * Read the active backend context without throwing if the provider is missing.
+ * Returns `null` when called outside an `<ActiveBackendProvider>` (e.g. from
+ * a unit test that mounts a narrow component without the full provider stack).
+ */
+export function useOptionalActiveBackendContext(): ActiveBackendContextValue | null {
+  return React.useContext(ActiveBackendContext);
+}
+
+/**
  * Read the resolved active backend.
  *
  * Falls back to a synthesized env-derived local backend when called

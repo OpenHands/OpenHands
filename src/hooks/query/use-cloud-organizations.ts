@@ -1,7 +1,7 @@
 import { useQueries } from "@tanstack/react-query";
 import { HttpError } from "@openhands/typescript-client";
 import axios from "axios";
-import { useActiveBackendContext } from "#/contexts/active-backend-context";
+import { useOptionalActiveBackendContext } from "#/contexts/active-backend-context";
 import {
   getCloudOrganizations,
   getCurrentCloudApiKey,
@@ -26,7 +26,8 @@ function isAuthorizationError(error: unknown): boolean {
  * responses independently and a switch (which clears the cache) refetches.
  */
 export function useAllCloudOrganizations() {
-  const { backends } = useActiveBackendContext();
+  const ctx = useOptionalActiveBackendContext();
+  const backends = ctx?.backends ?? [];
   const cloudBackends = backends.filter((b) => b.kind === "cloud");
 
   const queries = useQueries({

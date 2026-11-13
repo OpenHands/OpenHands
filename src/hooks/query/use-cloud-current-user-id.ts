@@ -2,7 +2,7 @@ import { useQueries } from "@tanstack/react-query";
 import { getCloudOrganizationMe } from "#/api/cloud/organization-service.api";
 import {
   useActiveBackend,
-  useActiveBackendContext,
+  useOptionalActiveBackendContext,
 } from "#/contexts/active-backend-context";
 import { useAllCloudOrganizations } from "./use-cloud-organizations";
 
@@ -11,7 +11,8 @@ export function useCloudCurrentUserId(): Record<
   string,
   { isLoading: boolean; userId: string | null }
 > {
-  const { backends } = useActiveBackendContext();
+  const ctx = useOptionalActiveBackendContext();
+  const backends = ctx?.backends ?? [];
   const active = useActiveBackend();
   const cloudOrgs = useAllCloudOrganizations();
 
