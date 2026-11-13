@@ -195,6 +195,14 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     }
   }
 
+  // Fallback: allow the session API key to be supplied via the
+  // SESSION_API_KEY environment variable instead of the command line, so
+  // launchers never have to expose it in `ps`/`/proc/<pid>/cmdline` on
+  // shared hosts. Only used in local mode (never with --auth-required).
+  if (!config.sessionApiKey && !config.authRequired && env.SESSION_API_KEY) {
+    config.sessionApiKey = env.SESSION_API_KEY;
+  }
+
   // Guard: --session-api-key and --auth-required are semantically
   // mutually exclusive. The first auto-injects the key (local mode);
   // the second forces the user to paste it (public mode). Combining
@@ -252,6 +260,9 @@ OPTIONS:
   --session-api-key <key>      Inject session API key into index.html so the
                                pre-built frontend authenticates to agent-server
                                without needing VITE_SESSION_API_KEY baked in.
+                               Alternatively set SESSION_API_KEY env var (not
+                               shown in process listings), which is preferred on
+                               shared hosts.
   --auth-required              Inject authRequired flag into index.html so the
                                pre-built frontend shows the API key entry screen
                                (public mode) without VITE_AUTH_REQUIRED baked in.
@@ -680,7 +691,7 @@ export function startStaticServer(config) {
   const staticMiddleware = createStaticMiddleware(dirAbs);
 
   const uninstallDiagnostics = proxy.installDiagnostics();
-  // DigitalOcean Managed Agents for the browser: this server hosts the MARS
+  // DigitalOcean Managed Agents for the browser: with MARS_WEB=1, host the MARS
   // bridge and proxies to sessions' tunnel listeners, behind the session key
   // (see mars-web-bridge.mjs). Deliberately `config.sessionApiKey`, not
   // `policy.sessionApiKey`: the policy decides whether the key may be baked

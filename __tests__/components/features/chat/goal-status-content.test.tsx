@@ -8,12 +8,12 @@ import type { GoalStatus } from "#/types/agent-server/core/events/conversation-s
 
 const stopGoal = vi.fn();
 const resumeGoal = vi.fn();
-const pauseConversation = vi.fn();
+const interruptConversation = vi.fn();
 
 vi.mock("#/hooks/mutation/conversation-mutation-utils", () => ({
   stopGoal: (...a: unknown[]) => stopGoal(...a),
   resumeGoal: (...a: unknown[]) => resumeGoal(...a),
-  pauseConversation: (...a: unknown[]) => pauseConversation(...a),
+  interruptConversation: (...a: unknown[]) => interruptConversation(...a),
 }));
 vi.mock("#/hooks/use-conversation-id", () => ({
   useOptionalConversationId: () => ({ conversationId: "conv-1" }),
@@ -48,7 +48,7 @@ describe("GoalStatusContent loop controls", () => {
     vi.clearAllMocks();
     stopGoal.mockResolvedValue(undefined);
     resumeGoal.mockResolvedValue(undefined);
-    pauseConversation.mockResolvedValue(undefined);
+    interruptConversation.mockResolvedValue(undefined);
     useGoalStore.setState({ statusByConversation: {} });
     useEventStore.getState().clearEvents();
   });
@@ -62,7 +62,7 @@ describe("GoalStatusContent loop controls", () => {
     await userEvent.click(screen.getByTestId("goal-stop"));
     await waitFor(() => expect(stopGoal).toHaveBeenCalledWith("conv-1"));
     await waitFor(() =>
-      expect(pauseConversation).toHaveBeenCalledWith("conv-1"),
+      expect(interruptConversation).toHaveBeenCalledWith("conv-1"),
     );
   });
 

@@ -12,17 +12,30 @@ import {
   type AutomationSetupKind,
 } from "#/api/automation-setup-types";
 import type { Automation } from "#/types/automation";
+import { formatAutomationRepositories } from "#/utils/automation-repo-sources";
 import {
   formatTimeOfDay,
   parseCronSchedule,
 } from "#/utils/automation-schedule";
 
 const HOURLY_CRON = "0 * * * *";
+// Prompt and plugin presets bake their repositories into a package the
+// service can rebuild; other automations keep them fixed.
+const REPOSITORY_UPDATABLE_PRESET_TYPES = new Set(["prompt", "plugin"]);
 
 function setupKind(automation: Automation): AutomationSetupKind {
+  if (automation.plugin_spec) return "custom";
   if ((automation.plugins?.length ?? 0) > 0) return "plugin";
   if (!automation.prompt?.trim() && automation.entrypoint) return "custom";
   return "prompt";
+}
+
+function canUpdateRepositories(automation: Automation): boolean {
+  const presetType = automation.preset_metadata?.preset_type;
+  return (
+    typeof presetType === "string" &&
+    REPOSITORY_UPDATABLE_PRESET_TYPES.has(presetType)
+  );
 }
 
 function eventKey(on: Automation["trigger"]["on"]): string {
@@ -38,6 +51,21 @@ function eventKey(on: Automation["trigger"]["on"]): string {
  * `0 * * * *` as custom. Everything else, including one-time dates, stays
  * a raw cron so we do not invent a date the expression does not contain.
  */
+// The setup form edits these event-trigger fields; any other field the service
+// stored (such as `destination`) is carried through an edit unchanged.
+const FORM_EVENT_TRIGGER_FIELDS = new Set(["type", "source", "on", "filter"]);
+
+function eventTriggerExtras(
+  trigger: Automation["trigger"],
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(trigger).filter(
+      ([field, value]) =>
+        !FORM_EVENT_TRIGGER_FIELDS.has(field) && value !== undefined,
+    ),
+  );
+}
+
 function scheduleFields(
   schedule: string | undefined,
   timezone: string | undefined,
@@ -86,9 +114,14 @@ export function setupDraftFromAutomation(
     kind,
     name: automation.name,
     prompt,
-    repository: automation.repository ?? "",
+    repository:
+      formatAutomationRepositories(automation.repositories) ||
+      (automation.repository ?? ""),
     model: automation.model ?? "",
     agentProfileId: automation.agent_profile_id ?? "",
+    ...(automation.plugin_spec
+      ? { pluginConfig: JSON.stringify(automation.plugin_spec.config, null, 2) }
+      : {}),
     entrypoint: automation.entrypoint ?? "",
     setupScriptPath: automation.setup_script_path ?? "",
     ...(trigger.type === "event"
@@ -109,10 +142,21 @@ export function setupDraftFromAutomation(
     form.timeoutSeconds = String(automation.timeout);
   }
 
+  const existingEventTrigger =
+    trigger.type === "event" ? eventTriggerExtras(trigger) : {};
+
   return {
     prompt,
     kind,
     editingAutomationId: automation.id,
+    ...(automation.plugin_spec
+      ? { existingPluginSpec: automation.plugin_spec }
+      : {}),
+    existingRepositories: automation.repositories ?? [],
+    canUpdateRepositories: canUpdateRepositories(automation),
+    ...(Object.keys(existingEventTrigger).length > 0
+      ? { existingEventTrigger }
+      : {}),
     ...(kind === "custom" && automation.tarball_path
       ? { existingCustomTarballPath: automation.tarball_path }
       : {}),

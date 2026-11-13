@@ -11,6 +11,7 @@ import { clearAgentServerHomeDirCache } from "#/api/agent-server-home";
 
 const fileUploadMock = vi.fn();
 const getHomeMock = vi.fn();
+const getConversationMock = vi.fn();
 
 vi.mock("@openhands/typescript-client/workspace/remote-workspace", () => ({
   RemoteWorkspace: vi.fn(function RemoteWorkspaceMock() {
@@ -19,6 +20,9 @@ vi.mock("@openhands/typescript-client/workspace/remote-workspace", () => ({
 }));
 
 vi.mock("@openhands/typescript-client/clients", () => ({
+  ConversationClient: vi.fn(function ConversationClientMock() {
+    return { getConversation: getConversationMock };
+  }),
   FileClient: vi.fn(function FileClientMock() {
     return { getHome: getHomeMock };
   }),
@@ -53,6 +57,53 @@ describe("uploadFilesToConversation", () => {
     batchGetCloudConversations.mockReset();
     getHomeMock.mockReset();
     getHomeMock.mockResolvedValue({ home: "/Users/test" });
+    getConversationMock.mockResolvedValue({workspace: {working_dir: "workspace/project"}});
+  });
+
+  it("stops before uploading if the organization changes during runtime lookup", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "original" });
+    batchGetCloudConversations.mockImplementation(async () => {
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "other" });
+      return [
+        {
+          id: "conv-1",
+          conversation_url:
+            "https://runtime.example.test/api/conversations/conv-1",
+          session_api_key: "fixture",
+          workspace: { working_dir: "/workspace" },
+        },
+      ];
+    });
+    await expect(
+      uploadFilesToConversation("conv-1", [makeFile("notes.txt")]),
+    ).rejects.toThrow("CONVERSATION$START_ENVIRONMENT_CHANGED");
+    expect(fileUploadMock).not.toHaveBeenCalled();
+  });
+
+  it("does not upload after an environment switch while resolving the upload path", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "original" });
+    batchGetCloudConversations.mockResolvedValue([
+      {
+        id: "conv-1",
+        conversation_url:
+          "https://runtime.example.test/api/conversations/conv-1",
+        session_api_key: "fixture",
+        workspace: { working_dir: "workspace/project" },
+      },
+    ]);
+    getHomeMock.mockImplementation(async () => {
+      setActiveSelection({ backendId: cloudBackend.id, orgId: "other" });
+      return { home: "/home/test" };
+    });
+    const result = await uploadFilesToConversation("conv-1", [
+      makeFile("notes.txt"),
+    ]);
+    expect(fileUploadMock).not.toHaveBeenCalled();
+    expect(result.skipped_files).toEqual([
+      { name: "notes.txt", reason: "CONVERSATION$START_ENVIRONMENT_CHANGED" },
+    ]);
   });
 
   // @spec WUP-001 — Default-fallback relative working dirs are resolved
@@ -114,6 +165,7 @@ describe("uploadFilesToConversation", () => {
   });
 
   it("uploads cloud conversations against the provisioned runtime URL", async () => {
+    getConversationMock.mockResolvedValue({workspace: {working_dir: "/workspace/project"}});
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
     batchGetCloudConversations.mockResolvedValue([
@@ -143,5 +195,77 @@ describe("uploadFilesToConversation", () => {
       "/workspace/project/notes.md",
     );
     expect(result.uploaded_files).toEqual(["notes.md"]);
+  });
+
+  it("uses the runtime workspace when cloud app metadata omits it", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    const id = "1717df5963ee43bfb32a83428d3efdc8";
+    batchGetCloudConversations.mockResolvedValue([{
+      id, conversation_url: `https://runtime.example.test/api/conversations/${id}`,
+      session_api_key: "fixture",
+    }]);
+    getConversationMock.mockResolvedValue({workspace: {working_dir: "/workspace/project/actual"}});
+    await uploadFilesToConversation(id, [makeFile("notes.txt")]);
+    expect(fileUploadMock).toHaveBeenCalledWith(
+      expect.objectContaining({name: "notes.txt"}), "/workspace/project/actual/notes.txt",
+    );
+  });
+
+  it("uploads using only the basename of user-provided file names", async () => {
+    const result = await uploadFilesToConversation("conv-1", [
+      makeFile("../../evil.txt"),
+    ]);
+
+    expect(fileUploadMock).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "../../evil.txt" }),
+      "/Users/test/workspace/project/evil.txt",
+    );
+    expect(result).toEqual({
+      uploaded_files: ["evil.txt"],
+      skipped_files: [],
+    });
+  });
+
+  it("uses the conversation session key and reports per-file failures", async () => {
+    fileUploadMock
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("too large"));
+
+    const result = await uploadFilesToConversation(
+      "conv-1",
+      [makeFile("ok.txt"), makeFile("bad.txt")],
+      { id: "conv-1", session_api_key: "session-key" } as never,
+    );
+
+    expect(RemoteWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: "session-key" }),
+    );
+    expect(result).toEqual({
+      uploaded_files: ["ok.txt"],
+      skipped_files: [{ name: "bad.txt", reason: "too large" }],
+    });
+  });
+
+  it("uploads files in bounded batches", async () => {
+    let activeUploads = 0;
+    let maxActiveUploads = 0;
+    fileUploadMock.mockImplementation(async () => {
+      activeUploads += 1;
+      maxActiveUploads = Math.max(maxActiveUploads, activeUploads);
+      await Promise.resolve();
+      activeUploads -= 1;
+    });
+
+    const files = Array.from({ length: 7 }, (_, index) =>
+      makeFile(`file-${String(index)}.txt`),
+    );
+
+    const result = await uploadFilesToConversation("conv-1", files);
+
+    expect(fileUploadMock).toHaveBeenCalledTimes(7);
+    expect(maxActiveUploads).toBe(5);
+    expect(result.uploaded_files).toEqual(files.map((file) => file.name));
+    expect(result.skipped_files).toEqual([]);
   });
 });

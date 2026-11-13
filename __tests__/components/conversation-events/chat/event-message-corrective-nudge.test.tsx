@@ -43,13 +43,12 @@ const renderEvent = (event: MessageEvent) =>
   renderWithProviders(
     <EventMessage
       event={event}
-      messages={[event]}
       isLastMessage={false}
       isInLast10Actions={false}
     />,
   );
 
-describe("EventMessage - empty-response corrective nudge", () => {
+describe("EventMessage - SDK corrective nudges", () => {
   beforeEach(() => {
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.INIT,

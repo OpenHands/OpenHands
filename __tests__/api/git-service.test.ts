@@ -4,11 +4,7 @@ import * as cloudGitService from "#/api/cloud/git-service.api";
 import * as activeStore from "#/api/backend-registry/active-store";
 
 const workspaceMocks = vi.hoisted(() => ({
-  gitChanges: vi.fn(),
-  gitDiff: vi.fn(),
-  resolveWorkingDir: vi.fn(),
   clientOptions: vi.fn(),
-  mapStatus: vi.fn(),
   searchRepositories: vi.fn(),
   closeGitClient: vi.fn(),
 }));
@@ -17,6 +13,7 @@ vi.mock("#/api/cloud/git-service.api", () => ({
   searchCloudRepositories: vi.fn(),
   getCloudInstallations: vi.fn(),
   getCloudRepositoryBranches: vi.fn(),
+  getCloudRepositoryDetails: vi.fn(),
 }));
 
 vi.mock("#/api/backend-registry/active-store", () => ({
@@ -32,30 +29,8 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   }),
 }));
 
-vi.mock("@openhands/typescript-client/workspace/remote-workspace", () => ({
-  RemoteWorkspace: vi.fn(function RemoteWorkspaceMock() {
-    return {
-      gitChanges: workspaceMocks.gitChanges,
-      gitDiff: workspaceMocks.gitDiff,
-    };
-  }),
-}));
-
-vi.mock(
-  "#/api/conversation-service/agent-server-conversation-service.api",
-  () => ({
-    default: {
-      resolveConversationWorkingDir: workspaceMocks.resolveWorkingDir,
-    },
-  }),
-);
-
 vi.mock("#/api/agent-server-client-options", () => ({
   getAgentServerClientOptions: workspaceMocks.clientOptions,
-}));
-
-vi.mock("#/utils/git-status-mapper", () => ({
-  mapAnyGitStatusToClientStatus: workspaceMocks.mapStatus,
 }));
 
 const mockSearchCloudRepositories = vi.mocked(
@@ -66,6 +41,9 @@ const mockGetCloudInstallations = vi.mocked(
 );
 const mockGetCloudRepositoryBranches = vi.mocked(
   cloudGitService.getCloudRepositoryBranches,
+);
+const mockGetCloudRepositoryDetails = vi.mocked(
+  cloudGitService.getCloudRepositoryDetails,
 );
 const mockGetActiveBackend = vi.mocked(activeStore.getActiveBackend);
 
@@ -96,9 +74,7 @@ const localActive = () =>
 describe("GitService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    workspaceMocks.resolveWorkingDir.mockResolvedValue("/workspace/project");
     workspaceMocks.clientOptions.mockReturnValue({ host: "http://localhost" });
-    workspaceMocks.mapStatus.mockImplementation((status) => `mapped:${status}`);
     workspaceMocks.searchRepositories.mockResolvedValue({
       items: [],
       next_page_id: null,
@@ -408,42 +384,45 @@ describe("GitService", () => {
       });
     });
 
-    it("maps workspace git changes using the SDK default revision", async () => {
-      workspaceMocks.gitChanges.mockResolvedValue([
-        { path: "src/a.ts", status: "M" },
-        { path: "src/b.ts", status: 7 },
-      ]);
-      await expect(GitService.getGitChanges("conversation-1")).resolves.toEqual(
-        [
-          { path: "src/a.ts", status: "mapped:M" },
-          { path: "src/b.ts", status: "mapped:7" },
-        ],
-      );
-      expect(workspaceMocks.clientOptions).toHaveBeenCalledWith({
-        conversationId: "conversation-1",
-        workingDir: "/workspace/project",
+    it("returns a repository's default branch from the cloud backend", async () => {
+      // Arrange
+      cloudActive();
+      mockGetCloudRepositoryDetails.mockResolvedValue({
+        id: "1",
+        full_name: "PROJ/repo",
+        git_provider: "bitbucket_data_center",
+        is_public: false,
+        main_branch: "master",
       });
-      expect(workspaceMocks.gitChanges).toHaveBeenCalledWith(
-        "/workspace/project",
+
+      // Act
+      const branch = await GitService.getRepositoryDefaultBranch(
+        "PROJ/repo",
+        "bitbucket_data_center",
       );
+
+      // Assert
+      expect(branch).toBe("master");
+      expect(mockGetCloudRepositoryDetails).toHaveBeenCalledWith({
+        provider: "bitbucket_data_center",
+        repository: "PROJ/repo",
+      });
     });
 
-    it.each([
-      [
-        { modified: "new", original: "old" },
-        { modified: "new", original: "old" },
-      ],
-      [{}, { modified: "", original: "" }],
-    ])(
-      "normalizes workspace diff content using the SDK default revision",
-      async (diff, expected) => {
-        workspaceMocks.gitDiff.mockResolvedValue(diff);
-        await expect(
-          GitService.getGitChangeDiff("ignored", "src/a.ts"),
-        ).resolves.toEqual(expected);
-        expect(workspaceMocks.gitDiff).toHaveBeenCalledWith("src/a.ts");
-      },
-    );
+    it("does not look up a default branch on a local backend", async () => {
+      // Arrange
+      localActive();
+
+      // Act
+      const branch = await GitService.getRepositoryDefaultBranch(
+        "PROJ/repo",
+        "bitbucket_data_center",
+      );
+
+      // Assert
+      expect(branch).toBeNull();
+      expect(mockGetCloudRepositoryDetails).not.toHaveBeenCalled();
+    });
 
     it("initializes fresh provider guards and empty result pages", async () => {
       vi.resetModules();

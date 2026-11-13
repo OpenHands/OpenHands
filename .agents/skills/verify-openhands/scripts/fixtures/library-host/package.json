@@ -1,0 +1,12 @@
+{
+  "name": "canvas-library-browser-proof",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openhands/agent-canvas": "file:REPLACE_WITH_LIBRARY_BUILD_DIR",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router": "7.18.2",
+    "vite": "8.0.16"
+  }
+}
