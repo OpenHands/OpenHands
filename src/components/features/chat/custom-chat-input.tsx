@@ -87,8 +87,13 @@ export function CustomChatInput({
   }, [submittedMessage, disabled, setSubmittedMessage]);
 
   // Custom hooks
-  const { chatInputRef, messageToSend, checkIsContentEmpty, saveDraft } =
-    useChatInputLogic({ persistDraft });
+  const {
+    chatInputRef,
+    conversationId,
+    messageToSend,
+    checkIsContentEmpty,
+    saveDraft,
+  } = useChatInputLogic({ persistDraft });
 
   const syncCanSubmit = React.useCallback(() => {
     const text = chatInputRef.current?.innerText ?? "";
@@ -160,8 +165,17 @@ export function CustomChatInput({
     [setShouldHideSuggestions, clearAllFiles],
   );
   useEffect(() => {
+    // Draft restoration and queued messages (including suggestion chips) write
+    // the contentEditable without firing onInput. Recalculate after either one
+    // changes, including when the conversation route stays the same.
     syncCanSubmit();
-  }, [syncCanSubmit, images.length, files.length]);
+  }, [
+    syncCanSubmit,
+    conversationId,
+    messageToSend,
+    images.length,
+    files.length,
+  ]);
   return (
     <div className={cn("w-full", className)}>
       {/* Hidden file input */}
