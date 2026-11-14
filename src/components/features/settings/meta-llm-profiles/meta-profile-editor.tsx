@@ -124,26 +124,17 @@ export function MetaProfileEditor({
       ? connectionOptions[0].id
       : NO_ROUTER_CONNECTION_KEY);
 
-  // The classifier dropdown is driven by saved LLM profile names, but a router
-  // template can name a classifier (e.g. ``minimax-m3``) before any profiles
-  // exist. Without the value in the list, the Autocomplete's
-  // ``defaultSelectedKey`` finds no match and renders an empty input — which
-  // ``allowsCustomValue`` then syncs back as ``""``, dropping the classifier
-  // from the saved config (so it never gets created). Surface the chosen
-  // classifier as an item so it is genuinely preselected.
-  const profileItems = useMemo(() => {
-    const items = availableProfiles.map((p) => ({ key: p, label: p }));
-    const classifier = config.classifier_model.trim();
-    if (
-      classifier &&
-      !availableProfiles.some(
-        (p) => p.toLowerCase() === classifier.toLowerCase(),
-      )
-    ) {
-      items.push({ key: classifier, label: classifier });
-    }
-    return items;
-  }, [availableProfiles, config.classifier_model]);
+  // The classifier list offers the saved LLM profile names. A router can
+  // name any classifier (a template's ``minimax-m3`` before that profile
+  // exists, or a name the user types), so the field's text is the value and
+  // a listed profile is selected only when the text names it.
+  const profileItems = useMemo(
+    () => availableProfiles.map((p) => ({ key: p, label: p })),
+    [availableProfiles],
+  );
+  const classifierKey = availableProfiles.includes(config.classifier_model)
+    ? config.classifier_model
+    : null;
   const routerConnectionItems = useMemo(
     () => [
       {
@@ -227,18 +218,22 @@ export function MetaProfileEditor({
           name="classifier_model"
           label={t(I18nKey.SETTINGS$META_PROFILE_CLASSIFIER)}
           items={profileItems}
-          selectedKey={config.classifier_model || undefined}
+          // Both the text and the selection are controlled: with only the
+          // selection controlled, a typed name that matches no listed
+          // profile resets the input to "".
+          inputValue={config.classifier_model}
+          selectedKey={classifierKey}
           allowsCustomValue
           isDisabled={isSaving}
           onInputChange={(value) =>
             setConfig((prev) => ({ ...prev, classifier_model: value }))
           }
-          onSelectionChange={(key) =>
-            setConfig((prev) => ({
-              ...prev,
-              classifier_model: key ? String(key) : "",
-            }))
-          }
+          onSelectionChange={(key) => {
+            // Leaving the field with custom text reports a null selection;
+            // the typed text is still the value.
+            if (key == null) return;
+            setConfig((prev) => ({ ...prev, classifier_model: String(key) }));
+          }}
         />
         <p className="text-xs text-muted">
           {t(I18nKey.SETTINGS$META_PROFILE_CLASSIFIER_HELP)}
