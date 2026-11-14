@@ -220,6 +220,18 @@ describe("content-editable helpers", () => {
     clearEmptyContent(empty);
     expect(empty.innerHTML).toBe("");
     expect(empty.textContent).toBe("");
+
+    // Does not clear when isComposing is true or element has data-composing="true"
+    const composingElement = document.createElement("div");
+    composingElement.innerHTML = "<br>";
+    composingElement.setAttribute("data-composing", "true");
+    clearEmptyContent(composingElement);
+    expect(composingElement.innerHTML).toBe("<br>");
+
+    const composingFlagElement = document.createElement("div");
+    composingFlagElement.innerHTML = "<br>";
+    clearEmptyContent(composingFlagElement, true);
+    expect(composingFlagElement.innerHTML).toBe("<br>");
   });
 
   it("gets and clears editable text and file inputs safely", () => {
