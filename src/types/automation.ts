@@ -42,6 +42,9 @@ export interface AutomationRepository {
 
 export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
 
+/** The service generates this bundle at dispatch time, so it cannot be downloaded. */
+export const PLUGIN_SPEC_RUNTIME_TARBALL_PATH = "plugin-spec://runtime";
+
 /**
  * `POST /v1/{id}/run-as` body: hand the automation to a service account of
  * the org, or back to the caller (managers only).

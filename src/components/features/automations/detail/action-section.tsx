@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
 import TerminalIcon from "#/icons/terminal.svg?react";
 import GitBranchIcon from "#/icons/git-branch.svg?react";
 import SparkleIcon from "#/icons/sparkle.svg?react";
+import CodeTagIcon from "#/icons/code-tag.svg?react";
 import PuzzleIcon from "#/icons/puzzle.svg?react";
 import UserIcon from "#/icons/user.svg?react";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
@@ -59,6 +61,36 @@ function AgentProfileFields({ id }: { id: string }) {
   );
 }
 
+const VALUE_TRUNCATE_LENGTH = 60;
+
+function ExpandableValue({ value }: { value: string }) {
+  const { t } = useTranslation("openhands");
+  const [expanded, setExpanded] = useState(false);
+  const isLong = value.length > VALUE_TRUNCATE_LENGTH;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="font-mono break-all whitespace-pre-wrap">
+        {isLong && !expanded
+          ? `${value.slice(0, VALUE_TRUNCATE_LENGTH)}…`
+          : value}
+      </span>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
+          className="text-xs text-muted hover:text-content self-start"
+        >
+          {expanded
+            ? t(I18nKey.SETTINGS$SKILLS_SHOW_LESS)
+            : t(I18nKey.SETTINGS$SKILLS_SHOW_MORE)}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /**
  * What the automation does once triggered: its prompt or script, then the
  * model, repositories and plugins it runs with. Mirrors the setup form's
@@ -68,6 +100,8 @@ export function ActionSection({ automation }: { automation: Automation }) {
   const { t } = useTranslation("openhands");
   const repositories = automation.repositories ?? [];
   const plugins = automation.plugins ?? [];
+  const plugin = automation.plugin_spec?.plugin;
+  const pluginConfig = Object.entries(automation.plugin_spec?.config ?? {});
 
   return (
     <SectionCard
@@ -121,6 +155,62 @@ export function ActionSection({ automation }: { automation: Automation }) {
             </ul>
           </ConfigField>
         ) : null}
+
+        {plugin && (
+          <>
+            <ConfigField
+              icon={<CodeTagIcon className="size-3.5" />}
+              label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)}
+            >
+              <span className="break-all">{plugin.source}</span>
+            </ConfigField>
+            {plugin.ref && (
+              <ConfigField
+                icon={<GitBranchIcon className="size-3.5" />}
+                label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}
+              >
+                <span className="break-all">{plugin.ref}</span>
+              </ConfigField>
+            )}
+            {plugin.repo_path && (
+              <ConfigField
+                icon={<CodeTagIcon className="size-3.5" />}
+                label={t(I18nKey.SETTINGS$PLUGINS_REPO_PATH_LABEL)}
+              >
+                <span className="break-all">{plugin.repo_path}</span>
+              </ConfigField>
+            )}
+          </>
+        )}
+
+        {pluginConfig.length > 0 && (
+          <div className="col-span-2">
+            <ConfigField
+              icon={<CodeTagIcon className="size-3.5" />}
+              label={t(I18nKey.AUTOMATIONS$DETAIL$PLUGIN_CONFIG)}
+            >
+              <dl
+                data-testid="automation-plugin-config"
+                className="flex flex-col gap-3"
+              >
+                {pluginConfig.map(([key, value]) => (
+                  <div key={key}>
+                    <dt className="text-xs text-muted break-all">{key}</dt>
+                    <dd>
+                      <ExpandableValue
+                        value={
+                          typeof value === "string"
+                            ? value
+                            : (JSON.stringify(value, null, 2) ?? String(value))
+                        }
+                      />
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </ConfigField>
+          </div>
+        )}
 
         {plugins.length > 0 ? (
           <ConfigField

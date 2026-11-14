@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -43,6 +49,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     dispatchAutomation: vi.fn(),
     updateAutomation: vi.fn(),
     fetchTarballBytes: vi.fn(),
+    downloadTarball: vi.fn(),
     checkHealth: vi.fn(),
     getCapabilities: vi.fn(),
     changeRunAs: vi.fn(),
@@ -233,6 +240,8 @@ beforeEach(() => {
   vi.mocked(AutomationService.getAutomation).mockResolvedValue(automation);
   vi.mocked(AutomationService.getAutomationRuns).mockReset();
   vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue(emptyRuns);
+  vi.mocked(AutomationService.fetchTarballBytes).mockReset();
+  vi.mocked(AutomationService.downloadTarball).mockReset();
   vi.mocked(ProfilesService.listProfiles).mockReset();
   vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
     profiles: [],
@@ -977,6 +986,71 @@ describe("AutomationDetail — disabled reason banner", () => {
 });
 
 describe("AutomationDetail — script automations", () => {
+  it("renders plugin-spec details and only offers supported automation actions", async () => {
+    // Arrange — this is the existing detail API response, with no extra lookup.
+    const channel = "engineering-updates-".repeat(5);
+    const pluginAutomation: Automation = {
+      ...automation,
+      prompt: null,
+      entrypoint: 'cd "$AUTOMATION_PLUGIN_ROOT/scripts" && python3 worker.py',
+      tarball_path: "plugin-spec://runtime",
+      timeout: 180,
+      preset_metadata: { preset_type: "plugin_spec" },
+      plugin_spec: {
+        plugin: {
+          source: "github:qa-example/automations",
+          ref: "v1.2.0",
+          repo_path: "plugins/daily-digest",
+        },
+        config: { channel },
+      },
+    };
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(
+      pluginAutomation,
+    );
+    const user = userEvent.setup();
+
+    // Act
+    renderDetail();
+
+    // Assert — real sections consume the plugin-spec fields from the detail.
+    expect(
+      await screen.findByText("github:qa-example/automations"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("v1.2.0")).toBeInTheDocument();
+    expect(screen.getByText("plugins/daily-digest")).toBeInTheDocument();
+    const config = within(screen.getByTestId("automation-plugin-config"));
+    expect(config.queryByText(channel)).not.toBeInTheDocument();
+    await user.click(
+      config.getByRole("button", { name: I18nKey.SETTINGS$SKILLS_SHOW_MORE }),
+    );
+    expect(config.getByText(channel)).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("automation-settings-section")).getByText("3m"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$SCRIPT_RUNTIME_BUNDLE"),
+    ).toBeInTheDocument();
+    expect(AutomationService.fetchTarballBytes).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId("automation-prompt-content"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    for (const name of [
+      I18nKey.AUTOMATIONS$EXPORT,
+      I18nKey.AUTOMATIONS$EDIT,
+      I18nKey.AUTOMATIONS$DELETE,
+    ]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+    expect(
+      screen.queryByRole("button", {
+        name: I18nKey.AUTOMATIONS$DOWNLOAD_TARBALL,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows the bundle's script in place of the prompt for an automation without a prompt", async () => {
     // Arrange
     setRegisteredBackends([localBackend]);
@@ -985,12 +1059,15 @@ describe("AutomationDetail — script automations", () => {
       ...automation,
       prompt: null,
       entrypoint: "python main.py",
+      tarball_path: "/uploads/script.tar.gz",
     });
     vi.mocked(AutomationService.fetchTarballBytes).mockResolvedValue(
       new Uint8Array(
         await packTarGzip([{ name: "main.py", content: "print('hi')\n" }]),
       ),
     );
+
+    const user = userEvent.setup();
 
     // Act
     renderDetail();
@@ -1002,6 +1079,16 @@ describe("AutomationDetail — script automations", () => {
     expect(
       screen.queryByTestId("automation-prompt-content"),
     ).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", {
+        name: I18nKey.AUTOMATIONS$DOWNLOAD_TARBALL,
+      }),
+    );
+    expect(AutomationService.downloadTarball).toHaveBeenCalledWith(
+      automation.id,
+      automation.name,
+    );
   });
 
   it("exports a script automation with its bundle", async () => {
