@@ -41,6 +41,17 @@ function wrapper({ children }: { children: React.ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
+function sharedWrapper(client: QueryClient) {
+  return function SharedWrapper({ children }: { children: React.ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+  };
+}
+
+const PI_LAUNCH = { server: "pi", command: [], args: [] } as const;
+const CLAUDE_LAUNCH = { server: "claude-code", command: [], args: [] } as const;
+
 const PI_DISCOVERY = {
   agent_name: "pi-acp",
   agent_version: "0.0.33",
@@ -75,14 +86,14 @@ describe("useAcpModelDiscovery", () => {
   it("asks the local agent-server with every saved secret", async () => {
     discoverModels.mockResolvedValue(PI_DISCOVERY);
 
-    const { result } = renderHook(() => useAcpModelDiscovery("pi"), {
+    const { result } = renderHook(() => useAcpModelDiscovery(PI_LAUNCH), {
       wrapper,
     });
 
     await waitFor(() =>
       expect(result.current.defaultModelId).toBe("anthropic/claude-opus-4-8"),
     );
-    expect(discoverModels).toHaveBeenCalledWith("pi", [
+    expect(discoverModels).toHaveBeenCalledWith(PI_LAUNCH, [
       "ANTHROPIC_API_KEY",
       "PI_AUTH_JSON",
     ]);
@@ -100,23 +111,89 @@ describe("useAcpModelDiscovery", () => {
 
     renderHook(
       () =>
-        useAcpModelDiscovery("pi", { secretRefs: ["PI_AUTH_JSON", "GONE"] }),
+        useAcpModelDiscovery(PI_LAUNCH, {
+          secretRefs: ["PI_AUTH_JSON", "GONE"],
+        }),
       { wrapper },
     );
 
     await waitFor(() =>
-      expect(discoverModels).toHaveBeenCalledWith("pi", ["PI_AUTH_JSON"]),
+      expect(discoverModels).toHaveBeenCalledWith(PI_LAUNCH, ["PI_AUTH_JSON"]),
     );
   });
 
   it("sends no secrets when the profile allows none", async () => {
     discoverModels.mockResolvedValue(PI_DISCOVERY);
 
-    renderHook(() => useAcpModelDiscovery("pi", { secretRefs: [] }), {
+    renderHook(() => useAcpModelDiscovery(PI_LAUNCH, { secretRefs: [] }), {
       wrapper,
     });
 
-    await waitFor(() => expect(discoverModels).toHaveBeenCalledWith("pi", []));
+    await waitFor(() =>
+      expect(discoverModels).toHaveBeenCalledWith(PI_LAUNCH, []),
+    );
+  });
+
+  it("asks a custom launch with its explicit command", async () => {
+    discoverModels.mockResolvedValue(PI_DISCOVERY);
+    const launch = {
+      server: "custom",
+      command: ["my-acp-wrapper", "--flag"],
+      args: ["--extra"],
+    };
+
+    const { result } = renderHook(() => useAcpModelDiscovery(launch), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(result.current.source).toBe("live"));
+    expect(discoverModels).toHaveBeenCalledWith(launch, [
+      "ANTHROPIC_API_KEY",
+      "PI_AUTH_JSON",
+    ]);
+  });
+
+  it("does not ask a custom launch without a command", () => {
+    discoverModels.mockResolvedValue(PI_DISCOVERY);
+    const models = [{ id: "sonnet", label: "Sonnet" }];
+    rememberAcpModels("local-1", "custom", ALL, models);
+
+    const { result } = renderHook(
+      () => useAcpModelDiscovery({ server: "custom", command: [], args: [] }),
+      { wrapper },
+    );
+
+    expect(discoverModels).not.toHaveBeenCalled();
+    // Another launch's remembered list must not leak into this one.
+    expect(result.current.models).toEqual([]);
+  });
+
+  it("asks again when the launch command changes", async () => {
+    discoverModels.mockResolvedValue(PI_DISCOVERY);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    const { rerender } = renderHook(
+      ({ launch }) => useAcpModelDiscovery(launch),
+      {
+        wrapper: sharedWrapper(client),
+        initialProps: {
+          launch: { server: "custom", command: ["wrapper-a"], args: [] },
+        },
+      },
+    );
+    await waitFor(() => expect(discoverModels).toHaveBeenCalledTimes(1));
+
+    rerender({
+      launch: { server: "custom", command: ["wrapper-b"], args: [] },
+    });
+
+    await waitFor(() => expect(discoverModels).toHaveBeenCalledTimes(2));
+    expect(discoverModels).toHaveBeenLastCalledWith(
+      { server: "custom", command: ["wrapper-b"], args: [] },
+      ["ANTHROPIC_API_KEY", "PI_AUTH_JSON"],
+    );
   });
 
   it("does not offer a list remembered with other secrets", async () => {
@@ -126,7 +203,7 @@ describe("useAcpModelDiscovery", () => {
     discoverModels.mockResolvedValue(AUTH_REQUIRED);
 
     const { result } = renderHook(
-      () => useAcpModelDiscovery("pi", { secretRefs: [] }),
+      () => useAcpModelDiscovery(PI_LAUNCH, { secretRefs: [] }),
       { wrapper },
     );
 
@@ -143,7 +220,7 @@ describe("useAcpModelDiscovery", () => {
     discoverModels.mockResolvedValue(AUTH_REQUIRED);
 
     const { result } = renderHook(
-      () => useAcpModelDiscovery("pi", { secretRefs: ["PI_AUTH_JSON"] }),
+      () => useAcpModelDiscovery(PI_LAUNCH, { secretRefs: ["PI_AUTH_JSON"] }),
       { wrapper },
     );
 
@@ -160,7 +237,7 @@ describe("useAcpModelDiscovery", () => {
     discoverModels.mockResolvedValue(PI_DISCOVERY);
 
     const { result } = renderHook(
-      () => useAcpModelDiscovery("pi", { secretRefs: ["PI_AUTH_JSON"] }),
+      () => useAcpModelDiscovery(PI_LAUNCH, { secretRefs: ["PI_AUTH_JSON"] }),
       { wrapper },
     );
 
@@ -175,7 +252,7 @@ describe("useAcpModelDiscovery", () => {
     discoverModels.mockResolvedValue(PI_DISCOVERY);
 
     const { result, rerender } = renderHook(
-      ({ enabled }) => useAcpModelDiscovery("pi", { enabled }),
+      ({ enabled }) => useAcpModelDiscovery(PI_LAUNCH, { enabled }),
       { wrapper, initialProps: { enabled: true } },
     );
     await waitFor(() => expect(result.current.source).toBe("live"));
@@ -190,7 +267,7 @@ describe("useAcpModelDiscovery", () => {
   it("has no models when the server cannot answer and none were seen", async () => {
     discoverModels.mockRejectedValue(new Error("404"));
 
-    const { result } = renderHook(() => useAcpModelDiscovery("pi"), {
+    const { result } = renderHook(() => useAcpModelDiscovery(PI_LAUNCH), {
       wrapper,
     });
 
@@ -207,7 +284,7 @@ describe("useAcpModelDiscovery", () => {
       orgId: null,
     };
 
-    const { result } = renderHook(() => useAcpModelDiscovery("claude-code"), {
+    const { result } = renderHook(() => useAcpModelDiscovery(CLAUDE_LAUNCH), {
       wrapper,
     });
 
@@ -227,7 +304,7 @@ describe("useAcpModelDiscovery", () => {
       { id: "gpt-5.5", label: "GPT" },
     ]);
 
-    const { result } = renderHook(() => useAcpModelDiscovery("claude-code"), {
+    const { result } = renderHook(() => useAcpModelDiscovery(CLAUDE_LAUNCH), {
       wrapper,
     });
 
@@ -241,7 +318,7 @@ describe("useAcpModelDiscovery", () => {
       backend: { id: "cloud-1", kind: "cloud" },
       orgId: null,
     };
-    const { result } = renderHook(() => useAcpModelDiscovery("claude-code"), {
+    const { result } = renderHook(() => useAcpModelDiscovery(CLAUDE_LAUNCH), {
       wrapper,
     });
     expect(result.current.models).toEqual([]);
@@ -253,7 +330,7 @@ describe("useAcpModelDiscovery", () => {
     expect(result.current.source).toBe("remembered");
   });
 
-  it("does not ask without a provider", () => {
+  it("does not ask without a launch", () => {
     renderHook(() => useAcpModelDiscovery(null), { wrapper });
 
     expect(discoverModels).not.toHaveBeenCalled();

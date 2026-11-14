@@ -164,10 +164,13 @@ describe("useChatInputModelState", () => {
     expect(result.current.availableAcpModels).toEqual(live);
     expect(result.current.displayModel).toBe("SWE-2 High");
     expect(result.current.showAcpPicker).toBe(true);
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(null, {
-      enabled: true,
-      secretRefs: null,
-    });
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(
+      { server: "custom", command: [], args: [] },
+      {
+        enabled: true,
+        secretRefs: null,
+      },
+    );
   });
 
   it("active ACP: uses the agent's reported list until the session reports its own", () => {
@@ -194,10 +197,13 @@ describe("useChatInputModelState", () => {
 
     const { result } = renderHook(() => useChatInputModelState());
 
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
-      enabled: true,
-      secretRefs: null,
-    });
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(
+      { server: "codex", command: [], args: [] },
+      {
+        enabled: true,
+        secretRefs: null,
+      },
+    );
     expect(result.current.availableAcpModels).toEqual(live);
     expect(result.current.currentModelId).toBe("gpt-5.6-terra");
   });
@@ -231,10 +237,13 @@ describe("useChatInputModelState", () => {
 
     renderHook(() => useChatInputModelState());
 
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
-      enabled: true,
-      secretRefs: ["OPENAI_API_KEY"],
-    });
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(
+      { server: "codex", command: [], args: [] },
+      {
+        enabled: true,
+        secretRefs: ["OPENAI_API_KEY"],
+      },
+    );
   });
 
   it("home ACP: lists the models the agent reported and shows its own default", () => {
@@ -260,10 +269,13 @@ describe("useChatInputModelState", () => {
 
     const { result } = renderHook(() => useChatInputModelState());
 
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("pi", {
-      enabled: true,
-      secretRefs: null,
-    });
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(
+      { server: "pi", command: [], args: [] },
+      {
+        enabled: true,
+        secretRefs: null,
+      },
+    );
     expect(result.current.availableAcpModels).toEqual(live);
     expect(result.current.currentModelId).toBe("anthropic/claude-opus-4-8");
     expect(result.current.displayModel).toBe("Claude Opus 4.8");
@@ -459,10 +471,13 @@ describe("useChatInputModelState", () => {
     const { result } = renderHook(() => useChatInputModelState());
 
     expect(result.current.currentModelId).toBe("gpt-5.5");
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
-      enabled: true,
-      secretRefs: null,
-    });
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(
+      { server: "codex", command: [], args: [] },
+      {
+        enabled: true,
+        secretRefs: null,
+      },
+    );
     expect(result.current.availableAcpModels).toEqual(codexModels);
   });
 
@@ -481,10 +496,13 @@ describe("useChatInputModelState", () => {
 
     renderHook(() => useChatInputModelState());
 
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
-      enabled: true,
-      secretRefs: ["OPENAI_API_KEY"],
-    });
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(
+      { server: "codex", command: [], args: [] },
+      {
+        enabled: true,
+        secretRefs: ["OPENAI_API_KEY"],
+      },
+    );
   });
 
   it("home ACP: does not ask for models until the active profile loads", () => {
@@ -497,7 +515,7 @@ describe("useChatInputModelState", () => {
 
     renderHook(() => useChatInputModelState());
 
-    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith("codex", {
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(null, {
       enabled: false,
       secretRefs: null,
     });
@@ -569,5 +587,118 @@ describe("useChatInputModelState", () => {
     expect(result.current.showAcpPicker).toBe(false);
     // No reported label → falls back to the raw id.
     expect(result.current.displayModel).toBe("custom-model");
+  });
+
+  it("home ACP: asks a custom profile with the launch it would spawn", () => {
+    useActiveAcpProfileDetailMock.mockReturnValue({
+      id: "id-custom",
+      name: "my-wrapper",
+      agent_kind: "acp",
+      acp_server: "custom",
+      acp_command: "my-acp-wrapper --flag",
+      acp_args: ["--extra"],
+      acp_model: null,
+      secret_refs: null,
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isHomeAcp: true, isAcpContext: true }),
+    );
+    useAcpModelDiscoveryMock.mockReturnValue({
+      models: CLAUDE_MODELS,
+      defaultModelId: null,
+    });
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(
+      {
+        server: "custom",
+        command: ["my-acp-wrapper", "--flag"],
+        args: ["--extra"],
+      },
+      { enabled: true, secretRefs: null },
+    );
+    // A discovered catalogue must be switchable back to the agent's default.
+    expect(result.current.showAcpPicker).toBe(true);
+    expect(result.current.agentDefaultLabel).toBe(
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
+    );
+  });
+
+  it("home ACP: names the default model a custom agent reports", () => {
+    useActiveAcpProfileDetailMock.mockReturnValue({
+      id: "id-custom",
+      name: "my-wrapper",
+      agent_kind: "acp",
+      acp_server: "custom",
+      acp_command: "my-acp-wrapper",
+      acp_args: null,
+      acp_model: null,
+      secret_refs: null,
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isHomeAcp: true, isAcpContext: true }),
+    );
+    useAcpModelDiscoveryMock.mockReturnValue({
+      models: CLAUDE_MODELS,
+      defaultModelId: CLAUDE_MODELS[0].id,
+    });
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.agentDefaultLabel).toBe(
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT_IS",
+    );
+    expect(result.current.currentModelId).toBe(CLAUDE_MODELS[0].id);
+  });
+
+  it("home ACP: ignores an explicit command stored on a built-in profile", () => {
+    useActiveAcpProfileDetailMock.mockReturnValue({
+      id: "id-claude",
+      name: "claude",
+      agent_kind: "acp",
+      acp_server: "claude-code",
+      acp_command: "my-claude-wrapper --flag",
+      acp_args: ["--extra"],
+      acp_model: null,
+      secret_refs: null,
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isHomeAcp: true, isAcpContext: true }),
+    );
+
+    renderHook(() => useChatInputModelState());
+
+    // Built-in profiles ask with the registry default, exactly as before this
+    // change, so the payload and remembered scope stay compatible.
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(
+      { server: "claude-code", command: [], args: [] },
+      { enabled: true, secretRefs: null },
+    );
+  });
+
+  it("home ACP: a custom profile without a command sends an empty launch", () => {
+    useActiveAcpProfileDetailMock.mockReturnValue({
+      id: "id-custom",
+      name: "my-wrapper",
+      agent_kind: "acp",
+      acp_server: "custom",
+      acp_command: null,
+      acp_args: null,
+      acp_model: null,
+      secret_refs: null,
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isHomeAcp: true, isAcpContext: true }),
+    );
+
+    renderHook(() => useChatInputModelState());
+
+    // The discovery hook refuses a custom launch with no command, so no request
+    // reaches the agent-server.
+    expect(useAcpModelDiscoveryMock).toHaveBeenCalledWith(
+      { server: "custom", command: [], args: [] },
+      { enabled: true, secretRefs: null },
+    );
   });
 });

@@ -3,6 +3,7 @@ import type {
   ACPModelDiscovery,
   BashOutput,
 } from "@openhands/typescript-client";
+import type { AcpLaunch } from "#/utils/acp-launch";
 import { buildCustomSecrets } from "../agent-server-adapter";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 
@@ -118,16 +119,29 @@ class AcpService {
   }
 
   /**
-   * Ask the (local) agent-server which models ``server`` offers and which one
-   * it picks by default, given the saved secrets named in ``secretNames``.
+   * Ask the (local) agent-server which models `launch` offers and which one it
+   * picks by default, given the saved secrets named in `secretNames`.
+   *
+   * `launch.command` / `launch.args` are omitted when empty, so a built-in
+   * provider on its default command sends exactly the payload it always did and
+   * the agent-server resolves the registry default. A custom launch sends its
+   * explicit argv; the server rejects a custom launch without one (422), which
+   * the discovery hook's `isAcpLaunchDiscoverable` guard prevents upstream.
    */
   static async discoverModels(
-    server: string,
+    launch: AcpLaunch,
     secretNames: readonly string[],
   ): Promise<ACPModelDiscovery> {
     const { host, apiKey } = getAgentServerClientOptions();
     return new ACPClient({ host, apiKey }).discoverModels({
-      agent_settings: { agent_kind: "acp", acp_server: server },
+      agent_settings: {
+        agent_kind: "acp",
+        acp_server: launch.server,
+        ...(launch.command.length > 0
+          ? { acp_command: [...launch.command] }
+          : {}),
+        ...(launch.args.length > 0 ? { acp_args: [...launch.args] } : {}),
+      },
       secrets: buildCustomSecrets(secretNames.map((name) => ({ name }))),
     });
   }
