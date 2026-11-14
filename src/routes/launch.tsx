@@ -26,6 +26,7 @@ import {
   pluginSpecTemplateVersion,
 } from "#/utils/plugin-launch-preflight";
 import { getApiErrorMessage } from "#/utils/api-error-message";
+import { decodePluginsBase64 } from "#/utils/plugin-launch-url";
 
 type ErrorType =
   "no_plugins" | "invalid_format" | "creation_failed" | "install_failed";
@@ -48,8 +49,9 @@ function parsePluginsFromUrl(searchParams: URLSearchParams): ParseResult {
   const pluginsParam = searchParams.get("plugins");
   if (pluginsParam) {
     try {
-      const decoded = atob(pluginsParam);
-      const parsed = JSON.parse(decoded);
+      // UTF-8 decode shared with the builder; plain atob read the bytes as
+      // Latin-1 and silently corrupted Unicode parameter values (#16735).
+      const parsed = decodePluginsBase64(pluginsParam);
 
       if (!Array.isArray(parsed)) {
         return { plugins: [], error: "invalid_format" };
