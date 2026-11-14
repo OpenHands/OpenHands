@@ -15,11 +15,13 @@
 //   churn on existing `// eslint-disable-next-line import/...` comments.
 // - `eslint-plugin-i18next` still ships only legacy config, so it is pulled
 //   in via `FlatCompat` from `@eslint/eslintrc`.
-// - Targets ESLint 9, not 10. The original dependabot PR proposed eslint@10,
-//   but as of this commit `eslint-plugin-react` still calls
-//   `context.getFilename()` (removed in ESLint 10) at rule-load time, which
-//   makes a v10 bump explode on every file. Re-evaluate once that plugin
-//   ships an ESLint-10-compatible release.
+// - Targets ESLint 10. `eslint-plugin-react` (7.37.5) and
+//   `eslint-plugin-jsx-a11y` (6.10.2) still declare ESLint peer ranges that
+//   exclude 10, and `eslint-plugin-react` calls `context.getFilename()`
+//   (removed in ESLint 10) when resolving the React version. The peer ranges
+//   are widened via `overrides` in package.json, and the removed API is
+//   avoided by pinning the React version below instead of `"detect"`.
+//   Re-evaluate once those plugins ship ESLint-10-compatible releases.
 
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -104,7 +106,6 @@ const legacyColorClasses = [
   "bg-status-fail-bg",
   "text-status-fail-text",
   "text-content-muted",
-  "text-modal-muted",
 ];
 
 export default [
@@ -187,7 +188,7 @@ export default [
       },
     },
     settings: {
-      react: { version: "detect" },
+      react: { version: "19.3.1" },
       // `eslint-import-resolver-typescript` resolves both TS path aliases
       // (via tsconfig) and regular node-style imports, so we don't also
       // configure the legacy `node` resolver shortcut here.
@@ -533,6 +534,8 @@ export default [
       "src/components/features/mcp-page/mcp-logo-stack-badge.tsx",
       "src/components/features/settings/llm-settings/openai-subscription-auth-card.tsx",
       "src/components/features/skills/skill-icon-badge.tsx",
+      "src/components/features/skills/build-skill-pills.tsx",
+      "src/components/shared/buttons/circle-plus-check-toggle.tsx",
       "src/routes/device-verify.tsx",
       "src/utils/modal-classes.ts",
     ],
