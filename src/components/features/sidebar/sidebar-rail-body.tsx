@@ -97,7 +97,14 @@ export function SidebarRailBody({
   const { t } = useTranslation("openhands");
   const { pages: canvasExtensionPages } = useCanvasExtensionsRuntime();
   const backendCloseTimerRef = collapsedBackendCloseTimer;
-  const { isPinnedRoute, togglePinnedRoute } = usePinnedHomeRoute();
+  // Extension pages are pinnable only while enabled: pass the live page
+  // hrefs so the pin validation tracks the runtime (#16995).
+  const extensionHrefs = React.useMemo(
+    () => new Set(canvasExtensionPages.map((page) => page.href)),
+    [canvasExtensionPages],
+  );
+  const { isPinnedRoute, togglePinnedRoute } =
+    usePinnedHomeRoute(extensionHrefs);
   const [backendMenuOpen, setBackendMenuOpen] = React.useState(false);
 
   const buildPinAction = (path: string, testId: string) => {
@@ -272,6 +279,10 @@ export function SidebarRailBody({
             label={page.contribution.nav_label || page.contribution.title}
             testId={`sidebar-canvas-extension-${page.extension.name}-${page.contribution.id}`}
             collapsed={collapsed}
+            pinAction={buildPinAction(
+              page.href,
+              `sidebar-pin-home-toggle-extension-${page.extension.name}-${page.contribution.id}`,
+            )}
             icon={
               <CanvasExtensionIcon
                 extension={page.extension}
