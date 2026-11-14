@@ -124,7 +124,14 @@ export function useChatInputModelState(): ChatInputModelState {
     });
     currentModelId = selectedModelId ?? discovered.defaultModelId;
   } else {
-    currentModelId = conversation?.llm_model ?? settings?.llm_model ?? null;
+    // Inside a loaded conversation the pill must reflect the model that
+    // conversation runs (#16851): falling back to the global default here
+    // makes reopening a conversation show the current default instead of its
+    // own model. The default is only meaningful when no conversation data is
+    // loaded yet (home page).
+    currentModelId = conversation
+      ? (conversation.llm_model ?? null)
+      : (settings?.llm_model ?? null);
   }
 
   let effortChoices: ACPEffortChoice[] = [];

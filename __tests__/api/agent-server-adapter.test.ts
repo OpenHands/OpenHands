@@ -1009,6 +1009,18 @@ describe("toAppConversation", () => {
     expect(result.llm_model).toBe("claude-sonnet-4-6");
   });
 
+  it("leaves llm_model null when an openhands conversation has no agent.llm.model", () => {
+    // Fabricating the release default here would make an old conversation
+    // display whichever profile currently holds that model, so changing the
+    // global default rewrites what existing conversations appear to run
+    // (#16851).
+    const result = toAppConversation({
+      ...baseInfo,
+      agent: { kind: "Agent" },
+    });
+    expect(result.llm_model).toBeNull();
+  });
+
   it("marks ACP conversations and surfaces the configured acp_model", () => {
     // The SDK's ACPAgent may still carry a sentinel ``llm`` (``acp-managed``)
     // for cost-attribution. Consumers should see the concrete ACP model Canvas

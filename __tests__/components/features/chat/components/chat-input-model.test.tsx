@@ -673,4 +673,17 @@ describe("ChatInputModel", () => {
     );
     expect(hasPendingHomeModelPick("local-1", null)).toBe(false);
   });
+
+  it("an open conversation never shows the global default model", () => {
+    // Reopening an existing conversation must not surface the current global
+    // default when its own model is unknown (#16851).
+    useActiveConversationMock.mockReturnValue({
+      data: { conversation_id: "test-conversation-id", llm_model: null },
+    });
+    useSettingsMock.mockReturnValue({ data: { llm_model: "openai/gpt-4o" } });
+
+    renderWithProviders(<ChatInputModel />);
+
+    expect(screen.queryByTestId("chat-input-llm-model")).not.toBeInTheDocument();
+  });
 });
