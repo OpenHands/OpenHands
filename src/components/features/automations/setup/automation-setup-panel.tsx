@@ -561,7 +561,7 @@ function DraftStatusBar({
       data-testid="automation-setup-draft-details"
       className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-3 py-2"
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <h3 className="truncate text-sm text-content">
             {t(I18nKey.AUTOMATION_SETUP$DRAFT_STATUS_TITLE)}
@@ -574,7 +574,7 @@ function DraftStatusBar({
             )}
           </span>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {validationMessage || saveFailed ? null : (
             <span
               data-testid="automation-setup-draft-validity"
