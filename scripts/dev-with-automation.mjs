@@ -696,6 +696,8 @@ function ensureDirectories(config) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const processes = new Map();
+const expectedServiceExits = new WeakSet();
+let serviceStopGeneration = 0;
 const shutdownHooks = createShutdownHookRegistry((err) => {
   logService("cleanup", `Cleanup hook failed: ${err.message}`, c.yellow);
 });
@@ -778,12 +780,13 @@ function spawnService(name, command, args, options = {}) {
   });
 
   proc.on("exit", (code, signal) => {
-    if (code !== 0 && code !== null && !shuttingDown) {
+    const expectedExit = shuttingDown || expectedServiceExits.has(proc);
+    if (code !== 0 && code !== null && !expectedExit) {
       logService(name, `Exited with code ${code}`, c.red);
       emitServiceLog(name, `exited with code ${code}`, "error");
     }
     processes.delete(name);
-    if (code !== 0 && !shuttingDown) {
+    if (code !== 0 && !expectedExit) {
       options.onUnexpectedExit?.(code ?? `signal ${signal}`);
     }
   });
@@ -1357,6 +1360,10 @@ let shuttingDown = false;
 // Services run in their own process groups, so they outlive the launcher
 // unless it stops them: SIGTERM each tree, then SIGKILL what is still running.
 async function stopServices() {
+  // Invalidate pending restarts before signalling any child. Failure shutdown
+  // also uses this path without invoking the launcher's process-exit handler.
+  serviceStopGeneration += 1;
+  for (const proc of processes.values()) expectedServiceExits.add(proc);
   for (const [name, proc] of processes) {
     logService(name, "Stopping...", c.dim);
     signalProcessTree(proc, "SIGTERM");
@@ -1429,9 +1436,12 @@ export function superviseService(
   { onFailure, maxRestarts = 3, restartDelayMs = 1000 },
 ) {
   let restarts = 0;
-  const launch = () =>
+  const stopGeneration = serviceStopGeneration;
+  const launch = () => {
+    if (shuttingDown || stopGeneration !== serviceStopGeneration) return;
     start({
       onUnexpectedExit: async (reason) => {
+        if (shuttingDown || stopGeneration !== serviceStopGeneration) return;
         if (restarts < maxRestarts) {
           restarts += 1;
           logService(
@@ -1450,6 +1460,7 @@ export function superviseService(
         onFailure(new Error(message));
       },
     });
+  };
   launch();
 }
 
@@ -2072,7 +2083,9 @@ function startStaticFrontend(config, staticDir, { onUnexpectedExit } = {}) {
     host: config.bindHost,
     allowLanSessionKey: config.allowLanSessionKey,
     sessionApiKey:
-      config.launchAgentServer && !config.isPublic ? config.sessionApiKey : null,
+      config.launchAgentServer && !config.isPublic
+        ? config.sessionApiKey
+        : null,
     authRequired: Boolean(config.launchAgentServer && config.isPublic),
     warn: (msg) => logService("static", msg, c.yellow),
   });
