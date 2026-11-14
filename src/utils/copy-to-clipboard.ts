@@ -31,7 +31,8 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   textarea.style.position = "fixed";
   textarea.style.top = "-9999px";
   textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
+  const container = active?.closest('[role="dialog"]') ?? document.body;
+  container.appendChild(textarea);
 
   try {
     textarea.select();
@@ -39,7 +40,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   } catch {
     return false;
   } finally {
-    document.body.removeChild(textarea);
+    textarea.remove();
     if (previousRange && selection) {
       selection.removeAllRanges();
       selection.addRange(previousRange);
