@@ -57,6 +57,13 @@ export function useSendMessage() {
           });
           return result;
         }
+        // Not a deliverable user message. Dropping it silently once hid a
+        // dead feature — a caller sent a state-change event through this
+        // hook and nothing anywhere reported that it never arrived — so
+        // name the dropped action instead.
+        console.warn(
+          `useSendMessage: dropping event with action "${action}" — this hook only sends "message" events with content.`,
+        );
         return { queued: false };
       }
       return { queued: false };
