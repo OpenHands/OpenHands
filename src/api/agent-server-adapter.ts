@@ -183,6 +183,18 @@ function resolveMaxIterations(value: unknown): number {
   return typeof value === "number" ? value : DEFAULT_MAX_ITERATIONS;
 }
 
+// `conversation_settings.max_budget_per_run` (USD). Unset means no limit, and
+// the field is then left out so the request is unchanged.
+function resolveMaxBudgetPerRun(value: unknown): number | undefined {
+  return typeof value === "number" && value > 0 ? value : undefined;
+}
+
+function budgetOption(maxBudgetPerRun: number | undefined) {
+  return maxBudgetPerRun === undefined
+    ? {}
+    : { max_budget_per_run: maxBudgetPerRun };
+}
+
 /**
  * Shape of the runtime services info served by Agent Canvas backends in
  * `/server_info.runtime_services`. All URLs are written from the agent's point of
@@ -1036,6 +1048,7 @@ type StartConversationPayloadBase = Record<string, unknown> & {
   security_analyzer?: SettingsRecord;
   initial_message?: InitialMessagePayload;
   max_iterations: number;
+  max_budget_per_run?: number;
   stuck_detection: true;
   autotitle: boolean;
   title_llm_profile?: string;
@@ -1240,6 +1253,9 @@ export function buildStartConversationRequest(
     confirmation_policy:
       getConversationConfirmationPolicy(conversationSettings),
     max_iterations: resolveMaxIterations(conversationSettings.max_iterations),
+    ...budgetOption(
+      resolveMaxBudgetPerRun(conversationSettings.max_budget_per_run),
+    ),
     stuck_detection: true,
     autotitle: true,
     ...(options.titleLlmProfile
@@ -1324,6 +1340,8 @@ export function buildStartPlanningConversationRequest(options: {
   customSecrets?: CustomSecretInput[];
   /** Mirrors the parent's configured `conversation_settings.max_iterations` — see DEFAULT_MAX_ITERATIONS. */
   maxIterations?: number;
+  /** Mirrors the parent's configured `conversation_settings.max_budget_per_run`. */
+  maxBudgetPerRun?: number;
   /** The skills the parent's agent profile selects. */
   skillEnablement?: SkillEnablement;
   /** Mirrors the main conversation's workspace selection — see buildConfiguredConversationSettings. */
@@ -1408,6 +1426,7 @@ export function buildStartPlanningConversationRequest(options: {
     client_tools: [],
     confirmation_policy: { kind: "NeverConfirm" },
     max_iterations: options.maxIterations ?? DEFAULT_MAX_ITERATIONS,
+    ...budgetOption(options.maxBudgetPerRun),
     stuck_detection: true,
     autotitle: false,
     worktree: false,
@@ -1598,6 +1617,9 @@ export async function buildStartPlanningConversationRequestWithEncryptedSettings
     secretsEncrypted: settingsResult.secretsEncrypted,
     customSecrets,
     maxIterations,
+    maxBudgetPerRun: resolveMaxBudgetPerRun(
+      settingsResult.conversationSettings.max_budget_per_run,
+    ),
     skillEnablement: profileSkillSelection ?? settingsResult.skillEnablement,
   });
 }

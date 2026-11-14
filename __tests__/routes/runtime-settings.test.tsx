@@ -77,6 +77,17 @@ describe("RuntimeSettingsScreen", () => {
     expect(await renderRuntimeOptions(settings)).toEqual(expected);
   });
 
+  it("shows the per-conversation limits", async () => {
+    await renderRuntimeOptions({ default_runtime: "local" });
+
+    expect(
+      screen.getByTestId("sdk-settings-max_iterations"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("sdk-settings-max_budget_per_run"),
+    ).toBeInTheDocument();
+  });
+
   describe("on a server that cannot run Docker", () => {
     beforeEach(() => {
       mockUseConversationWorkspace.mockReturnValue({
