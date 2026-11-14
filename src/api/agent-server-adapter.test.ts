@@ -253,6 +253,44 @@ describe("buildStartConversationRequest", () => {
       payload.agent_launch_additions?.skills?.map((skill) => skill.name),
     ).toEqual(["slack-standup-digest"]);
   });
+  it("sends the configured per-conversation budget", () => {
+    const settings = makeSettings({ agent_kind: "openhands" });
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...settings,
+        conversation_settings: {
+          ...settings.conversation_settings,
+          max_budget_per_run: 2.5,
+        },
+      },
+      agentProfileId: "profile-xyz",
+      agentProfileKind: "openhands",
+    });
+
+    expect(payload.max_budget_per_run).toBe(2.5);
+  });
+
+  it.each([
+    ["unset", {}],
+    ["null", { max_budget_per_run: null }],
+    ["zero", { max_budget_per_run: 0 }],
+  ])("leaves the budget out when it is %s", (_, budgetSetting) => {
+    const settings = makeSettings({ agent_kind: "openhands" });
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...settings,
+        conversation_settings: {
+          ...settings.conversation_settings,
+          ...budgetSetting,
+        },
+      },
+      agentProfileId: "profile-xyz",
+      agentProfileKind: "openhands",
+    });
+
+    expect(payload).not.toHaveProperty("max_budget_per_run");
+  });
+
   it("does not admit a skill named mid-sentence rather than invoked", () => {
     const payload = buildStartConversationRequest({
       settings: makeSettings({ agent_kind: "openhands" }),
@@ -520,6 +558,21 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
     expect(payload.max_iterations).toBe(1000);
   });
 
+  it("mirrors the parent's configured budget", async () => {
+    vi.mocked(SettingsService.getSettingsForConversation).mockResolvedValue({
+      ...globallyActiveSettings,
+      conversationSettings: { max_budget_per_run: 1.5 },
+    });
+
+    const payload =
+      await buildStartPlanningConversationRequestWithEncryptedSettings({
+        workingDir: "/workspace/project",
+        parentConversationId: "parent-1",
+      });
+
+    expect(payload.max_budget_per_run).toBe(1.5);
+  });
+
   it("falls back to 500 when the parent has no configured max_iterations", async () => {
     const payload =
       await buildStartPlanningConversationRequestWithEncryptedSettings({
@@ -528,6 +581,7 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
       });
 
     expect(payload.max_iterations).toBe(500);
+    expect(payload).not.toHaveProperty("max_budget_per_run");
   });
 
   it("applies the full skill enablement to the planner's agent context, mirroring the code agent", async () => {

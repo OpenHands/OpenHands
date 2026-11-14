@@ -23,7 +23,8 @@ function RuntimeSettingsScreen() {
 
   const source: SettingsSourceConfig = {
     settingsSource: "conversation_settings",
-    sectionKeys: ["runtime"],
+    // "general" holds the per-conversation limits (max iterations, budget).
+    sectionKeys: ["general", "runtime"],
   };
   if (dockerUnavailable) {
     source.excludeKeys = CONTAINER_FIELD_KEYS;

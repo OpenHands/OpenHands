@@ -221,6 +221,7 @@ describe("mock settings schemas and state", () => {
       max_iterations: contract("general", "integer", 500, "major", {
         required: true,
       }),
+      max_budget_per_run: contract("general", "number", null, "major"),
       confirmation_mode: contract("verification", "boolean", false, "major", {
         required: true,
       }),
