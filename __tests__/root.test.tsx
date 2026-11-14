@@ -5,11 +5,15 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Children, type ReactElement, type ReactNode } from "react";
 import { createRoutesStub } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
-import App, { links } from "#/root";
+import App, { Layout, links } from "#/root";
+import { AgentServerUIRoot } from "#/components/providers/agent-server-ui-root";
 import { server } from "#/mocks/node";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
 import { LOCKED_CLOUD_BACKEND_ID } from "#/api/backend-registry/default-backend";
@@ -983,6 +987,23 @@ describe("App root agent-server availability guard", () => {
   });
 });
 
+describe("App root viewport sizing", () => {
+  it("uses a dynamic viewport constraint for the outer UI wrapper", () => {
+    const layout = Layout({ children: <div /> }) as ReactElement<{
+      children: ReactNode;
+    }>;
+    const body = Children.toArray(layout.props.children)[1] as ReactElement<{
+      children: ReactNode;
+    }>;
+    const uiRoot = Children.toArray(body.props.children)[0] as ReactElement<{
+      contentClassName: string;
+    }>;
+
+    expect(uiRoot.type).toBe(AgentServerUIRoot);
+    expect(uiRoot.props.contentClassName).toBe("h-dvh min-h-0");
+  });
+});
+
 describe("App root document links", () => {
   it("declares the SVG favicon used by the browser tab", () => {
     // Act
@@ -1009,7 +1030,37 @@ describe("App root document links", () => {
       type: "image/svg+xml",
       href: "/canvas/favicon.svg",
     });
+    expect(documentLinks).toContainEqual({
+      rel: "manifest",
+      href: "/canvas/site.webmanifest",
+    });
 
     vi.unstubAllEnvs();
+  });
+
+  it("provides install metadata and relative icon assets", () => {
+    const manifest = JSON.parse(
+      readFileSync("public/site.webmanifest", "utf8"),
+    );
+
+    expect(manifest).toMatchObject({
+      name: expect.any(String),
+      short_name: expect.any(String),
+      description: expect.any(String),
+      start_url: "./",
+      scope: "./",
+      display: "standalone",
+      categories: ["productivity"],
+    });
+    expect(manifest.name).not.toBe("");
+    expect(manifest.short_name).not.toBe("");
+
+    for (const icon of manifest.icons) {
+      expect(icon.src).not.toMatch(/^\//);
+      const png = readFileSync(resolve("public", icon.src));
+      expect(png.subarray(1, 4).toString()).toBe("PNG");
+      expect(png.readUInt32BE(16)).toBe(Number(icon.sizes.split("x")[0]));
+      expect(png.readUInt32BE(20)).toBe(Number(icon.sizes.split("x")[1]));
+    }
   });
 });
