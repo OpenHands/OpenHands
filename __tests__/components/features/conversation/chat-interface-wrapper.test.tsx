@@ -7,11 +7,14 @@ vi.mock("#/components/features/chat/chat-interface", () => ({
   ChatInterface: () => <div data-testid="chat-interface" />,
 }));
 
-vi.mock("#/components/features/conversation/conversation-overview-panel", () => ({
-  ConversationOverviewPanel: () => (
-    <div data-testid="conversation-overview-panel" />
-  ),
-}));
+vi.mock(
+  "#/components/features/conversation/conversation-overview-panel",
+  () => ({
+    ConversationOverviewPanel: () => (
+      <div data-testid="conversation-overview-panel" />
+    ),
+  }),
+);
 
 vi.mock("#/hooks/use-breakpoint", () => ({
   useBreakpoint: () => false,
@@ -50,8 +53,12 @@ describe("ChatInterfaceWrapper", () => {
     useConversationStore.setState({ isOverviewPanelShown: true });
     render(<ChatInterfaceWrapper isRightPanelShown={false} />);
 
-    expect(screen.getByTestId("conversation-overview-column")).toBeInTheDocument();
-    expect(screen.getByTestId("conversation-overview-panel")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-overview-column"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("conversation-overview-panel"),
+    ).toBeInTheDocument();
   });
 
   it("keeps the thread in a height-constrained flex column when overview is shown", () => {
@@ -78,5 +85,16 @@ describe("ChatInterfaceWrapper", () => {
       screen.queryByTestId("conversation-overview-panel"),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
+  });
+
+  it("renders the conversation thread with full width without a max-width clamp", () => {
+    const { container } = render(
+      <ChatInterfaceWrapper isRightPanelShown={false} />,
+    );
+
+    const thread = container.querySelector(".flex-1.justify-center > div");
+    expect(thread).toBeInTheDocument();
+    expect(thread).toHaveClass("w-full");
+    expect(thread?.className).not.toContain("max-w-200");
   });
 });
