@@ -46,7 +46,10 @@ import { QUERY_KEYS } from "#/hooks/query/query-keys";
 import { AgentServerUIRoot } from "#/components/providers";
 import { TelemetryConsentBanner } from "#/components/features/analytics/telemetry-consent-banner";
 import { buildAgentCanvasPath } from "#/utils/base-path";
-import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
+import {
+  isOnboardingSkippedByOperator,
+  useOnboardingCompletion,
+} from "#/components/features/onboarding/use-onboarding-completion";
 import { NavigationProvider } from "#/context/navigation-context";
 import {
   applyColorTheme,
@@ -306,7 +309,7 @@ export default function App() {
     ? !shouldCheckMainAppAuth &&
       (!isActiveLockedCloudBackend ||
         (lockedCloudAuthMode !== "cookie" && !onboardingCompleted))
-    : !onboardingCompleted;
+    : !onboardingCompleted && !isOnboardingSkippedByOperator();
   const mainAppAuth = useQuery({
     queryKey: QUERY_KEYS.MAIN_APP_COOKIE_AUTH,
     queryFn: authenticateWithMainAppCookie,

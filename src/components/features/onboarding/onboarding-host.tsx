@@ -10,7 +10,10 @@ import {
   isOnboardingPreviewActive,
   readOnboardingPreviewStep,
 } from "./onboarding-preview";
-import { useOnboardingCompletion } from "./use-onboarding-completion";
+import {
+  isOnboardingSkippedByOperator,
+  useOnboardingCompletion,
+} from "./use-onboarding-completion";
 
 function hasUsableLlm(settings: Settings | undefined): boolean {
   const llm = settings?.agent_settings?.llm as
@@ -54,7 +57,7 @@ export function OnboardingHost() {
     backend.kind === "cloud" || backend.id !== SEEDED_DEFAULT_BACKEND_ID;
 
   if (!isPreview) {
-    if (isCompleted) return null;
+    if (isCompleted || isOnboardingSkippedByOperator()) return null;
     if (getLockedCloudHost() !== null) return null;
     if (trustsBackendLlm && settings.isLoading) return null;
     if (trustsBackendLlm && hasUsableLlm(settings.data)) {

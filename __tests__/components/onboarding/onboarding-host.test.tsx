@@ -78,6 +78,8 @@ function seedUserAddedLocalBackend() {
 
 beforeEach(() => {
   window.localStorage.clear();
+  delete (window as unknown as Record<string, unknown>)
+    .__AGENT_CANVAS_SKIP_ONBOARDING__;
   vi.stubEnv("VITE_BACKEND_BASE_URL", "http://localhost:9000");
   vi.stubEnv("VITE_SESSION_API_KEY", "session-key");
   __resetActiveStoreForTests();
@@ -86,11 +88,60 @@ beforeEach(() => {
 
 afterEach(() => {
   window.localStorage.clear();
+  delete (window as unknown as Record<string, unknown>)
+    .__AGENT_CANVAS_SKIP_ONBOARDING__;
   vi.unstubAllEnvs();
   __resetActiveStoreForTests();
 });
 
 describe("OnboardingHost", () => {
+  it("skips a launcher-seeded backend's modal without persisting completion", async () => {
+    (
+      window as unknown as Record<string, unknown>
+    ).__AGENT_CANVAS_SKIP_ONBOARDING__ = true;
+    const getSettings = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockResolvedValue({
+        ...DEFAULT_SETTINGS,
+        llm_api_key_set: true,
+        agent_settings: {
+          ...DEFAULT_SETTINGS.agent_settings,
+          llm: { model: "openai/gpt-5.5" },
+        },
+      });
+
+    renderHost();
+
+    await waitFor(() => expect(getSettings).toHaveBeenCalledOnce());
+    expect(
+      screen.queryByTestId("onboarding-modal-stub"),
+    ).not.toBeInTheDocument();
+    expect(
+      window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
+    ).toBeNull();
+  });
+
+  it.each([0, 1, 2, 3])(
+    "opens preview step %i even when the operator skips onboarding",
+    async (step) => {
+      (
+        window as unknown as Record<string, unknown>
+      ).__AGENT_CANVAS_SKIP_ONBOARDING__ = true;
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        DEFAULT_SETTINGS,
+      );
+
+      renderHost(`/?previewOnboardingStep=${step}`);
+
+      expect(
+        await screen.findByTestId("onboarding-modal-stub"),
+      ).toBeInTheDocument();
+      expect(
+        window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
+      ).toBeNull();
+    },
+  );
+
   it("renders the onboarding modal for a fresh install with no configured LLM", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
       ...DEFAULT_SETTINGS,
