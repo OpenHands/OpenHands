@@ -1313,6 +1313,18 @@ export function ConversationWebSocketProvider({
       sessionApiKey,
       connectionKey: historyConnectionKey,
       reconnect: { enabled: true },
+      onAuthRevoked: () =>
+        // Sandbox resume on Cloud rotates the runtime's session key, and
+        // the agent-server closes the socket with code 4001 to tell us our
+        // cached key is dead. Re-fetch the conversation (and any related
+        // queries) so the next connect uses the rotated key instead of
+        // retrying the rejected one forever (#18992). The invalidation
+        // propagates to planningWebsocketOptions via its own sessionApiKey
+        // prop, which comes from subConversations that also refetch.
+        queryClient.invalidateQueries({
+          queryKey: ["conversation"],
+          refetchType: "active",
+        }),
       onOpen: () => {
         mainServedRef.current = false;
         mainReplayThroughSeqRef.current = null;
@@ -1367,6 +1379,14 @@ export function ConversationWebSocketProvider({
       queryParams,
       sessionApiKey: planningApiKey,
       reconnect: { enabled: true },
+      onAuthRevoked: () =>
+        // Same rotation path as the main socket — invalidate conversation
+        // queries so subConversations refetch and supply the planning socket
+        // with its own rotated session_api_key.
+        queryClient.invalidateQueries({
+          queryKey: ["conversation"],
+          refetchType: "active",
+        }),
       onOpen: async () => {
         planningReplayThroughSeqRef.current = null;
         planningConnectionError.cancel();
