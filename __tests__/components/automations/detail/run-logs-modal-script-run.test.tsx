@@ -6,7 +6,7 @@
  * stubbed.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nKey } from "#/i18n/declaration";
 import { RunLogsModal } from "#/components/features/automations/detail/run-logs-modal";
@@ -112,6 +112,57 @@ describe("RunLogsModal — script run without a conversation (cloud)", () => {
       "sandbox-key",
       "cmd-1",
     );
+  });
+
+  it("moves tab focus and selection with arrow, Home, and End keys", async () => {
+    // Arrange
+    batchGetCloudSandboxesMock.mockResolvedValue([runningSandbox]);
+    listOutputsMock.mockResolvedValue([
+      {
+        kind: "BashOutput",
+        id: "out-1",
+        command_id: "cmd-1",
+        timestamp: "2026-01-01T10:00:00Z",
+        order: 0,
+        stdout: "stdout-visible",
+        stderr: "stderr-keyboard-proof",
+      },
+    ]);
+    renderModal();
+    await screen.findByText("stdout-visible");
+    const [outputTab, errorTab] = screen.getAllByRole("tab");
+    outputTab.focus();
+
+    // Act and assert
+    fireEvent.keyDown(outputTab, { key: "ArrowRight" });
+    expect(errorTab).toHaveFocus();
+    expect(errorTab).toHaveAttribute("aria-selected", "true");
+    expect(errorTab).toHaveAttribute("tabindex", "0");
+    expect(outputTab).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByRole("tabpanel")).toHaveAttribute(
+      "aria-labelledby",
+      "run-logs-tab-stderr",
+    );
+    expect(screen.getByTestId("run-logs-output-stderr")).toHaveTextContent(
+      "stderr-keyboard-proof",
+    );
+
+    fireEvent.keyDown(errorTab, { key: "ArrowRight" });
+    expect(outputTab).toHaveFocus();
+    expect(outputTab).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.keyDown(outputTab, { key: "ArrowLeft" });
+    expect(errorTab).toHaveFocus();
+    expect(errorTab).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.keyDown(errorTab, { key: "Home" });
+    expect(outputTab).toHaveFocus();
+    expect(outputTab).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.keyDown(outputTab, { key: "End" });
+    expect(errorTab).toHaveFocus();
+    expect(errorTab).toHaveAttribute("aria-selected", "true");
+    expect(listOutputsMock).toHaveBeenCalledTimes(1);
   });
 
   it("says the sandbox is gone instead of loading forever once the run's sandbox was deleted", async () => {
