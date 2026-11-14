@@ -41,12 +41,7 @@ function baseResult() {
     isPending: false,
     isResolvingConversation: false,
     sandboxIssue: null as
-      | null
-      | "missing"
-      | "paused"
-      | "starting"
-      | "errored"
-      | "unreachable",
+      null | "missing" | "paused" | "starting" | "errored" | "unreachable",
     conversationMissing: false,
   };
 }
@@ -334,6 +329,95 @@ describe("RunLogsModal", () => {
     );
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("RunLogsModal — log tab keyboard navigation", () => {
+  const renderWithStreams = () => {
+    useBashCommandLogsMock.mockReturnValue(
+      makeHookResult({
+        data: [
+          {
+            id: "o1",
+            kind: "BashOutput",
+            timestamp: "2026-01-01T10:00:00Z",
+            command_id: "cmd-1",
+            order: 0,
+            stdout: "stdout-visible\n",
+            stderr: "stderr-keyboard-proof\n",
+          },
+        ],
+      }),
+    );
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+      />,
+    );
+    return screen.getAllByRole("tab");
+  };
+
+  it("ArrowRight from Output selects Error and moves focus to it", () => {
+    const [outputTab, errorTab] = renderWithStreams();
+    outputTab.focus();
+    fireEvent.keyDown(outputTab, { key: "ArrowRight" });
+
+    expect(errorTab).toHaveAttribute("aria-selected", "true");
+    expect(outputTab).toHaveAttribute("aria-selected", "false");
+    expect(document.activeElement).toBe(errorTab);
+    expect(screen.getByTestId("run-logs-output-stderr")).toHaveTextContent(
+      "stderr-keyboard-proof",
+    );
+  });
+
+  it("ArrowLeft from Error returns to Output", () => {
+    const [outputTab, errorTab] = renderWithStreams();
+    errorTab.focus();
+    fireEvent.click(errorTab);
+    fireEvent.keyDown(errorTab, { key: "ArrowLeft" });
+
+    expect(outputTab).toHaveAttribute("aria-selected", "true");
+    expect(document.activeElement).toBe(outputTab);
+    expect(screen.getByTestId("run-logs-output-stdout")).toHaveTextContent(
+      "stdout-visible",
+    );
+  });
+
+  it("arrow keys wrap around at both ends", () => {
+    const [outputTab, errorTab] = renderWithStreams();
+
+    outputTab.focus();
+    fireEvent.keyDown(outputTab, { key: "ArrowLeft" });
+    expect(errorTab).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.keyDown(errorTab, { key: "ArrowRight" });
+    expect(outputTab).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("Home selects Output and End selects Error", () => {
+    const [outputTab, errorTab] = renderWithStreams();
+
+    errorTab.focus();
+    fireEvent.click(errorTab);
+    fireEvent.keyDown(errorTab, { key: "Home" });
+    expect(outputTab).toHaveAttribute("aria-selected", "true");
+    expect(document.activeElement).toBe(outputTab);
+
+    fireEvent.keyDown(outputTab, { key: "End" });
+    expect(errorTab).toHaveAttribute("aria-selected", "true");
+    expect(document.activeElement).toBe(errorTab);
+  });
+
+  it("keeps a single tab stop after keyboard navigation", () => {
+    const [outputTab, errorTab] = renderWithStreams();
+    outputTab.focus();
+    fireEvent.keyDown(outputTab, { key: "ArrowRight" });
+
+    expect(errorTab).toHaveAttribute("tabindex", "0");
+    expect(outputTab).toHaveAttribute("tabindex", "-1");
   });
 });
 
