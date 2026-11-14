@@ -246,6 +246,23 @@ describe("PluginLaunchModal", () => {
       expect(input).toHaveValue(100);
     });
 
+    it("keeps a cleared number parameter numeric when a value is typed again", () => {
+      renderModal([
+        {
+          source: "github:owner/repo",
+          parameters: { count: 2 },
+        },
+      ]);
+
+      const input = screen.getByTestId("plugin-0-param-count");
+      fireEvent.change(input, { target: { value: "" } });
+      const cleared = screen.getByTestId("plugin-0-param-count");
+      expect(cleared).toHaveAttribute("type", "number");
+
+      fireEvent.change(cleared, { target: { value: "3" } });
+      expect(screen.getByTestId("plugin-0-param-count")).toHaveValue(3);
+    });
+
     it("should toggle boolean parameter when clicking checkbox", async () => {
       const user = userEvent.setup();
       renderModal([
@@ -603,6 +620,25 @@ describe("automation mode preflight", () => {
     const submitted = mockOnInstallAutomation.mock.calls[0][0] as PluginSpec[];
     expect(submitted[0].parameters).toEqual({ priority: 2 });
     expect(typeof submitted[0].parameters?.priority).toBe("number");
+  });
+
+  it("installs a cleared and retyped badge number as a number without preflight", async () => {
+    const user = userEvent.setup();
+    renderModal([{ source: "github:org/recipe", parameters: { count: 2 } }], {
+      mode: "automation",
+    });
+
+    const input = screen.getByTestId("plugin-0-param-count");
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.change(screen.getByTestId("plugin-0-param-count"), {
+      target: { value: "3" },
+    });
+    await user.click(screen.getByTestId("trust-checkbox"));
+    await user.click(screen.getByTestId("start-conversation-button"));
+
+    expect(mockOnInstallAutomation).toHaveBeenCalledTimes(1);
+    const submitted = mockOnInstallAutomation.mock.calls[0][0] as PluginSpec[];
+    expect(submitted[0].parameters).toEqual({ count: 3 });
   });
 
   it("renders a stale badge value as a disabled placeholder so display and submission agree", async () => {
