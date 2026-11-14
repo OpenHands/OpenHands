@@ -3,12 +3,16 @@ import { usePrefetchUserConversation } from "#/hooks/query/use-user-conversation
 import { useConversationDisplayTitleState } from "#/hooks/use-conversation-display-title";
 import { usePendingTaskAttachmentsStore } from "#/stores/pending-task-attachments-store";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+import { useSearchJumpStore } from "#/stores/search-jump-store";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
+import { useConversationContentSearch } from "#/hooks/use-conversation-content-search";
+import { ConversationContentSearchBox } from "./conversation-content-search-box";
+import { ConversationContentSearchResults } from "./conversation-content-search-results";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
 import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
@@ -100,6 +104,11 @@ export function ConversationPanel({
   const { backend: activeBackend, orgId } = useActiveBackend();
   const backendScopedPath = useBackendScopedPath();
   const prefetchConversation = usePrefetchUserConversation();
+  const contentSearch = useConversationContentSearch();
+  // The hook probes /search/enabled: the box renders only when the local
+  // backend actually runs the search service, so deployments with the
+  // feature off see nothing (no box, no error line).
+  const isContentSearchAvailable = contentSearch.isAvailable && !compact;
   // Click-outside is only relevant in the legacy drawer mode where an
   // onClose handler is provided. When the panel is rendered inline (e.g.
   // as the always-visible conversation list pane), clicking outside should
@@ -1374,227 +1383,270 @@ export function ConversationPanel({
         />
       )}
 
-      <div
-        ref={scrollContainerRef}
-        data-testid="conversation-panel-list-scroll"
-        onScroll={(event) => {
-          setIsListScrolled(event.currentTarget.scrollTop > 0);
-        }}
-        className={cn(
-          "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain custom-scrollbar-always",
-          !compact && "conversation-panel-list-scroll",
-        )}
-      >
-        {showInitialSkeleton && <ConversationCardSkeleton compact={compact} />}
-
-        {!compact && showEmptyState && (
-          <div
-            data-testid="conversation-panel-empty-state"
-            className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-8"
-          >
-            <p className="text-xs text-muted">
-              {t(
-                emptyDueToAutomationFilter
-                  ? I18nKey.CONVERSATION_PANEL$NO_AUTOMATION_MATCHES
-                  : emptyDueToTagFilter
-                    ? I18nKey.CONVERSATION_PANEL$NO_TAG_MATCHES
-                    : I18nKey.CONVERSATION$NO_CONVERSATIONS,
-              )}
-            </p>
-          </div>
-        )}
-
-        {showPinnedSection ? (
-          <ConversationPanelPinnedSection
-            pinnedConversations={pinnedConversations}
-            isPreviewExpanded={expandedPinnedPreview}
-            onTogglePreviewExpanded={() =>
-              setExpandedPinnedPreview((current) => !current)
-            }
-            activeConversationId={currentConversationId}
-            showDivider={!compact && organizeMode === "chronological"}
-            renderConversationCard={(conversation) =>
-              renderConversationCard(conversation, { inPinnedSection: true })
-            }
+      {/* Content search: local backends only. The endpoint does not exist on
+          Cloud, so the box is hidden there entirely rather than erroring. */}
+      {isContentSearchAvailable && (
+        <div className="px-2.5 pt-2">
+          <ConversationContentSearchBox
+            query={contentSearch.query}
+            onQueryChange={contentSearch.setQuery}
           />
-        ) : null}
+        </div>
+      )}
 
-        {!compact &&
-          Object.values(pendingLaunches)
-            .filter(
-              (launch) =>
-                (!launch.targetId ||
-                  (launch.targetId.startsWith("task-") &&
-                    unresolvedTaskIds.includes(launch.targetId.slice(5)) &&
-                    !pendingAttachments[launch.targetId.slice(5)]?.error &&
-                    !pendingAttachments[launch.targetId.slice(5)]
-                      ?.readError)) &&
-                launch.backendId === activeBackend.id &&
-                launch.orgId === orgId,
-            )
-            .map((launch) => (
-              <NavigationLink
-                key={launch.id}
-                to={backendScopedPath(`/conversations/${launch.id}`)}
-                onClick={onClose}
-                className="block"
-              >
-                <ConversationCard
-                  title={getTitle(launch.id).title}
-                  titlePending={getTitle(launch.id).pending}
-                  isStarting
-                  selectedRepository={null}
-                  lastUpdatedAt=""
-                  showRepositoryMetadata={false}
-                  isActive={
-                    currentConversationId === launch.id ||
-                    currentConversationId === launch.targetId
-                  }
-                  executionStatus={
-                    launch.error ||
-                    (launch.targetId?.startsWith("task-") &&
-                      failedTaskIds.includes(launch.targetId.slice(5)))
-                      ? ExecutionStatus.ERROR
-                      : null
-                  }
-                />
-              </NavigationLink>
-            ))}
+      {isContentSearchAvailable && contentSearch.isSearching && (
+        <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2">
+          <ConversationContentSearchResults
+            hits={contentSearch.hits}
+            isPending={contentSearch.isPending}
+            error={contentSearch.error}
+            capped={contentSearch.capped}
+            total={contentSearch.total}
+            onSelect={(hit) => {
+              contentSearch.reset();
+              // Arm the jump before navigating so it survives the async
+              // event load of the target conversation.
+              if (hit.source !== "title") {
+                const terms = contentSearch.query
+                  .split(/\s+/)
+                  .map((t) => t.trim())
+                  .filter((t) => t.length >= 3)
+                  .slice(0, 8);
+                useSearchJumpStore.getState().startJump(hit.event_id, terms);
+              }
+              navigate(`/conversations/${hit.conversation_id}`);
+            }}
+          />
+        </div>
+      )}
 
-        {!compact &&
-          Object.entries(pendingAttachments)
-            .filter(
-              ([, pending]) =>
-                (pending.error || pending.readError) &&
-                pending.backendId === activeBackend.id &&
-                pending.orgId === orgId,
-            )
-            .map(([taskId, pending]) => (
-              <NavigationLink
-                key={taskId}
-                to={backendScopedPath(
-                  `/conversations/${pending.error && pending.conversationId ? pending.conversationId : `task-${taskId}`}`,
+      {!contentSearch.isSearching && (
+        <div
+          ref={scrollContainerRef}
+          data-testid="conversation-panel-list-scroll"
+          onScroll={(event) => {
+            setIsListScrolled(event.currentTarget.scrollTop > 0);
+          }}
+          className={cn(
+            "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain custom-scrollbar-always",
+            !compact && "conversation-panel-list-scroll",
+          )}
+        >
+          {showInitialSkeleton && (
+            <ConversationCardSkeleton compact={compact} />
+          )}
+
+          {!compact && showEmptyState && (
+            <div
+              data-testid="conversation-panel-empty-state"
+              className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-8"
+            >
+              <p className="text-xs text-muted">
+                {t(
+                  emptyDueToAutomationFilter
+                    ? I18nKey.CONVERSATION_PANEL$NO_AUTOMATION_MATCHES
+                    : emptyDueToTagFilter
+                      ? I18nKey.CONVERSATION_PANEL$NO_TAG_MATCHES
+                      : I18nKey.CONVERSATION$NO_CONVERSATIONS,
                 )}
-                onClick={onClose}
-                className="block"
-              >
-                <ConversationCard
-                  title={pending.content || t(I18nKey.CONVERSATION$UNTITLED)}
-                  selectedRepository={null}
-                  lastUpdatedAt=""
-                  showRepositoryMetadata={false}
-                  isActive={
-                    currentConversationId === `task-${taskId}` ||
-                    currentConversationId === pending.conversationId
-                  }
-                  executionStatus={ExecutionStatus.ERROR}
-                />
-              </NavigationLink>
-            ))}
+              </p>
+            </div>
+          )}
 
-        {/* Keep pending conversations available while their sandboxes start. */}
-        {!compact &&
-          startTasks
-            ?.filter(
-              (task) =>
-                !pendingAttachments[task.id]?.error &&
-                !pendingAttachments[task.id]?.readError,
-            )
-            .map((task) => (
-              <NavigationLink
-                key={task.id}
-                to={backendScopedPath(`/conversations/task-${task.id}`)}
-                onClick={onClose}
-                className="block"
-              >
-                <StartTaskCard
-                  task={task}
-                  title={getTitle(`task-${task.id}`, task.request.title).title}
-                  titlePending={
-                    getTitle(`task-${task.id}`, task.request.title).pending
-                  }
-                  initialMessage={
-                    pendingAttachments[task.id]?.content ||
-                    Object.values(pendingLaunches).find(
-                      (launch) => launch.targetId === `task-${task.id}`,
-                    )?.message
-                  }
-                  isActive={
-                    currentConversationId === task.app_conversation_id ||
-                    currentConversationId === `task-${task.id}` ||
-                    Object.values(pendingLaunches).some(
-                      (launch) =>
-                        launch.id === currentConversationId &&
-                        launch.targetId === `task-${task.id}`,
-                    )
-                  }
-                  showRepositoryMetadata={showRepoBranchMetadata}
-                />
-              </NavigationLink>
-            ))}
+          {showPinnedSection ? (
+            <ConversationPanelPinnedSection
+              pinnedConversations={pinnedConversations}
+              isPreviewExpanded={expandedPinnedPreview}
+              onTogglePreviewExpanded={() =>
+                setExpandedPinnedPreview((current) => !current)
+              }
+              activeConversationId={currentConversationId}
+              showDivider={!compact && organizeMode === "chronological"}
+              renderConversationCard={(conversation) =>
+                renderConversationCard(conversation, { inPinnedSection: true })
+              }
+            />
+          ) : null}
 
-        {!showInitialSkeleton && compact
-          ? compactVisibleConversations.map((conversation) =>
-              renderConversationCard(conversation),
-            )
-          : null}
+          {!compact &&
+            Object.values(pendingLaunches)
+              .filter(
+                (launch) =>
+                  (!launch.targetId ||
+                    (launch.targetId.startsWith("task-") &&
+                      unresolvedTaskIds.includes(launch.targetId.slice(5)) &&
+                      !pendingAttachments[launch.targetId.slice(5)]?.error &&
+                      !pendingAttachments[launch.targetId.slice(5)]
+                        ?.readError)) &&
+                  launch.backendId === activeBackend.id &&
+                  launch.orgId === orgId,
+              )
+              .map((launch) => (
+                <NavigationLink
+                  key={launch.id}
+                  to={backendScopedPath(`/conversations/${launch.id}`)}
+                  onClick={onClose}
+                  className="block"
+                >
+                  <ConversationCard
+                    title={getTitle(launch.id).title}
+                    titlePending={getTitle(launch.id).pending}
+                    isStarting
+                    selectedRepository={null}
+                    lastUpdatedAt=""
+                    showRepositoryMetadata={false}
+                    isActive={
+                      currentConversationId === launch.id ||
+                      currentConversationId === launch.targetId
+                    }
+                    executionStatus={
+                      launch.error ||
+                      (launch.targetId?.startsWith("task-") &&
+                        failedTaskIds.includes(launch.targetId.slice(5)))
+                        ? ExecutionStatus.ERROR
+                        : null
+                    }
+                  />
+                </NavigationLink>
+              ))}
 
-        {!showInitialSkeleton &&
-        !compact &&
-        organizeMode === "grouped" &&
-        orderedConversationGroups &&
-        orderedConversationGroups.length > 0 ? (
-          <ConversationGroupFolderList
-            groups={orderedConversationGroups}
-            groupIds={conversationGroupIds}
-            groupFolderOrder={groupFolderOrder}
-            setGroupFolderOrder={setGroupFolderOrder}
-            collapsedGroupIds={collapsedGroupIds}
-            expandedGroupPreviewIds={expandedGroupPreviewIds}
-            discoveryConversationIds={groupDiscoveryConversationIds}
-            onToggleGroupCollapsed={toggleGroupCollapsed}
-            onToggleGroupPreviewExpanded={toggleGroupPreviewExpanded}
-            isCreatingConversationFlow={isCreatingConversationFlow}
-            activeConversationId={currentConversationId}
-            onLaunchFromGroup={launchFromGroup}
-            renderConversationCard={(conversation) =>
-              renderConversationCard(conversation)
-            }
-          />
-        ) : null}
+          {!compact &&
+            Object.entries(pendingAttachments)
+              .filter(
+                ([, pending]) =>
+                  (pending.error || pending.readError) &&
+                  pending.backendId === activeBackend.id &&
+                  pending.orgId === orgId,
+              )
+              .map(([taskId, pending]) => (
+                <NavigationLink
+                  key={taskId}
+                  to={backendScopedPath(
+                    `/conversations/${pending.error && pending.conversationId ? pending.conversationId : `task-${taskId}`}`,
+                  )}
+                  onClick={onClose}
+                  className="block"
+                >
+                  <ConversationCard
+                    title={pending.content || t(I18nKey.CONVERSATION$UNTITLED)}
+                    selectedRepository={null}
+                    lastUpdatedAt=""
+                    showRepositoryMetadata={false}
+                    isActive={
+                      currentConversationId === `task-${taskId}` ||
+                      currentConversationId === pending.conversationId
+                    }
+                    executionStatus={ExecutionStatus.ERROR}
+                  />
+                </NavigationLink>
+              ))}
 
-        {!showInitialSkeleton &&
-        !compact &&
-        organizeMode === "chronological" ? (
-          <div className="space-y-0.5">
-            {sortedVisibleConversations.map((conversation) =>
-              renderConversationCard(conversation),
-            )}
-          </div>
-        ) : null}
+          {/* Keep pending conversations available while their sandboxes start. */}
+          {!compact &&
+            startTasks
+              ?.filter(
+                (task) =>
+                  !pendingAttachments[task.id]?.error &&
+                  !pendingAttachments[task.id]?.readError,
+              )
+              .map((task) => (
+                <NavigationLink
+                  key={task.id}
+                  to={backendScopedPath(`/conversations/task-${task.id}`)}
+                  onClick={onClose}
+                  className="block"
+                >
+                  <StartTaskCard
+                    task={task}
+                    title={
+                      getTitle(`task-${task.id}`, task.request.title).title
+                    }
+                    titlePending={
+                      getTitle(`task-${task.id}`, task.request.title).pending
+                    }
+                    initialMessage={
+                      pendingAttachments[task.id]?.content ||
+                      Object.values(pendingLaunches).find(
+                        (launch) => launch.targetId === `task-${task.id}`,
+                      )?.message
+                    }
+                    isActive={
+                      currentConversationId === task.app_conversation_id ||
+                      currentConversationId === `task-${task.id}` ||
+                      Object.values(pendingLaunches).some(
+                        (launch) =>
+                          launch.id === currentConversationId &&
+                          launch.targetId === `task-${task.id}`,
+                      )
+                    }
+                    showRepositoryMetadata={showRepoBranchMetadata}
+                  />
+                </NavigationLink>
+              ))}
 
-        {/* Explicit "Load more" trigger. Only shown when more pages exist
+          {!showInitialSkeleton && compact
+            ? compactVisibleConversations.map((conversation) =>
+                renderConversationCard(conversation),
+              )
+            : null}
+
+          {!showInitialSkeleton &&
+          !compact &&
+          organizeMode === "grouped" &&
+          orderedConversationGroups &&
+          orderedConversationGroups.length > 0 ? (
+            <ConversationGroupFolderList
+              groups={orderedConversationGroups}
+              groupIds={conversationGroupIds}
+              groupFolderOrder={groupFolderOrder}
+              setGroupFolderOrder={setGroupFolderOrder}
+              collapsedGroupIds={collapsedGroupIds}
+              expandedGroupPreviewIds={expandedGroupPreviewIds}
+              discoveryConversationIds={groupDiscoveryConversationIds}
+              onToggleGroupCollapsed={toggleGroupCollapsed}
+              onToggleGroupPreviewExpanded={toggleGroupPreviewExpanded}
+              isCreatingConversationFlow={isCreatingConversationFlow}
+              activeConversationId={currentConversationId}
+              onLaunchFromGroup={launchFromGroup}
+              renderConversationCard={(conversation) =>
+                renderConversationCard(conversation)
+              }
+            />
+          ) : null}
+
+          {!showInitialSkeleton &&
+          !compact &&
+          organizeMode === "chronological" ? (
+            <div className="space-y-0.5">
+              {sortedVisibleConversations.map((conversation) =>
+                renderConversationCard(conversation),
+              )}
+            </div>
+          ) : null}
+
+          {/* Explicit "Load more" trigger. Only shown when more pages exist
             *and* the older list is currently visible (or there are no older
             conversations to begin with) — otherwise the next page would be
             populated mostly with conversations the user has chosen to hide. */}
-        {showLoadMore &&
-          (isLoadingMore ? (
-            <div className="py-1">
-              <ConversationCardSkeleton compact={compact} />
-            </div>
-          ) : (
-            <div className="flex justify-center py-4">
-              <button
-                type="button"
-                data-testid="load-more-conversations"
-                onClick={requestLoadMore}
-                className="text-xs text-muted hover:text-contrast"
-              >
-                {t(I18nKey.CONVERSATION$LOAD_MORE)}
-              </button>
-            </div>
-          ))}
-      </div>
+          {showLoadMore &&
+            (isLoadingMore ? (
+              <div className="py-1">
+                <ConversationCardSkeleton compact={compact} />
+              </div>
+            ) : (
+              <div className="flex justify-center py-4">
+                <button
+                  type="button"
+                  data-testid="load-more-conversations"
+                  onClick={requestLoadMore}
+                  className="text-xs text-muted hover:text-contrast"
+                >
+                  {t(I18nKey.CONVERSATION$LOAD_MORE)}
+                </button>
+              </div>
+            ))}
+        </div>
+      )}
 
       {confirmDeleteModalVisible && (
         <ConfirmDeleteModal

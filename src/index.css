@@ -161,3 +161,28 @@ code {
 .environment-switch-overlay > div {
   animation: environment-switch-overlay-fade 980ms ease-in-out forwards;
 }
+
+/* Highlight ring shown briefly on the message a content-search jump lands
+   on, so the user's eye lands on the right bubble. */
+@keyframes search-jump-pulse {
+  0%,
+  70% {
+    background-color: color-mix(in oklab, var(--oh-accent) 25%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+[data-search-jump-target="true"] {
+  animation: search-jump-pulse 2.4s ease-out forwards;
+  border-radius: 8px;
+}
+
+/* Words matched by the search that brought the user here. */
+[data-search-jump-target="true"] mark {
+  background-color: color-mix(in oklab, var(--oh-accent) 18%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}

@@ -66,6 +66,11 @@ interface EventMessageProps {
    */
   suppressThought?: boolean;
   suppressReasoning?: boolean;
+  /**
+   * Search words to mark inside this message while a content-search jump
+   * lands on it. Undefined renders the message normally.
+   */
+  searchHighlightTerms?: string[];
 }
 
 const getActivatedSkills = (event: MessageEvent): string[] =>
@@ -185,6 +190,7 @@ function EventMessageComponent({
   showPlanPreview,
   suppressThought = false,
   suppressReasoning = false,
+  searchHighlightTerms,
 }: EventMessageProps) {
   const { data: config } = useConfig();
   const planContent = useConversationStore((state) => state.planContent);
@@ -424,13 +430,15 @@ function EventMessageComponent({
       <UserAssistantEventMessage
         event={messageEvent}
         suppressReasoning={suppressReasoning}
+        searchHighlightTerms={searchHighlightTerms}
         {...commonProps}
         isLastMessage={isLastMessage}
       />
     );
   }
 
-  // Generic fallback for all other events
+  // Generic fallback for all other events. Search never targets these (the
+  // index only covers message events), so no highlight terms are passed.
   return (
     <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
   );

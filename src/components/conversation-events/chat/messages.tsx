@@ -33,6 +33,10 @@ import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
 import type { SecretRequest } from "#/stores/secret-request-store";
 import {
+  useSearchJumpStore,
+  SEARCH_JUMP_HIGHLIGHT_MS,
+} from "#/stores/search-jump-store";
+import {
   SecretRequestCard,
   usePendingSecretRequests,
 } from "#/components/features/conversation/secret-request-card";
@@ -86,6 +90,27 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     const setRowOpen = React.useCallback((key: string, open: boolean) => {
       setOpenRows((prev) => new Map(prev).set(key, open));
     }, []);
+
+    // Content-search jump: when a target event id is pending and the matching
+    // anchor has rendered, scroll it into view once. The anchor may appear
+    // later (history still loading), so the effect runs on every messages
+    // change until it finds it. The target stays set for the pulse duration
+    // so the ring animation and word highlights are actually seen.
+    const searchJump = useSearchJumpStore();
+    React.useEffect(() => {
+      const target = searchJump.targetEventId;
+      if (!target) return;
+      const anchor = document.querySelector<HTMLElement>(
+        `[data-event-id="${target}"]`,
+      );
+      if (!anchor) return;
+      anchor.scrollIntoView({ behavior: "smooth", block: "center" });
+      const timer = window.setTimeout(
+        () => searchJump.clearJump(),
+        SEARCH_JUMP_HIGHLIGHT_MS,
+      );
+      return () => window.clearTimeout(timer);
+    }, [messages, searchJump.targetEventId, searchJump]);
 
     // EventMessage used to receive the complete allEvents array and the plan
     // Set, so every append changed every historical item's shallow props.
@@ -189,26 +214,47 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             setOpen: (open) => setRowOpen(stepKey, open),
           }}
         >
-          <EventMessage
-            event={event}
-            correspondingAction={
-              (isObservationEvent(event) || isUserRejectObservation(event)) &&
-              event.action_id
-                ? (actionById.get(event.action_id) ?? null)
-                : null
+          {/* display:contents keeps the anchor from affecting layout;
+              it becomes a real box only while a content-search jump is
+              landing on this event (see index.css search-jump-pulse),
+              with negative margins so the message doesn't shift. */}
+          <div
+            data-event-id={event.id}
+            data-search-jump-target={
+              searchJump.targetEventId === event.id ? "true" : undefined
             }
-            isLastMessage={messages.length - 1 === index}
-            isInLast10Actions={messages.length - 1 - index < 10}
-            showPlanPreview={
-              event.id ? planPreviewEventIds.has(event.id) : false
+            className={
+              searchJump.targetEventId === event.id
+                ? "-mx-1 -my-1 rounded-lg px-1 py-1"
+                : "contents"
             }
-            suppressThought={suppressThought}
-            suppressReasoning={groupedReasoningIds.has(
-              isObservationEvent(event) || isUserRejectObservation(event)
-                ? event.action_id
-                : (event.id ?? ""),
-            )}
-          />
+          >
+            <EventMessage
+              event={event}
+              searchHighlightTerms={
+                searchJump.targetEventId === event.id
+                  ? searchJump.highlightTerms
+                  : undefined
+              }
+              correspondingAction={
+                (isObservationEvent(event) || isUserRejectObservation(event)) &&
+                event.action_id
+                  ? (actionById.get(event.action_id) ?? null)
+                  : null
+              }
+              isLastMessage={messages.length - 1 === index}
+              isInLast10Actions={messages.length - 1 - index < 10}
+              showPlanPreview={
+                event.id ? planPreviewEventIds.has(event.id) : false
+              }
+              suppressThought={suppressThought}
+              suppressReasoning={groupedReasoningIds.has(
+                isObservationEvent(event) || isUserRejectObservation(event)
+                  ? event.action_id
+                  : (event.id ?? ""),
+              )}
+            />
+          </div>
         </StepDisclosureContext.Provider>
       );
     };
