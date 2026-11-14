@@ -154,6 +154,22 @@ export const CONVERSATION_QUERY_KEYS = {
   subConversations: ["v1", "sub-conversations"] as const,
 } as const;
 
+export const MODEL_ROUTER_QUERY_KEYS = {
+  status: (
+    conversationId: string,
+    backendId: string,
+    orgId: string | null,
+    conversationUrl: string | null,
+  ) =>
+    [
+      "model-router",
+      conversationId,
+      backendId,
+      orgId,
+      conversationUrl,
+    ] as const,
+} as const;
+
 export const LOCAL_PLANNER_MUTATION_KEYS = {
   create: ["create-local-planning-conversation"] as const,
 } as const;

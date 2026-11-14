@@ -15,6 +15,7 @@ import { mobileTopBarIconButtonClassName } from "#/utils/mobile-top-bar-icon-but
 import { ChatInterfaceWrapper } from "./chat-interface-wrapper";
 import { ConversationTabContent } from "../conversation-tabs/conversation-tab-content/conversation-tab-content";
 import { ConversationNameWithStatus } from "../conversation-name-with-status";
+import { ConversationModelRouterControl } from "../conversation-model-router-control";
 import { ConversationTabs } from "../conversation-tabs/conversation-tabs";
 import { ResizeHandle } from "../../../ui/resize-handle";
 import { useResizablePanels } from "#/hooks/use-resizable-panels";
@@ -351,6 +352,7 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
               <div className="min-w-0 flex-1" inert={!!children}>
                 <ConversationNameWithStatus />
               </div>
+              {!children ? <ConversationModelRouterControl /> : null}
             </div>
           ) : null}
           <div className="flex-1 min-h-0 flex flex-col">

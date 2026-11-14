@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Runtime model router UI</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #10131a;
+        color: #eef2ff;
+      }
+      body {
+        margin: 0;
+        padding: 32px;
+      }
+      main {
+        max-width: 1040px;
+        margin: 0 auto;
+      }
+      h1, h2 {
+        margin: 0 0 12px;
+      }
+      p {
+        color: #c9d2e6;
+        line-height: 1.6;
+      }
+      code {
+        background: #1d2433;
+        border: 1px solid #2d374f;
+        border-radius: 6px;
+        padding: 2px 6px;
+      }
+      .card {
+        background: #151a24;
+        border: 1px solid #2d374f;
+        border-radius: 18px;
+        padding: 20px;
+        margin: 18px 0;
+        box-shadow: 0 12px 36px rgb(0 0 0 / 0.24);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+      }
+      .label {
+        color: #8fb4ff;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      svg {
+        width: 100%;
+        height: auto;
+      }
+      .node {
+        fill: #20293b;
+        stroke: #5f78b8;
+        stroke-width: 2;
+      }
+      .new {
+        fill: #332817;
+        stroke: #f59e0b;
+      }
+      .text {
+        fill: #eef2ff;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .muted {
+        fill: #a7b1c8;
+        font-size: 12px;
+      }
+      .arrow {
+        stroke: #8fb4ff;
+        stroke-width: 2.5;
+        marker-end: url(#arrow);
+      }
+      ul {
+        line-height: 1.7;
+        color: #c9d2e6;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Runtime model router UI</h1>
+      <p>
+        This PR is the Canvas companion for the software-agent-sdk model-router work. It adds an optional conversation-header control that appears only when the runtime supports the new model-router status endpoint. The control lets testers add existing LLM profiles as routes and manually switch routes without waiting for a released <code>@openhands/typescript-client</code> package.
+      </p>
+
+      <section class="card">
+        <div class="label">API shape</div>
+        <h2>Canvas consumes the SDK PR routes directly</h2>
+        <div class="grid">
+          <div>
+            <p>Before, the chat UI could only live-switch by LLM profile through <code>/switch_profile</code>. That path replaces the conversation LLM directly and keeps profile switching as the UI concept.</p>
+          </div>
+          <div>
+            <p>After, the new control treats the model router as the state owner: <code>GET /model_router</code> reads routes and selection, <code>POST /model_router/routes</code> adds a profile-backed LLM route, and <code>PATCH /model_router</code> manually selects or resumes automatic routing.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="label">Flow</div>
+        <h2>Plain LLM conversations can become routable</h2>
+        <svg viewBox="0 0 920 330" role="img" aria-label="Runtime model router UI flow">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#8fb4ff" />
+            </marker>
+          </defs>
+          <rect class="node" x="30" y="50" width="200" height="78" rx="14" />
+          <text class="text" x="52" y="84">Conversation header</text>
+          <text class="muted" x="52" y="108">model-router control</text>
+
+          <line class="arrow" x1="230" y1="89" x2="335" y2="89" />
+          <rect class="node" x="345" y="50" width="230" height="78" rx="14" />
+          <text class="text" x="367" y="84">ModelRouterService</text>
+          <text class="muted" x="367" y="108">copied TS client methods</text>
+
+          <line class="arrow" x1="575" y1="89" x2="680" y2="89" />
+          <rect class="new" x="690" y="50" width="200" height="78" rx="14" />
+          <text class="text" x="712" y="84">Agent Server</text>
+          <text class="muted" x="712" y="108">/model_router APIs</text>
+
+          <rect class="node" x="30" y="200" width="200" height="78" rx="14" />
+          <text class="text" x="52" y="234">LLM profiles</text>
+          <text class="muted" x="52" y="258">encrypted local config</text>
+
+          <line class="arrow" x1="230" y1="239" x2="345" y2="126" />
+          <rect class="new" x="345" y="200" width="230" height="78" rx="14" />
+          <text class="text" x="367" y="234">Add route</text>
+          <text class="muted" x="367" y="258">profile config + route key</text>
+
+          <line class="arrow" x1="575" y1="239" x2="690" y2="126" />
+          <rect class="new" x="690" y="200" width="200" height="78" rx="14" />
+          <text class="text" x="712" y="234">RouterLLM state</text>
+          <text class="muted" x="712" y="258">routes + selection</text>
+        </svg>
+      </section>
+
+      <section class="card">
+        <div class="label">Files to review</div>
+        <ul>
+          <li><code>src/api/conversation-service/model-router-service.api.ts</code> copies the unreleased TypeScript client methods against <code>ConversationClient</code>.</li>
+          <li><code>src/components/features/conversation/conversation-model-router-control.tsx</code> adds the conversation-window route add/switch popover.</li>
+          <li><code>src/components/features/conversation/conversation-main/conversation-main.tsx</code> mounts the control in the chat header.</li>
+          <li><code>__tests__/api/model-router-service.test.ts</code> and <code>__tests__/components/conversation-model-router-control.test.tsx</code> cover the API adapter and UI behavior.</li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>
