@@ -6,7 +6,7 @@ import { useWorkspaceFiles } from "#/hooks/query/use-workspace-files";
 import { openWorkspaceFile } from "#/services/canvas-ui";
 import { looksLikeWorkspaceFilePath, toFilesTabPath } from "#/utils/path-utils";
 import { cn } from "#/utils/utils";
-import { code as defaultCode } from "../markdown/code";
+import { code as DefaultCode } from "../markdown/code";
 import { anchor as defaultAnchor } from "../markdown/anchor";
 
 /** True while rendering Markdown descendants of an existing `<a>`. */
@@ -36,7 +36,7 @@ export function WorkspaceFilesForChatProvider({
 
 type CodeProps = React.ClassAttributes<HTMLElement> &
   React.HTMLAttributes<HTMLElement> &
-  ExtraProps;
+  ExtraProps & { isBlock?: boolean };
 
 type AnchorProps = React.ClassAttributes<HTMLAnchorElement> &
   React.AnchorHTMLAttributes<HTMLAnchorElement> &
@@ -110,13 +110,13 @@ function ChatMarkdownPathLink({
  * Nested under an existing Markdown link → stay plain `<code>`.
  */
 export function ChatCode(props: CodeProps) {
-  const { children, className } = props;
+  const { children, className, isBlock } = props;
   const inLink = useContext(InMarkdownLinkContext);
   const match = /language-(\w+)/.exec(className || "");
   const codeString = String(children).replace(/\n$/, "");
   const isMultiline = String(children).includes("\n");
   const existingPath = useExistingWorkspacePath(
-    !match && !isMultiline && !inLink ? codeString : "",
+    !isBlock && !match && !isMultiline && !inLink ? codeString : "",
   );
 
   if (existingPath) {
@@ -127,7 +127,36 @@ export function ChatCode(props: CodeProps) {
     );
   }
 
-  return defaultCode(props);
+  return <DefaultCode {...props} />;
+}
+
+/** Keep fenced code distinct from inline code and the surrounding message. */
+export function AssistantChatPre({
+  node,
+  children,
+  className,
+  id,
+  ...props
+}: React.ComponentPropsWithoutRef<"pre"> & ExtraProps) {
+  const child = node?.children[0];
+  if (
+    node?.children.length !== 1 ||
+    child?.type !== "element" ||
+    child.tagName !== "code" ||
+    !React.isValidElement<CodeProps>(children)
+  ) {
+    return (
+      <pre {...props} className={className} id={id}>
+        {children}
+      </pre>
+    );
+  }
+
+  return (
+    <div className={cn(className, "rounded-lg assistant-code-block")} id={id}>
+      {React.cloneElement(children, { isBlock: true })}
+    </div>
+  );
 }
 
 /**

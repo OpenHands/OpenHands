@@ -20,9 +20,10 @@ import { SyntaxHighlighter } from "./syntax-highlighter";
 function Code({
   children,
   className,
+  isBlock = false,
 }: React.ClassAttributes<HTMLElement> &
   React.HTMLAttributes<HTMLElement> &
-  ExtraProps) {
+  ExtraProps & { isBlock?: boolean }) {
   const colorTheme = useColorTheme();
   const match = /language-(\w+)/.exec(className || ""); // get the language
   const codeString = String(children).replace(/\n$/, "");
@@ -30,7 +31,7 @@ function Code({
   if (!match) {
     const isMultiline = String(children).includes("\n");
 
-    if (!isMultiline) {
+    if (!isBlock && !isMultiline) {
       return (
         <code
           className={cn(

@@ -272,6 +272,10 @@ describe("vite library build", () => {
     expect(declarations(recipe("scroll-fade-surface"))).toEqual({
       "--oh-scroll-fade-from": "var(--oh-surface)",
     });
+    const assistantCodeBlock = declarations(recipe("assistant-code-block"));
+    expect(assistantCodeBlock["background-color"]).toBe("var(--oh-surface)");
+    expect(assistantCodeBlock.border).toBe("1px solid var(--oh-border)");
+    expect(assistantCodeBlock["border-inline-start-width"]).toBe("4px");
     expect(declarations(recipe("scroll-fade-tertiary"))).toEqual({
       "--oh-scroll-fade-from": "var(--oh-color-tertiary)",
     });
