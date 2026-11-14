@@ -70,8 +70,25 @@ export function SchemaField({
   onChange: (value: string | boolean) => void;
 }) {
   const { t } = useTranslation("openhands");
-  const label = resolveSchemaFieldLabel(t, field.key, field.label);
+  let label = resolveSchemaFieldLabel(t, field.key, field.label);
   const constraints = getSettingsFieldConstraints(field.key);
+
+  let costHint: string | null = null;
+  if (
+    field.key === "llm.input_cost_per_token" ||
+    field.key === "llm.output_cost_per_token"
+  ) {
+    label =
+      field.key === "llm.input_cost_per_token"
+        ? "Input cost ($ per 1M tokens)"
+        : "Output cost ($ per 1M tokens)";
+
+    const numValue = Number(value);
+    if (!Number.isNaN(numValue) && value !== "") {
+      const perToken = numValue / 1_000_000;
+      costHint = `= $${Number(perToken.toPrecision(6))} per token`;
+    }
+  }
 
   if (isBooleanField(field)) {
     return (
@@ -163,6 +180,7 @@ export function SchemaField({
         max={constraints?.max}
         step={constraints?.step}
       />
+      {costHint && <p className="text-xs text-cool-grey-500">{costHint}</p>}
       <FieldHelp field={field} />
     </div>
   );

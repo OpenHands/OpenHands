@@ -148,6 +148,17 @@ export function normalizeFieldValue(
     return JSON.stringify(resolvedValue, null, 2);
   }
 
+  if (
+    field.key === "llm.input_cost_per_token" ||
+    field.key === "llm.output_cost_per_token"
+  ) {
+    const numValue = Number(resolvedValue);
+    if (!Number.isNaN(numValue)) {
+      const perMillion = numValue * 1_000_000;
+      return String(Number(perMillion.toPrecision(6)));
+    }
+  }
+
   return String(resolvedValue);
 }
 
@@ -372,15 +383,29 @@ export function coerceFieldValue(
       throw new Error(`Expected an integer value, received: ${stringValue}`);
     }
 
+    let finalValue = parsedValue;
+
+    if (
+      field.key === "llm.input_cost_per_token" ||
+      field.key === "llm.output_cost_per_token"
+    ) {
+      if (parsedValue > 0 && parsedValue < 0.001) {
+        throw new Error(
+          `Looks like a per-token price. Did you mean ${parsedValue * 1_000_000}?`,
+        );
+      }
+      finalValue = Number((parsedValue / 1_000_000).toPrecision(12));
+    }
+
     const constraints = getSettingsFieldConstraints(field.key);
-    if (constraints?.min != null && parsedValue < constraints.min) {
+    if (constraints?.min != null && finalValue < constraints.min) {
       throw new Error(`${field.label} must be at least ${constraints.min}`);
     }
-    if (constraints?.max != null && parsedValue > constraints.max) {
+    if (constraints?.max != null && finalValue > constraints.max) {
       throw new Error(`${field.label} must be at most ${constraints.max}`);
     }
 
-    return parsedValue;
+    return finalValue;
   }
 
   if (field.value_type === "array" || field.value_type === "object") {
