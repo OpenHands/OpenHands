@@ -174,7 +174,7 @@
     "postcss-prefix-selector": "2.1.1",
     "prettier": "3.8.3",
     "tailwindcss": "4.3.3",
-    "typescript": "6.0.3",
+    "typescript": "^6.0.3",
     "vite-plugin-svgr": "5.2.0",
     "vitest": "5.0.0"
   },
