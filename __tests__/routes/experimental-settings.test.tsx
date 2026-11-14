@@ -45,6 +45,9 @@ describe("Features settings", () => {
       screen.getByText("The agent can put an emoji reaction on your messages."),
     ).toBeInTheDocument();
     expect(toggle).not.toBeChecked();
+    expect(screen.getByTestId("experimental-notice")).toHaveTextContent(
+      "SETTINGS$EXPERIMENTAL_NOTICE",
+    );
 
     await user.click(toggle);
 

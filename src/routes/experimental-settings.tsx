@@ -77,6 +77,12 @@ function ExperimentalSettingsScreen() {
           </p>
         </div>
       ))}
+      <p
+        data-testid="experimental-notice"
+        className="max-w-prose border-t border-border pt-4 text-xs text-muted"
+      >
+        {t(I18nKey.SETTINGS$EXPERIMENTAL_NOTICE)}
+      </p>
     </div>
   );
 }
