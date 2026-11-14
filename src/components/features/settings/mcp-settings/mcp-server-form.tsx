@@ -139,11 +139,15 @@ export function MCPServerForm({
       mode === "add" || (mode === "edit" && server?.name !== name);
     if (!shouldCheckUniqueness) return null;
 
-    const existingStdioNames = existingServers
-      .filter((s) => s.type === "stdio")
-      .map((s) => s.name)
-      .filter(Boolean);
-    if (existingStdioNames.includes(name)) {
+    // A server name becomes the mcp_config settings key for every transport,
+    // so it must be unique across all servers, compared case-insensitively.
+    // The server being edited is excluded so its own name stays acceptable.
+    const duplicate = existingServers.some(
+      (existing) =>
+        existing.id !== server?.id &&
+        existing.name?.toLowerCase() === name.toLowerCase(),
+    );
+    if (duplicate) {
       return t(I18nKey.SETTINGS$MCP_ERROR_NAME_DUPLICATE);
     }
     return null;
@@ -258,10 +262,14 @@ export function MCPServerForm({
 
       // The name is optional, but when provided it becomes the mcp_config
       // key (and the reference used in mcp_server_refs), so hold it to the
-      // same safe-identifier rule as stdio names.
+      // same safe-identifier and uniqueness rules as stdio names.
       const name = formData.get("name")?.toString().trim() || "";
-      if (name && !isValidMcpServerName(name)) {
-        return t(I18nKey.SETTINGS$MCP_ERROR_NAME_INVALID);
+      if (name) {
+        if (!isValidMcpServerName(name)) {
+          return t(I18nKey.SETTINGS$MCP_ERROR_NAME_INVALID);
+        }
+        const uniquenessError = validateNameUniqueness(name);
+        if (uniquenessError) return uniquenessError;
       }
 
       // Validate timeout for SHTTP servers only
