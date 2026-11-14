@@ -16,12 +16,33 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
+import {
+  describeSubscriptionStatusError,
+  type SubscriptionStatusErrorKind,
+} from "#/utils/subscription-status-error";
 
 const DEFAULT_DEVICE_POLL_INTERVAL_SECONDS = 5;
 const MIN_DEVICE_POLL_INTERVAL_SECONDS = 1;
 
+const STATUS_ERROR_MESSAGE_KEYS: Record<SubscriptionStatusErrorKind, I18nKey> =
+  {
+    "no-backend": I18nKey.SETTINGS$SUBSCRIPTION_STATUS_NO_BACKEND,
+    "missing-endpoints": I18nKey.SETTINGS$SUBSCRIPTION_STATUS_UNAVAILABLE,
+    unauthorized: I18nKey.SETTINGS$SUBSCRIPTION_STATUS_UNAUTHORIZED,
+    unreachable: I18nKey.SETTINGS$SUBSCRIPTION_STATUS_UNREACHABLE,
+    failed: I18nKey.SETTINGS$SUBSCRIPTION_STATUS_FAILED,
+  };
+const CLOUD_STATUS_ERROR_KEYS: Partial<
+  Record<SubscriptionStatusErrorKind, I18nKey>
+> = {
+  "missing-endpoints": I18nKey.SETTINGS$SUBSCRIPTION_STATUS_CLOUD_UNAVAILABLE,
+  unauthorized: I18nKey.SETTINGS$SUBSCRIPTION_STATUS_CLOUD_UNAUTHORIZED,
+  unreachable: I18nKey.SETTINGS$SUBSCRIPTION_STATUS_CLOUD_UNREACHABLE,
+};
+
 interface OpenAISubscriptionAuthCardProps {
   isDisabled?: boolean;
+  isCloud?: boolean;
 }
 
 function openVerificationUrl(challenge: LLMSubscriptionDeviceChallenge) {
@@ -31,6 +52,7 @@ function openVerificationUrl(challenge: LLMSubscriptionDeviceChallenge) {
 
 export function OpenAISubscriptionAuthCard({
   isDisabled = false,
+  isCloud = false,
 }: OpenAISubscriptionAuthCardProps) {
   const { t } = useTranslation("openhands");
   const status = useOpenAISubscriptionStatus();
@@ -42,6 +64,14 @@ export function OpenAISubscriptionAuthCard({
   const [copied, setCopied] = React.useState(false);
   const [isPendingLogin, setIsPendingLogin] = React.useState(false);
   const pollTimeoutRef = React.useRef<number | null>(null);
+  const mountedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const clearPollTimeout = React.useCallback(() => {
     if (pollTimeoutRef.current !== null) {
@@ -60,11 +90,19 @@ export function OpenAISubscriptionAuthCard({
   const isBusy =
     startLogin.isPending || pollLogin.isPending || logout.isPending;
   const connected = Boolean(status.data?.connected);
+  const statusError = status.isError
+    ? describeSubscriptionStatusError(status.error)
+    : null;
+  const statusErrorKey = statusError
+    ? (isCloud && CLOUD_STATUS_ERROR_KEYS[statusError.kind]) ||
+      STATUS_ERROR_MESSAGE_KEYS[statusError.kind]
+    : null;
 
   const pollDeviceLogin = React.useCallback(
     async (deviceCode: string) => {
       try {
         const nextStatus = await pollLogin.mutateAsync(deviceCode);
+        if (!mountedRef.current) return true;
         if (nextStatus.connected) {
           setChallenge(null);
           setIsPendingLogin(false);
@@ -74,7 +112,9 @@ export function OpenAISubscriptionAuthCard({
         setIsPendingLogin(true);
         return false;
       } catch {
-        displayErrorToast(t(I18nKey.SETTINGS$SUBSCRIPTION_CONNECT_ERROR));
+        if (mountedRef.current) {
+          displayErrorToast(t(I18nKey.SETTINGS$SUBSCRIPTION_CONNECT_ERROR));
+        }
         return true;
       }
     },
@@ -117,11 +157,14 @@ export function OpenAISubscriptionAuthCard({
   const handleStartLogin = async () => {
     try {
       const nextChallenge = await startLogin.mutateAsync();
+      if (!mountedRef.current) return;
       setChallenge(nextChallenge);
       setIsPendingLogin(true);
       openVerificationUrl(nextChallenge);
     } catch {
-      displayErrorToast(t(I18nKey.SETTINGS$SUBSCRIPTION_CONNECT_ERROR));
+      if (mountedRef.current) {
+        displayErrorToast(t(I18nKey.SETTINGS$SUBSCRIPTION_CONNECT_ERROR));
+      }
     }
   };
 
@@ -134,12 +177,13 @@ export function OpenAISubscriptionAuthCard({
   const handleLogout = async () => {
     try {
       await logout.mutateAsync();
+      if (!mountedRef.current) return;
       clearPollTimeout();
       setChallenge(null);
       setIsPendingLogin(false);
       displaySuccessToast(t(I18nKey.SETTINGS$SUBSCRIPTION_DISCONNECTED_TOAST));
     } catch {
-      displayErrorToast(t(I18nKey.ERROR$GENERIC));
+      if (mountedRef.current) displayErrorToast(t(I18nKey.ERROR$GENERIC));
     }
   };
 
@@ -147,6 +191,10 @@ export function OpenAISubscriptionAuthCard({
     clearPollTimeout();
     setChallenge(null);
     setIsPendingLogin(false);
+  };
+
+  const handleRetryStatus = () => {
+    void status.refetch();
   };
 
   return (
@@ -171,10 +219,20 @@ export function OpenAISubscriptionAuthCard({
           <span className="text-tertiary-light">
             {t(I18nKey.SETTINGS$SUBSCRIPTION_STATUS_CHECKING)}
           </span>
-        ) : status.isError ? (
-          <span className="text-danger">
-            {t(I18nKey.SETTINGS$SUBSCRIPTION_STATUS_UNAVAILABLE)}
-          </span>
+        ) : statusError ? (
+          <>
+            <span className="text-danger">
+              {statusErrorKey ? t(statusErrorKey) : null}
+            </span>
+            {statusError.detail ? (
+              <span
+                data-testid="subscription-status-detail"
+                className="break-all text-xs text-tertiary-light"
+              >
+                {statusError.detail}
+              </span>
+            ) : null}
+          </>
         ) : connected ? (
           <>
             <span className="text-success">
@@ -250,12 +308,29 @@ export function OpenAISubscriptionAuthCard({
             testId="subscription-connect"
             type="button"
             variant="primary"
-            isDisabled={isDisabled || isBusy}
+            isDisabled={
+              isDisabled ||
+              isBusy ||
+              status.isLoading ||
+              statusError?.kind === "no-backend"
+            }
             onClick={handleStartLogin}
           >
             {t(I18nKey.SETTINGS$SUBSCRIPTION_CONNECT)}
           </BrandButton>
         )}
+
+        {statusError ? (
+          <BrandButton
+            testId="subscription-status-retry"
+            type="button"
+            variant="secondary"
+            isDisabled={isBusy}
+            onClick={handleRetryStatus}
+          >
+            {t(I18nKey.SETTINGS$SUBSCRIPTION_STATUS_RETRY)}
+          </BrandButton>
+        ) : null}
 
         {challenge ? (
           <>
