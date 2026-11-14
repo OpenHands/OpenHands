@@ -82,6 +82,24 @@ describe("Agent Canvas absolute URLs", () => {
     ).toBe("https://app.example.com/canvas/settings");
   });
 
+  it("does not strip a hostname that merely matches the base path", () => {
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+
+    // `https://canvas`.endsWith(`/canvas`) is true because the scheme's
+    // second slash sits in front of the host. That is not a path suffix.
+    expect(buildAgentCanvasUrl("/settings", "https://canvas")).toBe(
+      "https://canvas/canvas/settings",
+    );
+    expect(getAgentCanvasBaseUrl("https://canvas")).toBe(
+      "https://canvas/canvas",
+    );
+
+    vi.stubEnv("VITE_BASE_PATH", "/localhost");
+    expect(buildAgentCanvasUrl("/settings", "http://localhost")).toBe(
+      "http://localhost/localhost/settings",
+    );
+  });
+
   it("returns a bare path when there is no origin available", () => {
     expect(buildAgentCanvasUrl("/settings", "")).toBe("/settings");
   });
