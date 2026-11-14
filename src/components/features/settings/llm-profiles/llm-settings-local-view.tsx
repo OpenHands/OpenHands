@@ -15,6 +15,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
 import {
@@ -101,6 +102,7 @@ export function LlmSettingsLocalView() {
   const saveProfile = useSaveLlmProfile();
   const activateProfile = useActivateLlmProfile();
   const { data: profilesData } = useLlmProfiles();
+  const { data: providerConnections } = useProviderConnections();
   const { data: settings } = useSettings();
   const { data: agentSchema } = useAgentSettingsSchema(
     settings?.agent_settings_schema,
@@ -354,6 +356,7 @@ export function LlmSettingsLocalView() {
       view: saveControl.view,
       supportsConnections,
       isCloud: backend.kind === "cloud",
+      providerConnections,
     });
 
     const model = typeof llmConfig.model === "string" ? llmConfig.model : "";
@@ -435,6 +438,7 @@ export function LlmSettingsLocalView() {
     viewMode,
     editingProfile,
     backend.kind,
+    providerConnections,
     profilesData?.active_profile,
     saveProfile,
     activateProfile,
