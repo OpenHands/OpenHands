@@ -1,6 +1,12 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { AxiosError } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsService from "#/api/settings-service/settings-service.api";
@@ -62,6 +68,19 @@ function buildSettingsWithMcp(overrides: Partial<Settings> = {}): Settings {
         github: {
           command: "docker",
           args: ["run", "-i", "--rm", "ghcr.io/github/github-mcp-server"],
+        },
+        jira: {
+          url: "https://mcp-jira.example.com/mcp",
+          transport: "http",
+          auth: { strategy: "bearer", value: "**********" },
+        },
+        superhuman_mail: {
+          url: "https://mcp.mail.superhuman.com/mcp",
+          transport: "http",
+          auth: {
+            strategy: "oauth2",
+            authentication: { type: "oauth", client_auth_method: "none" },
+          },
         },
       },
     },
@@ -191,39 +210,60 @@ describe("CustomServerEditor", () => {
     });
   });
 
-  it.each([
-    ["Save", "submit-button"],
-    ["Test connection", "mcp-test-connection"],
-  ])(
-    "shows one error toast when %s cannot test the connection",
-    async (_, button) => {
-      // Arrange: use the app's global mutation handler and the real editor hooks.
-      vi.spyOn(McpService, "testServer").mockRejectedValue(
-        new AxiosError("Agent Server unavailable"),
-      );
-      const errorToast = vi
-        .spyOn(toastHandlers, "displayErrorToast")
-        .mockImplementation(() => {});
-      const onClose = vi.fn();
-      renderWith(
-        <EditEditorOnceSettingsLoaded onClose={onClose} />,
-        createAgentServerQueryClient(),
-      );
-      await screen.findByTestId("mcp-custom-editor");
+  it("shows one error toast when Save cannot test the connection", async () => {
+    // Arrange: use the app's global mutation handler and the real editor hooks.
+    vi.spyOn(McpService, "testServer").mockRejectedValue(
+      new AxiosError("Agent Server unavailable"),
+    );
+    const errorToast = vi
+      .spyOn(toastHandlers, "displayErrorToast")
+      .mockImplementation(() => {});
+    const onClose = vi.fn();
+    renderWith(
+      <EditEditorOnceSettingsLoaded onClose={onClose} />,
+      createAgentServerQueryClient(),
+    );
+    await screen.findByTestId("mcp-custom-editor");
 
-      // Act
-      fireEvent.click(screen.getByTestId(button));
+    // Act
+    fireEvent.click(screen.getByTestId("submit-button"));
 
-      // Assert: the failure is reported once and no save or dismissal follows.
-      await waitFor(() => expect(errorToast).toHaveBeenCalled());
-      await waitFor(() => expect(screen.getByTestId(button)).toBeEnabled());
-      expect(errorToast.mock.calls).toEqual([["Agent Server unavailable"]]);
-      expect(SettingsService.createMcpServer).not.toHaveBeenCalled();
-      expect(SettingsService.patchMcpServer).not.toHaveBeenCalled();
-      expect(onClose).not.toHaveBeenCalled();
-      expect(screen.getByTestId("mcp-custom-editor")).toBeInTheDocument();
-    },
-  );
+    // Assert: the failure is reported once and no save or dismissal follows.
+    await waitFor(() => expect(errorToast).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByTestId("submit-button")).toBeEnabled(),
+    );
+    expect(errorToast.mock.calls).toEqual([["Agent Server unavailable"]]);
+    expect(SettingsService.createMcpServer).not.toHaveBeenCalled();
+    expect(SettingsService.patchMcpServer).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId("mcp-custom-editor")).toBeInTheDocument();
+  });
+
+  it("has a single Save action that tests and saves the server", async () => {
+    // Arrange: a remote server whose connection test passes.
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithMcp(),
+    );
+    const testSpy = vi
+      .spyOn(McpService, "testServer")
+      .mockResolvedValue({ ok: true, tools: ["search_issues"] });
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    const onClose = vi.fn();
+    renderWith(<EditRemoteEditorOnceSettingsLoaded onClose={onClose} />);
+    await screen.findByTestId("mcp-custom-editor");
+
+    // Act
+    fireEvent.click(screen.getByTestId("submit-button"));
+
+    // Assert: one click both tests and persists, then closes the editor.
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(testSpy).toHaveBeenCalledTimes(1);
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("mcp-test-connection")).not.toBeInTheDocument();
+  });
 
   it("keeps the modal open and does not call onClose when the add mutation fails", async () => {
     // Simulate a backend rejection — the editor should surface the
@@ -310,7 +350,7 @@ describe("CustomServerEditor", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("surfaces a credential failure from Test connection in the edit modal", async () => {
+  it("surfaces a credential failure from Save in the edit modal without saving", async () => {
     // Arrange: editing an installed server whose stored credentials the
     // verification call rejects — previously this path always reported
     // "Connected" because only tools/list was exercised.
@@ -323,22 +363,25 @@ describe("CustomServerEditor", () => {
       error_kind: "credentials",
     });
 
-    renderWith(<EditEditorOnceSettingsLoaded onClose={vi.fn()} />);
+    const onClose = vi.fn();
+    renderWith(<EditEditorOnceSettingsLoaded onClose={onClose} />);
     await screen.findByTestId("mcp-custom-editor");
 
-    // Act: run the connection test from the edit form.
-    fireEvent.click(screen.getByTestId("mcp-test-connection"));
+    // Act: save, which tests the connection first.
+    fireEvent.click(screen.getByTestId("submit-button"));
 
     // Assert: the credentials-specific message is shown inline (i18n keys
-    // are returned as-is in tests).
+    // are returned as-is in tests) and nothing is saved.
     await waitFor(() =>
       expect(screen.getByTestId("mcp-test-message")).toHaveTextContent(
         "MCP$TEST_ERROR_CREDENTIALS",
       ),
     );
+    expect(SettingsService.patchMcpServer).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("explains a stdio connection failure from Test connection as a command that could not start", async () => {
+  it("explains a stdio connection failure from Save as a command that could not start", async () => {
     // Arrange: editing an installed stdio server whose command cannot spawn.
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettingsWithMcp(),
@@ -352,7 +395,7 @@ describe("CustomServerEditor", () => {
     await screen.findByTestId("mcp-custom-editor");
 
     // Act
-    fireEvent.click(screen.getByTestId("mcp-test-connection"));
+    fireEvent.click(screen.getByTestId("submit-button"));
 
     // Assert: the stdio-specific message, not the URL hint.
     await waitFor(() =>
@@ -362,7 +405,7 @@ describe("CustomServerEditor", () => {
     );
   });
 
-  it("offers Test connection for remote servers on cloud backends and shows the result", async () => {
+  it("tests remote servers through the app server before saving on cloud backends", async () => {
     // Arrange: a cloud backend is active and the probe (routed through the
     // app server) succeeds.
     setRegisteredBackends([
@@ -378,27 +421,25 @@ describe("CustomServerEditor", () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettingsWithMcp(),
     );
+    vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
     const testSpy = vi
       .spyOn(McpService, "testServer")
       .mockResolvedValue({ ok: true, tools: ["search_issues"] });
-    renderWith(<EditRemoteEditorOnceSettingsLoaded onClose={vi.fn()} />);
+    const onClose = vi.fn();
+    renderWith(<EditRemoteEditorOnceSettingsLoaded onClose={onClose} />);
     await screen.findByTestId("mcp-custom-editor");
 
     // Act
-    fireEvent.click(screen.getByTestId("mcp-test-connection"));
+    fireEvent.click(screen.getByTestId("submit-button"));
 
     // Assert
-    await waitFor(() =>
-      expect(screen.getByTestId("mcp-test-message")).toHaveTextContent(
-        "MCP$TEST_SUCCESS",
-      ),
-    );
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(testSpy).toHaveBeenCalledWith(
       expect.objectContaining({ type: "shttp", url: EDIT_REMOTE_SERVER.url }),
     );
   });
 
-  it("hides Test connection for stdio servers on cloud backends", async () => {
+  it("saves stdio servers on cloud backends without reporting a synthetic health verdict", async () => {
     setRegisteredBackends([
       {
         id: "cloud-1",
@@ -409,14 +450,23 @@ describe("CustomServerEditor", () => {
       },
     ]);
     setActiveSelection({ backendId: "cloud-1" });
+    __resetMcpHealthStoreForTests();
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettingsWithMcp(),
     );
-
-    renderWith(<EditEditorOnceSettingsLoaded onClose={vi.fn()} />);
+    vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
+    const onClose = vi.fn();
+    renderWith(<EditEditorOnceSettingsLoaded onClose={onClose} />);
     await screen.findByTestId("mcp-custom-editor");
 
-    expect(screen.queryByTestId("mcp-test-connection")).not.toBeInTheDocument();
+    // Act
+    fireEvent.click(screen.getByTestId("submit-button"));
+
+    // Assert: saved and closed, but the card is not marked healthy.
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(
+      getMcpHealthSnapshot()[getMcpServerHealthKey(EDIT_STDIO_SERVER)],
+    ).toBeUndefined();
   });
 
   it("reseeds the edited server's health from the fresh pre-save test", async () => {
@@ -450,7 +500,7 @@ describe("CustomServerEditor", () => {
     expect(getMcpHealthSnapshot()[key]).toMatchObject({ status: "healthy" });
   });
 
-  it("runs the OAuth flow from Test connection on cloud backends", async () => {
+  it("runs the OAuth flow from Save on cloud backends", async () => {
     // Arrange: a cloud backend is active and an OAuth server is being edited.
     setRegisteredBackends([
       {
@@ -471,18 +521,16 @@ describe("CustomServerEditor", () => {
     const testSpy = vi
       .spyOn(McpService, "testServer")
       .mockResolvedValue({ ok: true, tools: [] });
-    renderWith(<EditOAuthEditorOnceSettingsLoaded onClose={vi.fn()} />);
+    vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
+    const onClose = vi.fn();
+    renderWith(<EditOAuthEditorOnceSettingsLoaded onClose={onClose} />);
     await screen.findByTestId("mcp-custom-editor");
 
     // Act
-    fireEvent.click(screen.getByTestId("mcp-test-connection"));
+    fireEvent.click(screen.getByTestId("submit-button"));
 
     // Assert
-    await waitFor(() =>
-      expect(screen.getByTestId("mcp-test-message")).toHaveTextContent(
-        "MCP$TEST_SUCCESS",
-      ),
-    );
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(authorizeSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "shttp",
@@ -543,5 +591,106 @@ describe("CustomServerEditor", () => {
         },
       },
     });
+  });
+  it("offers Save anyway after a failed test and saves the tested server", async () => {
+    // Arrange: a server whose connection test fails, e.g. one only reachable
+    // from inside the sandbox.
+    __resetMcpHealthStoreForTests();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithMcp(),
+    );
+    vi.spyOn(McpService, "testServer").mockResolvedValue({
+      ok: false,
+      error: "connect ECONNREFUSED",
+      error_kind: "connection",
+    });
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    const onClose = vi.fn();
+    renderWith(<EditRemoteEditorOnceSettingsLoaded onClose={onClose} />);
+    await screen.findByTestId("mcp-custom-editor");
+    fireEvent.click(screen.getByTestId("submit-button"));
+    await screen.findByTestId("mcp-save-anyway");
+    expect(saveSpy).not.toHaveBeenCalled();
+
+    // Act
+    fireEvent.click(screen.getByTestId("mcp-save-anyway"));
+
+    // Assert: saved without another test, and the card shows the failure.
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+    expect(McpService.testServer).toHaveBeenCalledTimes(1);
+    expect(
+      getMcpHealthSnapshot()[getMcpServerHealthKey(EDIT_REMOTE_SERVER)],
+    ).toMatchObject({ status: "failed" });
+  });
+
+  it("does not offer Save anyway when OAuth sign-in fails", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithMcp(),
+    );
+    vi.spyOn(McpService, "authorizeOAuth").mockResolvedValue({
+      ok: false,
+      error: "popup closed",
+      error_kind: "authorization",
+    });
+    renderWith(<EditOAuthEditorOnceSettingsLoaded onClose={vi.fn()} />);
+    await screen.findByTestId("mcp-custom-editor");
+
+    fireEvent.click(screen.getByTestId("submit-button"));
+
+    await screen.findByTestId("mcp-test-message");
+    expect(screen.queryByTestId("mcp-save-anyway")).not.toBeInTheDocument();
+  });
+
+  it("clears a failed test result once the user edits the form", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithMcp(),
+    );
+    vi.spyOn(McpService, "testServer").mockResolvedValue({
+      ok: false,
+      error: "connect ECONNREFUSED",
+      error_kind: "connection",
+    });
+    renderWith(<EditRemoteEditorOnceSettingsLoaded onClose={vi.fn()} />);
+    await screen.findByTestId("mcp-custom-editor");
+    fireEvent.click(screen.getByTestId("submit-button"));
+    await screen.findByTestId("mcp-save-anyway");
+
+    fireEvent.change(screen.getByTestId("url-input"), {
+      target: { value: "https://mcp-jira.example.com/v2/mcp" },
+    });
+
+    expect(screen.queryByTestId("mcp-test-message")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mcp-save-anyway")).not.toBeInTheDocument();
+  });
+
+  it("asks before discarding unsaved edits when the editor is closed", async () => {
+    // Arrange: the user has typed into the form but not saved.
+    const onClose = vi.fn();
+    renderWith(<EditorOnceSettingsLoaded onClose={onClose} />);
+    await screen.findByTestId("mcp-custom-editor");
+    fireEvent.change(screen.getByTestId("url-input"), {
+      target: { value: "https://example.com/mcp" },
+    });
+
+    // Act: close from the top-right button, then keep editing.
+    fireEvent.click(screen.getByTestId("mcp-custom-editor-close"));
+    expect(await screen.findByTestId("confirmation-modal")).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(screen.getByTestId("confirmation-modal")).getByTestId(
+        "cancel-button",
+      ),
+    );
+    expect(screen.queryByTestId("confirmation-modal")).not.toBeInTheDocument();
+
+    // Act: close again and discard.
+    fireEvent.click(screen.getByTestId("mcp-custom-editor-close"));
+    fireEvent.click(await screen.findByTestId("confirm-button"));
+
+    // Assert
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

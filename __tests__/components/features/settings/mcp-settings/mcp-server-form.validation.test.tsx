@@ -229,7 +229,7 @@ describe("MCPServerForm validation", () => {
   });
 
   it("keeps raw protocol headers in the pre-save connection-test candidate", () => {
-    const onTest = vi.fn();
+    const onSubmit = vi.fn();
     render(
       <MCPServerForm
         mode="edit"
@@ -241,15 +241,14 @@ describe("MCPServerForm validation", () => {
           headers: { "X-Workspace": "canvas" },
         }}
         existingServers={[]}
-        onSubmit={noop}
+        onSubmit={onSubmit}
         onCancel={noop}
-        onTest={onTest}
       />,
     );
 
-    fireEvent.click(screen.getByTestId("mcp-test-connection"));
+    fireEvent.click(screen.getByTestId("submit-button"));
 
-    expect(onTest).toHaveBeenCalledWith(
+    expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ headers: { "X-Workspace": "canvas" } }),
     );
   });
