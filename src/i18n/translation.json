@@ -43055,6 +43055,24 @@
     "ca": "Aquest servidor d'agent no té funcions experimentals per activar o desactivar.",
     "id": "Server agen ini tidak memiliki fitur eksperimental untuk dinyalakan atau dimatikan."
   },
+  "SETTINGS$EXPERIMENTAL_NOTICE": {
+    "en": "Experimental features can change significantly and are not guaranteed to stay backwards compatible.",
+    "ja": "実験的機能は大きく変更される可能性があり、後方互換性は保証されません。",
+    "zh-CN": "实验性功能可能会有重大变更，且不保证向后兼容。",
+    "zh-TW": "實驗性功能可能會有重大變更，且不保證向後相容。",
+    "ko-KR": "실험적 기능은 크게 바뀔 수 있으며 이전 버전과의 호환성이 보장되지 않습니다.",
+    "no": "Eksperimentelle funksjoner kan endres betydelig og er ikke garantert å forbli bakoverkompatible.",
+    "it": "Le funzionalità sperimentali possono cambiare in modo significativo e non è garantito che restino retrocompatibili.",
+    "pt": "Recursos experimentais podem mudar significativamente e não há garantia de que continuem compatíveis com versões anteriores.",
+    "es": "Las funciones experimentales pueden cambiar de forma significativa y no se garantiza que sigan siendo compatibles con versiones anteriores.",
+    "ar": "قد تتغير الميزات التجريبية بشكل كبير، ولا يُضمن أن تبقى متوافقة مع الإصدارات السابقة.",
+    "fr": "Les fonctionnalités expérimentales peuvent changer de manière importante et leur rétrocompatibilité n'est pas garantie.",
+    "tr": "Deneysel özellikler önemli ölçüde değişebilir ve geriye dönük uyumlu kalacakları garanti edilmez.",
+    "de": "Experimentelle Funktionen können sich erheblich ändern und bleiben nicht garantiert abwärtskompatibel.",
+    "uk": "Експериментальні функції можуть суттєво змінюватися, і їхня зворотна сумісність не гарантується.",
+    "ca": "Les funcions experimentals poden canviar de manera important i no es garanteix que continuïn sent compatibles amb versions anteriors.",
+    "id": "Fitur eksperimental dapat berubah secara signifikan dan tidak dijamin tetap kompatibel dengan versi sebelumnya."
+  },
   "SETTINGS$EXPERIMENTAL_UPDATE_FAILED": {
     "en": "Could not change the feature. Please try again.",
     "ja": "機能を変更できませんでした。もう一度お試しください。",
