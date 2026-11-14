@@ -1,0 +1,63 @@
+[
+  {
+    "video": "before.webm",
+    "source_frame_count": 40,
+    "dimensions": [
+      1896,
+      973
+    ],
+    "source_recording_duration_ms": 16306,
+    "first_frame_source_time_ms": 430,
+    "video_duration_seconds": 15.876,
+    "max_timestamp_error_ms": 0.5,
+    "source_actions": [
+      {
+        "action": "click Save",
+        "t": 2058
+      }
+    ],
+    "sha256": "9726267bcb62f203741bd9f4772dd23244383176171c23fbdb1636fff8c81de0"
+  },
+  {
+    "video": "after.webm",
+    "source_frame_count": 65,
+    "dimensions": [
+      1896,
+      973
+    ],
+    "source_recording_duration_ms": 20138,
+    "first_frame_source_time_ms": 29,
+    "video_duration_seconds": 20.109,
+    "max_timestamp_error_ms": 0.5,
+    "source_actions": [
+      {
+        "action": "click Save",
+        "t": 2070
+      },
+      {
+        "action": "edit Base URL",
+        "t": 15678
+      }
+    ],
+    "sha256": "1d170ca6b51bb2582b060e0bb96a1ea9dde027040458b05274fd34e7484e1f68"
+  },
+  {
+    "video": "late-preflight.webm",
+    "source_frame_count": 82,
+    "dimensions": [
+      1896,
+      973
+    ],
+    "source_recording_duration_ms": 36651,
+    "first_frame_source_time_ms": 183,
+    "video_duration_seconds": 36.468,
+    "max_timestamp_error_ms": 0.5,
+    "source_actions": [
+      {
+        "action": "click Save, then immediately change Base URL",
+        "t": 2242
+      }
+    ],
+    "sha256": "5187d42876daa7d02f153268a623c0c395e3da93448c7ecb8d696071ac57a307"
+  }
+]

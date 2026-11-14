@@ -128,6 +128,8 @@ export function LlmSettingsScreen({
   hideSaveButton,
   suppressSuccessToast,
   onSaveControlChange,
+  onDraftChange,
+  showApiKeySetIndicator = true,
   showProviderConnection,
 }: {
   scope?: SettingsScope;
@@ -145,6 +147,10 @@ export function LlmSettingsScreen({
   suppressSuccessToast?: boolean;
   /** Forwarded to {@link SdkSectionPage}. */
   onSaveControlChange?: (control: SdkSectionSaveControl) => void;
+  /** Forwarded to {@link SdkSectionPage}. */
+  onDraftChange?: () => void;
+  /** The profile editor reports configuration checks separately from key presence. */
+  showApiKeySetIndicator?: boolean;
   /**
    * When true (the local profile editor), show a "Provider connection" selector
    * that links this profile to a shared connection. Only rendered when at least
@@ -330,7 +336,9 @@ export function LlmSettingsScreen({
             onChange={(value) => onChange("llm.api_key", value)}
             isDisabled={isDisabled}
             startContent={
-              apiKeyIsSet ? <KeyStatusIcon isSet={apiKeyIsSet} /> : undefined
+              showApiKeySetIndicator && apiKeyIsSet ? (
+                <KeyStatusIcon isSet={apiKeyIsSet} />
+              ) : undefined
             }
           />
 
@@ -547,6 +555,7 @@ export function LlmSettingsScreen({
       showProviderConnection,
       defaultModel,
       embedded,
+      showApiKeySetIndicator,
       isCloud,
       freeModels,
       isWaitingForSubscriptionModels,
@@ -641,6 +650,7 @@ export function LlmSettingsScreen({
       hideSaveButton={hideSaveButton}
       suppressSuccessToast={suppressSuccessToast}
       onSaveControlChange={onSaveControlChange}
+      onDraftChange={onDraftChange}
       testId="llm-settings-screen"
     />
   );
