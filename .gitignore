@@ -46,10 +46,3 @@ build-fresh/
 # Per-arch runtime downloads for macOS universal builds (ELECTRON_ARCH=universal)
 /resources/bin-*/
 /resources/node-*/
-
-# PR #18913 evidence tooling runtime artifacts (contains real cloud API key)
-.pr/cloud-session.json
-.pr/cloud-session.pending.json
-.pr/cloud-requests.jsonl
-.pr/evidence-real.mjs
-.pr/evidence-23.mjs
