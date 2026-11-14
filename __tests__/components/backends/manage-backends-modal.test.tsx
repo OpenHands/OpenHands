@@ -20,6 +20,7 @@ import {
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import { ManageBackendsModal } from "#/components/features/backends/manage-backends-modal";
+import { FeaturePolicyProvider } from "#/feature-policy/feature-policy-context";
 import { BackendVersion } from "#/components/features/backends/backend-version";
 import { BackendRow } from "#/components/features/backends/backend-row";
 import { type Backend } from "#/api/backend-registry/types";
@@ -326,6 +327,53 @@ describe("ManageBackendsModal", () => {
     await user.click(screen.getByTestId("manage-backends-add"));
 
     expect(await screen.findByTestId("add-backend-modal")).toBeInTheDocument();
+  });
+
+  it("hides the add button when the operator turned adding off, keeping Done", async () => {
+    // Arrange
+    renderWithProviders(
+      <FeaturePolicyProvider
+        policy={{ version: 1, disabled: ["backends.add"] }}
+      >
+        <ManageBackendsModal onClose={vi.fn()} />
+      </FeaturePolicyProvider>,
+    );
+
+    // Assert: the window itself stays usable, only the add path is gone.
+    expect(
+      await screen.findByTestId("manage-backends-list"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("manage-backends-add")).not.toBeInTheDocument();
+    expect(screen.getByTestId("manage-backends-done")).toBeInTheDocument();
+  });
+
+  it("hides the add button on the recovery screen too, without leaving an empty footer", async () => {
+    // Arrange: recovery mode is the root no-backend gate, which normally
+    // offers adding as its only action.
+    renderWithProviders(
+      <FeaturePolicyProvider
+        policy={{ version: 1, disabled: ["backends.add"] }}
+      >
+        <ManageBackendsModal onClose={vi.fn()} recoveryMode />
+      </FeaturePolicyProvider>,
+    );
+
+    // Assert
+    expect(
+      await screen.findByTestId("manage-backends-list"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("manage-backends-add")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("manage-backends-done"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still offers adding when no policy is set", async () => {
+    renderWithProviders(<ManageBackendsModal onClose={vi.fn()} recoveryMode />);
+
+    expect(
+      await screen.findByTestId("manage-backends-add"),
+    ).toBeInTheDocument();
   });
 
   it("re-checks a disabled backend on open and clears stale persisted health when it recovers", async () => {

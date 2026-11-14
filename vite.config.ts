@@ -14,6 +14,7 @@ import {
   AGENT_SERVER_UI_SCOPE_SELECTOR,
   transformAgentServerUISelector,
 } from "./src/styles/agent-server-ui-style-scope";
+import { resolveFeaturePolicy } from "./scripts/feature-policy.mjs";
 
 const LIB_ENTRY = fileURLToPath(new URL("./src/index.ts", import.meta.url));
 const LIB_EXTERNALS = [
@@ -107,7 +108,7 @@ const appBuildConfig = {
   },
 };
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const {
     VITE_BACKEND_HOST = "127.0.0.1:8000",
     VITE_USE_TLS = "false",
@@ -138,6 +139,16 @@ export default defineConfig(({ mode }) => {
       // "public" when the value is falsy.
       __EXTENSIONS_SKILLS_DIR__: JSON.stringify(
         isLibraryBuild ? "" : EXTENSIONS_SKILLS_DIR,
+      ),
+      // The Vite dev server has no static-server to inject the operator's
+      // feature policy, so resolve the same env vars here. Builds never bake a
+      // policy in: static-server injects it at runtime. Vitest also runs with
+      // command === "serve", so skip it there: tests must not inherit (or fail
+      // to start because of) a policy the developer happens to have exported.
+      __AGENT_CANVAS_DEV_FEATURE_POLICY__: JSON.stringify(
+        command === "serve" && !process.env.VITEST
+          ? resolveFeaturePolicy(process.env)
+          : null,
       ),
     },
     plugins: [

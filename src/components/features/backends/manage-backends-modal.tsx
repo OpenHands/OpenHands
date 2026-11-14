@@ -14,6 +14,7 @@ import {
 } from "#/components/shared/modals/modal-body";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
+import { useFeaturePolicy } from "#/feature-policy/feature-policy-context";
 import { useBackendsHealth } from "#/hooks/query/use-backends-health";
 import { useAllCloudOrganizations } from "#/hooks/query/use-cloud-organizations";
 import { useCloudCurrentUserId } from "#/hooks/query/use-cloud-current-user-id";
@@ -104,6 +105,16 @@ export function ManageBackendsModal({
     null,
   );
   const [showAddForm, setShowAddForm] = React.useState(false);
+  // The operator's `backends.add` policy hides this window's add button too,
+  // including on the recovery screen: the list panel keeps its heading and
+  // empty-state text, and existing backends can still be edited or picked.
+  const featurePolicy = useFeaturePolicy();
+  const showAddBackend = featurePolicy.isEnabled("backends.add");
+  // On the recovery screen Done is already hidden, so with the add button gone
+  // the footer would be a padded empty strip. Drop it instead.
+  const showFooterActions =
+    (isLockedToCloud ? Boolean(lockedCloudBackend) : showAddBackend) ||
+    !recoveryMode;
   // The tunnel lives in the Electron main process, so the browser and library
   // builds have nothing to offer here.
   const showManagedAgents = getMarsBridge() !== null && !isLockedToCloud;
@@ -231,41 +242,43 @@ export function ManageBackendsModal({
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 p-5">
-                {isLockedToCloud ? (
-                  lockedCloudBackend ? (
-                    <DeviceFlowAuth
-                      host={lockedCloudReconnectHost}
-                      onSuccess={handleLockedCloudReconnect}
-                      testIdRoot="manage-backends-reconnect-cloud"
-                      idleButtonLabel={t(I18nKey.BACKEND$RECONNECT_CLOUD)}
-                      className="w-full sm:w-auto"
-                      buttonClassName="w-full sm:w-auto"
-                      statusDisplay="modal"
-                    />
-                  ) : null
-                ) : (
-                  <BrandButton
-                    type="button"
-                    variant={recoveryMode ? "primary" : "secondary"}
-                    onClick={() => setShowAddForm(true)}
-                    testId="manage-backends-add"
-                    startContent={<Plus width={14} height={14} />}
-                  >
-                    {t(I18nKey.BACKEND$ADD)}
-                  </BrandButton>
-                )}
-                {recoveryMode ? null : (
-                  <BrandButton
-                    type="button"
-                    variant="primary"
-                    onClick={onClose}
-                    testId="manage-backends-done"
-                  >
-                    {t(I18nKey.HOME$DONE)}
-                  </BrandButton>
-                )}
-              </div>
+              {showFooterActions ? (
+                <div className="flex justify-end gap-2 p-5">
+                  {isLockedToCloud ? (
+                    lockedCloudBackend ? (
+                      <DeviceFlowAuth
+                        host={lockedCloudReconnectHost}
+                        onSuccess={handleLockedCloudReconnect}
+                        testIdRoot="manage-backends-reconnect-cloud"
+                        idleButtonLabel={t(I18nKey.BACKEND$RECONNECT_CLOUD)}
+                        className="w-full sm:w-auto"
+                        buttonClassName="w-full sm:w-auto"
+                        statusDisplay="modal"
+                      />
+                    ) : null
+                  ) : showAddBackend ? (
+                    <BrandButton
+                      type="button"
+                      variant={recoveryMode ? "primary" : "secondary"}
+                      onClick={() => setShowAddForm(true)}
+                      testId="manage-backends-add"
+                      startContent={<Plus width={14} height={14} />}
+                    >
+                      {t(I18nKey.BACKEND$ADD)}
+                    </BrandButton>
+                  ) : null}
+                  {recoveryMode ? null : (
+                    <BrandButton
+                      type="button"
+                      variant="primary"
+                      onClick={onClose}
+                      testId="manage-backends-done"
+                    >
+                      {t(I18nKey.HOME$DONE)}
+                    </BrandButton>
+                  )}
+                </div>
+              ) : null}
             </>
           )}
         </div>
