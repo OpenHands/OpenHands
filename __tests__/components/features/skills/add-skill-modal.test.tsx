@@ -53,6 +53,6 @@ describe("AddSkillModal clipboard fallback", () => {
     );
     expect(activeDuringCopy).toBeInstanceOf(HTMLTextAreaElement);
     expect(valueDuringCopy).toBe(ADD_SKILL_EXAMPLE_COMMAND);
-    expect(copyButton).toHaveFocus();
+    await waitFor(() => expect(copyButton).toBeDisabled());
   });
 });
