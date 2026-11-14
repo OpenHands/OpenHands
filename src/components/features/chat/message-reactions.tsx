@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { SmilePlus } from "lucide-react";
 import type { ReactionEmoji } from "@openhands/typescript-client";
 import { conversationReactionsService } from "#/api/conversation-reactions-service/conversation-reactions-service.api";
-import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useIsExperimentalFeatureEnabled } from "#/hooks/query/use-experimental-features";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
@@ -111,12 +110,10 @@ export function useMessageReactions(
   const enabled = useIsExperimentalFeatureEnabled(
     CONVERSATION_REACTIONS_EXPERIMENTAL_FEATURE,
   );
-  const isCloud = useActiveBackend().backend.kind === "cloud";
   const { conversationId } = useOptionalConversationId();
   const canReact =
     !!eventId &&
     enabled &&
-    !isCloud &&
     !!conversationId &&
     author === "agent" &&
     !isFromPlanningAgent;
