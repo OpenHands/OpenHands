@@ -40,6 +40,7 @@ describe("useAwaitContextCompaction", () => {
       {
         cost: null,
         max_budget_per_task: null,
+        usage_breakdown: null,
         usage: {
           prompt_tokens: 0,
           completion_tokens: 0,
@@ -74,6 +75,7 @@ describe("useAwaitContextCompaction", () => {
         {
           cost: null,
           max_budget_per_task: null,
+          usage_breakdown: null,
           usage: {
             prompt_tokens: 0,
             completion_tokens: 0,
@@ -155,6 +157,7 @@ describe("useAwaitContextCompaction", () => {
         {
           cost: null,
           max_budget_per_task: null,
+          usage_breakdown: null,
           usage: {
             prompt_tokens: 0,
             completion_tokens: 0,

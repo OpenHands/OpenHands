@@ -74,6 +74,7 @@ import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { useConversationStore } from "#/stores/conversation-store";
 import { trackError } from "#/utils/error-handler";
+import { buildUsageBreakdown } from "#/utils/conversation-metrics";
 import { getUnreadableEventFileReason } from "#/utils/unreadable-event-file-error";
 import { matchesPendingConversationId } from "#/utils/pending-task-message-link";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
@@ -435,6 +436,7 @@ export function ConversationWebSocketProvider({
           cost: combined.cost,
           max_budget_per_task: combined.maxBudgetPerTask,
           usage: combined.usage,
+          usage_breakdown: buildUsageBreakdown(usageToMetrics),
         },
         sourceConversationId,
       );

@@ -40,6 +40,7 @@ export interface MetricsSnapshot {
   accumulated_cost: number | null;
   max_budget_per_task: number | null;
   accumulated_token_usage: TokenUsage | null;
+  usage_breakdown?: UsageBreakdownEntry[] | null;
 }
 
 // V1 API Types for requests
@@ -297,6 +298,19 @@ export interface GetHooksResponse {
 // Runtime conversation types (from agent server)
 export interface RuntimeConversationStats {
   usage_to_metrics: Record<string, RuntimeMetrics>;
+}
+
+/** Cost and tokens of one model, summed over the usage ids that used it. */
+export interface UsageBreakdownEntry {
+  modelName: string;
+  accumulatedCost: number;
+  usage: Pick<
+    TokenUsage,
+    | "prompt_tokens"
+    | "completion_tokens"
+    | "cache_read_tokens"
+    | "cache_write_tokens"
+  >;
 }
 
 export interface RuntimeMetrics {

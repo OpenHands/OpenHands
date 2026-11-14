@@ -69,6 +69,7 @@ const runtimeInfo = (
 const storeMetrics: MetricsState = {
   cost: 9.99,
   max_budget_per_task: 10,
+  usage_breakdown: null,
   usage: {
     prompt_tokens: 1,
     completion_tokens: 2,
@@ -118,6 +119,7 @@ describe("useLiveConversationMetrics", () => {
       cost: 9.99,
       maxBudget: 5,
       usage: storeMetrics.usage,
+      usage_breakdown: null,
     });
   });
 
@@ -162,6 +164,18 @@ describe("useLiveConversationMetrics", () => {
         cost: 1.23,
         maxBudget: 5,
         usage: null,
+        usage_breakdown: [
+          {
+            modelName: "test-model",
+            accumulatedCost: 1.23,
+            usage: {
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              cache_read_tokens: 0,
+              cache_write_tokens: 0,
+            },
+          },
+        ],
       }),
     );
   });

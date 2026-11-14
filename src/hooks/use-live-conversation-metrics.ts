@@ -9,9 +9,12 @@ import { useConversationMetrics } from "#/hooks/query/use-conversation-metrics";
  * when no stats have arrived or the latest stats belong to a planning child.
  * Pass `enabled: false` to pause REST polling while the consumer is hidden.
  */
-export function useLiveConversationMetrics(
-  enabled: boolean = true,
-): Pick<MetricsState, "cost" | "usage"> & { maxBudget: number | null } {
+export function useLiveConversationMetrics(enabled: boolean = true): Pick<
+  MetricsState,
+  "cost" | "usage" | "usage_breakdown"
+> & {
+  maxBudget: number | null;
+} {
   // Per-field selectors rather than a bare `useMetricsStore()`: subscribing to
   // the whole store re-runs this hook on any store write, including the action
   // identity, and matches how `useContextWindowUsage` reads the same store.
@@ -20,6 +23,7 @@ export function useLiveConversationMetrics(
   );
   const storeCost = useMetricsStore((state) => state.cost);
   const storeUsage = useMetricsStore((state) => state.usage);
+  const storeBreakdown = useMetricsStore((state) => state.usage_breakdown);
   const { data: conversation } = useActiveConversation();
 
   const { data: conversationMetrics, maxBudget } = useConversationMetrics(
@@ -38,6 +42,7 @@ export function useLiveConversationMetrics(
         cost: storeCost,
         maxBudget,
         usage: storeUsage,
+        usage_breakdown: storeBreakdown,
       };
     }
 
@@ -64,6 +69,7 @@ export function useLiveConversationMetrics(
                 conversationMetrics.accumulated_token_usage.per_turn_token ?? 0,
             }
           : null,
+        usage_breakdown: conversationMetrics.usage_breakdown ?? null,
       };
     }
 
@@ -71,12 +77,14 @@ export function useLiveConversationMetrics(
       cost: null,
       maxBudget,
       usage: null,
+      usage_breakdown: null,
     };
   }, [
     conversation?.id,
     conversationMetrics,
     maxBudget,
     sourceConversationId,
+    storeBreakdown,
     storeCost,
     storeUsage,
   ]);
