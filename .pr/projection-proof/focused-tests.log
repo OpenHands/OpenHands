@@ -1,0 +1,79 @@
+
+> @openhands/agent-canvas@1.40.0 test
+> npm run make-i18n && vitest run __tests__/stores/use-event-store.test.ts __tests__/utils/handle-event-for-ui.test.ts __tests__/hooks/use-load-older-events.test.tsx __tests__/hooks/query/use-conversation-history.test.tsx __tests__/hooks/query/use-conversation-history-cloud.test.tsx __tests__/routes/shared-conversation-cloud-viewer.test.tsx __tests__/routes/shared-conversation-viewer-behavior.test.tsx src/utils/transcript-export/index.test.ts
+
+
+> @openhands/agent-canvas@1.40.0 make-i18n
+> node scripts/make-i18n-translations.cjs
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./src/styles/agent-server-ui-style-scope" without a file extension (vite.config.ts:16:8). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.1.0 <fix-checkout>
+
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/clients.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/acp-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/http-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/agent-profiles-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/conversation-event-stream.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/server-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/bash-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/runtime-transport.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/agent-server-compatibility.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/index.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/canvas-extensions-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/conversation/remote-conversation.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/conversation-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/events/websocket-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/file-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/events/global-websocket.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/hooks-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/conversation/remote-state.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/git-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/events/remote-events-list.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/llm-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/workspace/remote-workspace.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/mcp-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/profiles-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/conversation/local-conversation.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/meta-profiles-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/workspace/local-workspace.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/settings-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/prompts/index.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/skills-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/prompts/system-prompt.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/sub-agents-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/conversation/secret-registry.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/plugins-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/conversation/stuck-detector.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/tool-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/events/types.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/vscode-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/security/confirmation-policy.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/shared-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/conversation/conversation.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/workspaces-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/conversation/conversation-manager.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/openhands-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/cloud-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/client/device-flow-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/workspace/workspace.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/security/security-analyzer.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/hooks/index.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/hooks/types.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/hooks/config.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/agent/agent.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/llm/index.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/llm/openrouter-llm.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/llm/llm.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/events/bash-websocket-client.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/types/base.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/models/conversation.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/models/acp.js" points to missing source files
+Sourcemap for "<fix-checkout>/node_modules/@openhands/typescript-client/dist/profiles/derive-switch-plan.js" points to missing source files
+
+ Test Files  8 passed (8)
+      Tests  114 passed (114)
+   Start at  10:17:51
+   Duration  6.30s (import 31%, transform 26%, tests 21%, environment 15%, setup 7%)

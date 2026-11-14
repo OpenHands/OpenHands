@@ -4,6 +4,7 @@ import {
   appendStreamingDeltas,
   clearStreamingSlots,
   handleEventForUI,
+  handleEventsForUI,
   openStreamingSlot,
   type StreamingSlotMeta,
   type UIEvent,
@@ -12,6 +13,7 @@ import type {
   DeltaFrame,
   ItemStartedFrame,
 } from "#/types/agent-server/session-frames";
+import { isStreamingDeltaEvent } from "#/types/agent-server/type-guards";
 
 export type OHEvent = UIEvent;
 
@@ -148,14 +150,34 @@ const appendEvent = (state: EventState, event: OHEvent): EventState => {
   };
 };
 
-const sortEventState = (
+const rebuildUIEvents = (
   state: EventState,
+  events: OHEvent[],
+  eventIds: Set<string | number>,
   compare = compareEventsByTimestamp,
-): EventState => ({
-  ...state,
-  events: [...state.events].sort(compare),
-  uiEvents: [...state.uiEvents].sort(compare),
-});
+): OHEvent[] => {
+  // Slots are UI-only. Keep their existing position relative to the next
+  // durable neighbor before stable sorting, including equal/missing timestamps.
+  const slotsBefore = new Map<OHEvent, OHEvent[]>();
+  let pending: OHEvent[] = [];
+  for (const event of state.uiEvents) {
+    if (isStreamingDeltaEvent(event)) {
+      if (!eventIds.has(event.id)) pending.push(event);
+    } else if (pending.length) {
+      slotsBefore.set(event, pending);
+      pending = [];
+    }
+  }
+  const ordered: OHEvent[] = [];
+  events.forEach((event, index) => {
+    // Trailing slots predate the newly appended rows, even when timestamps tie.
+    if (index === state.events.length) ordered.push(...pending);
+    ordered.push(...(slotsBefore.get(event) ?? []), event);
+  });
+  if (events.length === state.events.length) ordered.push(...pending);
+  ordered.sort(compare);
+  return handleEventsForUI(ordered).sort(compare);
+};
 
 const applyAddEvent = (state: EventState, event: OHEvent): EventState => {
   const next = appendEvent(state, event);
@@ -170,7 +192,11 @@ const applyAddEvent = (state: EventState, event: OHEvent): EventState => {
     return next;
   }
 
-  return sortEventState(next);
+  return {
+    ...next,
+    events: [...next.events].sort(compareEventsByTimestamp),
+    uiEvents: rebuildUIEvents(state, next.events, next.eventIds),
+  };
 };
 
 export const useEventStore = create<EventState>()((set) => ({
@@ -202,7 +228,6 @@ export const useEventStore = create<EventState>()((set) => ({
 
       const eventIds = new Set(state.eventIds);
       const events = [...state.events];
-      let uiEvents = [...state.uiEvents];
       const incomingOrder = new Map<OHEvent, number>();
 
       for (const event of incoming) {
@@ -215,7 +240,6 @@ export const useEventStore = create<EventState>()((set) => ({
             eventIds.add(eventId);
           }
           events.push(event);
-          uiEvents = handleEventForUI(event, uiEvents);
         }
       }
 
@@ -234,10 +258,22 @@ export const useEventStore = create<EventState>()((set) => ({
             (incomingOrder.get(a) ?? incomingOrder.size) -
               (incomingOrder.get(b) ?? incomingOrder.size)
         : compareEventsByTimestamp;
-      return sortEventState(
-        { ...state, events, eventIds, uiEvents, historyPagination },
-        compare,
+      const sortedEvents = [...events].sort(compare);
+      const reordered = sortedEvents.some(
+        (event, index) => event !== events[index],
       );
+      const uiEvents = reordered
+        ? rebuildUIEvents(state, events, eventIds, compare)
+        : handleEventsForUI([...incomingOrder.keys()], state.uiEvents).sort(
+            compare,
+          );
+      return {
+        ...state,
+        events: sortedEvents,
+        eventIds,
+        uiEvents,
+        historyPagination,
+      };
     }),
   clearEvents: () =>
     set(() => ({

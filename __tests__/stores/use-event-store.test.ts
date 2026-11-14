@@ -8,6 +8,7 @@ import {
   SecurityRisk,
 } from "#/types/agent-server/core";
 import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
+import { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
 
 const mockUserMessageEvent: MessageEvent = {
   id: "test-event-1",
@@ -306,6 +307,170 @@ describe("useEventStore", () => {
       mockUserMessageEvent,
       mockObservationEvent,
     ]);
+  });
+
+  it.each([
+    ["earlier", "2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z"],
+    ["equal", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z"],
+    ["missing", undefined, undefined],
+  ])(
+    "reconciles an older action across a %s timestamp page boundary",
+    (_, actionTimestamp, observationTimestamp) => {
+      // Also exercise the store's supported missing-timestamp fallback.
+      const action = {
+        ...mockActionEvent,
+        timestamp: actionTimestamp,
+      } as ActionEvent;
+      const observation = {
+        ...mockObservationEvent,
+        timestamp: observationTimestamp,
+      } as ObservationEvent;
+      const store = useEventStore.getState();
+      store.addEvents([observation], { nextPageId: "older", hasMore: true });
+
+      store.addEvents([action, { ...observation }], {
+        nextPageId: null,
+        hasMore: false,
+        prepend: true,
+      });
+
+      expect(useEventStore.getState().events).toEqual([action, observation]);
+      expect(useEventStore.getState().uiEvents).toEqual([observation]);
+      expect(useEventStore.getState().historyPagination).toEqual({
+        nextPageId: null,
+        hasMore: false,
+        hasLoadedOlder: true,
+      });
+      const settled = useEventStore.getState();
+      store.addEvents([action, observation]);
+      expect(useEventStore.getState()).toBe(settled);
+    },
+  );
+
+  it.each(["completed", "failed"] as const)(
+    "keeps an ACP %s result when its older start is loaded",
+    (status) => {
+      const started: ACPToolCallEvent = {
+        kind: "ACPToolCallEvent",
+        id: "acp-started",
+        timestamp: "2024-01-01T00:00:00Z",
+        source: "agent",
+        tool_call_id: "tool-page-boundary",
+        title: "Read a file",
+        tool_kind: "read",
+        status: "in_progress",
+        raw_input: null,
+        raw_output: null,
+        content: null,
+        is_error: false,
+      };
+      const terminal = {
+        ...started,
+        id: "acp-terminal",
+        timestamp: "2024-01-02T00:00:00Z",
+        status,
+        isFromPlanningAgent: true,
+      };
+      const store = useEventStore.getState();
+      store.addEvent(terminal);
+
+      store.addEvents([{ ...started, isFromPlanningAgent: true }]);
+
+      expect(useEventStore.getState().uiEvents).toEqual([terminal]);
+    },
+  );
+
+  it("reconciles an out-of-order single durable action", () => {
+    const action = { ...mockActionEvent, timestamp: "2024-01-01T00:00:00Z" };
+    const observation = {
+      ...mockObservationEvent,
+      timestamp: "2024-01-02T00:00:00Z",
+    };
+    const store = useEventStore.getState();
+    const middle = makeUserMessageEvent("middle", "2024-01-01T12:00:00Z");
+    store.addEvent(middle);
+    store.addEvent(observation);
+
+    store.addEvent(action);
+
+    expect(useEventStore.getState().uiEvents).toEqual([middle, observation]);
+  });
+
+  it("preserves main and planning slots between tied rows while replaying older history", () => {
+    const timestamp = "2024-01-02T00:00:00Z";
+    const observation = { ...mockObservationEvent, timestamp, seq: 20 };
+    const following = {
+      ...makeUserMessageEvent("following", timestamp),
+      seq: 21,
+    };
+    const planner = {
+      ...makeUserMessageEvent("planner", timestamp),
+      seq: 20,
+      isFromPlanningAgent: true,
+    };
+    const store = useEventStore.getState();
+    store.addEvents([observation, following, planner]);
+    store.openStreamingSlot({
+      type: "item_started",
+      item_id: "main-slot",
+      anchor_seq: 20,
+    });
+    store.appendStreamingDeltas([
+      {
+        type: "delta",
+        item_id: "main-slot",
+        content: "main partial",
+        order: 0,
+      },
+    ]);
+    store.openStreamingSlot(
+      { type: "item_started", item_id: "planner-slot", anchor_seq: 20 },
+      { isFromPlanningAgent: true },
+    );
+    store.appendStreamingDeltas(
+      [
+        {
+          type: "delta",
+          item_id: "planner-slot",
+          content: "plan partial",
+          kind: "reasoning",
+          order: 0,
+        },
+      ],
+      { isFromPlanningAgent: true },
+    );
+    const before = useEventStore.getState().uiEvents;
+
+    store.addEvents([{ ...mockActionEvent, timestamp }], {
+      nextPageId: null,
+      hasMore: false,
+      prepend: true,
+    });
+
+    expect(useEventStore.getState().uiEvents).toEqual(before);
+    expect(useEventStore.getState().uiEvents[1]).toBe(before[1]);
+    expect(useEventStore.getState().uiEvents[4]).toBe(before[4]);
+    store.addEvent({
+      ...mockAgentMessageEvent,
+      id: "main-slot",
+      timestamp: "2024-01-01T00:00:00Z",
+    });
+    expect(
+      useEventStore
+        .getState()
+        .uiEvents.filter((event) => event.id === "main-slot"),
+    ).toEqual([
+      {
+        ...mockAgentMessageEvent,
+        id: "main-slot",
+        timestamp: "2024-01-01T00:00:00Z",
+      },
+    ]);
+    expect(
+      useEventStore
+        .getState()
+        .uiEvents.find((event) => event.id === "planner-slot"),
+    ).toBe(before[4]);
   });
 
   it("should clear all events when clearEvents is called", () => {

@@ -1,0 +1,13 @@
+{
+  "kind": "independent semantic probe; no fixture/store bypass in live UI",
+  "baseline": "754abee4f0869dfc85dbd0acb6457f2e0ad17d4c",
+  "currentHelperSHA256": "dcd054756b3b1b3c69adbc33a0466b5c91d9c59330797ba18ef3f8a9d3bdbc34",
+  "seed": 19620,
+  "cases": {
+    "singleHelperParity": 1000,
+    "indexedBatchParity": 1000,
+    "initialUIChunkParity": 1000
+  },
+  "failures": [],
+  "limitations": "Deterministic synthetic sequences exercise existing projection branches. No browser geometry or backend behavior claims."
+}
