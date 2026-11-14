@@ -39,6 +39,7 @@ import {
   findCatalogEntryForServer,
   getMcpMarketplaceCatalog,
 } from "#/utils/mcp-marketplace-utils";
+import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 
 interface ConversationConfigurationModalProps {
   conversationId: string;
@@ -50,6 +51,7 @@ interface ConversationConfigurationModalProps {
 type AppliedChange = {
   type: "success" | "error";
   name?: string;
+  message?: string;
 };
 
 function SavedMcpSection({
@@ -223,7 +225,11 @@ export function ConversationConfigurationModal({
     }
   };
 
-  const applyMcpServers = async (mcpServers: MCPConfig, labels: string[]) => {
+  const applyMcpServers = async (
+    mcpServers: MCPConfig,
+    labels: string[],
+    options: { throwOnError?: boolean } = {},
+  ) => {
     setPending(true);
     setResult(null);
     try {
@@ -237,8 +243,10 @@ export function ConversationConfigurationModal({
       });
       setResult({ type: "success", name: labels.join(", ") });
       return true;
-    } catch {
-      setResult({ type: "error" });
+    } catch (err: unknown) {
+      const message = retrieveAxiosErrorMessage(err);
+      setResult({ type: "error", ...(message ? { message } : {}) });
+      if (options.throwOnError) throw err;
       return false;
     } finally {
       setPending(false);
@@ -267,11 +275,11 @@ export function ConversationConfigurationModal({
     for (let suffix = 1; attached.has(name); suffix += 1) {
       name = `${preferred}_${suffix}`;
     }
-    const installed = await applyMcpServers(
+    await applyMcpServers(
       { [name]: toCanonicalMcpServer(server) as MCPServer },
       [name],
+      { throwOnError: true },
     );
-    if (!installed) throw new Error("MCP install failed");
   };
 
   const installCustomMcp = async (server: MCPServerConfig) => {
@@ -487,7 +495,8 @@ export function ConversationConfigurationModal({
         )}
         {result?.type === "error" && (
           <p role="alert" className="w-full text-sm text-feedback-error">
-            {t(I18nKey.CHAT$CONVERSATION_CONFIGURATION_FAILED)}
+            {result.message ||
+              t(I18nKey.CHAT$CONVERSATION_CONFIGURATION_FAILED)}
           </p>
         )}
       </ModalBody>
