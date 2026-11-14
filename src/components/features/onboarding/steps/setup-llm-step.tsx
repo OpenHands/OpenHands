@@ -58,6 +58,12 @@ interface ProfileSeed {
   baseConfig: Record<string, unknown>;
   /** The form values that show that profile. */
   initialValues: SettingsFormValues;
+  /**
+   * Whether that profile already has a stored API key. The key itself is never
+   * put into the form (see `useOnboardingProfileSeed`), so this flag is what
+   * keeps the "<hidden>" placeholder and key-set indicator visible.
+   */
+  apiKeyIsSet: boolean;
 }
 
 /**
@@ -73,6 +79,7 @@ interface ProfileSeed {
 async function loadOnboardingProfile(): Promise<{
   profileName: string | null;
   config: Record<string, unknown>;
+  apiKeyIsSet: boolean;
 }> {
   const agentProfiles = await AgentProfilesService.listProfiles().catch(
     () => null,
@@ -86,11 +93,16 @@ async function loadOnboardingProfile(): Promise<{
     [llmProfiles.active_profile, defaultAgentRef].find(
       (name): name is string => !!name && existing.has(name),
     ) ?? null;
-  if (!profileName) return { profileName: null, config: {} };
+  if (!profileName)
+    return { profileName: null, config: {}, apiKeyIsSet: false };
   const detail = await ProfilesService.getProfile(profileName, "encrypted");
+  const config = (detail.config ?? {}) as Record<string, unknown>;
   return {
     profileName,
-    config: (detail.config ?? {}) as Record<string, unknown>,
+    config,
+    apiKeyIsSet:
+      detail.api_key_set === true ||
+      (typeof config.api_key === "string" && config.api_key.length > 0),
   };
 }
 
@@ -147,7 +159,14 @@ function useOnboardingProfileSeed(isLocalBackend: boolean): {
       seed: {
         profileName: profile.data.profileName,
         baseConfig: profile.data.config,
-        initialValues: profileConfigToFormValues(schema, profile.data.config),
+        // The stored key is encrypted, and a password input would render dots
+        // as long as that token. Keep the field blank; `baseConfig` still
+        // carries the key, so a save that leaves the field untouched keeps it.
+        initialValues: {
+          ...profileConfigToFormValues(schema, profile.data.config),
+          "llm.api_key": "",
+        },
+        apiKeyIsSet: profile.data.apiKeyIsSet,
       },
     });
   }, [enabled, seed, backend.id, profile.data, isSchemaSettled, schema]);
@@ -389,6 +408,7 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
             markInitialOverridesDirty={!isLocalBackend}
             onSaveSuccess={isLocalBackend ? undefined : onNext}
             onSaveControlChange={setSaveControl}
+            apiKeyIsSet={profileSeed?.apiKeyIsSet ?? false}
           />
         ) : (
           <LlmSettingsInputsSkeleton />

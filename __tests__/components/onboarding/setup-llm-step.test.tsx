@@ -25,6 +25,7 @@ interface ScreenProps {
   markInitialOverridesDirty?: boolean;
   onSaveSuccess?: () => void;
   onSaveControlChange: (control: SdkSectionSaveControl) => void;
+  apiKeyIsSet?: boolean;
 }
 
 const formState = vi.hoisted(() => ({
@@ -259,12 +260,14 @@ describe("SetupLlmStep", () => {
     expect(formState.screenProps?.markInitialOverridesDirty).toBe(false);
     expect(formState.screenProps?.initialValueOverrides).toMatchObject({
       "llm.model": "openai/previous-model",
-      "llm.api_key": "encrypted:test-key",
+      // The stored key is never seeded into the form; the flag keeps the cue.
+      "llm.api_key": "",
       "llm.base_url": "http://localhost:19118/v1",
       "llm.temperature": "0.2",
       "llm.timeout": "30",
       "llm.auth_type": "api_key",
     });
+    expect(formState.screenProps?.apiKeyIsSet).toBe(true);
     expect(saveProfile).toHaveBeenCalledWith("mock-onboarding-model", {
       llm: {
         ...activeConfig,
@@ -415,6 +418,84 @@ describe("SetupLlmStep", () => {
     });
   });
 
+  it("never puts the stored key into the form and flags it as set", async () => {
+    givenActiveProfile("previous", {
+      model: "openai/previous-model",
+      api_key: "encrypted:test-key",
+    });
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={vi.fn()} />);
+
+    await screen.findByTestId("llm-settings-screen");
+
+    // The encrypted token would render as a long run of dots in the password
+    // field, so the field starts blank and the flag keeps the key-set cue.
+    expect(formState.screenProps?.initialValueOverrides).toMatchObject({
+      "llm.api_key": "",
+    });
+    expect(formState.screenProps?.apiKeyIsSet).toBe(true);
+  });
+
+  it("flags a stored key from api_key_set when the config doesn't carry it", async () => {
+    listProfiles.mockResolvedValue({
+      profiles: [{ name: "previous" }],
+      active_profile: "previous",
+    });
+    getProfile.mockResolvedValue({
+      name: "previous",
+      config: { model: "openai/previous-model" },
+      api_key_set: true,
+    });
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={vi.fn()} />);
+
+    await screen.findByTestId("llm-settings-screen");
+
+    expect(formState.screenProps?.apiKeyIsSet).toBe(true);
+  });
+
+  it("does not flag a stored key when the profile has none", async () => {
+    givenActiveProfile("previous", { model: "openai/previous-model" });
+    getProfile.mockResolvedValue({
+      name: "previous",
+      config: { model: "openai/previous-model" },
+      api_key_set: false,
+    });
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={vi.fn()} />);
+
+    await screen.findByTestId("llm-settings-screen");
+
+    expect(formState.screenProps?.apiKeyIsSet).toBe(false);
+  });
+
+  it("does not flag a stored key for a fresh profile", async () => {
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={vi.fn()} />);
+
+    await screen.findByTestId("llm-settings-screen");
+
+    expect(formState.screenProps?.apiKeyIsSet).toBe(false);
+  });
+
+  it("replaces the stored key when the user types a new one", async () => {
+    givenActiveProfile("previous", {
+      model: "openai/previous-model",
+      api_key: "encrypted:test-key",
+    });
+    formState.dirtyLlm = { api_key: "sk-new" };
+    const onNext = vi.fn();
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={onNext} />);
+
+    await clickNext();
+
+    await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1));
+    expect(saveProfile).toHaveBeenCalledWith("previous-model", {
+      llm: {
+        ...API_KEY_PROFILE_DEFAULTS,
+        model: "openai/previous-model",
+        api_key: "sk-new",
+      },
+      include_secrets: true,
+    });
+  });
+
   it("saves the prefilled default model for a fresh profile", async () => {
     formState.view = "basic";
     formState.dirtyLlm = { api_key: "sk-test" };
@@ -489,8 +570,9 @@ describe("SetupLlmStep", () => {
     expect(formState.screenProps?.initialValueOverrides).toMatchObject({
       "llm.model": "openai/legacy-model",
       "llm.base_url": "http://legacy.example/v1",
-      "llm.api_key": "encrypted:legacy-key",
+      "llm.api_key": "",
     });
+    expect(formState.screenProps?.apiKeyIsSet).toBe(true);
   });
 
   it("still edits the active profile when the agent profiles can't be listed", async () => {
