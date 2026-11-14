@@ -13,6 +13,7 @@ import * as useLlmProfilesHook from "#/hooks/query/use-llm-profiles";
 import * as useActivateLlmProfileHook from "#/hooks/mutation/use-activate-llm-profile";
 import * as useSaveLlmProfileHook from "#/hooks/mutation/use-save-llm-profile";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import ProviderConnectionsService from "#/api/provider-connections-service/provider-connections-service.api";
 import * as activeBackendContext from "#/contexts/active-backend-context";
 import { useFreeModelsStore } from "#/stores/free-models-store";
 import type { Backend } from "#/api/backend-registry/types";
@@ -915,6 +916,52 @@ describe("LlmSettingsLocalView", () => {
 
       await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
       expect(ProfilesService.validateProfile).not.toHaveBeenCalled();
+    });
+
+    it("saves an OpenRouter model ID with the openrouter/ prefix when linked to an OpenRouter connection", async () => {
+      const user = userEvent.setup();
+      vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([
+        {
+          id: "conn-or",
+          display_name: "OpenRouter",
+          provider: "openrouter",
+          base_url: null,
+          created_at: 0,
+          updated_at: 0,
+          api_key_set: true,
+        },
+      ]);
+      vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+        name: "gpt-4-profile",
+        api_key_set: true,
+        config: {
+          model: "openrouter/anthropic/claude-sonnet-4",
+          provider_connection_id: "conn-or",
+        },
+      });
+      mockSaveMutateAsync.mockResolvedValue({ success: true });
+      renderWithProviders(<LlmSettingsLocalView />);
+      await openEditView(user);
+      await waitFor(() =>
+        expect(ProviderConnectionsService.list).toHaveBeenCalled(),
+      );
+      const modelInput = await screen.findByTestId("mock-basic-model-input");
+      await user.clear(modelInput);
+      await user.type(modelInput, "thinkingmachines/inkling-small:free");
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() =>
+        expect(mockSaveMutateAsync).toHaveBeenCalledWith(
+          expect.objectContaining({
+            request: expect.objectContaining({
+              llm: expect.objectContaining({
+                model: "openrouter/thinkingmachines/inkling-small:free",
+                provider_connection_id: "conn-or",
+              }),
+            }),
+          }),
+        ),
+      );
     });
   });
 

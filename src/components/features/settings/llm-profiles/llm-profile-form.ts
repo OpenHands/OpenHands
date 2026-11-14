@@ -1,3 +1,4 @@
+import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 import { LLM_PROVIDER_CONNECTION_KEY } from "#/constants/llm-provider-connection";
 import {
   LLM_AUTH_TYPE_API_KEY,
@@ -82,6 +83,32 @@ export interface BuildProfileLlmConfigOptions {
    * subscription picker shows in that case.
    */
   subscriptionModels?: readonly string[];
+  /** The loaded provider connections, to tell which provider a link targets. */
+  providerConnections?: readonly Pick<ProviderConnection, "id" | "provider">[];
+}
+
+const OPENROUTER_PROVIDER = "openrouter";
+
+export function isOpenRouterBaseUrl(baseUrl: unknown): boolean {
+  if (typeof baseUrl !== "string" || !baseUrl.trim()) return false;
+  try {
+    const { hostname } = new URL(baseUrl.trim());
+    return hostname === "openrouter.ai" || hostname.endsWith(".openrouter.ai");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * OpenRouter lists its models as `vendor/model` (e.g.
+ * `thinkingmachines/inkling-small:free`), which LiteLLM reads as an unknown
+ * `vendor` provider. LiteLLM routes them to OpenRouter only with the
+ * `openrouter/` prefix.
+ */
+export function qualifyOpenRouterModel(model: string): string {
+  return model.startsWith(`${OPENROUTER_PROVIDER}/`)
+    ? model
+    : `${OPENROUTER_PROVIDER}/${model}`;
 }
 
 /**
@@ -97,6 +124,7 @@ export function buildProfileLlmConfig({
   supportsConnections,
   isCloud,
   subscriptionModels,
+  providerConnections,
 }: BuildProfileLlmConfigOptions): {
   llmConfig: Record<string, unknown>;
   connectionId: string;
@@ -126,6 +154,19 @@ export function buildProfileLlmConfig({
   const connectionId = supportsConnections
     ? String(values[LLM_PROVIDER_CONNECTION_KEY] ?? "").trim()
     : "";
+
+  const targetsOpenRouter = connectionId
+    ? providerConnections?.find((c) => c.id === connectionId)?.provider ===
+      OPENROUTER_PROVIDER
+    : isOpenRouterBaseUrl(llmConfig.base_url);
+  if (
+    authType !== LLM_AUTH_TYPE_SUBSCRIPTION &&
+    targetsOpenRouter &&
+    typeof llmConfig.model === "string" &&
+    llmConfig.model
+  ) {
+    llmConfig.model = qualifyOpenRouterModel(llmConfig.model);
+  }
 
   if (authType === LLM_AUTH_TYPE_SUBSCRIPTION) {
     const model = typeof llmConfig.model === "string" ? llmConfig.model : "";
