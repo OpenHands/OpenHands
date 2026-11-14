@@ -28,6 +28,9 @@
 }
 
 @theme inline {
+  /* Colour emoji first, for reaction chips: theme fonts can carry plain emoji glyphs. */
+  --font-emoji:
+    "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   /* HeroUI utilities its imported component CSS applies, on Canvas tokens.
      Radius scale stays Canvas-owned; only HeroUI's field/shadow slots map. */
   --color-overlay: var(--overlay);

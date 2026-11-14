@@ -13,6 +13,7 @@ import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visua
 import type { SessionActivity } from "#/stores/session-activity-store";
 import { parseDateAsUTC } from "#/utils/format-time-delta";
 import { parseMessageFromEvent } from "./event-content-helpers/parse-message-from-event";
+import { isReactionResult } from "./event-content-helpers/should-render-event";
 import {
   getReasoningContent,
   splitInlineThink,
@@ -231,7 +232,9 @@ export const groupEvents = (
       isObservationEvent(event) || isUserRejectObservation(event)
         ? actionById.get(event.action_id ?? "")
         : undefined;
-    if (isGroupableEvent(event, correspondingAction)) {
+    // Narration: the agent's thought on a tool call is hoisted into the main
+    // stream, and its reasoning goes to the step's group.
+    const keepNarration = () => {
       // Hoist the thought before attaching the action's reasoning, so the
       // reasoning lands in the step's own group rather than a "Thinking"-only
       // group that shares the step's key and open state.
@@ -262,6 +265,15 @@ export const groupEvents = (
           runReasoningIds.add(reasoningAction.id);
         }
       }
+    };
+    if (isReactionResult(event)) {
+      // The reaction itself shows as a chip on its message, so its tool card
+      // is dropped; what the agent said while reacting stays.
+      keepNarration();
+      return;
+    }
+    if (isGroupableEvent(event, correspondingAction)) {
+      keepNarration();
       if (!run) run = { events: [], startIndex: index };
       run.events.push(event);
     } else {

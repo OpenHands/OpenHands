@@ -3,7 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ResolvedConversationBanner } from "#/components/features/chat/resolved-conversation-banner";
+import { HttpError } from "@openhands/typescript-client";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import ProjectsService from "#/api/projects-service/projects-service.api";
 import { makeDefaultLocalBackend } from "#/api/backend-registry/default-backend";
 import {
   NO_BACKEND,
@@ -18,22 +20,19 @@ import * as toastHandlers from "#/utils/custom-toast-handlers";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { MessageEvent } from "#/types/agent-server/core";
 
+const projectsFlag = vi.hoisted(() => ({ enabled: true }));
+
+vi.mock("#/hooks/query/use-projects", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/hooks/query/use-projects")>()),
+  useProjectsEnabled: () => projectsFlag.enabled,
+}));
+
 const CONVERSATION_ID = "test-conversation-id";
 
 vi.mock("#/hooks/use-conversation-id", () => ({
   useOptionalConversationId: () => ({ conversationId: CONVERSATION_ID }),
   useConversationId: () => ({ conversationId: CONVERSATION_ID }),
 }));
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (error: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
 
 function conversationWith(tags: Record<string, string>) {
   return {
@@ -56,7 +55,11 @@ function renderBanner(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  queryClient.setQueryData(detailKey(backendId), conversationWith(tags));
+  // Only a project's members can be resolved; tests opt out with project: "".
+  const withProject = { project: "abc", ...tags };
+  if (!withProject.project)
+    delete (withProject as Record<string, string>).project;
+  queryClient.setQueryData(detailKey(backendId), conversationWith(withProject));
   render(
     <QueryClientProvider client={queryClient}>
       <ActiveBackendProvider>
@@ -85,15 +88,14 @@ const reopenButton = () =>
   screen.getByRole("button", { name: I18nKey.CHAT_INTERFACE$RESOLVED_REOPEN });
 
 describe("ResolvedConversationBanner", () => {
-  let updateTagFlags: ReturnType<typeof vi.spyOn>;
   let batchGet: ReturnType<typeof vi.spyOn>;
+  let setResolved: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    setResolved = vi
+      .spyOn(ProjectsService, "setConversationResolved")
+      .mockResolvedValue(undefined);
     useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
-    updateTagFlags = vi.spyOn(
-      AgentServerConversationService,
-      "updateConversationTagFlags",
-    );
     batchGet = vi.spyOn(
       AgentServerConversationService,
       "batchGetAppConversations",
@@ -104,6 +106,14 @@ describe("ResolvedConversationBanner", () => {
     vi.restoreAllMocks();
     localStorage.clear();
     __resetActiveStoreForTests();
+    projectsFlag.enabled = true;
+  });
+
+  it("stays hidden while Projects is off", () => {
+    projectsFlag.enabled = false;
+    renderBanner({ resolved: "user" });
+
+    expect(screen.queryByTestId("resolved-conversation-banner")).toBeNull();
   });
 
   it.each(["user", "auto"])("shows for resolved=%s", (resolution) => {
@@ -118,11 +128,35 @@ describe("ResolvedConversationBanner", () => {
     expect(reopenButton()).toBeEnabled();
   });
 
+  it.each([
+    ["0.93 nothing", I18nKey.PROJECTS$AUTO_RESOLVED],
+    ["agent", I18nKey.PROJECTS$AUTO_RESOLVED_AGENT],
+  ])("says why it resolved itself (%s)", (resolvenote, message) => {
+    renderBanner({ resolved: "auto", resolvenote });
+
+    expect(
+      screen.getByTestId("resolved-conversation-auto-note"),
+    ).toHaveTextContent(message);
+  });
+
+  it.each<Record<string, string>>([
+    { resolved: "auto" },
+    { resolved: "auto", resolvenote: "sure" },
+    { resolved: "user", resolvenote: "0.93 nothing" },
+  ])("gives no reason for tags %j", (tags) => {
+    renderBanner(tags);
+
+    expect(
+      screen.queryByTestId("resolved-conversation-auto-note"),
+    ).not.toBeInTheDocument();
+  });
+
   it.each<Record<string, string>>([
     {},
     { resolved: "" },
     { resolved: "true" },
     { project: "abc" },
+    { resolved: "user", project: "" },
   ])("stays hidden for tags %j", (tags) => {
     renderBanner(tags);
 
@@ -150,63 +184,42 @@ describe("ResolvedConversationBanner", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("reopens from fresh tags, hides before the PATCH settles, and focuses the composer", async () => {
-    // The server added a tag since the cached copy was fetched.
-    batchGet.mockResolvedValueOnce([
-      conversationWith({ resolved: "user", project: "abc", turn: "answered" }),
-    ]);
-    const patch = deferred<AppConversation>();
-    updateTagFlags.mockReturnValue(patch.promise);
-    const queryClient = renderBanner({ resolved: "user", project: "abc" });
+  it("reopens a project's member through the project's route", async () => {
+    batchGet.mockResolvedValue([conversationWith({ project: "abc" })]);
+    renderBanner({
+      resolved: "auto",
+      project: "abc",
+      resolvenote: "0.9 critic",
+    });
 
     await userEvent.click(reopenButton());
 
-    expect(updateTagFlags).toHaveBeenCalledWith(
-      CONVERSATION_ID,
-      { resolved: "user", project: "abc", turn: "answered" },
-      { resolved: false },
-    );
+    expect(setResolved).toHaveBeenCalledWith("abc", CONVERSATION_ID, false);
     await waitFor(() => {
       expect(
         screen.queryByTestId("resolved-conversation-banner"),
       ).not.toBeInTheDocument();
     });
-    expect(
-      queryClient.getQueryData<AppConversation>(detailKey(localBackendId))
-        ?.tags,
-    ).toEqual({ project: "abc", turn: "answered" });
     expect(screen.getByTestId("composer")).toHaveFocus();
-
-    batchGet.mockReturnValue(new Promise(() => {}));
-    patch.resolve(conversationWith({ project: "abc", turn: "answered" }));
   });
 
-  it("rolls the banner back and shows an error when reopening fails", async () => {
-    // Keep every refetch pending so only the rollback can restore the banner.
-    batchGet.mockResolvedValueOnce([conversationWith({ resolved: "auto" })]);
-    const patch = deferred<AppConversation>();
-    updateTagFlags.mockReturnValue(patch.promise);
+  it("shows an error when the project's route refuses the reopen", async () => {
+    setResolved.mockRejectedValue(new HttpError(500, "Server Error", {}));
     const toast = vi
       .spyOn(toastHandlers, "displayErrorToast")
       .mockImplementation(() => {});
-    renderBanner({ resolved: "auto" });
+    renderBanner({ resolved: "user", project: "abc" });
 
     await userEvent.click(reopenButton());
-    await waitFor(() => {
-      expect(
-        screen.queryByTestId("resolved-conversation-banner"),
-      ).not.toBeInTheDocument();
-    });
 
-    batchGet.mockReturnValue(new Promise(() => {}));
-    await act(async () => patch.reject(new Error("boom")));
-
-    expect(
-      await screen.findByTestId("resolved-conversation-banner"),
-    ).toBeInTheDocument();
-    expect(toast).toHaveBeenCalledWith(
-      I18nKey.CHAT_INTERFACE$RESOLVED_REOPEN_FAILED,
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith(
+        I18nKey.CHAT_INTERFACE$RESOLVED_REOPEN_FAILED,
+      ),
     );
+    expect(
+      screen.getByTestId("resolved-conversation-banner"),
+    ).toBeInTheDocument();
   });
 
   it("refetches the conversation when a new user message is echoed", async () => {

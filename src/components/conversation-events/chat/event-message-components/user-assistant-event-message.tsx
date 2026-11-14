@@ -3,6 +3,10 @@ import { useTranslation } from "react-i18next";
 import { useNavigation } from "#/context/navigation-context";
 import { MessageEvent } from "#/types/agent-server/core";
 import { ChatMessage } from "../../../features/chat/chat-message";
+import {
+  MessageReactions,
+  useMessageReactions,
+} from "../../../features/chat/message-reactions";
 import { ImageCarousel } from "../../../features/images/image-carousel";
 import { parseMessageFromEvent } from "../event-content-helpers/parse-message-from-event";
 import { CriticResultDisplay } from "./critic-result-display";
@@ -19,6 +23,12 @@ import { useForkConversation } from "#/hooks/mutation/use-fork-conversation";
 import { setConversationState } from "#/utils/conversation-local-storage";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { isInsiderConversation } from "#/utils/insider-cat";
+import { insiderUserMessageForDisplay } from "#/utils/insider-message";
+import { parseProjectMessageHeader } from "#/utils/project-message-header";
+import { ProjectMessageHeaderLine } from "../../../features/chat/project-message-header-line";
+import { useUserConversation } from "#/hooks/query/use-user-conversation";
+import { useProjectsEnabled } from "#/hooks/query/use-projects";
 
 interface UserAssistantEventMessageProps {
   event: MessageEvent;
@@ -41,6 +51,13 @@ function UserAssistantEventMessageComponent({
   // Blocks a same-tick double-click, before `isForking` flips.
   const forkInFlightRef = React.useRef(false);
 
+  const reactionAuthor = event.source === "user" ? "user" : "agent";
+  const reactions = useMessageReactions(
+    event.source === "user" || event.source === "agent" ? event.id : undefined,
+    reactionAuthor,
+    { isFromPlanningAgent },
+  );
+
   const parsed = parseMessageFromEvent(event);
   // Route an inline <think> block (e.g. from a streamed reply) to the thinking
   // section so reloaded conversations match the live rendering.
@@ -48,6 +65,28 @@ function UserAssistantEventMessageComponent({
     event.source === "agent"
       ? splitInlineThink(parsed)
       : { reasoning: "", message: parsed };
+  // Subscribe to the backend/org-scoped query so late metadata and backend
+  // changes cannot leave the message classified by a stale global snapshot.
+  const { data: currentConversation } = useUserConversation(
+    conversationId ?? null,
+  );
+  // A message another project conversation sent opens with the Agent
+  // Server's header for the agent; show a compact line in its place.
+  const projectsEnabled = useProjectsEnabled();
+  const projectHeader =
+    projectsEnabled && event.source === "user"
+      ? parseProjectMessageHeader(
+          message,
+          (event as { sender?: unknown }).sender,
+        )
+      : null;
+  const displayMessage = projectHeader
+    ? projectHeader.body
+    : event.source === "user" &&
+        currentConversation?.id === conversationId &&
+        isInsiderConversation(currentConversation)
+      ? insiderUserMessageForDisplay(message)
+      : message;
   // The finished message replaces its streaming slot outright, so reasoning the
   // model streamed must render from the message itself or it vanishes on
   // finalize (and never shows after a reload).
@@ -128,9 +167,14 @@ function UserAssistantEventMessageComponent({
       {!suppressReasoning && reasoning && (
         <CollapsibleThinking content={reasoning} />
       )}
+      {projectHeader && (
+        <div className="flex justify-end px-1">
+          <ProjectMessageHeaderLine header={projectHeader} />
+        </div>
+      )}
       <ChatMessage
         type={event.source}
-        message={message}
+        message={displayMessage}
         isFromPlanningAgent={isFromPlanningAgent}
         actions={actions}
         timestamp={event.timestamp}
@@ -138,6 +182,7 @@ function UserAssistantEventMessageComponent({
         {imageUrls.length > 0 && (
           <ImageCarousel size="small" images={imageUrls} />
         )}
+        {reactions.visible && <MessageReactions state={reactions} />}
       </ChatMessage>
       {event.source === "agent" && event.critic_result != null && (
         <CriticResultDisplay criticResult={event.critic_result} />

@@ -10,7 +10,11 @@ import {
   TAG_CHIP_VALUE_MAX_LENGTH,
   truncateTagChipValue,
 } from "#/components/features/conversation-panel/conversation-card/conversation-tag-display";
-import { getDisplayConversationTags } from "#/api/agent-server-adapter";
+import {
+  getDisplayConversationTags,
+  getEditableConversationTags,
+} from "#/api/agent-server-adapter";
+import { mergeConversationTagEdits } from "#/components/features/conversation-panel/edit-conversation-tags-modal";
 import { I18nKey } from "#/i18n/declaration";
 
 describe("truncateTagChipValue", () => {
@@ -83,6 +87,25 @@ describe("computeVisibleTagChipCount", () => {
 });
 
 describe("getDisplayConversationTags", () => {
+  it.each([null, "parent-conversation"])(
+    "hides only tags already represented by the Insider badge (parent %s)",
+    (parentConversationId) => {
+      const tags = {
+        smolpaws: "insider",
+        insiderrole: "controller",
+        origin: "api",
+      };
+      expect(getDisplayConversationTags(tags, parentConversationId)).toEqual(
+        parentConversationId
+          ? [
+              ["origin", "api"],
+              ["insiderrole", "controller"],
+              ["smolpaws", "insider"],
+            ]
+          : [["origin", "api"]],
+      );
+    },
+  );
   it("excludes reserved keys and puts priority keys first", () => {
     expect(
       getDisplayConversationTags({
@@ -131,6 +154,23 @@ describe("getDisplayConversationTags", () => {
       ["Origin", "slack"],
       ["env", "prod"],
     ]);
+  });
+
+  it("hides the Projects board state and keeps project and resolved as chips, not editable", () => {
+    const tags = {
+      project: "p1",
+      resolved: "auto",
+      resolvenote: "0.93 nothing",
+      turn: "asked",
+      ask: "Ship it?",
+      team: "web",
+    };
+    expect(getDisplayConversationTags(tags).map(([key]) => key)).toEqual([
+      "project",
+      "resolved",
+      "team",
+    ]);
+    expect(getEditableConversationTags(tags)).toEqual([["team", "web"]]);
   });
 
   it("returns an empty list for nullish tags", () => {
@@ -250,5 +290,24 @@ describe("getDisplayConversationTags — launched agent profile tags", () => {
         owner: "alice",
       }),
     ).toEqual([["owner", "alice"]]);
+  });
+});
+
+describe("mergeConversationTagEdits", () => {
+  it("keeps internal tags but never sends the Projects tags the server owns", () => {
+    expect(
+      mergeConversationTagEdits(
+        {
+          project: "p1",
+          turn: "asked",
+          ask: "Ship it?",
+          resolved: "auto",
+          resolvenote: "0.93 nothing",
+          clientsource: "agentcanvas",
+          team: "web",
+        },
+        [["team", "api"]],
+      ),
+    ).toEqual({ clientsource: "agentcanvas", team: "api" });
   });
 });

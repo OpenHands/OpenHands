@@ -23,6 +23,11 @@ import {
 import { ConversationCardActions } from "#/components/features/conversation-panel/conversation-card/conversation-card-actions";
 import { useCommandMenuStore } from "#/stores/command-menu-store";
 import { useSidebarStore } from "#/stores/sidebar-store";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 import { renderWithProviders } from "../../../../test-utils";
 
 vi.mock("react-i18next", async (importOriginal) => ({
@@ -92,11 +97,63 @@ function withNavigation(navigate: NavigationContextValue["navigate"]) {
 beforeEach(() => {
   navigateMock.mockReset();
   window.localStorage.clear();
+  setRegisteredBackends([]);
+  setActiveSelection(null);
   useCommandMenuStore.setState({ isOpen: false });
   useSidebarStore.setState({ collapsed: false });
 });
 
 describe("CommandMenu", () => {
+  it("updates backend-specific settings when switching Local to Cloud and back without remounting", async () => {
+    setRegisteredBackends([
+      {
+        id: "local",
+        name: "Local",
+        kind: "local",
+        host: "http://local.test",
+        apiKey: "",
+      },
+      {
+        id: "cloud",
+        name: "Cloud",
+        kind: "cloud",
+        host: "https://cloud.test",
+        apiKey: "",
+      },
+    ]);
+    setActiveSelection({ backendId: "local", orgId: null });
+    renderWithProviders(
+      <ActiveBackendProvider>
+        <CommandMenu />
+      </ActiveBackendProvider>,
+    );
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    const experimental = "NAV_EXPERIMENTAL";
+    const condenser = "CONDENSER_SETTINGS_TITLE";
+    expect(
+      await screen.findByRole("option", { name: new RegExp(experimental) }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: new RegExp(condenser) }),
+    ).not.toBeInTheDocument();
+
+    act(() => setActiveSelection({ backendId: "cloud", orgId: "qa-org" }));
+    expect(
+      screen.queryByRole("option", { name: new RegExp(experimental) }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("option", { name: new RegExp(condenser) }),
+    ).toBeInTheDocument();
+
+    act(() => setActiveSelection({ backendId: "local", orgId: null }));
+    expect(
+      await screen.findByRole("option", { name: new RegExp(experimental) }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: new RegExp(condenser) }),
+    ).not.toBeInTheDocument();
+  });
+
   it("opens from the global command-k shortcut and closes with escape", async () => {
     renderCommandMenu();
 
@@ -480,7 +537,7 @@ describe("CommandMenu", () => {
       name: SEARCH_LABEL_KEY,
     });
     expect(reopenedInput).toHaveValue("");
-    expect(screen.getAllByRole("option")).toHaveLength(14);
+    expect(screen.getAllByRole("option")).toHaveLength(15);
     expect(screen.getAllByRole("option")[0]).toHaveAttribute(
       "aria-selected",
       "true",

@@ -7,6 +7,7 @@ import {
   Keyboard,
   KeyRound,
   ListTodo,
+  FlaskConical,
   PanelsTopLeft,
   Route,
   Search,
@@ -23,7 +24,7 @@ import {
   hasAutomationInterface,
 } from "#/manifests/automation-interface";
 import { getLockedCloudHost } from "#/api/agent-server-config";
-import { getActiveBackend } from "#/api/backend-registry/active-store";
+import type { BackendKind } from "#/api/backend-registry/types";
 import { LOCKED_CLOUD_SETTINGS_NAV_PATH } from "#/constants/settings-nav";
 import { isApplePlatform } from "#/utils/utils";
 
@@ -43,6 +44,7 @@ export const COMMAND_MENU_ROUTE = {
   verificationSettings: "/settings/verification",
   runtimeSettings: "/settings/runtime",
   appSettings: "/settings/app",
+  experimentalSettings: "/settings/experimental",
   secretsSettings: "/settings/secrets",
 } as const;
 
@@ -61,6 +63,7 @@ export type CommandMenuItemId =
   | "verification-settings"
   | "runtime-settings"
   | "app-settings"
+  | "experimental-settings"
   | "secrets-settings"
   | "toggle-sidebar";
 
@@ -117,8 +120,10 @@ export const COMMAND_MENU_GROUP_ORDER: CommandMenuGroupId[] = [
 
 export const createCommandMenuItems = ({
   toggleSidebar,
+  backendKind,
 }: {
   toggleSidebar: () => void;
+  backendKind: BackendKind;
 }): CommandMenuItemDefinition[] => {
   const items: CommandMenuItemDefinition[] = [
     {
@@ -245,6 +250,15 @@ export const createCommandMenuItems = ({
       to: COMMAND_MENU_ROUTE.appSettings,
     },
     {
+      id: "experimental-settings",
+      group: "settings",
+      titleKey: I18nKey.SETTINGS$NAV_EXPERIMENTAL,
+      descriptionKey: I18nKey.SETTINGS$PAGE_EXPERIMENTAL_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$EXPERIMENTAL_SETTINGS_KEYWORDS,
+      icon: <FlaskConical size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.experimentalSettings,
+    },
+    {
       id: "secrets-settings",
       group: "settings",
       titleKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_TITLE,
@@ -268,11 +282,13 @@ export const createCommandMenuItems = ({
   // the OHE settings shell owns the rest (OHE-3168).
   const isLockedToCloud = getLockedCloudHost() !== null;
   // Locally each agent profile has its own condenser.
-  const isCloud = getActiveBackend().backend.kind === "cloud";
+  const isCloud = backendKind === "cloud";
 
   return items.filter(
     (item) =>
       (isCloud || item.to !== COMMAND_MENU_ROUTE.condenserSettings) &&
+      // Experimental features live on a local agent server.
+      (!isCloud || item.to !== COMMAND_MENU_ROUTE.experimentalSettings) &&
       (!isLockedToCloud ||
         item.group !== "settings" ||
         item.to === COMMAND_MENU_ROUTE.settings ||

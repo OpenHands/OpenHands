@@ -15,6 +15,11 @@ import type {
 import { ServerClient } from "@openhands/typescript-client/clients";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import { DEFAULT_SETTINGS } from "#/services/settings";
+import {
+  INSIDER_CAT_TAG,
+  INSIDER_ROLE_TAG,
+  isInsiderConversation,
+} from "#/utils/insider-cat";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import {
   AgentKind,
@@ -160,6 +165,7 @@ export interface DirectConversationInfo {
    * values are opaque strings.
    */
   tags?: Record<string, string> | null;
+  parent_conversation_id?: string | null;
   launched_agent_profile?: {
     agent_profile_id: string;
     revision: number;
@@ -461,6 +467,7 @@ export function toAppConversation(
       ? toAcpEffortChoices(info.available_efforts)
       : null,
     tags: info.tags ?? null,
+    parent_conversation_id: info.parent_conversation_id ?? null,
     launched_agent_profile: info.launched_agent_profile ?? null,
     // Chip path: omit ``providerDefault`` so that when no concrete model
     // resolves, the chip falls back to the provider display name in
@@ -665,7 +672,45 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   // hovercard names the profile instead of echoing the raw id and revision.
   "agentprofileid",
   "agentprofilerevision",
+  // Projects board state the Agent Server owns: whether the agent ended on
+  // a question (`turn`, `ask`) and why it resolved a conversation. The board
+  // and the resolved banner show these; a tag PATCH cannot change them.
+  "turn",
+  "ask",
+  "resolvenote",
 ]);
+
+/**
+ * Projects tags that keep a chip (`project` shows the project's name,
+ * `resolved` who resolved it) but are not editable: membership and
+ * resolution change through the Projects routes, not tags.
+ */
+export const PROJECT_BOARD_TAG_KEYS: ReadonlySet<string> = new Set([
+  "project",
+  "resolved",
+]);
+
+/**
+ * Every Projects tag the Agent Server owns. A tag PATCH keeps them as the
+ * server has them, so clients never send them.
+ */
+export const SERVER_OWNED_PROJECT_TAG_KEYS: ReadonlySet<string> = new Set([
+  "project",
+  "turn",
+  "ask",
+  "resolved",
+  "resolvenote",
+]);
+
+/** The tags a user can edit: the displayed ones minus Projects state. */
+export function getEditableConversationTags(
+  tags: Record<string, string> | null | undefined,
+  parentConversationId?: string | null,
+): Array<[string, string]> {
+  return getDisplayConversationTags(tags, parentConversationId).filter(
+    ([key]) => !PROJECT_BOARD_TAG_KEYS.has(key.trim().toLowerCase()),
+  );
+}
 
 /**
  * High-signal tag keys shown first in the chip row (before A–Z). Automation
@@ -682,13 +727,19 @@ export const PRIORITY_CONVERSATION_TAG_KEYS: readonly string[] = [
  * {@link RESERVED_CONVERSATION_TAG_KEYS}, as stable ``[key, value]`` entries.
  * Priority keys come first (in {@link PRIORITY_CONVERSATION_TAG_KEYS} order);
  * the rest sort A–Z so chip order doesn't shuffle between refetches.
+ * Insider identity tags are represented by the dedicated Cat badge instead.
  */
 export function getDisplayConversationTags(
   tags: Record<string, string> | null | undefined,
+  parentConversationId?: string | null,
 ): Array<[string, string]> {
   if (!tags) {
     return [];
   }
+  const hasInsiderBadge = isInsiderConversation({
+    tags,
+    parent_conversation_id: parentConversationId,
+  });
   // Both the reserved-key check and the priority lookup must see the same
   // normalized key: a cloud backend can stamp ``Origin`` / `` origin``, and
   // ranking those off the raw key would silently drop them out of first place.
@@ -702,6 +753,10 @@ export function getDisplayConversationTags(
   return Object.entries(tags)
     .filter(
       ([key, value]) =>
+        !(
+          hasInsiderBadge &&
+          (key === INSIDER_CAT_TAG || key === INSIDER_ROLE_TAG)
+        ) &&
         !RESERVED_CONVERSATION_TAG_KEYS.has(key.trim().toLowerCase()) &&
         typeof value === "string" &&
         // Bare tags (empty value) are displayable — chips/tooltips render
@@ -807,6 +862,24 @@ function getConversationSecurityAnalyzer(conversationSettings: SettingsRecord) {
     default:
       return undefined;
   }
+}
+
+/**
+ * The user's approval and iteration settings, as a start request carries them.
+ * A conversation the server starts for Canvas, such as a project's
+ * coordinator, needs the same ones an ordinary chat gets; its workers then
+ * inherit them from the coordinator.
+ */
+export function buildConversationLaunchPolicies(settings: Settings) {
+  const conversationSettings = toRecord(settings.conversation_settings);
+  const securityAnalyzer =
+    getConversationSecurityAnalyzer(conversationSettings);
+  return {
+    confirmation_policy:
+      getConversationConfirmationPolicy(conversationSettings),
+    ...(securityAnalyzer ? { security_analyzer: securityAnalyzer } : {}),
+    max_iterations: resolveMaxIterations(conversationSettings.max_iterations),
+  };
 }
 
 /**
