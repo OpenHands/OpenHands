@@ -1,7 +1,11 @@
 import React from "react";
 import { ExtraProps } from "react-markdown";
 import { NavigationLink } from "#/components/shared/navigation-link";
+import { useIsExperimentalFeatureEnabled } from "#/hooks/query/use-experimental-features";
 import { useProjectsEnabled } from "#/hooks/query/use-projects";
+
+/** The Agent Server experimental feature that turns mentions on. */
+export const CONVERSATION_MENTIONS_FEATURE_KEY = "conversation_mentions";
 
 /**
  * A conversation mention, as Agent Server and agents write it:
@@ -14,6 +18,23 @@ const CONVERSATION_MENTION =
 export function conversationMentionId(href: string | undefined | null) {
   const match = CONVERSATION_MENTION.exec(href ?? "");
   return match ? match[1].toLowerCase().replace(/-/g, "") : null;
+}
+
+const MENTION_TITLE_MAX = 80;
+
+/**
+ * The mention of a conversation, as Agent Server writes it. The title is cut
+ * to one line without brackets, parentheses, quotes or backslashes so it
+ * cannot end the link early (same rule as the SDK's `conversation_mention`).
+ */
+export function conversationMention(title: string | null, id: string) {
+  const text =
+    (title ?? "")
+      .replace(/[\s"[\]()\\`]+/g, " ")
+      .trim()
+      .slice(0, MENTION_TITLE_MAX)
+      .trim() || "untitled conversation";
+  return `[${text}](conversation:${id.toLowerCase().replace(/-/g, "")})`;
 }
 
 /**
@@ -34,9 +55,14 @@ export function ConversationMention({
   id: string;
   children: React.ReactNode;
 }) {
-  // Mentions come with Projects; while it is off they read as plain text.
+  // While the feature is off a mention reads as its title, plain text.
+  // Projects' header lines name conversations by mention, so Projects
+  // turns them on too.
+  const mentionsEnabled = useIsExperimentalFeatureEnabled(
+    CONVERSATION_MENTIONS_FEATURE_KEY,
+  );
   const projectsEnabled = useProjectsEnabled();
-  if (!projectsEnabled) {
+  if (!mentionsEnabled && !projectsEnabled) {
     return <span data-testid="conversation-mention-text">{children}</span>;
   }
   return (

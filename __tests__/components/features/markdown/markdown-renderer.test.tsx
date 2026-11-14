@@ -9,7 +9,16 @@ import {
   MARKDOWN_SANITIZE_SCHEMA,
 } from "#/components/features/markdown/markdown-renderer";
 
-const projectsFlag = vi.hoisted(() => ({ enabled: true }));
+const mentionsFlag = vi.hoisted(() => ({ enabled: true }));
+const projectsFlag = vi.hoisted(() => ({ enabled: false }));
+
+vi.mock("#/hooks/query/use-experimental-features", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/hooks/query/use-experimental-features")
+  >()),
+  useIsExperimentalFeatureEnabled: (key: string) =>
+    key === "conversation_mentions" && mentionsFlag.enabled,
+}));
 
 vi.mock("#/hooks/query/use-projects", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#/hooks/query/use-projects")>()),
@@ -485,11 +494,25 @@ describe("MarkdownRenderer conversation mentions", () => {
   const hex = "4f2c9e0a1b2c4d5e8f90a1b2c3d4e5f6";
 
   afterEach(() => {
-    projectsFlag.enabled = true;
+    mentionsFlag.enabled = true;
+    projectsFlag.enabled = false;
   });
 
-  it("shows a mention as plain text while Projects is off", () => {
-    projectsFlag.enabled = false;
+  it("opens mentions while Projects is on, even with mentions off", () => {
+    mentionsFlag.enabled = false;
+    projectsFlag.enabled = true;
+    render(
+      <MarkdownRenderer>
+        {`Ask [Fix export](conversation:${hex}) first.`}
+      </MarkdownRenderer>,
+    );
+    expect(screen.getByTestId("conversation-mention").textContent).toBe(
+      "Fix export",
+    );
+  });
+
+  it("shows a mention as plain text while conversation mentions are off", () => {
+    mentionsFlag.enabled = false;
     render(
       <MarkdownRenderer>
         {`Ask [Fix export](conversation:${hex}) first.`}
