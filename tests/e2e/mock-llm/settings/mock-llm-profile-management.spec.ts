@@ -198,24 +198,22 @@ test.describe("active profile deletion + reconciliation", () => {
       await confirm.click();
       await expect(confirm).toBeHidden({ timeout: 30_000 });
 
-      // Wait on this page: the delete and useEnsureActiveProfile's activation
-      // both refetch the list here. Reloading instead restarts the list load,
-      // and reading right after `add-llm-profile` (rendered before the list)
-      // saw the loading spinner, so the check failed on slow CI runs.
-      const rows = page.getByTestId("profile-row");
-      await expect(
-        rows.filter({ hasText: ACTIVE_PROFILE }),
-        `"${ACTIVE_PROFILE}" should be gone after deleting it`,
-      ).toHaveCount(0, { timeout: 30_000 });
-      await expect(rows.filter({ hasText: INACTIVE_PROFILE })).toHaveCount(1);
-      // Reconciliation must keep *some* profile active (the "always have an
-      // active profile" guarantee). We don't assert it's INACTIVE_PROFILE
-      // specifically — other profiles may linger on the shared agent-server
-      // and useEnsureActiveProfile activates the first keyed one.
-      await expect(
-        page.getByTestId("profile-active-badge"),
-        `a profile should become active after deleting "${ACTIVE_PROFILE}"`,
-      ).toHaveCount(1, { timeout: 30_000 });
+      const remaining = page.getByTestId("profile-row").filter({
+        has: page.locator(`span[title="${INACTIVE_PROFILE}"]`),
+      });
+      const deleted = page.getByTestId("profile-row").filter({
+        has: page.locator(`span[title="${ACTIVE_PROFILE}"]`),
+      });
+      const activeBadge = page.getByTestId("profile-active-badge");
+
+      await expect(remaining).toBeVisible();
+      await expect(deleted).toHaveCount(0, { timeout: 30_000 });
+      await expect(activeBadge).toBeVisible({ timeout: 30_000 });
+
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await expect(remaining).toBeVisible({ timeout: 30_000 });
+      await expect(deleted).toHaveCount(0, { timeout: 30_000 });
+      await expect(activeBadge).toBeVisible({ timeout: 30_000 });
     });
   });
 });
