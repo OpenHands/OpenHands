@@ -237,6 +237,61 @@ describe("useCreateConversation", () => {
     });
   });
 
+  it.each([
+    {
+      case: "names the git provider connection the repository came from",
+      repository: {
+        name: "team/app",
+        gitProvider: "gitlab" as const,
+        branch: "main",
+        gitProviderId: 9,
+      },
+      expected: {
+        selected_repository: "team/app",
+        selected_branch: "main",
+        git_provider: "gitlab",
+        git_provider_id: 9,
+      },
+    },
+    {
+      case: "sends no connection when none was picked",
+      repository: {
+        name: "team/app",
+        gitProvider: "gitlab" as const,
+        branch: "main",
+      },
+      expected: {
+        selected_repository: "team/app",
+        selected_branch: "main",
+        git_provider: "gitlab",
+      },
+    },
+  ])("$case", async ({ repository, expected }) => {
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        status: "READY",
+        app_conversation_id: null,
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hello", repository });
+
+    await waitFor(() => {
+      expect(createConversationSpy.mock.lastCall?.[0]?.metadata).toStrictEqual(
+        expected,
+      );
+    });
+  });
+
   it("suppresses route-at-start on cloud when suppressRouterAtStart is passed by the home launcher", async () => {
     // "Run on first message" is on and a router is active, so a plain launch
     // would stamp the suffix — but the home launcher explicitly passes
@@ -353,7 +408,6 @@ describe("useCreateConversation", () => {
     // The home composer's pending pick is still intact for the actual home send.
     expect(hasPendingHomeModelPick("cloud-1", null)).toBe(true);
   });
-
 
   it("launches new local conversations from the active AgentProfile (#3727)", async () => {
     listAgentProfilesMock.mockResolvedValue({

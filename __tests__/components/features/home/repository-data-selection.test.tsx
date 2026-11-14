@@ -24,6 +24,7 @@ type RepositoryDataProps = {
   inputValue: string;
   value?: string | null;
   repositoryName?: string | null;
+  gitProviderId?: number | null;
 };
 
 type RepositoryData = {
@@ -124,6 +125,7 @@ const renderRepositoryData = (options: HarnessOptions = {}) => {
         props.inputValue,
         props.value,
         props.repositoryName,
+        props.gitProviderId,
       ),
     { initialProps },
   );
@@ -160,6 +162,8 @@ describe("repository data selection", () => {
       "owner/selected",
       "github",
       true,
+      undefined,
+      undefined,
     );
 
     rerender({
@@ -176,6 +180,27 @@ describe("repository data selection", () => {
       "owner/selected",
       "github",
       false,
+      undefined,
+      undefined,
+    );
+  });
+
+  it("lists and searches the chosen git provider connection", () => {
+    renderRepositoryData({
+      props: { gitProviderId: 9, processedSearchInput: "agent" },
+    });
+
+    expect(useGitRepositoriesMock).toHaveBeenLastCalledWith({
+      provider: "github",
+      gitProviderId: 9,
+      enabled: true,
+    });
+    expect(useSearchRepositoriesMock).toHaveBeenLastCalledWith(
+      "agent",
+      "github",
+      false,
+      undefined,
+      9,
     );
   });
 

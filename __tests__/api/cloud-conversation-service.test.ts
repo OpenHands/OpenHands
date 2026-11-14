@@ -160,6 +160,58 @@ describe("cloud conversation-service overlay", () => {
     expect(conversation?.git_provider).toBe("github");
   });
 
+  describe("git provider connection overlay", () => {
+    const stored = {
+      selected_repository: "team/app",
+      selected_branch: "main",
+      git_provider: "gitlab" as const,
+      git_provider_id: 9,
+    };
+
+    it("fills in the stored connection when the server holds no repository", async () => {
+      setStoredConversationMetadata("conv-1", stored);
+      mockCallCloudProxy.mockResolvedValueOnce([
+        { id: "conv-1", selected_repository: null, git_provider: null },
+      ]);
+
+      const [conversation] = await batchGetCloudConversations(["conv-1"]);
+
+      expect(conversation?.git_provider_id).toBe(9);
+    });
+
+    it("keeps the server's connection over the stored one", async () => {
+      setStoredConversationMetadata("conv-1", stored);
+      mockCallCloudProxy.mockResolvedValueOnce([
+        {
+          id: "conv-1",
+          selected_repository: "team/app",
+          git_provider: "gitlab",
+          git_provider_id: 4,
+        },
+      ]);
+
+      const [conversation] = await batchGetCloudConversations(["conv-1"]);
+
+      expect(conversation?.git_provider_id).toBe(4);
+    });
+
+    it("does not apply a stored connection to a repository the server holds without one", async () => {
+      setStoredConversationMetadata("conv-1", stored);
+      mockCallCloudProxy.mockResolvedValueOnce([
+        {
+          id: "conv-1",
+          selected_repository: "other/repo",
+          git_provider: "github",
+          git_provider_id: null,
+        },
+      ]);
+
+      const [conversation] = await batchGetCloudConversations(["conv-1"]);
+
+      expect(conversation?.git_provider_id).toBeNull();
+    });
+  });
+
   it("leaves null entries untouched when the cloud server returns null for a missing conversation", async () => {
     mockCallCloudProxy.mockResolvedValueOnce([null]);
 

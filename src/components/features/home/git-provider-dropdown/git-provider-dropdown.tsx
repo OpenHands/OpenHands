@@ -48,6 +48,16 @@ export function GitProviderDropdown({
   const [localSelectedItem, setLocalSelectedItem] =
     useState<GitProviderOption | null>(value || null);
 
+  // Downshift marks an option selected by identity, so use the listed entry
+  // that stands for the same connection as the value.
+  const currentOption = useMemo(
+    () =>
+      options.find((option) =>
+        gitProviderOptionsMatch(option, localSelectedItem),
+      ) ?? localSelectedItem,
+    [options, localSelectedItem],
+  );
+
   // Filter providers based on input value
   const filteredProviders = useMemo(() => {
     // If we have a selected provider and the input matches it exactly, show all providers
@@ -77,7 +87,7 @@ export function GitProviderDropdown({
   } = useCombobox({
     items: filteredProviders,
     itemToString: (item) => item?.label ?? "",
-    selectedItem: localSelectedItem,
+    selectedItem: currentOption,
     onSelectedItemChange: ({ selectedItem: newSelectedItem }) => {
       setLocalSelectedItem(newSelectedItem || null);
       onChange?.(newSelectedItem || null);

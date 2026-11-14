@@ -89,6 +89,40 @@ describe("useUpdateConversationRepository", () => {
       "owner/repo",
       "main",
       "github",
+      undefined,
+    );
+  });
+
+  it("passes the chosen git provider connection to the service", async () => {
+    vi.mocked(
+      AgentServerConversationService.updateConversationRepository,
+    ).mockResolvedValue({ id: "test-conversation-id" } as any);
+
+    const { Wrapper } = createWrapper();
+    const { result } = renderHook(() => useUpdateConversationRepository(), {
+      wrapper: Wrapper,
+    });
+
+    result.current.mutate({
+      conversationId: "test-conversation-id",
+      repository: "owner/repo",
+      branch: "main",
+      gitProvider: "gitlab",
+      gitProviderId: 9,
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(
+      AgentServerConversationService.updateConversationRepository,
+    ).toHaveBeenCalledWith(
+      "test-conversation-id",
+      "owner/repo",
+      "main",
+      "gitlab",
+      9,
     );
   });
 
@@ -122,7 +156,7 @@ describe("useUpdateConversationRepository", () => {
 
     expect(
       AgentServerConversationService.updateConversationRepository,
-    ).toHaveBeenCalledWith("test-conversation-id", null, null, null);
+    ).toHaveBeenCalledWith("test-conversation-id", null, null, null, undefined);
   });
 
   it("should handle errors gracefully", async () => {
@@ -200,6 +234,53 @@ describe("useUpdateConversationRepository", () => {
       expect(cached?.git_provider).toBe("github");
     });
   });
+
+  it.each([
+    { gitProviderId: 9, expected: 9 },
+    { gitProviderId: undefined, expected: null },
+  ])(
+    "optimistically sets the cached git provider connection to $expected",
+    async ({ gitProviderId, expected }) => {
+      const conversationId = "test-conversation-id";
+      const cacheKey = [
+        "user",
+        "conversation",
+        conversationId,
+        "default-local",
+        null,
+      ] as const;
+      vi.mocked(
+        AgentServerConversationService.updateConversationRepository,
+      ).mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return { id: conversationId } as unknown as AppConversation;
+      });
+
+      const { Wrapper, client } = createWrapper();
+      client.setQueryData(cacheKey, {
+        id: conversationId,
+        selected_repository: null,
+        git_provider_id: 4,
+      } as unknown as AppConversation);
+      const { result } = renderHook(() => useUpdateConversationRepository(), {
+        wrapper: Wrapper,
+      });
+
+      result.current.mutate({
+        conversationId,
+        repository: "owner/repo",
+        branch: "main",
+        gitProvider: "gitlab",
+        gitProviderId,
+      });
+
+      await waitFor(() => {
+        expect(
+          client.getQueryData<AppConversation>(cacheKey)?.git_provider_id,
+        ).toBe(expected);
+      });
+    },
+  );
 
   it("optimistically updates every prefix-matching cache entry (multiple backends/orgs)", async () => {
     const conversationId = "test-conversation-id";

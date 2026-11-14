@@ -1057,13 +1057,15 @@ class AgentServerConversationService {
       }
     }
     if (repository) {
-      const existing = getStoredConversationMetadata(conversationId);
+      // The previous id belongs to the previous repository, so drop it.
+      const { git_provider_id: _previous, ...existing } =
+        getStoredConversationMetadata(conversationId) ?? {};
       setStoredConversationMetadata(conversationId, {
-        ...(existing ?? {}),
+        ...existing,
         selected_repository: repository,
         selected_branch: branch ?? null,
         git_provider: gitProvider ?? null,
-        git_provider_id: gitProviderId ?? null,
+        ...(gitProviderId != null ? { git_provider_id: gitProviderId } : {}),
       });
     } else {
       removeStoredConversationMetadata(conversationId);

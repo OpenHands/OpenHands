@@ -424,4 +424,65 @@ describe("git provider selection", () => {
     expect(unselectedOption).toHaveClass("hover:bg-interactive-hover");
     expect(unselectedOption).not.toHaveClass("bg-interactive-selected");
   });
+
+  describe("connections of the same provider type", () => {
+    const workGitLab: GitProviderOption = {
+      provider: "gitlab",
+      gitProviderId: 4,
+      label: "Work GitLab",
+    };
+    const selfHostedGitLab: GitProviderOption = {
+      provider: "gitlab",
+      gitProviderId: 9,
+      label: "Self-hosted GitLab",
+    };
+
+    it("lists each connection by its title and reports the one picked", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <ControlledDropdown
+          {...createProps({
+            options: [workGitLab, selfHostedGitLab],
+            onChange,
+          })}
+        />,
+      );
+
+      await user.click(screen.getByTestId("git-provider-dropdown"));
+      expect(
+        screen.getAllByRole("option").map((item) => item.textContent),
+      ).toEqual(["Work GitLab", "Self-hosted GitLab"]);
+
+      await user.click(
+        screen.getByRole("option", { name: "Self-hosted GitLab" }),
+      );
+
+      expect(onChange).toHaveBeenCalledExactlyOnceWith(selfHostedGitLab);
+      await waitFor(() =>
+        expect(screen.getByTestId("git-provider-dropdown")).toHaveValue(
+          "Self-hosted GitLab",
+        ),
+      );
+    });
+
+    it("marks only the matching connection as selected", async () => {
+      const user = userEvent.setup();
+      render(
+        <GitProviderDropdown
+          options={[workGitLab, selfHostedGitLab]}
+          value={{ ...selfHostedGitLab }}
+        />,
+      );
+
+      await user.click(screen.getByTestId("git-provider-dropdown"));
+
+      expect(
+        screen.getByRole("option", { name: "Self-hosted GitLab" }),
+      ).toHaveAttribute("aria-selected", "true");
+      expect(
+        screen.getByRole("option", { name: "Work GitLab" }),
+      ).toHaveAttribute("aria-selected", "false");
+    });
+  });
 });

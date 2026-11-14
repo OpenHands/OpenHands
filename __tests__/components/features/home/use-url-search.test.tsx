@@ -111,12 +111,37 @@ describe("useUrlSearch", () => {
           "owner/repo",
           "github",
           3,
+          undefined,
+          undefined,
+          undefined,
         );
       });
 
       await waitFor(() => {
         expect(result.current.urlSearchResults).toHaveLength(1);
         expect(result.current.urlSearchResults[0].full_name).toBe("owner/repo");
+      });
+    });
+
+    it("searches the chosen git provider connection", async () => {
+      mockSearchGitRepositories.mockResolvedValue({
+        items: [],
+        next_page_id: null,
+      });
+
+      renderHook(() =>
+        useUrlSearch("https://gitlab.example.com/owner/repo", "gitlab", 9),
+      );
+
+      await waitFor(() => {
+        expect(mockSearchGitRepositories).toHaveBeenCalledWith(
+          "owner/repo",
+          "gitlab",
+          3,
+          undefined,
+          undefined,
+          9,
+        );
       });
     });
 

@@ -284,7 +284,6 @@ async function launchLocalChild(
             selected_repository: parentMetadata.selected_repository,
             selected_branch: parentMetadata.selected_branch,
             git_provider: parentMetadata.git_provider,
-            git_provider_id: parentMetadata.git_provider_id,
           }
         : null,
       workingDirOverride: workspace,

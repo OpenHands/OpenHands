@@ -40,8 +40,11 @@ function overlayStoredRepoSelection(
     selected_branch:
       conversation.selected_branch ?? stored.selected_branch ?? null,
     git_provider: conversation.git_provider ?? stored.git_provider ?? null,
-    git_provider_id:
-      conversation.git_provider_id ?? stored.git_provider_id ?? null,
+    // The id belongs to the repository it was saved with, so a server-held
+    // repository without one must not pick up a stale cached id.
+    git_provider_id: conversation.selected_repository
+      ? (conversation.git_provider_id ?? null)
+      : (stored.git_provider_id ?? null),
     selected_workspace:
       conversation.selected_workspace ?? stored.selected_workspace ?? null,
   };
