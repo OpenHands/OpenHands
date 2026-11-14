@@ -84,6 +84,17 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
     };
 
     ws.onmessage = (event) => {
+      // A socket replaced by reconnect() or a conversation/URL change can still
+      // have frames buffered when it is closed; the browser may dispatch them
+      // after the replacement is open. Drop them so a frame from the previous
+      // conversation's socket can't be delivered to the current conversation's
+      // handler and leak into its (global) event store. Uses the same
+      // `wasReplaced` identity check as `onclose`; `onerror` reaches the
+      // equivalent result via the allowed-to-reconnect set.
+      const wasReplaced = wsRef.current !== null && wsRef.current !== ws;
+      if (wasReplaced) {
+        return;
+      }
       // Deliberately no `lastMessage` state here: nothing reads it, and a
       // React state write per frame re-renders this hook's owner on every
       // streamed token. Consumers subscribe via `onMessage`.
