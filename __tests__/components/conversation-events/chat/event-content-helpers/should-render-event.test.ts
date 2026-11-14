@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
+import {
+  canAnchorAfterEvent,
+  isReactionResult,
+  shouldRenderEvent,
+} from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 import { CHILD_CONVERSATION_RESULT_PREFIX } from "#/constants/child-conversation";
 import { SECRET_REQUEST_RESULT_PREFIX } from "#/constants/secret-request";
 import {
@@ -312,5 +316,48 @@ describe("shouldRenderEvent - Stop hook feedback", () => {
 
   it("still renders a user message that starts with the same text", () => {
     expect(shouldRenderEvent(makeMessage("user"))).toBe(true);
+  });
+});
+
+describe("shouldRenderEvent - reactions", () => {
+  it("shows a pending react / unreact call; its result keeps only the narration", () => {
+    const react = createOtherActionEvent("react-1");
+    const reactAction = {
+      ...react,
+      action: { kind: "ReactAction", emoji: "eyes", message_id: null },
+    } as unknown as OpenHandsEvent;
+    const unreactAction = {
+      ...react,
+      action: { kind: "UnreactAction", emoji: "eyes", message_id: null },
+    } as unknown as OpenHandsEvent;
+    const observation = {
+      ...createPlanningObservationEvent("react-obs-1"),
+      observation: {
+        kind: "ReactionObservation",
+        content: [{ type: "text", text: "Reacted :eyes:" }],
+        is_error: false,
+        target_event_id: "msg-1",
+        emoji: "eyes",
+        removed: false,
+      },
+    } as unknown as OpenHandsEvent;
+
+    // Pending (for example awaiting confirmation): the user sees the call.
+    expect(shouldRenderEvent(reactAction)).toBe(true);
+    expect(shouldRenderEvent(unreactAction)).toBe(true);
+    // Done: the observation replaces the call. It passes, so groupEvents can
+    // keep the agent's narration, but it renders no card of its own.
+    expect(shouldRenderEvent(observation)).toBe(true);
+    expect(isReactionResult(observation)).toBe(true);
+    expect(canAnchorAfterEvent(observation)).toBe(false);
+    const failed = {
+      ...observation,
+      observation: {
+        ...(observation as unknown as { observation: object }).observation,
+        is_error: true,
+      },
+    } as unknown as OpenHandsEvent;
+    expect(shouldRenderEvent(failed)).toBe(true);
+    expect(isReactionResult(failed)).toBe(false);
   });
 });
