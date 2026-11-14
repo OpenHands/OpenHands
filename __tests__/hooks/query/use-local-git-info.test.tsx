@@ -3,6 +3,13 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SettingsClient } from "@openhands/typescript-client/clients";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import { SecretsService } from "#/api/secrets-service";
 import { useLocalGitInfo } from "#/hooks/query/use-local-git-info";
 
 const useActiveBackendMock = vi.fn();
@@ -181,6 +188,74 @@ describe("useLocalGitInfo", () => {
     expect(result.current.data).toMatchObject({
       repository: "acme/widgets",
       branch: "main",
+    });
+  });
+
+  describe("self-hosted remotes", () => {
+    function configureLocalSecrets(secrets: Record<string, string>) {
+      __resetActiveStoreForTests();
+      const { backend } = makeBackend("local");
+      setRegisteredBackends([backend]);
+      setActiveSelection({ backendId: backend.id });
+      vi.spyOn(SecretsService, "getSecrets").mockResolvedValue(
+        Object.keys(secrets).map((name) => ({ name })),
+      );
+      vi.spyOn(SettingsClient.prototype, "getSecret").mockImplementation(
+        async (name: string) => secrets[name],
+      );
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      __resetActiveStoreForTests();
+    });
+
+    it.each([
+      "https://gitlab.example.com/acme/widgets.git",
+      "git@gitlab.example.com:acme/widgets.git",
+    ])(
+      "detects %s as GitLab when GITLAB_HOST names that host",
+      async (remote) => {
+        useActiveBackendMock.mockReturnValue(makeBackend("local"));
+        configureLocalSecrets({ GITLAB_HOST: "https://gitlab.example.com" });
+        runCommandMock.mockResolvedValueOnce({
+          exit_code: 0,
+          stdout: `${remote}\nmain`,
+          stderr: "",
+        });
+
+        const { result } = renderHook(() => useLocalGitInfo(), {
+          wrapper: makeWrapper(),
+        });
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(result.current.data).toMatchObject({
+          repository: "acme/widgets",
+          provider: "gitlab",
+          host: "gitlab.example.com",
+        });
+      },
+    );
+
+    it("leaves an unknown host undetected without GITLAB_HOST", async () => {
+      useActiveBackendMock.mockReturnValue(makeBackend("local"));
+      configureLocalSecrets({ GITLAB_TOKEN: "glpat-test" });
+      runCommandMock.mockResolvedValueOnce({
+        exit_code: 0,
+        stdout: "https://gitlab.example.com/acme/widgets.git\nmain",
+        stderr: "",
+      });
+
+      const { result } = renderHook(() => useLocalGitInfo(), {
+        wrapper: makeWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toMatchObject({
+        repository: "acme/widgets",
+        provider: null,
+        host: "gitlab.example.com",
+      });
     });
   });
 });
