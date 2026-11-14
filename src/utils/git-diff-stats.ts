@@ -46,8 +46,8 @@ function countTextDiffStats(
   original: string,
   modified: string,
 ): GitDiffLineStats {
-  const originalLines = original.length === 0 ? [] : original.split("\n");
-  const modifiedLines = modified.length === 0 ? [] : modified.split("\n");
+  const originalLines = original.length === 0 ? [] : original.split('\n');
+  const modifiedLines = modified.length === 0 ? [] : modified.split('\n');
 
   if (originalLines.length === 0) {
     return { additions: modifiedLines.length, deletions: 0 };
@@ -57,45 +57,36 @@ function countTextDiffStats(
     return { additions: 0, deletions: originalLines.length };
   }
 
-  let additions = 0;
-  let deletions = 0;
-  let originalIndex = 0;
-  let modifiedIndex = 0;
+  // Compute the length of the Longest Common Subsequence (LCS) between the
+  // two line sequences. Lines not in the LCS are either deleted (original
+  // only) or added (modified only). This avoids the greedy look-ahead in the
+  // previous implementation, which misaligned files with repeated lines
+  // (e.g. `}`, `"dev": true`) and counted most of the file as changed.
+  const m = originalLines.length;
+  const n = modifiedLines.length;
 
-  while (
-    originalIndex < originalLines.length ||
-    modifiedIndex < modifiedLines.length
-  ) {
-    const originalLine = originalLines[originalIndex];
-    const modifiedLine = modifiedLines[modifiedIndex];
+  // Two-row DP for O(n) space. prev[j] = LCS length of original[:i-1] and
+  // modified[:j]; curr[j] = LCS length of original[:i] and modified[:j].
+  let prev = new Array(n + 1).fill(0);
+  let curr = new Array(n + 1).fill(0);
 
-    if (
-      originalIndex < originalLines.length &&
-      modifiedIndex < modifiedLines.length &&
-      originalLine === modifiedLine
-    ) {
-      originalIndex += 1;
-      modifiedIndex += 1;
-      continue;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (originalLines[i - 1] === modifiedLines[j - 1]) {
+        curr[j] = prev[j - 1] + 1;
+      } else {
+        curr[j] = Math.max(prev[j], curr[j - 1]);
+      }
     }
-
-    if (
-      modifiedIndex < modifiedLines.length &&
-      (originalIndex >= originalLines.length ||
-        !originalLines.slice(originalIndex).includes(modifiedLine))
-    ) {
-      additions += 1;
-      modifiedIndex += 1;
-      continue;
-    }
-
-    if (originalIndex < originalLines.length) {
-      deletions += 1;
-      originalIndex += 1;
-    }
+    [prev, curr] = [curr, prev];
+    curr.fill(0);
   }
 
-  return { additions, deletions };
+  const lcsLength = prev[n];
+  return {
+    additions: n - lcsLength,
+    deletions: m - lcsLength,
+  };
 }
 
 export function countGitChangeDiffStats(

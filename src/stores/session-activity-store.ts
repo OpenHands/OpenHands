@@ -4,6 +4,21 @@ import type { AppConversationStartTaskStatus } from "#/api/conversation-service/
 
 const STORAGE_KEY = "openhands-session-activity";
 const MAX_CONVERSATIONS = 100;
+
+// `crypto.randomUUID` is a [SecureContext]-only API and is unavailable on
+// plain-HTTP non-loopback origins (VMs, LAN addresses, Tailscale IPs, …).
+// Fall back to a timestamp + random suffix so session activity recording still
+// works on insecure origins.
+function generateActivityId(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+  return `activity-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export interface SessionActivity {
   id: string;
   kind: "initialize" | "resume";
@@ -86,7 +101,7 @@ export const useSessionActivityStore = create<SessionActivityState>()(
             [key]: [
               ...previous,
               {
-                id: crypto.randomUUID(),
+                id: generateActivityId(),
                 kind,
                 afterEventId,
                 startedAt: Date.now(),

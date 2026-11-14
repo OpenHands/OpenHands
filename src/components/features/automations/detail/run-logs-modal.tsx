@@ -208,6 +208,36 @@ export function RunLogsModal({
   const { t } = useTranslation("openhands");
   const [activeTab, setActiveTab] = useState<LogTab>("stdout");
 
+  const tabs: LogTab[] = ["stdout", "stderr"];
+
+  const handleTabKeyDown = (
+    event: React.KeyboardEvent,
+    nextTab: LogTab,
+  ) => {
+    switch (event.key) {
+      case "ArrowRight":
+      case "ArrowDown":
+        event.preventDefault();
+        setActiveTab(tabs[(tabs.indexOf(activeTab) + 1) % tabs.length]);
+        break;
+      case "ArrowLeft":
+      case "ArrowUp":
+        event.preventDefault();
+        setActiveTab(
+          tabs[(tabs.indexOf(activeTab) - 1 + tabs.length) % tabs.length],
+        );
+        break;
+      case "Home":
+        event.preventDefault();
+        setActiveTab(tabs[0]);
+        break;
+      case "End":
+        event.preventDefault();
+        setActiveTab(tabs[tabs.length - 1]);
+        break;
+    }
+  };
+
   const {
     data: outputs,
     isFetching,
@@ -305,6 +335,7 @@ export function RunLogsModal({
               id="run-logs-tab-stdout"
               tabIndex={activeTab === "stdout" ? 0 : -1}
               onClick={() => setActiveTab("stdout")}
+              onKeyDown={(e) => handleTabKeyDown(e, "stdout")}
               className={`${tabBaseClass} ${
                 activeTab === "stdout" ? tabActiveClass : tabInactiveClass
               }`}
@@ -319,6 +350,7 @@ export function RunLogsModal({
               id="run-logs-tab-stderr"
               tabIndex={activeTab === "stderr" ? 0 : -1}
               onClick={() => setActiveTab("stderr")}
+              onKeyDown={(e) => handleTabKeyDown(e, "stderr")}
               className={`${tabBaseClass} ${
                 activeTab === "stderr" ? tabActiveClass : tabInactiveClass
               }`}
