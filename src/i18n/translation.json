@@ -773,6 +773,24 @@
     "ca": "Configura el LLM",
     "id": "Siapkan LLM"
   },
+  "HOME$LLM_MISSING_API_KEY_MESSAGE": {
+    "en": "Your active LLM profile \"{{profile}}\" is missing its API key. Edit the profile and re-enter the key before starting a conversation.",
+    "ja": "アクティブな LLM プロファイル「{{profile}}」に API キーがありません。会話を開始する前に、プロファイルを編集してキーを再入力してください。",
+    "zh-CN": "当前使用的 LLM 配置“{{profile}}”缺少 API 密钥。请编辑该配置并重新输入密钥，然后再开始对话。",
+    "zh-TW": "目前使用的 LLM 設定「{{profile}}」缺少 API 金鑰。請編輯該設定並重新輸入金鑰，然後再開始對話。",
+    "ko-KR": "활성 LLM 프로필 \"{{profile}}\"에 API 키가 없습니다. 대화를 시작하기 전에 프로필을 편집하여 키를 다시 입력하세요.",
+    "no": "Den aktive LLM-profilen «{{profile}}» mangler API-nøkkelen. Rediger profilen og skriv inn nøkkelen på nytt før du starter en samtale.",
+    "it": "Il profilo LLM attivo \"{{profile}}\" non ha la chiave API. Modifica il profilo e reinserisci la chiave prima di avviare una conversazione.",
+    "pt": "O perfil de LLM ativo \"{{profile}}\" está sem a chave de API. Edite o perfil e insira a chave novamente antes de iniciar uma conversa.",
+    "es": "El perfil de LLM activo \"{{profile}}\" no tiene clave de API. Edita el perfil y vuelve a introducir la clave antes de iniciar una conversación.",
+    "ar": "ملف LLM النشط \"{{profile}}\" يفتقد مفتاح API. عدّل الملف الشخصي وأعد إدخال المفتاح قبل بدء محادثة.",
+    "fr": "Le profil LLM actif « {{profile}} » n'a pas de clé API. Modifiez le profil et saisissez à nouveau la clé avant de démarrer une conversation.",
+    "tr": "Etkin LLM profili \"{{profile}}\" için API anahtarı eksik. Bir görüşme başlatmadan önce profili düzenleyip anahtarı yeniden girin.",
+    "de": "Dem aktiven LLM-Profil „{{profile}}“ fehlt der API-Schlüssel. Bearbeite das Profil und gib den Schlüssel erneut ein, bevor du eine Unterhaltung startest.",
+    "uk": "В активному профілі LLM \"{{profile}}\" відсутній ключ API. Відредагуйте профіль і повторно введіть ключ перед початком розмови.",
+    "ca": "El perfil LLM actiu \"{{profile}}\" no té clau d'API. Edita el perfil i torna a introduir la clau abans d'iniciar una conversa.",
+    "id": "Profil LLM aktif \"{{profile}}\" tidak memiliki kunci API. Edit profil dan masukkan kembali kuncinya sebelum memulai percakapan."
+  },
   "AUTH$INVALID_KEY": {
     "en": "Invalid API key. Please check the key and try again.",
     "ja": "無効なAPIキーです。キーを確認して再試行してください。",
