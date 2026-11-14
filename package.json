@@ -24,7 +24,7 @@
     "@heroui/styles": "3.2.7",
     "@microlink/react-json-view": "1.31.48",
     "@monaco-editor/react": "4.7.0",
-    "@openhands/extensions": "0.42.0",
+    "@openhands/extensions": "https://codeload.github.com/OpenHands/extensions/tar.gz/b82d5a927b80f65f3b7673b0c9c1141ec4ca899b",
     "@openhands/typescript-client": "1.62.0",
     "@react-router/node": "8.5.1",
     "@tailwindcss/vite": "4.3.3",

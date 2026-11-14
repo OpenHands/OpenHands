@@ -4,6 +4,7 @@ import {
   CircleAlert,
   LayoutDashboard,
   Library,
+  ShieldCheck,
   Sparkles,
   Timer,
   type LucideIcon,
@@ -23,4 +24,5 @@ export const MANIFEST_ICON_BY_SLUG = {
   "circle-alert": CircleAlert,
   activity: Activity,
   timer: Timer,
+  "shield-check": ShieldCheck,
 } satisfies Record<InterfaceIconSlug, LucideIcon>;
