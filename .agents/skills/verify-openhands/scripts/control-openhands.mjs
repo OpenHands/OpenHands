@@ -419,6 +419,17 @@ async function browserCall(run, cmd, args = {}, { timeout = 120_000 } = {}) {
   return result;
 }
 
+// A user who opens the app over a LAN or VPN address (plain HTTP, a host that
+// is not loopback) gets a page that is not a secure context: crypto.randomUUID,
+// navigator.clipboard and service workers are absent there (#19514). The
+// browser daemon resolves this reserved name to 127.0.0.1 itself, so the run
+// has such an origin in any sandbox, with no extra interface, no /etc/hosts
+// entry and the services still bound to loopback.
+const LAN_HOST = "lan.openhands.test";
+function lanUrlOf(run) {
+  return run.lanUrl ?? `http://${LAN_HOST}:${new URL(run.baseUrl).port}`;
+}
+
 async function startBrowser(run) {
   const existing = daemonInfo(run);
   if (existing) return { alreadyRunning: true, pid: existing.pid };
@@ -432,7 +443,10 @@ async function startBrowser(run) {
       OH_VERIFY_RUN: run.dir,
       OH_VERIFY_BASE_URL: run.baseUrl,
       // `browser goto` may also open the run's own locked-to-Cloud page.
-      OH_VERIFY_EXTRA_ORIGINS: run.lockedCloud?.url ?? "",
+      OH_VERIFY_EXTRA_ORIGINS: [run.lockedCloud?.url, lanUrlOf(run)]
+        .filter(Boolean)
+        .join(","),
+      OH_VERIFY_LAN_HOST: LAN_HOST,
     },
   });
   child.unref();
@@ -806,6 +820,9 @@ async function cmdLaunch({ flags }) {
     builtThisRun: built,
     mode: flags.public ? "public" : "local",
     baseUrl: `http://127.0.0.1:${ports.ingress}`,
+    // The same ingress under a name that is not loopback: a plain-HTTP origin
+    // the browser does not treat as a secure context (see lanUrlOf).
+    lanUrl: `http://${LAN_HOST}:${ports.ingress}`,
     ports,
     launcherArgs,
     startedAt: new Date().toISOString(),
@@ -872,6 +889,7 @@ async function cmdLaunch({ flags }) {
     run: dir,
     ...(envWarning ? { warning: envWarning } : {}),
     baseUrl: run.baseUrl,
+    lanUrl: lanUrlOf(run),
     mode: run.mode,
     revision,
     builtThisRun: built,
@@ -1525,7 +1543,7 @@ function listFiles(dir) {
 async function cmdEnv({ flags }) {
   const run = loadRun(flags);
   process.stdout.write(
-    `export OH_VERIFY_RUN=${run.dir}\nexport OH_VERIFY_BASE_URL=${run.baseUrl}\n`,
+    `export OH_VERIFY_RUN=${run.dir}\nexport OH_VERIFY_BASE_URL=${run.baseUrl}\nexport OH_VERIFY_LAN_URL=${lanUrlOf(run)}\n`,
   );
 }
 
@@ -1915,7 +1933,9 @@ async function cmdLogin({ flags }) {
 async function cmdOnboard({ flags }) {
   const run = loadRun(flags);
   const steps = [];
-  await browserCall(run, "goto", { target: "/" });
+  // --stay: answer the dialogs on the page that is open (another origin of
+  // this run, such as lanUrl, has its own browser storage and asks again).
+  if (!flags.stay) await browserCall(run, "goto", { target: "/" });
   await delay(1500);
   if (await visible(run, "testid=telemetry-consent-form")) {
     const analytics = flags.analytics === "on";
@@ -4875,7 +4895,7 @@ states can be driven through the UI. Bring everything back with restart.
 `,
   runs: `control-openhands runs — every run under $OH_VERIFY_HOME with liveness.
 `,
-  env: `control-openhands env — export lines (OH_VERIFY_RUN, OH_VERIFY_BASE_URL) for this run.
+  env: `control-openhands env — export lines (OH_VERIFY_RUN, OH_VERIFY_BASE_URL, OH_VERIFY_LAN_URL) for this run.
 `,
   _: `control-openhands — drive a real, isolated Agent Canvas stack like a user.
 
@@ -4949,6 +4969,13 @@ option) on P+4, listed as ports.lockedCloud and lockedCloud.url. The locked page
 talks only to that Cloud host, never to the run's backend. \`browser goto
 <lockedCloud.url>/\` opens it without --allow-external, doctor checks the lock is
 injected, and stop ends it with the run.
+Every run also answers at lanUrl (http://lan.openhands.test:P): the same
+ingress under a host name that is not loopback, which the run's browser
+resolves to 127.0.0.1 itself. A page opened there is plain HTTP outside a
+secure context, as it is for a user who reaches the app over a LAN or VPN
+address: \`browser goto "$OH_VERIFY_LAN_URL/"\` (no --allow-external), then
+\`browser eval isSecureContext\` reads false. It needs no network interface
+and the services stay bound to loopback.
 Idempotent: an alive current run is reused unless --new is given.
 --print-run prints only the run directory, for
   export OH_VERIFY_RUN=$(control-openhands launch --new --print-run)
@@ -5017,11 +5044,13 @@ Examples:
   DEEPSEEK_API_KEY=... control-openhands llm preset deepseek
   control-openhands llm set --profile alt --model deepseek/deepseek-v4-pro --api-key-env DEEPSEEK_API_KEY --no-activate
 `,
-  onboard: `control-openhands onboard [--skip] [--agent openhands|claude-code|codex|gemini-cli] [--analytics on|off]
+  onboard: `control-openhands onboard [--skip] [--stay] [--agent openhands|claude-code|codex|gemini-cli] [--analytics on|off]
 
 Answers the telemetry consent form (analytics off by default) and then either
 skips the onboarding modal (--skip) or walks it: choose agent → keep current LLM
 settings → close at say-hello. Skipping is not proof that onboarding works.
+--stay answers the dialogs on the page that is open instead of going to / first:
+another origin of the run (lanUrl) has its own browser storage and asks again.
 `,
   conversation: `control-openhands conversation start --prompt TEXT [--wait] [--until STATES] [--timeout SEC] [--stay] [--workspace PATH [--mode local_repo|new_worktree]]
 control-openhands conversation wait ID [--until finished,idle] [--timeout SEC] [--fresh]
@@ -5091,7 +5120,7 @@ Example: 'testid=add-secret-form >> testid=submit-button'
 
 Verbs
   start | stop                          daemon lifecycle (launch starts it)
-  goto <path> [--allow-external]        navigate (run origin only by default)
+  goto <path> [--allow-external]        navigate (run origins only by default: baseUrl, lanUrl)
   reload | back | forward | url
   click|dblclick <sel> [--force] [--timeout MS] [--button left|middle|right]
         [--modifiers Control,Meta,Shift,Alt] [--position X,Y] (offset inside the element)

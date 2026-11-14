@@ -106,6 +106,12 @@ control-openhands stop                         # stops only this run; evidence s
   only `scripts/static-server.mjs` takes `--lock-to-cloud`; `browser goto
   <lockedCloud.url>/` opens it as a run page, and `stop` ends it with the run.
   Never hand-start these processes on fixed ports: `stop` cannot see them.
+- **A non-loopback origin** comes with every run: `lanUrl`
+  (`$OH_VERIFY_LAN_URL` from `control-openhands env`) is the run's ingress
+  under a name its browser resolves to loopback, so the page is plain HTTP
+  outside a secure context, as it is for a user on a LAN or VPN address
+  (`F26.lan-http-origin`). It has its own browser storage: `onboard --skip
+  --stay` and `conversation start --stay` act on the page that is open.
 - **Doctor** checks the launcher's process group, ports, served build revision,
   unauthenticated rejection, authenticated settings, Agent Server pin and the
   UI's minimum Agent Server version, automation health and a throwaway-tab UI

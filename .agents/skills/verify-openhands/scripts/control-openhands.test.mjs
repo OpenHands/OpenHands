@@ -3263,3 +3263,35 @@ test("bug run puts back the viewport a block changed", () => {
   });
   assert.match(help.stdout, /viewportRestored/);
 });
+
+test("every run names a non-loopback plain-HTTP origin on its ingress port", () => {
+  // A run saved before lanUrl existed still gets one, from its baseUrl.
+  const dir = mkdtempSync(join(tmpdir(), "lan-run-"));
+  mkdirSync(join(dir, "private"));
+  writeFileSync(
+    join(dir, "run.json"),
+    JSON.stringify({
+      baseUrl: "http://127.0.0.1:18800",
+      ports: { ingress: 18800 },
+      launcherPgid: 0,
+    }),
+  );
+  const res = spawnSync(process.execPath, [cli, "env"], {
+    encoding: "utf8",
+    env: { ...process.env, OH_VERIFY_RUN: dir },
+  });
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(
+    res.stdout,
+    /^export OH_VERIFY_LAN_URL=http:\/\/lan\.openhands\.test:18800$/m,
+  );
+  const launch = spawnSync(process.execPath, [cli, "help", "launch"], {
+    encoding: "utf8",
+  });
+  assert.match(launch.stdout, /lanUrl/);
+  assert.match(launch.stdout, /isSecureContext/);
+  const onboard = spawnSync(process.execPath, [cli, "help", "onboard"], {
+    encoding: "utf8",
+  });
+  assert.match(onboard.stdout, /--stay/);
+});
