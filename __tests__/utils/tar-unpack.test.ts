@@ -56,6 +56,69 @@ describe("unpackTarGzip", () => {
     expect(entries[0].path).toBe("main.py");
   });
 
+  it("reads a UTF-8 member name written by the packer", async () => {
+    // Arrange: `packTar` writes the name as the bytes it encodes to.
+    const archive = new Uint8Array(
+      await packTarGzip([{ name: "café.py", content: "print('hi')\n" }]),
+    );
+
+    // Act
+    const entries = await unpackTarGzip(archive, budget);
+
+    // Assert
+    expect(entries[0].path).toBe("café.py");
+  });
+
+  it("decodes the ustar prefix field as UTF-8", async () => {
+    // Arrange: a header whose directory part lives in the prefix field.
+    const archive = packTar([{ name: "main.py", content: "1" }]);
+    archive.set(new TextEncoder().encode("données"), PREFIX_OFFSET);
+
+    // Act
+    const entries = await unpackTarGzip(archive, budget);
+
+    // Assert
+    expect(entries[0].path).toBe("données/main.py");
+  });
+
+  it("keeps a legacy non-UTF-8 name readable", async () => {
+    // Arrange: `caf\xe9.py` is Latin-1, not UTF-8. The reader must keep its
+    // existing single-byte fallback instead of producing replacement chars.
+    const archive = packTar([{ name: "cafe.py", content: "1" }]);
+    archive[3] = 0xe9;
+
+    // Act
+    const entries = await unpackTarGzip(archive, budget);
+
+    // Assert
+    expect(entries[0].path).toBe("café.py");
+  });
+
+  it("ignores bytes after a name's NUL terminator", async () => {
+    // Arrange: a valid UTF-8 name followed by an invalid byte in the unused
+    // part of the field. Validity is decided on the name bytes, not the field.
+    const archive = packTar([{ name: "café.py", content: "1" }]);
+    archive[8] = 0;
+    archive[9] = 0xff;
+
+    // Act
+    const entries = await unpackTarGzip(archive, budget);
+
+    // Assert
+    expect(entries[0].path).toBe("café.py");
+  });
+
+  it("preserves a leading U+FEFF in a member name", async () => {
+    // Arrange: a BOM before the name is data, not an encoding marker.
+    const archive = packTar([{ name: "\uFEFFmain.py", content: "1" }]);
+
+    // Act
+    const entries = await unpackTarGzip(archive, budget);
+
+    // Assert
+    expect(entries[0].path).toBe("\uFEFFmain.py");
+  });
+
   it("joins the ustar prefix field onto the name", async () => {
     // Arrange: a header whose directory part lives in the prefix field.
     const archive = packTar([{ name: "util.py", content: "1" }]);
