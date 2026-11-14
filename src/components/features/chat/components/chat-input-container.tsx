@@ -30,6 +30,8 @@ interface ChatInputContainerProps {
   onKeyDown: (e: React.KeyboardEvent) => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  onCompositionStart?: () => void;
+  onCompositionEnd?: () => void;
   isSlashMenuOpen?: boolean;
   slashItems?: SlashCommandItem[];
   slashSelectedIndex?: number;
@@ -57,6 +59,8 @@ export function ChatInputContainer({
   onKeyDown,
   onFocus,
   onBlur,
+  onCompositionStart,
+  onCompositionEnd,
   isSlashMenuOpen = false,
   slashItems = [],
   slashSelectedIndex = 0,
@@ -102,6 +106,8 @@ export function ChatInputContainer({
           onKeyDown={onKeyDown}
           onFocus={onFocus}
           onBlur={onBlur}
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={onCompositionEnd}
         />
       </div>
 
