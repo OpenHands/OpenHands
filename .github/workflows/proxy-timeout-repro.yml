@@ -1,0 +1,46 @@
+name: Proxy timeout reproduction
+
+on:
+  pull_request:
+    paths:
+      - "scripts/proxy-utils.mjs"
+      - "scripts/ingress.mjs"
+      - "scripts/repro/proxy-timeout/**"
+      - ".github/workflows/proxy-timeout-repro.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24.22.1"
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+      - name: Prepare the unpatched control
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/proxy-base" 9979fa2591681d0801f6b5c1d66fd87ea7230de4
+          npm ci --ignore-scripts --prefix "$RUNNER_TEMP/proxy-base"
+      - name: Compare real ingress and downstream deadlines
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p proxy-repro-logs
+          git rev-parse HEAD | tee proxy-repro-logs/head-sha.txt
+          node scripts/repro/proxy-timeout/repro.mjs "$RUNNER_TEMP/proxy-base" warning 2>&1 | tee proxy-repro-logs/base.txt
+          node scripts/repro/proxy-timeout/timeout-repro.mjs "$RUNNER_TEMP/proxy-base" 2>&1 | tee -a proxy-repro-logs/base.txt
+          node scripts/repro/proxy-timeout/repro.mjs . clean 2>&1 | tee proxy-repro-logs/head.txt
+          node scripts/repro/proxy-timeout/timeout-repro.mjs . 2>&1 | tee -a proxy-repro-logs/head.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: proxy-timeout-raw-output
+          path: proxy-repro-logs/

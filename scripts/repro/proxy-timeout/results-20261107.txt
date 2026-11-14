@@ -1,0 +1,58 @@
+{"time":"2026-11-07T02:20:35.384Z","node":"v24.22.1","cwd":"/private/tmp/proxy-timeout-verification-20261107","root":"/private/tmp/proxy-timeout-verification-20261107/main","argv":["/Users/kidad/.npm/_npx/ef8b185be06dfeb4/node_modules/node/bin/node","/private/tmp/proxy-timeout-verification-20261107/head/scripts/repro/proxy-timeout/repro.mjs","main","warning"],"pid":48044}
+spawn ["/Users/kidad/.npm/_npx/ef8b185be06dfeb4/node_modules/node/bin/node","/private/tmp/proxy-timeout-verification-20261107/main/scripts/ingress.mjs","--port","59499","--default","http://127.0.0.1:59497"]
+
+╔═══════════════════════════════════════════════════════════════╗
+║  Ingress Proxy                                                ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Listening on: http://localhost:59499/                          ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Routes:                                                      ║
+║      * (default) → http://127.0.0.1:59497                     ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+
+(node:48045) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 timeout listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+Shutting down...
+{"requests":20,"connections":1,"warning":true,"expected":"warning"}
+{"time":"2026-11-07T02:20:35.496Z","node":"v24.22.1","cwd":"/private/tmp/proxy-timeout-verification-20261107","root":"/private/tmp/proxy-timeout-verification-20261107/main","argv":["/Users/kidad/.npm/_npx/ef8b185be06dfeb4/node_modules/node/bin/node","/private/tmp/proxy-timeout-verification-20261107/head/scripts/repro/proxy-timeout/timeout-repro.mjs","main"],"pid":48046}
+{"timeoutMs":300,"elapsedMs":306,"code":"ECONNRESET"}
+{"time":"2026-11-07T02:20:35.856Z","node":"v24.22.1","cwd":"/private/tmp/proxy-timeout-verification-20261107","root":"/private/tmp/proxy-timeout-verification-20261107/head","argv":["/Users/kidad/.npm/_npx/ef8b185be06dfeb4/node_modules/node/bin/node","/private/tmp/proxy-timeout-verification-20261107/head/scripts/repro/proxy-timeout/repro.mjs","head","clean"],"pid":48047}
+spawn ["/Users/kidad/.npm/_npx/ef8b185be06dfeb4/node_modules/node/bin/node","/private/tmp/proxy-timeout-verification-20261107/head/scripts/ingress.mjs","--port","59508","--default","http://127.0.0.1:59507"]
+
+╔═══════════════════════════════════════════════════════════════╗
+║  Ingress Proxy                                                ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Listening on: http://localhost:59508/                          ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Routes:                                                      ║
+║      * (default) → http://127.0.0.1:59507                     ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+
+
+Shutting down...
+{"requests":20,"connections":1,"warning":false,"expected":"clean"}
+{"time":"2026-11-07T02:20:35.960Z","node":"v24.22.1","cwd":"/private/tmp/proxy-timeout-verification-20261107","root":"/private/tmp/proxy-timeout-verification-20261107/head","argv":["/Users/kidad/.npm/_npx/ef8b185be06dfeb4/node_modules/node/bin/node","/private/tmp/proxy-timeout-verification-20261107/head/scripts/repro/proxy-timeout/timeout-repro.mjs","head"],"pid":48049}
+{"timeoutMs":300,"elapsedMs":306,"code":"ECONNRESET"}
+{"time":"2026-11-07T02:20:36.315Z","node":"v24.22.1","cwd":"/private/tmp/proxy-timeout-verification-20261107","root":"/private/tmp/proxy-timeout-verification-20261107/published","argv":["/Users/kidad/.npm/_npx/ef8b185be06dfeb4/node_modules/node/bin/node","/private/tmp/proxy-timeout-verification-20261107/head/scripts/repro/proxy-timeout/repro.mjs","published","warning"],"pid":48050}
+spawn ["/Users/kidad/.npm/_npx/ef8b185be06dfeb4/node_modules/node/bin/node","/private/tmp/proxy-timeout-verification-20261107/published/scripts/ingress.mjs","--port","59516","--default","http://127.0.0.1:59515"]
+
+╔═══════════════════════════════════════════════════════════════╗
+║  Ingress Proxy                                                ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Listening on: http://localhost:59516/                          ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Routes:                                                      ║
+║      * (default) → http://127.0.0.1:59515                     ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+
+(node:48051) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 timeout listeners added to [Socket]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+Shutting down...
+{"requests":20,"connections":1,"warning":true,"expected":"warning"}
+{"time":"2026-11-07T02:20:36.413Z","node":"v24.22.1","cwd":"/private/tmp/proxy-timeout-verification-20261107","root":"/private/tmp/proxy-timeout-verification-20261107/published","argv":["/Users/kidad/.npm/_npx/ef8b185be06dfeb4/node_modules/node/bin/node","/private/tmp/proxy-timeout-verification-20261107/head/scripts/repro/proxy-timeout/timeout-repro.mjs","published"],"pid":48052}
+{"timeoutMs":300,"elapsedMs":305,"code":"ECONNRESET"}
