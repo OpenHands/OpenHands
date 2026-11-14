@@ -308,6 +308,10 @@ export function DigitalOceanConnectPanel({
           error={signIn.error}
           onSignInWithOAuth={signIn.signInWithOAuth}
           onSaveToken={signIn.saveToken}
+          pendingSignIn={signIn.pendingSignIn}
+          isCompletingSignIn={signIn.isCompletingSignIn}
+          onCompleteSignIn={signIn.completeSignIn}
+          onCancelSignIn={signIn.cancelSignIn}
         />
       </div>
     );

@@ -5,15 +5,33 @@ import { useTranslation } from "react-i18next";
 import {
   getMarsErrorMessage,
   requireMarsBridge,
+  type MarsAuthState,
+  type MarsSignInStatus,
 } from "#/api/mars/mars-tunnel-backend";
 import { MARS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { I18nKey } from "#/i18n/declaration";
 
+const MIN_AWAIT_INTERVAL_MS = 1_000;
+/**
+ * Asks in a row that may fail (a network blip, a Canvas restart, a proxy
+ * cutting the held call) before the page gives the sign-in up.
+ */
+const MAX_FAILED_AWAITS = 4;
+
+/** A browser sign-in waiting on DigitalOcean. */
+export interface PendingMarsSignIn {
+  /** DigitalOcean's page, offered again if the new tab did not open. */
+  authorizeUrl: string;
+  /** False when the return address will not load here, so it is pasted back. */
+  returnsHere: boolean;
+}
+
 /**
  * DigitalOcean sign-in by OAuth or personal access token, plus switching
- * between saved connections and signing out. The token goes straight to the
- * main process, which verifies it against harness-api before keeping it, so a
- * success here means the team really has Managed Agents.
+ * between saved connections and signing out. Tokens and OAuth proofs stay in
+ * the bridge (the desktop main process or the Canvas server), which verifies
+ * a credential against harness-api before keeping it, so a success here
+ * means the team really has Managed Agents.
  */
 export function useMarsSignIn({
   onAuthChanged,
@@ -21,6 +39,23 @@ export function useMarsSignIn({
   const { t } = useTranslation("openhands");
   const queryClient = useQueryClient();
   const [error, setError] = React.useState<string | null>(null);
+  const [pending, setPending] = React.useState<PendingMarsSignIn | null>(null);
+  /** The browser sign-in this page is waiting on, if any. */
+  const attemptRef = React.useRef<string | null>(null);
+  /** The tab opened for DigitalOcean's page. */
+  const tabRef = React.useRef<Window | null>(null);
+  /** Ends this page's wait at once, without waiting on a call in flight. */
+  const releaseRef = React.useRef<(() => void) | null>(null);
+
+  // Leaving stops the waiting, not the sign-in: a return that lands later
+  // still signs the host in, and the next view shows it.
+  React.useEffect(
+    () => () => {
+      attemptRef.current = null;
+      releaseRef.current?.();
+    },
+    [],
+  );
 
   // A new attempt drops the previous one's error (a failed sign-out included,
   // which would otherwise linger on the sign-in form).
@@ -36,10 +71,102 @@ export function useMarsSignIn({
         t(I18nKey.BACKEND$DIGITALOCEAN_AUTH_FAILED),
     );
 
+  /**
+   * The page's sign-in: DigitalOcean opens in the tab the click already
+   * made, and the bridge reports when the return reached the Canvas server
+   * (or the user pasted it). Resolves null when the sign-in was cancelled.
+   */
+  const signInInBrowser = async (): Promise<MarsAuthState | null> => {
+    const bridge = requireMarsBridge();
+    let attempt;
+    try {
+      attempt = await bridge.beginSignIn!();
+    } catch (failure) {
+      tabRef.current?.close();
+      throw failure;
+    }
+    const id = attempt.attemptId;
+    attemptRef.current = id;
+    setPending({
+      authorizeUrl: attempt.authorizeUrl,
+      returnsHere: attempt.returnsHere !== false,
+    });
+    const tab = tabRef.current;
+    if (tab && !tab.closed && attempt.authorizeUrl.startsWith("https://")) {
+      // DigitalOcean's page gets no handle back to Canvas.
+      tab.opener = null;
+      tab.location.href = attempt.authorizeUrl;
+    }
+    // Cancel answers at once, even while a held call is still out.
+    const released = new Promise<null>((resolve) => {
+      releaseRef.current = () => resolve(null);
+    });
+    let failures = 0;
+    for (;;) {
+      const askedAt = Date.now();
+      let result: MarsSignInStatus | null | undefined;
+      try {
+        result = await Promise.race([bridge.awaitSignIn!(id), released]);
+      } catch (failure) {
+        if (attemptRef.current !== id) return null;
+        failures += 1;
+        if (failures >= MAX_FAILED_AWAITS) {
+          // Giving up ends the sign-in on the host too, so a return that
+          // lands later cannot sign in with nothing here showing it.
+          attemptRef.current = null;
+          void bridge.cancelSignIn?.(id);
+          throw failure;
+        }
+      }
+      if (attemptRef.current !== id || result === null) return null;
+      if (result) {
+        failures = 0;
+        if (result.status === "done") return result.authState;
+        if (result.status === "failed") {
+          throw new Error(result.message ?? "DigitalOcean sign-in failed.");
+        }
+      }
+      // The bridge holds each call open; one that answers at once, or fails,
+      // is not asked again straight away. Failures back off.
+      const interval = MIN_AWAIT_INTERVAL_MS * 2 ** failures;
+      const wait = interval - (Date.now() - askedAt);
+      if (wait > 0) {
+        await Promise.race([
+          new Promise((resolve) => setTimeout(resolve, wait)),
+          released,
+        ]);
+      }
+    }
+  };
+
   const oauth = useMutation({
-    mutationFn: () => requireMarsBridge().signInWithOAuth(),
+    mutationFn: async () => {
+      const bridge = requireMarsBridge();
+      if (!bridge.beginSignIn || !bridge.awaitSignIn) {
+        return bridge.signInWithOAuth();
+      }
+      try {
+        return await signInInBrowser();
+      } finally {
+        setPending(null);
+        tabRef.current = null;
+        releaseRef.current = null;
+      }
+    },
     onMutate,
-    onSuccess,
+    // A cancelled sign-in changed nothing; the form it was started from stays.
+    onSuccess: (result) => {
+      if (result) onSuccess();
+    },
+    onError,
+  });
+  const pastedReturn = useMutation({
+    mutationFn: (returned: string) =>
+      requireMarsBridge().completeSignIn!(
+        returned.trim(),
+        attemptRef.current ?? undefined,
+      ),
+    onMutate,
     onError,
   });
   const pat = useMutation({
@@ -61,12 +188,42 @@ export function useMarsSignIn({
     onError,
   });
 
+  const signInWithOAuth = () => {
+    // A tab opened after an await counts as a popup and is blocked, so open
+    // it now, inside the click, and point it at DigitalOcean once the
+    // bridge has begun.
+    tabRef.current = requireMarsBridge().beginSignIn
+      ? window.open("about:blank", "_blank")
+      : null;
+    oauth.mutate();
+  };
+
+  const cancelSignIn = () => {
+    const id = attemptRef.current;
+    attemptRef.current = null;
+    setPending(null);
+    // The page stops waiting now, not when the call in flight answers.
+    releaseRef.current?.();
+    // DigitalOcean's tab stays: once cut loose from Canvas, Canvas cannot
+    // close it.
+    if (id) void requireMarsBridge().cancelSignIn?.(id);
+  };
+
   return {
-    signInWithOAuth: () => oauth.mutate(),
-    saveToken: (token: string) => pat.mutate(token),
+    signInWithOAuth,
+    /** The browser sign-in in progress, for the paste-back field. */
+    pendingSignIn: pending,
+    completeSignIn: (returned: string) => pastedReturn.mutate(returned),
+    cancelSignIn,
+    saveToken: (token: string) => {
+      // A token instead: the browser sign-in still waiting is dropped.
+      if (attemptRef.current) cancelSignIn();
+      pat.mutate(token);
+    },
     switchConnection: (id: string) => switchConnection.mutate(id),
     signOut: () => signOut.mutate(),
     isSigningIn: oauth.isPending,
+    isCompletingSignIn: pastedReturn.isPending,
     isSavingToken: pat.isPending,
     isSigningOut: signOut.isPending,
     error,

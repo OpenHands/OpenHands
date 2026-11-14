@@ -39,7 +39,7 @@
     "workspace": "openhands-workspace"
   },
   "mars": {
-    "_comment": "DigitalOcean Managed Agents: the Electron desktop app and the web build (its server hosts the experimental bridge only with MARS_WEB=1). apiBaseUrl is the harness API both use. oauthClientId (desktop only; the web build offers personal access tokens only) is the public client ID of the DigitalOcean OAuth app registered with redirect URI http://127.0.0.1:53682/callback; implicit grant needs no secret. Leave empty to offer personal access tokens only. Overridden at runtime by DO_OAUTH_CLIENT_ID / MARS_API_BASE_URL. Read by scripts/mars-tunnel-bridge.mjs.",
+    "_comment": "DigitalOcean Managed Agents: the Electron desktop app and the web build (its server hosts the experimental bridge only with MARS_WEB=1). apiBaseUrl is the harness API both use. oauthClientId is the public client ID of the DigitalOcean OAuth app (authorization code + PKCE, no secret), registered with loopback redirect URIs http://127.0.0.1/callback (desktop) and http://127.0.0.1/mars/oauth/callback, http://localhost/mars/oauth/callback, http://[::1]/mars/oauth/callback (web: the page's own loopback host); DigitalOcean matches loopback on any port. Leave empty to offer personal access tokens only. Overridden at runtime by DO_OAUTH_CLIENT_ID / MARS_API_BASE_URL. Read by scripts/mars-tunnel-bridge.mjs.",
     "apiBaseUrl": "https://api.digitalocean.com",
     "oauthClientId": ""
   },

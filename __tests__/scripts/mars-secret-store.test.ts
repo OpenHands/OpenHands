@@ -1,5 +1,6 @@
 // @vitest-environment node
-import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -148,6 +149,39 @@ describe("encrypted file store", () => {
     ).toBeNull();
     store.remove("digitalocean/c1");
     expect(store.read("digitalocean/c1")).toBeNull();
+  });
+
+  it("keeps every write when several Canvas processes write the file at once", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mars-secrets-"));
+    const script = join(dir, "writer.mjs");
+    const storeModule = new URL(
+      "../../scripts/mars-secret-store.mjs",
+      import.meta.url,
+    ).href;
+    writeFileSync(
+      script,
+      `import { createEncryptedFileStore } from ${JSON.stringify(storeModule)};
+const [dir, name] = process.argv.slice(2);
+const store = createEncryptedFileStore({ dir, secretKey: "host-key" });
+for (let i = 0; i < 100; i += 1) store.write(\`\${name}/\${i}\`, String(i));
+`,
+    );
+
+    await Promise.all(
+      ["first", "second"].map(
+        (name) =>
+          new Promise((done) =>
+            spawn(process.execPath, [script, dir, name]).on("exit", done),
+          ),
+      ),
+    );
+
+    const store = createEncryptedFileStore({ dir, secretKey: "host-key" });
+    for (const name of ["first", "second"]) {
+      for (let i = 0; i < 100; i += 1) {
+        expect(store.read(`${name}/${i}`)).toBe(String(i));
+      }
+    }
   });
 });
 
