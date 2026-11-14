@@ -1,0 +1,84 @@
+[
+  {
+    "label": "base",
+    "results": [
+      {
+        "attempt": 1,
+        "before": {
+          "name": "Keep phone draft 1",
+          "prompt": "Summarize pull requests 1",
+          "eventKey": "pull_request.closed",
+          "eventSelected": "true"
+        },
+        "after": {
+          "name": "New Automation",
+          "prompt": "",
+          "eventKey": null,
+          "eventSelected": "false"
+        }
+      },
+      {
+        "attempt": 2,
+        "before": {
+          "name": "Keep phone draft 2",
+          "prompt": "Summarize pull requests 2",
+          "eventKey": "pull_request.closed",
+          "eventSelected": "true"
+        },
+        "after": {
+          "name": "New Automation",
+          "prompt": "",
+          "eventKey": null,
+          "eventSelected": "false"
+        }
+      }
+    ],
+    "afterExit": {
+      "name": "New Automation",
+      "prompt": "",
+      "eventKey": null,
+      "eventSelected": "false"
+    }
+  },
+  {
+    "label": "fixed",
+    "results": [
+      {
+        "attempt": 1,
+        "before": {
+          "name": "Keep phone draft 1",
+          "prompt": "Summarize pull requests 1",
+          "eventKey": "pull_request.closed",
+          "eventSelected": "true"
+        },
+        "after": {
+          "name": "Keep phone draft 1",
+          "prompt": "Summarize pull requests 1",
+          "eventKey": "pull_request.closed",
+          "eventSelected": "true"
+        }
+      },
+      {
+        "attempt": 2,
+        "before": {
+          "name": "Keep phone draft 2",
+          "prompt": "Summarize pull requests 2",
+          "eventKey": "pull_request.closed",
+          "eventSelected": "true"
+        },
+        "after": {
+          "name": "Keep phone draft 2",
+          "prompt": "Summarize pull requests 2",
+          "eventKey": "pull_request.closed",
+          "eventSelected": "true"
+        }
+      }
+    ],
+    "afterExit": {
+      "name": "New Automation",
+      "prompt": "",
+      "eventKey": null,
+      "eventSelected": "false"
+    }
+  }
+]
