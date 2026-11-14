@@ -4,9 +4,11 @@ import { UploadedFiles } from "../uploaded-files";
 import { ChatInputRow } from "./chat-input-row";
 import { ChatInputActions } from "./chat-input-actions";
 import { SlashCommandMenu } from "./slash-command-menu";
+import { ConversationMentionMenu } from "./conversation-mention-menu";
 import { useConversationStore } from "#/stores/conversation-store";
 import { cn } from "#/utils/utils";
 import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
+import { ConversationMentionItem } from "#/hooks/chat/use-conversation-mention-picker";
 import { insertTextAtCaret } from "../utils/chat-input.utils";
 
 interface ChatInputContainerProps {
@@ -34,6 +36,10 @@ interface ChatInputContainerProps {
   slashItems?: SlashCommandItem[];
   slashSelectedIndex?: number;
   onSlashSelect?: (item: SlashCommandItem) => void;
+  isMentionMenuOpen?: boolean;
+  mentionItems?: ConversationMentionItem[];
+  mentionSelectedIndex?: number;
+  onMentionSelect?: (item: ConversationMentionItem) => void;
 }
 
 export function ChatInputContainer({
@@ -61,6 +67,10 @@ export function ChatInputContainer({
   slashItems = [],
   slashSelectedIndex = 0,
   onSlashSelect,
+  isMentionMenuOpen = false,
+  mentionItems = [],
+  mentionSelectedIndex = 0,
+  onMentionSelect,
 }: ChatInputContainerProps) {
   const conversationMode = useConversationStore(
     (state) => state.conversationMode,
@@ -90,6 +100,13 @@ export function ChatInputContainer({
             items={slashItems}
             selectedIndex={slashSelectedIndex}
             onSelect={onSlashSelect}
+          />
+        )}
+        {isMentionMenuOpen && onMentionSelect && (
+          <ConversationMentionMenu
+            items={mentionItems}
+            selectedIndex={mentionSelectedIndex}
+            onSelect={onMentionSelect}
           />
         )}
 

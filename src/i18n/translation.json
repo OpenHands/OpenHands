@@ -43450,5 +43450,41 @@
     "uk": "Відкрити Customer Center",
     "ca": "Obre Customer Center",
     "id": "Buka Customer Center"
+  },
+  "CHAT_INTERFACE$CONVERSATIONS": {
+    "en": "Conversations",
+    "ja": "会話",
+    "zh-CN": "对话",
+    "zh-TW": "對話",
+    "ko-KR": "대화",
+    "no": "Samtaler",
+    "ar": "المحادثات",
+    "de": "Unterhaltungen",
+    "fr": "Conversations",
+    "it": "Conversazioni",
+    "pt": "Conversas",
+    "es": "Conversaciones",
+    "tr": "Sohbetler",
+    "uk": "Розмови",
+    "ca": "Converses",
+    "id": "Percakapan"
+  },
+  "CHAT_INTERFACE$UNTITLED_CONVERSATION": {
+    "en": "Untitled conversation",
+    "ja": "無題の会話",
+    "zh-CN": "未命名对话",
+    "zh-TW": "未命名對話",
+    "ko-KR": "제목 없는 대화",
+    "no": "Samtale uten tittel",
+    "ar": "محادثة بلا عنوان",
+    "de": "Unterhaltung ohne Titel",
+    "fr": "Conversation sans titre",
+    "it": "Conversazione senza titolo",
+    "pt": "Conversa sem título",
+    "es": "Conversación sin título",
+    "tr": "Başlıksız sohbet",
+    "uk": "Розмова без назви",
+    "ca": "Conversa sense títol",
+    "id": "Percakapan tanpa judul"
   }
 }
