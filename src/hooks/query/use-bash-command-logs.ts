@@ -1,13 +1,30 @@
+import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { isSdkHttpError } from "#/api/agent-server-compatibility";
-import BashService from "#/api/bash-service/bash-service.api";
+import BashService, {
+  type BashOutputListing,
+} from "#/api/bash-service/bash-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useCloudSandbox } from "./use-cloud-sandbox";
 import { useUserConversation } from "./use-user-conversation";
 
 export const BASH_COMMAND_LOGS_QUERY_KEY = ["bash-command-logs"] as const;
+
+/** How often runner output is re-read while it can still change. */
+export const RUNNER_OUTPUT_POLL_INTERVAL_MS = 3000;
+
+/**
+ * How long to keep re-reading after the run reaches a terminal status when
+ * the runner has not yet published its final (exit-code-bearing) output.
+ * The automation service can record completion before the runner process
+ * exits, so the last output may land a few seconds after the status flips.
+ */
+export const RUNNER_OUTPUT_SETTLE_WINDOW_MS = 30_000;
+
+/** Cache lifetime for output that can no longer change. */
+const FINAL_OUTPUT_STALE_TIME_MS = 60 * 1000;
 
 /**
  * Reasons the modal can't fetch logs from a cloud sandbox, in priority
@@ -40,6 +57,13 @@ interface UseBashCommandLogsOptions {
   sandboxId?: string | null;
   bashCommandId: string | null | undefined;
   enabled?: boolean;
+  /**
+   * Whether the automation run is still PENDING/RUNNING. While it is, the
+   * output is re-read on an interval; when it turns terminal the output is
+   * re-read at once and then until the runner's final output arrives (or
+   * the settle window passes).
+   */
+  isRunActive?: boolean;
 }
 
 /** Name of the agent-server entry in a cloud sandbox's `exposed_urls`. */
@@ -76,6 +100,30 @@ function sandboxIssueFromStatus(
   }
 }
 
+function httpStatusOf(error: unknown): number | undefined {
+  if (axios.isAxiosError(error)) return error.response?.status;
+  if (isSdkHttpError(error)) return (error as { status: number }).status;
+  return undefined;
+}
+
+/** 401/403: the runtime answered but refused these credentials. */
+function isAuthError(error: unknown): boolean {
+  const status = httpStatusOf(error);
+  return status === 401 || status === 403;
+}
+
+/**
+ * The runner's last `BashOutput` carries its exit code; once one has been
+ * read the command is finished and its output will not grow.
+ */
+function hasFinalOutput(listing: BashOutputListing | undefined): boolean {
+  return (
+    listing?.outputs.some(
+      (output) => output.exit_code !== null && output.exit_code !== undefined,
+    ) ?? false
+  );
+}
+
 /**
  * Detect "the runtime is unreachable" errors from the cloud proxy. The
  * proxy itself returns 5xx when the upstream sandbox is gone; runtimes
@@ -86,11 +134,7 @@ function sandboxIssueFromStatus(
  * axios-shaped errors are still recognized as well.
  */
 function classifyFetchError(error: unknown): SandboxIssue | null {
-  const status = axios.isAxiosError(error)
-    ? error.response?.status
-    : isSdkHttpError(error)
-      ? (error as { status: number }).status
-      : undefined;
+  const status = httpStatusOf(error);
   if (status !== undefined) {
     // Treat 502/503/504 (proxy can't reach upstream) and 404 (sandbox or
     // resource no longer exists) as the sandbox being gone. We do not
@@ -140,7 +184,13 @@ function classifyFetchError(error: unknown): SandboxIssue | null {
  *   as `unreachable`.
  */
 export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
-  const { conversationId, sandboxId, bashCommandId, enabled = true } = options;
+  const {
+    conversationId,
+    sandboxId,
+    bashCommandId,
+    enabled = true,
+    isRunActive = false,
+  } = options;
   const active = useActiveBackend();
   const isCloud = active.backend.kind === "cloud";
 
@@ -232,6 +282,7 @@ export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
     !preflightIssue &&
     !conversationMissing;
 
+  const settleDeadlineRef = useRef(0);
   const query = useQuery({
     queryKey: [
       ...BASH_COMMAND_LOGS_QUERY_KEY,
@@ -248,12 +299,41 @@ export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
         bashCommandId as string,
       ),
     enabled: canFire,
-    // Completed-run logs don't change — cache long enough that reopening
-    // the modal is instant but not forever.
-    staleTime: 60 * 1000,
+    // Finished output doesn't change — cache it long enough that reopening
+    // the modal is instant. Output that may still grow is always stale, so
+    // reopening the modal reads it again instead of showing a stale empty
+    // result.
+    staleTime: (q) =>
+      !isRunActive && hasFinalOutput(q.state.data)
+        ? FINAL_OUTPUT_STALE_TIME_MS
+        : 0,
     gcTime: 5 * 60 * 1000,
     retry: false,
+    refetchInterval: (q) => {
+      // Retrying cannot fix a non-transient failure (401/403, 4xx), so stop
+      // and leave its error on screen. Transient ones (5xx, network) retry.
+      if (q.state.error && !classifyFetchError(q.state.error)) return false;
+      if (isRunActive) return RUNNER_OUTPUT_POLL_INTERVAL_MS;
+      if (hasFinalOutput(q.state.data)) return false;
+      return Date.now() < settleDeadlineRef.current
+        ? RUNNER_OUTPUT_POLL_INTERVAL_MS
+        : false;
+    },
   });
+
+  // Open a settle window whenever the modal is showing a terminal run, both
+  // when it opens on one and when the open run's status flips to terminal.
+  // A run that turns terminal under an open modal is re-read at once, so
+  // output published around completion appears without reopening.
+  const { refetch } = query;
+  const wasRunActiveRef = useRef(isRunActive);
+  useEffect(() => {
+    const turnedTerminal = wasRunActiveRef.current && !isRunActive;
+    wasRunActiveRef.current = isRunActive;
+    if (!enabled || isRunActive) return;
+    settleDeadlineRef.current = Date.now() + RUNNER_OUTPUT_SETTLE_WINDOW_MS;
+    if (turnedTerminal && canFire) void refetch();
+  }, [enabled, isRunActive, canFire, refetch]);
 
   // If the request fired and failed in a way that suggests the
   // sandbox is gone/unreachable, surface it as a sandbox issue so the
@@ -262,7 +342,16 @@ export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
   const sandboxIssue: SandboxIssue | null = preflightIssue ?? fetchIssue;
 
   return {
-    data: query.data,
+    data: query.data?.outputs,
+    /**
+     * True when the server had more output than the page cap allowed us to
+     * read, so `data` is only the start of the command's output.
+     */
+    isTruncated: query.data?.truncated ?? false,
+    /** True once the runner's final, exit-code-bearing output was read. */
+    hasFinalOutput: hasFinalOutput(query.data),
+    /** The runtime refused these credentials (401/403). */
+    isAuthError: isAuthError(query.error),
     /**
      * Set only when the request actually fired and failed AND the
      * failure isn't already classified as a sandbox issue. The modal

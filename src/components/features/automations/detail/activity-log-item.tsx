@@ -106,7 +106,9 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
     setLogsOpen(true);
   };
 
-  const logsButton = hasBashCommand ? (
+  // Every run can be inspected: the modal shows status, task outcome and
+  // error details even when no runner command was dispatched.
+  const logsButton = (
     <button
       type="button"
       onClick={handleLogsClick}
@@ -118,7 +120,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
     >
       <TerminalIcon className="size-4" />
     </button>
-  ) : null;
+  );
 
   const content = (
     <>
@@ -176,17 +178,15 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
         </div>
       )}
 
-      {hasBashCommand && (
-        <RunLogsModal
-          conversationId={run.conversation_id}
-          sandboxId={run.sandbox_id ?? null}
-          bashCommandId={run.bash_command_id}
-          isOpen={logsOpen}
-          onClose={() => setLogsOpen(false)}
-          run={run}
-          automation={automation}
-        />
-      )}
+      <RunLogsModal
+        conversationId={run.conversation_id}
+        sandboxId={run.sandbox_id ?? null}
+        bashCommandId={run.bash_command_id}
+        isOpen={logsOpen}
+        onClose={() => setLogsOpen(false)}
+        run={run}
+        automation={automation}
+      />
     </>
   );
 }

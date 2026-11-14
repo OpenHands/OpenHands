@@ -35,6 +35,13 @@ const SANDBOX_ISSUE_I18N: Record<SandboxIssue, I18nKey> = {
 
 type LogTab = "stdout" | "stderr";
 
+function isActiveRunStatus(status: AutomationRunStatus | undefined): boolean {
+  return (
+    status === AutomationRunStatus.PENDING ||
+    status === AutomationRunStatus.RUNNING
+  );
+}
+
 interface RunLogsModalProps {
   /** Conversation that owns the bash command. */
   conversationId: string | null;
@@ -43,7 +50,10 @@ interface RunLogsModalProps {
    * no conversation (script automations).
    */
   sandboxId?: string | null;
-  /** Bash command id to fetch logs for. */
+  /**
+   * Bash command id to fetch logs for; null when the run has not dispatched
+   * (or never dispatched) a runner command.
+   */
   bashCommandId: string | null;
   isOpen: boolean;
   onClose: () => void;
@@ -207,9 +217,13 @@ export function RunLogsModal({
 }: RunLogsModalProps) {
   const { t } = useTranslation("openhands");
   const [activeTab, setActiveTab] = useState<LogTab>("stdout");
+  const isRunActive = isActiveRunStatus(run?.status);
 
   const {
     data: outputs,
+    isTruncated,
+    hasFinalOutput,
+    isAuthError,
     isFetching,
     isResolvingConversation,
     sandboxIssue,
@@ -220,6 +234,7 @@ export function RunLogsModal({
     sandboxId,
     bashCommandId,
     enabled: isOpen,
+    isRunActive,
   });
 
   // Reset to the default tab whenever the modal opens for a different run.
@@ -250,6 +265,10 @@ export function RunLogsModal({
   const loading = isResolvingConversation || (isFetching && !outputs);
   const noBashCommand = !bashCommandId;
   const activeBody = activeTab === "stdout" ? stdout : stderr;
+  // An active run whose runner has published nothing yet is waiting, not
+  // empty: "(no output)" is reserved for output that is known to be final.
+  const awaitingOutput =
+    isRunActive && !hasFinalOutput && (outputs?.length ?? 0) === 0;
 
   const tabBaseClass =
     "border-b-2 px-3 py-2 text-sm font-normal transition-colors focus:outline-none";
@@ -291,6 +310,13 @@ export function RunLogsModal({
 
         <div className="px-6 pb-6">
           <RunInspectionSummary run={run} />
+
+          <h3 className="mt-5 text-sm font-medium text-content">
+            {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_RUNNER_OUTPUT_TITLE)}
+          </h3>
+          <p className="mt-1 text-xs text-muted">
+            {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_RUNNER_OUTPUT_HINT)}
+          </p>
 
           <div
             role="tablist"
@@ -334,8 +360,19 @@ export function RunLogsModal({
             className="mt-3 automation-log-min-height rounded-lg border border-border bg-surface-deep dark:bg-black/40 p-4 font-mono text-xs"
           >
             {noBashCommand && (
-              <p className="text-muted italic">
-                {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_NO_COMMAND)}
+              <p
+                data-testid={
+                  isRunActive
+                    ? "run-logs-waiting-for-runner"
+                    : "run-logs-no-command"
+                }
+                className="text-muted italic"
+              >
+                {t(
+                  isRunActive
+                    ? I18nKey.AUTOMATIONS$DETAIL$LOGS_WAITING_FOR_RUNNER
+                    : I18nKey.AUTOMATIONS$DETAIL$LOGS_NO_COMMAND,
+                )}
               </p>
             )}
 
@@ -367,14 +404,25 @@ export function RunLogsModal({
               !conversationMissing &&
               !sandboxIssue &&
               !loading &&
-              error &&
-              !outputs && (
-                <p className="text-danger">
-                  {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_ERROR)}: {String(error)}
+              error && (
+                <p data-testid="run-logs-error" className="text-danger">
+                  {isAuthError
+                    ? t(I18nKey.AUTOMATIONS$DETAIL$LOGS_AUTH_ERROR)
+                    : `${t(I18nKey.AUTOMATIONS$DETAIL$LOGS_ERROR)}: ${String(error)}`}
                 </p>
               )}
 
-            {!loading && !sandboxIssue && outputs && (
+            {!loading && !sandboxIssue && !error && outputs && isTruncated && (
+              <p
+                data-testid="run-logs-truncated"
+                role="status"
+                className="mb-3 font-sans text-muted"
+              >
+                {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TRUNCATED)}
+              </p>
+            )}
+
+            {!loading && !sandboxIssue && !error && outputs && (
               <pre
                 data-testid={`run-logs-output-${activeTab}`}
                 className={`whitespace-pre-wrap break-words ${
@@ -384,8 +432,19 @@ export function RunLogsModal({
                 {activeBody.length > 0 ? (
                   activeBody
                 ) : (
-                  <span className="text-muted italic">
-                    {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_EMPTY)}
+                  <span
+                    data-testid={
+                      awaitingOutput
+                        ? "run-logs-waiting-for-output"
+                        : "run-logs-empty"
+                    }
+                    className="text-muted italic"
+                  >
+                    {t(
+                      awaitingOutput
+                        ? I18nKey.AUTOMATIONS$DETAIL$LOGS_WAITING_FOR_OUTPUT
+                        : I18nKey.AUTOMATIONS$DETAIL$LOGS_EMPTY,
+                    )}
                   </span>
                 )}
               </pre>
