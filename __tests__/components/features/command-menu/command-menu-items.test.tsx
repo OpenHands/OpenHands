@@ -52,6 +52,7 @@ describe("the command menu settings group", () => {
       "verification-settings",
       "runtime-settings",
       "app-settings",
+      "experimental-settings",
       "secrets-settings",
     ]);
   });

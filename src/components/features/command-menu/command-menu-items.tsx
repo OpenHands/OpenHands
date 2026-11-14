@@ -7,6 +7,7 @@ import {
   Keyboard,
   KeyRound,
   ListTodo,
+  FlaskConical,
   PanelsTopLeft,
   Route,
   Search,
@@ -43,6 +44,7 @@ export const COMMAND_MENU_ROUTE = {
   verificationSettings: "/settings/verification",
   runtimeSettings: "/settings/runtime",
   appSettings: "/settings/app",
+  experimentalSettings: "/settings/experimental",
   secretsSettings: "/settings/secrets",
 } as const;
 
@@ -61,6 +63,7 @@ export type CommandMenuItemId =
   | "verification-settings"
   | "runtime-settings"
   | "app-settings"
+  | "experimental-settings"
   | "secrets-settings"
   | "toggle-sidebar";
 
@@ -245,6 +248,15 @@ export const createCommandMenuItems = ({
       to: COMMAND_MENU_ROUTE.appSettings,
     },
     {
+      id: "experimental-settings",
+      group: "settings",
+      titleKey: I18nKey.SETTINGS$NAV_EXPERIMENTAL,
+      descriptionKey: I18nKey.SETTINGS$PAGE_EXPERIMENTAL_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$EXPERIMENTAL_SETTINGS_KEYWORDS,
+      icon: <FlaskConical size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.experimentalSettings,
+    },
+    {
       id: "secrets-settings",
       group: "settings",
       titleKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_TITLE,
@@ -273,6 +285,8 @@ export const createCommandMenuItems = ({
   return items.filter(
     (item) =>
       (isCloud || item.to !== COMMAND_MENU_ROUTE.condenserSettings) &&
+      // Experimental features live on a local agent server.
+      (!isCloud || item.to !== COMMAND_MENU_ROUTE.experimentalSettings) &&
       (!isLockedToCloud ||
         item.group !== "settings" ||
         item.to === COMMAND_MENU_ROUTE.settings ||
