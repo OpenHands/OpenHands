@@ -3285,6 +3285,18 @@ test("every run names a non-loopback plain-HTTP origin on its ingress port", () 
     res.stdout,
     /^export OH_VERIFY_LAN_URL=http:\/\/lan\.openhands\.test:18800$/m,
   );
+  const env = { OH_VERIFY_RUN: dir };
+  assert.equal(
+    run(["status"], env).json.lanUrl,
+    "http://lan.openhands.test:18800",
+  );
+  // No daemon that resolves the name: goto says how to get one.
+  const goto = run(
+    ["browser", "goto", "http://lan.openhands.test:18800/"],
+    env,
+  );
+  assert.equal(goto.status, 3, JSON.stringify(goto.json));
+  assert.match(goto.json.hint, /browser stop/);
   const launch = spawnSync(process.execPath, [cli, "help", "launch"], {
     encoding: "utf8",
   });

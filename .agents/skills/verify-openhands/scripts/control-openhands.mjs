@@ -430,6 +430,25 @@ function lanUrlOf(run) {
   return run.lanUrl ?? `http://${LAN_HOST}:${new URL(run.baseUrl).port}`;
 }
 
+// A daemon started by an older CLI on this run has neither the name mapping
+// nor the origin: say how to get one that does, instead of a refused goto.
+function assertDaemonKnowsLanHost(run, target) {
+  let host;
+  try {
+    host = new URL(target ?? "/", run.baseUrl).hostname;
+  } catch {
+    return;
+  }
+  if (host !== LAN_HOST || daemonInfo(run)?.lanHost === LAN_HOST) return;
+  throw new CliError(
+    `This run's browser daemon was started before ${LAN_HOST} existed and cannot resolve it.`,
+    {
+      code: 3,
+      hint: "Restart the daemon: `control-openhands browser stop`, then `control-openhands browser start`.",
+    },
+  );
+}
+
 async function startBrowser(run) {
   const existing = daemonInfo(run);
   if (existing) return { alreadyRunning: true, pid: existing.pid };
@@ -1275,6 +1294,7 @@ async function cmdStatus({ flags }) {
     ok: true,
     run: run.dir,
     baseUrl: run.baseUrl,
+    lanUrl: lanUrlOf(run),
     mode: run.mode,
     revision: run.revision,
     launcherAlive: groupAlive(run.launcherPgid),
@@ -2863,6 +2883,7 @@ async function cmdBrowser({ positional, flags }) {
       break;
     case "goto":
     case "open":
+      assertDaemonKnowsLanHost(run, rest[0]);
       result = await browserCall(run, "goto", {
         target: rest[0] ?? "/",
         allowExternal: Boolean(flags["allow-external"]),

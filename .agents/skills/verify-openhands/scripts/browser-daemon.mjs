@@ -1754,6 +1754,8 @@ server.listen(0, "127.0.0.1", () => {
       pid: process.pid,
       port,
       token,
+      // Tells the CLI this daemon resolves the run's non-loopback name.
+      lanHost,
       startedAt: new Date().toISOString(),
     }),
     { mode: 0o600 },
