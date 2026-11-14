@@ -521,6 +521,64 @@ describe("ingress proxy functionality", () => {
       await stopChild(runtimeIngress);
     }
   });
+
+  it.each(["//", "//a:b", "//["])(
+    "keeps running after a request for %s",
+    async (requestTarget) => {
+      // With runtime services info set, every request is checked for
+      // /server_info. A target like "//" is not a valid URL path, and the
+      // check used to throw inside the request handler and exit the process.
+      // A cross-site <img src="http://localhost:8000//"> was enough.
+      const frontend = createServer((_req, res) => {
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end("frontend");
+      });
+      const frontendPort = await listenOnLoopback(frontend);
+      const runtimeIngressPort = await getFreePort();
+      const runtimeIngress = spawn(
+        process.execPath,
+        [
+          ingressScript,
+          "--port",
+          runtimeIngressPort.toString(),
+          "--runtime-services-info",
+          JSON.stringify({ mode: "dev:automation", services: {} }),
+          "--default",
+          originForPort(frontendPort),
+        ],
+        {
+          cwd: repoRoot,
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+
+      await waitForPort(runtimeIngressPort, runtimeIngress);
+
+      try {
+        const socket = netConnect(runtimeIngressPort, loopbackHost);
+        let response = "";
+        socket.on("data", (chunk) => {
+          response += chunk;
+        });
+        await once(socket, "connect");
+        socket.write(
+          `GET ${requestTarget} HTTP/1.1\r\n` +
+            `Host: localhost:${runtimeIngressPort}\r\n` +
+            "Connection: close\r\n\r\n",
+        );
+        await once(socket, "close");
+        await delay(100);
+
+        expect(response).toMatch(/^HTTP\/1\.1 200/);
+        expect(runtimeIngress.exitCode).toBeNull();
+        const next = await getText(`${originForPort(runtimeIngressPort)}/`);
+        expect(next.body).toBe("frontend");
+      } finally {
+        await stopChild(runtimeIngress);
+        await closeServer(frontend);
+      }
+    },
+  );
 });
 
 describe("ingress route matching", () => {

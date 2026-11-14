@@ -63,7 +63,15 @@ function writeInvalidBackendUrlResponse(req, res) {
 }
 
 export function isServerInfoRequest(req) {
-  const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
+  let pathname;
+  try {
+    pathname = new URL(req.url ?? "/", "http://localhost").pathname;
+  } catch {
+    // A request target such as "//a:b" is not a valid URL path. This check
+    // runs inside the server's request handler, so throwing here would take
+    // the whole proxy down.
+    return false;
+  }
   return pathname === SERVER_INFO_PATH;
 }
 
