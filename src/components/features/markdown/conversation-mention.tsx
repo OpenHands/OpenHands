@@ -19,6 +19,23 @@ export function conversationMentionId(href: string | undefined | null) {
   return match ? match[1].toLowerCase().replace(/-/g, "") : null;
 }
 
+const MENTION_TITLE_MAX = 80;
+
+/**
+ * The mention of a conversation, as Agent Server writes it. The title is cut
+ * to one line without brackets, parentheses, quotes or backslashes so it
+ * cannot end the link early (same rule as the SDK's `conversation_mention`).
+ */
+export function conversationMention(title: string | null, id: string) {
+  const text =
+    (title ?? "")
+      .replace(/[\s"[\]()\\`]+/g, " ")
+      .trim()
+      .slice(0, MENTION_TITLE_MAX)
+      .trim() || "untitled conversation";
+  return `[${text}](conversation:${id.toLowerCase().replace(/-/g, "")})`;
+}
+
 /**
  * Keep conversation mentions as written; react-markdown drops links with
  * schemes it does not know.
