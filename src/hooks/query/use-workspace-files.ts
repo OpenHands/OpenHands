@@ -27,6 +27,14 @@ export interface WorkspaceFilesResult {
   data: string[] | undefined;
   isLoading: boolean;
   isTruncated?: boolean;
+  /**
+   * The listing request failed. The Files tab uses this to tell "the workspace
+   * is empty" apart from "we could not read the workspace" — without it a
+   * failed listing renders as a genuine empty tree. Both queries pass
+   * `meta: { disableToast: true }`, so nothing else surfaces the failure.
+   */
+  isError: boolean;
+  error?: unknown;
 }
 
 function normalizePath(path: string): string {
@@ -107,6 +115,8 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
     data: query.data?.paths,
     isLoading: discovery.isLoading || query.isLoading,
     isTruncated: query.data?.isTruncated ?? false,
+    isError: query.isError,
+    error: query.error,
   };
 }
 
@@ -141,7 +151,7 @@ function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
   const gitPath = getGitPath(selectedRepository, workingDir);
   const absolutePath = gitPath.startsWith("/") ? gitPath : `/${gitPath}`;
 
-  const query = useQuery<string[]>({
+  const query = useQuery<{ paths: string[]; isTruncated: boolean }>({
     // Shares the `workspace-files` prefix with the local listing so the Files
     // tab Refresh and the file-edit auto-refresh (which invalidate
     // `["workspace-files"]`) refetch this query too.
@@ -152,7 +162,14 @@ function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
         absolutePath,
       );
       const normalized = files.map(normalizePath).filter(Boolean);
-      return Array.from(new Set(normalized)).slice(0, MAX_FILES);
+      // Compare before slicing: `>=` on the capped array would call a listing
+      // that happens to end on exactly MAX_FILES truncated, while `>` would
+      // miss one that overflowed by a single entry.
+      const unique = Array.from(new Set(normalized));
+      return {
+        paths: unique.slice(0, MAX_FILES),
+        isTruncated: unique.length > MAX_FILES,
+      };
     },
     enabled: enabled && runtimeIsReady && !!conversationId,
     retry: false,
@@ -161,7 +178,13 @@ function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
     meta: { disableToast: true },
   });
 
-  return { data: query.data, isLoading: query.isLoading };
+  return {
+    data: query.data?.paths,
+    isLoading: query.isLoading,
+    isTruncated: query.data?.isTruncated ?? false,
+    isError: query.isError,
+    error: query.error,
+  };
 }
 
 /**
