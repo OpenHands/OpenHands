@@ -1,0 +1,53 @@
+name: bump-pins
+
+# Keeps one pull request open that moves the upstream release pins to the latest
+# published releases: the automation service, the agent-server it was built on,
+# and the extensions package. The reusable workflow in OpenHands/release-actions
+# resolves the versions and owns the branch (bump-pins), the commit and the pull
+# request; scripts/bump-pins.mjs is how this repo writes a version into its files.
+#
+# The agent-server pin is not "the newest SDK": it is the SDK version the pinned
+# automation release requires, which is the pairing check-sdk-version-sync.mjs
+# enforces. A new SDK release therefore reaches this repo only once an automation
+# release built on it is on PyPI, and then both pins move in the same pull request.
+on:
+  # Safety net: each run compares the registries with main and stops when the
+  # pins are already current.
+  schedule:
+    - cron: "17 * * * *"
+  # Sent by an upstream publish job so the pull request opens right away, with
+  # client_payload {"expect": "AUTOMATION=X.Y.Z"} (or EXTENSIONS=X.Y.Z).
+  repository_dispatch:
+    types: [upstream-released]
+  workflow_dispatch:
+    inputs:
+      expect:
+        description: 'Release to wait for, e.g. "AUTOMATION=1.33.0" (optional)'
+        required: false
+        type: string
+        default: ""
+      dry-run:
+        description: Show the commit without pushing or opening a pull request
+        required: false
+        type: boolean
+        default: false
+
+# The reusable workflow acts through the release App token only.
+permissions: {}
+
+jobs:
+  bump-pins:
+    # secrets: inherit forwards the org secrets RELEASE_APP_ID /
+    # RELEASE_APP_PRIVATE_KEY that the reusable workflow needs.
+    secrets: inherit
+    uses: OpenHands/release-actions/.github/workflows/bump-pins.yml@main
+    with:
+      pins: |
+        AUTOMATION=pypi:openhands-automation
+        SDK=pypi:openhands-sdk required-by AUTOMATION
+        EXTENSIONS=npm:@openhands/extensions
+      title: "chore: bump agent-server to {SDK}, automation to {AUTOMATION}, extensions to {EXTENSIONS}"
+      expect: ${{ inputs.expect || github.event.client_payload.expect || '' }}
+      dry-run: ${{ inputs.dry-run || false }}
+      node-version: "24.22.1"
+      command: node scripts/bump-pins.mjs
