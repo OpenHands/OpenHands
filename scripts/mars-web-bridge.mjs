@@ -253,8 +253,13 @@ function requestOrigin(req) {
   return `${proto}://${req.headers.host}`;
 }
 
+/** The path the browser addresses a session at, under this origin. */
+function sessionPathPrefix(sessionId) {
+  return `${SESSIONS_PREFIX}${encodeURIComponent(sessionId)}`;
+}
+
 function sessionProxyBase(req, sessionId) {
-  return `${requestOrigin(req)}${SESSIONS_PREFIX}${encodeURIComponent(sessionId)}`;
+  return `${requestOrigin(req)}${sessionPathPrefix(sessionId)}`;
 }
 
 /**
@@ -332,6 +337,44 @@ export function rewriteAgentServerUrls(value, proxyBase, field = null) {
     return out;
   }
   return value;
+}
+
+/**
+ * Scope cookies a session host sets to that session's proxy prefix.
+ *
+ * The session host names paths on its own origin. The agent-server's
+ * workspace-session cookie, for one, is `Path=/api/conversations`. On this
+ * origin that path belongs to the local agent-server, so the session's cookie
+ * would replace the local one of the same name (local file previews then get
+ * 401), and the browser would not send it on the `/mars/sessions/<id>/...`
+ * URLs it uses for the session. An explicit `Path` therefore gets the prefix
+ * in front. A cookie without one defaults to the folder of the URL the
+ * browser requested, which is already under `/mars/sessions/`. `Domain` is
+ * dropped so a session cannot widen a cookie past this host.
+ *
+ * @param {string | string[] | undefined} setCookie The `set-cookie` header as Node parsed it
+ * @param {string} prefix Path the browser uses for the session, e.g. `/mars/sessions/<id>`
+ */
+export function scopeSessionCookies(setCookie, prefix) {
+  if (setCookie === undefined) return undefined;
+  const cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
+  return cookies.map((cookie) =>
+    cookie
+      .split(";")
+      .flatMap((part, index) => {
+        // The first part is name=value, whatever the name.
+        if (index === 0) return [part];
+        const eq = part.indexOf("=");
+        const name = (eq === -1 ? part : part.slice(0, eq)).trim();
+        if (/^domain$/i.test(name)) return [];
+        const value = eq === -1 ? "" : part.slice(eq + 1).trim();
+        if (/^path$/i.test(name) && value.startsWith("/")) {
+          return [` Path=${prefix}${value}`];
+        }
+        return [part];
+      })
+      .join(";"),
+  );
 }
 
 /** Thrown by parseSessionPath for a path that cannot be decoded. */
@@ -515,15 +558,25 @@ export function createMarsWebBridge({
       return;
     }
     const proxyBase = sessionProxyBase(req, sessionId);
+    const prefix = sessionPathPrefix(sessionId);
+    const writeResponse = rewriteJsonResponse(
+      (body) => rewriteAgentServerUrls(body, proxyBase),
+      { limit: JSON_REWRITE_LIMIT_BYTES },
+    );
     toUpstreamRequest(req, path);
     proxy.proxyHttp(req, res, target, {
       // Responses are read as UTF-8 for the URL rewrite; a compressed body
       // would have to be inflated first.
       headers: { "accept-encoding": "identity" },
-      onResponse: rewriteJsonResponse(
-        (body) => rewriteAgentServerUrls(body, proxyBase),
-        { limit: JSON_REWRITE_LIMIT_BYTES },
-      ),
+      onResponse: (proxyRes, proxiedReq, proxiedRes) => {
+        if (proxyRes.headers["set-cookie"] !== undefined) {
+          proxyRes.headers["set-cookie"] = scopeSessionCookies(
+            proxyRes.headers["set-cookie"],
+            prefix,
+          );
+        }
+        writeResponse(proxyRes, proxiedReq, proxiedRes);
+      },
     });
   }
 
