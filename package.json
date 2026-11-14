@@ -75,7 +75,7 @@
     "winston": "3.19.0",
     "winston-daily-rotate-file": "5.0.0",
     "ws": "8.22.1",
-    "zustand": "5.0.16"
+    "zustand": "5.1.0"
   },
   "scripts": {
     "dev": "node --env-file-if-exists=.env scripts/dev-with-automation.mjs",
