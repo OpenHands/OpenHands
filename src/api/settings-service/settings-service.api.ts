@@ -472,25 +472,6 @@ const getSkillEnablement = (response: SettingsApiResponse): SkillEnablement => {
 };
 
 /**
- * Read the app-level git identity (name/email) off a raw API response —
- * mirroring {@link getSkillEnablement}, used by
- * `SettingsService.getSettingsForConversation` to pass git identity through
- * to the planner conversation without re-fetching full redacted settings.
- */
-const getGitIdentity = (response: SettingsApiResponse): {
-  gitUserName?: string | null;
-  gitUserEmail?: string | null;
-} => {
-  const prefs = response.misc_settings?.app_preferences;
-  const name = prefs?.git_user_name;
-  const email = prefs?.git_user_email;
-  return {
-    gitUserName: typeof name === "string" ? name : null,
-    gitUserEmail: typeof email === "string" ? email : null,
-  };
-};
-
-/**
  * Transform API response into Settings object with derived fields.
  */
 const transformApiResponse = (
@@ -673,10 +654,6 @@ class SettingsService {
     conversationSettings: Record<string, SettingsValue>;
     secretsEncrypted: boolean;
     skillEnablement: SkillEnablement;
-    /** App-level git identity for planner conversation session_start hook. */
-    gitUserName?: string | null;
-    /** App-level git identity for planner conversation session_start hook. */
-    gitUserEmail?: string | null;
   }> {
     const backend = getActiveBackend().backend;
     const connectionRevision = backend.connectionRevision ?? 0;
@@ -692,7 +669,6 @@ class SettingsService {
         conversationSettings: cached.conversation_settings,
         secretsEncrypted: true,
         skillEnablement: getSkillEnablement(cached),
-        ...getGitIdentity(cached),
       };
     }
 
@@ -708,7 +684,6 @@ class SettingsService {
       conversationSettings: response.conversation_settings,
       secretsEncrypted: true,
       skillEnablement: getSkillEnablement(response),
-      ...getGitIdentity(response),
     };
   }
 
