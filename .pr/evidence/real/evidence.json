@@ -1,0 +1,45 @@
+{
+  "label": "real-cloud",
+  "host": "https://app.all-hands.dev",
+  "org_id": "79b384f7-6d7d-4798-97f9-bf3c823c6121",
+  "note": "Live evidence against the real OpenHands Cloud (app.all-hands.dev), driven through the production Canvas build. Each step reads GET /api/v1/settings.agent_settings immediately after the UI action.",
+  "steps": {
+    "created-acp-profile": {
+      "profile": "codex",
+      "agent_kind": "acp",
+      "acp_server": "claude-code"
+    },
+    "after-activate-acp": {
+      "agent_kind": "acp",
+      "acp_server": "claude-code"
+    },
+    "after-activate-openhands": {
+      "agent_kind": "openhands",
+      "acp_server": null
+    },
+    "#2-before-edit": {
+      "agent_kind": "acp",
+      "acp_server": "claude-code"
+    },
+    "#2-after-edit": {
+      "agent_kind": "openhands",
+      "acp_server": null
+    },
+    "#3-after-delete": {
+      "agent_kind": "openhands",
+      "acp_server": null
+    },
+    "#3-home-pill": {
+      "agentProfilePill": null,
+      "acpModelPicker": false,
+      "llmPill": "Default"
+    },
+    "#3-launched-url": {
+      "url": "http://127.0.0.1:18300/conversations/task-74e44c99d167488c91751217911c2a55"
+    }
+  },
+  "result": {
+    "activate-acp-profile": "agent_kind -> acp (symmetrical)",
+    "activate-openhands-profile": "agent_kind -> openhands (the fix under test)"
+  }
+}

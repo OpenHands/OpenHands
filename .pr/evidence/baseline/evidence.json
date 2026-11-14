@@ -1,0 +1,30 @@
+{
+  "label": "baseline",
+  "frontend": "http://127.0.0.1:18300",
+  "cloud": "http://127.0.0.1:18901",
+  "steps": {
+    "home-initial": {
+      "profilePill": {
+        "agentProfilePill": "codex",
+        "llmProfilePill": null,
+        "acpModelPicker": false
+      }
+    },
+    "after-activate": {
+      "agent_kind": "acp",
+      "acp_server": "codex"
+    },
+    "after-delete": {
+      "agent_kind": "acp",
+      "acp_server": "codex"
+    },
+    "home-after-delete": {
+      "agentProfilePill": null,
+      "llmProfilePill": null,
+      "acpModelPicker": false
+    },
+    "launched-url": {
+      "url": "http://127.0.0.1:18300/"
+    }
+  }
+}
