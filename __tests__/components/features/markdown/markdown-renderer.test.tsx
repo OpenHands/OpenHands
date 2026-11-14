@@ -1,5 +1,6 @@
+import React from "react";
 import { render, screen } from "@testing-library/react";
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { sanitize } from "hast-util-sanitize";
 import type { Element, Root } from "hast";
 
@@ -7,6 +8,16 @@ import {
   MarkdownRenderer,
   MARKDOWN_SANITIZE_SCHEMA,
 } from "#/components/features/markdown/markdown-renderer";
+
+const mentionsFlag = vi.hoisted(() => ({ enabled: true }));
+
+vi.mock("#/hooks/query/use-experimental-features", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/hooks/query/use-experimental-features")
+  >()),
+  useIsExperimentalFeatureEnabled: (key: string) =>
+    key === "conversation_mentions" && mentionsFlag.enabled,
+}));
 
 describe("MarkdownRenderer", () => {
   it("renders GFM tables (a GFM-only feature)", () => {
@@ -470,5 +481,90 @@ describe("MarkdownRenderer without includeStandard", () => {
     expect(anchorEl?.getAttribute("href")).toBe("https://example.com");
     expect(anchorEl?.getAttribute("target")).toBe("_blank");
     expect(anchorEl?.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+});
+
+describe("MarkdownRenderer conversation mentions", () => {
+  const hex = "4f2c9e0a1b2c4d5e8f90a1b2c3d4e5f6";
+
+  afterEach(() => {
+    mentionsFlag.enabled = true;
+  });
+
+  it("shows a mention as plain text while conversation mentions are off", () => {
+    mentionsFlag.enabled = false;
+    render(
+      <MarkdownRenderer>
+        {`Ask [Fix export](conversation:${hex}) first.`}
+      </MarkdownRenderer>,
+    );
+    expect(screen.queryByTestId("conversation-mention")).toBeNull();
+    expect(screen.getByTestId("conversation-mention-text").textContent).toBe(
+      "Fix export",
+    );
+  });
+
+  it.each([true, false])(
+    "opens [Title](conversation:<id>) in place (includeStandard %s)",
+    (includeStandard) => {
+      render(
+        <MarkdownRenderer includeStandard={includeStandard}>
+          {`Ask [Fix export](conversation:${hex}) first.`}
+        </MarkdownRenderer>,
+      );
+      const link = screen.getByTestId("conversation-mention");
+      expect(link.textContent).toBe("Fix export");
+      expect(link.getAttribute("href")).toMatch(
+        new RegExp(`/conversations/${hex}$`),
+      );
+      expect(link.getAttribute("target")).toBeNull();
+    },
+  );
+
+  it("keeps mentions working with a custom link renderer", () => {
+    function CustomLink({ href, children }: React.ComponentProps<"a">) {
+      return (
+        <a href={href} data-testid="custom-link">
+          {children}
+        </a>
+      );
+    }
+    render(
+      <MarkdownRenderer
+        components={{ a: CustomLink }}
+        content={`[A](conversation:${hex}) [docs](https://example.com)`}
+      />,
+    );
+    expect(screen.getByTestId("conversation-mention").textContent).toBe("A");
+    expect(screen.getByTestId("custom-link").textContent).toBe("docs");
+  });
+
+  it("accepts a dashed id and keeps other links external", () => {
+    render(
+      <MarkdownRenderer
+        includeStandard
+        content="[A](conversation:4f2c9e0a-1b2c-4d5e-8f90-a1b2c3d4e5f6) and [docs](https://example.com)"
+      />,
+    );
+    expect(
+      screen.getByTestId("conversation-mention").getAttribute("href"),
+    ).toMatch(new RegExp(`/conversations/${hex}$`));
+    const docs = screen.getByText("docs");
+    expect(docs.getAttribute("target")).toBe("_blank");
+  });
+
+  it("does not turn other unknown schemes into links", () => {
+    const { container } = render(
+      <MarkdownRenderer
+        includeStandard
+        content="[x](conversation:not-an-id) [y](javascript:alert(1))"
+      />,
+    );
+    expect(screen.queryByTestId("conversation-mention")).toBeNull();
+    for (const a of container.querySelectorAll("a")) {
+      expect(a.getAttribute("href") ?? "").not.toMatch(
+        /^(javascript|conversation):/,
+      );
+    }
   });
 });
