@@ -284,72 +284,53 @@ npm run test -- __tests__/api/agent-server-config.test.ts __tests__/scripts/dev-
 
 ### Unit test environments
 
-`npm test` runs Vitest as two projects, so each suite pays only for the
-environment it actually needs:
+`npm test` runs five mutually exclusive projects:
 
-| Project | Environment | Setup             | Suites                                                                   |
-| ------- | ----------- | ----------------- | ------------------------------------------------------------------------ |
-| `jsdom` | `jsdom`     | `vitest.setup.ts` | everything else (the default)                                            |
-| `node`  | `node`      | none              | the DOM-free suites listed in `NODE_ENV_PILOT_TESTS` in `vite.config.ts` |
+| Project      | Worker/environment                                              | Setup             | Purpose                                                                              |
+| ------------ | --------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------ |
+| `jsdom`      | Fresh VM context with ordinary jsdom globals                    | `vitest.setup.ts` | Browser tests by default                                                             |
+| `forks`      | Fresh process with ordinary jsdom (or the file's Node docblock) | `vitest.setup.ts` | Native loader hooks, host-realm identity contracts, and real analytics SDK lifecycle |
+| `node`       | Fresh VM context, Node                                          | None              | Explicitly validated setup-free suites                                               |
+| `node-forks` | Fresh process, Node                                             | None              | Setup-free native-loader contracts                                                   |
+| `config`     | Fresh process, Node                                             | None              | Vite configuration and build contracts                                               |
 
-Both projects run in a single `npm test`, and the Node list is excluded from
-the jsdom project, so every suite runs exactly once. Vitest prefixes each
-result with its project name (`|node|` / `|jsdom|`) when a test fails or when
-you pass `--reporter=verbose`.
+Every file runs once. `NODE_TEST_SUITES` in `vitest.node-suites.ts` takes
+precedence over `FORK_TEST_SUITES` in `vitest.fork-suites.ts`. Setup-free files also listed in `FORK_TEST_SUITES` run in `node-forks`
+with a fresh Node process and no shared setup. The configuration
+suite has its own project because it loads Vite's native build tooling.
 
-The Node project exists because jsdom is not free: it costs roughly a second of
-environment setup per run, plus the whole of `vitest.setup.ts` (Testing Library
-cleanup, MSW, jest-dom, DOM global stubs). Suites that only call pure functions
-need none of it.
+The default VM pool shares compiled code, not application module state. Each
+file still receives a new VM context, jsdom instance, mocks, and setup lifecycle.
+Workers recycle at a 1 GB memory limit. `vitest.environment.ts` composes
+Vitest's public Node VM and ordinary jsdom setup APIs so `window` and `location`
+remain configurable, unlike jsdom's own VM globals.
 
-#### Adding a suite to the Node project
+#### Classifying tests
 
-A suite qualifies only if **all** of the following hold. Check the suite and
-everything it imports, transitively — an import that touches the DOM at module
-scope is enough to disqualify it.
+Add a file to the Node list only after checking that it and its transitive
+imports need no browser globals, rendering, shared MSW handlers, Zustand manual
+mock, or other `vitest.setup.ts` fixtures. A self-contained Node suite may own
+its own fixtures. Run it in the Node project before adding it to the list.
 
-- No DOM: no `document`, `window`, `HTMLElement`, `navigator`, or
-  `@testing-library/*` rendering.
-- No Web Storage or browser-owned globals: no `localStorage`,
-  `sessionStorage`, `location`, `matchMedia`, `requestAnimationFrame`.
-- No React component rendering or hook execution.
-- No MSW / network interception: nothing that relies on the `server` started
-  in `vitest.setup.ts`.
-- Nothing from `vitest.setup.ts` at all — the Node project loads no setup
-  file, so a suite that depends on one of its stubs (for example the
-  `VITE_SESSION_API_KEY` env stub) belongs in jsdom.
+Use the forks list when a suite needs native loader registration (for example,
+Tailwind compilation), checks native constructor/prototype identity across an
+SDK boundary, or exercises an SDK whose async lifecycle extends beyond a VM
+context. Keep the original assertions: do not replace `toStrictEqual` or
+`instanceof` checks merely to accommodate a different realm. Node docblock
+suites that still require shared setup also belong in this list.
 
-Then add the suite's path to `NODE_ENV_PILOT_TESTS` in `vite.config.ts` and run
-it. Passing under the Node project is the confirmation; a `ReferenceError`
-naming a browser global means the suite belongs in jsdom.
+Both lists are explicit so newly added tests keep the default isolated browser
+environment until reviewed. Removing a path from the Node list sends it to the
+browser project, or to forks if it is also listed there.
 
-Keep the list explicit rather than glob-based: a glob would silently adopt new
-suites that have never been checked against the rules above.
+#### Consolidating small suites
 
-An individual suite can also opt into Node with a `// @vitest-environment node`
-docblock, which several `__tests__/scripts/` suites already do. That still
-loads `vitest.setup.ts`; the Node project is for suites that need no setup at
-all.
-
-#### Rolling back
-
-The pilot is contained in one config block and unwinds in stages:
-
-- **One suite misbehaves** — remove its path from `NODE_ENV_PILOT_TESTS`. It
-  returns to the jsdom project automatically, because that project excludes
-  exactly this list.
-- **Revert the split entirely** — empty `NODE_ENV_PILOT_TESTS`, then replace
-  `test.projects` with the previous flat options:
-
-  ```ts
-  environment: "jsdom",
-  setupFiles: ["vitest.setup.ts"],
-  exclude: [...configDefaults.exclude, "tests"],
-  ```
-
-No test file changes are needed either way: the pilot suites are unmodified and
-pass in both environments. The expectations in `__tests__/vite-config.test.ts`
-describe the split, so remove them in the same commit as a full revert.
+Group related feature tests in an existing owner file to avoid repeated DOM,
+MSW and dependency initialization. Keep named `describe` sections and scope each
+section's fixtures and hooks locally. Do not combine files with different
+hoisted module mocks or import-time environment requirements. Prefer a few
+cohesive sections over a repository-wide mega-suite. Run the combined file and
+the full suite after moving tests; compare source coverage as well as counts.
 
 ### Mutation testing
 

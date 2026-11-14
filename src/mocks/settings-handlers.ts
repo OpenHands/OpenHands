@@ -1,4 +1,5 @@
-import { http, delay, HttpResponse } from "msw";
+import { networkDelay } from "./network-delay";
+import { http, HttpResponse } from "msw";
 import { WebClientConfig } from "#/api/option-service/option.types";
 import type { SaveProfileRequest } from "#/api/profiles-service/profiles-service.api";
 import { DEFAULT_SETTINGS } from "#/services/settings";
@@ -1049,17 +1050,17 @@ export const SETTINGS_HANDLERS = [
   ),
 
   http.get("*/api/settings/conversation-schema", async () => {
-    await delay();
+    await networkDelay();
     return HttpResponse.json(MOCK_CONVERSATION_SETTINGS_SCHEMA);
   }),
 
   http.get("*/api/v1/settings/conversation-schema", async () => {
-    await delay();
+    await networkDelay();
     return HttpResponse.json(MOCK_CONVERSATION_SETTINGS_SCHEMA);
   }),
 
   http.get("*/api/v1/settings", async () => {
-    await delay();
+    await networkDelay();
     const { settings } = MOCK_USER_PREFERENCES;
 
     if (!settings) return HttpResponse.json(null, { status: 404 });
@@ -1074,7 +1075,7 @@ export const SETTINGS_HANDLERS = [
     const pathParts = url.pathname.split("/").filter(Boolean);
     if (pathParts.length > 2) return undefined;
 
-    await delay();
+    await networkDelay();
     const { settings } = MOCK_USER_PREFERENCES;
 
     const DEFAULT_APP_PREFERENCES = {
@@ -1146,7 +1147,7 @@ export const SETTINGS_HANDLERS = [
 
   // PATCH /api/settings - incremental updates
   http.patch("*/api/settings", async ({ request }) => {
-    await delay();
+    await networkDelay();
     const body = (await request.json()) as {
       agent_settings_diff?: Record<string, unknown>;
       conversation_settings_diff?: Record<string, SettingsValue>;
@@ -1239,22 +1240,22 @@ export const SETTINGS_HANDLERS = [
   }),
 
   http.post("*/api/mcp/test", async () => {
-    await delay();
+    await networkDelay();
     return HttpResponse.json({ ok: true, tools: ["mock_tool"] });
   }),
 
   http.get("*/api/settings/agent-schema", async () => {
-    await delay();
+    await networkDelay();
     return HttpResponse.json(MOCK_AGENT_SETTINGS_SCHEMA);
   }),
 
   http.get("*/api/v1/settings/agent-schema", async () => {
-    await delay();
+    await networkDelay();
     return HttpResponse.json(MOCK_AGENT_SETTINGS_SCHEMA);
   }),
 
   http.post("*/api/v1/settings", async ({ request }) => {
-    await delay();
+    await networkDelay();
     const body = (await request.json()) as Record<string, unknown> | null;
 
     if (body) {
@@ -1317,7 +1318,7 @@ export const SETTINGS_HANDLERS = [
   // POST /api/mcp/test – MCP server connectivity check before install.
   // Returns ok:true so the install modal can proceed to save and close.
   http.post("*/api/mcp/test", async () => {
-    await delay();
+    await networkDelay();
     return HttpResponse.json({ ok: true, tools: [] });
   }),
 ];
