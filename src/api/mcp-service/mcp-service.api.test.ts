@@ -438,6 +438,36 @@ describe("McpService.testServer", () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
+  it("asks the agent-server to send the OAuth redirect to the backend URL the browser uses", async () => {
+    vi.spyOn(window, "open").mockReturnValue(null);
+
+    await McpService.authorizeOAuth(oauthServer());
+
+    expect(startOAuth.mock.calls[0][0]).toMatchObject({
+      callback_base_url: "http://127.0.0.1:8001",
+    });
+  });
+
+  it("resolves a same-origin backend to the page origin and keeps its path prefix", async () => {
+    setRegisteredBackends([
+      {
+        id: "local",
+        name: "Local",
+        host: "/agent-server/",
+        apiKey: "session-key",
+        kind: "local",
+      },
+    ]);
+    setActiveSelection({ backendId: "local", orgId: null });
+    vi.spyOn(window, "open").mockReturnValue(null);
+
+    await McpService.authorizeOAuth(oauthServer());
+
+    expect(startOAuth.mock.calls[0][0]).toMatchObject({
+      callback_base_url: `${window.location.origin}/agent-server`,
+    });
+  });
+
   it("omits empty stdio options and optional local credentials", async () => {
     setRegisteredBackends([
       {
