@@ -313,9 +313,12 @@ export function InstallServerModal({
           onSuccess?.(entry);
           onClose();
         })
-        .catch(() =>
-          setGlobalError(t(I18nKey.CHAT$CONVERSATION_CONFIGURATION_FAILED)),
-        )
+        .catch((err: unknown) => {
+          const message = retrieveAxiosErrorMessage(err as AxiosError);
+          setGlobalError(
+            message || t(I18nKey.CHAT$CONVERSATION_CONFIGURATION_FAILED),
+          );
+        })
         .finally(() => setIsFinalizingInstall(false));
       return;
     }
