@@ -59,12 +59,15 @@ describe("useCompactContextAction (integration)", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     useEventStore.getState().clearEvents();
-    useMetricsStore.getState().setMetrics({
-      cost: null,
-      max_budget_per_task: null,
-      usage: usage(50_000),
-      usage_breakdown: null,
-    });
+    useMetricsStore.getState().setMetrics(
+      {
+        cost: null,
+        max_budget_per_task: null,
+        usage_breakdown: null,
+        usage: usage(50_000),
+      },
+      "c1",
+    );
     vi.spyOn(
       AgentServerConversationService,
       "condenseConversation",
@@ -94,12 +97,15 @@ describe("useCompactContextAction (integration)", () => {
 
     act(() => {
       useEventStore.getState().addEvent(condensationEvent("cond-x"));
-      useMetricsStore.getState().setMetrics({
-        cost: null,
-        max_budget_per_task: null,
-        usage: usage(20_000),
-        usage_breakdown: null,
-      });
+      useMetricsStore.getState().setMetrics(
+        {
+          cost: null,
+          max_budget_per_task: null,
+          usage_breakdown: null,
+          usage: usage(20_000),
+        },
+        "c1",
+      );
     });
 
     expect(successToast).toHaveBeenCalledWith(

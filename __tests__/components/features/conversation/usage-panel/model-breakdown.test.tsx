@@ -10,7 +10,6 @@ import type { UsageBreakdownEntry } from "#/api/conversation-service/agent-serve
 const entry = (
   overrides: Partial<UsageBreakdownEntry> = {},
 ): UsageBreakdownEntry => ({
-  usageId: "default",
   modelName: "anthropic/claude-sonnet-4-5",
   accumulatedCost: 0.003,
   usage: {
@@ -32,16 +31,8 @@ describe("ModelBreakdown", () => {
     render(
       <ModelBreakdown
         entries={[
-          entry({
-            usageId: "default",
-            modelName: "m/a",
-            accumulatedCost: 0.003,
-          }),
-          entry({
-            usageId: "condenser",
-            modelName: "m/b",
-            accumulatedCost: 1.5,
-          }),
+          entry({ modelName: "m/b", accumulatedCost: 1.5 }),
+          entry({ modelName: "m/a", accumulatedCost: 0.003 }),
         ]}
       />,
     );
@@ -50,11 +41,6 @@ describe("ModelBreakdown", () => {
     expect(screen.getByText("$1.5000")).toBeInTheDocument();
     expect(screen.getByText("m/a")).toBeInTheDocument();
     expect(screen.getByText("$0.0030")).toBeInTheDocument();
-  });
-
-  it("falls back to the usage id when the model name is empty", () => {
-    render(<ModelBreakdown entries={[entry({ modelName: "" })]} />);
-    expect(screen.getByText("default")).toBeInTheDocument();
   });
 
   it("summarizes per-model input and output tokens", () => {
@@ -66,8 +52,13 @@ describe("ModelBreakdown", () => {
     ).toBeInTheDocument();
   });
 
-  it("omits the token summary for entries without token usage", () => {
-    render(<ModelBreakdown entries={[entry({ usage: null })]} />);
-    expect(screen.queryByText(/19,747,245/)).not.toBeInTheDocument();
+  it("marks a model that used tokens but reported no cost as unpriced", () => {
+    render(
+      <ModelBreakdown
+        entries={[entry({ modelName: "acme/coder", accumulatedCost: 0 })]}
+      />,
+    );
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.queryByText("$0.0000")).not.toBeInTheDocument();
   });
 });

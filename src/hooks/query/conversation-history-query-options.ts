@@ -4,6 +4,7 @@ import { getActiveBackend } from "#/api/backend-registry/active-store";
 import type { ResolvedActiveBackend } from "#/api/backend-registry/types";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { isRuntimeUnavailableSandboxStatus } from "#/utils/conversation-archive-status";
+import { getUnreadableEventFileReason } from "#/utils/unreadable-event-file-error";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
 
 export const HISTORY_NAVIGATION_FRESHNESS_MS = 1000;
@@ -121,7 +122,12 @@ export function conversationHistoryQueryOptions(
             conversationUrl,
             conversation?.session_api_key ?? null,
           );
-        } catch {
+        } catch (error) {
+          // A local server that cannot read an event file cannot serve this
+          // log at all. Stop here: only this response is sure to carry its
+          // reason (through the ingress, a request sent right after a 500
+          // comes back as a bare 502).
+          if (!isCloud && getUnreadableEventFileReason(error)) throw error;
           // Not fatal: without a cursor the socket replays the whole log.
           count = null;
         }
@@ -164,7 +170,9 @@ export function conversationHistoryQueryOptions(
     refetchOnMount: isCloud ? true : "always",
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    retry: 1,
+    // An unreadable event file fails the same way every time.
+    retry: (failureCount, error) =>
+      failureCount < 1 && !getUnreadableEventFileReason(error),
     // Socket recovery handles a failed preload and reports connection failures.
     meta: { disableToast: true },
   });

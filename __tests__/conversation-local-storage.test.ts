@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   clearConversationLocalStorage,
+  clearConfirmedConversationDraft,
+  getConversationDraftRevision,
+  markConversationDraftEdited,
   getConversationState,
   isTaskConversationId,
   setConversationState,
@@ -10,6 +13,44 @@ import {
 describe("conversation localStorage utilities", () => {
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  it("keeps a debounced save with its input revision and rejects obsolete saves", () => {
+    const conversationId = "conv-owned-draft";
+    const revision = markConversationDraftEdited(conversationId);
+    setConversationState(
+      conversationId,
+      { draftMessage: "Submitted edit" },
+      revision,
+    );
+    expect(getConversationDraftRevision(conversationId)).toBe(revision);
+
+    // A programmatic update, including one from another tab, starts a new edit.
+    setConversationState(conversationId, { draftMessage: "Newer edit" });
+    setConversationState(
+      conversationId,
+      { draftMessage: "Submitted edit" },
+      revision,
+    );
+    expect(getConversationState(conversationId).draftMessage).toBe(
+      "Newer edit",
+    );
+  });
+
+  it("confirms legacy drafts and removes edit metadata when clearing a conversation", () => {
+    const conversationId = "conv-legacy-draft";
+    localStorage.setItem(
+      `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`,
+      JSON.stringify({ draftMessage: "Legacy draft" }),
+    );
+    clearConfirmedConversationDraft(conversationId, {
+      text: "Legacy draft",
+      draftRevision: null,
+    });
+    expect(getConversationState(conversationId).draftMessage).toBeNull();
+    expect(getConversationDraftRevision(conversationId)).not.toBeNull();
+    clearConversationLocalStorage(conversationId);
+    expect(getConversationDraftRevision(conversationId)).toBeNull();
   });
 
   describe("isTaskConversationId", () => {
@@ -66,9 +107,9 @@ describe("conversation localStorage utilities", () => {
     });
 
     it("defaults rightPanelShown to false and drops corrupt values", () => {
-      expect(getConversationState("conv-right-panel-default").rightPanelShown).toBe(
-        false,
-      );
+      expect(
+        getConversationState("conv-right-panel-default").rightPanelShown,
+      ).toBe(false);
 
       const conversationId = "conv-right-panel-corrupt";
       const key = `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`;
@@ -153,7 +194,12 @@ describe("conversation localStorage utilities", () => {
     it("persists and sanitizes unpinnedOverviewSections", () => {
       const conversationId = "conv-overview-pins";
       setConversationState(conversationId, {
-        unpinnedOverviewSections: ["skills", "not-a-section", "mcp", "workspace"],
+        unpinnedOverviewSections: [
+          "skills",
+          "not-a-section",
+          "mcp",
+          "workspace",
+        ],
       });
 
       const state = getConversationState(conversationId);

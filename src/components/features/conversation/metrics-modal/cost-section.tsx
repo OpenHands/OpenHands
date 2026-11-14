@@ -4,14 +4,17 @@ import { I18nKey } from "#/i18n/declaration";
 
 interface CostSectionProps {
   cost: number | null;
-  maxBudgetPerTask: number | null;
+  maxBudget: number | null;
   usageTokens: number | null;
+  /** ACP conversations already carry their own plan-usage estimate note. */
+  showEstimateNote: boolean;
 }
 
 export function CostSection({
   cost,
-  maxBudgetPerTask,
+  maxBudget,
   usageTokens,
+  showEstimateNote,
 }: CostSectionProps) {
   const { t } = useTranslation("openhands");
 
@@ -19,28 +22,31 @@ export function CostSection({
     return null;
   }
 
-  // The agent server records cost only for calls it could price; tokens
-  // without a matching cost mean the model's pricing was unknown, so a
-  // flat "$0.0000" would misread as "this session was free".
-  const hasTokensWithoutCost = cost === 0 && (usageTokens ?? 0) > 0;
+  // Calls the agent server cannot price are recorded at cost 0 while their
+  // tokens still count, so "$0.0000" here would read as "this was free".
+  const isUnpriced = cost === 0 && (usageTokens ?? 0) > 0;
 
   return (
     <>
-      <BudgetDisplay cost={cost} maxBudgetPerTask={maxBudgetPerTask} />
-      <div className="flex justify-between items-center border-t border-border-subtle pt-2">
+      <BudgetDisplay cost={cost} maxBudget={maxBudget} />
+      <div className="flex justify-between items-center border-t border-divider pt-2">
         <span className="font-semibold">
           {t(I18nKey.CONVERSATION$TOTAL_COST)}
         </span>
-        <span className="font-semibold">${cost.toFixed(4)}</span>
+        <span className="font-semibold" data-testid="total-cost-value">
+          {isUnpriced ? "—" : `$${cost.toFixed(4)}`}
+        </span>
       </div>
-      {hasTokensWithoutCost && (
-        <span className="text-xs text-muted">
+      {isUnpriced && (
+        <span className="text-xs text-muted" data-testid="cost-unpriced-note">
           {t(I18nKey.CONVERSATION$NO_COST_DATA)}
         </span>
       )}
-      <span className="text-xs text-muted">
-        {t(I18nKey.CONVERSATION$COST_ESTIMATE_NOTE)}
-      </span>
+      {!isUnpriced && showEstimateNote && (
+        <span className="text-xs text-muted" data-testid="cost-estimate-note">
+          {t(I18nKey.CONVERSATION$COST_ESTIMATE_NOTE)}
+        </span>
+      )}
     </>
   );
 }

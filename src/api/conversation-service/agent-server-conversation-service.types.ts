@@ -3,7 +3,10 @@ import type { ClientToolSpec } from "../canvas-ui-client-tool";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
 import { ExecutionStatus } from "#/types/agent-server/core";
-import type { ACPModelOption } from "#/constants/acp-providers";
+import type {
+  ACPEffortChoice,
+  ACPModelOption,
+} from "#/constants/acp-providers";
 
 /**
  * Lifecycle state of a cloud sandbox. Mirrors OpenHands' V1SandboxStatus.
@@ -189,6 +192,10 @@ export interface AppConversation {
    * Empty before the session starts and on servers that don't report models.
    */
   acp_available_models?: ACPModelOption[] | null;
+  /** Reasoning effort the ACP session reports for its current model. */
+  acp_current_effort?: string | null;
+  /** Effort levels the ACP session offers for its current model. */
+  acp_available_efforts?: ACPEffortChoice[] | null;
   /**
    * Server-side key-value tags from the agent-server's
    * ``ConversationInfo.tags`` (settable at creation and via
@@ -293,8 +300,8 @@ export interface RuntimeConversationStats {
   usage_to_metrics: Record<string, RuntimeMetrics>;
 }
 
+/** Cost and tokens of one model, summed over the usage ids that used it. */
 export interface UsageBreakdownEntry {
-  usageId: string;
   modelName: string;
   accumulatedCost: number;
   usage: Pick<
@@ -303,7 +310,7 @@ export interface UsageBreakdownEntry {
     | "completion_tokens"
     | "cache_read_tokens"
     | "cache_write_tokens"
-  > | null;
+  >;
 }
 
 export interface RuntimeMetrics {
@@ -330,6 +337,7 @@ export interface ResponseLatency {
 
 export interface RuntimeConversationInfo {
   id: string;
+  max_budget_per_run?: number | null;
   title: string | null;
   metrics: MetricsSnapshot | null;
   created_at: string;
@@ -338,4 +346,8 @@ export interface RuntimeConversationInfo {
   stats: RuntimeConversationStats;
   /** Models an ACP session reported; empty otherwise. */
   available_models: ACPModelOption[];
+  /** Reasoning effort an ACP session reports for its current model. */
+  current_effort?: string | null;
+  /** Effort levels an ACP session offers for its current model. */
+  available_efforts?: ACPEffortChoice[];
 }

@@ -74,6 +74,8 @@ import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { useConversationStore } from "#/stores/conversation-store";
 import { trackError } from "#/utils/error-handler";
+import { buildUsageBreakdown } from "#/utils/conversation-metrics";
+import { getUnreadableEventFileReason } from "#/utils/unreadable-event-file-error";
 import { matchesPendingConversationId } from "#/utils/pending-task-message-link";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore, { type MetricsState } from "#/stores/metrics-store";
@@ -82,7 +84,7 @@ import {
   usePersistedConversationHistory,
   getConversationHistoryScope,
 } from "#/hooks/query/use-conversation-history";
-import { setConversationState } from "#/utils/conversation-local-storage";
+import { clearConfirmedConversationDraft } from "#/utils/conversation-local-storage";
 import {
   recordModelSwitchMessage,
   seedModelSwitchesFromHistory,
@@ -283,6 +285,8 @@ export function ConversationWebSocketProvider({
 
   // Track if we've ever successfully connected for each connection
   const hasConnectedRefMain = React.useRef(false);
+  // Whether the open main socket has delivered any frame yet (see sendMessage).
+  const mainServedRef = React.useRef(false);
   const hasConnectedRefPlanning = React.useRef(false);
 
   const queryClient = useQueryClient();
@@ -373,7 +377,10 @@ export function ConversationWebSocketProvider({
 
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
-    (event: ConversationStateUpdateEventStats) => {
+    (
+      event: ConversationStateUpdateEventStats,
+      sourceConversationId: string,
+    ) => {
       const usageToMetrics = event.value.usage_to_metrics;
       if (!usageToMetrics) {
         return;
@@ -382,13 +389,12 @@ export function ConversationWebSocketProvider({
       // usage_to_metrics is keyed by arbitrary LLM usage ids ("default",
       // "condenser", "profile:<name>:<uuid>", …) — combine across all of
       // them, mirroring getCombinedMetrics on the REST path.
-      const combined = Object.entries(usageToMetrics).reduce<{
+      const combined = Object.values(usageToMetrics).reduce<{
         cost: number;
         maxBudgetPerTask: number | null;
         usage: MetricsState["usage"];
-        breakdown: MetricsState["usage_breakdown"];
       }>(
-        (acc, [usageId, metrics]) => {
+        (acc, metrics) => {
           acc.cost += metrics.accumulated_cost;
           if (
             acc.maxBudgetPerTask === null &&
@@ -420,36 +426,20 @@ export function ConversationWebSocketProvider({
               ),
             };
           }
-          acc.breakdown = [
-            ...(acc.breakdown ?? []),
-            {
-              usageId,
-              modelName: metrics.model_name,
-              accumulatedCost: metrics.accumulated_cost,
-              usage: tokenUsage
-                ? {
-                    prompt_tokens: tokenUsage.prompt_tokens,
-                    completion_tokens: tokenUsage.completion_tokens,
-                    cache_read_tokens: tokenUsage.cache_read_tokens,
-                    cache_write_tokens: tokenUsage.cache_write_tokens,
-                  }
-                : null,
-            },
-          ];
           return acc;
         },
-        { cost: 0, maxBudgetPerTask: null, usage: null, breakdown: null },
+        { cost: 0, maxBudgetPerTask: null, usage: null },
       );
 
-      // Costliest entry first, mirroring combineUsageMetrics on the REST path.
-      combined.breakdown?.sort((a, b) => b.accumulatedCost - a.accumulatedCost);
-
-      useMetricsStore.getState().setMetrics({
-        cost: combined.cost,
-        max_budget_per_task: combined.maxBudgetPerTask,
-        usage: combined.usage,
-        usage_breakdown: combined.breakdown,
-      });
+      useMetricsStore.getState().setMetrics(
+        {
+          cost: combined.cost,
+          max_budget_per_task: combined.maxBudgetPerTask,
+          usage: combined.usage,
+          usage_breakdown: buildUsageBreakdown(usageToMetrics),
+        },
+        sourceConversationId,
+      );
     },
     [],
   );
@@ -459,8 +449,21 @@ export function ConversationWebSocketProvider({
   // user scrolls to the top of the chat. The WebSocket connection waits for
   // this query so it can subscribe with `resend_mode='since'` and avoid
   // re-streaming everything REST already returned.
-  const { data: preloadedHistory, isPending: isPreloadingHistory } =
-    useConversationHistory(conversationId);
+  const {
+    data: preloadedHistory,
+    isPending: isPreloadingHistory,
+    error: historyError,
+  } = useConversationHistory(conversationId);
+
+  // A server that cannot read one of the event files cannot open the
+  // conversation, so the socket below would only retry with nothing to show.
+  // Say why instead of leaving an empty chat.
+  useEffect(() => {
+    const reason = getUnreadableEventFileReason(historyError);
+    if (reason) {
+      useErrorMessageStore.getState().setErrorMessage(reason, "conversation");
+    }
+  }, [historyError]);
 
   const historyScope = getConversationHistoryScope();
   const historyConnectionKey = JSON.stringify([
@@ -549,10 +552,13 @@ export function ConversationWebSocketProvider({
   ]);
 
   useLayoutEffect(() => {
-    if (!visibleHistory || visibleHistory.events.length === 0) {
+    if (!visibleHistory) {
       return;
     }
-    addEvents(visibleHistory.events);
+    addEvents(visibleHistory.events, {
+      nextPageId: visibleHistory.nextPageId,
+      hasMore: visibleHistory.hasMore,
+    });
 
     // The first user message of a cloud start-task conversation is persisted
     // server-side and reaches us via this REST preload, not over the WebSocket
@@ -573,11 +579,12 @@ export function ConversationWebSocketProvider({
 
       for (const event of visibleHistory.events) {
         if (isUserMessageEvent(event)) {
-          consumeMatchingPendingMessage(
+          const confirmed = consumeMatchingPendingMessage(
             conversationId,
             extractMessageEventText(event),
             event,
           );
+          clearConfirmedConversationDraft(conversationId, confirmed);
         }
       }
     }
@@ -766,6 +773,7 @@ export function ConversationWebSocketProvider({
   // Separate message handlers for each connection
   const handleMainMessage = useCallback(
     (messageEvent: MessageEvent) => {
+      mainServedRef.current = true;
       try {
         const routed = routeSessionFrame(
           JSON.parse(messageEvent.data),
@@ -877,13 +885,12 @@ export function ConversationWebSocketProvider({
           // History and live delivery share the same timestamp/identity checks.
           if (isUserMessageEvent(event)) {
             if (conversationId) {
-              consumeMatchingPendingMessage(
+              const confirmed = consumeMatchingPendingMessage(
                 conversationId,
                 extractMessageEventText(event),
                 event,
               );
-              // Clear draft from localStorage - message was successfully delivered
-              setConversationState(conversationId, { draftMessage: null });
+              clearConfirmedConversationDraft(conversationId, confirmed);
             }
           }
 
@@ -909,8 +916,8 @@ export function ConversationWebSocketProvider({
                 setExecutionStatus(conversationId, reportedStatus);
               }
             }
-            if (isStatsConversationStateUpdateEvent(event)) {
-              updateMetricsFromStats(event);
+            if (isStatsConversationStateUpdateEvent(event) && conversationId) {
+              updateMetricsFromStats(event, conversationId);
             }
             // Mirror goal status into the store. Intentionally duplicated across
             // the main and planning WebSocket handlers (like the execution_status
@@ -1175,12 +1182,12 @@ export function ConversationWebSocketProvider({
           // events can never consume a main-conversation pending entry.
           if (isUserMessageEvent(event)) {
             if (conversationId) {
-              consumeMatchingPendingMessage(
+              const confirmed = consumeMatchingPendingMessage(
                 conversationId,
                 extractMessageEventText(event),
                 event,
               );
-              setConversationState(conversationId, { draftMessage: null });
+              clearConfirmedConversationDraft(conversationId, confirmed);
             }
           }
 
@@ -1213,8 +1220,11 @@ export function ConversationWebSocketProvider({
                 setExecutionStatus(planningConversationId, reportedStatus);
               }
             }
-            if (isStatsConversationStateUpdateEvent(event)) {
-              updateMetricsFromStats(event);
+            if (
+              isStatsConversationStateUpdateEvent(event) &&
+              planningConversationId
+            ) {
+              updateMetricsFromStats(event, planningConversationId);
             }
             // Mirror goal status into the store. Intentionally duplicated across
             // the main and planning WebSocket handlers (like the execution_status
@@ -1306,6 +1316,7 @@ export function ConversationWebSocketProvider({
       connectionKey: historyConnectionKey,
       reconnect: { enabled: true },
       onOpen: () => {
+        mainServedRef.current = false;
         mainReplayThroughSeqRef.current = null;
         setReadyHistoryConnectionKey(null);
         mainConnectionError.cancel();
@@ -1319,6 +1330,7 @@ export function ConversationWebSocketProvider({
         useEventStore.getState().clearStreamingSlots();
       },
       onClose: () => {
+        mainServedRef.current = false;
         setReadyHistoryConnectionKey(null);
         setMainConnectionState("CLOSED");
         mainDeltaBatcherRef.current?.reset();
@@ -1562,8 +1574,16 @@ export function ConversationWebSocketProvider({
       const targetConversationId =
         currentMode === "plan" ? planningConversationId : conversationId;
 
-      if (currentSocket?.readyState !== WebSocket.OPEN) {
-        // WebSocket not connected.
+      // An open socket the server has not served yet (no frame received)
+      // may never read what we send: the agent server subscribes a new
+      // session socket only after the running step releases the
+      // conversation lock, and a frame sent before that is lost if the tab
+      // navigates away first. Until the first frame arrives, deliver over
+      // HTTP like a closed socket.
+      const socketServed =
+        currentMode === "plan" ? true : mainServedRef.current;
+      if (currentSocket?.readyState !== WebSocket.OPEN || !socketServed) {
+        // WebSocket not connected, or not yet served.
         if (!targetConversationId) {
           // Never fall back to the parent in plan mode: without a planner
           // target the message would run in the code agent, which is exactly

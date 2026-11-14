@@ -31,12 +31,6 @@ export function UsagePanel() {
   const { usage, usage_breakdown: usageBreakdown } = metrics;
   const hasMetrics = metrics.cost !== null || usage !== null;
 
-  // With a single LLM usage id the combined totals already carry the model's
-  // numbers; the per-model rows only add information once several usage ids
-  // (e.g. "default" + "condenser") contribute to the same Total Cost.
-  const breakdownEntries =
-    usageBreakdown !== null && usageBreakdown.length > 1 ? usageBreakdown : [];
-
   if (!hasMetrics) {
     return (
       <ConversationTabEmptyState icon={<Gauge />}>
@@ -83,16 +77,15 @@ export function UsagePanel() {
           {usage !== null && <UsageSection usage={usage} />}
           <CostSection
             cost={metrics.cost}
-            maxBudgetPerTask={metrics.max_budget_per_task}
+            maxBudget={metrics.maxBudget}
             usageTokens={
               usage !== null
                 ? usage.prompt_tokens + usage.completion_tokens
                 : null
             }
+            showEstimateNote={!isAcp}
           />
-          {breakdownEntries.length > 0 && (
-            <ModelBreakdown entries={breakdownEntries} />
-          )}
+          <ModelBreakdown entries={usageBreakdown ?? []} />
         </div>
       </div>
 

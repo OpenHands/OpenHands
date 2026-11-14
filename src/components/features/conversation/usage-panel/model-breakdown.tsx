@@ -7,11 +7,7 @@ interface ModelBreakdownProps {
   entries: UsageBreakdownEntry[];
 }
 
-/**
- * Per-model cost rows for the usage panel: one row per LLM usage id
- * ("default", "condenser", …) with the model the agent server priced it on.
- * The combined Total Cost row alone cannot answer "which model spent this?".
- */
+/** Per-model rows under Total Cost, so the total can be attributed. */
 export function ModelBreakdown({ entries }: ModelBreakdownProps) {
   const { t } = useTranslation("openhands");
 
@@ -20,26 +16,32 @@ export function ModelBreakdown({ entries }: ModelBreakdownProps) {
   }
 
   return (
-    <div className="border-t border-border-subtle pt-2">
+    <div
+      className="border-t border-divider pt-2"
+      data-testid="usage-model-breakdown"
+    >
       <span className="text-sm text-muted">
         {t(I18nKey.CONVERSATION$BY_MODEL)}
       </span>
-      {entries.map((entry) => (
-        <div key={entry.usageId} className="mt-1">
-          <MetricRow
-            label={entry.modelName || entry.usageId}
-            value={`$${entry.accumulatedCost.toFixed(4)}`}
-          />
-          {entry.usage && (
+      {entries.map(({ modelName, accumulatedCost, usage }) => {
+        const isUnpriced =
+          accumulatedCost === 0 &&
+          usage.prompt_tokens + usage.completion_tokens > 0;
+        return (
+          <div key={modelName} className="mt-1">
+            <MetricRow
+              label={modelName}
+              value={isUnpriced ? "—" : `$${accumulatedCost.toFixed(4)}`}
+            />
             <div className="pl-4 text-sm text-muted">
               {t(I18nKey.CONVERSATION$INPUT)}{" "}
-              {entry.usage.prompt_tokens.toLocaleString()} ·{" "}
+              {usage.prompt_tokens.toLocaleString()} ·{" "}
               {t(I18nKey.CONVERSATION$OUTPUT)}{" "}
-              {entry.usage.completion_tokens.toLocaleString()}
+              {usage.completion_tokens.toLocaleString()}
             </div>
-          )}
-        </div>
-      ))}
+          </div>
+        );
+      })}
     </div>
   );
 }

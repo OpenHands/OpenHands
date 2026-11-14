@@ -391,10 +391,10 @@ The convention:
    the code/API design and a **before/after** of your change, grounded to the actual code.
    Keep it static, with no scripts: htmlpreview runs the page in the reviewer's browser.
 2. Commit it under the temporary **`.pr/`** directory, e.g. `.pr/design.html`. This directory
-   is for temporary PR-only artifacts. For both same-repository and fork PRs, it is
-   **removed automatically after the PR merges to `main`**, through a cleanup PR opened
-   or updated by `.github/workflows/pr-artifacts.yml`. Approval leaves review artifacts
-   available and avoids rerunning CI solely for their removal.
+   is for temporary PR-only artifacts. It stays on the PR branch for review. For both
+   same-repository and fork PRs, the **next release PR removes it from `main`** after the
+   PR merges (`cleanup-pr-artifacts` in `.github/workflows/release.yml`), so no separate
+   cleanup PR or CI run is needed.
 3. Link it near the top of the PR description via htmlpreview, at the commit that contains
    the page (`git rev-parse HEAD` after you push it):
 
@@ -402,7 +402,7 @@ The convention:
    https://htmlpreview.github.io/?https://github.com/<your-fork>/<repo>/blob/<commit-sha>/.pr/design.html
    ```
 
-   Use the commit SHA, not the branch name. Post-merge cleanup removes `.pr/` from `main`,
+   Use the commit SHA, not the branch name. The release PR removes `.pr/` from `main`,
    and PR branches may be deleted; a SHA link keeps resolving. Refresh the link when the
    page changes substantively.
 

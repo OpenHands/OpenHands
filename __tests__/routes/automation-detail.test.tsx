@@ -30,6 +30,7 @@ import type { Backend } from "#/api/backend-registry/types";
 import { AutomationRunStatus } from "#/types/automation";
 import type { Automation, AutomationRunsResponse } from "#/types/automation";
 import { withPresetSources } from "#/utils/automation-preset-sources";
+import { bytesToBase64 } from "#/utils/base64";
 import { packTarGzip } from "#/utils/tar-gzip";
 import * as ToastHandlers from "#/utils/custom-toast-handlers";
 
@@ -56,9 +57,18 @@ vi.mock("#/api/profiles-service/profiles-service.api", () => ({
 
 // Spy on the success toast; the test tree does not render a toaster.
 const displaySuccessToast = vi.hoisted(() => vi.fn());
+const displayErrorToast = vi.hoisted(() => vi.fn());
 vi.mock("#/utils/custom-toast-handlers", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#/utils/custom-toast-handlers")>()),
   displaySuccessToast,
+  displayErrorToast,
+}));
+
+// Spy on the file download; jsdom has no object URLs to hand a real one.
+const downloadBlob = vi.hoisted(() => vi.fn());
+vi.mock("#/utils/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/utils")>()),
+  downloadBlob,
 }));
 
 // Mock permission hooks so cloud-backend tests don't need a real /me endpoint.
@@ -101,6 +111,7 @@ function mockServiceAccountsEnabled(isServiceAccountsEnabled: boolean) {
     isSlackEnabled: false,
     deploymentMode: null,
     isOrgMcpServersEnabled: false,
+    isAgentProfilesEnabled: false,
     isServiceAccountsEnabled,
   };
   vi.mocked(fetchCloudIntegrationsConfig).mockResolvedValue(config);
@@ -231,6 +242,8 @@ beforeEach(() => {
   mockServiceAccountsEnabled(false);
   detailMocks.createConversationMutate.mockReset();
   detailMocks.navigate.mockReset();
+  downloadBlob.mockReset();
+  displayErrorToast.mockReset();
   setRegisteredBackends([localBackend, cloudBackend]);
   setActiveSelection({ backendId: localBackend.id });
 });
@@ -281,6 +294,87 @@ describe("AutomationDetail — Edit in the header", () => {
     expect(detailMocks.navigate).toHaveBeenCalledWith(
       "/automations/setup?automationId=auto-1",
     );
+  });
+});
+
+describe("AutomationDetail — another user's automation", () => {
+  const disabledAutomation: Automation = {
+    ...automation,
+    enabled: false,
+    tags: ["qa"],
+  };
+
+  async function renderAndOpenMenu() {
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(
+      disabledAutomation,
+    );
+    setActiveSelection({ backendId: cloudBackend.id });
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+  }
+
+  it("lets an admin or owner edit, tag, turn on and delete it", async () => {
+    // Arrange — manage permission, but not the creator.
+    permissionMocks.canManage = true;
+    permissionMocks.isOwner = false;
+
+    // Act
+    await renderAndOpenMenu();
+
+    // Assert
+    expect(
+      screen.getByRole("switch", { name: I18nKey.AUTOMATIONS$TURN_ON }),
+    ).toBeInTheDocument();
+    for (const name of [
+      I18nKey.AUTOMATIONS$EDIT,
+      I18nKey.AUTOMATIONS$TURN_ON,
+      I18nKey.AUTOMATIONS$DELETE,
+    ]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+    expect(screen.getByTestId("automation-tags-edit")).toBeInTheDocument();
+  });
+
+  it("offers a member no write actions", async () => {
+    // Arrange — view only, and not the creator.
+    permissionMocks.canManage = false;
+    permissionMocks.isOwner = false;
+
+    // Act
+    await renderAndOpenMenu();
+
+    // Assert
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    for (const name of [
+      I18nKey.AUTOMATIONS$EDIT,
+      I18nKey.AUTOMATIONS$TURN_ON,
+      I18nKey.AUTOMATIONS$DELETE,
+    ]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+    expect(
+      screen.queryByTestId("automation-tags-edit"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lets a member who created it turn it back on", async () => {
+    // Arrange — view only, but the creator (escape hatch).
+    permissionMocks.canManage = false;
+    permissionMocks.isOwner = true;
+
+    // Act
+    await renderAndOpenMenu();
+
+    // Assert
+    expect(
+      screen.getByRole("switch", { name: I18nKey.AUTOMATIONS$TURN_ON }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -678,8 +772,9 @@ describe("AutomationDetail — runs as a service account", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("does not let an admin edit the tags of another member's automation", async () => {
+  it("lets an admin edit the tags of another member's automation", async () => {
     // Arrange — runs as a person, and the caller is a manager but not the creator.
+    permissionMocks.isOwner = false;
     vi.mocked(AutomationService.getAutomation).mockResolvedValue({
       ...automation,
       user_id: "another-member",
@@ -692,10 +787,8 @@ describe("AutomationDetail — runs as a service account", () => {
     renderDetail();
     await screen.findByTestId("automation-tags");
 
-    // Assert — only the creator edits a automation that runs as a person.
-    expect(
-      screen.queryByTestId("automation-tags-edit"),
-    ).not.toBeInTheDocument();
+    // Assert
+    expect(screen.getByTestId("automation-tags-edit")).toBeInTheDocument();
   });
 
   it("shows a member the generic label and never the service account id", async () => {
@@ -910,7 +1003,77 @@ describe("AutomationDetail — script automations", () => {
       screen.queryByTestId("automation-prompt-content"),
     ).not.toBeInTheDocument();
   });
+
+  it("exports a script automation with its bundle", async () => {
+    // Arrange
+    const bundle = new Uint8Array(
+      await packTarGzip([{ name: "main.py", content: "print('hi')\n" }]),
+    );
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      prompt: null,
+      entrypoint: "python main.py",
+    });
+    vi.mocked(AutomationService.fetchTarballBytes).mockResolvedValue(bundle);
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByTestId("automation-script-file");
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EXPORT }),
+    );
+
+    // Assert — the file carries the bundle the detail page showed.
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalledTimes(1));
+    const [blob, filename] = downloadBlob.mock.calls[0] as [Blob, string];
+    expect(filename).toBe("test-automation.automation.json");
+    expect(JSON.parse(await readBlobText(blob)).spec).toMatchObject({
+      prompt: null,
+      script: {
+        entrypoint: "python main.py",
+        tarball_base64: bytesToBase64(bundle),
+      },
+    });
+  });
+
+  it("reports the error instead of writing a file when the bundle cannot be fetched", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      prompt: null,
+      entrypoint: "python main.py",
+    });
+    vi.mocked(AutomationService.fetchTarballBytes).mockRejectedValue(
+      new Error("Upload not found"),
+    );
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByTestId("automation-script-entrypoint");
+
+    // Act
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EXPORT }),
+    );
+
+    // Assert
+    await waitFor(() =>
+      expect(displayErrorToast).toHaveBeenCalledWith("Upload not found"),
+    );
+    expect(downloadBlob).not.toHaveBeenCalled();
+  });
 });
+
+function readBlobText(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result)));
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsText(blob);
+  });
+}
 
 describe("AutomationDetail — keep sandbox alive", () => {
   beforeEach(() => {
@@ -1017,8 +1180,8 @@ describe("AutomationDetail — keep sandbox alive", () => {
     },
   );
 
-  it("leaves the item out for a manager who did not create a user-owned automation", async () => {
-    // Arrange — the service lets only the creator change keep_alive here.
+  it("offers the item to a manager who did not create a user-owned automation", async () => {
+    // Arrange — managers may edit an automation that runs as another person.
     permissionMocks.isOwner = false;
     permissionMocks.canManage = true;
     vi.mocked(AutomationService.getAutomation).mockResolvedValue({
@@ -1037,13 +1200,10 @@ describe("AutomationDetail — keep sandbox alive", () => {
 
     // Assert
     expect(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", {
+      screen.getByRole("button", {
         name: I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE,
       }),
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
   });
 
   it("offers the item to a manager of an automation that runs as a service account", async () => {

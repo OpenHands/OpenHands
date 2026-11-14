@@ -94,6 +94,12 @@ vi.mock("#/hooks/query/use-automation-run-summaries", () => ({
   },
 }));
 
+// The owner filter is hidden here (no creator id), so the instance config
+// that gates its Service accounts option is never read.
+vi.mock("#/hooks/query/use-cloud-integrations-config", () => ({
+  useCloudIntegrationsConfig: () => ({ data: undefined }),
+}));
+
 vi.mock("#/hooks/query/use-automation-health", () => ({
   useAutomationHealth: () => mocks.healthState,
 }));

@@ -36,7 +36,12 @@ import {
   runPorts,
 } from "./lib/launcher-env.mjs";
 import { baselineLines, parseBaseline, withBaseline } from "./lib/baseline.mjs";
-import { affectedFamilies, familyHead } from "./lib/map-sources.mjs";
+import {
+  affectedFamilies,
+  familyHead,
+  serverMapIds,
+  specMatches,
+} from "./lib/map-sources.mjs";
 import {
   classifyAttempt,
   judgeAssertion,
@@ -50,6 +55,9 @@ import {
   citedTestids,
   resolveTestids,
   sourceLiterals,
+  sourceControls,
+  mapWords,
+  unnamedControls,
 } from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
@@ -2159,11 +2167,13 @@ async function cmdConversation({ positional, flags }) {
       value: prompt,
     });
     await browserCall(run, "click", { selector: "testid=submit-button" });
+    // Some launches (the automation setup page) show a temporary
+    // /conversations/launch-<id> page first; wait for the real id.
     const { url } = await browserCall(run, "wait-url", {
-      pattern: "/conversations/[^/?#]+",
+      pattern: "/conversations/(?!launch-)[^/?#]+",
       timeout: 60_000,
     });
-    const conversationId = /\/conversations\/([^/?#]+)/.exec(url)[1];
+    const conversationId = /\/conversations\/((?!launch-)[^/?#]+)/.exec(url)[1];
     const result = {
       ok: true,
       id: conversationId,
@@ -3235,6 +3245,17 @@ async function cmdBrowser({ positional, flags }) {
         fixed: flags.fixed,
       });
       break;
+    case "timezone":
+      if (!flags.reset)
+        need(
+          1,
+          "control-openhands browser timezone America/Sao_Paulo   # an IANA name, or --reset",
+        );
+      result = await browserCall(run, "timezone", {
+        zone: rest[0],
+        reset: Boolean(flags.reset),
+      });
+      break;
     case "viewport":
       need(
         1,
@@ -4100,6 +4121,7 @@ const BROWSER_VERBS = new Set([
   "record",
   "viewport",
   "clock",
+  "timezone",
   "errors",
   "events",
   "eval",
@@ -4128,7 +4150,7 @@ function featureFiles() {
     .sort();
 }
 
-function mapCheck({ only } = {}) {
+function mapCheck({ only, serverIds } = {}) {
   const problems = [];
   const ids = new Map();
   const index = existsSync(join(mapDir, "README.md"))
@@ -4224,6 +4246,22 @@ function mapCheck({ only } = {}) {
       if (!sourcePathExists(s))
         problems.push(`${file}: Source: path ${s.path} does not exist`);
     }
+    // The Server: line names verify-agent-server IDs; with --server-map each
+    // one must exist in that map.
+    for (const token of head.server.invalid)
+      problems.push(
+        `${file}: Server: ${token} is not an Agent Server ID like F15 or F15.changes`,
+      );
+    const serverSeen = new Set();
+    for (const id of head.server.ids) {
+      if (serverSeen.has(id))
+        problems.push(`${file}: Server: ${id} is listed twice`);
+      serverSeen.add(id);
+      if (serverIds && !serverIds.has(id))
+        problems.push(
+          `${file}: Server: ${id} is not in the verify-agent-server map`,
+        );
+    }
   }
   // References (`Fnn.slug` in prose, --feature Fnn.slug in recipes) must name
   // a declared ID once that family's file exists.
@@ -4312,6 +4350,30 @@ function sourcePathExists(s) {
   return readdirSync(dir).some(
     (name) => name.startsWith(head) && name.endsWith(tail),
   );
+}
+
+// A software-agent-sdk checkout, or the verify-agent-server feature-map
+// directory itself.
+function resolveServerMap(dir) {
+  const root = resolve(dir);
+  for (const candidate of [
+    join(
+      root,
+      ".agents",
+      "skills",
+      "verify-agent-server",
+      "references",
+      "feature-map",
+    ),
+    root,
+  ]) {
+    if (
+      existsSync(candidate) &&
+      readdirSync(candidate).some((f) => /^F\d{2}-.*\.md$/.test(f))
+    )
+      return candidate;
+  }
+  return null;
 }
 
 // Families with their parsed Source: lines.
@@ -4564,7 +4626,26 @@ async function cmdMap({ positional, flags }) {
         ? basename(String(flags.file))
         : undefined;
     if (flags["fix-counts"] && !only) fixIndexCounts();
-    const result = mapCheck({ only });
+    let serverIds;
+    let serverMap;
+    if (flags["server-map"]) {
+      serverMap = resolveServerMap(String(flags["server-map"]));
+      if (!serverMap)
+        usage(
+          `No verify-agent-server feature map under ${flags["server-map"]}`,
+          "control-openhands map check --server-map ../software-agent-sdk",
+        );
+      serverIds = serverMapIds(
+        readdirSync(serverMap)
+          .filter((f) => /^F\d{2}-.*\.md$/.test(f))
+          .map((file) => ({
+            file,
+            text: readFileSync(join(serverMap, file), "utf8"),
+          })),
+      );
+    }
+    const result = mapCheck({ only, serverIds });
+    if (serverMap) result.serverMap = serverMap;
     if (only) {
       result.problems = result.problems.filter(
         (p) => p.startsWith(`${only}:`) || p.includes(`(also in ${only})`),
@@ -4694,8 +4775,69 @@ async function cmdMap({ positional, flags }) {
     if (!ok) process.exitCode = 1;
     return;
   }
+  if (sub === "controls") {
+    // The reverse of `map testids`: controls the source renders that no
+    // bullet names. Candidates to operate or to leave out on purpose.
+    const families = familyList();
+    let controls = sourceControls(join(repoRoot, "src"), repoRoot);
+    let range;
+    if (flags.base && flags.base !== true) {
+      const target =
+        flags.target && flags.target !== true ? String(flags.target) : "HEAD";
+      const changed = new Set(
+        git(["diff", "--name-only", `${flags.base}..${target}`])
+          .split("\n")
+          .filter(Boolean),
+      );
+      controls = controls.filter((c) => changed.has(c.file));
+      range = { base: String(flags.base), target };
+    }
+    const owners = (file) => {
+      const ids = families
+        .filter((f) => f.sources.some((s) => specMatches(s, file)))
+        .map((f) => f.id);
+      return ids.length ? ids : ["unowned"];
+    };
+    const corpus = featureFiles()
+      .map((f) => readFileSync(join(mapDir, f), "utf8"))
+      .join("\n");
+    const result = unnamedControls(controls, mapWords(corpus), {
+      all: Boolean(flags.all),
+    });
+    let unnamed = result.unnamed.map((c) => ({
+      id: c.id,
+      tag: c.tag,
+      file: c.file,
+      families: owners(c.file),
+    }));
+    let considered = result.considered;
+    if (flags.family && flags.family !== true) {
+      const family = String(flags.family);
+      unnamed = unnamed.filter((c) => c.families.includes(family));
+      considered = controls.filter(
+        (c) => (flags.all || c.interactive) && owners(c.file).includes(family),
+      ).length;
+    }
+    const byFamily = {};
+    for (const c of unnamed)
+      for (const f of c.families) byFamily[f] = (byFamily[f] ?? 0) + 1;
+    const ok = !flags.strict || unnamed.length === 0;
+    out({
+      ok,
+      ...(range ? { range } : {}),
+      controls: considered,
+      unnamed: unnamed.length,
+      byFamily: Object.fromEntries(
+        Object.entries(byFamily).sort(([a], [b]) => a.localeCompare(b)),
+      ),
+      list: unnamed,
+      note: "Candidates, not defects: each is a control with a literal test id that no map file mentions. Operate it in a bullet (what it does, and what it does on a second use), or confirm a recipe already reaches it by role or label. `unowned` files belong to no family's Source: line.",
+    });
+    if (!ok) process.exitCode = 1;
+    return;
+  }
   usage(
-    "Usage: control-openhands map check|coverage|ids|routes|affected|testids|baseline",
+    "Usage: control-openhands map check|coverage|ids|routes|affected|testids|controls|baseline",
     "control-openhands map coverage",
   );
 }
@@ -4767,7 +4909,7 @@ Evidence and map
   evidence      add | list | report — the run's pass/fail/blocked/not-run ledger
   assert        --field F --equals V [--bug-shows B | --bug P] -- <command> — check one value of a command's output
   bug           list | run ID --attempts 2 | proof ID — known bugs as executable expected failures
-  map           check | coverage | ids | routes | affected | testids | baseline — keep the feature map honest
+  map           check | coverage | ids | routes | affected | testids | controls | baseline — keep the feature map honest
 
 Run state lives in $OH_VERIFY_HOME (default: $TMPDIR/openhands-verify); the
 current run is the 'current' symlink there, or --run / $OH_VERIFY_RUN.
@@ -4814,7 +4956,9 @@ Every other command uses --run, else $OH_VERIFY_RUN, else the only live run;
 with several live runs it refuses to guess (several agents on one machine).
 Backend versions, VS Code and the bridge come only from the flags:
 OH_AGENT_SERVER_*, OH_AUTOMATION_*, OH_CANVAS_ENABLE_VSCODE and MARS_WEB in your
-shell are not forwarded (launch warns). An Agent Server below
+shell are not forwarded (launch warns). TZ is forwarded: TZ=America/Sao_Paulo
+control-openhands launch --new runs the stack's services in that zone (a server
+host that is not in UTC; browser timezone moves the browser instead). An Agent Server below
 config/defaults.json compatibility.minimumAgentServer never gets
 past the UI's backend-compatibility gate.
 
@@ -4987,6 +5131,9 @@ Verbs
   viewport desktop|phone|narrow|tablet|WxH                    1440x1000, 390x844, 320x700, 820x1180
   clock --offset-ms N | --system ISO|+MS | --fixed ISO|+MS    skew the page's clock (install before the goto
                                          whose page should see it; the server's clock is untouched)
+  timezone <IANA name> | --reset         put the active tab in another time zone (America/Sao_Paulo, Asia/Tokyo);
+                                         it holds across reloads until --reset, and the server's zone is untouched
+                                         (timestamps, "N minutes ago", ordering by time: reload after setting it)
   errors [--clear] [--all] [--app-only] [--no-warnings]        page/console/HTTP errors since last clear
                                          (--clear prints the list, then empties it: run it before the action)
   events [--kinds pageerror,dialog,download,websocket-created,websocket-open,websocket-close,websocket-error] [--last N]
@@ -5100,6 +5247,7 @@ to a release before the fix).
 `,
   map: `control-openhands map check [--file Fnn-name.md]   lint the map (or one entry, skipping index links): four H2s, unique IDs, links, known commands, index counts
 control-openhands map check --fix-counts   rewrite the index's sub-feature counts and total from the files, then lint
+control-openhands map check --server-map ../software-agent-sdk   also check every Server: ID against that checkout's verify-agent-server map
 control-openhands map coverage   routes in src/routes.ts and src/components/features/* dirs not yet mapped
 control-openhands map ids        every sub-feature ID with its file
 control-openhands map routes     the route registry as path → route module
@@ -5117,6 +5265,13 @@ control-openhands map baseline [--set TARGET [--force]]
 control-openhands map testids [--strict]
                                  test ids the map drives that no literal or prefix in src/ accounts for
                                  (a cheap drift check before launching; --strict exits 1 on any)
+
+control-openhands map controls [--family Fnn] [--base REF [--target REF]] [--all] [--strict]
+                                 the reverse check: interactive elements in src/ with a literal test id
+                                 that no map file mentions, with the families whose Source: lines own
+                                 the file. A page can be mapped while a button on it is never operated;
+                                 this lists those buttons. --base limits it to files changed in a range
+                                 (the day's new controls), --all adds non-interactive elements
 
 check also verifies every Source: path exists and the baseline line's shape.
 `,

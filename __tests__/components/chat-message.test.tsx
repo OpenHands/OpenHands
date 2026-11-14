@@ -208,6 +208,22 @@ describe("ChatMessage", () => {
     expect(screen.getByText("Hello, World!")).toBeInTheDocument();
   });
 
+  it("blends wide-table fades into the user bubble, not the page", () => {
+    render(<ChatMessage type="user" message="Hello" />);
+    // The bubble sets the fade colour its Markdown tables inherit.
+    expect(screen.getByTestId("user-message")).toHaveClass(
+      "bg-tertiary",
+      "scroll-fade-tertiary",
+    );
+  });
+
+  it("leaves agent replies on the page fade colour", () => {
+    render(<ChatMessage type="agent" message="Hello" />);
+    expect(screen.getByTestId("agent-message")).not.toHaveClass(
+      "scroll-fade-tertiary",
+    );
+  });
+
   it("should support code syntax highlighting", () => {
     const code = "```js\nconsole.log('Hello, World!')\n```";
     render(<ChatMessage type="user" message={code} />);

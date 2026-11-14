@@ -22,7 +22,7 @@ function ChatStatusIndicator({
         {/* Dot */}
         <motion.span
           key={`dot-${status}`}
-          className="flex-shrink-0 animate-[pulse_1.2s_ease-in-out_infinite]"
+          className="flex-shrink-0 animate-chat-status-pulse"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

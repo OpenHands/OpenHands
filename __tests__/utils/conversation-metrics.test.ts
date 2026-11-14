@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { MetricsSnapshot } from "#/api/conversation-service/agent-server-conversation-service.types";
-import { combineUsageMetrics } from "#/utils/conversation-metrics";
+import {
+  buildUsageBreakdown,
+  combineUsageMetrics,
+} from "#/utils/conversation-metrics";
 
 const usage = (overrides: Record<string, number> = {}) => ({
   prompt_tokens: 100,
@@ -36,7 +39,7 @@ describe("combineUsageMetrics", () => {
     });
   });
 
-  it("combines cost and tokens across usage ids", () => {
+  it("combines cost and tokens and attributes them per model", () => {
     const result = snapshotFrom({
       default: metrics("gpt-4o", 1.25, usage({ prompt_tokens: 100 })),
       condenser: metrics("gpt-4o-mini", 0.5, usage({ prompt_tokens: 20 })),
@@ -44,17 +47,8 @@ describe("combineUsageMetrics", () => {
 
     expect(result.accumulated_cost).toBe(1.75);
     expect(result.accumulated_token_usage?.prompt_tokens).toBe(120);
-  });
-
-  it("keeps a per-model breakdown with usage ids and costs", () => {
-    const result = snapshotFrom({
-      default: metrics("gpt-4o", 1.25, usage()),
-      condenser: metrics("gpt-4o-mini", 0.5, usage()),
-    });
-
     expect(result.usage_breakdown).toEqual([
       {
-        usageId: "default",
         modelName: "gpt-4o",
         accumulatedCost: 1.25,
         usage: {
@@ -65,27 +59,57 @@ describe("combineUsageMetrics", () => {
         },
       },
       {
-        usageId: "condenser",
         modelName: "gpt-4o-mini",
         accumulatedCost: 0.5,
         usage: {
-          prompt_tokens: 100,
+          prompt_tokens: 20,
           completion_tokens: 50,
           cache_read_tokens: 10,
           cache_write_tokens: 5,
         },
       },
     ]);
+    const breakdownTotal = result.usage_breakdown!.reduce(
+      (sum, entry) => sum + entry.accumulatedCost,
+      0,
+    );
+    expect(breakdownTotal).toBe(result.accumulated_cost);
   });
+});
 
-  it("sorts the breakdown by accumulated cost descending", () => {
-    const result = snapshotFrom({
+describe("buildUsageBreakdown", () => {
+  it("sorts models by accumulated cost descending", () => {
+    const result = buildUsageBreakdown({
       default: metrics("gpt-4o", 1.0),
       condenser: metrics("gpt-4o-mini", 2.0),
     });
+    expect(result.map((entry) => entry.modelName)).toEqual([
+      "gpt-4o-mini",
+      "gpt-4o",
+    ]);
+  });
 
-    expect(
-      result.usage_breakdown?.map((entry) => entry.accumulatedCost),
-    ).toEqual([2.0, 1.0]);
+  it("sums usage ids that share a model into one entry", () => {
+    const result = buildUsageBreakdown({
+      default: metrics("gpt-4o", 1.0, usage({ prompt_tokens: 100 })),
+      condenser: metrics("gpt-4o", 0.25, usage({ prompt_tokens: 40 })),
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].accumulatedCost).toBe(1.25);
+    expect(result[0].usage.prompt_tokens).toBe(140);
+  });
+
+  it("drops usage ids that never ran and keeps unpriced ones that did", () => {
+    const zero = usage({ prompt_tokens: 0, completion_tokens: 0 });
+    const result = buildUsageBreakdown({
+      default: metrics("acme/coder", 0, usage({ prompt_tokens: 1_000 })),
+      condenser: metrics("gpt-4o-mini", 0, zero),
+    });
+    expect(result.map((entry) => entry.modelName)).toEqual(["acme/coder"]);
+  });
+
+  it("falls back to the usage id when the model name is empty", () => {
+    const result = buildUsageBreakdown({ agent: metrics("", 0.1) });
+    expect(result[0].modelName).toBe("agent");
   });
 });

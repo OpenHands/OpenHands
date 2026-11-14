@@ -1,9 +1,0 @@
-{
-  "method": "Production groupEvents bundled with esbuild, unused SVG/CSS imports excluded. Median of seven calls after warmup. Before includes the shared action-index fix; after additionally uses a per-run reasoning-id Set and in-place local array appends. CPU microbenchmark only.",
-  "results": [
-    { "actionObservationPairs": 500, "beforeMs": 1.8, "afterMs": 0.27 },
-    { "actionObservationPairs": 1000, "beforeMs": 6.45, "afterMs": 0.41 },
-    { "actionObservationPairs": 2000, "beforeMs": 12.12, "afterMs": 0.66 },
-    { "actionObservationPairs": 4000, "beforeMs": 52.9, "afterMs": 0.91 }
-  ]
-}

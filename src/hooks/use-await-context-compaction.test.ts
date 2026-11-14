@@ -36,19 +36,22 @@ describe("useAwaitContextCompaction", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     useEventStore.getState().clearEvents();
-    useMetricsStore.getState().setMetrics({
-      cost: null,
-      max_budget_per_task: null,
-      usage: {
-        prompt_tokens: 0,
-        completion_tokens: 0,
-        cache_read_tokens: 0,
-        cache_write_tokens: 0,
-        context_window: 100_000,
-        per_turn_token: 10_000,
+    useMetricsStore.getState().setMetrics(
+      {
+        cost: null,
+        max_budget_per_task: null,
+        usage_breakdown: null,
+        usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          cache_read_tokens: 0,
+          cache_write_tokens: 0,
+          context_window: 100_000,
+          per_turn_token: 10_000,
+        },
       },
-      usage_breakdown: null,
-    });
+      "c1",
+    );
   });
 
   afterEach(() => {
@@ -68,19 +71,22 @@ describe("useAwaitContextCompaction", () => {
 
     act(() => {
       useEventStore.getState().addEvent(condensationEvent("cond-1"));
-      useMetricsStore.getState().setMetrics({
-        cost: null,
-        max_budget_per_task: null,
-        usage: {
-          prompt_tokens: 0,
-          completion_tokens: 0,
-          cache_read_tokens: 0,
-          cache_write_tokens: 0,
-          context_window: 100_000,
-          per_turn_token: 4_000,
+      useMetricsStore.getState().setMetrics(
+        {
+          cost: null,
+          max_budget_per_task: null,
+          usage_breakdown: null,
+          usage: {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            context_window: 100_000,
+            per_turn_token: 4_000,
+          },
         },
-        usage_breakdown: null,
-      });
+        "c1",
+      );
     });
 
     expect(onComplete).toHaveBeenCalledWith({
@@ -147,19 +153,22 @@ describe("useAwaitContextCompaction", () => {
     const baseline = new Set(useEventStore.getState().eventIds);
     act(() => {
       useEventStore.getState().addEvent(condensationEvent("cond-early"));
-      useMetricsStore.getState().setMetrics({
-        cost: null,
-        max_budget_per_task: null,
-        usage: {
-          prompt_tokens: 0,
-          completion_tokens: 0,
-          cache_read_tokens: 0,
-          cache_write_tokens: 0,
-          context_window: 100_000,
-          per_turn_token: 4_000,
+      useMetricsStore.getState().setMetrics(
+        {
+          cost: null,
+          max_budget_per_task: null,
+          usage_breakdown: null,
+          usage: {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            context_window: 100_000,
+            per_turn_token: 4_000,
+          },
         },
-        usage_breakdown: null,
-      });
+        "c1",
+      );
     });
 
     const onComplete = vi.fn();

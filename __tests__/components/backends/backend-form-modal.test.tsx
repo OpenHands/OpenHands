@@ -126,7 +126,11 @@ describe("BackendFormModal – edit mode (BackendForm entry point)", () => {
     style.textContent = viewportRules.join("\n");
     document.head.appendChild(style);
     try {
-      expect(getComputedStyle(dialog).maxHeight).toBe("92dvh");
+      // jsdom 31 resolves 92dvh to a pixel value; assert it is 92% of the
+      // viewport height (the dvh unit is approximated by innerHeight).
+      expect(parseFloat(getComputedStyle(dialog).maxHeight)).toBeCloseTo(
+        (window.innerHeight * 92) / 100,
+      );
     } finally {
       style.remove();
     }
