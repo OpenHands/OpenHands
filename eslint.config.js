@@ -439,8 +439,6 @@ export default [
           // Typography, menus, and Pre need a separate design audit.
           componentImports: [
             "^#/ui/(divider|toggle-switch|combobox-caret)$",
-            // Match the existing re-export path explicitly too.
-            "^#/components/features/automations/toggle-switch$",
           ],
           allow: ["layout"],
           contracts: [
@@ -499,7 +497,7 @@ export default [
       "src/components/features/conversation-panel/conversation-panel-wrapper.tsx",
       "src/components/features/command-menu/command-menu.tsx",
       "src/components/features/backends/backend-version.tsx",
-      "src/components/features/settings/settings-nav-header.tsx",
+      "src/components/features/settings/settings-mobile-drawer.tsx",
       "src/components/features/settings/backend-synced-settings-badge.tsx",
       "src/utils/custom-toast-handlers.tsx",
       "src/utils/form-control-classes.ts",

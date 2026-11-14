@@ -1,0 +1,74 @@
+{
+  "date": "2026-10-18",
+  "attribution": "Codex, reviewing on Engel\u2019s behalf",
+  "kind": "real Canvas smoke evidence; no before/after bug claim",
+  "source_commit": "f06b4e5ddec035ad00eb6cc31bf8585335fd7fed",
+  "build_identity": "4d0dd4a347778e43",
+  "runtime": {
+    "platform": "macOS",
+    "node": "24.19.0",
+    "canvas": "1.27.1",
+    "agent_server": "1.55.1",
+    "sdk": "1.55.1",
+    "automation": "1.20.1",
+    "browser": "Playwright Chromium 153.0.8010.12",
+    "backend": "isolated real local Agent Server and automation",
+    "model_calls": 0
+  },
+  "captures": [
+    {
+      "file": "desktop-settings-smoke.png",
+      "route": "/settings/app",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    },
+    {
+      "file": "phone-settings-hub-smoke.png",
+      "route": "/settings",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "file": "phone-application-smoke.png",
+      "route": "/settings/app",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "entry": "Clicked Application in the real phone settings hub"
+    }
+  ],
+  "checks": {
+    "doctor_before": true,
+    "doctor_after": true,
+    "phone_hub_horizontal_overflow": false,
+    "legacy_drawer_nodes": 0,
+    "application_click_page_errors": 0,
+    "application_click_app_errors": 0,
+    "images_visually_inspected": true
+  },
+  "scope_limit": "Current SettingsLayout does not mount legacy SettingsNavigation/SettingsMobileDrawer; these screenshots do not demonstrate those compatibility-only header/divider branches. Existing component tests cover that path.",
+  "cleanup": {
+    "ok": true,
+    "launcher_stopped": true,
+    "owned_ports": {
+      "ingress": "closed",
+      "agentServer": "closed",
+      "automation": "closed",
+      "frontend": "closed",
+      "vscode": "closed"
+    },
+    "private_purged": true,
+    "evidence_files_retained": 3,
+    "shared_services_touched": false
+  },
+  "sha256": {
+    "desktop-settings-smoke.png": "d9964cb36ab931b960698edf7f05c1f96fe4fd7c71f24a2356f0edecf461f39f",
+    "phone-settings-hub-smoke.png": "4058557fd43370368797221e41f1f9714e10cff91881b453853cad301ff86fb9",
+    "phone-application-smoke.png": "7ecbb5528cd3d367aca19a8bb0b8df92a0451e62df2fc40bf95de76534923842"
+  }
+}
