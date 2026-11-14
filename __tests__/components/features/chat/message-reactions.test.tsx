@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import {
   HttpError,
   type ReactionEmoji,
   type ReactionEvent,
 } from "@openhands/typescript-client";
 import userEvent from "@testing-library/user-event";
+import { SettingsClient } from "@openhands/typescript-client/clients";
 import { renderWithProviders } from "test-utils";
 import {
   MessageReactions,
@@ -14,13 +15,11 @@ import {
 import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
 import { conversationReactionsService } from "#/api/conversation-reactions-service/conversation-reactions-service.api";
 import { useEventStore } from "#/stores/use-event-store";
-
-vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackend: () => ({
-    backend: { id: "local-1", kind: "local" },
-    orgId: null,
-  }),
-}));
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 
 const { displayApiErrorToast } = vi.hoisted(() => ({
   displayApiErrorToast: vi.fn(),
@@ -77,10 +76,49 @@ const featureState = (enabled: boolean) => [
 describe("MessageReactions", () => {
   beforeEach(() => {
     useEventStore.getState().clearEvents();
+    setRegisteredBackends([]);
+    setActiveSelection(null);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("isolates an enabled Local flag from Cloud and restores it on return", async () => {
+    const list = vi
+      .spyOn(SettingsClient.prototype, "listExperimentalFeatures")
+      .mockResolvedValue(featureState(true));
+    setRegisteredBackends([
+      {
+        id: "local",
+        name: "Local",
+        kind: "local",
+        host: "http://local.test",
+        apiKey: "",
+      },
+      {
+        id: "cloud",
+        name: "Cloud",
+        kind: "cloud",
+        host: "https://cloud.test",
+        apiKey: "",
+      },
+    ]);
+    setActiveSelection({ backendId: "local", orgId: null });
+    renderWithProviders(
+      <ActiveBackendProvider>
+        <Row author="agent" />
+      </ActiveBackendProvider>,
+    );
+    expect(await screen.findByTestId("add-reaction")).toBeInTheDocument();
+    list.mockClear();
+
+    act(() => setActiveSelection({ backendId: "cloud", orgId: "qa-org" }));
+    expect(screen.queryByTestId("add-reaction")).not.toBeInTheDocument();
+    expect(list).not.toHaveBeenCalled();
+
+    act(() => setActiveSelection({ backendId: "local", orgId: null }));
+    expect(await screen.findByTestId("add-reaction")).toBeInTheDocument();
   });
 
   it("shows the agent's reaction on the user's message", async () => {
