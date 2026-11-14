@@ -68,6 +68,18 @@ const CREATING_TOAST_DELAY_MS = 600;
 // Once shown, how long it stays up at least, so it never flashes.
 const CREATING_TOAST_MIN_VISIBLE_MS = 700;
 
+/**
+ * Fixed id for the "Creating conversation…" toast.
+ *
+ * react-hot-toast gives loading toasts an infinite duration, so this one only
+ * ever leaves the screen when something dismisses it by id. Under a generated
+ * id a toast that outlives its dismiss becomes unreachable — no other code can
+ * name it — and stays up until the page is reloaded (#15701). A fixed id keeps
+ * it addressable, and means a repeat submit reuses the same toast instead of
+ * stacking another one that also has to be cleaned up.
+ */
+const CREATING_CONVERSATION_TOAST_ID = "creating-conversation";
+
 export function HomeChatLauncher() {
   const { t } = useTranslation("openhands");
   const { backend, orgId } = useActiveBackend();
@@ -172,6 +184,15 @@ export function HomeChatLauncher() {
   };
 
   const hasSelection = isLocal ? !!pendingWorkspace : !!repositorySelection;
+
+  // The submit below drives a promise chain that isn't tied to this component,
+  // and the create mutation stays pending past the point where the conversation
+  // itself exists (it also resolves agent profiles and snapshots installed
+  // plugins). Leaving the home page inside that window — clicking a sidebar
+  // conversation, switching backend — tears the launcher down while the chain
+  // is still awaiting, so clear the toast on the way out rather than trusting
+  // the chain to get there (#15701).
+  useEffect(() => () => toast.dismiss(CREATING_CONVERSATION_TOAST_ID), []);
 
   const handleSubmit = (message: string) => {
     const trimmed = message.trim();
@@ -280,10 +301,10 @@ export function HomeChatLauncher() {
     const toastTimer = isLocal
       ? setTimeout(() => {
           toastShownAt = Date.now();
-          toastId = toast.loading(
-            t(I18nKey.HOME$CREATING_CONVERSATION),
-            TOAST_OPTIONS,
-          );
+          toastId = toast.loading(t(I18nKey.HOME$CREATING_CONVERSATION), {
+            ...TOAST_OPTIONS,
+            id: CREATING_CONVERSATION_TOAST_ID,
+          });
         }, CREATING_TOAST_DELAY_MS)
       : undefined;
     const dismissCreatingToast = ({ immediately = false } = {}) => {
