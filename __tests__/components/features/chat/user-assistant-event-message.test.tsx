@@ -297,4 +297,85 @@ describe("UserAssistantEventMessage — branch action", () => {
       screen.queryByRole("button", { name: BRANCH_LABEL }),
     ).not.toBeInTheDocument();
   });
+
+  describe("thinking blocks for agent replies (#17026)", () => {
+    const makeAgentEvent = (
+      llmOverrides: Record<string, unknown>,
+      text = "The sky is blue because air scatters sunlight.",
+    ): MessageEvent =>
+      ({
+        id: "evt-agent",
+        source: "agent",
+        timestamp: "2024-01-01T00:00:00.000Z",
+        llm_message: {
+          role: "assistant",
+          content: [{ type: "text", text }],
+          ...llmOverrides,
+        },
+        critic_result: null,
+      }) as unknown as MessageEvent;
+
+    // The thinking section renders collapsed; expand it before asserting.
+    const expandThinking = () =>
+      fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
+
+    it("renders the persisted reasoning_content of a text-only reply", () => {
+      renderMessage(
+        makeAgentEvent({
+          reasoning_content: "The sky scatters shorter wavelengths.",
+          thinking_blocks: [],
+        }),
+      );
+
+      expect(screen.getByTestId("collapsible-thinking")).toBeInTheDocument();
+      expandThinking();
+      expect(
+        screen.getByTestId("collapsible-thinking-content"),
+      ).toHaveTextContent("The sky scatters shorter wavelengths.");
+    });
+
+    it("keeps rendering inline <think> reasoning when reasoning_content is absent", () => {
+      renderMessage(
+        makeAgentEvent(
+          { reasoning_content: null },
+          "<think>Weights, weights, weights.</think>The sky is blue.",
+        ),
+      );
+
+      expect(screen.getByTestId("collapsible-thinking")).toBeInTheDocument();
+      expandThinking();
+      expect(
+        screen.getByTestId("collapsible-thinking-content"),
+      ).toHaveTextContent("Weights, weights, weights.");
+      // The raw markup must not stay in the message body.
+      expect(screen.getByTestId("agent-message")).not.toHaveTextContent(
+        "<think>",
+      );
+    });
+
+    it("renders structured reasoning alongside inline thinking without leaking markup", () => {
+      renderMessage(
+        makeAgentEvent(
+          { reasoning_content: "Structured reasoning." },
+          "<think>Inline reasoning.</think>The sky is blue.",
+        ),
+      );
+
+      expandThinking();
+      const content = screen.getByTestId("collapsible-thinking-content");
+      expect(content).toHaveTextContent("Structured reasoning.");
+      expect(content).toHaveTextContent("Inline reasoning.");
+      expect(screen.getByTestId("agent-message")).not.toHaveTextContent(
+        "<think>",
+      );
+    });
+
+    it("renders no thinking section without reasoning of any kind", () => {
+      renderMessage(makeAgentEvent({ reasoning_content: null }));
+
+      expect(
+        screen.queryByTestId("collapsible-thinking"),
+      ).not.toBeInTheDocument();
+    });
+  });
 });
