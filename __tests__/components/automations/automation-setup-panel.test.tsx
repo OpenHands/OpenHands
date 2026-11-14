@@ -2371,6 +2371,57 @@ describe("AutomationSetupPanel", () => {
       } as never);
     });
 
+    it("omits agent_profile_id from draft payload while keeping it for create", async () => {
+            vi.mocked(useDeploymentCapabilities).mockReturnValue({
+        data: {
+          ready: true,
+          features: ["automationDrafts", "agentProfiles", "presetAgentProfiles"],
+          triggerKinds: ["cron", "event"],
+          eventSources: [],
+          eventTypes: [],
+          triggers: {},
+        },
+        isLoading: false,
+      } as never);
+      vi.mocked(AutomationService.supportsAutomationDrafts).mockReturnValue(
+        true,
+      );
+      vi.mocked(AutomationService.createServerDraft).mockResolvedValue({
+        ...dispatchableDraft,
+        validationErrors: null,
+      });
+      vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+        id: "automation-1",
+      });
+
+      const user = userEvent.setup();
+      renderPanel({
+        prompt: "Review every pull request",
+        kind: "prompt",
+        form: { kind: "prompt", agentProfileId: "agent-reviewer" },
+      });
+
+      // 1. Verify Save Draft strips the profile
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+      await waitFor(() =>
+        expect(AutomationService.createServerDraft).toHaveBeenCalled(),
+      );
+
+      const draftBody = vi.mocked(AutomationService.createServerDraft).mock
+        .calls[0][0].draft;
+      expect(draftBody).not.toHaveProperty("agent_profile_id");
+
+      // 2. Verify Create Automation KEEPS the profile
+      await user.click(screen.getByTestId("automation-setup-create"));
+      await waitFor(() =>
+        expect(AutomationService.createAutomationDraft).toHaveBeenCalled(),
+      );
+
+      const createBody = vi.mocked(AutomationService.createAutomationDraft).mock
+        .calls[0][0];
+      expect(createBody).toHaveProperty("agent_profile_id", "agent-reviewer");
+    });
+
     it("tags the conversation as automation setup mode when opened", async () => {
       renderPanel();
 

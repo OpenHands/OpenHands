@@ -38789,6 +38789,24 @@
     "zh-TW": "Save draft",
     "id": "Simpan draf"
   },
+  "AUTOMATION_SETUP$CUSTOM_AGENT_PROFILE_DRAFT_NOTE": {
+    "en": "Drafts and test runs use your default profile until you create the automation.",
+    "ja": "下書きとテスト実行は、自動化を作成するまでデフォルトのプロファイルを使用します。",
+    "zh-CN": "在您创建自动化之前，草稿和测试运行将使用您的默认配置文件。",
+    "zh-TW": "在您建立自動化之前，草稿與測試執行將使用您的預設設定檔。",
+    "ko-KR": "자동화를 생성할 때까지 초안 및 테스트 실행은 기본 프로필을 사용합니다.",
+    "no": "Utkast og testkjøringer bruker standardprofilen din til du oppretter automatiseringen.",
+    "ar": "تستخدم المسودات وعمليات تشغيل الاختبار ملف التعريف الافتراضي الخاص بك حتى تقوم بإنشاء الأتمتة.",
+    "de": "Entwürfe und Testläufe verwenden Ihr Standardprofil, bis Sie die Automatisierung erstellen.",
+    "fr": "Les brouillons et les exécutions de test utilisent votre profil par défaut jusqu'à ce que vous créiez l'automatisation.",
+    "it": "Le bozze e le esecuzioni di test utilizzano il tuo profilo predefinito finché non crei l'automazione.",
+    "pt": "Rascunhos e execuções de teste usam seu perfil padrão até que você crie a automação.",
+    "es": "Los borradores y las ejecuciones de prueba utilizan su perfil predeterminado hasta que cree la automatización.",
+    "ca": "Els esborranys i les execucions de prova utilitzen el vostre perfil predeterminat fins que creeu l'automatització.",
+    "tr": "Otomasyonu oluşturana kadar taslaklar ve test çalıştırmaları varsayılan profilinizi kullanır.",
+    "uk": "Чернетки та тестові запуски використовують ваш профіль за замовчуванням, доки ви не створите автоматизацію.",
+    "id": "Draf dan uji coba akan menggunakan profil default Anda hingga Anda membuat otomatisasi."
+  },
   "AUTOMATION_SETUP$TEST": {
     "ar": "Test",
     "ca": "Test",
