@@ -215,6 +215,23 @@ describe("automation Events page", () => {
       "placeholder",
       I18nKey.AUTOMATIONS$EVENTS$SOURCE_PLACEHOLDER,
     );
+    const sourcePattern = new RegExp(
+      `^(?:${sourceIdField.getAttribute("pattern")})$`,
+      "v",
+    );
+    for (const [source, valid] of [
+      ["a", true],
+      ["issues", true],
+      ["my-source-1", true],
+      ["a".repeat(50), true],
+      ["QA_bad id", false],
+      ["-issues", false],
+      ["issues-", false],
+      ["Issues", false],
+      ["a".repeat(51), false],
+    ] as const) {
+      expect(sourcePattern.test(source), source).toBe(valid);
+    }
     await userEvent.type(sourceIdField, "issues");
     await userEvent.click(
       screen.getByRole("button", {
