@@ -83,6 +83,23 @@ describe("ChatInputLlmProfilePicker", () => {
     rect.mockRestore();
   });
 
+  it("closes on Escape and returns focus to the pill (#18808)", () => {
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+    const pill = screen.getByTestId("chat-input-llm-profile");
+    fireEvent.click(pill);
+    expect(
+      screen.getByTestId("chat-input-llm-profile-popover"),
+    ).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(
+      screen.queryByTestId("chat-input-llm-profile-popover"),
+    ).not.toBeInTheDocument();
+    expect(pill).toHaveFocus();
+    expect(pill).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("live-switches to the picked profile", () => {
     renderWithProviders(<ChatInputLlmProfilePicker />);
     fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
