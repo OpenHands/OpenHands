@@ -25,6 +25,14 @@ const GENERIC_SECRET_PATTERNS: RegExp[] = [
   /\blin_api_[A-Za-z0-9]{10,}\b/g,
   // JWT-shaped values (three base64url segments starting with "eyJ").
   /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\b/g,
+  // OpenAI API Keys (legacy sk-... and project-scoped sk-proj-...).
+  /\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}\b/g,
+  // Anthropic Claude API Keys (sk-ant-...).
+  /\bsk-ant-[A-Za-z0-9_-]{32,}\b/g,
+  // Google Gemini / Cloud API Keys (AIzaSy...).
+  /\bAIzaSy[A-Za-z0-9_-]{30,40}\b/g,
+  // Hugging Face Access Tokens (hf_...).
+  /\bhf_[A-Za-z0-9]{34,}\b/g,
 ];
 
 // "Bearer <token>" keeps its prefix so the message stays readable.
@@ -58,7 +66,7 @@ function addUrlSecrets(values: Set<string>, rawUrl: string | undefined): void {
       if (SECRETLIKE_PARAM_NAME.test(name)) addValue(values, value);
     });
   } catch {
-    // Not a parseable URL — nothing to collect.
+    // Not a parseable URL â€” nothing to collect.
   }
 }
 
