@@ -19,7 +19,6 @@ import {
   useDeleteAutomation,
   useImportAutomation,
   useToggleAutomation,
-  useUpdateAutomation,
 } from "#/hooks/query/use-automations";
 import {
   useAutomationDetail,
@@ -47,7 +46,6 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     cancelAutomationRun: vi.fn(),
     createAutomation: vi.fn(),
     deleteAutomation: vi.fn(),
-    updateAutomation: vi.fn(),
     toggleAutomation: vi.fn(),
     listServerDrafts: vi.fn(),
     getCapabilities: vi.fn(),
@@ -156,10 +154,8 @@ beforeEach(() => {
     automationRun,
   );
   vi.mocked(AutomationService.deleteAutomation).mockReset();
-  vi.mocked(AutomationService.updateAutomation).mockReset();
   vi.mocked(AutomationService.toggleAutomation).mockReset();
   vi.mocked(AutomationService.deleteAutomation).mockResolvedValue(undefined);
-  vi.mocked(AutomationService.updateAutomation).mockResolvedValue(automation);
   vi.mocked(AutomationService.toggleAutomation).mockResolvedValue(automation);
 
   vi.mocked(AutomationService.getAutomations).mockResolvedValue(listResponse);
@@ -175,7 +171,6 @@ afterEach(() => {
 });
 
 describe("useAutomationDrafts — draft endpoint unavailability", () => {
-
   it("does not call the drafts endpoint when capabilities do not advertise drafts", async () => {
     vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
       ready: true,
@@ -482,26 +477,6 @@ describe("automation mutation hooks — analytics tracking", () => {
     });
   });
 
-  it("captures automation_edited after a successful update", async () => {
-    const { result } = renderHook(() => useUpdateAutomation(), {
-      wrapper: makeWrapper(),
-    });
-
-    await act(async () => {
-      await result.current.mutateAsync({
-        id: "auto-1",
-        body: { name: "Renamed" },
-      });
-    });
-
-    await waitFor(() => {
-      expect(captureMock).toHaveBeenCalledWith(
-        "automation_edited",
-        expect.objectContaining({ backend_kind: "local" }),
-      );
-    });
-  });
-
   it("captures automation_disable_button when an automation is disabled", async () => {
     const { result } = renderHook(() => useToggleAutomation(), {
       wrapper: makeWrapper(),
@@ -572,7 +547,6 @@ describe("automation mutation hooks — error toasts", () => {
       .mockImplementation(() => "toast-id");
     vi.mocked(AutomationService.dispatchAutomation).mockRejectedValue(notFound);
     vi.mocked(AutomationService.createAutomation).mockRejectedValue(notFound);
-    vi.mocked(AutomationService.updateAutomation).mockRejectedValue(notFound);
     vi.mocked(AutomationService.cancelAutomationRun).mockRejectedValue(
       notFound,
     );
@@ -610,20 +584,6 @@ describe("automation mutation hooks — error toasts", () => {
               trigger: automation.trigger,
               enabled: false,
             },
-            { onError: toastApiMessage },
-          ),
-        );
-      },
-    },
-    {
-      action: "Edit save",
-      run: () => {
-        const { result } = renderHook(() => useUpdateAutomation(), {
-          wrapper: makeAppClientWrapper(),
-        });
-        act(() =>
-          result.current.mutate(
-            { id: "auto-1", body: { name: "Renamed" } },
             { onError: toastApiMessage },
           ),
         );

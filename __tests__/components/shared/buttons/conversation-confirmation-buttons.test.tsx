@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
@@ -360,12 +360,16 @@ describe("conversation confirmation controls", () => {
         </>,
       );
 
-      expect(screen.getByTestId("action-confirm-button")).toHaveTextContent(
-        `CHAT_INTERFACE$INPUT_CONTINUE_MESSAGE ${continueHint}`,
-      );
-      expect(screen.getByTestId("action-reject-button")).toHaveTextContent(
-        `BUTTON$CANCEL ${cancelHint}`,
-      );
+      // The shortcut is its own element, not part of the label text, so the
+      // label stays whole on narrow layouts that drop the hint.
+      const confirm = within(screen.getByTestId("action-confirm-button"));
+      expect(
+        confirm.getByText("CHAT_INTERFACE$INPUT_CONTINUE_MESSAGE"),
+      ).toBeInTheDocument();
+      expect(confirm.getByText(continueHint)).toBeInTheDocument();
+      const reject = within(screen.getByTestId("action-reject-button"));
+      expect(reject.getByText("BUTTON$CANCEL")).toBeInTheDocument();
+      expect(reject.getByText(cancelHint)).toBeInTheDocument();
     },
   );
 });

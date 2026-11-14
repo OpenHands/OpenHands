@@ -1,6 +1,5 @@
 import { cn } from "#/utils/utils";
 import {
-  formControlBorderClassName,
   formControlRadiusClassName,
   formControlSurfaceClassName,
   formControlTransitionClassName,
@@ -11,7 +10,7 @@ export const settingsListRowHeightClassName = "h-12 min-h-12";
 
 /** Bordered list shell shared by secrets, LLM profiles, and similar settings tables. */
 export const settingsListContainerClassName = cn(
-  formControlBorderClassName,
+  "border border-border",
   formControlRadiusClassName,
   formControlSurfaceClassName,
   "overflow-hidden",

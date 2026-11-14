@@ -7,12 +7,12 @@ import {
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import { requestAutomationSetupAgent } from "#/components/features/automations/setup/automation-setup-agent-request";
+import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 
 // Mutable mock state for controlling breakpoint
 let mockIsMobile = false;
 let mockIsRightPanelShown = false;
 let mockLeftWidth = 50;
-let mockHasAutomationSetupHandoff = false;
 let mockActiveConversationTags: Record<string, string> | null = null;
 
 const mockNavigate = vi.fn();
@@ -21,6 +21,9 @@ const mockSetIsRightPanelShown = vi.fn();
 
 // Track ChatInterface unmount via vi.fn()
 const chatInterfaceUnmount = vi.fn();
+// Every conversation id the setup panel is rendered for. The real panel tags
+// that conversation as an automation setup on mount.
+const automationSetupPanelRender = vi.fn();
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -47,10 +50,6 @@ vi.mock("#/stores/conversation-store", () => ({
     setHasRightPanelToggled: mockSetHasRightPanelToggled,
     setIsRightPanelShown: mockSetIsRightPanelShown,
   }),
-}));
-
-vi.mock("#/api/automation-setup-handoff-store", () => ({
-  consumeAutomationSetupHandoff: () => mockHasAutomationSetupHandoff,
 }));
 
 vi.mock("#/hooks/query/use-active-conversation", () => ({
@@ -114,7 +113,9 @@ vi.mock("#/components/features/chat/chat-interface", () => {
 vi.mock(
   "#/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content",
   () => ({
-    ConversationTabContent: () => <div data-testid="tab-content" />,
+    ConversationTabContent: () => (
+      <input data-testid="tab-content" aria-label="Panel draft" />
+    ),
   }),
 );
 
@@ -149,30 +150,36 @@ vi.mock(
       }: {
         conversationId?: string | null;
         toolbarPortal?: HTMLElement | null;
-      }) => (
-        <>
-          {toolbarPortal
-            ? createPortal(
-                <button type="button" data-testid="automation-setup-create" />,
-                toolbarPortal,
-              )
-            : null}
-          <div
-            data-testid="automation-setup-panel"
-            data-conversation-id={conversationId ?? ""}
-          />
-        </>
-      ),
+      }) => {
+        automationSetupPanelRender(conversationId);
+        return (
+          <>
+            {toolbarPortal
+              ? createPortal(
+                  <button
+                    type="button"
+                    data-testid="automation-setup-create"
+                  />,
+                  toolbarPortal,
+                )
+              : null}
+            <div
+              data-testid="automation-setup-panel"
+              data-conversation-id={conversationId ?? ""}
+            />
+          </>
+        );
+      },
     };
   },
 );
 
 import { ConversationMain } from "#/components/features/conversation/conversation-main/conversation-main";
 
-function conversationMainTree() {
+function conversationMainTree(conversationId = "conv-1") {
   const navigation: NavigationContextValue = {
-    currentPath: "/conversations/conv-1",
-    conversationId: "conv-1",
+    currentPath: `/conversations/${conversationId}`,
+    conversationId,
     isNavigating: false,
     navigate: mockNavigate,
   };
@@ -195,12 +202,42 @@ describe("ConversationMain - Layout Transition Stability", () => {
     mockIsMobile = false;
     mockIsRightPanelShown = false;
     mockLeftWidth = 50;
-    mockHasAutomationSetupHandoff = false;
     mockActiveConversationTags = null;
+    window.sessionStorage.clear();
     chatInterfaceUnmount.mockClear();
+    automationSetupPanelRender.mockClear();
     mockNavigate.mockClear();
     mockSetHasRightPanelToggled.mockClear();
     mockSetIsRightPanelShown.mockClear();
+  });
+
+  it("defers closed tabs until opened and preserves their state when closed again", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderConversationMain();
+    expect(screen.queryByTestId("tab-content")).not.toBeInTheDocument();
+
+    mockIsRightPanelShown = true;
+    rerender(conversationMainTree());
+    const panel = screen.getByRole("textbox", { name: "Panel draft" });
+    await user.type(panel, "unsaved draft");
+
+    mockIsRightPanelShown = false;
+    rerender(conversationMainTree());
+    expect(panel).toBeInTheDocument();
+    mockIsRightPanelShown = true;
+    rerender(conversationMainTree());
+    expect(screen.getByRole("textbox", { name: "Panel draft" })).toHaveValue(
+      "unsaved draft",
+    );
+
+    mockIsRightPanelShown = false;
+    rerender(conversationMainTree("conv-2"));
+    expect(screen.queryByTestId("tab-content")).not.toBeInTheDocument();
+    mockIsRightPanelShown = true;
+    rerender(conversationMainTree("conv-2"));
+    expect(screen.getByRole("textbox", { name: "Panel draft" })).toHaveValue(
+      "",
+    );
   });
 
   it("opens automation setup mode when the conversation has a draft tag", async () => {
@@ -213,6 +250,25 @@ describe("ConversationMain - Layout Transition Stability", () => {
     ).toBeInTheDocument();
     expect(mockSetHasRightPanelToggled).toHaveBeenCalledWith(true);
     expect(mockSetIsRightPanelShown).toHaveBeenCalledWith(true);
+  });
+
+  it("keeps a setup handoff on its own conversation when navigating to another", () => {
+    markAutomationSetupHandoff("conv-1");
+    const { rerender } = render(conversationMainTree("conv-1"));
+    expect(screen.getByTestId("automation-setup-panel")).toHaveAttribute(
+      "data-conversation-id",
+      "conv-1",
+    );
+
+    rerender(conversationMainTree("conv-2"));
+
+    expect(automationSetupPanelRender).not.toHaveBeenCalledWith("conv-2");
+    expect(
+      screen.queryByTestId("automation-setup-panel"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-topbar"),
+    ).not.toBeInTheDocument();
   });
 
   it.each([
@@ -261,7 +317,7 @@ describe("ConversationMain - Layout Transition Stability", () => {
 
   it("uses a single automation setup top bar", () => {
     mockIsRightPanelShown = true;
-    mockHasAutomationSetupHandoff = true;
+    markAutomationSetupHandoff("conv-1");
 
     renderConversationMain();
 
@@ -296,7 +352,7 @@ describe("ConversationMain - Layout Transition Stability", () => {
     const user = userEvent.setup();
     mockIsMobile = true;
     mockIsRightPanelShown = true;
-    mockHasAutomationSetupHandoff = true;
+    markAutomationSetupHandoff("conv-1");
 
     renderConversationMain();
 
@@ -379,7 +435,7 @@ describe("ConversationMain - Layout Transition Stability", () => {
   it("expands the automation form to full width when hiding the agent", async () => {
     const user = userEvent.setup();
     mockIsRightPanelShown = true;
-    mockHasAutomationSetupHandoff = true;
+    markAutomationSetupHandoff("conv-1");
 
     renderConversationMain();
 
@@ -412,7 +468,7 @@ describe("ConversationMain - Layout Transition Stability", () => {
     async (trigger) => {
       const user = userEvent.setup();
       mockIsRightPanelShown = true;
-      mockHasAutomationSetupHandoff = true;
+      markAutomationSetupHandoff("conv-1");
 
       renderConversationMain();
       await user.click(screen.getByTestId("automation-setup-agent-toggle"));

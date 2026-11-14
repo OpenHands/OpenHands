@@ -9,7 +9,6 @@ import {
   getTextContent,
   insertTextAtCaret,
   isContentEmpty,
-  isPastedClipboardImage,
   normalizePastedFile,
   partitionImagesForUpload,
 } from "#/components/features/chat/utils/chat-input.utils";
@@ -79,28 +78,6 @@ describe("normalizePastedFile", () => {
 
     expect(normalized.name).toBe(`pasted-image-1234.${extension}`);
     expect(normalized.lastModified).toBe(99);
-  });
-});
-
-describe("isPastedClipboardImage", () => {
-  it("returns true for normalized clipboard screenshot names", () => {
-    const file = new File(["x"], "pasted-image-1710000000000.png", {
-      type: "image/png",
-    });
-    expect(isPastedClipboardImage(file)).toBe(true);
-  });
-
-  it("returns false for images picked from the file dialog", () => {
-    const file = new File(["x"], "photo.png", { type: "image/png" });
-    expect(isPastedClipboardImage(file)).toBe(false);
-  });
-
-  it("matches normalized names case-insensitively", () => {
-    expect(
-      isPastedClipboardImage(
-        new File(["x"], "PASTED-IMAGE-1710000000000.WEBP"),
-      ),
-    ).toBe(true);
   });
 });
 
@@ -201,12 +178,6 @@ describe("module-initialized clipboard contracts", () => {
         fresh.normalizePastedFile(new File(["x"], "", { type })).name,
       ).toBe(`pasted-image-1234.${extension}`);
     }
-
-    const named = (name: string) =>
-      fresh.isPastedClipboardImage(new File(["x"], name));
-    expect(named("pasted-image-1710000000000.png")).toBe(true);
-    expect(named("prefix-pasted-image-1710000000000.png")).toBe(false);
-    expect(named("pasted-image-1710000000000.png.extra")).toBe(false);
 
     const editable = document.createElement("div");
     editable.innerText = "message";

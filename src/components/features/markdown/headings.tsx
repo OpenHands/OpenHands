@@ -21,7 +21,7 @@ export function h2({
   React.HTMLAttributes<HTMLHeadingElement> &
   ExtraProps) {
   return (
-    <h2 className="text-lg font-medium leading-6 -tracking-[0.01em] text-contrast mb-2.5 mt-4 first:mt-0">
+    <h2 className="text-lg font-medium leading-6 tracking-title text-contrast mb-2.5 mt-4 first:mt-0">
       {children}
     </h2>
   );

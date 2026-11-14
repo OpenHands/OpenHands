@@ -13,13 +13,6 @@ export function getAutomationDraftIdFromTags(
   return draftId || null;
 }
 
-export function getAutomationMaterializedDraftIdFromTags(
-  tags: Record<string, string> | null | undefined,
-): string | null {
-  const draftId = tags?.[AUTOMATION_MATERIALIZED_DRAFT_ID_TAG_KEY]?.trim();
-  return draftId || null;
-}
-
 export function getAutomationEditIdFromTags(
   tags: Record<string, string> | null | undefined,
 ): string | null {

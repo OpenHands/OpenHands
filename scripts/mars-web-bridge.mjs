@@ -28,23 +28,30 @@
  * the event WebSocket, so proxied JSON has those URLs rewritten to the prefix.
  *
  * Trust model. These routes hold the DigitalOcean token and can destroy
- * sessions, so they are off unless `MARS_WEB=1`, and when on they want the
- * server's session key on every request: the renderer sends it as
- * `X-Session-API-Key` on `/mars/rpc/*` (the same key it already sends the
- * agent-server), and a request that presents it gets an `HttpOnly;
- * SameSite=Strict; Path=/mars` cookie back, which the browser then attaches
- * on its own to the proxied REST calls and to the WebSocket upgrade — the
- * one request a browser cannot put a header on. The key is `MARS_WEB_KEY`,
- * else the server's `--session-api-key`; with neither, the bridge mounts
- * only on a loopback bind (dev), where a `Host` check keeps a DNS-rebound
- * page from reaching it (cookies are host-scoped, so with a key in play
- * rebinding cannot carry one). Cross-origin requests are refused outright;
- * JSON POSTs preflight and this server sends no CORS headers. Credentials
- * are in-memory only (no OS keychain here, nothing written to disk);
- * `MARS_TOKEN` seeds one at startup.
+ * sessions, so they want the server's session key on every request: the
+ * renderer sends it as `X-Session-API-Key` on `/mars/rpc/*` (the same key it
+ * already sends the agent-server), and a request that presents it gets an
+ * `HttpOnly; SameSite=Strict; Path=/mars` cookie back, which the browser then
+ * attaches on its own to the proxied REST calls and to the WebSocket upgrade
+ * — the one request a browser cannot put a header on. The key is
+ * `MARS_WEB_KEY`, else the server's `--session-api-key`; with neither, the
+ * bridge mounts only on a loopback bind (dev), where a `Host` check keeps a
+ * DNS-rebound page from reaching it (cookies are host-scoped, so with a key in
+ * play rebinding cannot carry one). Cross-origin requests are refused outright;
+ * JSON POSTs preflight and this server sends no CORS headers.
+ *
+ * Credentials survive a restart. Their descriptions live under the Canvas
+ * state directory (`MARS_STATE_DIR`, else `OH_CANVAS_SAFE_STATE_DIR`, else
+ * `~/.openhands/agent-canvas`), and the tokens in the OS keychain, a file
+ * encrypted with `OH_SECRET_KEY`, or memory (scripts/mars-secret-store.mjs).
+ * The cookie is derived from the session key, so it outlives a restart too and
+ * stops working when the key rotates. `MARS_TOKEN` seeds a connection at
+ * startup.
  */
 
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { homedir } from "node:os";
+import path from "node:path";
 
 import { DEFAULT_BIND_HOST, isLoopbackBind } from "./bind-host.mjs";
 import { readRequestBody } from "./http-body.mjs";
@@ -52,6 +59,7 @@ import {
   buildTunnelHost,
   createMarsTunnelBridge,
 } from "./mars-tunnel-bridge.mjs";
+import { openSecretStore } from "./mars-secret-store.mjs";
 import { createProxyHandlers, rewriteJsonResponse } from "./proxy-utils.mjs";
 
 export const MARS_WEB_PREFIX = "/mars";
@@ -66,6 +74,10 @@ const JSON_REWRITE_LIMIT_BYTES = 8 * 1024 * 1024;
 const AUTH_HEADER = "x-session-api-key";
 /** Issued to a request that presented the key; carries auth to WebSocket upgrades. */
 const AUTH_COOKIE = "mars_web_auth";
+/** Domain separator for the cookie value derived from the session key. */
+const AUTH_COOKIE_CONTEXT = "mars-web-cookie/v1";
+/** Under the Canvas state directory: credential descriptions and secrets file. */
+const STATE_SUBDIR = "digitalocean";
 /** Response fields whose agent-server URL the renderer follows. */
 const URL_FIELDS = new Set(["conversation_url"]);
 
@@ -98,16 +110,15 @@ export const RPC_METHODS = new Set([
 /** Request headers that belong to the canvas origin, never to the session host. */
 const CANVAS_ONLY_HEADERS = ["cookie", AUTH_HEADER, "origin", "referer"];
 
-/** Off unless asked for: these routes hold the DO token and can destroy sessions. */
-export function isMarsWebEnabled(env = process.env) {
-  return env.MARS_WEB === "1";
-}
-
 /**
  * The key `/mars/*` requires, or null when none is configured. Explicit
  * `MARS_WEB_KEY` wins so a deployment can decouple it from the agent-server
  * key; otherwise the server's own `--session-api-key` is reused, which is
  * what the renderer already holds.
+ *
+ * @param {object} [options]
+ * @param {Record<string, string | undefined>} [options.env]
+ * @param {string | null} [options.sessionApiKey]
  */
 export function resolveMarsWebKey({
   env = process.env,
@@ -120,26 +131,92 @@ export function resolveMarsWebKey({
 }
 
 /**
- * Mount the bridge for a server, or return null when it must not be: not
- * opted in, or no key on a non-loopback bind (the routes would be open to
- * the LAN with the DO token behind them).
+ * The Canvas state directory the bridge keeps its credentials under: the
+ * launcher passes `MARS_STATE_DIR`; a stand-alone static server (Docker) uses
+ * the same default the launcher does.
+ */
+export function resolveMarsStateDir(env = process.env) {
+  const configured =
+    env.MARS_STATE_DIR?.trim() || env.OH_CANVAS_SAFE_STATE_DIR?.trim();
+  if (configured) return configured;
+  try {
+    return path.join(homedir(), ".openhands", "agent-canvas");
+  } catch {
+    // No home folder (HOME unset and no passwd entry, as with `docker run
+    // --user <uid>`): sign-ins stay in memory rather than Canvas not starting.
+    return null;
+  }
+}
+
+/**
+ * The cookie value a request earns by presenting the key. Derived from the
+ * key rather than random per process, so a browser stays admitted across a
+ * restart; a rotated key changes it, which signs every browser out.
+ */
+export function deriveAuthCookieValue(key) {
+  return createHmac("sha256", key).update(AUTH_COOKIE_CONTEXT).digest("hex");
+}
+
+/**
+ * The web integration is experimental: mount only with `MARS_WEB=1`.
+ * This readiness flag is separate from authentication. An opted-in bridge
+ * still refuses a non-loopback bind without a key. Launchers set `MARS_WEB=0`
+ * on static children and under Electron so only the web ingress hosts it.
+ * Off is silent unless the env suggests someone meant it on
+ * (`marsWebOffWarning`).
+ *
+ * @param {object} [options]
+ * @param {Record<string, string | undefined>} [options.env]
+ * @param {string} [options.host]
+ * @param {string | null} [options.sessionApiKey]
+ * @param {(message: string) => void} [options.log]
+ * @param {(message: string) => void} [options.debug]
  */
 export function mountMarsWebBridge({
   env = process.env,
   host = DEFAULT_BIND_HOST,
   sessionApiKey = null,
   log = (message) => console.warn(`[mars-web] ${message}`),
+  debug = (message) => console.debug(`[mars-web] ${message}`),
 } = {}) {
-  if (!isMarsWebEnabled(env)) return null;
+  if (env.MARS_WEB !== "1") {
+    const warning = marsWebOffWarning(env);
+    if (warning) log(warning);
+    return null;
+  }
   const key = resolveMarsWebKey({ env, sessionApiKey });
   if (!key && !isLoopbackBind(host)) {
     log(
-      `MARS_WEB=1 but no key and bind host ${host} is not loopback; refusing to mount /mars/* (set MARS_WEB_KEY or --session-api-key).`,
+      `no key and bind host ${host} is not loopback; not mounting /mars/* (set MARS_WEB_KEY or --session-api-key).`,
     );
     return null;
   }
-  if (!key) log("no key configured; /mars/* is open to local callers only");
-  return createMarsWebBridge({ env, host, key });
+  if (!key) debug("no key configured; /mars/* is open to local callers only");
+  return createMarsWebBridge({
+    env,
+    host,
+    key,
+    stateDir: resolveMarsStateDir(env),
+  });
+}
+
+/**
+ * Why the bridge stays off, for an operator who seems to have wanted it on;
+ * null otherwise, so a server nobody pointed at DigitalOcean starts quietly.
+ * Any value but `1` or `0` (launchers set `0` on purpose) gets a line, since
+ * it may be a mistyped opt-in (`true`, `"1 "`, a quoted `"1"` from
+ * `docker run --env-file`), and so does `MARS_TOKEN` with no `MARS_WEB`.
+ */
+function marsWebOffWarning(env) {
+  const value = env.MARS_WEB ?? "";
+  if (value.trim() === "0") return null;
+  if (value) {
+    return `MARS_WEB=${JSON.stringify(value)} is not "1"; not mounting /mars/* (set MARS_WEB=1).`;
+  }
+  if (env.MARS_TOKEN?.trim()) {
+    return `MARS_TOKEN is set but MARS_WEB is not "1"; not mounting /mars/* (set MARS_WEB=1).`;
+  }
+  return null;
 }
 
 function safeEqual(a, b) {
@@ -292,6 +369,7 @@ function toUpstreamRequest(req, path) {
  * @param {Record<string, string | undefined>} [options.env]
  * @param {string} [options.host] The server's bind host; loopback gets the Host check
  * @param {string | null} [options.key] Session key every request must present; null = open (loopback dev only — see mountMarsWebBridge)
+ * @param {string | null} [options.stateDir] Canvas state directory; null keeps credentials in memory
  * @param {(message: string, error?: unknown) => void} [options.log]
  */
 export function createMarsWebBridge({
@@ -299,11 +377,17 @@ export function createMarsWebBridge({
   env = process.env,
   host = DEFAULT_BIND_HOST,
   key = null,
+  stateDir = null,
   log = (message, error) => console.warn(`[mars-web] ${message}`, error ?? ""),
 } = {}) {
-  // No userDataPath: credentials stay in this process's memory.
+  const dir = stateDir ? path.join(stateDir, STATE_SUBDIR) : null;
   const bridge =
-    bridgeOverride ?? createMarsTunnelBridge({ userDataPath: null, env });
+    bridgeOverride ??
+    createMarsTunnelBridge({
+      userDataPath: dir,
+      secrets: openSecretStore({ env, dir }),
+      env,
+    });
 
   /** Both ends of proxied WebSockets, so dispose() can close them. */
   const sockets = new Set();
@@ -328,8 +412,10 @@ export function createMarsWebBridge({
     }),
     onProxySocket: track,
   });
-  /** Per-process cookie value handed to requests that presented the key. */
-  const cookieToken = randomBytes(32).toString("hex");
+  /** Cookie value handed to requests that presented the key. */
+  const cookieToken = key
+    ? deriveAuthCookieValue(key)
+    : randomBytes(32).toString("hex");
 
   /**
    * Whether the request may use the bridge. With no key configured every

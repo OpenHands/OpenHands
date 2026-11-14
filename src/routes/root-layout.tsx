@@ -12,8 +12,10 @@ import { useConfig } from "#/hooks/query/use-config";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
 import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
 import { SidebarMobileMenuBar } from "#/components/features/sidebar/sidebar-mobile-menu-bar";
+import { LicenseBanner } from "#/components/features/alerts/license-banner";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useEnsureActiveProfile } from "#/hooks/use-ensure-active-profile";
+import { useMigrateDefaultAgentProfile } from "#/hooks/use-migrate-default-agent-profile";
 import { useMigrateEnabledSkills } from "#/hooks/use-migrate-enabled-skills";
 import { useSyncTelemetryConsent } from "#/hooks/use-sync-telemetry-consent";
 import { useSyncAutomationTelemetryConsent } from "#/hooks/use-sync-automation-telemetry-consent";
@@ -121,9 +123,13 @@ export default function MainApp() {
   );
 }
 
+function DocumentTitle() {
+  const appTitle = useAppTitle();
+  return <title>{appTitle}</title>;
+}
+
 function MainAppContent() {
   const location = useLocation();
-  const appTitle = useAppTitle();
   const { data: settings } = useSettings();
   const config = useConfig();
   const showTitleBarBand = useShowTitleBarBand();
@@ -136,6 +142,8 @@ function MainAppContent() {
   useEnsureActiveProfile();
   // One-shot move from the catalog deny-list to an explicit allow-list.
   useMigrateEnabledSkills();
+  // One-shot move of global agent behavior into the `default` profile.
+  useMigrateDefaultAgentProfile();
 
   React.useEffect(() => {
     if (settings?.language) {
@@ -171,12 +179,13 @@ function MainAppContent() {
               showTitleBarBand && "pt-7",
             )}
           >
-            <title>{appTitle}</title>
+            <DocumentTitle />
             <TitleBarDragRegion />
             <Sidebar />
 
             <div className="flex min-h-0 flex-col w-full min-w-0 h-full gap-3">
               {!hideMobileSidebarMenuBar ? <SidebarMobileMenuBar /> : null}
+              <LicenseBanner />
               {config.data &&
                 (config.data.maintenance_start_time ||
                   (config.data.faulty_models &&

@@ -1,8 +1,8 @@
 # The daily pass
 
 The weekly pass in [maintenance.md](maintenance.md) proves every feature live.
-A daily pass cannot: 27 families and 700-odd sub-features take longer than one
-agent's day, and most of the map did not change since yesterday. The daily
+A daily pass cannot: the full feature map takes longer than one agent's day,
+and most of the map did not change since yesterday. The daily
 pass answers a narrower question with the same rigor: **did anything that
 merged since the last pass change what a user sees, and does the rest still
 hold where it is cheapest to look?** It is the delta pass that
@@ -56,7 +56,9 @@ cheaper than the next and catches a different kind of rot.
    `map coverage` and `map testids`. A `Source:` path that is gone, or a test
    id the map drives that no literal in `src/` accounts for, is drift found
    before any browser opens. Fix it in the map
-   with a live drive later today, or report it. Zero unresolved test ids is
+   with a live drive later today, or report it. `control-openhands map
+   controls --base "$BASE" --target "$TARGET"` lists the controls in the
+   day's changed files that no bullet names: tier 2 operates each one. Zero unresolved test ids is
    the normal state; treat a new one as a rename until a drive says otherwise.
 2. **Changed (the core).** `control-openhands map affected --target $TARGET`
    (`--base` defaults to the recorded baseline). Launch, doctor, then drive
@@ -67,17 +69,26 @@ cheaper than the next and catches a different kind of rot.
    reads it; pick the families whose `Source:` lines name those consumers, not
    one convenient screen). An `unmapped` path under `src/` is a map gap: a new
    surface to map per [mapping.md](mapping.md), or a `Source:` line to extend.
+   A change that does what its PR says is half the check. For each changed
+   surface also ask the questions in [scenarios.md](scenarios.md) that have
+   an answer there (the item edited later, the action taken mid-save, data
+   that is long or many, another backend or time zone) and drive those too;
+   a new control or form field gets them all.
    Resolve each merged commit in `BASE..TARGET` to its PR and keep intent
    (`documented`, `undocumented`, `contradictory`) separate from runtime
    results, as [maintenance.md](maintenance.md) step 2 describes. The delta
    pass has a second half: every bullet whose Gotchas or Known failure note
    links an issue that closed since `BASE` (check each linked issue's state)
-   is re-driven too, its row recorded and its note updated (a note with a
-   `known-bug` block is re-driven with `control-openhands bug run <ID>`; an
-   `xpass` goes to map review per [maintenance.md](maintenance.md) step 5). A fix that landed
-   in the Agent Server or the automation service shows up only this way. So is
-   every open `bug` issue opened since `BASE` that names a mapped feature: it
-   is reproduced and gets its note, so bugs filed outside a pass reach the map.
+   is re-driven too, its row recorded and its note updated. Re-drive a
+   `known-bug` block with `control-openhands bug run <ID>`; an `xpass` goes to
+   map review per [maintenance.md](maintenance.md) step 5. A fix in the Agent
+   Server or automation service shows up only this way. Query open `bug`
+   issues without a supported map or pass-ledger outcome, regardless of creation
+   date, and re-triage reopened or newly bug-labeled reports. Drive actionable
+   reports and add their note or recorded not-reproduced result. Include older
+   actionable reports: `ready-for-dev` sets priority, not inventory membership.
+   Reconcile outcome labels against their note or recorded run per
+   [bug-backfill.md](bug-backfill.md); labels alone are not reproduction evidence.
 3. **Smoke (every family, cheaply).** For each family not already driven in
    tier 2: open its first entry point, run the family's `errors --app-only`
    sweep, and drive the one bullet that proves the page's main state (a list
@@ -85,13 +96,14 @@ cheaper than the next and catches a different kind of rot.
    sub-feature ID that bullet names. This catches a page that stopped loading
    without re-proving every row.
 4. **Rotation (depth over the week).** Drive the full recipe of about a
-   seventh of the families, four a day, so every family gets a full live pass
-   once a week between weekly maintenance passes. The day's slice comes from
-   the date, not from yesterday's notes: with `d` the UTC day of the year,
-   today's families are the ones at positions `(d mod 7) * 4` to
-   `(d mod 7) * 4 + 3` of the index table, in ID order (position 24 onwards
-   holds F25 to F27). Model-backed bullets run only inside the LLM budget;
-   without a key they are `blocked` with the missing prerequisite.
+   seventh of the families. Read the family rows from `TARGET`'s
+   [index table](feature-map/README.md), sort by numeric family ID, and number
+   their positions from zero. Let `w` be the UTC weekday recorded at the start
+   of the pass (Monday = 0 through Sunday = 6). Today's families are those
+   whose position `i` satisfies `i mod 7 = w`. Every indexed family is assigned
+   to one day of the week, including newly added families, and the rotation
+   does not reset at year boundaries. Model-backed bullets run only inside
+   the LLM budget; without a key they are `blocked` with the missing prerequisite.
 
 ## Reading the result
 

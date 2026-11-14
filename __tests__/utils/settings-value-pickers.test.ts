@@ -1,36 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  isNonEmptyString,
   pickFirstBoolean,
   pickFirstNumber,
-  pickFirstString,
   pickNullableString,
 } from "#/utils/settings-value-pickers";
 
 describe("settings value selection", () => {
-  describe("non-empty strings", () => {
-    it.each([
-      ["a non-empty string", "configured", true],
-      ["an empty string", "", false],
-      ["null", null, false],
-      ["a non-string with a length", { length: 1 }, false],
-      ["a number", 42, false],
-    ])("identifies %s", (_description, value, expected) => {
-      expect(isNonEmptyString(value)).toBe(expected);
-    });
-
-    it("returns the first non-empty string and skips other values", () => {
-      expect(pickFirstString(undefined, "", false, "first", "second")).toBe(
-        "first",
-      );
-    });
-
-    it("returns undefined when no non-empty string is available", () => {
-      expect(pickFirstString(undefined, null, false, 0, "")).toBeUndefined();
-      expect(pickFirstString()).toBeUndefined();
-    });
-  });
-
   describe("booleans", () => {
     it("preserves false and returns the first boolean", () => {
       expect(pickFirstBoolean("false", 0, false, true)).toBe(false);

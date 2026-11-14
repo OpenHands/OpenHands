@@ -48,7 +48,7 @@ export function PluginPickerTrigger({
       {count > 0 ? (
         <span
           data-testid="plugin-picker-count"
-          className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-contrast px-1 text-[11px] font-semibold leading-none text-contrast-foreground"
+          className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-contrast px-1 text-2xs font-semibold leading-none text-contrast-foreground"
         >
           {count}
         </span>

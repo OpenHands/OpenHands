@@ -1,6 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 
+import GitService from "#/api/git-service/git-service.api";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useNavigation } from "#/context/navigation-context";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
@@ -145,7 +146,8 @@ export function CloudNewConversationMenu({
 
   const { mutate: createConversation, isPending } = useCreateConversation();
   const isCreatingElsewhere = useIsCreatingConversation();
-  const isCreating = isPending || isCreatingElsewhere;
+  const [isResolvingBranch, setIsResolvingBranch] = React.useState(false);
+  const isCreating = isPending || isCreatingElsewhere || isResolvingBranch;
 
   React.useEffect(() => {
     if (!open) return undefined;
@@ -170,14 +172,26 @@ export function CloudNewConversationMenu({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
-  const launchRepository = (repo: GitRepository) => {
+  const launchRepository = async (repo: GitRepository) => {
     if (isCreating) return;
+    let branch = repo.main_branch;
+    if (!branch) {
+      // Repository lists leave the default branch empty for some providers
+      // (e.g. Bitbucket Data Center). If it stays unknown, launch without a
+      // branch so the backend clones the remote's default.
+      setIsResolvingBranch(true);
+      branch = await GitService.getRepositoryDefaultBranch(
+        repo.full_name,
+        repo.git_provider,
+      ).catch(() => null);
+      setIsResolvingBranch(false);
+    }
     createConversation(
       {
         repository: {
           name: repo.full_name,
           gitProvider: repo.git_provider,
-          branch: repo.main_branch ?? "main",
+          branch: branch ?? undefined,
         },
         entryPoint: "sidebar_cloud_menu",
       },
@@ -316,7 +330,7 @@ export function CloudNewConversationMenu({
 
           <ul
             className={cn(
-              "max-h-[40vh] overflow-y-auto custom-scrollbar-always sm:max-h-70",
+              "new-conversation-menu-height overflow-y-auto custom-scrollbar-always sm:max-h-70",
               dropdownMenuListClassName,
             )}
           >
@@ -330,7 +344,7 @@ export function CloudNewConversationMenu({
             )}
             {isError && (
               <li
-                className="px-2 py-2 text-sm text-[#F87171]"
+                className="px-2 py-2 text-sm text-danger dark:text-[#F87171]"
                 data-testid="cloud-repo-error"
               >
                 {t(I18nKey.HOME$FAILED_TO_LOAD_REPOSITORIES)}

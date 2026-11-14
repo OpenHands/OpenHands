@@ -27,7 +27,7 @@ const PROJECTS_PATH = "/projects";
 // Below md the Kind track is narrow and the name track may shrink to its
 // share (the name truncates), so folder names stay visible at phone width.
 const FOLDER_BROWSER_COLUMNS_CLASS_NAME =
-  "grid grid-cols-[minmax(0,1fr)_4rem] gap-x-2 md:grid-cols-[1fr_120px] md:gap-x-0";
+  "grid workspace-folder-columns gap-x-2 md:workspace-folder-columns-desktop md:gap-x-0";
 
 interface FolderBrowserModalProps {
   isOpen: boolean;
@@ -57,7 +57,7 @@ function SidebarSection({
   if (entries.length === 0) return null;
   return (
     <div className="px-2 pb-3">
-      <div className="px-2 pb-1 text-[11px] uppercase tracking-wide text-muted font-semibold truncate">
+      <div className="px-2 pb-1 workspace-section-label uppercase tracking-wide text-muted font-semibold truncate">
         {label}
       </div>
       <ul>
@@ -319,7 +319,7 @@ export function FolderBrowserModal({
               )}
               {isError && (
                 <li
-                  className="px-4 py-2 text-sm text-red-400"
+                  className="px-4 py-2 text-sm text-feedback-error"
                   data-testid="folder-browser-error"
                 >
                   {(error as Error | undefined)?.message ??
