@@ -129,6 +129,12 @@ describe("useCreateConversation persists selected repository metadata", () => {
       conversationSettings: {},
       secretsEncrypted: true,
     });
+    // A configured account: the seeded `default` agent profile's LLM ref
+    // resolves, so the launch path is not the never-configured guard.
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [{ name: "default" }],
+      active_profile: null,
+    } as never);
     mockConversationClient.mockReset();
     vi.mocked(ConversationClient).mockClear();
     vi.mocked(SettingsClient).mockClear();

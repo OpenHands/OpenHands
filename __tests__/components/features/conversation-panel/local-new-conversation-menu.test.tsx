@@ -139,6 +139,16 @@ describe("LocalNewConversationMenu", () => {
   });
 
   beforeEach(() => {
+    // A configured account: the seeded `default` agent profile's LLM ref
+    // resolves, so the launch path is not the never-configured guard.
+    server.use(
+      http.get("*/api/profiles", () =>
+        HttpResponse.json({
+          profiles: [{ name: "default" }],
+          active_profile: null,
+        }),
+      ),
+    );
     mockSearchSubdirectories.mockReset();
     mockSearchSubdirectories.mockResolvedValue({
       items: [],

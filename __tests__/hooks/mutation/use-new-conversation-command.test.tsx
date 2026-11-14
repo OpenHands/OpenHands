@@ -102,6 +102,12 @@ describe("useNewConversationCommand", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // A configured account: the seeded `default` agent profile's LLM ref
+    // resolves, so the launch path is not the never-configured guard.
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [{ name: "default" }],
+      active_profile: null,
+    } as never);
     captureMock = vi
       .spyOn(telemetry, "trackEvent")
       .mockResolvedValue(undefined);
