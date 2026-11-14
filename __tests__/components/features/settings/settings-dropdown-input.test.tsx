@@ -64,6 +64,50 @@ describe("SettingsDropdownInput", () => {
     expect(screen.queryByText("Spanish")).not.toBeInTheDocument();
   });
 
+  it("is clearable by default: omitting isClearable shows the clear button and clears via onSelectionChange(null)", async () => {
+    const user = userEvent.setup();
+    const onSelectionChange = vi.fn();
+    const onInputChange = vi.fn();
+
+    render(
+      <SettingsDropdownInput
+        defaultSelectedKey="english"
+        items={items}
+        label="Language"
+        name="language"
+        onInputChange={onInputChange}
+        onSelectionChange={onSelectionChange}
+        testId="language-input"
+      />,
+    );
+
+    const clearButton = screen.getByRole("button", {
+      name: "COMMON$CLEAR_SELECTION",
+    });
+    await user.click(clearButton);
+
+    expect(screen.getByLabelText("Language")).toHaveValue("");
+    expect(onSelectionChange).toHaveBeenCalledWith(null);
+    expect(onInputChange).toHaveBeenCalledWith("");
+  });
+
+  it("isClearable={false} renders no clear button even with a selection", () => {
+    render(
+      <SettingsDropdownInput
+        defaultSelectedKey="english"
+        isClearable={false}
+        items={items}
+        label="Language"
+        name="language"
+        testId="language-input"
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "COMMON$CLEAR_SELECTION" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("clears the selection when the clear button is pressed", async () => {
     const user = userEvent.setup();
     const onSelectionChange = vi.fn();
