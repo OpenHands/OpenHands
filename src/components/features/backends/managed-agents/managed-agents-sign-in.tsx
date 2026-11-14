@@ -60,7 +60,7 @@ export function ManagedAgentsSignIn({
         </div>
       ) : null}
       <div className="flex flex-col items-center gap-1.5 text-center">
-        <h3 className="text-balance text-base font-medium text-white">
+        <h3 className="text-balance text-base font-medium text-contrast">
           {t(I18nKey.DO_AGENTS$SIGN_IN_TITLE)}
         </h3>
         <p className="text-pretty text-sm leading-relaxed text-muted">
@@ -147,7 +147,7 @@ export function ManagedAgentsSignIn({
           type="button"
           onClick={onCancel}
           data-testid="managed-agents-sign-in-cancel"
-          className="cursor-pointer text-xs text-muted hover:text-white"
+          className="cursor-pointer text-xs text-muted hover:text-contrast"
         >
           {t(I18nKey.BUTTON$CANCEL)}
         </button>

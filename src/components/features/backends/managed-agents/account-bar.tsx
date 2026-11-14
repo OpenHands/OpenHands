@@ -41,7 +41,7 @@ export function AccountBar({
             value={activeConnection.id}
             onChange={(event) => onSwitchConnection(event.target.value)}
             data-testid="managed-agents-connection-switcher"
-            className="min-w-0 flex-1 cursor-pointer rounded border border-border bg-transparent px-1.5 py-0.5 text-white"
+            className="min-w-0 flex-1 cursor-pointer rounded border border-border bg-transparent px-1.5 py-0.5 text-contrast"
           >
             {connections.map((connection) => (
               <option key={connection.id} value={connection.id}>
@@ -51,7 +51,7 @@ export function AccountBar({
           </select>
         </label>
       ) : (
-        <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-white">
+        <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-contrast">
           <span
             aria-hidden
             className="size-1.5 rounded-full bg-status-success"
@@ -71,7 +71,7 @@ export function AccountBar({
         type="button"
         onClick={onSignOut}
         data-testid="managed-agents-sign-out"
-        className="cursor-pointer text-muted hover:text-white"
+        className="cursor-pointer text-muted hover:text-contrast"
       >
         {t(I18nKey.BACKEND$DIGITALOCEAN_SIGN_OUT)}
       </button>

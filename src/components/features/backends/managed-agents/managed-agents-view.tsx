@@ -353,7 +353,7 @@ export function ManagedAgentsView({ onBack, onDone }: ManagedAgentsViewProps) {
               placeholder={t(I18nKey.DO_AGENTS$SEARCH_PLACEHOLDER)}
               aria-label={t(I18nKey.DO_AGENTS$SEARCH_PLACEHOLDER)}
               data-testid="managed-agents-search"
-              className="h-9 w-full rounded-md border border-border bg-transparent pl-8 pr-3 text-sm text-white placeholder:text-muted focus:outline-none"
+              className="h-9 w-full rounded-md border border-border bg-transparent pl-8 pr-3 text-sm text-contrast placeholder:text-muted focus:outline-none"
             />
           </label>
           <SegmentedToggle<StatusFilter>
@@ -372,7 +372,7 @@ export function ManagedAgentsView({ onBack, onDone }: ManagedAgentsViewProps) {
             aria-label={t(I18nKey.BACKEND$DIGITALOCEAN_AGENTS_REFRESH)}
             title={t(I18nKey.BACKEND$DIGITALOCEAN_AGENTS_REFRESH)}
             data-testid="managed-agents-refresh"
-            className="inline-flex size-9 cursor-pointer items-center justify-center rounded-md text-muted transition-colors hover:bg-interactive-hover hover:text-white"
+            className="inline-flex size-9 cursor-pointer items-center justify-center rounded-md text-muted transition-colors hover:bg-interactive-hover hover:text-contrast"
           >
             <RefreshCw
               className={cn("size-4", agentsQuery.isFetching && "animate-spin")}
@@ -447,7 +447,7 @@ export function ManagedAgentsView({ onBack, onDone }: ManagedAgentsViewProps) {
                 className="overflow-hidden rounded-lg border border-border bg-surface-raised"
               >
                 <header className="border-b border-border px-3 py-2">
-                  <h4 className="text-sm font-medium text-white">
+                  <h4 className="text-sm font-medium text-contrast">
                     {t(I18nKey.DO_AGENTS$OTHER_SESSIONS)}
                   </h4>
                 </header>
@@ -474,7 +474,7 @@ export function ManagedAgentsView({ onBack, onDone }: ManagedAgentsViewProps) {
         <div className="flex items-center gap-3">
           <DigitalOceanLogo width={28} height={28} aria-hidden />
           <div className="flex min-w-0 flex-col">
-            <h2 className="text-lg font-medium text-white">
+            <h2 className="text-lg font-medium text-contrast">
               {t(I18nKey.DO_AGENTS$TITLE)}
             </h2>
             <p className="text-xs text-muted">
