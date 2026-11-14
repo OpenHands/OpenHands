@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRef } from "react";
 
 import type { CommandResult } from "#/api/runtime-service/agent-server-runtime-service";
+import { GitProviderItemsService } from "#/api/git-provider-items-service";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
@@ -13,6 +14,8 @@ export interface LocalGitInfo {
   repository: string | null;
   branch: string | null;
   provider: Provider | null;
+  /** Browsable host of the origin remote, e.g. `gitlab.example.com`. */
+  host: string | null;
   remoteUrl: string | null;
 }
 
@@ -20,6 +23,7 @@ const EMPTY_LOCAL_GIT_INFO: LocalGitInfo = {
   repository: null,
   branch: null,
   provider: null,
+  host: null,
   remoteUrl: null,
 };
 
@@ -66,9 +70,16 @@ async function probeGitInfo(
   if (!remoteUrl && !branch) return EMPTY_LOCAL_GIT_INFO;
 
   const parsedRemote = parseGitRemoteUrl(remoteUrl);
+  const host = parsedRemote?.host ?? null;
+  const provider =
+    parsedRemote?.provider ??
+    (host
+      ? await GitProviderItemsService.detectConfiguredProvider(host)
+      : null);
   return {
     repository: parsedRemote?.repository ?? null,
-    provider: parsedRemote?.provider ?? null,
+    provider,
+    host,
     remoteUrl: remoteUrl || null,
     branch,
   };

@@ -3,6 +3,7 @@ import { ExternalLink } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { GitProviderItemsService } from "#/api/git-provider-items-service";
 import {
+  useGitProviderHost,
   useRepositoryIssues,
   useRepositoryPullRequests,
 } from "#/hooks/query/use-repository-git-items";
@@ -22,15 +23,25 @@ const EXTERNAL_LINK_ICON_CLASSNAME = cn(
 );
 
 function useGitItemsExternalListUrl(kind: "pull_requests" | "issues") {
-  const { repository, provider } = useConversationPrimaryRepository();
+  const { repository, provider, remoteHost } =
+    useConversationPrimaryRepository();
+  const { host } = useGitProviderHost(provider, remoteHost);
 
   if (!repository || !provider) {
     return null;
   }
 
   return kind === CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests
-    ? GitProviderItemsService.constructPullRequestsListUrl(provider, repository)
-    : GitProviderItemsService.constructIssuesListUrl(provider, repository);
+    ? GitProviderItemsService.constructPullRequestsListUrl(
+        provider,
+        repository,
+        host,
+      )
+    : GitProviderItemsService.constructIssuesListUrl(
+        provider,
+        repository,
+        host,
+      );
 }
 
 export function ConversationOverviewGitItemsHeaderLink({
@@ -68,11 +79,22 @@ export function ConversationOverviewGitItemsPanel({
   kind,
 }: ConversationOverviewGitItemsPanelProps) {
   const { t } = useTranslation("openhands");
-  const { repository, provider, isConnected } =
+  const { repository, provider, remoteHost, isConnected } =
     useConversationPrimaryRepository();
+  const { host, isResolved } = useGitProviderHost(provider, remoteHost);
 
-  const pullRequestsQuery = useRepositoryPullRequests(repository, provider);
-  const issuesQuery = useRepositoryIssues(repository, provider);
+  const pullRequestsQuery = useRepositoryPullRequests(
+    repository,
+    provider,
+    host,
+    isResolved,
+  );
+  const issuesQuery = useRepositoryIssues(
+    repository,
+    provider,
+    host,
+    isResolved,
+  );
 
   const query =
     kind === CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests

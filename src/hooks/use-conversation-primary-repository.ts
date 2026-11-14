@@ -25,11 +25,19 @@ export function useConversationPrimaryRepository() {
     localGitInfo?.provider ||
     null) as Provider | null;
   const branch = conversationBranch || localGitInfo?.branch || null;
+  // Only the workspace remote knows which instance a repository lives on.
+  const remoteHost =
+    localGitInfo?.host &&
+    localGitInfo.repository === repository &&
+    localGitInfo.provider === provider
+      ? localGitInfo.host
+      : null;
 
   return {
     repository,
     provider,
     branch,
+    remoteHost,
     isConnected: Boolean(repository && provider),
   };
 }

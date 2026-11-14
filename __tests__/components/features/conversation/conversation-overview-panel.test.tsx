@@ -81,6 +81,7 @@ vi.mock("#/hooks/query/use-unified-git-commits", () => ({
 }));
 
 vi.mock("#/hooks/query/use-repository-git-items", () => ({
+  useGitProviderHost: () => ({ host: null, isResolved: true }),
   useRepositoryPullRequests: () => ({
     data: [
       {
