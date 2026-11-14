@@ -8,6 +8,8 @@ import {
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { McpServerCheckboxSelector } from "#/components/features/mcp-page/mcp-server-checkbox-selector";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { I18nKey } from "#/i18n/declaration";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { Typography } from "#/ui/typography";
@@ -41,7 +43,11 @@ interface PluginLaunchModalProps {
   } | null;
   /** True while the preflight is being fetched (automation mode only). */
   isPreflightLoading?: boolean;
-  onStartConversation: (plugins: PluginSpec[], initialMessage?: string) => void;
+  onStartConversation: (
+    plugins: PluginSpec[],
+    initialMessage?: string,
+    mcpRefs?: string[],
+  ) => void;
   /** Required when mode === "automation". */
   onInstallAutomation?: (
     plugins: PluginSpec[],
@@ -67,6 +73,8 @@ export function PluginLaunchModal({
   onClose,
 }: PluginLaunchModalProps) {
   const { t } = useTranslation("openhands");
+  const { backend } = useActiveBackend();
+
   const [pluginConfigs, setPluginConfigs] =
     React.useState<PluginSpec[]>(plugins);
   const [expandedSections, setExpandedSections] = React.useState<ExpandedState>(
@@ -82,6 +90,9 @@ export function PluginLaunchModal({
     },
   );
   const [trustConfirmed, setTrustConfirmed] = React.useState(false);
+  const [selectedMcpRefs, setSelectedMcpRefs] = React.useState(
+    () => new Set<string>(),
+  );
   // Tracks sections that auto-expanded from the preflight arrival (vs a user
   // toggle). The smooth-scroll only fires for auto-expanded sections.
   const [autoExpandedSections, setAutoExpandedSections] =
@@ -242,6 +253,11 @@ export function PluginLaunchModal({
       onInstallAutomation?.(cleanedPlugins, trigger);
       return;
     }
+    const selectedRefs = [...selectedMcpRefs];
+    if (backend.kind === "local" && selectedRefs.length > 0) {
+      onStartConversation(pluginConfigs, message, selectedRefs);
+      return;
+    }
     onStartConversation(pluginConfigs, message);
   };
 
@@ -325,6 +341,15 @@ export function PluginLaunchModal({
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {mode === "conversation" && backend.kind === "local" && (
+            <div className="mt-4 flex items-center gap-3">
+              <McpServerCheckboxSelector
+                selectedRefs={selectedMcpRefs}
+                onSelectedRefsChange={setSelectedMcpRefs}
+              />
             </div>
           )}
 

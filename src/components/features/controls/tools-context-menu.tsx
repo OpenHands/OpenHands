@@ -39,6 +39,7 @@ interface ToolsContextMenuProps {
    * without query/navigation providers when the item is off.
    */
   showAgentProfileSwitch?: boolean;
+  configurationAction?: { label: string; onClick: () => void };
   /** When set, renders a divider and this action as the last menu item. */
   footerAction?: {
     testId: string;
@@ -58,6 +59,7 @@ export function ToolsContextMenu({
   shouldShowHooks = false,
   shouldShowPlugins = false,
   showAgentProfileSwitch = false,
+  configurationAction,
   footerAction,
 }: ToolsContextMenuProps) {
   const { t } = useTranslation("openhands");
@@ -267,6 +269,27 @@ export function ToolsContextMenu({
             />
           </ContextMenuListItem>
         </ArchivedDisabledTooltip>
+      )}
+
+      {configurationAction && (
+        <>
+          <Divider inset="menu" />
+          <ArchivedDisabledTooltip isDisabled={isArchivedConversation}>
+            <ContextMenuListItem
+              testId="conversation-configuration-button"
+              onClick={() => {
+                configurationAction.onClick();
+                handleClose();
+              }}
+              isDisabled={isArchivedConversation}
+            >
+              <ToolsContextMenuIconText
+                icon={<PuzzleIcon width={16} height={16} aria-hidden />}
+                text={configurationAction.label}
+              />
+            </ContextMenuListItem>
+          </ArchivedDisabledTooltip>
+        </>
       )}
 
       {footerAction && (

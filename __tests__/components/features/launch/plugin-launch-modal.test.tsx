@@ -1,9 +1,12 @@
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PluginLaunchModal } from "#/components/features/launch/plugin-launch-modal";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
+import SettingsService from "#/api/settings-service/settings-service.api";
+import { server } from "#/mocks/node";
 import type { SchemaFormField } from "#/utils/plugin-launch-preflight";
 
 const mockOnStartConversation = vi.fn();
@@ -55,6 +58,7 @@ function renderModal(
 describe("PluginLaunchModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    SettingsService.invalidateCache();
   });
 
   describe("Plugin Display Name Extraction", () => {
@@ -232,7 +236,6 @@ describe("PluginLaunchModal", () => {
     });
 
     it("should update number parameter value when typing", async () => {
-      const user = userEvent.setup();
       renderModal([
         {
           source: "github:owner/repo",
@@ -396,6 +399,42 @@ describe("PluginLaunchModal", () => {
       const calledWithMessage = mockOnStartConversation.mock.calls[0][1];
       expect(calledWithPlugins[0].source).toBe("github:owner/repo");
       expect(calledWithMessage).toBe("/city-weather:now Tokyo");
+    });
+
+    it("passes selected installed MCP server refs to conversation launch", async () => {
+      const user = userEvent.setup();
+      server.use(
+        http.get("*/api/settings", () =>
+          HttpResponse.json({
+            agent_settings: {
+              mcp_config: {
+                fetch: {
+                  command: "python3",
+                  args: ["-m", "fetch"],
+                  enabled: true,
+                },
+                disabled: {
+                  command: "python3",
+                  args: ["-m", "disabled"],
+                  enabled: false,
+                },
+              },
+            },
+          }),
+        ),
+      );
+      renderModal([{ source: "github:owner/repo" }]);
+
+      await user.click(screen.getByTestId("mcp-server-checkbox-selector"));
+      await user.click(await screen.findByLabelText(/fetch/i));
+      await user.click(screen.getByTestId("trust-checkbox"));
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      expect(mockOnStartConversation).toHaveBeenCalledWith(
+        expect.any(Array),
+        undefined,
+        ["fetch"],
+      );
     });
 
     it("should show 'Starting...' text when loading", () => {

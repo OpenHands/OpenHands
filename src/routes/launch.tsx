@@ -309,12 +309,14 @@ export default function LaunchRoute() {
   const handleStartConversation = async (
     plugins: PluginSpec[],
     initialMessage?: string,
+    mcpRefs?: string[],
   ) => {
     setCreationError(null);
     try {
       const result = await createConversation.mutateAsync({
         plugins,
         query: initialMessage,
+        ...(mcpRefs?.length ? { mcpRefs } : {}),
         entryPoint: "launch_deeplink",
       });
       navigate(`/conversations/${result.conversation_id}`);
