@@ -2,14 +2,14 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { SmilePlus } from "lucide-react";
 import type { ReactionEmoji } from "@openhands/typescript-client";
-import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
+import { conversationReactionsService } from "#/api/conversation-reactions-service/conversation-reactions-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useIsExperimentalFeatureEnabled } from "#/hooks/query/use-experimental-features";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { I18nKey } from "#/i18n/declaration";
-import { useEventStore } from "#/stores/use-event-store";
+import { useEventStore, type OHEvent } from "#/stores/use-event-store";
 import { cn } from "#/utils/utils";
 import { displayApiErrorToast } from "#/utils/custom-toast-handlers";
 
@@ -32,14 +32,6 @@ const EMOJI_FONT = "font-emoji";
 type ReactionSource = "agent" | "user";
 type ReactionAuthor = "user" | "agent";
 
-interface StoredReaction {
-  kind?: string;
-  target_event_id?: string;
-  emoji?: string;
-  removed?: boolean;
-  source?: string;
-}
-
 const compareEmoji = (a: string, b: string) =>
   EMOJI_ORDER.indexOf(a.split(":")[0] as ReactionEmoji) -
     EMOJI_ORDER.indexOf(b.split(":")[0] as ReactionEmoji) || a.localeCompare(b);
@@ -53,19 +45,13 @@ const compareEmoji = (a: string, b: string) =>
  */
 const reactionIndexes = new WeakMap<object, Map<string, string>>();
 
-function reactionIndex(events: readonly unknown[]): Map<string, string> {
+function reactionIndex(events: readonly OHEvent[]): Map<string, string> {
   const cached = reactionIndexes.get(events);
   if (cached) return cached;
 
   const current = new Map<string, Map<string, boolean>>();
-  for (const raw of events) {
-    const event = raw as StoredReaction;
-    if (
-      event.kind === "ReactionEvent" &&
-      event.target_event_id &&
-      event.emoji &&
-      (event.source === "agent" || event.source === "user")
-    ) {
+  for (const event of events) {
+    if ("kind" in event && event.kind === "ReactionEvent") {
       const pairs = current.get(event.target_event_id) ?? new Map();
       pairs.set(`${event.emoji}:${event.source}`, !event.removed);
       current.set(event.target_event_id, pairs);
@@ -240,7 +226,7 @@ export function MessageReactions({
     const before = optimistic;
     setOptimistic({ ...before, [emoji]: !removed });
     try {
-      await experimentalFeaturesService.react({
+      await conversationReactionsService.react({
         conversationId,
         emoji,
         targetEventId: eventId,

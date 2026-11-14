@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
-import { HttpError } from "@openhands/typescript-client";
+import {
+  HttpError,
+  type ReactionEmoji,
+  type ReactionEvent,
+} from "@openhands/typescript-client";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import {
@@ -8,8 +12,8 @@ import {
   useMessageReactions,
 } from "#/components/features/chat/message-reactions";
 import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
+import { conversationReactionsService } from "#/api/conversation-reactions-service/conversation-reactions-service.api";
 import { useEventStore } from "#/stores/use-event-store";
-import type { OHEvent } from "#/stores/use-event-store";
 
 vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => ({
@@ -29,20 +33,19 @@ vi.mock("#/hooks/use-conversation-id", () => ({
 
 const reaction = (
   id: string,
-  emoji: string,
+  emoji: ReactionEmoji,
   source: "agent" | "user",
   removed = false,
   target = "msg-1",
-) =>
-  ({
-    id,
-    kind: "ReactionEvent",
-    timestamp: `2026-11-07T00:00:0${id.length}Z`,
-    source,
-    target_event_id: target,
-    emoji,
-    removed,
-  }) as unknown as OHEvent;
+): ReactionEvent => ({
+  id,
+  kind: "ReactionEvent",
+  timestamp: `2026-11-07T00:00:0${id.length}Z`,
+  source,
+  target_event_id: target,
+  emoji,
+  removed,
+});
 
 function Row({
   eventId = "msg-1",
@@ -229,7 +232,7 @@ describe("MessageReactions", () => {
       experimentalFeaturesService,
       "listExperimentalFeatures",
     ).mockResolvedValue(featureState(true));
-    vi.spyOn(experimentalFeaturesService, "react").mockRejectedValue(
+    vi.spyOn(conversationReactionsService, "react").mockRejectedValue(
       new HttpError(409, "Conflict", {
         detail: "Conversation reactions are turned off",
       }),
@@ -258,7 +261,7 @@ describe("MessageReactions", () => {
       "listExperimentalFeatures",
     ).mockResolvedValue(featureState(true));
     const react = vi
-      .spyOn(experimentalFeaturesService, "react")
+      .spyOn(conversationReactionsService, "react")
       .mockResolvedValue();
     const user = userEvent.setup();
 
@@ -294,7 +297,7 @@ describe("MessageReactions", () => {
       "listExperimentalFeatures",
     ).mockResolvedValue(featureState(true));
     const react = vi
-      .spyOn(experimentalFeaturesService, "react")
+      .spyOn(conversationReactionsService, "react")
       .mockResolvedValue();
     useEventStore.getState().addEvents([reaction("a", "heart", "user")]);
     const user = userEvent.setup();
