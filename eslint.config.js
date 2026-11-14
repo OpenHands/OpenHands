@@ -276,7 +276,22 @@ export default [
               message:
                 "Use typed @openhands/typescript-client clients instead of constructing HttpClient directly.",
             },
+            {
+              name: "uuid",
+              importNames: ["v4"],
+              message: "Use randomUUID from #/utils/random-uuid.",
+            },
           ],
+        },
+      ],
+      // crypto.randomUUID is SecureContext-only: it is undefined when Canvas
+      // is served over plain HTTP on a non-loopback host (#19514).
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "crypto",
+          property: "randomUUID",
+          message: "Use randomUUID from #/utils/random-uuid.",
         },
       ],
       // All agent-server API access must go through the typed
