@@ -72,6 +72,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { hasConversationStarted } from "./components/resolve-picker-kind";
 import { ComposerDockedProvider } from "#/context/composer-docked-context";
 import { isContentEmpty } from "./utils/chat-input.utils";
+import { ConversationHistorySearch } from "./conversation-history-search";
 
 // Ctrl/Cmd+Enter in a text field that holds text belongs to that field (the
 // composer sends it); an empty field or any other target builds the plan.
@@ -710,6 +711,14 @@ export function ChatInterface({
               />
             )}
           {/* Note: We only hide chat suggestions when there's a user message */}
+
+          {conversationId && !isProvisioningTask && (
+            <ConversationHistorySearch
+              conversationId={conversationId}
+              conversationUrl={activeConversation?.conversation_url}
+              sessionApiKey={activeConversation?.session_api_key}
+            />
+          )}
 
           <div
             ref={scrollRef}
