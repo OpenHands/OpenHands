@@ -1,9 +1,38 @@
 import type { TFunction } from "i18next";
+import type { SettingsFieldSchema } from "#/types/settings";
 
 export interface SettingsFieldConstraints {
   min?: number;
   max?: number;
   step?: number;
+  exclusive_min?: boolean;
+  exclusive_max?: boolean;
+}
+
+/**
+ * Resolves numeric constraints for a schema field, preferring SDK-supplied
+ * values (on newer servers) over the frontend's hardcoded per-field metadata
+ * map (for older agent-servers that don't expose these descriptors).
+ *
+ * Merge rule: SDK values win for every field it supplies; metadata fills in
+ * the gaps (e.g. step is often omitted by the SDK but present in metadata).
+ * Returns undefined when neither source supplies anything.
+ */
+export function resolveNumericConstraints(
+  field: SettingsFieldSchema,
+): SettingsFieldConstraints | undefined {
+  const sdk = field.constraints;
+  const metadata = FIELD_METADATA[field.key]?.constraints;
+
+  if (!sdk && !metadata) return undefined;
+
+  return {
+    min: sdk?.min ?? metadata?.min,
+    max: sdk?.max ?? metadata?.max,
+    step: sdk?.step ?? metadata?.step,
+    exclusive_min: sdk?.exclusive_min,
+    exclusive_max: sdk?.exclusive_max,
+  };
 }
 
 interface SettingsFieldMetadata {
