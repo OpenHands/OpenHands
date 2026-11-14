@@ -16,6 +16,7 @@ interface ErrorMessageBannerProps {
   /** Recovery action (e.g. re-authenticate) shown for credential failures. */
   onReauth?: () => void;
   classification?: ErrorClassification | null;
+  isRetrying?: boolean;
 }
 
 const DEFAULT_MAX_COLLAPSED_CHARS = 220;
@@ -27,6 +28,7 @@ export function ErrorMessageBanner({
   onRetry,
   onReauth,
   classification,
+  isRetrying,
 }: ErrorMessageBannerProps) {
   const { t, i18n } = useTranslation("openhands");
   const headerKey = getAcpErrorHeaderKey(code);
@@ -171,7 +173,11 @@ export function ErrorMessageBanner({
           <button
             type="button"
             onClick={onRetry}
-            className="cursor-pointer rounded-md border border-border px-2 py-1 text-xs font-normal text-foreground hover:bg-interactive-hover"
+            disabled={isRetrying}
+            className={cn(
+              "cursor-pointer rounded-md border border-border px-2 py-1 text-xs font-normal text-foreground hover:bg-interactive-hover",
+              isRetrying && "cursor-not-allowed opacity-50",
+            )}
             data-testid="error-message-banner-retry"
           >
             {t(I18nKey.CHAT_INTERFACE$MESSAGE_RETRY)}
