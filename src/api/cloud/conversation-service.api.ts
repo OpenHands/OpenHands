@@ -40,6 +40,8 @@ function overlayStoredRepoSelection(
     selected_branch:
       conversation.selected_branch ?? stored.selected_branch ?? null,
     git_provider: conversation.git_provider ?? stored.git_provider ?? null,
+    git_provider_id:
+      conversation.git_provider_id ?? stored.git_provider_id ?? null,
     selected_workspace:
       conversation.selected_workspace ?? stored.selected_workspace ?? null,
   };
@@ -270,6 +272,7 @@ export async function updateCloudConversationRepository(
   repository: string | null,
   branch: string | null,
   gitProvider: Provider | null,
+  gitProviderId?: number | null,
 ): Promise<AppConversation> {
   const backend = getActiveCloudBackend();
   return callCloudProxy<AppConversation>({
@@ -280,6 +283,7 @@ export async function updateCloudConversationRepository(
       selected_repository: repository,
       selected_branch: branch,
       git_provider: gitProvider,
+      ...(gitProviderId != null ? { git_provider_id: gitProviderId } : {}),
     },
   });
 }

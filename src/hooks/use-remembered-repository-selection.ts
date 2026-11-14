@@ -1,9 +1,8 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import GitService from "#/api/git-service/git-service.api";
-import { useSettings } from "#/hooks/query/use-settings";
+import { useGitProviderOptions } from "#/hooks/use-git-provider-options";
 import { HomeRepositorySelection, useHomeStore } from "#/stores/home-store";
-import { convertRawProvidersToList } from "#/utils/convert-raw-providers-to-list";
 
 // Comfortably above the branch dropdown's page size, so a short exact name
 // (e.g. `main`) is not crowded out by longer names that contain it.
@@ -24,7 +23,9 @@ const isSelectionShaped = (
  * The home launcher's repository selection for `backendId`, persisted across
  * visits. A remembered selection is shown immediately and checked in the
  * background; if its provider is disconnected, or the repository or branch
- * can no longer be reached, it is forgotten.
+ * can no longer be reached, it is forgotten. A selection made through a
+ * different git provider connection than the picker now offers is forgotten
+ * too, so a launch never uses another connection's credentials.
  */
 export function useRememberedRepositorySelection(
   backendId: string,
@@ -39,13 +40,16 @@ export function useRememberedRepositorySelection(
   const clearRepositorySelection = useHomeStore(
     (state) => state.clearRepositorySelection,
   );
-  const { data: settings, isSuccess: hasSettings } = useSettings();
+  const { options, isLoading: isLoadingProviders } = useGitProviderOptions();
 
   const selection = isSelectionShaped(stored) ? stored : null;
+  const gitProviderId = selection?.repository.git_provider_id ?? null;
   const isProviderConnected =
     !!selection &&
-    convertRawProvidersToList(settings?.provider_tokens_set).includes(
-      selection.provider,
+    options.some(
+      (option) =>
+        option.provider === selection.provider &&
+        option.gitProviderId === gitProviderId,
     );
   const repositoryName = selection?.repository.full_name ?? null;
   const branchName = selection?.branch.name ?? null;
@@ -58,6 +62,7 @@ export function useRememberedRepositorySelection(
       "remembered-selection",
       branchName,
       selection?.provider,
+      gitProviderId,
       backendId,
     ],
     queryFn: async () => {
@@ -67,6 +72,7 @@ export function useRememberedRepositorySelection(
         branchName!,
         undefined,
         BRANCH_LOOKUP_LIMIT,
+        gitProviderId,
       );
       return page.items.some((branch) => branch.name === branchName);
     },
@@ -78,7 +84,7 @@ export function useRememberedRepositorySelection(
   const isInvalid =
     stored !== undefined &&
     (!selection ||
-      (hasSettings && !isProviderConnected) ||
+      (!isLoadingProviders && !isProviderConnected) ||
       isError ||
       isReachable === false);
 

@@ -9,6 +9,8 @@ export interface ConversationMetadata {
   selected_repository: string | null;
   selected_branch: string | null;
   git_provider: Provider | null;
+  /** The connected git provider (`auth_providers.id`) the repository came from. */
+  git_provider_id?: number | null;
   /**
    * The local workspace path the user explicitly attached at conversation
    * creation time. Distinct from `selected_repository` (which is set by

@@ -11,13 +11,19 @@ import { Branch, GitRepository } from "#/types/git";
 import { GitRepoDropdown } from "#/components/features/home/git-repo-dropdown/git-repo-dropdown";
 import { GitBranchDropdown } from "#/components/features/home/git-branch-dropdown/git-branch-dropdown";
 import { GitProviderDropdown } from "#/components/features/home/git-provider-dropdown/git-provider-dropdown";
-import { useUserProviders } from "#/hooks/use-user-providers";
+import { useGitProviderOptions } from "#/hooks/use-git-provider-options";
+import {
+  gitProviderOptionsMatch,
+  type GitProviderOption,
+} from "#/utils/git-provider-option";
 
 interface OpenRepositoryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onLaunch: (repository: GitRepository, branch: Branch) => void;
   defaultProvider?: Provider;
+  /** The conversation's connected git provider, to pick among several of one type. */
+  defaultGitProviderId?: number | null;
 }
 
 export function OpenRepositoryModal({
@@ -25,36 +31,46 @@ export function OpenRepositoryModal({
   onClose,
   onLaunch,
   defaultProvider = "github",
+  defaultGitProviderId = null,
 }: OpenRepositoryModalProps) {
   const { t } = useTranslation("openhands");
-  const { providers } = useUserProviders();
+  const { options } = useGitProviderOptions();
 
-  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(
+  const [pickedOption, setPickedOption] = useState<GitProviderOption | null>(
     null,
   );
+  const selectedOption =
+    options.find((option) => gitProviderOptionsMatch(option, pickedOption)) ??
+    null;
+  const selectedProvider = selectedOption?.provider ?? null;
   const [selectedRepository, setSelectedRepository] =
     useState<GitRepository | null>(null);
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
 
   // Auto-select provider: single provider auto-selects, multiple uses defaultProvider if available
   useEffect(() => {
-    if (providers.length === 1 && !selectedProvider) {
-      setSelectedProvider(providers[0]);
-    } else if (providers.length > 1 && !selectedProvider && defaultProvider) {
-      if (providers.includes(defaultProvider)) {
-        setSelectedProvider(defaultProvider);
-      }
+    if (selectedOption) return;
+    if (options.length === 1) {
+      setPickedOption(options[0]);
+    } else if (options.length > 1 && defaultProvider) {
+      const preferred =
+        options.find(
+          (option) =>
+            option.provider === defaultProvider &&
+            option.gitProviderId === defaultGitProviderId,
+        ) ?? options.find((option) => option.provider === defaultProvider);
+      if (preferred) setPickedOption(preferred);
     }
-  }, [providers, selectedProvider, defaultProvider]);
+  }, [options, selectedOption, defaultProvider, defaultGitProviderId]);
 
   const handleProviderChange = useCallback(
-    (provider: Provider | null) => {
-      if (provider === selectedProvider) return;
-      setSelectedProvider(provider);
+    (option: GitProviderOption | null) => {
+      if (gitProviderOptionsMatch(option, selectedOption)) return;
+      setPickedOption(option);
       setSelectedRepository(null);
       setSelectedBranch(null);
     },
-    [selectedProvider],
+    [selectedOption],
   );
 
   const handleRepositoryChange = useCallback((repository?: GitRepository) => {
@@ -81,7 +97,7 @@ export function OpenRepositoryModal({
   };
 
   const handleClose = () => {
-    setSelectedProvider(null);
+    setPickedOption(null);
     setSelectedRepository(null);
     setSelectedBranch(null);
     onClose();
@@ -91,6 +107,8 @@ export function OpenRepositoryModal({
 
   const activeProvider =
     selectedRepository?.git_provider || selectedProvider || defaultProvider;
+  const activeGitProviderId =
+    selectedRepository?.git_provider_id ?? selectedOption?.gitProviderId;
   const canLaunch = !!selectedRepository && !!selectedBranch;
 
   return (
@@ -112,10 +130,10 @@ export function OpenRepositoryModal({
             <span className="text-sm text-contrast font-normal leading-5.5">
               {t(I18nKey.CONVERSATION$SELECT_OR_INSERT_LINK)}
             </span>
-            {providers.length > 1 && (
+            {options.length > 1 && (
               <GitProviderDropdown
-                providers={providers}
-                value={selectedProvider}
+                options={options}
+                value={selectedOption}
                 onChange={handleProviderChange}
               />
             )}
@@ -124,6 +142,7 @@ export function OpenRepositoryModal({
           <div className="flex flex-col gap-2.5 w-full">
             <GitRepoDropdown
               provider={activeProvider}
+              gitProviderId={activeGitProviderId}
               value={selectedRepository?.id || null}
               repositoryName={selectedRepository?.full_name || null}
               onChange={handleRepositoryChange}
@@ -133,6 +152,7 @@ export function OpenRepositoryModal({
             <GitBranchDropdown
               repository={selectedRepository?.full_name || null}
               provider={activeProvider}
+              gitProviderId={activeGitProviderId}
               selectedBranch={selectedBranch}
               onBranchSelect={handleBranchSelect}
               defaultBranch={selectedRepository?.main_branch || null}

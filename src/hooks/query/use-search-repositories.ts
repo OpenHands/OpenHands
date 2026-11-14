@@ -8,10 +8,18 @@ export function useSearchRepositories(
   selectedProvider?: Provider | null,
   disabled?: boolean,
   pageSize: number = 100,
+  gitProviderId?: number | null,
 ) {
   // For backward compatibility, return the items array directly
   return useQuery<GitRepository[]>({
-    queryKey: ["repositories", "search", query, selectedProvider, pageSize],
+    queryKey: [
+      "repositories",
+      "search",
+      query,
+      selectedProvider,
+      pageSize,
+      gitProviderId ?? null,
+    ],
     queryFn: async () => {
       if (!selectedProvider) {
         return [];
@@ -20,6 +28,9 @@ export function useSearchRepositories(
         query,
         selectedProvider, // provider (required)
         pageSize,
+        undefined,
+        undefined,
+        gitProviderId,
       );
       return response.items;
     },

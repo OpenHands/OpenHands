@@ -6,8 +6,12 @@ import { useNavigation } from "#/context/navigation-context";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
 import { Branch, GitRepository } from "#/types/git";
 import { BrandButton } from "../settings/brand-button";
-import { useUserProviders } from "#/hooks/use-user-providers";
+import { useGitProviderOptions } from "#/hooks/use-git-provider-options";
 import { Provider } from "#/types/settings";
+import {
+  gitProviderOptionsMatch,
+  type GitProviderOption,
+} from "#/utils/git-provider-option";
 import { I18nKey } from "#/i18n/declaration";
 import RepoForkedIcon from "#/icons/repo-forked.svg?react";
 import { GitProviderDropdown } from "./git-provider-dropdown";
@@ -50,14 +54,19 @@ export function RepositorySelectionForm({
   const [selectedBranch, setSelectedBranch] = React.useState<Branch | null>(
     null,
   );
-  const [selectedProvider, setSelectedProvider] =
-    React.useState<Provider | null>(null);
+  const [pickedOption, setPickedOption] =
+    React.useState<GitProviderOption | null>(null);
 
-  const { providers } = useUserProviders();
+  const { options, isLoading: isLoadingProviders } = useGitProviderOptions();
+  const selectedOption =
+    options.find((option) => gitProviderOptionsMatch(option, pickedOption)) ??
+    null;
+  const selectedProvider = selectedOption?.provider ?? null;
   const {
     addRecentRepository,
     setLastSelectedProvider,
     getLastSelectedProvider,
+    getLastSelectedGitProviderId,
   } = useHomeStore();
   const {
     mutate: createConversation,
@@ -71,22 +80,31 @@ export function RepositorySelectionForm({
 
   // Auto-select provider logic
   React.useEffect(() => {
-    if (providers.length === 0) return;
+    if (options.length === 0 || selectedOption) return;
 
     // If there's only one provider, auto-select it
-    if (providers.length === 1 && !selectedProvider) {
-      setSelectedProvider(providers[0]);
+    if (options.length === 1) {
+      setPickedOption(options[0]);
       return;
     }
 
     // If there are multiple providers and none is selected, try to use the last selected one
-    if (providers.length > 1 && !selectedProvider) {
-      const lastSelected = getLastSelectedProvider();
-      if (lastSelected && providers.includes(lastSelected)) {
-        setSelectedProvider(lastSelected);
-      }
+    const lastProvider = getLastSelectedProvider();
+    const lastGitProviderId = getLastSelectedGitProviderId();
+    const lastSelected = options.find(
+      (option) =>
+        option.provider === lastProvider &&
+        option.gitProviderId === lastGitProviderId,
+    );
+    if (lastSelected) {
+      setPickedOption(lastSelected);
     }
-  }, [providers, selectedProvider, getLastSelectedProvider]);
+  }, [
+    options,
+    selectedOption,
+    getLastSelectedProvider,
+    getLastSelectedGitProviderId,
+  ]);
 
   // We check for isSuccess because the app might require time to render
   // into the new conversation screen after the conversation is created.
@@ -95,13 +113,16 @@ export function RepositorySelectionForm({
 
   // Branch selection is now handled by GitBranchDropdown component
 
-  const handleProviderSelection = (provider: Provider | null) => {
-    if (provider === selectedProvider) {
+  const handleProviderSelection = (option: GitProviderOption | null) => {
+    if (gitProviderOptionsMatch(option, selectedOption)) {
       return;
     }
 
-    setSelectedProvider(provider);
-    setLastSelectedProvider(provider); // Store the selected provider
+    setPickedOption(option);
+    setLastSelectedProvider(
+      option?.provider ?? null,
+      option?.gitProviderId ?? null,
+    ); // Store the selected provider
     setSelectedRepository(null); // Reset repository selection when provider changes
     setSelectedBranch(null); // Reset branch selection when provider changes
     onRepoSelection?.(null); // Reset parent component's selected repo
@@ -114,17 +135,17 @@ export function RepositorySelectionForm({
   // Render the provider dropdown
   const renderProviderSelector = () => {
     // Only render if there are multiple providers
-    if (providers.length <= 1) {
+    if (options.length <= 1) {
       return null;
     }
 
     return (
       <GitProviderDropdown
-        providers={providers}
-        value={selectedProvider}
+        options={options}
+        value={selectedOption}
         className="max-w-125"
         onChange={handleProviderSelection}
-        disabled={isLoadingSettings}
+        disabled={isLoadingSettings || isLoadingProviders}
       />
     );
   };
@@ -144,12 +165,13 @@ export function RepositorySelectionForm({
 
     return (
       <GitRepoDropdown
-        provider={selectedProvider || providers[0]}
+        provider={(selectedOption ?? options[0])?.provider}
+        gitProviderId={(selectedOption ?? options[0])?.gitProviderId}
         value={selectedRepository?.id || null}
         repositoryName={selectedRepository?.full_name || null}
         // eslint-disable-next-line i18next/no-literal-string -- example value, not translatable
         placeholder="user/repo"
-        disabled={!selectedProvider || isLoadingSettings}
+        disabled={!selectedProvider || isLoadingSettings || isLoadingProviders}
         onChange={handleRepoSelection}
       />
     );
@@ -161,7 +183,8 @@ export function RepositorySelectionForm({
     return (
       <GitBranchDropdown
         repository={selectedRepository?.full_name || null}
-        provider={selectedProvider || providers[0]}
+        provider={(selectedOption ?? options[0])?.provider}
+        gitProviderId={(selectedOption ?? options[0])?.gitProviderId}
         selectedBranch={selectedBranch}
         onBranchSelect={handleBranchSelection}
         defaultBranch={defaultBranch}
@@ -205,7 +228,7 @@ export function RepositorySelectionForm({
           !selectedRepository ||
           !selectedBranch ||
           (!onConfirm && isCreatingConversation) ||
-          (providers.length > 1 && !selectedProvider) ||
+          (options.length > 1 && !selectedProvider) ||
           isLoadingSettings
         }
         onClick={() => {
@@ -230,6 +253,9 @@ export function RepositorySelectionForm({
                 name: selectedRepository.full_name || "",
                 gitProvider: selectedRepository.git_provider || "github",
                 branch: selectedBranch.name,
+                ...(selectedRepository.git_provider_id != null
+                  ? { gitProviderId: selectedRepository.git_provider_id }
+                  : {}),
               },
               entryPoint: "home_repo_form",
             },

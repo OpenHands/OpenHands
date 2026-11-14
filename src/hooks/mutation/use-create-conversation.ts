@@ -32,6 +32,8 @@ export interface CreateConversationVariables {
   repository?: {
     name: string;
     gitProvider: Provider;
+    /** The connected git provider to clone with; omit to use the type's default. */
+    gitProviderId?: number;
     branch?: string;
   };
   suggestedTask?: SuggestedTask;
@@ -144,6 +146,9 @@ export const useCreateConversation = ({
                 selected_repository: repository.name,
                 selected_branch: repository.branch ?? null,
                 git_provider: repository.gitProvider,
+                ...(repository.gitProviderId != null
+                  ? { git_provider_id: repository.gitProviderId }
+                  : {}),
               }
             : null,
           workingDirOverride: workingDir,

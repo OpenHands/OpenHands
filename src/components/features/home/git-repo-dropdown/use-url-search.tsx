@@ -6,6 +6,7 @@ import GitService from "#/api/git-service/git-service.api";
 export function useUrlSearch(
   inputValue: string,
   provider: Provider | null | undefined,
+  gitProviderId?: number | null,
 ) {
   const [urlSearchResults, setUrlSearchResults] = useState<GitRepository[]>([]);
   const [isUrlSearchLoading, setIsUrlSearchLoading] = useState(false);
@@ -30,6 +31,9 @@ export function useUrlSearch(
               repoName,
               provider,
               3,
+              undefined,
+              undefined,
+              gitProviderId,
             );
 
             setUrlSearchResults(repositories.items);
@@ -47,7 +51,7 @@ export function useUrlSearch(
     };
 
     handleUrlSearch();
-  }, [inputValue, provider]);
+  }, [inputValue, provider, gitProviderId]);
 
   return { urlSearchResults, isUrlSearchLoading };
 }

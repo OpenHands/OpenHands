@@ -264,6 +264,11 @@ export interface CloudIntegrationsConfig {
    * that run as a service account.
    */
   isServiceAccountsEnabled: boolean;
+  /**
+   * Whether git connections are individual rows (`feature_flags.enable_oauth_v2_login`),
+   * so a user can have several of one type, such as two GitLab hosts.
+   */
+  isOauthV2LoginEnabled: boolean;
 }
 
 export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsConfig> {
@@ -279,6 +284,7 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
       enable_org_mcp_servers?: boolean;
       enable_agent_profiles_page?: boolean;
       enable_service_accounts?: boolean;
+      enable_oauth_v2_login?: boolean;
     };
   }>({
     backend,
@@ -298,6 +304,7 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
       config.feature_flags?.enable_agent_profiles_page === true,
     isServiceAccountsEnabled:
       config.feature_flags?.enable_service_accounts === true,
+    isOauthV2LoginEnabled: config.feature_flags?.enable_oauth_v2_login === true,
   };
 }
 

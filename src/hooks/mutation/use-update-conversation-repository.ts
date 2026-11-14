@@ -18,6 +18,7 @@ interface UpdateRepositoryVariables {
   repository: string | null;
   branch?: string | null;
   gitProvider?: Provider | null;
+  gitProviderId?: number | null;
 }
 
 export const useUpdateConversationRepository = () => {
@@ -31,6 +32,7 @@ export const useUpdateConversationRepository = () => {
         variables.repository,
         variables.branch,
         variables.gitProvider,
+        variables.gitProviderId,
       ),
     onMutate: async (variables) => {
       // The active conversation is cached under a prefix-extended key
@@ -59,6 +61,7 @@ export const useUpdateConversationRepository = () => {
                 selected_repository: variables.repository,
                 selected_branch: variables.branch ?? null,
                 git_provider: variables.gitProvider ?? null,
+                git_provider_id: variables.gitProviderId ?? null,
               }
             : old,
       );

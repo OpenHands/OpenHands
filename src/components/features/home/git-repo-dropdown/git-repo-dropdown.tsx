@@ -25,9 +25,12 @@ import { I18nKey } from "#/i18n/declaration";
 import RepoIcon from "#/icons/repo.svg?react";
 import { useHomeStore } from "#/stores/home-store";
 import { Typography } from "#/ui/typography";
+import { withGitProviderId } from "#/utils/with-git-provider-id";
 
 export interface GitRepoDropdownProps {
   provider: Provider;
+  /** The connected git provider to list from; omit to let the instance pick. */
+  gitProviderId?: number | null;
   value?: string | null;
   repositoryName?: string | null;
   placeholder?: string;
@@ -38,6 +41,7 @@ export interface GitRepoDropdownProps {
 
 export function GitRepoDropdown({
   provider,
+  gitProviderId,
   value,
   repositoryName,
   placeholder,
@@ -68,6 +72,7 @@ export function GitRepoDropdown({
   const { urlSearchResults, isUrlSearchLoading } = useUrlSearch(
     inputValue,
     provider,
+    gitProviderId,
   );
 
   // Repository data management
@@ -88,6 +93,7 @@ export function GitRepoDropdown({
     inputValue,
     value,
     repositoryName,
+    gitProviderId,
   );
 
   /**
@@ -101,7 +107,9 @@ export function GitRepoDropdown({
   const recentRepositories = useMemo(() => {
     const allRecentRepos = storedRecentRepositories;
     const providerFilteredRepos = allRecentRepos.filter(
-      (repo) => repo.git_provider === provider,
+      (repo) =>
+        repo.git_provider === provider &&
+        (gitProviderId == null || repo.git_provider_id === gitProviderId),
     );
 
     // If no input value, return all recent repos for this provider
@@ -117,7 +125,13 @@ export function GitRepoDropdown({
     return providerFilteredRepos.filter((repo) =>
       repo.full_name.toLowerCase().includes(filterText.toLowerCase()),
     );
-  }, [storedRecentRepositories, provider, inputValue, processedSearchInput]);
+  }, [
+    storedRecentRepositories,
+    provider,
+    gitProviderId,
+    inputValue,
+    processedSearchInput,
+  ]);
 
   // Helper function to prioritize recent repositories at the top
   const prioritizeRecentRepositories = useCallback(
@@ -171,13 +185,17 @@ export function GitRepoDropdown({
   const handleSelectionChange = useCallback(
     (selectedItem: GitRepository | null) => {
       setLocalSelectedItem(selectedItem);
-      onChange?.(selectedItem || undefined);
+      onChange?.(
+        selectedItem
+          ? withGitProviderId(selectedItem, gitProviderId)
+          : undefined,
+      );
       // Update input value to show selected item
       if (selectedItem) {
         setInputValue(selectedItem.full_name);
       }
     },
-    [onChange],
+    [onChange, gitProviderId],
   );
 
   // Handle clear selection

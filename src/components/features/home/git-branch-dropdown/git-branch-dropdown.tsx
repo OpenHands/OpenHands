@@ -25,6 +25,8 @@ import BranchIcon from "#/icons/u-code-branch.svg?react";
 export interface GitBranchDropdownProps {
   repository: string | null;
   provider: Provider;
+  /** The connected git provider to list from; omit to let the instance pick. */
+  gitProviderId?: number | null;
   selectedBranch: Branch | null;
   onBranchSelect: (branch: Branch | null) => void;
   defaultBranch?: string | null;
@@ -36,6 +38,7 @@ export interface GitBranchDropdownProps {
 export function GitBranchDropdown({
   repository,
   provider,
+  gitProviderId,
   selectedBranch,
   onBranchSelect,
   defaultBranch,
@@ -62,6 +65,7 @@ export function GitBranchDropdown({
     repository,
     provider,
     !defaultBranch,
+    gitProviderId,
   );
   const resolvedDefaultBranch = defaultBranch || fetchedDefaultBranch || null;
 
@@ -81,6 +85,7 @@ export function GitBranchDropdown({
     processedSearchInput,
     inputValue,
     selectedBranch,
+    gitProviderId,
   );
 
   const error = isError ? new Error("Failed to load branches") : null;

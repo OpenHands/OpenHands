@@ -284,6 +284,7 @@ async function launchLocalChild(
             selected_repository: parentMetadata.selected_repository,
             selected_branch: parentMetadata.selected_branch,
             git_provider: parentMetadata.git_provider,
+            git_provider_id: parentMetadata.git_provider_id,
           }
         : null,
       workingDirOverride: workspace,
@@ -422,6 +423,9 @@ async function launchCloudChild(
       git_provider: params.repository
         ? null
         : (parentMetadata?.git_provider ?? null),
+      ...(!params.repository && parentMetadata?.git_provider_id != null
+        ? { git_provider_id: parentMetadata.git_provider_id }
+        : {}),
       // The parent runs on the local agent-server, so its id means nothing to
       // Cloud. Sending it would only hide the child from the Cloud
       // conversation list, which filters out anything with a parent.

@@ -12,6 +12,7 @@ interface UseGitRepositoriesOptions {
   pageSize?: number;
   enabled?: boolean;
   allowMissingProvider?: boolean;
+  gitProviderId?: number | null;
 }
 
 type InstallationCursor = { installationIndex: number; pageId: string | null };
@@ -24,9 +25,13 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
     pageSize = 30,
     enabled = true,
     allowMissingProvider = false,
+    gitProviderId,
   } = options;
   const { providers } = useUserProviders();
-  const { data: page } = useAppInstallations(provider, { enabled });
+  const { data: page } = useAppInstallations(provider, {
+    enabled,
+    gitProviderId,
+  });
   const installations = page?.items;
   const active = useActiveBackend();
 
@@ -66,6 +71,7 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
       pageSize,
       active.backend.id,
       active.orgId,
+      gitProviderId ?? null,
       ...(useInstallationRepos ? [installations || []] : []),
     ],
     queryFn: async ({ pageParam }) => {
@@ -85,6 +91,7 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
           installations,
           cursor.pageId ?? undefined,
           pageSize,
+          gitProviderId,
         );
         return result;
       }
@@ -94,6 +101,8 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
         provider,
         cursor ?? undefined,
         pageSize,
+        undefined,
+        gitProviderId,
       );
       return result;
     },
@@ -122,7 +131,9 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
       : null,
     enabled:
       enabled &&
-      (allowMissingProvider || (providers || []).length > 0) &&
+      (allowMissingProvider ||
+        gitProviderId != null ||
+        (providers || []).length > 0) &&
       !!provider &&
       (!useInstallationRepos ||
         (Array.isArray(installations) && installations.length > 0)),

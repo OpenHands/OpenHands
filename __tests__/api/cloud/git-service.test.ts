@@ -9,6 +9,7 @@ import type { Backend } from "#/api/backend-registry/types";
 import {
   getCloudInstallations,
   getCloudRepositoryBranches,
+  getCloudRepositoryDetails,
   searchCloudRepositories,
 } from "#/api/cloud/git-service.api";
 import { server } from "#/mocks/node";
@@ -128,6 +129,87 @@ describe("getCloudRepositoryBranches", () => {
       "provider=github&repository=owner%2Frepo&limit=4&query=feature&page_id=next",
     );
   });
+});
+
+describe("git_provider_id", () => {
+  const calls: Record<
+    string,
+    {
+      endpoint: string;
+      payload: JsonBodyType;
+      call: (gitProviderId?: number | null) => Promise<unknown>;
+    }
+  > = {
+    "repository search": {
+      endpoint: "repositories/search",
+      payload: { items: [], next_page_id: null },
+      call: (gitProviderId) =>
+        searchCloudRepositories({ provider: "gitlab", gitProviderId }),
+    },
+    "branch search": {
+      endpoint: "branches/search",
+      payload: { items: [], next_page_id: null },
+      call: (gitProviderId) =>
+        getCloudRepositoryBranches({
+          provider: "gitlab",
+          repository: "owner/repo",
+          gitProviderId,
+        }),
+    },
+    "installation search": {
+      endpoint: "installations/search",
+      payload: { items: [], next_page_id: null },
+      call: (gitProviderId) =>
+        getCloudInstallations({ provider: "gitlab", gitProviderId }),
+    },
+    "repository details": {
+      endpoint: "repositories/details",
+      payload: { id: "1", full_name: "owner/repo" },
+      call: (gitProviderId) =>
+        getCloudRepositoryDetails({
+          provider: "gitlab",
+          repository: "owner/repo",
+          gitProviderId,
+        }),
+    },
+  };
+
+  const capture = (endpoint: string, payload: JsonBodyType) => {
+    const captured: CapturedRequest = { request: null };
+    server.use(
+      http.get(`*/api/v1/git/${endpoint}`, ({ request }) => {
+        captured.request = request;
+        return HttpResponse.json(payload);
+      }),
+    );
+    return captured;
+  };
+
+  it.each(Object.entries(calls))(
+    "names the chosen git provider on the %s request",
+    async (_name, { endpoint, payload, call }) => {
+      const captured = capture(endpoint, payload);
+
+      await call(7);
+
+      expect(
+        new URL(requestOf(captured).url).searchParams.get("git_provider_id"),
+      ).toBe("7");
+    },
+  );
+
+  it.each(Object.entries(calls))(
+    "leaves the %s request unchanged when no git provider is chosen",
+    async (_name, { endpoint, payload, call }) => {
+      const captured = capture(endpoint, payload);
+
+      await call(null);
+
+      expect(
+        new URL(requestOf(captured).url).searchParams.has("git_provider_id"),
+      ).toBe(false);
+    },
+  );
 });
 
 describe("cloud repository and installation searches", () => {

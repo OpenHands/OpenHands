@@ -5,6 +5,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { GitProviderDropdown } from "#/components/features/home/git-provider-dropdown/git-provider-dropdown";
 import type { Provider } from "#/types/settings";
+import type { GitProviderOption } from "#/utils/git-provider-option";
+import { getProviderName } from "#/utils/utils";
 
 const useTranslationMock = vi.hoisted(() => vi.fn());
 
@@ -30,27 +32,35 @@ const ALL_PROVIDERS: Provider[] = [
   "forgejo",
 ];
 
+const option = (provider: Provider): GitProviderOption => ({
+  provider,
+  gitProviderId: null,
+  label: getProviderName(provider),
+});
+
+const toOptions = (providers: Provider[]) => providers.map(option);
+
 type DropdownProps = React.ComponentProps<typeof GitProviderDropdown>;
 
 function createProps(overrides: Partial<DropdownProps> = {}): DropdownProps {
   return {
-    providers: ALL_PROVIDERS,
+    options: toOptions(ALL_PROVIDERS),
     onChange: vi.fn(),
     ...overrides,
   };
 }
 
 function ControlledDropdown({ onChange, value, ...props }: DropdownProps) {
-  const [selectedProvider, setSelectedProvider] =
-    React.useState<Provider | null>(value ?? null);
+  const [selectedOption, setSelectedOption] =
+    React.useState<GitProviderOption | null>(value ?? null);
 
   return (
     <GitProviderDropdown
       {...props}
-      value={selectedProvider}
-      onChange={(provider) => {
-        setSelectedProvider(provider);
-        onChange?.(provider);
+      value={selectedOption}
+      onChange={(next) => {
+        setSelectedOption(next);
+        onChange?.(next);
       }}
     />
   );
@@ -59,10 +69,13 @@ function ControlledDropdown({ onChange, value, ...props }: DropdownProps) {
 describe("git provider selection", () => {
   it("includes the controlled provider in the initial markup", () => {
     const emptyMarkup = renderToStaticMarkup(
-      <GitProviderDropdown providers={ALL_PROVIDERS} />,
+      <GitProviderDropdown options={toOptions(ALL_PROVIDERS)} />,
     );
     const selectedMarkup = renderToStaticMarkup(
-      <GitProviderDropdown providers={ALL_PROVIDERS} value="gitlab" />,
+      <GitProviderDropdown
+        options={toOptions(ALL_PROVIDERS)}
+        value={option("gitlab")}
+      />,
     );
 
     expect(emptyMarkup).toContain('value=""');
@@ -134,7 +147,7 @@ describe("git provider selection", () => {
 
     await user.click(screen.getByRole("option", { name: "GitLab" }));
 
-    expect(props.onChange).toHaveBeenCalledWith("gitlab");
+    expect(props.onChange).toHaveBeenCalledWith(option("gitlab"));
     expect(props.onChange).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(input).toHaveValue("GitLab"));
     expect(input).toHaveClass("pl-6");
@@ -153,7 +166,9 @@ describe("git provider selection", () => {
   it("updates the available options when the providers prop changes", async () => {
     const user = userEvent.setup();
     const { rerender } = render(
-      <GitProviderDropdown {...createProps({ providers: ["github"] })} />,
+      <GitProviderDropdown
+        {...createProps({ options: toOptions(["github"]) })}
+      />,
     );
     const input = screen.getByTestId("git-provider-dropdown");
 
@@ -164,7 +179,7 @@ describe("git provider selection", () => {
 
     rerender(
       <GitProviderDropdown
-        {...createProps({ providers: ["gitlab", "azure_devops"] })}
+        {...createProps({ options: toOptions(["gitlab", "azure_devops"]) })}
       />,
     );
     await user.click(input);
@@ -176,10 +191,12 @@ describe("git provider selection", () => {
 
   it("keeps provider options uniquely keyed when their order changes", async () => {
     const user = userEvent.setup();
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
     const { rerender } = render(
       <GitProviderDropdown
-        {...createProps({ providers: ["github", "gitlab"] })}
+        {...createProps({ options: toOptions(["github", "gitlab"]) })}
       />,
     );
     const input = screen.getByTestId("git-provider-dropdown");
@@ -188,7 +205,7 @@ describe("git provider selection", () => {
       await user.click(input);
       rerender(
         <GitProviderDropdown
-          {...createProps({ providers: ["gitlab", "github"] })}
+          {...createProps({ options: toOptions(["gitlab", "github"]) })}
         />,
       );
 
@@ -205,7 +222,7 @@ describe("git provider selection", () => {
 
   it("allows a different provider to be selected without a callback", async () => {
     const user = userEvent.setup();
-    render(<GitProviderDropdown providers={["github", "gitlab"]} />);
+    render(<GitProviderDropdown options={toOptions(["github", "gitlab"])} />);
     const input = screen.getByTestId("git-provider-dropdown");
 
     await user.click(input);
@@ -228,7 +245,9 @@ describe("git provider selection", () => {
 
   it("reopens a selected provider with the complete provider list", async () => {
     const user = userEvent.setup();
-    render(<GitProviderDropdown {...createProps({ value: "gitlab" })} />);
+    render(
+      <GitProviderDropdown {...createProps({ value: option("gitlab") })} />,
+    );
     const input = screen.getByTestId("git-provider-dropdown");
     await waitFor(() => expect(input).toHaveValue("GitLab"));
 
@@ -240,7 +259,7 @@ describe("git provider selection", () => {
   });
 
   it("tracks controlled provider changes and clearing", async () => {
-    const props = createProps({ value: "github", isLoading: true });
+    const props = createProps({ value: option("github"), isLoading: true });
     const { rerender } = render(<GitProviderDropdown {...props} />);
     const input = screen.getByTestId("git-provider-dropdown");
 
@@ -249,7 +268,7 @@ describe("git provider selection", () => {
       "right-11",
     );
 
-    rerender(<GitProviderDropdown {...props} value="azure_devops" />);
+    rerender(<GitProviderDropdown {...props} value={option("azure_devops")} />);
     await waitFor(() => expect(input).toHaveValue("Azure DevOps"));
 
     rerender(<GitProviderDropdown {...props} value={null} />);
@@ -297,7 +316,9 @@ describe("git provider selection", () => {
 
   it("shows an empty state when no providers are available", async () => {
     const user = userEvent.setup();
-    render(<GitProviderDropdown {...createProps({ providers: [] })} />);
+    render(
+      <GitProviderDropdown {...createProps({ options: toOptions([]) })} />,
+    );
 
     await user.click(screen.getByTestId("git-provider-dropdown"));
 
@@ -344,7 +365,9 @@ describe("git provider selection", () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
-      <ControlledDropdown {...createProps({ value: "github", onChange })} />,
+      <ControlledDropdown
+        {...createProps({ value: option("github"), onChange })}
+      />,
     );
     const input = screen.getByTestId("git-provider-dropdown");
     await waitFor(() => expect(input).toHaveValue("GitHub"));
@@ -361,7 +384,12 @@ describe("git provider selection", () => {
 
   it("allows the current provider to be reselected without a callback", async () => {
     const user = userEvent.setup();
-    render(<GitProviderDropdown providers={["forgejo"]} value="forgejo" />);
+    render(
+      <GitProviderDropdown
+        options={toOptions(["forgejo"])}
+        value={option("forgejo")}
+      />,
+    );
     const input = screen.getByTestId("git-provider-dropdown");
     await waitFor(() => expect(input).toHaveValue("Forgejo"));
 
@@ -374,7 +402,9 @@ describe("git provider selection", () => {
 
   it("marks the current provider as selected when the menu opens", async () => {
     const user = userEvent.setup();
-    render(<GitProviderDropdown {...createProps({ value: "bitbucket" })} />);
+    render(
+      <GitProviderDropdown {...createProps({ value: option("bitbucket") })} />,
+    );
     const input = screen.getByTestId("git-provider-dropdown");
     await waitFor(() => expect(input).toHaveValue("Bitbucket"));
 
@@ -389,15 +419,9 @@ describe("git provider selection", () => {
     });
     expect(selectedOption).toHaveAttribute("aria-selected", "true");
     expect(selectedOption).toHaveClass("bg-interactive-selected");
-    expect(selectedOption).not.toHaveClass(
-      "hover:bg-interactive-hover",
-    );
+    expect(selectedOption).not.toHaveClass("hover:bg-interactive-hover");
     expect(unselectedOption).toHaveAttribute("aria-selected", "false");
-    expect(unselectedOption).toHaveClass(
-      "hover:bg-interactive-hover",
-    );
-    expect(unselectedOption).not.toHaveClass(
-      "bg-interactive-selected",
-    );
+    expect(unselectedOption).toHaveClass("hover:bg-interactive-hover");
+    expect(unselectedOption).not.toHaveClass("bg-interactive-selected");
   });
 });

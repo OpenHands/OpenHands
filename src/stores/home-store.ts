@@ -12,6 +12,8 @@ export interface HomeRepositorySelection {
 interface HomeState {
   recentRepositories: GitRepository[];
   lastSelectedProvider: Provider | null;
+  /** The connected git provider of the last pick, when it was a specific one. */
+  lastSelectedGitProviderId: number | null;
   /** The home launcher's repository selection, keyed by backend id. */
   repositorySelections: Record<string, HomeRepositorySelection>;
 }
@@ -20,8 +22,12 @@ interface HomeActions {
   addRecentRepository: (repository: GitRepository) => void;
   clearRecentRepositories: () => void;
   getRecentRepositories: () => GitRepository[];
-  setLastSelectedProvider: (provider: Provider | null) => void;
+  setLastSelectedProvider: (
+    provider: Provider | null,
+    gitProviderId?: number | null,
+  ) => void;
   getLastSelectedProvider: () => Provider | null;
+  getLastSelectedGitProviderId: () => number | null;
   setRepositorySelection: (
     backendId: string,
     selection: HomeRepositorySelection,
@@ -34,6 +40,7 @@ type HomeStore = HomeState & HomeActions;
 const initialState: HomeState = {
   recentRepositories: [],
   lastSelectedProvider: null,
+  lastSelectedGitProviderId: null,
   repositorySelections: {},
 };
 
@@ -46,7 +53,10 @@ export const useHomeStore = create<HomeStore>()(
         set((state) => {
           // Remove the repository if it already exists to avoid duplicates
           const filteredRepos = state.recentRepositories.filter(
-            (repo) => repo.id !== repository.id,
+            (repo) =>
+              repo.id !== repository.id ||
+              (repo.git_provider_id ?? null) !==
+                (repository.git_provider_id ?? null),
           );
 
           // Add the new repository to the beginning and keep only top 3
@@ -64,12 +74,16 @@ export const useHomeStore = create<HomeStore>()(
 
       getRecentRepositories: () => get().recentRepositories,
 
-      setLastSelectedProvider: (provider: Provider | null) =>
+      setLastSelectedProvider: (provider, gitProviderId = null) =>
         set(() => ({
           lastSelectedProvider: provider,
+          lastSelectedGitProviderId: gitProviderId,
         })),
 
       getLastSelectedProvider: () => get().lastSelectedProvider,
+
+      getLastSelectedGitProviderId: () =>
+        get().lastSelectedGitProviderId ?? null,
 
       setRepositorySelection: (backendId, selection) =>
         set((state) => ({

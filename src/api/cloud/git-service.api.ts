@@ -9,6 +9,16 @@ import { getActiveBackend } from "../backend-registry/active-store";
 import type { Backend } from "../backend-registry/types";
 import { callCloudProxy } from "./proxy";
 
+/** Names the exact connected git provider; omitted when none is chosen. */
+function setGitProviderId(
+  params: URLSearchParams,
+  gitProviderId: number | null | undefined,
+) {
+  if (gitProviderId != null) {
+    params.set("git_provider_id", String(gitProviderId));
+  }
+}
+
 function getActiveCloudBackend(): Backend {
   const active = getActiveBackend().backend;
   if (active.kind !== "cloud") {
@@ -23,6 +33,7 @@ export async function searchCloudRepositories(args: {
   limit?: number;
   pageId?: string;
   installationId?: string;
+  gitProviderId?: number | null;
 }): Promise<RepositoryPage> {
   const backend = getActiveCloudBackend();
   const params = new URLSearchParams();
@@ -31,6 +42,7 @@ export async function searchCloudRepositories(args: {
   if (args.query) params.set("query", args.query);
   if (args.pageId) params.set("page_id", args.pageId);
   if (args.installationId) params.set("installation_id", args.installationId);
+  setGitProviderId(params, args.gitProviderId);
 
   const data = await callCloudProxy<{
     items: GitRepository[];
@@ -54,11 +66,13 @@ export async function searchCloudRepositories(args: {
 export async function getCloudRepositoryDetails(args: {
   provider: Provider;
   repository: string;
+  gitProviderId?: number | null;
 }): Promise<GitRepository> {
   const backend = getActiveCloudBackend();
   const params = new URLSearchParams();
   params.set("provider", args.provider);
   params.set("repository", args.repository);
+  setGitProviderId(params, args.gitProviderId);
 
   return callCloudProxy<GitRepository>({
     backend,
@@ -71,12 +85,14 @@ export async function getCloudInstallations(args: {
   provider: Provider;
   pageId?: string;
   limit?: number;
+  gitProviderId?: number | null;
 }): Promise<InstallationPage> {
   const backend = getActiveCloudBackend();
   const params = new URLSearchParams();
   params.set("provider", args.provider);
   params.set("limit", String(args.limit ?? 100));
   if (args.pageId) params.set("page_id", args.pageId);
+  setGitProviderId(params, args.gitProviderId);
 
   const data = await callCloudProxy<{
     items: string[];
@@ -99,6 +115,7 @@ export async function getCloudRepositoryBranches(args: {
   query?: string;
   pageId?: string;
   limit?: number;
+  gitProviderId?: number | null;
 }): Promise<BranchPage> {
   const backend = getActiveCloudBackend();
   const params = new URLSearchParams();
@@ -107,6 +124,7 @@ export async function getCloudRepositoryBranches(args: {
   params.set("limit", String(args.limit ?? 30));
   params.set("query", args.query ?? "");
   if (args.pageId) params.set("page_id", args.pageId);
+  setGitProviderId(params, args.gitProviderId);
 
   const data = await callCloudProxy<{
     items: BranchPage["items"];
