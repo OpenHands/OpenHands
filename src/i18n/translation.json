@@ -521,6 +521,24 @@
     "ca": "Aquest agent rep les eines que el servidor considera estàndard, mostrades a dalt. La llista depèn del servidor, així que pot canviar quan s'actualitzi.",
     "id": "Agen ini mendapatkan alat yang dianggap standar oleh server, yang ditampilkan di atas. Daftarnya mengikuti server, sehingga dapat berubah saat server ditingkatkan."
   },
+  "OBSERVATION$TOOL": {
+    "ar": "الأداة:",
+    "ca": "Eina:",
+    "de": "Werkzeug:",
+    "en": "Tool:",
+    "es": "Herramienta:",
+    "fr": "Outil :",
+    "it": "Strumento:",
+    "ja": "ツール:",
+    "ko-KR": "도구:",
+    "no": "Verktøy:",
+    "pt": "Ferramenta:",
+    "tr": "Araç:",
+    "uk": "Інструмент:",
+    "zh-CN": "工具:",
+    "zh-TW": "工具:",
+    "id": "Alat:"
+  },
   "TASK$SUBAGENT": {
     "en": "Subagent:",
     "ja": "サブエージェント:",
