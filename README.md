@@ -78,6 +78,8 @@ agent-canvas --frontend-only  # static frontend + ingress only
 agent-canvas --backend-only   # agent server + automation backend + ingress only
 ```
 
+When the startup summary shows `Main UI: http://localhost:8000/`, open [http://localhost:8000](http://localhost:8000).
+
 ### Option 2: With a Docker Sandbox
 
 Install Docker Desktop on macOS/Windows, or Docker Engine/Docker Desktop on Linux.
@@ -149,6 +151,8 @@ directory inaccessible. If you override the user, configure a writable
 
 The agent will be able to access any project under `PROJECTS_PATH`.
 
+When the container logs report `All services started`, OpenHands is ready. Open [http://localhost:8000/canvas](http://localhost:8000/canvas).
+
 ### Option 3: With Multiple Docker Sandboxes
 
 Run each new conversation in its own Docker container, with its own Agent Server and tools. This is useful for running several agents concurrently. Canvas and the outer Agent Server run on your host and route conversation requests to the containers.
@@ -186,9 +190,14 @@ npm ci
 npm run dev
 ```
 
+When the startup summary shows `Main UI: http://localhost:8000/`, open [http://localhost:8000](http://localhost:8000).
+
 ---
 
-Access the UI at [http://localhost:8000](http://localhost:8000) for the npm/source launchers, or [http://localhost:8000/canvas](http://localhost:8000/canvas) for the Docker image. You can add additional backends directly from the UI.
+### Next steps
+
+1. Follow the [First Time Setup guide](https://docs.openhands.dev/openhands/usage/agent-canvas/first-time-setup) to choose an agent, verify your backend, configure an LLM, and start working.
+2. Optionally [configure additional LLM profiles](https://docs.openhands.dev/openhands/usage/settings/llm-settings#llm-profiles) or [add another backend](https://docs.openhands.dev/openhands/usage/agent-canvas/backends), such as a remote Agent Server or OpenHands Cloud.
 
 Local (`npx` / `npm run dev`) listeners bind **loopback only** (`127.0.0.1`) so the auto-injected session key is not reachable from other machines on the network. To listen on all interfaces, pass `--host 0.0.0.0` (or set `OH_BIND_HOST`); the session key is then **not** injected and the UI uses the same API-key entry screen as `--public`.
 

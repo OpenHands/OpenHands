@@ -29,7 +29,7 @@ docker run -it --rm `
   ghcr.io/openhands/agent-canvas:1.40.0 # x-release-please-version
 ```
 
-Open [http://localhost:8000/canvas](http://localhost:8000/canvas) in your browser.
+When the container logs report `All services started`, OpenHands is ready. Open [http://localhost:8000/canvas](http://localhost:8000/canvas) in your browser.
 
 > [!NOTE]
 > The entrypoint stops the container with exit code 1 when the Agent Server stops answering
