@@ -1,5 +1,6 @@
 import type React from "react";
-import { act, renderHook } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, renderHook as renderHookBase } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useConversationNameContextMenu } from "#/hooks/use-conversation-name-context-menu";
 import { I18nKey } from "#/i18n/declaration";
@@ -89,6 +90,17 @@ vi.mock("#/utils/system-message-adapter", () => ({
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: harness.displaySuccessToast,
 }));
+
+const renderHook = <Result,>(callback: () => Result) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return renderHookBase(callback, {
+    wrapper: ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
+};
 
 const clickEvent = () => {
   const preventDefault = vi.fn();
