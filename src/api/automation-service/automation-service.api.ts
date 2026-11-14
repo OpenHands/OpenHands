@@ -48,6 +48,7 @@ import type {
 } from "#/manifests/types";
 import { withPresetSources } from "#/utils/automation-preset-sources";
 import { base64ToBytes } from "#/utils/base64";
+import { isGzip } from "#/utils/tar-unpack";
 import { downloadBlob } from "#/utils/utils";
 import type { Backend, ResolvedActiveBackend } from "../backend-registry/types";
 import {
@@ -959,9 +960,14 @@ class AutomationService {
 
   static async downloadTarball(id: string, name: string): Promise<void> {
     const bytes = await AutomationService.fetchTarballBytes(id);
+    // The service answers application/x-tar even for a gzipped bundle, so
+    // the bytes decide the file type and extension.
+    const gzipped = isGzip(bytes);
     downloadBlob(
-      new Blob([bytes], { type: "application/x-tar" }),
-      `${name}.tar`,
+      new Blob([bytes], {
+        type: gzipped ? "application/gzip" : "application/x-tar",
+      }),
+      gzipped ? `${name}.tar.gz` : `${name}.tar`,
     );
   }
 
