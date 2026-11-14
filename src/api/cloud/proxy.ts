@@ -18,6 +18,11 @@ export interface CloudProxyRequest {
   authMode?: "bearer" | "session-api-key" | "none";
   sessionApiKey?: string | null;
   responseType?: "blob" | "arrayBuffer";
+  /**
+   * The organization captured when the user confirmed the action. Omit it to
+   * use the backend's active organization at call time.
+   */
+  orgId?: string | null;
 }
 
 export async function callCloudProxy<TResponse = unknown>(
@@ -28,7 +33,8 @@ export async function callCloudProxy<TResponse = unknown>(
     : createCloudClient(req.backend);
   // The org this request is scoped to, read when the client is built so a
   // later org switch can't be blamed for this response.
-  const orgId = activeOrgForBackend(req.backend);
+  const orgId =
+    req.orgId !== undefined ? req.orgId : activeOrgForBackend(req.backend);
   const headers = orgId ? { ...req.headers, "X-Org-Id": orgId } : req.headers;
 
   try {
