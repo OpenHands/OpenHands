@@ -37,6 +37,17 @@ describe("HeroUI v3 CSS integration", () => {
     );
   });
 
+  it("ships tooltip content wrapping whole words, not mid-word (break-all)", () => {
+    // HeroUI v3's tooltip.css @applies break-all onto .tooltip; the
+    // components-layer override in tailwind.css must come after it so the
+    // shipped stylesheet ends on word-break: normal (#19647).
+    const tooltipBlocks = css.match(/\.tooltip\s*\{[^{}]*\}/g) ?? [];
+    expect(tooltipBlocks.length).toBeGreaterThan(0);
+    const lastTooltip = tooltipBlocks[tooltipBlocks.length - 1];
+    expect(lastTooltip).toMatch(/word-break:\s*normal/);
+    expect(lastTooltip).toMatch(/overflow-wrap:\s*break-word/);
+  });
+
   it("ships the HeroUI component styles Canvas uses, resolved onto Canvas tokens", () => {
     for (const selector of [
       ".tooltip",
