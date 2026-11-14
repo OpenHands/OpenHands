@@ -115,6 +115,17 @@ const conversations: MockConversation[] = [
     execution_status: "idle",
     workspace: { working_dir: "/workspace/project" },
   },
+  // Delegated subagent conversation (spawned via launch_child_conversation)
+  // so the conversations list's subagent marking has something to show in
+  // mock mode — see ConversationSubagentBadge.
+  {
+    id: "subagent-1",
+    title: "Refactor auth module",
+    created_at: new Date(now - 30 * 60 * 1000).toISOString(),
+    updated_at: new Date(now - 30 * 60 * 1000).toISOString(),
+    execution_status: "idle",
+    parent_conversation_id: "1",
+  },
 ];
 
 const CONVERSATIONS = new Map<string, MockConversation>(
@@ -242,6 +253,12 @@ function createConversationResponse(
     agent: conversation.agent ?? null,
     workspace: conversation.workspace ?? null,
     tags: conversation.tags ?? null,
+    // Sent only when a parent link exists, mirroring agent-servers that
+    // omit the field for top-level conversations; the adapter normalizes
+    // both wire shapes to `null`.
+    ...(conversation.parent_conversation_id
+      ? { parent_conversation_id: conversation.parent_conversation_id }
+      : {}),
   };
 }
 

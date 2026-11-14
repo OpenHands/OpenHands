@@ -237,6 +237,32 @@ describe("buildStartConversationRequest", () => {
     expect(page.items.map((item) => item.id)).toEqual(["main-1"]);
   });
 
+  it("maps the server-owned parent link onto delegated subagent rows", () => {
+    const page = toConversationPage({
+      items: [
+        {
+          id: "parent-1",
+          created_at: "2024-01-01T00:00:00.000Z",
+          updated_at: "2024-01-01T00:00:00.000Z",
+          execution_status: "idle",
+          tags: {},
+        },
+        {
+          id: "child-1",
+          created_at: "2024-01-01T00:01:00.000Z",
+          updated_at: "2024-01-01T00:01:00.000Z",
+          execution_status: "idle",
+          tags: {},
+          parent_conversation_id: "parent-1",
+        },
+      ],
+    });
+
+    expect(page.items.map((item) => item.id)).toEqual(["parent-1", "child-1"]);
+    expect(page.items[0].parent_conversation_id).toBeNull();
+    expect(page.items[1].parent_conversation_id).toBe("parent-1");
+  });
+
   it("loads a catalog skill the opening slash command invokes", () => {
     // An automation card fills the chat input with the skill's own command
     // (`findAutomationCommand`), and most of the catalog's slash commands
