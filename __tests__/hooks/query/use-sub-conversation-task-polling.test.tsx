@@ -5,16 +5,26 @@ import React from "react";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { useConversationStore } from "#/stores/conversation-store";
+import { setConversationState } from "#/utils/conversation-local-storage";
 
-// Mock the underlying service
 vi.mock("#/api/conversation-service/agent-server-conversation-service.api", () => ({
   default: {
     getStartTask: vi.fn(),
   },
 }));
 
+vi.mock("#/stores/conversation-store", () => ({
+  useConversationStore: vi.fn(),
+}));
+
+vi.mock("#/utils/conversation-local-storage", () => ({
+  setConversationState: vi.fn(),
+}));
+
 describe("useSubConversationTaskPolling", () => {
   let queryClient: QueryClient;
+  const setSubConversationTaskId = vi.fn();
 
   const createWrapper = () => {
     queryClient = new QueryClient({
@@ -51,6 +61,13 @@ describe("useSubConversationTaskPolling", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useConversationStore).mockImplementation((selector: unknown) => {
+      const state = { setSubConversationTaskId };
+      if (typeof selector === "function") {
+        return (selector as (s: typeof state) => unknown)(state);
+      }
+      return state;
+    });
   });
 
   afterEach(() => {
@@ -58,36 +75,82 @@ describe("useSubConversationTaskPolling", () => {
   });
 
   it("should return task status when task is READY", async () => {
-    // Arrange
     const mockTask = createMockTask("READY", "sub-conversation-123");
-    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue(mockTask);
+    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue(
+      mockTask,
+    );
 
-    // Act
     const { result } = renderHook(
       () =>
         useSubConversationTaskPolling("task-123", "parent-conversation-456"),
       { wrapper: createWrapper() },
     );
 
-    // Assert
     await waitFor(() => {
       expect(result.current.taskStatus).toBe("READY");
     });
     expect(result.current.subConversationId).toBe("sub-conversation-123");
-    expect(AgentServerConversationService.getStartTask).toHaveBeenCalledWith("task-123");
+    expect(AgentServerConversationService.getStartTask).toHaveBeenCalledWith(
+      "task-123",
+    );
+    expect(setSubConversationTaskId).not.toHaveBeenCalled();
+    expect(setConversationState).not.toHaveBeenCalled();
+  });
+
+  it("clears failed Cloud planner ownership so Plan can retry (#19380)", async () => {
+    const mockTask = createMockTask("ERROR", null);
+    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue(
+      mockTask,
+    );
+
+    const { result } = renderHook(
+      () =>
+        useSubConversationTaskPolling(
+          "research-planner-start",
+          "parent-conversation-456",
+        ),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current.taskStatus).toBe("ERROR");
+    });
+    expect(setSubConversationTaskId).toHaveBeenCalledWith(null);
+    expect(setConversationState).toHaveBeenCalledWith(
+      "parent-conversation-456",
+      { subConversationTaskId: null },
+    );
+  });
+
+  it("does not clear ownership when ERROR still produced a conversation id", async () => {
+    const mockTask = createMockTask("ERROR", "sub-conversation-123");
+    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue(
+      mockTask,
+    );
+
+    const { result } = renderHook(
+      () =>
+        useSubConversationTaskPolling("task-123", "parent-conversation-456"),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current.taskStatus).toBe("ERROR");
+    });
+    expect(setSubConversationTaskId).not.toHaveBeenCalled();
+    expect(setConversationState).not.toHaveBeenCalled();
   });
 
   it("should not poll when taskId is null", async () => {
-    // Arrange
-    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue(null);
+    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue(
+      null,
+    );
 
-    // Act
     const { result } = renderHook(
       () => useSubConversationTaskPolling(null, "parent-conversation-456"),
       { wrapper: createWrapper() },
     );
 
-    // Assert - wait a bit to ensure no calls are made
     await new Promise((resolve) => {
       setTimeout(resolve, 100);
     });
@@ -96,16 +159,15 @@ describe("useSubConversationTaskPolling", () => {
   });
 
   it("should not poll when parentConversationId is null", async () => {
-    // Arrange
-    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue(null);
+    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue(
+      null,
+    );
 
-    // Act
     const { result } = renderHook(
       () => useSubConversationTaskPolling("task-123", null),
       { wrapper: createWrapper() },
     );
 
-    // Assert - wait a bit to ensure no calls are made
     await new Promise((resolve) => {
       setTimeout(resolve, 100);
     });

@@ -1,5 +1,8 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { useConversationStore } from "#/stores/conversation-store";
+import { setConversationState } from "#/utils/conversation-local-storage";
 
 /**
  * Hook that polls V1 sub-conversation start tasks.
@@ -7,6 +10,8 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
  * This hook:
  * - Polls the V1 start task API every 3 seconds until status is READY or ERROR
  * - Exposes task status and details for UI components to show loading states and errors
+ * - Clears a terminal ERROR ownership claim that produced no planner conversation, so
+ *   an explicit Plan retry can create a replacement (#19380)
  *
  * Note: This hook does NOT invalidate the parent conversation cache. The component
  * that initiates the sub-conversation creation should handle cache invalidation
@@ -23,6 +28,10 @@ export const useSubConversationTaskPolling = (
   taskId: string | null,
   parentConversationId: string | null,
 ) => {
+  const setSubConversationTaskId = useConversationStore(
+    (state) => state.setSubConversationTaskId,
+  );
+
   // Poll the task if we have both taskId and parentConversationId
   const taskQuery = useQuery({
     queryKey: ["sub-conversation-task", taskId],
@@ -45,6 +54,22 @@ export const useSubConversationTaskPolling = (
     },
     retry: false,
   });
+
+  // A Cloud planner start that ends in ERROR with no conversation id still left
+  // its task id in the store and localStorage, so hasPlanner stayed true and
+  // Plan retries sent no create. Drop that ownership so an explicit retry can
+  // start a replacement; in-flight / READY / existing planners are unchanged.
+  useEffect(() => {
+    const task = taskQuery.data;
+    if (!taskId || !parentConversationId || !task) return;
+    if (task.status !== "ERROR") return;
+    if (task.app_conversation_id) return;
+
+    setSubConversationTaskId(null);
+    setConversationState(parentConversationId, {
+      subConversationTaskId: null,
+    });
+  }, [taskQuery.data, taskId, parentConversationId, setSubConversationTaskId]);
 
   return {
     task: taskQuery.data,
