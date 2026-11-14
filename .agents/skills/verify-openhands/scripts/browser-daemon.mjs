@@ -97,7 +97,17 @@ function spkiPins(files) {
 const trustPins = process.env.CONTROL_OPENHANDS_TRUST_CA
   ? spkiPins(process.env.CONTROL_OPENHANDS_TRUST_CA)
   : [];
+// The run's non-loopback origin (launch help, lanUrl): resolve its reserved
+// name to loopback here, in the browser, and keep it off any proxy. Chromium
+// sends ws:// through the HTTPS proxy of the environment, where the name does
+// not exist (the socket then fails with 502), so it goes on the no-proxy list
+// the browser inherits.
+const lanHost = process.env.OH_VERIFY_LAN_HOST;
+if (lanHost)
+  for (const name of ["NO_PROXY", "no_proxy"])
+    process.env[name] = [process.env[name], lanHost].filter(Boolean).join(",");
 const extraArgs = [
+  ...(lanHost ? [`--host-resolver-rules=MAP ${lanHost} 127.0.0.1`] : []),
   "--disable-background-networking",
   "--disable-component-update",
   "--no-first-run",
