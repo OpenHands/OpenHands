@@ -49,6 +49,7 @@ function settled(summary: Partial<AutomationRunSummary>): RunSummaryState {
     summary: {
       total: 0,
       completedTotal: null,
+      pendingTotal: null,
       latestRun: null,
       recentRuns: [],
       recentSuccessRate: null,
@@ -199,6 +200,7 @@ describe("summarizeAutomationRuns", () => {
     expect(summary).toEqual({
       total: 40,
       completedTotal: null,
+      pendingTotal: null,
       latestRun: runs[0],
       recentRuns: runs,
       recentSuccessRate: 1 / 3,
@@ -265,6 +267,38 @@ describe("summarizeAutomationRuns", () => {
 
     // Assert
     expect(summary.completedTotal).toBe(1);
+  });
+
+  it("takes the lifetime pending count from status_counts", () => {
+    // Arrange — five runs queued, though the sample holds only one of them.
+    const runs = [
+      createRun({ status: AutomationRunStatus.PENDING, completed_at: null }),
+    ];
+
+    // Act
+    const summary = summarizeAutomationRuns({
+      runs,
+      total: 80,
+      status_counts: { PENDING: 5, COMPLETED: 75 },
+    });
+
+    // Assert
+    expect(summary.pendingTotal).toBe(5);
+  });
+
+  it("counts pending runs in the sample when it holds the whole history", () => {
+    // Arrange — an older service reports no status_counts.
+    const runs = [
+      createRun({ status: AutomationRunStatus.PENDING, completed_at: null }),
+      createRun({ status: AutomationRunStatus.PENDING, completed_at: null }),
+      createRun(),
+    ];
+
+    // Act
+    const summary = summarizeAutomationRuns({ runs, total: 3 });
+
+    // Assert
+    expect(summary.pendingTotal).toBe(2);
   });
 });
 
