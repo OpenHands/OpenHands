@@ -108,6 +108,9 @@ describe("useConversationMentionPicker", () => {
       "see [Fix Safari export button](conversation:4f2c9e0a1b2c4d5e8f90a1b2c3d4e5f6) ",
     );
     expect(result.current.isMenuOpen).toBe(false);
+    // The caret sits after the inserted mention and its space.
+    const caret = window.getSelection()!.getRangeAt(0);
+    expect(caret.startOffset).toBe(ref.current.textContent!.length);
   });
 
   it("leaves out the conversation being written in", async () => {
