@@ -65,6 +65,28 @@ describe("ChatMessage", () => {
     }
   });
 
+  it("renders offset-aware local agent-server timestamps as Just now rather than shifted by timezone", () => {
+    vi.useFakeTimers();
+    try {
+      // 2026-11-09T01:00:20Z is 22:00:20 local wall clock for a UTC-3 user
+      vi.setSystemTime(new Date("2026-11-09T01:00:20Z"));
+      render(
+        <ChatMessage
+          type="user"
+          message="Hello from UTC-3"
+          timestamp="2026-11-08T22:00:00-03:00"
+        />,
+      );
+      const message = screen.getByTestId("user-message");
+      fireEvent.mouseEnter(message);
+      expect(screen.getByTestId("message-timestamp")).toHaveTextContent(
+        "CHAT_INTERFACE$TIMESTAMP_JUST_NOW",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("makes the exact timestamp available to keyboard focus", async () => {
     const timestamp = "2026-04-16T19:32:29.828Z";
     const expected = new Date(timestamp).toLocaleString("en", {
