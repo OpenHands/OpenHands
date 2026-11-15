@@ -154,7 +154,7 @@ describe("buildStartConversationRequest", () => {
     expect(payload.parent_conversation_id).toBe("parent-1");
   });
 
-  it("requests DockerExecutionWorkspace for the planner on Docker execution servers", () => {
+  it("requests the /workspace sandbox for the planner on Docker execution servers", () => {
     const payload = buildStartPlanningConversationRequest({
       encryptedAgentSettings: {
         agent_kind: "openhands",
@@ -166,7 +166,7 @@ describe("buildStartConversationRequest", () => {
     });
 
     expect(payload.workspace).toEqual({
-      kind: "DockerExecutionWorkspace",
+      kind: "LocalWorkspace",
       working_dir: "/workspace",
     });
   });
@@ -266,19 +266,33 @@ describe("buildStartConversationRequest", () => {
 });
 
 describe("buildStartConversationRequest — execution runtime", () => {
-  it("requests DockerExecutionWorkspace from Docker execution servers", () => {
+  it("sends the host folder to Docker execution servers for bind-mounting", () => {
     const payload = buildStartConversationRequest({
       settings: makeSettings({ agent_kind: "openhands" }),
       agentProfileId: "profile-xyz",
       workingDir: "/host/workspace",
+      worktree: true,
       executionRuntime: "docker",
     });
 
     expect(payload.workspace).toEqual({
-      kind: "DockerExecutionWorkspace",
+      kind: "LocalWorkspace",
+      working_dir: "/host/workspace",
+    });
+    expect(payload.worktree).toBe(true);
+  });
+
+  it("uses the /workspace sandbox on Docker when no folder is attached", () => {
+    const payload = buildStartConversationRequest({
+      settings: makeSettings({ agent_kind: "openhands" }),
+      agentProfileId: "profile-xyz",
+      executionRuntime: "docker",
+    });
+
+    expect(payload.workspace).toEqual({
+      kind: "LocalWorkspace",
       working_dir: "/workspace",
     });
-    expect(payload.worktree).toBe(false);
   });
 
   it("keeps LocalWorkspace for local and older servers", () => {
@@ -545,17 +559,17 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
     expect(skillNames).not.toContain("agent-memory");
   });
 
-  it("threads executionRuntime through to DockerExecutionWorkspace selection", async () => {
+  it("threads executionRuntime through to the planner workspace", async () => {
     const payload =
       await buildStartPlanningConversationRequestWithEncryptedSettings({
-        workingDir: "/workspace",
+        workingDir: "/host/workspace/project",
         parentConversationId: "parent-1",
         executionRuntime: "docker",
       });
 
     expect(payload.workspace).toEqual({
-      kind: "DockerExecutionWorkspace",
-      working_dir: "/workspace",
+      kind: "LocalWorkspace",
+      working_dir: "/host/workspace/project",
     });
   });
 

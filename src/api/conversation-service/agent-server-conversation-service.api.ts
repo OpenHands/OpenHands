@@ -602,7 +602,7 @@ class AgentServerConversationService {
       agentLlmProfileRef,
     );
     const conversationId = uuidv4();
-    const { workingDir, hooksProjectDir, isolated } =
+    const { workingDir, hooksProjectDir } =
       await resolveNewConversationWorkspace({
         conversationId,
         workingDir: workingDirOverride,
@@ -628,7 +628,7 @@ class AgentServerConversationService {
       parentConversationId,
       workingDir,
       hooksProjectDir,
-      worktree: !isolated && resolvedWorkspaceMode === "new_worktree",
+      worktree: resolvedWorkspaceMode === "new_worktree",
       agentProfileId,
       agentProfileKind,
       llmProfileOverride: agentLlmProfileOverride,

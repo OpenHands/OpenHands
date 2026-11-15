@@ -162,7 +162,7 @@
     "id": "Menampilkan {{count}} file pertama. Pohon ini tidak lengkap. Sesuaikan Penemuan file untuk melihat lebih banyak."
   },
   "HOME$ISOLATED_WORKSPACE_NEW": {
-    "en": "New isolated workspace",
+    "en": "New empty sandbox (/workspace)",
     "ja": "新しい分離ワークスペース",
     "zh-CN": "新建隔离工作区",
     "zh-TW": "建立隔離工作區",
@@ -47790,7 +47790,7 @@
     "id": "Pratinjau gambar ukuran penuh"
   },
   "HOME$ISOLATED_WORKSPACE_NOTICE": {
-    "en": "This backend uses isolated workspaces. Host folders and projects cannot be attached.",
+    "en": "Docker runtime: host folders you pick are bind-mounted at /workspace.",
     "ja": "このバックエンドは分離ワークスペースを使用します。ホストのフォルダーやプロジェクトは接続できません。",
     "zh-CN": "此后端使用隔离工作区，无法附加主机文件夹或项目。",
     "zh-TW": "此後端使用隔離工作區，無法附加主機資料夾或專案。",

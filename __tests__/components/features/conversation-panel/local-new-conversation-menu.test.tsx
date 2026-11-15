@@ -101,7 +101,7 @@ const renderMenu = ({
 };
 
 describe("LocalNewConversationMenu", () => {
-  it("disables saved host workspaces and explains isolated Docker creation", async () => {
+  it("keeps saved host workspaces usable on a Docker backend", async () => {
     clearCachedAgentServerInfo();
     server.use(
       http.get("*/server_info", () =>
@@ -125,12 +125,13 @@ describe("LocalNewConversationMenu", () => {
     });
     await user.click(screen.getByTestId("new-conversation-button"));
     await waitFor(() =>
-      expect(screen.getByTestId("launch-workspace")).toBeDisabled(),
+      expect(screen.getByTestId("launch-no-workspace")).toHaveTextContent(
+        "HOME$ISOLATED_WORKSPACE_NEW",
+      ),
     );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "HOME$ISOLATED_WORKSPACE_NOTICE",
-    );
-    expect(screen.getByTestId("add-workspaces-button")).toBeDisabled();
+    expect(screen.getByTestId("launch-workspace")).toBeEnabled();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByTestId("add-workspaces-button")).toBeEnabled();
     expect(screen.getByTestId("launch-no-workspace")).toBeEnabled();
     expect(screen.getByTestId("launch-workspace")).toHaveAttribute(
       "data-workspace-path",

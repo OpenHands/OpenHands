@@ -497,16 +497,11 @@ describe("HomeChatLauncher", () => {
     );
   });
 
-  it("omits a stale host workspace override on an isolated backend", async () => {
-    // A host folder selected while the backend looked like a normal local
-    // backend must not be forwarded once the backend advertises isolation: the
-    // server rejects it and the user sees an error toast for a selection the
-    // launcher already deems unsupported. `isolated` is read per render, so
-    // flipping the mocked value and forcing a re-render models the backend
-    // changing under the user.
+  it("forwards the host workspace on an isolated (Docker) backend", async () => {
+    // The docker runtime bind-mounts the host folder at /workspace.
     mockUseConversationWorkspace.mockImplementation(() => ({
       isolated: mockIsolated,
-      unsupportedMessage: mockIsolated ? "isolated-unsupported" : null,
+      unsupportedMessage: null,
     }));
     const createSpy = vi
       .spyOn(AgentServerConversationService, "createConversation")
@@ -530,8 +525,8 @@ describe("HomeChatLauncher", () => {
     expect(createSpy.mock.calls[0]?.[0]).toMatchObject({
       initialUserMsg: "hello world",
       metadata: null,
-      workingDirOverride: undefined,
-      workspaceMode: undefined,
+      workingDirOverride: "/p/app",
+      workspaceMode: "new_worktree",
     });
   });
 

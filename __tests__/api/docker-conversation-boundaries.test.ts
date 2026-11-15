@@ -10,7 +10,10 @@ import {
 } from "#/api/backend-registry/active-store";
 import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
 import { clearAgentServerHomeDirCache } from "#/api/agent-server-home";
-import { resolveNewConversationWorkspace } from "#/api/conversation-workspace";
+import {
+  resolveConversationHooksProjectDir,
+  resolveNewConversationWorkspace,
+} from "#/api/conversation-workspace";
 import GitService from "#/api/git-service/git-service.api";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
@@ -118,15 +121,53 @@ describe("conversation runtime boundaries", () => {
     expect(paths).toEqual(["/server_info"]);
   });
 
-  it.each(["/home/user/project", "/workspace", "relative/project"])(
-    "rejects selected host folder %s rather than discarding it",
-    async (workingDir) => {
-      await expect(
-        resolveNewConversationWorkspace({ conversationId: cid, workingDir }),
-      ).rejects.toThrow(i18n.t(I18nKey.HOME$ISOLATED_WORKSPACE_NOTICE));
-      expect(paths).toEqual(["/server_info"]);
-    },
-  );
+  it("bind-mounts a selected host folder and loads its hooks", async () => {
+    expect(
+      await resolveNewConversationWorkspace({
+        conversationId: cid,
+        workingDir: "/home/user/project",
+      }),
+    ).toEqual({
+      workingDir: "/home/user/project",
+      hooksProjectDir: "/home/user/project",
+      isolated: true,
+    });
+  });
+
+  it("resolves a relative host folder against the backend home", async () => {
+    expect(
+      await resolveNewConversationWorkspace({
+        conversationId: cid,
+        workingDir: "relative/project",
+      }),
+    ).toEqual({
+      workingDir: "/home/agent/relative/project",
+      hooksProjectDir: "/home/agent/relative/project",
+      isolated: true,
+    });
+  });
+
+  it("treats a selected /workspace as the empty sandbox", async () => {
+    expect(
+      await resolveNewConversationWorkspace({
+        conversationId: cid,
+        workingDir: "/workspace",
+      }),
+    ).toEqual({
+      workingDir: "/workspace",
+      hooksProjectDir: null,
+      isolated: true,
+    });
+    expect(paths).toEqual(["/server_info"]);
+  });
+
+  it("resolves hooks of an existing conversation on its host folder", async () => {
+    expect(await resolveConversationHooksProjectDir("/home/user/project")).toBe(
+      "/home/user/project",
+    );
+    expect(await resolveConversationHooksProjectDir("/workspace")).toBeNull();
+    expect(await resolveConversationHooksProjectDir(null)).toBeNull();
+  });
 
   it("rejects selected host repository metadata", async () => {
     await expect(

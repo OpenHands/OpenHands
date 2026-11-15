@@ -691,7 +691,7 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
 });
 
 describe("isolated workspace selection", () => {
-  it("preserves saved selection but disables confirmation of host folders", async () => {
+  it("keeps host folders selectable on a Docker backend", async () => {
     clearCachedAgentServerInfo();
     sessionStorage.setItem(
       HOME_SELECTED_WORKSPACE_PATH_KEY,
@@ -717,12 +717,12 @@ describe("isolated workspace selection", () => {
       ],
     });
     await waitFor(() =>
-      expect(screen.getByTestId("workspace-status-message")).toHaveTextContent(
-        "HOME$ISOLATED_WORKSPACE_NOTICE",
-      ),
+      expect(screen.getByTestId("workspace-launch-button")).toBeEnabled(),
     );
-    expect(screen.getByTestId("workspace-dropdown")).toBeDisabled();
-    expect(screen.getByTestId("workspace-launch-button")).toBeDisabled();
+    expect(screen.getByTestId("workspace-dropdown")).toBeEnabled();
+    expect(
+      screen.queryByTestId("workspace-status-message"),
+    ).not.toBeInTheDocument();
     expect(sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY)).toBe(
       "/home/user/project",
     );

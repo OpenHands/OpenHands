@@ -48,15 +48,18 @@ export async function resolveNewConversationWorkspace(options: {
   const clientOptions = getAgentServerClientOptions();
   const info = await getConversationServerInfo(clientOptions);
   if (usesIsolatedWorkspace(info)) {
-    if (
-      options.selectedRepository ||
-      (options.workingDir !== undefined &&
-        !(
-          options.parentConversationId &&
-          options.workingDir === ISOLATED_WORKSPACE_DIR
-        ))
-    ) {
+    if (options.selectedRepository) {
       throw new Error(i18n.t(I18nKey.HOME$ISOLATED_WORKSPACE_NOTICE));
+    }
+    // The docker runtime bind-mounts a host `working_dir` at /workspace in the
+    // conversation container, so an attached host folder is still usable and
+    // its `.openhands/hooks.json` is read from the host side.
+    if (
+      options.workingDir !== undefined &&
+      options.workingDir !== ISOLATED_WORKSPACE_DIR
+    ) {
+      const hostDir = await resolveAbsoluteAgentServerPath(options.workingDir);
+      return { workingDir: hostDir, hooksProjectDir: hostDir, isolated: true };
     }
     return {
       workingDir: ISOLATED_WORKSPACE_DIR,
@@ -96,14 +99,19 @@ function resolveHooksProjectDir(
 /**
  * The hooks project dir of an existing conversation, resolved as
  * `resolveNewConversationWorkspace()` resolved it at start from the workspace
- * the user attached. `null` on an isolated (Docker) backend, whose
- * conversations never load host hooks.
+ * the user attached. On an isolated (Docker) backend, `null` unless a host
+ * folder was attached (it is bind-mounted into the conversation container).
  */
 export async function resolveConversationHooksProjectDir(
   selectedWorkspace: string | null | undefined,
 ): Promise<string | null> {
   const clientOptions = getAgentServerClientOptions();
   const info = await getConversationServerInfo(clientOptions);
-  if (usesIsolatedWorkspace(info)) return null;
+  if (usesIsolatedWorkspace(info)) {
+    if (!selectedWorkspace || selectedWorkspace === ISOLATED_WORKSPACE_DIR) {
+      return null;
+    }
+    return resolveAbsoluteAgentServerPath(selectedWorkspace);
+  }
   return resolveHooksProjectDir(selectedWorkspace, clientOptions.host);
 }

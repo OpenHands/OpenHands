@@ -1,5 +1,3 @@
-import { useTranslation } from "react-i18next";
-import { I18nKey } from "#/i18n/declaration";
 import { useQuery } from "@tanstack/react-query";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
@@ -8,7 +6,6 @@ import {
 } from "#/api/conversation-workspace";
 
 export function useConversationWorkspace() {
-  const { t } = useTranslation();
   const { backend } = useActiveBackend();
   const query = useQuery({
     queryKey: [
@@ -25,10 +22,7 @@ export function useConversationWorkspace() {
   });
   const isolated =
     backend.kind === "local" && usesIsolatedWorkspace(query.data);
-  return {
-    isolated,
-    unsupportedMessage: isolated
-      ? t(I18nKey.HOME$ISOLATED_WORKSPACE_NOTICE)
-      : null,
-  };
+  // Docker conversations bind-mount an attached host folder, so isolation
+  // never blocks the workspace pickers.
+  return { isolated, unsupportedMessage: null };
 }

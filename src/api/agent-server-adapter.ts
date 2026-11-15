@@ -513,14 +513,9 @@ interface LocalWorkspacePayload {
   working_dir: string;
 }
 
-const DOCKER_EXECUTION_WORKING_DIR = "/workspace" as const;
+const DOCKER_EXECUTION_WORKING_DIR = "/workspace";
 
-interface DockerExecutionWorkspacePayload {
-  kind: "DockerExecutionWorkspace";
-  working_dir: typeof DOCKER_EXECUTION_WORKING_DIR;
-}
-
-type WorkspacePayload = LocalWorkspacePayload | DockerExecutionWorkspacePayload;
+type WorkspacePayload = LocalWorkspacePayload;
 
 interface InitialMessagePayload {
   role: "user";
@@ -893,16 +888,15 @@ function buildConfiguredConversationSettings(options: {
     (key) => delete conversationSettings[key],
   );
 
-  const workspace: WorkspacePayload =
-    executionRuntime === "docker"
-      ? {
-          kind: "DockerExecutionWorkspace",
-          working_dir: DOCKER_EXECUTION_WORKING_DIR,
-        }
-      : {
-          kind: "LocalWorkspace",
-          working_dir: workingDir ?? getAgentServerWorkingDir(),
-        };
+  // On the docker runtime a host `working_dir` is bind-mounted at /workspace;
+  // only the literal /workspace gets a private, empty sandbox.
+  const workspace: WorkspacePayload = {
+    kind: "LocalWorkspace",
+    working_dir:
+      executionRuntime === "docker"
+        ? (workingDir ?? DOCKER_EXECUTION_WORKING_DIR)
+        : (workingDir ?? getAgentServerWorkingDir()),
+  };
   const payload: ConversationSettingsPayload = {
     ...conversationSettings,
     workspace,
@@ -1111,10 +1105,7 @@ export function buildStartConversationRequest(
     ...(options.titleLlmProfile
       ? { title_llm_profile: options.titleLlmProfile }
       : {}),
-    worktree:
-      options.executionRuntime === "docker"
-        ? false
-        : (options.worktree ?? true),
+    worktree: options.worktree ?? true,
   };
 
   // Stamp the client source tag so the agent-server can attribute the
@@ -1257,16 +1248,13 @@ export function buildStartPlanningConversationRequest(options: {
         keep_first: 6,
       },
     },
-    workspace:
-      options.executionRuntime === "docker"
-        ? {
-            kind: "DockerExecutionWorkspace",
-            working_dir: DOCKER_EXECUTION_WORKING_DIR,
-          }
-        : {
-            kind: "LocalWorkspace",
-            working_dir: options.workingDir,
-          },
+    workspace: {
+      kind: "LocalWorkspace",
+      working_dir:
+        options.executionRuntime === "docker"
+          ? (options.workingDir ?? DOCKER_EXECUTION_WORKING_DIR)
+          : options.workingDir,
+    },
     // No Canvas UI client tool: the planner's only output is PLAN.md, which the
     // Planner tab surfaces on its own via PlanningFileEditorObservation. Handing
     // it the panel-control tool would only let it navigate the right-side panel
