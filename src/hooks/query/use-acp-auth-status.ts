@@ -53,9 +53,12 @@ interface UseAcpAuthStatusOptions {
  * unknown ``providerKey`` simply classifies as ``"unknown"``. The caller renders
  * this hook only for ACP providers, so any local backend is probeable.
  *
- * The probe runs a subprocess on the agent-server, so the result is cached for
- * the session (``staleTime: Infinity``, no refetch on focus/mount) — one probe
- * per provider per backend.
+ * The probe runs a subprocess on the agent-server, so it is not polled on an
+ * interval — but the result is no longer cached for the whole session: the
+ * query is stale immediately and refetches on mount and on window focus, so
+ * signing in or out via the provider CLI outside Canvas shows up without a
+ * page reload (#19730). React Query keeps the previous status visible while a
+ * refetch is in flight, so the banner never flashes back to "checking".
  */
 export function useAcpAuthStatus(
   providerKey: string | null | undefined,
@@ -74,18 +77,16 @@ export function useAcpAuthStatus(
     queryKey: ["acp-auth-status", active.backend.id, providerKey],
     queryFn: () => probeAcpAuth(providerKey as string),
     enabled: queryEnabled,
-    // ``staleTime: Infinity`` = never re-probe while the result stays cached;
-    // ``gcTime`` then bounds that to ~15 min after the hook unmounts. So a
-    // user who dismisses and reopens onboarding >15 min later re-probes —
-    // intentional: it's a cheap one-off and their login state may have changed.
-    staleTime: Infinity,
+    // Always stale: remounts (Settings → Agent closed and reopened, the
+    // onboarding credentials step re-entered) and window focus re-probe, so
+    // the banner tracks CLI sign-in/sign-out done outside Canvas. The
+    // subprocess is cheap and only runs on those user-visible transitions.
+    staleTime: 0,
     gcTime: 1000 * 60 * 15,
     // ``probeAcpAuth`` always resolves (it catches internally → "unknown"), so
     // this is redundant today — kept as a guard so the probe still never retries
     // if that inner catch is ever removed.
     retry: false,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
   });
 
   return {
