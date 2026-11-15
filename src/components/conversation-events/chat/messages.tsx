@@ -26,6 +26,7 @@ import { buildActionById } from "./event-thought-helpers";
 import { getSingleToolEvent } from "./event-message-components/event-group-summary";
 import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
+import { DecisionCard } from "./event-message-components/decision-card";
 import { getStepKey, StepDisclosureContext } from "./step-disclosure-context";
 import { useModelStore } from "#/stores/model-store";
 import { ModelMessages } from "#/components/features/chat/model-messages";
@@ -180,6 +181,24 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       detailsOnly = false,
     ) => {
       const stepKey = getStepKey(event);
+      const action = isObservationEvent(event)
+        ? actionById.get(event.action_id)
+        : undefined;
+      if (
+        isObservationEvent(event) &&
+        event.observation.kind === "AskUserObservation" &&
+        !event.observation.is_error &&
+        action?.action.kind === "AskUserAction"
+      ) {
+        return (
+          <DecisionCard
+            key={stepKey}
+            question={{ ...action, action: action.action }}
+            result={event}
+            events={allEvents}
+          />
+        );
+      }
       return (
         <StepDisclosureContext.Provider
           key={stepKey}

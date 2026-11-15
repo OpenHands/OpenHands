@@ -6,6 +6,11 @@ import {
   ImageContent,
 } from "./common";
 
+export interface AskUserObservation extends ObservationBase<"AskUserObservation"> {
+  content: Array<TextContent | ImageContent>;
+  is_error: boolean;
+}
+
 export interface MCPToolObservation extends ObservationBase<"MCPToolObservation"> {
   /**
    * Content returned from the MCP tool converted to LLM Ready TextContent or ImageContent
@@ -387,6 +392,7 @@ export interface ClassifyAndSwitchLLMObservation extends ObservationBase<"Classi
 }
 
 export type Observation =
+  | AskUserObservation
   | MCPToolObservation
   | FinishObservation
   | ThinkObservation

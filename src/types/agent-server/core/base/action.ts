@@ -5,6 +5,12 @@ import { REQUEST_SECRET_ACTION_KIND } from "#/constants/secret-request";
 import { ActionBase } from "./base";
 import { TaskItem } from "./common";
 
+export interface AskUserAction extends ActionBase<"AskUserAction"> {
+  question: string;
+  options: { label: string; consequence: string }[];
+  recommended?: number | null;
+}
+
 export interface MCPToolAction extends ActionBase<"MCPToolAction"> {
   /**
    * Dynamic data fields from the tool call
@@ -367,6 +373,7 @@ export interface RequestSecretAction extends ActionBase<
 }
 
 export type Action =
+  | AskUserAction
   | MCPToolAction
   | FinishAction
   | ThinkAction

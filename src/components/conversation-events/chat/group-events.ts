@@ -59,7 +59,10 @@ export const isGroupableEvent = (
     if (isMarkdownFileEditorEvent(event, correspondingAction)) {
       return false;
     }
-    if (event.observation.kind === "TaskTrackerObservation") {
+    if (
+      event.observation.kind === "TaskTrackerObservation" ||
+      event.observation.kind === "AskUserObservation"
+    ) {
       return false;
     }
     return true;
