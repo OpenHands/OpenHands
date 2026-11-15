@@ -17,7 +17,10 @@ stored one.
 
 The **Runtime** page renders the conversation schema's `runtime` section the
 same way: a default runtime (Local, Worktree, and Docker when the Agent Server
-offers it) followed by only that runtime's options.
+offers it) followed by only that runtime's options. The **Conversation
+limits** page renders the conversation schema's `general` section: the
+defaults copied into each new conversation (**Max Iterations** and **Default
+budget per conversation (USD)**).
 
 Source: `src/routes/runtime-settings.tsx`, `src/routes/condenser-settings.tsx`, `src/routes/agent-context-settings.tsx`, `src/routes/verification-settings.tsx`, `src/components/features/settings/sdk-settings/`, `src/utils/sdk-settings-schema.ts`, `src/components/features/settings/agent-profiles/profile-behavior-form.ts`.
 
@@ -40,6 +43,7 @@ Server: F18.
 - `F15.confirmation-mode-save`: Confirmation Mode and Security Analyzer (conversation settings) persist after reload, alongside the agent-settings fields on the same page.
 - `F15.confirmation-mode-effect`: with Confirmation Mode on and Security Analyzer **None**, a new conversation stops before its first command with **Do you want to continue with this action?** and Cancel/Continue; Continue runs it.
 - `F15.runtime-page`: Runtime shows **Default runtime** (`Local` by default, `Worktree`, and `Docker` only when `/server_info.available_conversation_runtimes` lists `docker`). Local shows nothing else; Worktree adds **Create worktrees from** (`Default branch`, `Current HEAD`, `Another branch, tag or commit`, which reveals its ref field) and **Branch name prefix** (`openhands/`); Docker adds **Container memory limit**, **Container CPU limit** and **Browser in containers**. On a server without Docker the Docker choice and the container fields are hidden; a Docker default saved earlier stays selected (with all three choices) under the notice `This server cannot run Docker conversations, so new conversations start locally. Pick another default runtime.` until another default is saved. The Home launcher starts on the saved default (F03.workspace-mode), and saved non-default values reach the next conversation's start request as `worktree_options` (`base`, `ref`, `branch_prefix`) and `container` (`memory`, `cpus`, `browser`).
+- `F15.conversation-limits-page`: Conversation limits (`/settings/conversation-limits`, nav item between Verification and Runtime) shows **Max Iterations** (`500`) and **Default budget per conversation (USD)** (empty = no limit) and no runtime field; the Runtime page does not show them. Saving a budget stores `conversation_settings.max_budget_per_run`, and the next conversation started from Home sends it as `max_budget_per_run` and stops with `Agent reached maximum budget limit` once its cost reaches it. Needs an Agent Server whose conversation schema has `max_budget_per_run`.
 - `F15.critic-tuning`: (Cloud backend page; locally the same fields in an agent profile's Verification section) Critic Mode is a dropdown (`Finish and Message`, `All Actions`); the mode, Critic Threshold and Max Refinement Iterations persist after reload, and an out-of-range threshold (`1.5`) is refused with the 422 toast.
 - `F15.critic-save`: the Critic API Key persists after reload and comes back masked, and clearing it stores `null`; on a Cloud backend the critic text fields on the page persist too, and clearing them and turning the critic off restores the defaults.
 - `F15.agent-context-effect`: with Persistent Agent Memory on, a new conversation's system prompt carries the `.openhands/memory/` instructions; with it off, it does not.
@@ -53,8 +57,8 @@ Server: F18.
 
 ## How to get to it (user POV)
 
-- Sidebar settings gear (`backend-selector-settings-link`, lands on `/settings/agents`), then **Agent Context**, **Verification** or **Runtime** in the settings navigation (`sidebar-settings-/settings/agent-context`, `sidebar-settings-/settings/verification`, `sidebar-settings-/settings/runtime`); **Condenser** (`sidebar-settings-/settings/condenser`) is listed only on a Cloud backend.
-- Direct URLs `/settings/condenser` (local: opens `/settings/agents`), `/settings/agent-context`, `/settings/verification`, `/settings/runtime`.
+- Sidebar settings gear (`backend-selector-settings-link`, lands on `/settings/agents`), then **Agent Context**, **Verification**, **Conversation limits** or **Runtime** in the settings navigation (`sidebar-settings-/settings/agent-context`, `sidebar-settings-/settings/verification`, `sidebar-settings-/settings/conversation-limits`, `sidebar-settings-/settings/runtime`); **Condenser** (`sidebar-settings-/settings/condenser`) is listed only on a Cloud backend.
+- Direct URLs `/settings/condenser` (local: opens `/settings/agents`), `/settings/agent-context`, `/settings/verification`, `/settings/conversation-limits`, `/settings/runtime`.
 - Command menu (`Control+k` or `Meta+k`, or `command-menu-trigger` in the sidebar): **Agent Context**, **Verification settings** and **Runtime** (plus **Condenser settings** on a Cloud backend); locally "memory" finds only Agent Context.
 - Per-profile condenser and critic (local): Settings → Agent, **Add agent profile** (`add-agent-profile`) or a row's menu → **Edit**, sections `agent-settings-condenser` and `agent-settings-verification`.
 - The effects show up in new conversations only: the confirmation prompt in the chat, and the memory instructions in the conversation's system prompt.
