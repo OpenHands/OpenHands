@@ -1426,13 +1426,15 @@ export function AutomationSetupPanel({
   // Only a new automation picks who it runs as; an existing one uses Change Runs As.
   const showRunAsPicker = serviceAccountRunAsEnabled && !isEditingExisting;
   const newAutomationRunAsId = showRunAsPicker ? runAsUserId : "";
-  const buildPresetBody = (): SetupRequestBody => {
+  // Only the final create runs enabled: drafts and preflight validation must
+  // stay inert, so the flag travels with the caller's intent.
+  const buildPresetBody = (enabled: boolean): SetupRequestBody => {
     const trimmedPrompt = prompt.trim();
     const body: SetupRequestBody = {
       name: normalizedName(),
       ...(trimmedPrompt ? { prompt: trimmedPrompt } : {}),
       trigger: buildTrigger(),
-      enabled: false,
+      enabled,
     } as SetupRequestBody;
     const repositories = parseAutomationSetupRepositories(repository);
     if (repositories.length > 0) {
@@ -1454,10 +1456,14 @@ export function AutomationSetupPanel({
     if (newAutomationRunAsId) body.run_as_user_id = newAutomationRunAsId;
     return body;
   };
-  const buildCustomBody = (tarballPath: string): SetupRequestBody =>
+  const buildCustomBody = (
+    tarballPath: string,
+    enabled: boolean,
+  ): SetupRequestBody =>
     ({
       name: normalizedName(),
       trigger: buildTrigger(),
+      enabled,
       tarball_path: tarballPath,
       entrypoint: entrypoint.trim(),
       setup_script_path: setupScriptPath.trim(),
@@ -1481,7 +1487,9 @@ export function AutomationSetupPanel({
   const draftRequestBody = (
     tarballPath: string = PREFLIGHT_TARBALL_PATH,
   ): SetupRequestBody =>
-    kind === "custom" ? buildCustomBody(tarballPath) : buildPresetBody();
+    kind === "custom"
+      ? buildCustomBody(tarballPath, false)
+      : buildPresetBody(false);
   const draftValidationByField = useMemo(() => {
     const byField = new Map<string, string>();
     for (const error of serverDraft?.validationErrors ?? []) {
@@ -1661,8 +1669,8 @@ export function AutomationSetupPanel({
       endpoint: draftValidationEndpoint(kind, pluginEndpointSource),
       draft:
         kind === "custom"
-          ? buildCustomBody(PREFLIGHT_TARBALL_PATH)
-          : buildPresetBody(),
+          ? buildCustomBody(PREFLIGHT_TARBALL_PATH, false)
+          : buildPresetBody(false),
     });
     setStatusMessage({
       kind: result.valid ? "success" : "error",
@@ -1858,12 +1866,12 @@ export function AutomationSetupPanel({
       if (kind === "custom") {
         const tarballPath = await uploadCustomArchive();
         created = await AutomationService.createAutomationDraft(
-          buildCustomBody(tarballPath),
+          buildCustomBody(tarballPath, true),
           kind,
         );
       } else {
         created = await AutomationService.createAutomationDraft(
-          buildPresetBody(),
+          buildPresetBody(true),
           presetKindForEndpoint(kind, pluginEndpointSource),
         );
       }

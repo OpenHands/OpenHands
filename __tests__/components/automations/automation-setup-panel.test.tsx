@@ -1735,7 +1735,9 @@ describe("AutomationSetupPanel", () => {
     await waitFor(() =>
       expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
         expect.objectContaining({
-          enabled: false,
+          // A completed setup creates the automation enabled (#19718); the
+          // user should not need a second manual step to start it.
+          enabled: true,
           prompt: "Summarize Slack blockers",
           plugins: [{ source: "github:org/blockers-plugin" }],
         }),
