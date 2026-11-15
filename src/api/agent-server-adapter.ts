@@ -624,6 +624,19 @@ export function buildGitIdentitySessionStartHook(
   const email = gitUserEmail?.trim();
   if (!name || !email) return undefined;
 
+  // Skip injecting a git-identity hook when the configured values match the
+  // Canvas defaults — the sandbox / SDK already ships those same defaults,
+  // so a redundant `git config --global` at conversation start would be a
+  // no-op and would also break callers that rely on hook_config staying
+  // undefined when the user has not explicitly overridden the identity
+  // (see the Ubuntu test-and-build failure in PR #19752).
+  if (
+    name === DEFAULT_SETTINGS.git_user_name &&
+    email === DEFAULT_SETTINGS.git_user_email
+  ) {
+    return undefined;
+  }
+
   const command = [
     "git config --global user.name",
     `'${shellEscapeSingleQuoted(name)}'`,
