@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { SmilePlus } from "lucide-react";
 import type { ReactionEmoji } from "@openhands/typescript-client";
+import { useShallow } from "zustand/react/shallow";
 import { conversationReactionsService } from "#/api/conversation-reactions-service/conversation-reactions-service.api";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useIsExperimentalFeatureEnabled } from "#/hooks/query/use-experimental-features";
@@ -192,30 +193,33 @@ export function MessageReactions({
     }
   }, [pickerOpen]);
 
-  // The user's clicks show at once. Each emoji's click stays until the
-  // server's events agree with it, which can be a while if a tool call is
-  // waiting for approval; an event for another emoji, or an older one for
-  // this emoji, leaves it in place.
+  // The user's clicks show at once. Each choice stays until its own event
+  // arrives, which can be a while if a tool call is waiting for approval.
   const [optimistic, setOptimistic] = React.useState<
-    Partial<Record<ReactionEmoji, boolean>>
+    Partial<Record<ReactionEmoji, { on: boolean; eventId?: string }>>
   >({});
+  const acknowledged = useEventStore(
+    useShallow(({ eventIds }) =>
+      Object.values(optimistic)
+        .map((change) => change.eventId)
+        .filter((id): id is string => !!id && eventIds.has(id)),
+    ),
+  );
   React.useEffect(() => {
-    const server = parseKey(key);
-    setOptimistic((current) => {
-      const settled = (Object.keys(current) as ReactionEmoji[]).filter(
-        (emoji) => (server.get(emoji)?.has("user") ?? false) === current[emoji],
-      );
-      if (settled.length === 0) return current;
-      const next = { ...current };
-      for (const emoji of settled) delete next[emoji];
-      return next;
-    });
-  }, [key]);
+    if (acknowledged.length === 0) return;
+    setOptimistic((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(
+          ([, change]) => !acknowledged.includes(change.eventId ?? ""),
+        ),
+      ),
+    );
+  }, [acknowledged]);
 
   const reactions = parseKey(key);
-  for (const [emoji, on] of Object.entries(optimistic) as [
+  for (const [emoji, { on }] of Object.entries(optimistic) as [
     ReactionEmoji,
-    boolean,
+    { on: boolean },
   ][]) {
     const sources = reactions.get(emoji) ?? new Set<ReactionSource>();
     if (on) sources.add("user");
@@ -233,18 +237,26 @@ export function MessageReactions({
       triggerRef.current?.focus();
     }
     const removed = reactions.get(emoji)?.has("user") ?? false;
-    setOptimistic((current) => ({ ...current, [emoji]: !removed }));
+    const before = optimistic[emoji];
+    setOptimistic((current) => ({ ...current, [emoji]: { on: !removed } }));
     try {
-      await conversationReactionsService.react({
+      const event = await conversationReactionsService.react({
         conversationId,
         emoji,
         targetEventId: eventId,
         removed,
       });
+      // Only this request's event acknowledges this choice. Another emoji,
+      // an agent reaction, or an earlier add must not erase a newer removal.
+      setOptimistic((current) => ({
+        ...current,
+        [emoji]: { on: !removed, eventId: event.id },
+      }));
     } catch (error) {
       setOptimistic((current) => {
         const next = { ...current };
-        delete next[emoji];
+        if (before) next[emoji] = before;
+        else delete next[emoji];
         return next;
       });
       displayApiErrorToast(error, t(I18nKey.CHAT_INTERFACE$REACTION_FAILED));
@@ -278,7 +290,7 @@ export function MessageReactions({
           title={describe(sources)}
           aria-label={`${EMOJI_GLYPHS[emoji]} ${describe(sources)}`}
           aria-pressed={sources.has("user")}
-          aria-disabled={!canReact}
+          aria-disabled={!canReact || pending}
           onClick={() => toggle(emoji)}
           className={cn(
             "flex h-6 items-center gap-1 rounded-full border border-border px-2 text-xs leading-none",
