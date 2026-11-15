@@ -1,3 +1,16 @@
+> [!NOTE]
+> **Fork of [OpenHands/OpenHands](https://github.com/OpenHands/OpenHands) (Agent Canvas v1.29.0) with one change: Docker-runtime conversations can use host folders.**
+>
+> Stock Canvas 1.25+ treats a Docker backend as fully isolated: it rejects host folders, disables the workspace pickers, forces `worktree: false` and never sends the project's hooks. The agent-server Docker runtime can bind-mount a host `working_dir` at `/workspace`, so this fork:
+>
+> - sends the picked host folder as `LocalWorkspace.working_dir` instead of a fixed `DockerExecutionWorkspace` (no folder still gives an empty `/workspace` sandbox);
+> - honours the "New worktree" / "Local repo" choice on Docker;
+> - loads the attached folder's `.openhands/hooks.json` as `hook_config`, including in the Available Hooks dialog;
+> - keeps the home and sidebar workspace pickers enabled (the agent-server version check is unchanged);
+> - updates the English isolated-workspace strings (other locales unchanged).
+>
+> GitHub repository attach on Docker stays blocked. Branch `fix/canvas-docker-host-workspace-v1.29.0`; files: `src/api/conversation-workspace.ts`, `src/api/agent-server-adapter.ts`, `src/api/conversation-service/agent-server-conversation-service.api.ts`, `src/hooks/query/use-conversation-workspace.ts`, `src/components/features/home/home-chat-launcher.tsx`, plus tests.
+
 <a name="readme-top"></a>
 
 <div align="center">
