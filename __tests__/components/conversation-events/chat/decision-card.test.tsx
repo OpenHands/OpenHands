@@ -94,6 +94,50 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+it("hydrates the answered card without repeating the machine answer as a chat bubble", async () => {
+  const machineText =
+    '[Answer to your question: "Choose where to store the data?"]\nPostgreSQL\nUse the EU region';
+  useEventStore.getState().addEvents([
+    {
+      id: "answer-1",
+      timestamp: "2026-11-15T12:00:02Z",
+      kind: "AskUserAnswerEvent",
+      source: "user",
+      ask_id: question.id,
+      option_index: 1,
+      option_label: "PostgreSQL",
+      text: "Use the EU region",
+    },
+    {
+      ...reply(),
+      llm_message: {
+        role: "user",
+        content: [{ type: "text", text: machineText }],
+      },
+    } satisfies MessageEvent,
+    {
+      ...reply(),
+      id: "ordinary-chat",
+      llm_message: {
+        role: "user",
+        content: [{ type: "text", text: "Keep the backups too." }],
+      },
+    } satisfies MessageEvent,
+  ]);
+  renderWithProviders(<Transcript />);
+  const card = await screen.findByRole("region", {
+    name: question.action.question,
+  });
+  expect(within(card).getByText("Use the EU region")).toBeVisible();
+  expect(within(card).getByRole("status")).toHaveTextContent(
+    "ASK_USER$ANSWERED",
+  );
+  expect(
+    screen.queryByText(/\[Answer to your question:/),
+  ).not.toBeInTheDocument();
+  expect(screen.getByText("Keep the backups too.")).toBeVisible();
+});
+
 it("does not offer to resend an answer already saved when run capacity is full", async () => {
   vi.spyOn(ConversationClient.prototype, "answerAskUser").mockRejectedValue(
     new HttpError(429, "Too Many Requests"),

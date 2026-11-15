@@ -73,16 +73,18 @@ const isStopHookFeedback = (event: MessageEvent): boolean =>
 // `services/secret-request.ts`). It is a JSON payload addressed to the agent,
 // which relays the outcome in its own reply, so the raw message does not
 // belong in the chat.
-const CLIENT_TOOL_RESULT_PREFIXES = [
+const TOOL_RESULT_PREFIXES = [
   CHILD_CONVERSATION_RESULT_PREFIX,
   SECRET_REQUEST_RESULT_PREFIX,
+  // ANSWER_HEADER_PREFIX in the SDK's event/ask_user.py is a client contract.
+  '[Answer to your question: "',
 ];
 
-const isClientToolResult = (event: MessageEvent): boolean => {
+const isToolResult = (event: MessageEvent): boolean => {
   const text = userMessageText(event);
   return (
     text !== null &&
-    CLIENT_TOOL_RESULT_PREFIXES.some((prefix) => text.startsWith(prefix))
+    TOOL_RESULT_PREFIXES.some((prefix) => text.startsWith(prefix))
   );
 };
 
@@ -175,7 +177,7 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
   if (isMessageEvent(event)) {
     return (
       !isGoalLoopReprompt(event) &&
-      !isClientToolResult(event) &&
+      !isToolResult(event) &&
       !isStopHookFeedback(event)
     );
   }
