@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsService from "#/api/settings-service/settings-service.api";
@@ -77,15 +77,15 @@ describe("RuntimeSettingsScreen", () => {
     expect(await renderRuntimeOptions(settings)).toEqual(expected);
   });
 
-  it("shows the per-conversation limits", async () => {
+  it("leaves the conversation limits to their own page", async () => {
     await renderRuntimeOptions({ default_runtime: "local" });
 
     expect(
-      screen.getByTestId("sdk-settings-max_iterations"),
-    ).toBeInTheDocument();
+      screen.queryByTestId("sdk-settings-max_iterations"),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByTestId("sdk-settings-max_budget_per_run"),
-    ).toBeInTheDocument();
+      screen.queryByTestId("sdk-settings-max_budget_per_run"),
+    ).not.toBeInTheDocument();
   });
 
   describe("on a server that cannot run Docker", () => {
