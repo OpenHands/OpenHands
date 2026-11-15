@@ -4,6 +4,7 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { GitRepoDropdown } from "#/components/features/home/git-repo-dropdown";
 import { I18nKey } from "#/i18n/declaration";
+import type { GitRepository } from "#/types/git";
 import type { SetupFormField as SetupFormFieldDefinition } from "#/manifests/types";
 
 export interface SetupRepositoryListProps {
@@ -12,6 +13,8 @@ export interface SetupRepositoryListProps {
   values: string[];
   /** Whether this backend can list the user's repositories to pick from. */
   canListRepositories: boolean;
+  /** What the list stores for a repository picked from the provider. */
+  repositoryAddress: (repository: GitRepository) => string;
   placeholder?: string;
   disabled: boolean;
   onChange: (values: string[]) => void;
@@ -35,6 +38,7 @@ export function SetupRepositoryList({
   field,
   values,
   canListRepositories,
+  repositoryAddress,
   placeholder,
   disabled,
   onChange,
@@ -92,7 +96,7 @@ export function SetupRepositoryList({
           placeholder={placeholder}
           disabled={disabled}
           onChange={(selected) => {
-            if (selected?.full_name) add(selected.full_name);
+            if (selected?.full_name) add(repositoryAddress(selected));
           }}
         />
       ) : (

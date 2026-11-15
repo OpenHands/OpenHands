@@ -8,6 +8,7 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import {
   fetchCloudConversationSettingsSchema,
+  fetchCloudIntegrationsConfig,
   fetchCloudSettings,
   fetchCloudSettingsSchema,
   saveCloudSettings,
@@ -451,4 +452,30 @@ describe("saveCloudSettings drops agent_context: null (agent-canvas#981)", () =>
     // Assert: nothing is left to send, so no agent_settings_diff goes on the wire.
     expect(capturedBodies[0]).toEqual({});
   });
+});
+
+describe("fetchCloudIntegrationsConfig", () => {
+  // A self-hosted instance's Agent Profiles admin console toggle reaches
+  // Canvas only through this web-client flag (OHE-3934).
+  it.each([
+    ["on", { enable_agent_profiles_page: true }, true],
+    ["not reported", {}, false],
+  ])(
+    "reads whether the instance has Agent Profiles %s",
+    async (_state, flags, isAgentProfilesEnabled) => {
+      stubGet("/api/v1/web-client/config", {
+        feature_flags: { deployment_mode: "self_hosted", ...flags },
+      });
+
+      const config = await fetchCloudIntegrationsConfig();
+
+      expect(capturedRequests[0]!.url).toBe(
+        `${cloudBackend.host}/api/v1/web-client/config`,
+      );
+      expect(config).toMatchObject({
+        deploymentMode: "self_hosted",
+        isAgentProfilesEnabled,
+      });
+    },
+  );
 });

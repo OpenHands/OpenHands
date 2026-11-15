@@ -18,9 +18,17 @@ export type ConversationMode = "code" | "plan";
 
 export type CommitsPaneSection = "uncommitted";
 
+/**
+ * The composer a queued message is meant for: the open conversation's, or the
+ * Home composer at `/conversations`, which has no conversation id.
+ */
+export type MessageToSendTarget = "conversation" | "home";
+
 export interface IMessageToSend {
   text: string;
   timestamp: number;
+  /** Absent means "conversation". */
+  target?: MessageToSendTarget;
 }
 
 interface ConversationState {
@@ -74,7 +82,7 @@ interface ConversationActions {
   addImageLoading: (imageName: string) => void;
   removeImageLoading: (imageName: string) => void;
   clearAllLoading: () => void;
-  setMessageToSend: (text: string) => void;
+  setMessageToSend: (text: string, target?: MessageToSendTarget) => void;
   clearMessageToSend: () => void;
   restoreMessageToInputIfEmpty: (text: string) => void;
   clearMessageRestoreIfEmpty: () => void;
@@ -172,7 +180,14 @@ export const useConversationStore = create<ConversationStore>()(
         set({ shouldShownAgentLoading }, false, "setShouldShownAgentLoading"),
 
       setShouldHideSuggestions: (shouldHideSuggestions) =>
-        set({ shouldHideSuggestions }, false, "setShouldHideSuggestions"),
+        set(
+          (state) =>
+            state.shouldHideSuggestions === shouldHideSuggestions
+              ? state
+              : { shouldHideSuggestions },
+          false,
+          "setShouldHideSuggestions",
+        ),
 
       addImages: (images) =>
         set(
@@ -313,12 +328,13 @@ export const useConversationStore = create<ConversationStore>()(
       clearAllLoading: () =>
         set({ loadingFiles: [], loadingImages: [] }, false, "clearAllLoading"),
 
-      setMessageToSend: (text) =>
+      setMessageToSend: (text, target = "conversation") =>
         set(
           {
             messageToSend: {
               text,
               timestamp: Date.now(),
+              target,
             },
           },
           false,

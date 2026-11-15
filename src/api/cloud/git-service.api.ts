@@ -47,6 +47,26 @@ export async function searchCloudRepositories(args: {
   };
 }
 
+/**
+ * One repository with its default branch (`main_branch`). Repository lists
+ * leave that field empty for some providers (e.g. Bitbucket Data Center).
+ */
+export async function getCloudRepositoryDetails(args: {
+  provider: Provider;
+  repository: string;
+}): Promise<GitRepository> {
+  const backend = getActiveCloudBackend();
+  const params = new URLSearchParams();
+  params.set("provider", args.provider);
+  params.set("repository", args.repository);
+
+  return callCloudProxy<GitRepository>({
+    backend,
+    method: "GET",
+    path: `/api/v1/git/repositories/details?${params.toString()}`,
+  });
+}
+
 export async function getCloudInstallations(args: {
   provider: Provider;
   pageId?: string;

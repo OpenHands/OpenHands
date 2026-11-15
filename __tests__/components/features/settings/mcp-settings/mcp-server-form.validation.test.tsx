@@ -56,6 +56,40 @@ describe("MCPServerForm validation", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
+  it("uses a header-specific format error for malformed header auth", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <MCPServerForm
+        mode="add"
+        server={{
+          id: "tmp",
+          type: "sse",
+          auth: { strategy: "header", headers: {} },
+        }}
+        existingServers={[]}
+        onSubmit={onSubmit}
+        onCancel={noop}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("url-input"), {
+      target: { value: "https://api.example.com/mcp" },
+    });
+    fireEvent.change(screen.getByTestId("headers-input"), {
+      target: { value: "NOEQUALS" },
+    });
+    fireEvent.click(screen.getByTestId("submit-button"));
+
+    expect(
+      screen.getByText("SETTINGS$MCP_ERROR_HEADER_INVALID_FORMAT"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("SETTINGS$MCP_ERROR_ENV_INVALID_FORMAT"),
+    ).not.toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it("includes an optional server name for sse/shttp servers", () => {
     const onSubmit = vi.fn();
 

@@ -8,7 +8,10 @@ import {
   setRegisteredBackends,
   subscribeActiveBackend,
 } from "#/api/backend-registry/active-store";
-import { SEEDED_DEFAULT_BACKEND_ID } from "#/api/backend-registry/default-backend";
+import {
+  LOCKED_CLOUD_BACKEND_ID,
+  SEEDED_DEFAULT_BACKEND_ID,
+} from "#/api/backend-registry/default-backend";
 import { MAX_CONSECUTIVE_FAILURES } from "#/api/backend-registry/health-storage";
 import {
   __resetHealthStoreForTests,
@@ -259,5 +262,67 @@ describe("backend pinned in the URL", () => {
     bootAt(`?${BACKEND_QUERY_PARAM}=${secondLocalBackend.id}`);
 
     expect(getActiveBackend().backend).toEqual(secondLocalBackend);
+  });
+});
+
+describe("org handed back by the cloud's web app", () => {
+  function lockToThisOrigin() {
+    (
+      window as unknown as Record<string, unknown>
+    ).__AGENT_CANVAS_LOCK_TO_CLOUD__ = window.location.origin;
+  }
+
+  function bootAt(search: string) {
+    window.history.replaceState({}, "", `/${search}`);
+    __resetActiveStoreForTests();
+  }
+
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_LOCK_TO_CLOUD__;
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("opens on the org named in ?org= instead of the one Canvas remembered", () => {
+    lockToThisOrigin();
+    window.sessionStorage.setItem(
+      ACTIVE_BACKEND_STORAGE_KEY,
+      JSON.stringify({ backendId: LOCKED_CLOUD_BACKEND_ID, orgId: "org-test" }),
+    );
+
+    bootAt(`?${ORG_QUERY_PARAM}=org-personal`);
+
+    const { backend, orgId } = getActiveBackend();
+    expect(backend.id).toBe(LOCKED_CLOUD_BACKEND_ID);
+    expect(orgId).toBe("org-personal");
+    expect(
+      JSON.parse(
+        window.sessionStorage.getItem(ACTIVE_BACKEND_STORAGE_KEY) ?? "null",
+      ),
+    ).toEqual({ backendId: LOCKED_CLOUD_BACKEND_ID, orgId: "org-personal" });
+  });
+
+  it("drops ?org= from the address bar once it is honoured", () => {
+    lockToThisOrigin();
+
+    bootAt(`?tab=files&${ORG_QUERY_PARAM}=org-personal`);
+
+    expect(window.location.search).toBe("?tab=files");
+  });
+
+  it("ignores ?org= alone when Canvas is not locked to a cloud host", () => {
+    window.localStorage.setItem(
+      BACKENDS_STORAGE_KEY,
+      JSON.stringify([localBackend, cloudBackend]),
+    );
+    window.localStorage.setItem(
+      ACTIVE_BACKEND_STORAGE_KEY,
+      JSON.stringify({ backendId: cloudBackend.id, orgId: "org-test" }),
+    );
+
+    bootAt(`?${ORG_QUERY_PARAM}=org-personal`);
+
+    expect(getActiveBackend().orgId).toBe("org-test");
+    expect(window.location.search).toBe(`?${ORG_QUERY_PARAM}=org-personal`);
   });
 });

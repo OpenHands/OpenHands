@@ -1,0 +1,8 @@
+
+ RUN  v5.0.0 /workspace/playground
+
+
+ Test Files  2 passed (2)
+      Tests  73 passed (73)
+   Start at  20:10:45
+   Duration  41.98s (tests 79%, environment 9%, transform 6%, setup 5%, import 1%)

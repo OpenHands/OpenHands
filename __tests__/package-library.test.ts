@@ -12,13 +12,14 @@ const packageJson = JSON.parse(
   module: string;
   types: string;
   exports: Record<string, unknown>;
+  sideEffects?: unknown;
   scripts: Record<string, string>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
 };
 
-const EXACT_SEMVER_PATTERN =
-  /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const EXACT_PIN_PATTERN =
+  /^(?:npm:(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+@)?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 describe("package library metadata", () => {
   const ALLOWED_STACK_PIN_DEPS = new Set([
@@ -57,7 +58,11 @@ describe("package library metadata", () => {
         import: "./dist/i18n/index.js",
         require: "./dist/i18n/index.cjs",
       },
+      "./styles.css": "./dist/styles.css",
     });
+    // A `sideEffects` list would let bundlers drop `import ".../styles.css"`
+    // unless it names the stylesheet.
+    expect(packageJson.sideEffects).toBeUndefined();
   });
 
   // Git dependencies break `npm install -g` because npm clones the repo and
@@ -96,13 +101,14 @@ describe("package library metadata", () => {
         Object.entries(dependencies ?? {})
           .filter(
             ([name, version]) =>
-              !EXACT_SEMVER_PATTERN.test(version) &&
+              !EXACT_PIN_PATTERN.test(version) &&
               !ALLOWED_STACK_PIN_DEPS.has(name),
           )
           .map(([name, version]) => `${section}.${name}: ${version}`),
     );
 
     expect(violations).toEqual([]);
+    expect(EXACT_PIN_PATTERN.test("npm:typescript@^7.0.2")).toBe(false);
   });
 
   it("prints startup guidance only for global installs", () => {

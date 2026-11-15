@@ -34,6 +34,7 @@ import {
 import { FaBitbucket, FaGithub, FaGitlab } from "react-icons/fa6";
 import type { IconType } from "react-icons/lib";
 import SlackIcon from "#/icons/slack.svg?react";
+import { AUTOMATION_SETUP_TAG_KEY } from "#/utils/automation-draft-tags";
 
 /**
  * Any icon renderable inside a tag chip / overflow row. Lucide, react-icons,
@@ -41,9 +42,7 @@ import SlackIcon from "#/icons/slack.svg?react";
  * and inherit ``currentColor`` for the muted chip text.
  */
 export type ConversationTagIcon =
-  | LucideIcon
-  | IconType
-  | ComponentType<SVGProps<SVGSVGElement>>;
+  LucideIcon | IconType | ComponentType<SVGProps<SVGSVGElement>>;
 
 /**
  * Tag keys whose value names a git host / chat source — resolve the icon from
@@ -89,6 +88,7 @@ const KEY_ICONS: Record<string, ConversationTagIcon> = {
   channel: Hash,
   email: Mails,
   automation: Zap,
+  [AUTOMATION_SETUP_TAG_KEY]: Zap,
   webhook: Webhook,
   agent: Bot,
   project: SquareKanban,

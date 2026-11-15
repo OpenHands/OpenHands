@@ -127,7 +127,25 @@ describe("AgentProfilesManager", () => {
     renderManager();
 
     const badge = await screen.findByTestId("agent-profile-active-badge");
-    expect(badge).toHaveTextContent("Default");
+    expect(badge).toHaveTextContent("Active");
+  });
+
+  it("keeps the default profile from being deleted", async () => {
+    vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
+      profiles: [{ ...mockProfiles[0], id: "id-default", name: "default" }],
+      active_agent_profile_id: "id-default",
+    });
+
+    renderManager();
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId("agent-profile-menu-trigger"));
+
+    const remove = screen.getByTestId("agent-profile-delete");
+    expect(remove).toBeDisabled();
+    expect(remove).toHaveAttribute(
+      "title",
+      "SETTINGS$AGENT_PROFILE_DEFAULT_LOCKED",
+    );
   });
 
   it("shows the Add button and fires onAddProfile", async () => {

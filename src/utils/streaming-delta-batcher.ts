@@ -1,5 +1,4 @@
-import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
-import { mergeStreamingDeltaEvent } from "#/utils/handle-event-for-ui";
+import type { DeltaFrame } from "#/types/agent-server/session-frames";
 
 /** Schedules a single deferred callback (defaults to the animation frame). */
 export interface DeltaFlushScheduler {
@@ -19,25 +18,25 @@ const defaultScheduler: DeltaFlushScheduler =
       };
 
 export interface StreamingDeltaBatcher {
-  /** Buffer a delta; a flush is scheduled for the next frame if not already. */
-  enqueue: (event: StreamingDeltaEvent) => void;
-  /** Commit buffered deltas now. Call before any non-delta event. */
+  /** Buffer a delta frame; a flush is scheduled for the next frame if not already. */
+  enqueue: (frame: DeltaFrame) => void;
+  /** Commit buffered deltas now. Call before any other frame. */
   flush: () => void;
   /** Drop buffered deltas without committing. Call on unmount / conversation switch. */
   reset: () => void;
 }
 
 /**
- * Coalesces adjacent `StreamingDeltaEvent`s and commits them at most once per
- * animation frame, so a fast model can't force a store commit + re-render per
- * token. Callers MUST `flush()` before any non-delta event so a
- * durable message/action can't render ahead of its own streamed text.
+ * Commits buffered `delta` frames at most once per animation frame, so a fast
+ * model can't force a store commit + re-render per token. Callers MUST
+ * `flush()` before any other frame so an `item_started`, an abort or a durable
+ * message can't overtake text that was streamed ahead of it.
  */
 export function createStreamingDeltaBatcher(
-  commit: (event: StreamingDeltaEvent) => void,
+  commit: (frames: DeltaFrame[]) => void,
   scheduler: DeltaFlushScheduler = defaultScheduler,
 ): StreamingDeltaBatcher {
-  let pending: StreamingDeltaEvent[] = [];
+  let pending: DeltaFrame[] = [];
   let frame: number | null = null;
 
   const cancelFrame = () => {
@@ -54,14 +53,12 @@ export function createStreamingDeltaBatcher(
     }
     const batch = pending;
     pending = [];
-    commit(
-      batch.reduce((merged, delta) => mergeStreamingDeltaEvent(delta, merged)),
-    );
+    commit(batch);
   };
 
   return {
-    enqueue: (event) => {
-      pending.push(event);
+    enqueue: (incoming) => {
+      pending.push(incoming);
       if (frame === null) {
         frame = scheduler.schedule(flush);
       }

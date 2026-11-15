@@ -2,6 +2,8 @@ import { act, renderHook } from "@testing-library/react";
 import type { RefObject } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useChatInputEvents } from "#/hooks/chat/use-chat-input-events";
+import { useGripResize } from "#/hooks/chat/use-grip-resize";
+import { useConversationStore } from "#/stores/conversation-store";
 
 const createElementRef = (text = "message") => {
   const element = document.createElement("div");
@@ -67,7 +69,6 @@ const renderInputEvents = ({
       smartResize,
       increaseHeight,
       isEmpty,
-      vi.fn(),
       onFocus,
       onBlur,
     ),
@@ -81,6 +82,62 @@ afterEach(() => {
 });
 
 describe("chat input DOM events", () => {
+  it("does not notify conversation subscribers while typing at the same suggestion visibility", () => {
+    vi.useFakeTimers();
+    const input = createElementRef("Draft");
+    let contentHeight = 20;
+    Object.defineProperty(input.element, "scrollHeight", {
+      configurable: true,
+      get: () => contentHeight,
+    });
+    useConversationStore.setState({ shouldHideSuggestions: false });
+    const { result } = renderHook(() => {
+      const { smartResize, increaseHeightForEmptyContent } = useGripResize(
+        input.ref,
+        null,
+      );
+      return useChatInputEvents(
+        input.ref,
+        smartResize,
+        increaseHeightForEmptyContent,
+        () => false,
+      );
+    });
+    act(() => vi.runOnlyPendingTimers());
+    const notifyConversation = vi.fn();
+    const unsubscribe = useConversationStore.subscribe(notifyConversation);
+
+    try {
+      for (const text of ["Draft a", "Draft a response", "Draft a response."]) {
+        input.element.textContent = text;
+        act(() => result.current.handleInput());
+        act(() => vi.runOnlyPendingTimers());
+      }
+
+      expect(notifyConversation).not.toHaveBeenCalled();
+
+      // Expanding the composer must still hide the empty-state suggestions.
+      contentHeight = 180;
+      act(() => result.current.handleInput());
+      act(() => vi.runOnlyPendingTimers());
+      expect(useConversationStore.getState().shouldHideSuggestions).toBe(true);
+
+      // Further typing at that height must leave unrelated consumers alone.
+      notifyConversation.mockClear();
+      input.element.textContent += " More detail.";
+      act(() => result.current.handleInput());
+      act(() => vi.runOnlyPendingTimers());
+      expect(notifyConversation).not.toHaveBeenCalled();
+
+      contentHeight = 20;
+      act(() => result.current.handleInput());
+      act(() => vi.runOnlyPendingTimers());
+      expect(useConversationStore.getState().shouldHideSuggestions).toBe(false);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   it("resizes and clears whitespace while remaining safe before mount", () => {
     const mounted = createElementRef("   ");
     const mountedResize = vi.fn();
@@ -282,16 +339,9 @@ describe("chat input callback freshness", () => {
     const latestResize = vi.fn();
     const increaseHeight = vi.fn();
     const isEmpty = vi.fn(() => false);
-    const clearHandler = vi.fn();
     const { result, rerender } = renderHook(
       ({ inputRef, resize }) =>
-        useChatInputEvents(
-          inputRef,
-          resize,
-          increaseHeight,
-          isEmpty,
-          clearHandler,
-        ),
+        useChatInputEvents(inputRef, resize, increaseHeight, isEmpty),
       {
         initialProps: { inputRef: first.ref, resize: firstResize },
       },
@@ -312,20 +362,13 @@ describe("chat input callback freshness", () => {
   it("uses the latest empty-content callbacks after rerender", () => {
     const inputRef: RefObject<HTMLDivElement | null> = { current: null };
     const smartResize = vi.fn();
-    const clearHandler = vi.fn();
     const firstCheck = vi.fn(() => false);
     const latestCheck = vi.fn(() => true);
     const firstIncrease = vi.fn();
     const latestIncrease = vi.fn();
     const { result, rerender } = renderHook(
       ({ check, increase }) =>
-        useChatInputEvents(
-          inputRef,
-          smartResize,
-          increase,
-          check,
-          clearHandler,
-        ),
+        useChatInputEvents(inputRef, smartResize, increase, check),
       {
         initialProps: { check: firstCheck, increase: firstIncrease },
       },
@@ -353,7 +396,6 @@ describe("chat input callback freshness", () => {
     const smartResize = vi.fn();
     const increaseHeight = vi.fn();
     const isEmpty = vi.fn(() => false);
-    const clearHandler = vi.fn();
     const { result, rerender } = renderHook(
       ({ inputRef, focus, blur }) =>
         useChatInputEvents(
@@ -361,7 +403,6 @@ describe("chat input callback freshness", () => {
           smartResize,
           increaseHeight,
           isEmpty,
-          clearHandler,
           focus,
           blur,
         ),

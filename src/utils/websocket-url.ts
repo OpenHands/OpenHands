@@ -79,28 +79,6 @@ function getConversationUrlProtocol(
 }
 
 /**
- * Builds the WebSocket URL for the agent-server's bash-events endpoint.
- * The URL is derived from the same host and path prefix as the conversation
- * events socket so it works in both direct-connect and reverse-proxy deployments.
- *
- * @param conversationUrl The conversation URL containing host/port
- * @returns WebSocket URL for the bash-events endpoint
- */
-export function buildBashWebSocketUrl(
-  conversationUrl: string | null | undefined,
-): string {
-  const baseHost = extractBaseHost(conversationUrl);
-  const pathPrefix = extractPathPrefix(conversationUrl);
-
-  const pageIsSecure = window.location.protocol === "https:";
-  const targetIsSecure =
-    getConversationUrlProtocol(conversationUrl) === "https:";
-  const protocol = pageIsSecure || targetIsSecure ? "wss:" : "ws:";
-
-  return `${protocol}//${baseHost}${pathPrefix}/sockets/bash-events`;
-}
-
-/**
  * Builds the WebSocket URL for V1 conversations (without query params)
  * @param conversationId The conversation ID
  * @param conversationUrl The conversation URL containing host/port (e.g., "http://localhost:3000/api/conversations/123")
@@ -117,7 +95,9 @@ export function buildWebSocketUrl(
   const baseHost = extractBaseHost(conversationUrl);
   const pathPrefix = extractPathPrefix(conversationUrl);
 
-  // Build WebSocket URL: ws://host:port[/path-prefix]/sockets/events/{conversationId}
+  // Build WebSocket URL: ws://host:port[/path-prefix]/sockets/session/{conversationId}
+  // The session endpoint speaks the envelope protocol (durable events plus
+  // stream-progress frames); the legacy /sockets/events endpoint is frozen.
   // The path prefix (e.g., /runtime/55313) is needed for proxy deployments
   // Note: Query params should be passed via the useWebSocket hook options
   //
@@ -131,5 +111,5 @@ export function buildWebSocketUrl(
     getConversationUrlProtocol(conversationUrl) === "https:";
   const protocol = pageIsSecure || targetIsSecure ? "wss:" : "ws:";
 
-  return `${protocol}//${baseHost}${pathPrefix}/sockets/events/${conversationId}`;
+  return `${protocol}//${baseHost}${pathPrefix}/sockets/session/${conversationId}`;
 }

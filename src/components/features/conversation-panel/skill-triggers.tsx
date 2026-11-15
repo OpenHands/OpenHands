@@ -22,7 +22,7 @@ export function SkillTriggers({ triggers }: SkillTriggersProps) {
         {triggers.map((trigger) => (
           <span
             key={trigger}
-            className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 border border-border bg-surface text-tertiary-light"
+            className="inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-medium leading-4 border border-border bg-surface text-tertiary-light"
           >
             {trigger}
           </span>

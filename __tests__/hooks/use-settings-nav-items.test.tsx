@@ -168,17 +168,29 @@ describe("useSettingsNavItems", () => {
         ),
     );
 
-    for (const path of [
-      "/settings/llm",
-      "/settings/condenser",
-      "/settings/verification",
-    ]) {
+    for (const path of ["/settings/llm", "/settings/verification"]) {
       const renderedItem = byPath.get(path);
       expect(renderedItem).toEqual({
         type: "item",
         item: OSS_NAV_ITEMS.find((item) => item.to === path),
       });
     }
+  });
+
+  it("lists the Condenser page only on cloud backends", () => {
+    useConfigMock.mockReturnValue({ data: createConfig() });
+    const paths = () =>
+      renderHook(() => useSettingsNavItems()).result.current.map((item) =>
+        item.type === "item" ? item.item.to : null,
+      );
+
+    expect(paths()).not.toContain("/settings/condenser");
+
+    useActiveBackendMock.mockReturnValue({
+      backend: { kind: "cloud" },
+      orgId: null,
+    });
+    expect(paths()).toContain("/settings/condenser");
   });
 
   it("lists only the Application page when the canvas is locked to a Cloud host", () => {

@@ -24,7 +24,7 @@ vi.mock("#/components/features/onboarding/onboarding-modal", () => ({
   ),
 }));
 
-function renderHost() {
+function renderHost(initialEntry = "/") {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -36,7 +36,7 @@ function renderHost() {
   };
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/"]}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <ActiveBackendProvider>
           <NavigationProvider value={navigationValue}>
             <OnboardingHost />
@@ -159,6 +159,47 @@ describe("OnboardingHost", () => {
     expect(
       window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
     ).toBeNull();
+  });
+
+  it("never opens the modal on a canvas locked to its Cloud host, even with no LLM configured", async () => {
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    seedCloudBackend();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      llm_api_key_set: false,
+      agent_settings: {
+        ...DEFAULT_SETTINGS.agent_settings,
+        llm: { model: "" },
+      },
+    });
+
+    renderHost();
+
+    await expect(
+      screen.findByTestId("onboarding-modal-stub"),
+    ).rejects.toThrow();
+    expect(
+      window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
+    ).toBeNull();
+  });
+
+  it("still opens the design preview on a canvas locked to its Cloud host", async () => {
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    seedCloudBackend();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      llm_api_key_set: false,
+      agent_settings: {
+        ...DEFAULT_SETTINGS.agent_settings,
+        llm: { model: "" },
+      },
+    });
+
+    renderHost("/?previewOnboardingStep=1");
+
+    expect(
+      await screen.findByTestId("onboarding-modal-stub"),
+    ).toBeInTheDocument();
   });
 
   it("skips the modal when the active Cloud backend uses subscription auth", async () => {

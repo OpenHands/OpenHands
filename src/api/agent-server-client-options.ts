@@ -4,6 +4,7 @@ import { getEffectiveLocalBackend } from "./backend-registry/active-store";
 import type { Backend } from "./backend-registry/types";
 
 export interface AgentServerClientOverrides {
+  conversationId?: string;
   host?: string;
   apiKey?: string | null;
   sessionApiKey?: string | null;
@@ -13,6 +14,7 @@ export interface AgentServerClientOverrides {
 }
 
 export interface AgentServerClientOptions {
+  conversationId?: string;
   host: string;
   apiKey?: string;
   workingDir: string;
@@ -25,15 +27,6 @@ export class NoBackendAvailableError extends Error {
     this.name = "NoBackendAvailableError";
   }
 }
-
-export const isNoBackendAvailableError = (
-  error: unknown,
-): error is NoBackendAvailableError =>
-  error instanceof NoBackendAvailableError ||
-  (typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    error.name === "NoBackendAvailableError");
 
 function normalizeHost(host: string): string {
   return host.replace(/\/+$/, "");
@@ -60,8 +53,15 @@ export function getAgentServerClientOptions(
   const apiKey =
     overrides.sessionApiKey ?? overrides.apiKey ?? backend?.apiKey ?? undefined;
 
+  const conversationId =
+    overrides.conversationId ??
+    overrides.conversationUrl?.match(
+      /\/api\/conversations\/([^/?#]+)(?:[/?#]|$)/,
+    )?.[1];
+
   return {
     host: resolveHost(overrides, backend),
+    ...(conversationId ? { conversationId } : {}),
     ...(apiKey ? { apiKey } : {}),
     workingDir: overrides.workingDir ?? getAgentServerWorkingDir(),
     ...(overrides.timeout !== undefined ? { timeout: overrides.timeout } : {}),
@@ -71,9 +71,11 @@ export function getAgentServerClientOptions(
 export function getAgentServerHttpClientOptions(
   overrides?: AgentServerClientOverrides,
 ) {
-  const { host, apiKey, timeout } = getAgentServerClientOptions(overrides);
+  const { host, apiKey, timeout, conversationId } =
+    getAgentServerClientOptions(overrides);
   return {
     baseUrl: host,
+    ...(conversationId ? { conversationId } : {}),
     ...(apiKey ? { apiKey } : {}),
     timeout: timeout ?? 60000,
   };

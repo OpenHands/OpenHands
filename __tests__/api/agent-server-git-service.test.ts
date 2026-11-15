@@ -65,6 +65,7 @@ describe("AgentServerGitService", () => {
       );
 
       expect(RemoteWorkspace).toHaveBeenCalledWith({
+        conversationId: "123",
         host: "http://localhost:3000",
         apiKey: "my-session-key",
         workingDir: "workspace/project",
@@ -126,6 +127,7 @@ describe("AgentServerGitService", () => {
       );
 
       expect(RemoteWorkspace).toHaveBeenCalledWith({
+        conversationId: "123",
         host: "http://localhost:3000",
         apiKey: "test-api-key",
         workingDir: "workspace/project",

@@ -23,7 +23,7 @@ export function SkillContent({ content }: SkillContentProps) {
         borderRadius="medium"
         maxHeight="small"
         overflow="auto"
-        className="mt-2 border border-border bg-base text-text-tertiary"
+        className="mt-2 border border-border bg-canvas-base text-text-tertiary"
       >
         {content || t(I18nKey.SKILLS_MODAL$NO_CONTENT)}
       </Pre>

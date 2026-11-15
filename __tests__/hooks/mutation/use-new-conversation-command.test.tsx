@@ -4,6 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
 import * as telemetry from "#/services/telemetry";
+import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import {
+  getStoredConversationMetadata,
+  removeStoredConversationMetadata,
+} from "#/api/conversation-metadata-store";
 
 const mockNavigate = vi.fn();
 
@@ -105,7 +111,8 @@ describe("useNewConversationCommand", () => {
   });
 
   afterEach(() => {
-    captureMock.mockRestore();
+    vi.restoreAllMocks();
+    removeStoredConversationMetadata("new-conv-999");
   });
 
   const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -216,10 +223,78 @@ describe("useNewConversationCommand", () => {
     // Assert — only sandbox_id travels; parent_conversation_id and agent_type
     // stay undefined because /new is NOT a sub-conversation.
     await waitFor(() => {
-      expect(createSpy).toHaveBeenCalledWith({
-        sandboxId: "sandbox-abc",
-      });
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ sandboxId: "sandbox-abc" }),
+      );
     });
+    const [options] = createSpy.mock.lastCall ?? [];
+    expect(options).not.toHaveProperty("parentConversationId");
+    expect(options).not.toHaveProperty("agentType");
+  });
+
+  it("launches the active agent profile rather than the global settings", async () => {
+    vi.spyOn(AgentProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [
+        {
+          id: "acp-1",
+          name: "claude",
+          agent_kind: "acp",
+          revision: 1,
+          llm_profile_ref: null,
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: "acp-1",
+    } as never);
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeStartTask() as never);
+
+    const { result } = renderHook(() => useNewConversationCommand(), {
+      wrapper,
+    });
+    await result.current.mutateAsync();
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sandboxId: "sandbox-abc",
+        agentProfileId: "acp-1",
+        agentProfileKind: "acp",
+      }),
+    );
+  });
+
+  it("records the LLM profile the new conversation runs", async () => {
+    vi.spyOn(AgentProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [
+        {
+          id: "oh-1",
+          name: "reviewer",
+          agent_kind: "openhands",
+          revision: 1,
+          llm_profile_ref: "pinned",
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: "oh-1",
+    } as never);
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [{ name: "pinned" }],
+      active_profile: "pinned",
+    } as never);
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockResolvedValue(makeStartTask() as never);
+
+    const { result } = renderHook(() => useNewConversationCommand(), {
+      wrapper,
+    });
+    await result.current.mutateAsync();
+
+    expect(getStoredConversationMetadata("new-conv-999")?.active_profile).toBe(
+      "pinned",
+    );
   });
 
   it("shows a loading toast and dismisses it on success", async () => {

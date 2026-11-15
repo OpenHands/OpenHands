@@ -30,8 +30,9 @@
  *   The fix is the `afterPack` hook below: after electron-builder has
  *   finished copying files, we rm -rf the bundled Resources/app/node_modules/
  *   directory, then copy back the dependency closure of RUNTIME_PACKAGES
- *   (~200 KB). The build wastes a few seconds copying files we immediately
- *   delete, but the final artifact is correctly tiny (~10 MB vs ~600 MB).
+ *   (~6 MB, nearly all @openhands/extensions). The build wastes a few seconds
+ *   copying files we immediately delete, but the final artifact stays small
+ *   (~16 MB vs ~600 MB).
  *
  * Packaged app layout (Resources/app/ = electron/ contents):
  *   main.mjs        ← Electron entry point
@@ -72,15 +73,22 @@ import { fileURLToPath } from "node:url";
 const ELECTRON_ARCH = process.env.ELECTRON_ARCH;
 const isUniversal = ELECTRON_ARCH === "universal";
 
-// npm packages the packaged app's child-process scripts import at runtime:
+// npm packages imported at runtime by code that isn't bundled through Vite
+// (main.mjs itself, and the child-process scripts it spawns):
 //   scripts/static-server.mjs  → sirv
 //   scripts/proxy-utils.mjs    → httpxy   (imported by ingress.mjs)
+//   scripts/tunnel-client.mjs  → ws       (imported directly by main.mjs,
+//                                          not spawned — the MARS
+//                                          port-forward tunnel client)
+//   scripts/dev-safe.mjs       → @openhands/extensions (read from disk by
+//                                          the agent-server as EXTENSIONS_PATH)
 // Their dependency closure is copied back into Resources/app/node_modules
-// after the strip below. If a spawned script gains a new bare import, add
-// the package here — a missing one crashes that service in the installed
-// app with ERR_MODULE_NOT_FOUND (invisible under Finder, where stdout goes
-// to /dev/null) and the splash times out waiting for port 8000.
-const RUNTIME_PACKAGES = ["sirv", "httpxy"];
+// after the strip below. If a spawned script (or main.mjs itself) gains a
+// new bare import, add the package here — a missing one crashes that
+// service in the installed app with ERR_MODULE_NOT_FOUND (invisible under
+// Finder, where stdout goes to /dev/null) and the splash times out waiting
+// for port 8000.
+const RUNTIME_PACKAGES = ["sirv", "httpxy", "ws", "@openhands/extensions"];
 
 const repoRoot = dirname(fileURLToPath(import.meta.url));
 
@@ -427,9 +435,7 @@ const config = {
     target: [
       {
         target: "dmg",
-        arch: [
-          ELECTRON_ARCH ?? (process.arch === "arm64" ? "arm64" : "x64"),
-        ],
+        arch: [ELECTRON_ARCH ?? (process.arch === "arm64" ? "arm64" : "x64")],
       },
     ],
     // Universal merge whitelist: the per-arch uv/node runtime binaries are

@@ -1,3 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { parse } from "postcss";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { I18nKey } from "#/i18n/declaration";
@@ -67,6 +71,52 @@ describe("RunLogsModal", () => {
       />,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("scrolls long log content inside the dialog", async () => {
+    useBashCommandLogsMock.mockReturnValue(
+      makeHookResult({
+        data: [
+          {
+            id: "o1",
+            kind: "BashOutput",
+            timestamp: "2026-01-01T10:00:00Z",
+            command_id: "cmd-1",
+            order: 0,
+            stdout: "line\n".repeat(80),
+            stderr: null,
+          },
+        ],
+      }),
+    );
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+      />,
+    );
+
+    const body = screen.getByTestId("run-logs-body");
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const properties: Record<string, string> = {};
+    parse(compiler.build([...body.classList])).walkDecls((declaration) => {
+      if (!["max-height", "overflow-y"].includes(declaration.prop)) return;
+      const rule = declaration.parent;
+      if (rule?.type === "rule" && body.matches(rule.selector))
+        properties[declaration.prop] = declaration.value;
+    });
+    expect(properties).toMatchObject({
+      "max-height": "80vh",
+      "overflow-y": "auto",
+    });
+    expect(
+      screen.getByTestId("run-logs-output-stdout").parentElement,
+    ).not.toHaveClass("overflow-auto");
   });
 
   it("uses the 'Logs' title (not 'Run logs')", () => {
@@ -374,7 +424,34 @@ describe("RunLogsModal — run inspection summary", () => {
     expect(screen.getByText(/Sandbox timed out/)).toBeInTheDocument();
   });
 
-  it("falls back to a readable JSON block for custom task metadata", () => {
+  it("shows a failed run's agent summary separately from its system error", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={makeRun({
+          status: AutomationRunStatus.FAILED,
+          error_detail: "Sandbox timed out.",
+          run_metadata: {
+            finish_tool_response: {
+              outcome_summary: "The report was generated before the timeout.",
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText("The report was generated before the timeout."),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Sandbox timed out/)).toBeInTheDocument();
+  });
+
+  it("shows a successful task with readable custom metadata when no status was reported", () => {
     useBashCommandLogsMock.mockReturnValue(makeHookResult());
 
     render(
@@ -396,7 +473,7 @@ describe("RunLogsModal — run inspection summary", () => {
     );
 
     expect(
-      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$NEEDS_REVIEW),
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$SUCCESSFUL),
     ).toBeInTheDocument();
     expect(
       screen.getByText(I18nKey.AUTOMATIONS$DETAIL$CUSTOM_TASK_METADATA),
@@ -409,6 +486,33 @@ describe("RunLogsModal — run inspection summary", () => {
     expect(metadata).toHaveTextContent(
       '"next_action": "Ask user to pick a contact."',
     );
+  });
+
+  it("shows an outcome summary for a successful task with no reported status", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={makeRun({
+          run_metadata: {
+            finish_tool_response: {
+              outcome_summary: "Created and published the weekly report.",
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$SUCCESSFUL),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Created and published the weekly report."),
+    ).toBeInTheDocument();
   });
 });
 

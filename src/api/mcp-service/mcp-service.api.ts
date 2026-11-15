@@ -148,8 +148,28 @@ function getMcpProbeOptions(): { host: string; apiKey?: string } {
   throw new Error("OAuth authorization requires a reachable local backend.");
 }
 
-function createMcpProbeClient(): MCPClient {
-  const { host, apiKey } = getMcpProbeOptions();
+/**
+ * The agent-server base URL as this browser reaches it. The agent-server
+ * sends the OAuth provider's redirect to its own route under it; without it,
+ * the redirect goes to a loopback port on the agent-server host, which a
+ * browser outside that container or machine cannot reach.
+ */
+function getMcpOAuthCallbackBaseUrl(host: string): string | undefined {
+  try {
+    const url = new URL(host || "/", window.location.href);
+    return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
+  } catch {
+    return undefined;
+  }
+}
+
+function createMcpProbeClient({
+  host,
+  apiKey,
+}: {
+  host: string;
+  apiKey?: string;
+}): MCPClient {
   return new MCPClient({
     host,
     ...(apiKey ? { apiKey } : {}),
@@ -181,6 +201,16 @@ function oauthStatusToTestResponse(
       ...(status.oauth_state !== undefined && {
         oauth_state: status.oauth_state,
       }),
+    };
+  }
+  // The backend's probe gives up after its own budget. When it had already
+  // handed out an authorization URL, that budget ran out waiting for the
+  // person to finish the sign-in, not for the server.
+  if (status.error_kind === "timeout" && status.authorization_url) {
+    return {
+      ok: false,
+      error: status.error || "OAuth authorization was not completed",
+      error_kind: "authorization",
     };
   }
   return {
@@ -264,47 +294,6 @@ class McpService {
     return finalizeMcpTestResponse(result, validation, [server]);
   }
 
-  static async startOAuth(
-    server: MCPServerConfig,
-  ): Promise<MCPOAuthStartResponse> {
-    const transport = McpService.createOAuthTransport();
-    try {
-      return await transport.start(server);
-    } finally {
-      transport.close();
-    }
-  }
-
-  static async getOAuthStatus(jobId: string): Promise<MCPOAuthStatusResponse> {
-    const transport = McpService.createOAuthTransport();
-    try {
-      return await transport.status(jobId);
-    } finally {
-      transport.close();
-    }
-  }
-
-  /**
-   * Local agent-server only: hands a captured loopback callback URL to the
-   * probe. On cloud backends the provider redirects straight to the app
-   * server's callback route, so there is nothing to submit.
-   */
-  static async submitOAuthCallback(
-    jobId: string,
-    callbackUrl: string,
-  ): Promise<MCPOAuthStatusResponse> {
-    const client = createMcpProbeClient();
-    try {
-      return await McpService.submitOAuthCallbackWithClient(
-        client,
-        jobId,
-        callbackUrl,
-      );
-    } finally {
-      client.close();
-    }
-  }
-
   static async authorizeOAuth(
     server: MCPServerConfig,
   ): Promise<ExtendedMCPTestResponse> {
@@ -313,18 +302,25 @@ class McpService {
       finalizeMcpTestResponse(result, validation, [server]);
     // Opened synchronously inside the click handler so popup blockers allow
     // it; every failure path below closes it again.
-    const popup = window.open("about:blank", "_blank");
+    let popup: Window | null = window.open("about:blank", "_blank");
     let transport: McpOAuthTransport | null = null;
     try {
       transport = McpService.createOAuthTransport();
       const start = await transport.start(server);
-      if (!start.ok || !start.job_id || !start.authorization_url) {
+      if (!start.ok || !start.job_id) {
         popup?.close();
         return finalize({
           ok: false,
           error: start.error || "Could not start OAuth authorization",
           error_kind: start.error_kind || "unknown",
         });
+      }
+      // No authorization URL: the probe completed on the stored tokens (still
+      // valid, or refreshed), so no consent is needed and the outcome is read
+      // from the status route.
+      if (!start.authorization_url) {
+        popup?.close();
+        popup = null;
       }
 
       let status = await transport.status(start.job_id);
@@ -338,7 +334,7 @@ class McpService {
         status = await transport.status(start.job_id);
       }
 
-      if (popup) {
+      if (popup && start.authorization_url) {
         popup.location.href = start.authorization_url;
       }
 
@@ -355,6 +351,16 @@ class McpService {
         }
       }
 
+      // With a pop-up, nothing on the server timed out: the person did not
+      // finish the sign-in. Without one, the app server was still probing the
+      // stored tokens, which is a plain timeout.
+      if (start.authorization_url) {
+        return {
+          ok: false,
+          error: "OAuth authorization was not completed",
+          error_kind: "authorization",
+        };
+      }
       return {
         ok: false,
         error: "OAuth authorization timed out",
@@ -392,9 +398,12 @@ class McpService {
         close: () => {},
       };
     }
-    const client = createMcpProbeClient();
+    const probe = getMcpProbeOptions();
+    const client = createMcpProbeClient(probe);
+    const callbackBaseUrl = getMcpOAuthCallbackBaseUrl(probe.host);
     return {
-      start: (server) => McpService.startOAuthWithClient(client, server),
+      start: (server) =>
+        McpService.startOAuthWithClient(client, server, callbackBaseUrl),
       status: (jobId) => McpService.getOAuthStatusWithClient(client, jobId),
       close: () => client.close(),
     };
@@ -403,9 +412,17 @@ class McpService {
   private static async startOAuthWithClient(
     client: MCPClient,
     server: MCPServerConfig,
+    callbackBaseUrl: string | undefined,
   ): Promise<MCPOAuthStartResponse> {
     const { request } = await buildMcpTestRequest(server);
-    return client.startOAuth(request);
+    // Agent-servers before `callback_base_url` existed ignore the field.
+    const startRequest: AgentServerMCPTestRequest & {
+      callback_base_url?: string;
+    } = {
+      ...request,
+      ...(callbackBaseUrl ? { callback_base_url: callbackBaseUrl } : {}),
+    };
+    return client.startOAuth(startRequest);
   }
 
   // typescript-client 1.36 types the OAuth probes with the generated
@@ -417,16 +434,6 @@ class McpService {
     jobId: string,
   ): Promise<MCPOAuthStatusResponse> {
     return (await client.getOAuthStatus(jobId)) as MCPOAuthStatusResponse;
-  }
-
-  private static async submitOAuthCallbackWithClient(
-    client: MCPClient,
-    jobId: string,
-    callbackUrl: string,
-  ): Promise<MCPOAuthStatusResponse> {
-    return (await client.submitOAuthCallback(jobId, {
-      callback_url: callbackUrl,
-    })) as MCPOAuthStatusResponse;
   }
 }
 

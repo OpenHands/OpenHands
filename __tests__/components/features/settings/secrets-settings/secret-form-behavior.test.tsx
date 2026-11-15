@@ -37,12 +37,16 @@ interface RenderFormOptions {
   mode?: "add" | "edit";
   selectedSecret?: string | null;
   onCancel?: () => void;
+  onSaved?: (secret: { name: string; description?: string }) => void;
+  keepOpenOnError?: boolean;
 }
 
 function renderForm({
   mode = "add",
   selectedSecret = null,
   onCancel = vi.fn(),
+  onSaved = vi.fn(),
+  keepOpenOnError,
 }: RenderFormOptions = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -54,10 +58,12 @@ function renderForm({
         mode={mode}
         selectedSecret={selectedSecret}
         onCancel={onCancel}
+        onSaved={onSaved}
+        keepOpenOnError={keepOpenOnError}
       />
     </QueryClientProvider>,
   );
-  return { ...view, invalidate, onCancel };
+  return { ...view, invalidate, onCancel, onSaved };
 }
 
 beforeEach(() => {
@@ -77,8 +83,11 @@ describe("Secret form behavior", () => {
     );
     expect(screen.getByTestId("name-input")).toBeRequired();
     expect(screen.getByTestId("value-input")).toBeRequired();
+    expect(screen.getByTestId("value-input")).toHaveAttribute(
+      "type",
+      "password",
+    );
     expect(screen.getByTestId("value-input")).toHaveClass(
-      "resize-none",
       "placeholder:italic",
       "disabled:bg-surface-raised",
       "disabled:border-border-subtle",
@@ -115,6 +124,10 @@ describe("Secret form behavior", () => {
     // Edit mode now exposes an optional value field that starts blank; leaving
     // it blank keeps the existing secret value.
     expect(screen.getByTestId("value-input")).toHaveValue("");
+    expect(screen.getByTestId("value-input")).toHaveAttribute(
+      "type",
+      "password",
+    );
     expect(screen.getByTestId("description-input")).toHaveValue(
       "production credential",
     );
@@ -225,10 +238,9 @@ describe("Secret form behavior", () => {
     await user.type(screen.getByTestId("value-input"), "secret-value");
     await user.click(screen.getByTestId("submit-button"));
 
-    expect(screen.getByText(I18nKey.SECRETS$SECRET_ALREADY_EXISTS)).toHaveClass(
-      "text-red-500",
-      "text-sm",
-    );
+    expect(
+      screen.getByText(I18nKey.SECRETS$SECRET_ALREADY_EXISTS),
+    ).toBeVisible();
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
@@ -251,7 +263,7 @@ describe("Secret form behavior", () => {
 
   it("creates a trimmed secret, refreshes both secret lists, and closes after settlement", async () => {
     const user = userEvent.setup();
-    const { invalidate, onCancel } = renderForm();
+    const { invalidate, onCancel, onSaved } = renderForm();
 
     await user.type(screen.getByTestId("name-input"), "NEW_SECRET");
     await user.type(screen.getByTestId("value-input"), "  secret value  ");
@@ -270,17 +282,42 @@ describe("Secret form behavior", () => {
 
     expect(invalidate).not.toHaveBeenCalled();
     expect(onCancel).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
 
     await act(async () => options.onSuccess());
 
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["secrets-search"] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["secrets"] });
+    expect(onSaved).toHaveBeenCalledExactlyOnceWith({
+      name: "NEW_SECRET",
+      description: "for deployments",
+    });
     expect(onCancel).not.toHaveBeenCalled();
 
     options.onSettled();
 
     expect(onCancel).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    { keepOpenOnError: undefined, closes: true },
+    { keepOpenOnError: true, closes: false },
+  ])(
+    "closes after a failed save unless kept open (keepOpenOnError=$keepOpenOnError)",
+    async ({ keepOpenOnError, closes }) => {
+      const user = userEvent.setup();
+      const { onCancel, onSaved } = renderForm({ keepOpenOnError });
+
+      await user.type(screen.getByTestId("name-input"), "NEW_SECRET");
+      await user.type(screen.getByTestId("value-input"), "value");
+      await user.click(screen.getByTestId("submit-button"));
+      const options = mocks.create.mock.calls[0][1];
+      options.onSettled(undefined, new Error("Save failed"));
+
+      expect(onSaved).not.toHaveBeenCalled();
+      expect(onCancel).toHaveBeenCalledTimes(closes ? 1 : 0);
+    },
+  );
 
   it("omits an empty optional description when creating", async () => {
     const user = userEvent.setup();
@@ -476,7 +513,7 @@ describe("Secret form behavior", () => {
     expect(submit).toBeDisabled();
   });
 
-  it("re-prefills the fields when the selected secret changes", () => {
+  it("re-prefills and masks the fields when the selected secret changes", async () => {
     mocks.secrets = [
       { name: "FIRST", description: "  one  " },
       { name: "SECOND", description: "two" },
@@ -484,6 +521,10 @@ describe("Secret form behavior", () => {
     const { rerender } = renderForm({ mode: "edit", selectedSecret: "FIRST" });
     expect(screen.getByTestId("name-input")).toHaveValue("FIRST");
     expect(screen.getByTestId("description-input")).toHaveValue("one");
+    await userEvent.click(
+      screen.getByRole("button", { name: I18nKey.SECRETS$SHOW_VALUE }),
+    );
+    expect(screen.getByTestId("value-input")).toHaveAttribute("type", "text");
 
     rerender(
       <QueryClientProvider client={new QueryClient()}>
@@ -492,5 +533,9 @@ describe("Secret form behavior", () => {
     );
     expect(screen.getByTestId("name-input")).toHaveValue("SECOND");
     expect(screen.getByTestId("description-input")).toHaveValue("two");
+    expect(screen.getByTestId("value-input")).toHaveAttribute(
+      "type",
+      "password",
+    );
   });
 });

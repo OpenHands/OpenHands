@@ -1,0 +1,1763 @@
+{
+  "target": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+  "families_observed": [
+    "F02",
+    "F03",
+    "F04",
+    "F05",
+    "F06",
+    "F07",
+    "F08",
+    "F10",
+    "F11",
+    "F13",
+    "F14",
+    "F15",
+    "F16",
+    "F17",
+    "F18",
+    "F19",
+    "F20",
+    "F21",
+    "F22",
+    "F23",
+    "F25",
+    "F26",
+    "F27"
+  ],
+  "counts": {
+    "pass": 23,
+    "fail": 75,
+    "blocked": 7
+  },
+  "checks": [
+    {
+      "ts": "2026-10-12T06:13:37.698Z",
+      "feature": "F07.open-by-url",
+      "entry": "Conversation route > idle untitled conversation",
+      "result": "pass",
+      "expected": "Local terminal conversation uses ordinary 30-second polling",
+      "actual": "Eight browser GETs over 210 seconds had 30.008–30.031-second intervals; real title stayed null and status idle; no 3-second polls observed",
+      "artifacts": [
+        "evidence/F07.open-by-url/16877-local-polling.json",
+        "evidence/F07.open-by-url/16877-local-idle.png"
+      ],
+      "note": "#16877 Local diagnostic only; Cloud untitled IDLE/FINISHED branch needs an authenticated Cloud fixture",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-coordinator-checks"
+    },
+    {
+      "ts": "2026-10-12T09:11:49.506Z",
+      "feature": "F03.composer-blocked-without-llm",
+      "entry": "Home > named AgentProfile with different active LLM",
+      "result": "fail",
+      "expected": "Readiness follows the configuration used by implicit launch",
+      "actual": "Keyless pinned/key-present active shows not-set-up warning; inverse hides warning and enables Send, but launches keyless active model with launched_agent_profile null and default concurrency1",
+      "artifacts": [
+        "evidence/F03.composer-blocked-without-llm/16951-empty-pinned-ready-active.png",
+        "evidence/F03.composer-blocked-without-llm/16951-ready-pinned-empty-active.png",
+        "evidence/F03.composer-blocked-without-llm/16951-launch-readback.json"
+      ],
+      "note": "#16951 credential-presence/launch-policy check only; disposable refused-loopback configuration, no successful inference",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-coordinator-checks"
+    },
+    {
+      "ts": "2026-10-12T09:28:37.924Z",
+      "feature": "F03.selection-after-reload",
+      "entry": "Home > selected Local workspace > SPA backend switch",
+      "result": "fail",
+      "expected": "Clear incompatible launch target before submission",
+      "actual": "QA_Secondary workspace stayed visible after switching to Local; actual Local conversation used QA_Secondary fixture path",
+      "artifacts": [
+        "evidence/F03.selection-after-reload/16950-target-after-switch.png",
+        "evidence/F03.selection-after-reload/16950-submission-readback.json"
+      ],
+      "note": "#16950 Local variant only; no Cloud organization/repository claim",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-coordinator-checks"
+    },
+    {
+      "ts": "2026-10-12T09:28:38.044Z",
+      "feature": "F03.workspace-dropdown-search",
+      "entry": "Home > saved workspace picker > SPA Local backend switch",
+      "result": "fail",
+      "expected": "Secondary picker shows only its own QA_B_ONLY registry",
+      "actual": "After warming Local QA_A_ONLY, secondary picker still offered QA_A_ONLY within2.7seconds; actual secondary registry contained only QA_B_ONLY",
+      "artifacts": [
+        "evidence/F03.workspace-dropdown-search/16844-local-switch.mp4",
+        "evidence/F03.workspace-dropdown-search/16844-local-b-picker.png",
+        "evidence/F03.workspace-dropdown-search/16844-saved-registry-readback.json"
+      ],
+      "note": "#16844 saved-workspace cache reproduced; shared-host parent-directory variant and Windows untested",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-coordinator-checks"
+    },
+    {
+      "ts": "2026-10-12T06:17:46.592Z",
+      "feature": "F26.session-key-rotated",
+      "entry": "OpenHands/OpenHands#18301 — [Bug]: Preserve Automation KV encryption across session-key rotation",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Wrote and read an owned Automation KV marker (HTTP 201/200), then control-openhands restart --rotate-key with no AUTOMATION_KV_SECRET override. Fresh-auth KV GET now returns HTTP 500 instead of the prior marker.",
+      "artifacts": [
+        "evidence/F26.session-key-rotated/kv-rotation-18301.json"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:46.711Z",
+      "feature": "F26.runtime-services",
+      "entry": "OpenHands/OpenHands#18299 — [Bug]: migration 029 errors with `duplicate column name: consecutive_auth_failures` on SQLite",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Stopped only the owned automation service, backed up its DB, reset alembic_version from 032 to 028 while consecutive_auth_failures exists, restarted the real launcher. Migration duplicate-column signature and automation unavailability occur while launcher stays alive. Private original DB restored afterward.",
+      "artifacts": [
+        "evidence/F26.runtime-services/partial-schema-18299.json",
+        "evidence/F26.runtime-services/partial-schema-18299.png"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:46.817Z",
+      "feature": "F20.git-tree-url",
+      "entry": "OpenHands/OpenHands#17783 — [Bug]: Canvas App install form throws on malformed percent escapes in tree URLs",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Executed both malformed ref and path tree URLs in the live install modal; each raised URI malformed, no install mutation or toast, modal remains. Reviewed local demo control installs and enables.",
+      "artifacts": [
+        "evidence/F20.git-tree-url/malformed-ref-17783.png"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:46.925Z",
+      "feature": "F23.script-section",
+      "entry": "OpenHands/OpenHands#17704 — [Bug]: A non-ASCII file name in a script bundle shows garbled (café.py as cafÃ©.py) and loses its Entrypoint badge",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Owned UTF-8 USTAR bundle café.py/main.py, inactive automation python3 café.py: actual Script header renders cafÃ©.py and no Entrypoint badge; ASCII control untouched.",
+      "artifacts": [
+        "evidence/F23.script-section/unicode-17704.png"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:47.028Z",
+      "feature": "F21.phone",
+      "entry": "OpenHands/OpenHands#17564 — [Bug]: Mobile automation dashboard actions squeeze the heading to about 52px",
+      "result": "pass",
+      "expected": "Execute the original reported trigger in the actual current configuration.",
+      "actual": "With 25 inert automation fixtures, the dashboard heading measures 347 px at 390 px and 277 px at 320 px, at 28 px height. Actions stack below it and no horizontal page overflow appears. This exact current dashboard layout does not reproduce the reported 52 px squeeze.",
+      "artifacts": [
+        "evidence/F21.phone/header-390-17564.png",
+        "evidence/F21.phone/header-320-17564.png"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:47.130Z",
+      "feature": "F26.cli-port-in-use",
+      "entry": "OpenHands/OpenHands#17546 — [Bug]: detect ports automatically instead of always using 3001",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Port 3001 was already occupied; no request or signal was sent to its owner. The genuine frozen launcher with --port 18940 and free private backend/automation ports exits 1 with frontend: port 3001. It provides no automatic frontend fallback, and the ingress override does not change that internal port.",
+      "artifacts": [
+        "evidence/F26.cli-port-in-use/frontend-default-17546-16226.json"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:47.231Z",
+      "feature": "F25.add-agent-server",
+      "entry": "OpenHands/OpenHands#17371 — [Bug]: rotated session key isn't reconciled into openhands-backends → silent permanent 401 loop",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Added QA_Rotation_Legacy for the identical origin through Add Backend using the owned session-key file. After restart --rotate-key and reload, read-only comparison shows default-local matches injected key but the manually registered active entry does not. UI shows Disconnected and Unauthorized; core unreconciled credential persists, although there is visible status feedback in this version.",
+      "artifacts": [
+        "evidence/F25.recovery-gate/rotated-manual-backend-17371.png",
+        "evidence/F25.recovery-gate/rotated-key-booleans-17371.json"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:47.337Z",
+      "feature": "F21.kebab-menu",
+      "entry": "OpenHands/OpenHands#17128 — [Bug]: automation menu is cut off and some options are unreachable",
+      "result": "pass",
+      "expected": "Execute the original reported trigger in the actual current configuration.",
+      "actual": "The 25th list row is scrolled into view and its action menu is opened at desktop 1440×1000 and phone 390×844. The full 160×236 menu and its 150×36 Delete button fit within both viewports; no option is cut off in this setup.",
+      "artifacts": [
+        "evidence/F21.phone/last-row-kebab-17128.png",
+        "evidence/F21.kebab-menu/last-row-phone-17128.png"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:47.442Z",
+      "feature": "F23.activity-log",
+      "entry": "OpenHands/OpenHands#17121 — [Bug]: Live run phases never render against automation 1.9.0+ (current_phase)",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Actual bounded local script run API current_phase=Starting automation, no structured phase fields; Activity Log reads only Running and contains no phase text.",
+      "artifacts": [
+        "evidence/F23.activity-log/current-phase-17121.aria.txt",
+        "evidence/F23.run-status-polling/missing-phase-17121.png"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:47.545Z",
+      "feature": "F20.rail-entry",
+      "entry": "OpenHands/OpenHands#16995 — [Bug]: Pin as Home is missing from Canvas Extension pages",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Installed and enabled reviewed local demo; hover extension sidebar entry reveals no pin control, while hover Automate reveals sidebar-pin-home-toggle-automations.",
+      "artifacts": [
+        "evidence/F20.rail-entry/extension-no-home-pin-16995.png"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:47.650Z",
+      "feature": "F26.runtime-services",
+      "entry": "OpenHands/OpenHands#16927 — [Bug]: Launcher stays alive after a required service dies with EADDRINUSE",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Killed only the owned required static frontend after a healthy startup. The genuine launcher remains alive and authenticated /api/settings still returns 200; UI / returns 502 Bad Gateway. This exercises the required-child fatal-exit branch using SIGKILL, not an EADDRINUSE race; exact trigger is recorded. Normal stack restored afterward.",
+      "artifacts": [
+        "evidence/F26.runtime-services/required-frontend-crash-16927.json",
+        "evidence/F26.runtime-services/required-frontend-crash-16927.png"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:47.752Z",
+      "feature": "F26.runtime-services",
+      "entry": "OpenHands/OpenHands#16839 — [Bug]: Proxy timeout listeners accumulate on keep-alive connections",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Twenty sequential genuine ingress authenticated /api/conversations/search requests over one keep-alive connection, allHTTP 200; the owned ingress emitted MaxListenersExceededWarning for11 timeout listeners.",
+      "artifacts": [
+        "evidence/F26.runtime-services/keepalive-16839.json"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:47.856Z",
+      "feature": "F25.manage-backends",
+      "entry": "OpenHands/OpenHands#16492 — Backend API keys live in origin-readable localStorage — any same-origin script can read all of them",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Read-only same-origin browser inspection records the number of registered backend entries and nonempty plaintext apiKey values; the retained probe now shows both owned entries are readable. No credential value or whole storage JSON was printed.",
+      "artifacts": [
+        "evidence/F25.manage-backends/plaintext-key-counts-16492.json"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:47.959Z",
+      "feature": "F26.runtime-services",
+      "entry": "OpenHands/OpenHands#16383 — Session API key passed as plaintext CLI arg to static-server.mjs (visible via ps/proc)",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Inspect only the owned static-server process for frontend18813: session-key equals a literal argv value. Evidence records booleans only; no credential/argv string exposed.",
+      "artifacts": [
+        "evidence/F26.runtime-services/argv-16383.json"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:48.061Z",
+      "feature": "F25.selector-dropdown",
+      "entry": "OpenHands/OpenHands#16297 — [Bug]: Default \"Local\" backend name is confusing when on a VM",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Served the unchanged UI on an owned protected non-loopback LAN origin, with auth-required and no injected key. Onboarding default Host Name is Local despite the LAN URL; after authenticating with only the private run key and skipping remaining setup, the actual selector reads Connected Local. This verifies the non-loopback naming branch, not a VM installation.",
+      "artifacts": [
+        "evidence/F25.selector-dropdown/nonloopback-label-final-16297.png"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:48.164Z",
+      "feature": "F22.template-card",
+      "entry": "OpenHands/OpenHands#16277 — Automate tab crashes on catalog entry with missing `requires` (guard getIntegrationIds)",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Frozen-source isolated copy with only private @openhands/extensions custom-automation manifest.requires removed; build served correctly from build/ against the healthy owned backend. Actual /automations/templates renders Application Error with TypeError: Cannot read properties of undefined (reading integrations), crashing the entire catalog instead of isolating the malformed entry. Shared source/build untouched.",
+      "artifacts": [
+        "evidence/F22.template-card/missing-requires-16277.png",
+        "evidence/F22.template-card/missing-requires-16277.aria.txt"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:48.267Z",
+      "feature": "F26.cli-port-in-use",
+      "entry": "OpenHands/OpenHands#16226 — [Bug]: FIXED frontend port results in port conflict",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Port 3001 was already occupied; no request or signal was sent to its owner. The genuine frozen launcher with --port 18940 and free private backend/automation ports exits 1 with frontend: port 3001. The explicit ingress override does not choose another frontend port.",
+      "artifacts": [
+        "evidence/F26.cli-port-in-use/frontend-default-17546-16226.json"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:48.368Z",
+      "feature": "F26.runtime-services",
+      "entry": "OpenHands/OpenHands#16217 — [Bug]: npm run dev can launch Uvicorn outside the automation environment",
+      "result": "pass",
+      "expected": "Execute the original reported trigger in the actual current configuration.",
+      "actual": "Installed real uvicorn 0.37.0 alone in an owned Python 3.12 venv, prepended that bin to the private launcher PATH, then restarted the genuine current launcher. Automation 1.19.3 starts and /api/automation/health returns HTTP 200; the reported external-uvicorn ModuleNotFoundError does not occur in this exact resolver/PATH setup. Original PATH restored and doctor run afterward.",
+      "artifacts": [
+        "evidence/F26.runtime-services/standalone-uvicorn-16217.json"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:48.470Z",
+      "feature": "F21.list-row",
+      "entry": "OpenHands/OpenHands#16155 — [Bug]: \"Run now\" button renders incorrectly when the automation title is long",
+      "result": "pass",
+      "expected": "Execute the original reported trigger in the actual current configuration.",
+      "actual": "The exact reported long title is arranged in a real inactive list row and scrolled into view. Run now is an icon-only 32×32 px control, with no wrapping Run/now text, in the current list layout.",
+      "artifacts": [
+        "evidence/F21.list-row/long-title-visible-16155.png"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:48.572Z",
+      "feature": "F21.add-menu",
+      "entry": "OpenHands/OpenHands#15833 — [Bug]: Missing text chat when Create Automation button is clicked in modal",
+      "result": "pass",
+      "expected": "Execute the original reported trigger in the actual current configuration.",
+      "actual": "Add Automation → Create Automation opens /automations/setup with a New Automation draft editor, prompt, schedule and assistance input. The old modal-to-empty-conversation branch is replaced on this target, so its missing prefilled chat text does not reproduce.",
+      "artifacts": [
+        "evidence/F22.agent-assisted-setup/create-flow-15833.png"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:48.675Z",
+      "feature": "F27.browser-screenshot",
+      "entry": "OpenHands/OpenHands#17383 — [Bug]: Browser tooling fails due to incompatible MCP dependency version",
+      "result": "blocked",
+      "expected": "Execute the original reported trigger in the actual current configuration.",
+      "actual": "Actual pinned runtime browser-use 0.11.13/mcp 1.30.0/fastmcp 3.4.8 BrowserToolExecutor constructs. The report’s supported Canvas/global browser operation still needs a genuine browser-enabled agent launch and authorized LLM to issue a browser_* operation; a constructor probe alone does not establish that user flow.",
+      "artifacts": [
+        "evidence/F27.browser-screenshot/dependency-17383-5152.json"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:48.778Z",
+      "feature": "F20.app-backend-view",
+      "entry": "OpenHands/software-agent-sdk#5648 — [Bug]: /app-backends WebSocket bridge negotiates no subprotocol (expected the backend's choice, qa.v1)",
+      "result": "blocked",
+      "expected": "Execute the original reported trigger in the actual current configuration.",
+      "actual": "Actual server_info on pinned Agent Server1.54.0 has no canvas_app_backend_bridge_v1 and null app_backend_ingress_url; reviewed demo displays App backend view unavailable. Need an admitted bridge-capable server, platform artifact and bridge-enabled deployment to drive this backend subprotocol/health/orphan report through Canvas.",
+      "artifacts": [
+        "evidence/F20.app-backend-view/bridge-unavailable.png"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:48.882Z",
+      "feature": "F20.app-backend-view",
+      "entry": "OpenHands/software-agent-sdk#5646 — [Bug]: Canvas App backend stays 'unhealthy' after one slow health probe instead of returning to 'ready'",
+      "result": "blocked",
+      "expected": "Execute the original reported trigger in the actual current configuration.",
+      "actual": "Actual server_info on pinned Agent Server1.54.0 has no canvas_app_backend_bridge_v1 and null app_backend_ingress_url; reviewed demo displays App backend view unavailable. Need an admitted bridge-capable server, platform artifact and bridge-enabled deployment to drive this backend subprotocol/health/orphan report through Canvas.",
+      "artifacts": [
+        "evidence/F20.app-backend-view/bridge-unavailable.png"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:48.987Z",
+      "feature": "F20.app-backend-view",
+      "entry": "OpenHands/software-agent-sdk#5637 — [Bug]: Canvas backend outlives a SIGKILLed agent-server; restart reports it stopped and starts a second one",
+      "result": "blocked",
+      "expected": "Execute the original reported trigger in the actual current configuration.",
+      "actual": "Actual server_info on pinned Agent Server1.54.0 has no canvas_app_backend_bridge_v1 and null app_backend_ingress_url; reviewed demo displays App backend view unavailable. Need an admitted bridge-capable server, platform artifact and bridge-enabled deployment to drive this backend subprotocol/health/orphan report through Canvas.",
+      "artifacts": [
+        "evidence/F20.app-backend-view/bridge-unavailable.png"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:49.096Z",
+      "feature": "F26.remote-backend",
+      "entry": "OpenHands/software-agent-sdk#5633 — [Bug]: Failed run blocks the event loop while logging a rich traceback: /alive takes ~5 s, not ~100 ms",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Temporarily replaced only the owned Agent Server with the same pinned interpreter and state under genuine default Rich logging (LOG_JSON/CI/LOG_RICH_TRACEBACKS unset). Canvas Send uses tools=[] and a dummy LLM pointing at closed 127.0.0.1:9; 60 concurrent direct /alive probes had maximum latency 2.091 s while the conversation ended error. No provider reachable. Restored normal launcher and doctor afterward.",
+      "artifacts": [
+        "evidence/F26.remote-backend/rich-failure-latency-5633.json",
+        "evidence/F26.remote-backend/rich-failure-5633.png"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:49.203Z",
+      "feature": "F03.launch-in-workspace",
+      "entry": "OpenHands/software-agent-sdk#5630 — [Bug]: Sub-agent file naming a missing skill makes the first message return 500 instead of being skipped",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Owned workspace has .agents/agents/qa-bad-skill.md naming nonexistent qa-f27-missing-skill. With only a closed-loopback dummy LLM profile and autotitling disabled, Home launch in that folder returns the missing-skill error and remains on Home. Two genuine message POSTs with run:false and a create with initial_message run:false each returned HTTP 500 before inference.",
+      "artifacts": [
+        "evidence/F03.create-error-toast/missing-skill-home-5630-2.png",
+        "evidence/F03.create-error-toast/bad-skill-5630.aria.txt"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:49.311Z",
+      "feature": "F27.browser-screenshot",
+      "entry": "OpenHands/software-agent-sdk#5152 — Unlocked installs resolve browser-use 0.11.13 with mcp 2.x — browser tools silently disappear",
+      "result": "pass",
+      "expected": "Execute the original reported trigger in the actual current configuration.",
+      "actual": "The actual unlocked pinned runtime resolves openhands-tools 1.54.0, browser-use 0.11.13, mcp 1.30.0 and fastmcp 3.4.8. Its genuine BrowserToolExecutor constructs successfully using its own interpreter and private HOME. The reported mcp 2.x/list_tools import failure does not occur in this exact dependency set; no model was called.",
+      "artifacts": [
+        "evidence/F27.browser-screenshot/dependency-17383-5152.json"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:49.420Z",
+      "feature": "F23.configuration",
+      "entry": "OpenHands/automation#557 — Prompt and plugin presets ignore the selected agent profile at run time",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Saved bare qa-backfill-bare agent profile (tools=[], unique persona, closed-loopback qa-offline LLM), created prompt preset then PATCHed its selected agent_profile_id. Real UI Run now created a linked conversation whose launched_agent_profile is null, selected persona is absent and default tools are present; the selected profile was ignored before the deliberate closed-loopback LLM connection failure.",
+      "artifacts": [
+        "evidence/F23.run-linked-conversation/profile-557.json",
+        "evidence/F23.run-linked-conversation/profile-557.aria.txt"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:49.526Z",
+      "feature": "F03.cancel-in-flight-run",
+      "entry": "OpenHands/automation#514 — fix(local): stop BashCommand when an automation run is cancelled",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Clicked Home owned worker Cancel run; toast Automation run cancelled and Activity Log CANCELLED. The python3 worker.py remains in this run launcher ancestry after cancellation, despite no provider or external worker calls.",
+      "artifacts": [
+        "evidence/F03.cancel-in-flight-run/owned-worker-post-cancel.json",
+        "evidence/F23.activity-log/cancelled-514.aria.txt"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:49.631Z",
+      "feature": "F21.card-grid",
+      "entry": "OpenHands/automation#347 — Run summaries are only readable one automation at a time, and the SQLite engine's undeclared pool turns the resulting fan-out into 30s stalls + HTTP 500",
+      "result": "blocked",
+      "expected": "Execute the original reported trigger in the actual current configuration.",
+      "actual": "The owned 25-automation local dashboard completed run summaries with HTTP 200 and no 30 s stall on automation 1.19.3. This narrow live probe does not account for the issue’s missing batch-summary API/pool configuration contracts or withheld original lock workload. A failing dashboard recipe needs the original DB load/lock setup and redacted service-log/HAR timing evidence, linked to Canvas #16559.",
+      "artifacts": [
+        "evidence/F21.card-grid/scale-347.json"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:49.734Z",
+      "feature": "F21.card-grid",
+      "entry": "Local dashboard / 25 inert automations — narrow probe for automation#347",
+      "result": "pass",
+      "expected": "All owned local run-summary requests return 200 without a30s stall.",
+      "actual": "All25 summaries returned200; current UI throttle applies. Original withheld lock/workload and independent service contracts remain unverified.",
+      "artifacts": [
+        "evidence/F21.card-grid/scale-347.json"
+      ],
+      "note": "This does not resolve the whole backend issue.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T06:17:49.836Z",
+      "feature": "F22.setup-tarball-create",
+      "entry": "OpenHands/automation#343 — setup_script_path is validated, stored and tested — but never read; only a root setup.sh ever runs",
+      "result": "fail",
+      "expected": "The reported user flow behaves correctly on the frozen target.",
+      "actual": "Uploaded owned tarball scripts/setup.sh writes .qa-setup-marker, main.py requires marker; persisted setup_script_path scripts/setup.sh. UI Run now genuine BashOutput exits1 with QA_NESTED_SETUP_WAS_SKIPPED, proving nested setup ignored.",
+      "artifacts": [
+        "evidence/F23.activity-log/nested-status-proof.json"
+      ],
+      "note": "Recorded after fixture restoration; actual action/URL is described in the issue steps and artifact. Frozen fa1f724; no provider reachable in offline checks.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-integrations-worker"
+    },
+    {
+      "ts": "2026-10-12T09:43:15.596Z",
+      "feature": "F10.edit",
+      "entry": "Bug backfill: OpenHands/OpenHands#17806",
+      "result": "pass",
+      "expected": "Changing only the model preserves the stored key.",
+      "actual": "Two UI saves and actual switches kept the dummy key and edited model; provider success untested.",
+      "artifacts": [
+        "backfill-18309-settings-rechecks/evidence/F10.edit/key-edit-diagnostic.json",
+        "backfill-18309-settings-rechecks/evidence/F10.edit/17806-dummy-key-preserved.png"
+      ],
+      "note": "Scoped Local pre-model diagnostic on frozen fa1f724 / SDK1.54.0; all model endpoints are refused loopback.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-rechecks"
+    },
+    {
+      "ts": "2026-10-12T09:43:18.090Z",
+      "feature": "F11.agent-uses-connection",
+      "entry": "Bug backfill: OpenHands/OpenHands#17803",
+      "result": "fail",
+      "expected": "New chats resolve the saved provider connection URL.",
+      "actual": "Stored connection /v2 then /v3; both new runtimes retained /v1.",
+      "artifacts": [
+        "backfill-18309-settings-rechecks/evidence/F11.agent-uses-connection/url-edit-diagnostic.json",
+        "backfill-18309-settings-rechecks/evidence/F11.agent-uses-connection/17803-stale-loopback-url.png"
+      ],
+      "note": "Scoped Local pre-model diagnostic on frozen fa1f724 / SDK1.54.0; all model endpoints are refused loopback.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-rechecks"
+    },
+    {
+      "ts": "2026-10-12T09:57:58.500Z",
+      "feature": "F10.edit",
+      "entry": "Bug backfill: OpenHands/OpenHands#17806",
+      "result": "pass",
+      "expected": "Model-only Basic and Advanced saves keep the untouched stored key.",
+      "actual": "Two Advanced and one protected Basic saves/swaps kept the dummy key and changed model; provider success untested.",
+      "artifacts": [
+        "backfill-18309-settings-rechecks/evidence/F10.edit/key-edit-diagnostic.json",
+        "backfill-18309-settings-rechecks/evidence/F10.edit/17806-dummy-key-preserved.png",
+        "backfill-18309-settings-rechecks/evidence/F10.edit/17806-basic-key-preserved.png"
+      ],
+      "note": "Corrected Basic trial used owned default OpenAI loopback endpoints; one earlier rejected dummy-key provider validation was a setup mistake and is excluded from verdict.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-rechecks"
+    },
+    {
+      "ts": "2026-10-12T09:57:59.888Z",
+      "feature": "F19.enabled-autoload",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#5628",
+      "result": "fail",
+      "expected": "After plugin disable and restart, its skills/command do not survive resume.",
+      "actual": "Two resumed conversations retained both plugin skills and activated the disabled command; hooks stayed dropped. Fresh disabled chat activated neither.",
+      "artifacts": [
+        "backfill-18309-settings-rechecks/evidence/F19.enabled-autoload/resume-plugin-diagnostic.json",
+        "backfill-18309-settings-rechecks/evidence/F19.enabled-autoload/5628-disabled-resume-activation.png"
+      ],
+      "note": "Pre-model state/activation only; no successful reply or plugin MCP reconciliation claimed.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-rechecks"
+    },
+    {
+      "ts": "2026-10-12T10:23:01.095Z",
+      "feature": "F10.custom-model",
+      "entry": "Bug backfill: OpenHands/OpenHands#17261",
+      "result": "fail",
+      "expected": "Configured OpenAI-compatible connection dispatches the saved model namespace.",
+      "actual": "Both actual starts failed at provider selection for saved qwen despite a configured OpenAI connection.",
+      "artifacts": [
+        "backfill-18309-settings-rechecks/evidence/F10.custom-model/17261-qwen-dispatch.png"
+      ],
+      "note": "Two bounded current Local diagnostics before successful inference. Exact historical installation/provider/account branches listed in the result ledger.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-rechecks"
+    },
+    {
+      "ts": "2026-10-12T10:23:03.758Z",
+      "feature": "F10.connection-link",
+      "entry": "Bug backfill: OpenHands/OpenHands#17195",
+      "result": "fail",
+      "expected": "Configured OpenAI-compatible connection dispatches the saved model namespace.",
+      "actual": "Both starts rejected the reported ollama-local namespace despite a saved custom_openai connection.",
+      "artifacts": [
+        "backfill-18309-settings-rechecks/evidence/F10.connection-link/17195-ollama-prefix-dispatch.png"
+      ],
+      "note": "Two bounded current Local diagnostics before successful inference. Exact historical installation/provider/account branches listed in the result ledger.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-rechecks"
+    },
+    {
+      "ts": "2026-10-12T10:23:09.194Z",
+      "feature": "F13.acp-conversation",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#5466",
+      "result": "fail",
+      "expected": "Codex uses the pinned adapter when a stale binary is on PATH.",
+      "actual": "Both actual ACP initializations reported the published stale 0.16.0 adapter rather than the pinned 1.10.0, and the warning misattributed selection to npx fallback.",
+      "artifacts": [
+        "backfill-18309-settings-rechecks/evidence/F13.acp-conversation/stale-adapter-diagnostic.json",
+        "backfill-18309-settings-rechecks/evidence/F13.acp-conversation/5466-stale-published-adapter.png"
+      ],
+      "note": "Two bounded current Local diagnostics before successful inference. Exact historical installation/provider/account branches listed in the result ledger.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-rechecks"
+    },
+    {
+      "ts": "2026-10-12T10:24:19.711Z",
+      "feature": "F10.default-used",
+      "entry": "Bug backfill: OpenHands/OpenHands#16578",
+      "result": "pass",
+      "expected": "Current Bedrock named-profile initialization imports boto3.",
+      "actual": "Both starts imported boto3 and failed at missing named AWS profile before AWS/provider HTTP.",
+      "artifacts": [
+        "backfill-18309-settings-rechecks/evidence/F10.default-drives-conversation/bedrock-import-diagnostic.json",
+        "backfill-18309-settings-rechecks/evidence/F10.default-drives-conversation/16578-boto3-import-diagnostic.png"
+      ],
+      "note": "Current Local SDK1.54.0 import diagnostic only; valid AWS credentials/inference and historical Linux/fresh dependency resolution untested.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-rechecks"
+    },
+    {
+      "ts": "2026-10-12T10:37:24.184Z",
+      "feature": "F10.custom-model",
+      "entry": "Bug backfill: OpenHands/OpenHands#17261",
+      "result": "fail",
+      "expected": "Configured OpenAI-compatible connection dispatches the stored model namespace.",
+      "actual": "Both actual qwen starts failed provider selection before HTTP despite a saved OpenAI connection.",
+      "artifacts": [
+        "backfill-18309-settings-rechecks/evidence/F10.custom-model/qwen-dispatch-diagnostic.json"
+      ],
+      "note": "Sanitized immutable prior error summaries, added after completed teardown; raw stack/event files remain private. Scope is current Local dispatch, not working external inference.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "run_id": "backfill-18309-settings-rechecks"
+    },
+    {
+      "ts": "2026-10-12T10:37:27.792Z",
+      "feature": "F10.connection-link",
+      "entry": "Bug backfill: OpenHands/OpenHands#17195",
+      "result": "fail",
+      "expected": "Configured OpenAI-compatible connection dispatches the stored model namespace.",
+      "actual": "Both actual ollama-local/qwen starts failed provider selection despite a custom_openai connection; exact original suffix omitted.",
+      "artifacts": [
+        "backfill-18309-settings-rechecks/evidence/F10.connection-link/ollama-prefix-dispatch-diagnostic.json"
+      ],
+      "note": "Sanitized immutable prior error summaries, added after completed teardown; raw stack/event files remain private. Scope is current Local dispatch, not working external inference.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "run_id": "backfill-18309-settings-rechecks"
+    },
+    {
+      "ts": "2026-10-12T05:36:54.422Z",
+      "feature": "F15.save-dirty-state",
+      "entry": "Settings > Condenser > All, stale-query reconnect",
+      "result": "fail",
+      "expected": "Unsaved Max Size=111 remains and Save remains enabled after a changed server baseline refetch.",
+      "actual": "Max Size becomes 300 and Save disables on the mounted form, twice; no UI Save/reset/scope change.",
+      "artifacts": [
+        "evidence/F15.save-dirty-state/16948-before-refetch.png",
+        "evidence/F15.save-dirty-state/16948-after-refetch.png",
+        "evidence/F15.save-dirty-state/network-state-and-refetch.gif"
+      ],
+      "note": "OpenHands/OpenHands#16948; TARGET fa1f724ab5737a17453ad6081129eb91c5a423c6; SDK1.54.0. Real offline/online networking, no routes intercepted. Clock and Max Size restored.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T05:49:33.441Z",
+      "feature": "F10.create-prefill",
+      "entry": "Settings → LLM → Add/Edit with an active custom-base-URL profile",
+      "result": "fail",
+      "expected": "The embedded editor starts on Basic per issue 17801 acceptance criteria.",
+      "actual": "Both Add and Edit selected All twice with QA_LOOPBACK custom base URL and temperature 0.4.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F10.create-prefill/17801-add-all.png",
+        "backfill-18309-settings-worker/evidence/F10.edit/17801-edit-all.png"
+      ],
+      "note": "Frozen target fa1f724; SDK1.54.0. No model request or Save.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T05:49:35.216Z",
+      "feature": "F10.model-picker",
+      "entry": "Settings → LLM → Add → Basic → OpenRouter → off-catalog model",
+      "result": "fail",
+      "expected": "Typing thinkingmachines/inkling-small:free remains after blur and is qualified with selected provider.",
+      "actual": "Two fill/Tab cycles returned an empty model. Covers root 17577 and the Basic dead end in 17233; no provider save was attempted.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F10.model-picker/17577-off-catalog.png"
+      ],
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T05:49:36.997Z",
+      "feature": "F10.model-picker",
+      "entry": "Settings → LLM → Add → Basic → Azure",
+      "result": "fail",
+      "expected": "Azure Basic offers its required Base URL field.",
+      "actual": "Base URL count was 0 on Basic, 1 on Advanced, and 0 again on Basic. Runtime Azure auth path remains untested.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F10.model-picker/16726-azure-basic.png"
+      ],
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T05:56:24.223Z",
+      "feature": "F13.set-active",
+      "entry": "Settings → Agents → Default row menu",
+      "result": "fail",
+      "expected": "Consistent Default wording.",
+      "actual": "The badge says Default, and the menu says Set as active on two openings.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F13.set-default/17426-wording.png"
+      ],
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T06:14:27.624Z",
+      "feature": "F10.create-validation",
+      "entry": "Settings LLM Add → loopback endpoint →5 retries → Save",
+      "result": "fail",
+      "expected": "Validation rejects an unreachable provider promptly and prevents saving.",
+      "actual": "Two real validations hung until the30s browser timeout; each fell through to a201profileSave. With1retry, both fast checks had rejected with Connection error and404.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F10.create-validation/5100-slow-saved.png",
+        "backfill-18309-settings-worker/evidence/F10.create-validation/5100-slow-saved-repeat.png"
+      ],
+      "note": "Root15778 and SDK5100slow branch. The exhausted-quota429branch needs an approved real provider fixture; no synthetic response used.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T06:14:30.569Z",
+      "feature": "F05.llm-profile-picker",
+      "entry": "Local Home and conversation →8 saved profiles",
+      "result": "pass",
+      "expected": "Menu within viewport, first and last rows reachable.",
+      "actual": "Home at1512x720,desktop,phone,narrow and conversation at1512x720/phone permitted inner scroll and first/last selection; Cloud and ACP model catalogue untested.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F05.llm-profile-picker/17239-conversation-phone.png",
+        "backfill-18309-settings-worker/evidence/F05.model-picker/17239-eight-1512x720.png"
+      ],
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:04:19.785Z",
+      "feature": "F18.card",
+      "entry": "Bug backfill: OpenHands/OpenHands#18287",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "After filtering a personal/bundled name collision, the summary said one result while two then three stale skill-creator cards remained.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F18.card/18287-ghost-filtered-card.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:04:22.554Z",
+      "feature": "F10.create-prefill",
+      "entry": "Bug backfill: OpenHands/OpenHands#17801",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Add and Edit selected All twice for a profile with a custom base URL and temperature 0.4, rather than the requested Basic starting tab.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F10.create-prefill/17801-add-all.png",
+        "backfill-18309-settings-worker/evidence/F10.edit/17801-edit-all.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:04:26.453Z",
+      "feature": "F10.model-picker",
+      "entry": "Bug backfill: OpenHands/OpenHands#17577",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Basic OpenRouter discarded the off-catalog model ID on blur in two trials; the model field became empty.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F10.model-picker/17577-off-catalog.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:04:28.804Z",
+      "feature": "F10.delete",
+      "entry": "Bug backfill: OpenHands/OpenHands#17520",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Two deletes returned 200 while title-cleanup PATCH returned 500; the UI kept the deleted row although its API returned 404. Temporary own-file immutable flags were restored immediately and doctor passed.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F10.delete/17520-immutable-cleanup-error.png",
+        "backfill-18309-settings-worker/evidence/F10.delete/17520-immutable-repeat.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:04:31.482Z",
+      "feature": "F13.set-active",
+      "entry": "Bug backfill: OpenHands/OpenHands#17426",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "The active agent profile badge says Default while its menu says Set as active, on two openings.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F13.set-default/17426-wording.png",
+        "backfill-18309-settings-worker/evidence/F13.set-default/17426-wording.aria.txt"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:04:34.909Z",
+      "feature": "F10.model-picker",
+      "entry": "Bug backfill: OpenHands/OpenHands#17233",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Reproduced the Basic entry dead end described by concrete companion #17577. The authenticated Advanced/save branch was not exercised.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F10.model-picker/17577-off-catalog.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:04:37.367Z",
+      "feature": "F17.server-health",
+      "entry": "Bug backfill: OpenHands/OpenHands#16954",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Two SPA switches from a freshly probed Local identity to unprobed QA_SCOPE reused the same Reachable verdict. The identities use ingress/direct URLs of one owned stack; independent credential and delayed-probe branches were not tested.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F17.server-health/16954-spa-cross-scope.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:04:42.510Z",
+      "feature": "F15.save-dirty-state",
+      "entry": "Bug backfill: OpenHands/OpenHands#16948",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Reproduced twice on a healthy frozen stack: an unsaved Condenser Max Size=111 was replaced by the changed server baseline=300 and Save disabled after a real stale-query background refetch. No UI Save, reset or scope change occurred. Clock/online state and Max Size=240 restored.",
+      "artifacts": [
+        "evidence/F15.save-dirty-state/16948-before-refetch.png",
+        "evidence/F15.save-dirty-state/16948-after-refetch.png",
+        "evidence/F15.save-dirty-state/16948-repeat.png",
+        "evidence/F15.save-dirty-state/network-state-and-refetch.mp4",
+        "evidence/F15.save-dirty-state/network-state-and-refetch.gif"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:04:44.376Z",
+      "feature": "F18.page",
+      "entry": "Bug backfill: OpenHands/OpenHands#16893",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Two SPA backend switches made zero skills requests and omitted a newly arranged card. Reload then fetched actual data and showed it. Registry identities share one physical stack, with real fixture data changes between loads.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F18.page/16893-spa-stale-cache.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:04:46.350Z",
+      "feature": "F19.launch-unicode",
+      "entry": "Bug backfill: OpenHands/OpenHands#16735",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "A real UTF-8 base64 launch path corrupted Chinese/emoji parameter intoLatin1mojibake twice, including reload. This tests decoding; no source-builder function evaluation was counted asUIproof.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F19.launch-unicode/16735-unicode-parameters.png",
+        "backfill-18309-settings-worker/evidence/F19.launch-unicode/16735-unicode-parameters.aria.txt"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:04:50.658Z",
+      "feature": "F10.model-picker",
+      "entry": "Bug backfill: OpenHands/OpenHands#16726",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Azure Basic had no Base URL input; Advanced had one, and returning to Basic hid it again. No authenticated Azure conversation was attempted.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F10.model-picker/16726-azure-basic.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:04:53.537Z",
+      "feature": "F18.toggle",
+      "entry": "Bug backfill: OpenHands/OpenHands#15694",
+      "result": "pass",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "The disabled skill stayed off in two eight-second samples and reloads; the server retained its disabled name. The report is intermittent, so longer or different timing remains unverified.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F18.toggle/15694-disabled-persists.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:04:55.236Z",
+      "feature": "F10.create-validation",
+      "entry": "Bug backfill: OpenHands/OpenHands#15778",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Fast refused-loopback validation rejected the profile, but two validations with five retries reached the 30-second browser timeout and then saved with 201.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F10.create-validation/15778-invalid-rejected.png",
+        "backfill-18309-settings-worker/evidence/F10.create-validation/5100-slow-saved.png",
+        "backfill-18309-settings-worker/evidence/F10.create-validation/5100-slow-saved-repeat.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:04:57.998Z",
+      "feature": "F15.verification-page",
+      "entry": "Bug backfill: OpenHands/OpenHands#15811",
+      "result": "pass",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Default Basic and Advanced both show two switches. Enabling Confirmation Mode reveals Security Analyzer only on Advanced. The report asks whether this is intentional; mapped as conditional-tier clarification.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F15.verification-page/15811-basic.aria.txt",
+        "backfill-18309-settings-worker/evidence/F15.verification-page/15811-advanced.aria.txt",
+        "backfill-18309-settings-worker/evidence/F15.verification-critic-fields/15811-conditional-advanced.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:04:59.830Z",
+      "feature": "F16.analytics",
+      "entry": "Bug backfill: OpenHands/OpenHands#17898",
+      "result": "pass",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "The hard-DNT build sent zero PostHog requests before and after opt-in/Save/reload, and created no PostHog storage key. Consent was restored off.",
+      "artifacts": [],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:02.380Z",
+      "feature": "F19.launch-trust",
+      "entry": "Bug backfill: OpenHands/OpenHands#17162",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Crafted evil.example/github.com/...source renders onlyAll-Hands-AI/openhands-plugin and omits evil.example twice; Start remained disabled and no plugin was fetched.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F19.launch-trust/17162-source-spoof.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:03.950Z",
+      "feature": "F15.save-errors",
+      "entry": "Bug backfill: OpenHands/OpenHands#15813",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Max Size accepted -5 and enabled Save twice. The server rejected the save and kept 240; the client input floor is missing.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F15.save-errors/15813-negative-enabled.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:11.188Z",
+      "feature": "F19.enabled-autoload",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#5718",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Two malformed-manifest first sends showed Invalid JSON and Sending, persisted no events and stayed idle. A malformed skill under a valid manifest instead initialized successfully.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F19.enabled-autoload/5718-broken-manifest-first-send.png",
+        "backfill-18309-settings-worker/evidence/F19.enabled-autoload/5718-broken-manifest-repeat.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:14.920Z",
+      "feature": "F19.add-plugin",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#5645",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Two Add attempts with an unknown ref on a warm local Git cache succeeded and installed cached version 1.0.0 instead of rejecting the missing ref.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F19.add-plugin/5645-unknown-ref.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:18.974Z",
+      "feature": "F17.custom-add",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#5643",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "An empty MCP body returned 201 twice and persisted enabled:true; real UI-started initialization lost the healthy echo tool. The invalid entry had no UI card.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F17.runtime-tools/5643-mixed-empty-init.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:21.481Z",
+      "feature": "F11.list",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#5632",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "The own provider-store lock delayed unrelated /alive responses by 25.416 and 28.060 seconds; the second list request returned 503 after 30.052 seconds. Locks were released and doctor passed.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F11.list/5632-lock-blocks-ui.png",
+        "backfill-18309-settings-worker/evidence/F11.list/store-lock-diagnostic.json"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:23.159Z",
+      "feature": "F11.create-validation",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#5624",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Two real Add forms accepted the redacted placeholder and persisted keyless connections. Typing it in Edit changed key-set to true. Keyboard Save was used; whitespace-only and provider-auth branches were not claimed.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F11.create-validation/5624-sentinel-created.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:30.000Z",
+      "feature": "F10.create-validation",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#5100",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "The slow branch reproduced twice: five-retry loopback validation lasted until the 30-second client abort, then Canvas saved the profile. The separate exhausted-quota 429 branch requires an approved real endpoint.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F10.create-validation/5100-slow-saved.png",
+        "backfill-18309-settings-worker/evidence/F10.create-validation/5100-slow-saved-repeat.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:32.229Z",
+      "feature": "F17.agent-uses-server",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#4891",
+      "result": "pass",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Missing stdio and unreachable HTTP MCP sources both allowed initialization and preserved the healthy sibling tool, then reached the expected loopback model error. No successful reply was claimed.",
+      "artifacts": [],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:34.176Z",
+      "feature": "F15.agent-context-effect",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#4709",
+      "result": "pass",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Canvas launches used fresh runtime datetimes despite naturally stale settings and an explicit old-date fixture. The old date was absent from the initialized prompt.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F15.agent-context-page/datetime-diagnostic.json"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:35.895Z",
+      "feature": "F13.acp-credentials",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#4629",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "An empty run-owned Gemini OAuth file produced the already-signed-in banner on two fresh ACP forms. Provider auth priority and version migration were not exercised.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F13.acp-credentials/4629-empty-file-signed-in.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:38.550Z",
+      "feature": "F13.active-drives-conversation",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#4533",
+      "result": "pass",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Two seeded-default UI launches preserved the dummy key in runtime state and reached loopback connection refusal. This verifies key propagation, not successful provider authentication.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F13.active-drives-conversation/default-key-diagnostic.json"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:41.710Z",
+      "feature": "F19.refresh",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#4363",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Completed Update changed persisted requested_ref from v1 to null. Visible version stayed 1.0.0 in this cache, so a default-HEAD jump was not observed.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F19.refresh/4363-pinned-before.aria.txt",
+        "backfill-18309-settings-worker/evidence/F19.refresh/pin-loss-diagnostic.json"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:44.321Z",
+      "feature": "F18.personal-skill-dirs",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#4252",
+      "result": "pass",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "A persistence-folder skill appeared in the UI and in available/activated skills in two actual initialized chats. This verifies discovery before the model reply, not historical Docker mounts.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F18.personal-skill-dirs/4252-legacy-skill-loaded.png"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:47.039Z",
+      "feature": "F17.agent-uses-server",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#4246",
+      "result": "pass",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "Two actual stdio timeouts left initialization after about 30 seconds, persisted the prompt/user message and reached loopback model error. This settles the current Local initialization loop only, not successful replies or historical Cloud/SSE behavior; sibling tools were lost.",
+      "artifacts": [],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:49.114Z",
+      "feature": "F14.create",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#5622",
+      "result": "fail",
+      "expected": "The linked issue's requested behavior holds on its current Canvas consumer.",
+      "actual": "With an approved replacement-cipher/old-encrypted-state fixture, secret creation rewrote an old entry and its dummy getter returned 404. Two unrelated settings saves cleared the old LLM key. Original cipher and stores were restored immediately; restart and doctor passed.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F14.create/5622-before-cipher-change.png",
+        "backfill-18309-settings-worker/evidence/F14.create/5622-after-new-secret.png",
+        "backfill-18309-settings-worker/evidence/F14.create/5622-settings-save.png",
+        "backfill-18309-settings-worker/evidence/F14.create/cipher-mismatch-diagnostic.json"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:05:50.771Z",
+      "feature": "F13.openhands-options",
+      "entry": "Bug backfill: OpenHands/software-agent-sdk#5519",
+      "result": "blocked",
+      "expected": "Complete the issue's affected user path once its stated prerequisite is available.",
+      "actual": "A complete scoped worker turn needs an approved working model and the affected legacy profile to dispatch a child and invoke TaskTrackingTool. Current Canvas Save added task_tracker despite its unchecked box, and real parent initialization exposed task/task_tracker; this is not a child-turn verdict.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F13.openhands-options/scoped-task-diagnostic.json"
+      ],
+      "note": "Retrospective import of captured real live checks on frozen fa1f724 / SDK1.54.0. Exact actual page, setup and scope are in the owning map recipe; recorded URL reflects final cleanup.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T08:09:40.611Z",
+      "feature": "F15.save-dirty-state",
+      "entry": "Bug backfill: OpenHands/OpenHands#16948",
+      "result": "fail",
+      "expected": "A background refetch keeps the unsaved draft.",
+      "actual": "Two real stale-query/refetch trials replaced draft111 with300 and disabledSave; original240/network/clock restored.",
+      "artifacts": [
+        "backfill-18309-settings-worker/evidence/F15.save-dirty-state/16948-before-refetch.png",
+        "backfill-18309-settings-worker/evidence/F15.save-dirty-state/16948-after-refetch.png",
+        "backfill-18309-settings-worker/evidence/F15.save-dirty-state/network-state-and-refetch.mp4"
+      ],
+      "note": "Recorded earlier during the real run; this corrects only relative artifact paths in its retrospective import.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "run_id": "backfill-18309-settings-worker"
+    },
+    {
+      "ts": "2026-10-12T04:56:43.410Z",
+      "feature": "F14.list",
+      "entry": "Settings > Secrets",
+      "result": "pass",
+      "expected": "Secrets list or empty-state visible",
+      "actual": "Secrets page opened on the healthy isolated target",
+      "artifacts": [
+        "evidence/F14.list/bootstrap-secrets.png"
+      ],
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-surface"
+    },
+    {
+      "ts": "2026-10-12T10:26:58.926Z",
+      "feature": "F06.reconnect",
+      "entry": "Conversation > durable messages > same-page backend reconnect (OpenHands/OpenHands#17619)",
+      "result": "pass",
+      "expected": "Scoped durable-event cursor check: reconnect uses the latest held sequence (REST count minus one), retaining the same page; a recovery marker appears once.",
+      "actual": "The initial session socket used after_seq=-1. Three genuine run:false user messages yielded events/count=7; the same open page reconnected after an owned backend restart with after_seq=6. A recovery message appeared once. A recorded repeat advanced -1 to2 with count3. No frame bodies were captured, so this does not quantify server replayed payloads or cost.",
+      "artifacts": [
+        "backfill-18309-surface-rechecks/evidence/F06.reconnect/socket-cursor-17619.json",
+        "backfill-18309-surface-rechecks/evidence/F06.reconnect/socket-cursor-video-17619.json",
+        "backfill-18309-surface-rechecks/evidence/F06.reconnect/cursor-recovery-17619.mp4",
+        "backfill-18309-surface-rechecks/evidence/F06.reconnect/recovered-video-17619.png"
+      ],
+      "note": "Recorded after the live checks and teardown; check date2026-10-12, frozen product fa1f724ab5737a17453ad6081129eb91c5a423c6, SDK1.54.0, Chromium153.0.8010.12. The owned run remains stoppedAt 2026-10-12T10:10:24.208Z; no service was restarted to add this entry. Scoped pass only for current after_seq subscription cursor/recovery. No frame bodies were recorded, so zero payload replay/server cost, provider streaming, former timestamp protocol and Cloud are unverified; idle UI outage labels are not graded.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "run_id": "backfill-18309-surface-rechecks"
+    },
+    {
+      "ts": "2026-10-12T10:26:58.993Z",
+      "feature": "F06.stop-resume",
+      "entry": "Composer > held dummy request > Stop > controlled crash recovery (OpenHands/software-agent-sdk#5626)",
+      "result": "pass",
+      "expected": "Scoped held-request pause durability: Canvas Stop immediately saves paused in GET and base_state.json; paused survives a controlled exact-owned-PID crash and restart.",
+      "actual": "Actual Canvas Stop displayed Stopped; GET and base_state.json both immediately reported paused while a dummy loopback model request was held. The exact launcher-owned Agent Server PID was SIGKILLed, then the own run restarted; GET, disk and reloaded UI retained paused. The accept-only fixture received one connection, generated no response, and bounded-exited cleanly.",
+      "artifacts": [
+        "backfill-18309-surface-rechecks/evidence/F06.stop-resume/bounded-inflight-5626.png",
+        "backfill-18309-surface-rechecks/evidence/F06.stop-resume/pause-durability-5626.json",
+        "backfill-18309-surface-rechecks/evidence/F06.stop-resume/owned-crash-5626.json",
+        "backfill-18309-surface-rechecks/evidence/F06.stop-resume/pause-after-crash-5626.json",
+        "backfill-18309-surface-rechecks/evidence/F06.stop-resume/paused-after-crash-5626.png"
+      ],
+      "note": "Recorded after the live checks and teardown; check date2026-10-12, frozen product fa1f724ab5737a17453ad6081129eb91c5a423c6, SDK1.54.0, Chromium153.0.8010.12. The owned run remains stoppedAt 2026-10-12T10:10:24.208Z; no service was restarted to add this entry. Scoped pass only for the held dummy-loopback request pause/crash variant. The accept-only endpoint generated no model response. Successful model/tool Play/resumption and other platforms are unverified.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "run_id": "backfill-18309-surface-rechecks"
+    },
+    {
+      "ts": "2026-10-12T10:26:59.060Z",
+      "feature": "F06.reconnect",
+      "entry": "Conversation > sandbox pause > new tab comparison > deletion (OpenHands/software-agent-sdk#5635)",
+      "result": "fail",
+      "expected": "Sandbox pause and deletion close original subscribed sockets; after pause the original Canvas tab receives new durable messages or reconnects to receive them.",
+      "actual": "prepare-for-sandbox-pause returned204 but the original communicating session socket stayed open for over10s. A newly opened Canvas tab received a new run:false message; the old tab did not. DELETE returned200 and GET404, but both held sockets stayed open over10s. Canvas later redirected through metadata polling; no claim of permanently stale navigation is made.",
+      "artifacts": [
+        "backfill-18309-surface-rechecks/evidence/F06.reconnect/pause-delete-sockets-5635.json",
+        "backfill-18309-surface-rechecks/evidence/F06.reconnect/pause-new-tab-5635.png",
+        "backfill-18309-surface-rechecks/evidence/F06.reconnect/pause-stale-tab-5635.png",
+        "backfill-18309-surface-rechecks/evidence/F06.reconnect/deleted-stale-tab-5635.png"
+      ],
+      "note": "Recorded after the live checks and teardown; check date2026-10-12, frozen product fa1f724ab5737a17453ad6081129eb91c5a423c6, SDK1.54.0, Chromium153.0.8010.12. The owned run remains stoppedAt 2026-10-12T10:10:24.208Z; no service was restarted to add this entry. Canvas later redirected through metadata polling; this is distinct from timely socket closure. Socket metadata only, no frame bodies/auth data.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "run_id": "backfill-18309-surface-rechecks"
+    },
+    {
+      "ts": "2026-10-12T10:26:59.128Z",
+      "feature": "F07.download-zip",
+      "entry": "Conversation header > Download conversation data during real overlapping receivers (OpenHands/software-agent-sdk#5539)",
+      "result": "fail",
+      "expected": "Every overlapping trajectory request for one idle conversation completes with a valid ZIP; deliberate receiver aborts are unverified rather than counted as corrupted.",
+      "actual": "A 20-second three-client real loopback overlapping receiver made929 attempts:31 completed corrupt200 ZIPs,106HTTP500,269ingress502,133RemoteProtocolError,388 validZIPs and2 intentionally deadline-aborted reads. Both ambiguous Content-Length differences were excluded from the public claim. Actual Canvas Download during overlap produced a ZIP with inspectable entries; that particular UI download is not claimed corrupt. A separate sequential2000-request pass returned validZIPs throughout.",
+      "artifacts": [
+        "backfill-18309-surface-rechecks/evidence/F07.download-zip/trajectory-overlap-5539-summary.json",
+        "backfill-18309-surface-rechecks/evidence/F07.download-zip/trajectory-summary-correction.json",
+        "backfill-18309-surface-rechecks/evidence/F07.download-zip/overlapping-download-5539.png"
+      ],
+      "note": "Recorded after the live checks and teardown; check date2026-10-12, frozen product fa1f724ab5737a17453ad6081129eb91c5a423c6, SDK1.54.0, Chromium153.0.8010.12. The owned run remains stoppedAt 2026-10-12T10:10:24.208Z; no service was restarted to add this entry. The actual Canvas download was inspectable and is not individually claimed corrupt. Two ambiguous Content-Length differences were excluded because they could be intentional deadline aborts; original private artifact and correction are retained.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "run_id": "backfill-18309-surface-rechecks"
+    },
+    {
+      "ts": "2026-10-12T10:26:59.197Z",
+      "feature": "F07.rename-inline",
+      "entry": "Conversation title > rename with owned metadata write denied (OpenHands/software-agent-sdk#4800)",
+      "result": "fail",
+      "expected": "A refused metadata write leaves both GET and persisted title unchanged; shutdown must not persist that rejected mutation.",
+      "actual": "After a successful baseline UI rename, chmod0500 on only the owned conversation directory made the next actual UI rename fail with PermissionError/HTTP500. GET nevertheless reported the rejected title while meta.json retained the baseline. Permissions were restored; graceful restart then persisted the rejected in-memory title. Tags/autotitle branches were not tested.",
+      "artifacts": [
+        "backfill-18309-surface-rechecks/evidence/F07.rename-inline/metadata-before-4800.json",
+        "backfill-18309-surface-rechecks/evidence/F07.rename-inline/metadata-denied-4800.json",
+        "backfill-18309-surface-rechecks/evidence/F07.rename-inline/refused-title-4800.png",
+        "backfill-18309-surface-rechecks/evidence/F07.rename-inline/metadata-after-graceful-restart-4800.json"
+      ],
+      "note": "Recorded after the live checks and teardown; check date2026-10-12, frozen product fa1f724ab5737a17453ad6081129eb91c5a423c6, SDK1.54.0, Chromium153.0.8010.12. The owned run remains stoppedAt 2026-10-12T10:10:24.208Z; no service was restarted to add this entry. Rename branch only; tags/autotitle and ownership-conflict branches unverified. Only the owned directory mode was temporarily changed and restored.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "run_id": "backfill-18309-surface-rechecks"
+    },
+    {
+      "ts": "2026-10-12T10:26:59.264Z",
+      "feature": "F07.rename-inline",
+      "entry": "Shared-storage secondary first load > connected Canvas title (OpenHands/software-agent-sdk#5629)",
+      "result": "fail",
+      "expected": "B first load retains the newer metadata title saved by A after B startup; Canvas displays the newer title after ownership transfer.",
+      "actual": "B was started with shared storage before A renamed an idle conversation from BEFORE_B to AFTER_B. A PATCH and disk confirmed AFTER_B. After own A graceful stop, native B events/count returned200 and rewrote disk title to its BEFORE_B startup copy. Real Add Backend→B card showed BEFORE_B in Canvas. The native first-load request is explicit; an earlier sandbox-pause variant did not reach a valid first load and is not the claimed reproduction.",
+      "artifacts": [
+        "backfill-18309-surface-rechecks/evidence/F07.rename-inline/metadata-repeat-before-b-load-5629.json",
+        "backfill-18309-surface-rechecks/evidence/F07.rename-inline/metadata-repeat-after-b-load-5629.json",
+        "backfill-18309-surface-rechecks/evidence/F07.rename-inline/shared-first-load-reverted-5629.png"
+      ],
+      "note": "Recorded after the live checks and teardown; check date2026-10-12, frozen product fa1f724ab5737a17453ad6081129eb91c5a423c6, SDK1.54.0, Chromium153.0.8010.12. The owned run remains stoppedAt 2026-10-12T10:10:24.208Z; no service was restarted to add this entry. The native events/count first-load request is explicit. The earlier sandbox-pause attempt did not reach a valid first load and is not the claimed reproduction.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "run_id": "backfill-18309-surface-rechecks"
+    },
+    {
+      "ts": "2026-10-12T10:26:59.332Z",
+      "feature": "F08.vscode-link",
+      "entry": "Cloud editor URL scheme validation; local card diagnostic (OpenHands/OpenHands#16871)",
+      "result": "blocked",
+      "expected": "Current Cloud editor exposed_urls path rejects unsafe schemes before opening; diagnostic local card menu and drawer behavior are recorded separately.",
+      "actual": "The local card menu had no Download via VS Code action; the sole production caller omits showOptions. Current drawer source opens with noopener,noreferrer. The current Cloud exposed_urls transformer scheme path was not driven.",
+      "artifacts": [
+        "backfill-18309-surface-rechecks/evidence/F04.download/vscode-card-action-absent-16871.png",
+        "backfill-18309-surface-rechecks/evidence/F04.download/vscode-card-action-absent-16871.aria.txt"
+      ],
+      "note": "Recorded after the live checks and teardown; check date2026-10-12, frozen product fa1f724ab5737a17453ad6081129eb91c5a423c6, SDK1.54.0, Chromium153.0.8010.12. The owned run remains stoppedAt 2026-10-12T10:10:24.208Z; no service was restarted to add this entry. Diagnostic only for local-menu/source observations. Missing prerequisite: an authorized Cloud account/sandbox with a controlled editor exposed_urls value. No opener exploit or Cloud scheme acceptance outcome was reproduced.",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "run_id": "backfill-18309-surface-rechecks"
+    },
+    {
+      "ts": "2026-10-12T05:01:02.034Z",
+      "feature": "F05.attach-files",
+      "entry": "Home > attach > remove > pick same file",
+      "result": "fail",
+      "expected": "The removed file attaches again",
+      "actual": "Re-pick leaves attachment count zero",
+      "artifacts": [
+        "evidence/F05.attach-files/issue-17471-repick.png"
+      ],
+      "note": "#17471, frozen fa1f724; dummy loopback LLM only",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-surface-worker"
+    },
+    {
+      "ts": "2026-10-12T05:04:54.879Z",
+      "feature": "F07.rename-inline",
+      "entry": "Chat header > Rename > space > Enter",
+      "result": "fail",
+      "expected": "Restore previous title without saving",
+      "actual": "PATCH title empty; server 422 rejects and restores previous title",
+      "artifacts": [
+        "evidence/F07.rename-inline/issue-17061-titled.png"
+      ],
+      "note": "#17061 empty submission reproduced; persistent blank title not observed",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-surface-worker"
+    },
+    {
+      "ts": "2026-10-12T05:04:54.986Z",
+      "feature": "F02.sidebar-collapse",
+      "entry": "Sidebar collapse",
+      "result": "fail",
+      "expected": "Collapsed rail offers access to existing conversations",
+      "actual": "No conversation panel or chooser; expanding required",
+      "artifacts": [
+        "evidence/F02.sidebar-collapse/issue-15662-collapsed.png"
+      ],
+      "note": "#15662",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-surface-worker"
+    },
+    {
+      "ts": "2026-10-12T05:04:55.090Z",
+      "feature": "F04.card-live-status",
+      "entry": "Folder + > new empty conversation",
+      "result": "fail",
+      "expected": "Idle empty conversation uses neutral status",
+      "actual": "Idle status uses green conversation-status-active dot; no pulse animation",
+      "artifacts": [
+        "evidence/F04.card-live-status/issue-16752-empty.png"
+      ],
+      "note": "#16752 narrower result: green active dot, not flashing",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-surface-worker"
+    },
+    {
+      "ts": "2026-10-12T05:08:39.131Z",
+      "feature": "F04.pin",
+      "entry": "Load more > pin page-two conversation > reload",
+      "result": "fail",
+      "expected": "Pin survives first-page reload",
+      "actual": "Pinned section count becomes zero while conversation still exists",
+      "artifacts": [
+        "evidence/F04.pin/issue-16399-reload.png"
+      ],
+      "note": "#16399, 23 empty conversations",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-surface-worker"
+    },
+    {
+      "ts": "2026-10-12T05:11:38.054Z",
+      "feature": "F04.grouped-folders",
+      "entry": "View > By workspace > fresh browser > By workspace",
+      "result": "fail",
+      "expected": "Same server workspaces group the same conversations",
+      "actual": "Existing conversations move to No workspace; registered folder remains empty",
+      "artifacts": [
+        "evidence/F04.grouped-folders/issue-17386-before-reset.png",
+        "evidence/F04.grouped-folders/issue-17386-after-reset.png"
+      ],
+      "note": "#17386; browser reset retains server workspace and conversations",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-surface-worker"
+    },
+    {
+      "ts": "2026-10-12T05:13:45.571Z",
+      "feature": "F08.files-tree",
+      "entry": "Files > Refresh with 1800 long-path files",
+      "result": "fail",
+      "expected": "All files below 2000 cap remain listed",
+      "actual": "README.md disappears and partial first path creates spurious bb folder",
+      "artifacts": [
+        "evidence/F08.files-tree/sdk-5638-settled.png"
+      ],
+      "note": "OpenHands/software-agent-sdk#5638; listing larger than one MiB; real files, no model",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-surface-worker"
+    },
+    {
+      "ts": "2026-10-12T05:13:45.970Z",
+      "feature": "F08.uncommitted-changes",
+      "entry": "Commits with modified tracked my notes.md",
+      "result": "fail",
+      "expected": "Changes list real filename and every other change",
+      "actual": "Scoped git/changes returns 400 and hides Uncommitted changes",
+      "artifacts": [
+        "evidence/F08.uncommitted-changes/sdk-5642-settled.png"
+      ],
+      "note": "OpenHands/software-agent-sdk#5642; space-name case only tested",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-surface-worker"
+    },
+    {
+      "ts": "2026-10-12T05:19:03.849Z",
+      "feature": "F08.uncommitted-changes",
+      "entry": "Commits > plain parent workspace with dirty proj repository",
+      "result": "fail",
+      "expected": "Nested repository changes remain visible",
+      "actual": "No commits yet with scoped changes200 empty while child has tracked and untracked changes",
+      "artifacts": [
+        "evidence/F08.uncommitted-changes/sdk-5641-settled.png"
+      ],
+      "note": "OpenHands/software-agent-sdk#5641; arranged parent as non-repo by removing run-owned auto-created empty .git",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-surface-worker"
+    },
+    {
+      "ts": "2026-10-12T05:19:05.275Z",
+      "feature": "F05.profile-identity",
+      "entry": "Open failed conversation after profile model changed and fresh browser cleared metadata",
+      "result": "fail",
+      "expected": "Useful existing model or active profile label",
+      "actual": "Select a model despite loaded active QA_surface profile and persisted model openai/gpt-4o",
+      "artifacts": [
+        "evidence/F05.profile-identity/issue-16263-error.png"
+      ],
+      "note": "#16263; conversation status error on closed loopback endpoint, no paid model calls",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-surface-worker"
+    },
+    {
+      "ts": "2026-10-12T05:21:35.143Z",
+      "feature": "F08.files-rich-plain",
+      "entry": "Files > QA_rich.md > Rich",
+      "result": "fail",
+      "expected": "One compact code block container",
+      "actual": "Code fence renders nested dark/gray containers with repeated padding",
+      "artifacts": [
+        "evidence/F08.files-rich-plain/issue-16802-codeblock.png"
+      ],
+      "note": "#16802; layout-only inspection of a fenced Python block",
+      "revision": "fa1f724ab5737a17453ad6081129eb91c5a423c6",
+      "backend": "local agent-server 1.54.0",
+      "viewport": "1440x1000",
+      "run_id": "backfill-18309-surface-worker"
+    }
+  ]
+}

@@ -16,6 +16,7 @@ import {
 } from "#/components/features/onboarding/steps/setup-acp-secrets-step";
 import { type OnboardingAgentId } from "#/components/features/onboarding/steps/choose-agent-step";
 import { SecretsService } from "#/api/secrets-service";
+import { I18nKey } from "#/i18n/declaration";
 
 // The login-detection probe is exercised in its own hook test; here we stub it
 // so rendering the step doesn't spin a conversation, and so we can drive the
@@ -261,6 +262,20 @@ describe("SetupAcpSecretsStep", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders OpenCode's auth store and API key, with no base URL", () => {
+    renderStep("opencode");
+
+    expect(
+      screen.getByTestId("onboarding-acp-secret-OPENCODE_AUTH_CONTENT"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("onboarding-acp-secret-OPENCODE_API_KEY"),
+    ).toHaveAttribute("type", "password");
+    expect(
+      screen.queryByTestId("onboarding-acp-secret-OPENCODE_BASE_URL"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows no banner when the provider is not authenticated", () => {
     acpAuthStatusMock.mockReturnValue({
       status: "unauthenticated",
@@ -301,6 +316,9 @@ describe("SetupAcpSecretsStep", () => {
 
     const blob = screen.getByTestId("onboarding-acp-secret-CODEX_AUTH_JSON");
     expect(blob.tagName).toBe("TEXTAREA");
+    expect(
+      screen.getByText(I18nKey.ONBOARDING$ACP_SECRET_CODEX_AUTH_JSON_HINT),
+    ).toBeInTheDocument();
   });
 
   it("requires credentials (blocks Next) on a logged-out local backend, then unblocks once one is entered", async () => {
