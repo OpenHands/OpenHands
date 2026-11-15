@@ -689,6 +689,111 @@ describe("recommended automations", () => {
     }
   });
 
+  /**
+   * Gives the pill rows room in jsdom, where `SkillCardPillRow` folds pills
+   * behind "+N more" when it measures zero widths.
+   */
+  function stubPillRowMeasurement(): () => void {
+    const offsetWidthDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "offsetWidth",
+    );
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      get() {
+        return 120;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get() {
+        return 2000;
+      },
+    });
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+
+        unobserve() {}
+
+        disconnect() {}
+      },
+    );
+    return () => {
+      if (offsetWidthDescriptor) {
+        Object.defineProperty(
+          HTMLElement.prototype,
+          "offsetWidth",
+          offsetWidthDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, "offsetWidth");
+      }
+      Reflect.deleteProperty(HTMLElement.prototype, "clientWidth");
+      vi.unstubAllGlobals();
+    };
+  }
+
+  it("does not count an optional integration as something to connect before launch", () => {
+    const restoreMeasurement = stubPillRowMeasurement();
+    // custom-automation declares GitHub with `required: false`: the card
+    // still shows the GitHub pill, but setup labels it Optional and lets the
+    // user continue, so it is not "to connect before launch".
+    const automation = AUTOMATION_CATALOG.find(
+      (item) => item.id === "custom-automation",
+    )!;
+    const original = automation.requires.integrations;
+    const setRequired = (required: boolean) => {
+      // RecommendedAutomation types `required` as the literal `false` on this
+      // entry, so the write goes through a loose record view of the same
+      // object.
+      (automation as {
+        requires: { integrations: Record<string, unknown> };
+      }).requires.integrations = {
+        github: { ...original.github, required },
+      };
+    };
+
+    try {
+      const { rerender } = render(
+        <RecommendedAutomationsSection
+          backendKind="local"
+          installedServers={[]}
+          onSelect={vi.fn()}
+        />,
+      );
+
+      const pillRow = screen.getByTestId(
+        "recommended-automation-pills-custom-automation",
+      );
+      expect(pillRow).toHaveTextContent("GitHub");
+      expect(
+        within(pillRow).queryByText(
+          new RegExp(I18nKey.RECOMMENDED_AUTOMATIONS$MISSING_CONNECT),
+        ),
+      ).not.toBeInTheDocument();
+
+      // Making the same integration required puts the pill back, so the
+      // count follows the required flag rather than the integration itself.
+      setRequired(true);
+      rerender(
+        <RecommendedAutomationsSection
+          backendKind="local"
+          installedServers={[]}
+          onSelect={vi.fn()}
+        />,
+      );
+      expect(
+        screen.getByTestId("recommended-automation-pills-custom-automation")
+          .textContent,
+      ).toContain(`${I18nKey.RECOMMENDED_AUTOMATIONS$MISSING_CONNECT}:1`);
+    } finally {
+      automation.requires.integrations = original;
+      restoreMeasurement();
+    }
+  });
+
   it("finds an automation by searching for its non-MCP-installable integration", () => {
     render(
       <RecommendedAutomationsSection

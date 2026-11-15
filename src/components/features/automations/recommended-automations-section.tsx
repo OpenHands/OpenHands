@@ -30,6 +30,7 @@ import {
   getAutomationIcon,
   getAutomationLaunchPrompt,
   getIntegrationIds,
+  getRequiredIntegrationIds,
   getTemplateIntegrationIds,
   getTemplateLogoIds,
   getTemplateTriggerKinds,
@@ -317,9 +318,15 @@ function AutomationCardGrid({
         const integrations = getIntegrationEntries(automation);
         // "N MCPs to connect" only counts entries the install flow can
         // actually connect (as MCP or natively); an external-setup
-        // integration is surfaced on its own pill instead.
+        // integration is surfaced on its own pill instead. An integration
+        // marked optional (`required: false`) can be connected during
+        // setup, so it never counts as something to connect before launch.
+        const requiredIds = new Set(getRequiredIntegrationIds(automation));
         const missingCount = integrations.filter(
           ({ id, entry, mcpInstallable }) => {
+            if (!requiredIds.has(id)) {
+              return false;
+            }
             if (!entry || findInstalledEntryMatch(entry, installedServers)) {
               return false;
             }
