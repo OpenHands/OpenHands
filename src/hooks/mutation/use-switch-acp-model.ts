@@ -1,17 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
-import AgentProfilesService, {
-  type AgentProfileListResponse,
-} from "#/api/agent-profiles-service/agent-profiles-service.api";
-import SettingsService from "#/api/settings-service/settings-service.api";
-import { mergeAgentProfileSaveInput } from "#/components/features/settings/agent-profiles/merge-agent-profile-save-input";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
-  AGENT_PROFILES_QUERY_KEYS,
-  AGENT_PROFILES_RETRY_OPTIONS,
-  SETTINGS_QUERY_KEYS,
-} from "#/hooks/query/query-keys";
-import { invalidateConversationQueries } from "./conversation-mutation-utils";
+  persistHomeAcpSelection,
+  refreshAfterAcpSelection,
+} from "./acp-selection";
 
 interface SwitchAcpModelVars {
   /**
@@ -30,17 +23,7 @@ interface SwitchAcpModelVars {
  * per-conversation when called from inside a conversation (live in-place model
  * switch; a created-but-not-yet-run conversation is a persist-only deferral on
  * the server, so blank conversations work too); persists it as the launch
- * default when called from the home page.
- *
- * The home-page persist target is the **active ACP AgentProfile**: profile
- * launches resolve the agent server-side purely from the stored profile
- * (``agent_profile_id`` and ``agent_settings`` are mutually exclusive launch
- * sources), so writing ``agent_settings.acp_model`` would not affect them.
- * Only when the profile list resolves with no active ACP profile does the
- * write fall back to the ``agent_settings_diff`` a Cloud launch without a
- * profile reads. A failed profile discovery propagates instead of downgrading
- * (#16523): an active-profile launch ignores agent_settings, so persisting
- * the pick there would silently drop it.
+ * default when called from the home page (see {@link persistHomeAcpSelection}).
  *
  * Invalidates the same conversation/settings query keys the profile hook does
  * so the chat-input model chip + conversation chip refresh with the new model.
@@ -61,74 +44,12 @@ export const useSwitchAcpModel = () => {
         return;
       }
 
-      // Home page: resolve the active profile from the shared query cache
-      // (same keys/retry policy as useCreateConversation's launch path, so a
-      // pick can't disagree with what a subsequent send would launch). Like
-      // that launch path, do not fall back to the legacy agent_settings
-      // persist when profile discovery fails (#16523): an active-profile
-      // launch ignores agent_settings, so the pick would be silently dropped.
-      // The rejection surfaces via the global mutation error toast.
-      const agentProfiles: AgentProfileListResponse =
-        await queryClient.ensureQueryData({
-          queryKey: [...AGENT_PROFILES_QUERY_KEYS.all, backend.id, orgId],
-          queryFn: AgentProfilesService.listProfiles,
-          ...AGENT_PROFILES_RETRY_OPTIONS,
-        });
-      const activeProfile = agentProfiles.profiles?.find(
-        (profile) =>
-          profile.id != null &&
-          profile.id === agentProfiles.active_agent_profile_id,
-      );
-
-      if (activeProfile?.agent_kind === "acp") {
-        // Merge over the stored profile so a model-only pick can't wipe the
-        // fields this surface doesn't model (command, session mode, …).
-        const detail = await queryClient.ensureQueryData({
-          queryKey: AGENT_PROFILES_QUERY_KEYS.detail(
-            backend.id,
-            orgId,
-            activeProfile.name,
-          ),
-          queryFn: () => AgentProfilesService.getProfile(activeProfile.name),
-          ...AGENT_PROFILES_RETRY_OPTIONS,
-        });
-        await AgentProfilesService.saveProfile(
-          activeProfile.name,
-          mergeAgentProfileSaveInput(detail.profile, {
-            agent_kind: "acp",
-            acp_model: model,
-          }),
-        );
-        return;
-      }
-
-      // No active ACP profile: persist as the agent-settings default a Cloud
-      // launch without a profile reads. The backend deep-merges
-      // ``agent_settings_diff`` into the existing ``agent_settings`` dict, so
-      // a scalar ``acp_model`` diff updates only the model and preserves the
-      // selected provider + command.
-      await SettingsService.saveSettings({
-        agent_settings_diff: { acp_model: model },
+      await persistHomeAcpSelection(queryClient, backend.id, orgId, {
+        acp_model: model,
       });
     },
-    onSuccess: (_data, { conversationId }) => {
-      if (conversationId) {
-        invalidateConversationQueries(queryClient, conversationId);
-      } else {
-        // Mirror useSwitchLlmProfile's home-page path: clear the stale settings
-        // cache so the next conversation-start reads the newly saved default,
-        // and refetch the settings query so the home-page chip updates. The
-        // agent-profiles prefix covers both the list and the detail entry the
-        // profile-persist path just rewrote.
-        SettingsService.invalidateCache();
-        queryClient.invalidateQueries({
-          queryKey: SETTINGS_QUERY_KEYS.personal(),
-        });
-        queryClient.invalidateQueries({
-          queryKey: AGENT_PROFILES_QUERY_KEYS.all,
-        });
-      }
-    },
+    onSuccess: (_data, { conversationId }) =>
+      refreshAfterAcpSelection(queryClient, conversationId),
     // No meta.disableToast: unlike useSwitchLlmProfile (which tailors a
     // "Switched to {name} failed" message via its own onError), there's no
     // per-action message worth tailoring here, so the global mutation error

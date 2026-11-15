@@ -13,7 +13,8 @@ import path from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it, afterEach } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { server as mswServer } from "#/mocks/node";
 import {
   assertPortsFree,
   buildSafeDevConfig,
@@ -35,6 +36,7 @@ import {
   getOrCreatePersistedSessionApiKey,
   resetPersistedSessionApiKeyCache,
   resolveExtensionsDir,
+  resolveFrontendPort,
 } from "../../scripts/dev-safe.mjs";
 import {
   chmodSync,
@@ -46,6 +48,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+
+beforeAll(() => mswServer.close());
+afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -98,6 +103,82 @@ describe("findFreePort", () => {
     const port = await findFreePort(0, "127.0.0.1");
     expect(typeof port).toBe("number");
     expect(port).toBeGreaterThan(0);
+  });
+});
+
+describe("resolveFrontendPort", () => {
+  const servers: net.Server[] = [];
+
+  afterEach(() => {
+    for (const server of servers) {
+      server.close();
+    }
+    servers.length = 0;
+  });
+
+  // Hold a port the way another local app would: listening on `host`.
+  // Resolves null when the host has no such address (e.g. IPv6 disabled).
+  function holdPort(host: string): Promise<number | null> {
+    return new Promise((resolve) => {
+      const server = net.createServer();
+      server.once("error", () => resolve(null));
+      server.listen(0, host, () => {
+        servers.push(server);
+        resolve((server.address() as net.AddressInfo).port);
+      });
+    });
+  }
+
+  it("keeps the preferred port when nothing uses it", async () => {
+    const preferred = await findFreePort(0);
+    expect(await resolveFrontendPort(preferred)).toBe(preferred);
+  });
+
+  // The ingress proxies to `localhost`, so any listener that name can reach
+  // would serve its app in place of Canvas. A bind probe on 127.0.0.1 alone
+  // misses the IPv6 and (on macOS) the wildcard cases.
+  it.for(["127.0.0.1", "0.0.0.0", "::1", "::"])(
+    "falls back when another app listens on %s",
+    async (host, { skip }) => {
+      const taken = await holdPort(host);
+      if (taken === null) return skip(`no ${host} on this host`);
+
+      const port = await resolveFrontendPort(taken);
+
+      expect(port).not.toBe(taken);
+      expect(port).toBeGreaterThan(0);
+    },
+  );
+
+  it("never returns a port reserved for another launcher service", async () => {
+    const reserved = await findFreePort(0);
+
+    const port = await resolveFrontendPort(reserved, {
+      reservedPorts: [reserved],
+    });
+
+    expect(port).not.toBe(reserved);
+    expect(port).toBeGreaterThan(0);
+  });
+
+  // On Linux a wildcard bind (docker runtime mode, --host 0.0.0.0) fails while
+  // another app holds the port on any single address, so the probe has to use
+  // the host the frontend really binds.
+  it("returns a port the frontend can bind on its bind host", async ({
+    skip,
+  }) => {
+    const taken = await holdPort("127.0.0.2");
+    if (taken === null) return skip("no 127.0.0.2 on this host");
+
+    const port = await resolveFrontendPort(taken, { bindHost: "0.0.0.0" });
+
+    const server = net.createServer();
+    servers.push(server);
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(port, "0.0.0.0", resolve);
+    });
+    expect(server.listening).toBe(true);
   });
 });
 
@@ -544,20 +625,20 @@ describe("buildAgentServerCommand", () => {
       "--python",
       ">=3.12,<3.15",
       "--from",
-      "openhands-agent-server==1.58.1",
+      "openhands-agent-server==1.62.0",
       "--with",
-      "openhands-sdk==1.58.1",
+      "openhands-sdk==1.62.0",
       "--with",
-      "openhands-tools==1.58.1",
+      "openhands-tools==1.62.0",
       "--with",
-      "openhands-workspace==1.58.1",
+      "openhands-workspace==1.62.0",
       "--with",
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
       "canvas_ui_tool",
     ]);
-    expect(cmd.source).toBe("PyPI (1.58.1, default)");
+    expect(cmd.source).toBe("PyPI (1.62.0, default)");
   });
 
   it("uses specific PyPI version when OH_AGENT_SERVER_VERSION is set with all packages pinned", () => {

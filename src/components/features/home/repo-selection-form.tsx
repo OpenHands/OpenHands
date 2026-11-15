@@ -229,7 +229,7 @@ export function RepositorySelectionForm({
               repository: {
                 name: selectedRepository.full_name || "",
                 gitProvider: selectedRepository.git_provider || "github",
-                branch: selectedBranch.name || "main",
+                branch: selectedBranch.name,
               },
               entryPoint: "home_repo_form",
             },

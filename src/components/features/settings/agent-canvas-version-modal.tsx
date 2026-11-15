@@ -18,6 +18,7 @@ import DockerIcon from "#/icons/docker.svg?react";
 import NpmIcon from "#/icons/npm.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
 
 const COPY_FEEDBACK_MS = 2000;
 
@@ -98,7 +99,7 @@ export function AgentCanvasVersionModal({
       onClose={onClose}
       aria-label={t(I18nKey.SETTINGS$VERSION_MODAL_ARIA_LABEL)}
     >
-      <section className="relative flex w-130 max-w-[90vw] flex-col gap-5 rounded-xl border border-border bg-base-secondary p-6 shadow-xl">
+      <section className="relative flex w-130 dialog-viewport-width flex-col gap-5 rounded-xl border border-border bg-base-secondary p-6 shadow-xl">
         <ModalCloseButton
           onClose={onClose}
           testId="agent-canvas-version-modal-close"
@@ -107,7 +108,7 @@ export function AgentCanvasVersionModal({
         <header className="flex items-center gap-3 pr-8">
           {updateAvailable ? (
             <ArrowUpCircle
-              className="size-7 shrink-0 text-[#3B82F6]"
+              className="size-7 shrink-0 text-info dark:text-[#3B82F6]"
               aria-hidden
             />
           ) : (
@@ -124,7 +125,12 @@ export function AgentCanvasVersionModal({
             )}
           </h2>
           {updateAvailable && latestVersion ? (
-            <span className="rounded-full bg-[#1E3A5F] px-2 py-0.5 text-xs font-semibold text-[#3B82F6]">
+            <span
+              className={cn(
+                "rounded-full border border-info/30 px-2 py-0.5 text-xs font-semibold dark:border-transparent dark:bg-[#1E3A5F] dark:text-[#3B82F6]",
+                statusToneBadgeClassName.info,
+              )}
+            >
               {latestVersion}
             </span>
           ) : null}

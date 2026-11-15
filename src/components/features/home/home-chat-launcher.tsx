@@ -1,7 +1,9 @@
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { useConversationWorkspace } from "#/hooks/query/use-conversation-workspace";
 import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
+import { ConversationStartupProgress } from "#/components/features/chat/conversation-startup-progress";
 import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
@@ -13,14 +15,17 @@ import { HOME_PROMPT_DRAFT_KEY } from "#/hooks/chat/use-draft-persistence";
 import { useChatAttachmentUpload } from "#/hooks/chat/use-chat-attachment-upload";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useModelStore } from "#/stores/model-store";
+import {
+  clearPendingHomeModelPick,
+  hasPendingHomeModelPick,
+} from "#/hooks/use-chat-input-llm-profile-state";
 import type { WorkspaceMode } from "#/api/conversation-metadata-store";
 import { setPendingTaskAttachments } from "#/stores/pending-task-attachments-store";
 import { enqueueHomeTaskPendingMessage } from "#/utils/enqueue-home-task-pending-message";
 import { sendMessageWithAttachments } from "#/utils/send-message-with-attachments";
 import { useNavigation } from "#/context/navigation-context";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
-import { Branch, GitRepository } from "#/types/git";
-import { Provider } from "#/types/settings";
+import { useRememberedRepositorySelection } from "#/hooks/use-remembered-repository-selection";
 import { LocalWorkspace } from "#/types/workspace";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
@@ -58,19 +63,37 @@ import { OpenWorkspaceDialog } from "./open-workspace-dialog";
 import { OpenRepositoryDialog } from "./open-repository-dialog";
 import { HomeGitControlBarPreview } from "./home-git-control-bar-preview";
 
+// How long a create may run before the "Creating conversation…" toast appears.
+const CREATING_TOAST_DELAY_MS = 600;
+// Once shown, how long it stays up at least, so it never flashes.
+const CREATING_TOAST_MIN_VISIBLE_MS = 700;
+
 export function HomeChatLauncher() {
   const { t } = useTranslation("openhands");
-  const { backend } = useActiveBackend();
-  const { navigate } = useNavigation();
+  const { backend, orgId } = useActiveBackend();
+  const { navigate, currentPath } = useNavigation();
+  const ownerKey = JSON.stringify([backend.id, orgId, currentPath]);
+  const currentOwner = useRef(ownerKey);
+  currentOwner.current = ownerKey;
+  const launchInFlight = useRef(false);
+  const [pendingLaunchId, setPendingLaunchId] = useState<string | null>(null);
+  const launch = useConversationLaunchStore((state) =>
+    pendingLaunchId ? state.launches[pendingLaunchId] : null,
+  );
+  const activeLaunch =
+    launch?.backendId === backend.id && launch.orgId === (orgId ?? null)
+      ? launch
+      : null;
   const isLocal = backend.kind === "local";
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [pendingWorkspace, setPendingWorkspace] =
     useState<LocalWorkspace | null>(null);
-  const [pendingRepository, setPendingRepository] =
-    useState<GitRepository | null>(null);
-  const [pendingBranch, setPendingBranch] = useState<Branch | null>(null);
-  const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
+  const {
+    selection: repositorySelection,
+    setSelection: setRepositorySelection,
+    clearSelection: clearRepositorySelection,
+  } = useRememberedRepositorySelection(backend.id, !isLocal);
   const { data: settings } = useSettings();
   const [lastUsedWorkspaceMode] = useState(readStoredLocalWorkspaceMode);
   const [pickedWorkspaceMode, setPickedWorkspaceMode] =
@@ -148,19 +171,40 @@ export function HomeChatLauncher() {
     if (isLocal) writeStoredLocalWorkspaceMode(mode);
   };
 
-  const hasSelection = isLocal
-    ? !!pendingWorkspace
-    : !!pendingRepository && !!pendingBranch;
+  const hasSelection = isLocal ? !!pendingWorkspace : !!repositorySelection;
 
   const handleSubmit = (message: string) => {
     const trimmed = message.trim();
     const hasAttachments = images.length > 0 || files.length > 0;
-    if ((!trimmed && !hasAttachments) || isCreating) return;
+    if ((!trimmed && !hasAttachments) || isCreating || launchInFlight.current)
+      return;
 
     // Safety net: the input is disabled when there's no usable LLM, but never
     // create a conversation that can't run (it would fail with a cryptic
     // API-key error on the first turn).
     if (llmBlocked) return;
+
+    launchInFlight.current = true;
+    const ownsLaunch = () =>
+      isMountedRef.current && currentOwner.current === ownerKey;
+    const clientLaunchId = !isLocal
+      ? useConversationLaunchStore.getState().begin({
+          backendId: backend.id,
+          orgId: orgId ?? null,
+          message,
+          files: [...images, ...files],
+          attachments: {
+            content: message,
+            images: [...images],
+            files: [...files],
+            imagesMarkedUploadAsFile: [...imagesMarkedUploadAsFile],
+          },
+        })
+      : null;
+    if (clientLaunchId) {
+      setPendingLaunchId(clientLaunchId);
+      clearAllFiles();
+    }
 
     const attachmentSnapshot = {
       images: [...images],
@@ -173,10 +217,12 @@ export function HomeChatLauncher() {
     // When attachments are present the first user message is sent afterward
     // via sendMessageWithAttachments / flushPendingTaskAttachments. Passing
     // query here would create a duplicate text-only initial_message.
+    const suppressRouterAtStart = hasPendingHomeModelPick(backend.id, orgId);
     let variables: Parameters<typeof createConversation>[0] = {
       query: hasAttachments ? undefined : trimmed || undefined,
       automationSetup: isAutomateMode,
       entryPoint: "home_chat_launcher",
+      ...(suppressRouterAtStart ? { suppressRouterAtStart: true } : {}),
     };
     // An isolated backend owns its workspace, so a host selection left over
     // from a non-isolated session must not be forwarded: the server rejects it
@@ -192,13 +238,13 @@ export function HomeChatLauncher() {
     } else if (isLocal && effectiveWorkspaceMode === "docker_container") {
       // No workspace: the container gets its own, so only the runtime is sent.
       variables = { ...variables, workspaceMode: effectiveWorkspaceMode };
-    } else if (!isLocal && pendingRepository && pendingBranch) {
+    } else if (!isLocal && repositorySelection) {
       variables = {
         ...variables,
         repository: {
-          name: pendingRepository.full_name,
-          gitProvider: pendingRepository.git_provider,
-          branch: pendingBranch.name,
+          name: repositorySelection.repository.full_name,
+          gitProvider: repositorySelection.repository.git_provider,
+          branch: repositorySelection.branch.name,
         },
       };
     }
@@ -224,25 +270,52 @@ export function HomeChatLauncher() {
       markAutomationSetupHandoff(conversationId);
     };
 
-    // Loading toast gives the user a clear signal that the request is in
-    // flight; dismissed precisely once the mutation resolves.
-    const toastId = toast.loading(
-      t(I18nKey.HOME$CREATING_CONVERSATION),
-      TOAST_OPTIONS,
-    );
+    // Most creates resolve quickly and navigate away, so an immediate loading
+    // toast only flashes. Show it only once the request is noticeably slow,
+    // and once shown keep it up long enough to read. The Toaster is global, so
+    // it outlives the navigation without delaying it. A failure removes it at
+    // once because the error toast takes its place.
+    let toastId: string | undefined;
+    let toastShownAt = 0;
+    const toastTimer = isLocal
+      ? setTimeout(() => {
+          toastShownAt = Date.now();
+          toastId = toast.loading(
+            t(I18nKey.HOME$CREATING_CONVERSATION),
+            TOAST_OPTIONS,
+          );
+        }, CREATING_TOAST_DELAY_MS)
+      : undefined;
+    const dismissCreatingToast = ({ immediately = false } = {}) => {
+      clearTimeout(toastTimer);
+      if (!toastId) return;
+      const id = toastId;
+      const remaining =
+        CREATING_TOAST_MIN_VISIBLE_MS - (Date.now() - toastShownAt);
+      if (immediately || remaining <= 0) toast.dismiss(id);
+      else setTimeout(() => toast.dismiss(id), remaining);
+    };
+
+    if (clientLaunchId) navigate(`/conversations/${clientLaunchId}`);
 
     void (async () => {
       let isCreated = false;
+      let createdTarget: string | null = null;
       try {
         const data = await createConversation(variables);
         isCreated = true;
-        toast.dismiss(toastId);
+        if (suppressRouterAtStart) {
+          clearPendingHomeModelPick(backend.id, orgId);
+        }
+        dismissCreatingToast();
         try {
-          sessionStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
+          if (sessionStorage.getItem(HOME_PROMPT_DRAFT_KEY) === message)
+            sessionStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
         } catch {
           // sessionStorage not available
         }
         const targetConversationId = data.conversation_id;
+        createdTarget = targetConversationId;
         const isTaskConversation = targetConversationId.startsWith("task-");
 
         if (hasAttachments) {
@@ -258,23 +331,34 @@ export function HomeChatLauncher() {
                 : null);
 
             if (!taskId) {
-              displayErrorToast(null);
-              return;
+              throw new Error(
+                t(I18nKey.CONVERSATION$ERROR_STARTING_CONVERSATION),
+              );
             }
 
             setPendingTaskAttachments(taskId, {
+              backendId: backend.id,
+              orgId: orgId ?? null,
               content: trimmed,
               images: attachmentSnapshot.images,
               files: attachmentSnapshot.files,
               imagesMarkedUploadAsFile: [...imagesMarkedUploadAsFile],
             });
-            clearAllFiles();
+            if (ownsLaunch()) clearAllFiles();
             await enqueueHomeTaskPendingMessage({
               conversationId: targetConversationId,
               text: trimmed,
               images: attachmentSnapshot.images,
               imagesMarkedUploadAsFile,
             });
+            if (clientLaunchId) {
+              openAutomationSetupMode(targetConversationId);
+              useConversationLaunchStore
+                .getState()
+                .update(clientLaunchId, { targetId: targetConversationId });
+              return;
+            }
+            if (!ownsLaunch()) return;
             openAutomationSetupMode(targetConversationId);
             navigate(`/conversations/${targetConversationId}`);
             return;
@@ -288,7 +372,7 @@ export function HomeChatLauncher() {
                 imagesMarkedUploadAsFile,
                 t,
               });
-              clearAllFiles();
+              if (ownsLaunch()) clearAllFiles();
             } catch (error) {
               displayErrorToast(error instanceof Error ? error.message : null);
               return;
@@ -305,14 +389,38 @@ export function HomeChatLauncher() {
           });
         }
 
+        if (clientLaunchId) {
+          openAutomationSetupMode(targetConversationId);
+          useConversationLaunchStore
+            .getState()
+            .update(clientLaunchId, { targetId: targetConversationId });
+          return;
+        }
+        if (!ownsLaunch()) return;
         openAutomationSetupMode(targetConversationId);
         navigate(`/conversations/${targetConversationId}`);
       } catch (error) {
-        toast.dismiss(toastId);
+        dismissCreatingToast({ immediately: true });
         // Prefer the server's own message; without one, keep the launcher's
         // existing wording (the error's message).
         const fallback = error instanceof Error ? error.message : "";
-        displayErrorToast(getApiErrorMessage(error, fallback) || null);
+        const errorMessage =
+          getApiErrorMessage(error, fallback) ||
+          t(I18nKey.CONVERSATION$ERROR_STARTING_CONVERSATION);
+        if (isCreated && clientLaunchId && createdTarget) {
+          useConversationLaunchStore
+            .getState()
+            .update(clientLaunchId, { targetId: createdTarget });
+          if (ownsLaunch()) displayErrorToast(errorMessage);
+          return;
+        }
+        if (clientLaunchId)
+          useConversationLaunchStore
+            .getState()
+            .update(clientLaunchId, { error: errorMessage });
+        if (!ownsLaunch()) return;
+        if (!isLocal) return;
+        displayErrorToast(errorMessage);
         // The composer cleared itself on submit; hand the prompt back so the
         // user can retry without retyping it. Only when the create itself
         // failed and this composer is still on screen: the request is consumed
@@ -321,6 +429,8 @@ export function HomeChatLauncher() {
         if (!isCreated && isMountedRef.current) {
           restoreMessageToInputIfEmpty(message);
         }
+      } finally {
+        launchInFlight.current = false;
       }
     })();
   };
@@ -334,14 +444,62 @@ export function HomeChatLauncher() {
   return (
     <div
       data-testid="home-chat-launcher"
-      className="flex w-full flex-col items-center pt-[max(4rem,28vh)] pb-10"
+      className={cn(
+        "flex w-full flex-col items-center",
+        activeLaunch ? "h-full min-h-0 py-4" : "pt-[max(4rem,28vh)] pb-10",
+      )}
     >
-      <div className="flex w-full max-w-200 flex-col gap-4 md:px-4">
-        <div className="flex w-full justify-center">
+      <div
+        className={cn(
+          "flex w-full max-w-200 flex-col gap-4 md:px-4",
+          activeLaunch && "min-h-0 flex-1",
+        )}
+      >
+        {activeLaunch && (
+          <div className="custom-scrollbar-always flex min-h-0 flex-1 flex-col overflow-y-auto px-4">
+            <div
+              data-testid="startup-user-message"
+              className="mt-6 w-fit max-w-full self-end whitespace-pre-wrap break-words rounded-xl bg-tertiary px-4 py-2.5 text-sm leading-6"
+            >
+              {activeLaunch.message}
+              {activeLaunch.files.length > 0 && (
+                <ul>
+                  {activeLaunch.files.map((file, index) => (
+                    <li key={`${index}-${file.name}`}>{file.name}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <ConversationStartupProgress
+              key={activeLaunch.id}
+              error={activeLaunch.error}
+              onEdit={() => {
+                useConversationLaunchStore.getState().remove(activeLaunch.id);
+                setPendingLaunchId(null);
+                restoreMessageToInputIfEmpty(activeLaunch.message);
+                if (activeLaunch.attachments) {
+                  const composer = useConversationStore.getState();
+                  composer.addImages(activeLaunch.attachments.images);
+                  composer.addFiles(activeLaunch.attachments.files);
+                  for (const name of activeLaunch.attachments
+                    .imagesMarkedUploadAsFile) {
+                    if (!composer.imagesMarkedUploadAsFile.includes(name))
+                      composer.toggleImageUploadAsFile(name);
+                  }
+                }
+              }}
+            />
+          </div>
+        )}
+        <div
+          className={cn("flex w-full justify-center", activeLaunch && "hidden")}
+        >
           <HomeHeaderTitle />
         </div>
 
-        <div className="flex w-full justify-center">
+        <div
+          className={cn("flex w-full justify-center", activeLaunch && "hidden")}
+        >
           <HomeLauncherModeToggle
             mode={displayedLauncherMode}
             onChange={handleLauncherModeChange}
@@ -352,7 +510,7 @@ export function HomeChatLauncher() {
           <CustomChatInput
             onSubmit={handleSubmitWithModelGuard}
             onFilesPaste={handleUpload}
-            disabled={isCreating || llmBlocked}
+            disabled={isCreating || llmBlocked || !!activeLaunch}
             placeholder={
               isAutomateMode
                 ? t(I18nKey.HOME$AUTOMATE_PROMPT_PLACEHOLDER)
@@ -361,7 +519,7 @@ export function HomeChatLauncher() {
           />
         </div>
 
-        {isolated && (
+        {!activeLaunch && isolated && (
           <p role="status" className="text-xs text-text-secondary">
             {pendingWorkspace
               ? runtimeWorkspaceMessage
@@ -382,19 +540,25 @@ export function HomeChatLauncher() {
           aria-disabled={isAutomateMode}
           className={cn(
             "flex items-center justify-start gap-2",
+            activeLaunch && "hidden",
             isAutomateMode && "pointer-events-none opacity-40",
           )}
         >
           {hasSelection ? (
             <HomeGitControlBarPreview
               workspace={pendingWorkspace}
-              repository={pendingRepository}
-              branch={pendingBranch}
-              provider={pendingProvider}
+              repository={repositorySelection?.repository}
+              branch={repositorySelection?.branch}
+              provider={repositorySelection?.provider}
               workspaceMode={effectiveWorkspaceMode}
               workspaceModes={workspaceModes}
               backendKind={backend.kind}
               onRepoClick={() => setIsDialogOpen(true)}
+              onClear={
+                isLocal
+                  ? () => setPendingWorkspace(null)
+                  : clearRepositorySelection
+              }
               onWorkspaceModeChange={setWorkspaceMode}
             />
           ) : (
@@ -424,7 +588,12 @@ export function HomeChatLauncher() {
           />
         </div>
 
-        <div className="mt-8 flex w-full flex-col gap-8">
+        <div
+          className={cn(
+            "mt-8 flex w-full flex-col gap-8",
+            activeLaunch && "hidden",
+          )}
+        >
           {/* @spec HL-002 — Only Home's rail is dismissible; dismissal unmounts it, inset included */}
           {!isRecommendedAutomationsDismissed && (
             <RecommendedAutomationsLauncher
@@ -442,22 +611,18 @@ export function HomeChatLauncher() {
         <OpenWorkspaceDialog
           isOpen={isDialogOpen}
           onClose={() => setIsDialogOpen(false)}
-          onConfirm={(workspace) => {
-            setPendingWorkspace(workspace);
-            setPendingRepository(null);
-            setPendingBranch(null);
-            setPendingProvider(null);
-          }}
+          onConfirm={setPendingWorkspace}
         />
       ) : (
         <OpenRepositoryDialog
           isOpen={isDialogOpen}
           onClose={() => setIsDialogOpen(false)}
           onConfirm={({ repository, branch, provider }) => {
-            setPendingRepository(repository);
-            setPendingBranch(branch);
-            setPendingProvider(provider ?? repository.git_provider);
-            setPendingWorkspace(null);
+            setRepositorySelection({
+              repository,
+              branch,
+              provider: provider ?? repository.git_provider,
+            });
             setPickedWorkspaceMode("local_repo");
           }}
         />

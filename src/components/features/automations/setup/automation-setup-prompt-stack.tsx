@@ -4,7 +4,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { Info, Plus, X } from "lucide-react";
+import { Info, Lock, Plus, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -17,6 +17,7 @@ import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { useGitRepositories } from "#/hooks/query/use-git-repositories";
 import { useSearchRepositories } from "#/hooks/query/use-search-repositories";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useDebounce } from "#/hooks/use-debounce";
@@ -69,17 +70,65 @@ function stopMenuKeyPropagation(event: ReactKeyboardEvent) {
   if (event.key !== "Escape") event.stopPropagation();
 }
 
-export function SetupModelPill({
-  value,
-  onChange,
+function ProfileMenuItem({
+  testId,
+  label,
+  detail,
+  isSelected,
+  onSelect,
 }: {
-  value: string;
-  onChange: (profileName: string) => void;
+  testId: string;
+  label: string;
+  detail?: string | null;
+  isSelected: boolean;
+  onSelect: () => void;
 }) {
-  const { t } = useTranslation("openhands");
-  const { data, isLoading } = useLlmProfiles();
-  const profiles = data?.profiles ?? [];
-  const activeProfileName = data?.active_profile ?? null;
+  return (
+    <ContextMenuListItem
+      testId={testId}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onSelect();
+      }}
+      className={cn(
+        "flex flex-col items-stretch gap-0.5",
+        isSelected && "bg-interactive-hover",
+      )}
+    >
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <span className="truncate">{label}</span>
+        {isSelected ? (
+          <CheckIcon className="size-4 shrink-0" aria-hidden />
+        ) : null}
+      </div>
+      {detail ? (
+        <span className="truncate text-xs leading-4 text-muted">{detail}</span>
+      ) : null}
+    </ContextMenuListItem>
+  );
+}
+
+/** A pill that opens a menu of profiles; the shape both profile pickers share. */
+function ProfilePill({
+  testId,
+  label,
+  tooltip,
+  canOpen,
+  lockedReason,
+  children,
+}: {
+  testId: string;
+  label: string;
+  tooltip: string;
+  canOpen: boolean;
+  /**
+   * Why the pill is shown but not choosable, because another setting decides
+   * it. The reason is the lock icon's tooltip.
+   */
+  lockedReason?: string;
+  children: (close: () => void) => ReactNode;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useClickOutsideElement<HTMLUListElement>(
@@ -87,102 +136,275 @@ export function SetupModelPill({
     triggerRef,
   );
   useCloseOnEscape(isOpen, () => setIsOpen(false), triggerRef);
-  const pinnedProfileName = value.trim() || null;
-  const displayName = pinnedProfileName ?? activeProfileName;
-  const pillLabel =
-    displayName ?? t(I18nKey.AUTOMATION_SETUP$MODEL_PLACEHOLDER);
-  const canOpen = !isLoading && profiles.length > 0;
-  const tooltip = t(I18nKey.LLM$MODEL);
+  const close = () => setIsOpen(false);
+  const locked = lockedReason !== undefined;
+
+  const trigger = (
+    <button
+      ref={triggerRef}
+      type="button"
+      className={cn(
+        chatInputPillButtonClassName,
+        "automation-setup-model-trigger rounded-lg",
+        locked && "cursor-not-allowed border-dashed text-muted",
+      )}
+      data-testid={testId}
+      aria-label={label}
+      aria-disabled={locked || undefined}
+      aria-expanded={locked ? undefined : isOpen}
+      aria-haspopup={locked ? undefined : "dialog"}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (locked || !canOpen) return;
+        setIsOpen((open) => !open);
+      }}
+    >
+      <span className="truncate">{truncateLabel(label)}</span>
+      {locked ? null : <ComboboxCaretInline isOpen={isOpen} />}
+    </button>
+  );
 
   return (
-    <div className="relative min-w-0">
-      <StyledTooltip content={tooltip} placement="top">
-        <button
-          ref={triggerRef}
-          type="button"
-          className={cn(
-            chatInputPillButtonClassName,
-            "automation-setup-model-trigger rounded-lg",
-          )}
-          data-testid="automation-setup-model"
-          aria-label={displayName ?? pillLabel}
-          aria-expanded={isOpen}
-          aria-haspopup="dialog"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (!canOpen) return;
-            setIsOpen((open) => !open);
-          }}
-        >
-          <span className="truncate">
-            {displayName ? truncateLabel(pillLabel) : pillLabel}
-          </span>
-          <ComboboxCaretInline isOpen={isOpen} />
-        </button>
-      </StyledTooltip>
-      {isOpen && canOpen ? (
+    <div className="relative flex min-w-0 items-center gap-1.5">
+      {locked ? (
+        <>
+          {trigger}
+          <StyledTooltip content={lockedReason} placement="top">
+            {/* A button so keyboard users can reach the explanation too. */}
+            <button
+              type="button"
+              aria-label={lockedReason}
+              data-testid={`${testId}-lock`}
+              className="inline-flex shrink-0 cursor-help rounded text-muted hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              <Lock className="size-3.5" aria-hidden />
+            </button>
+          </StyledTooltip>
+        </>
+      ) : (
+        <StyledTooltip content={tooltip} placement="top">
+          {trigger}
+        </StyledTooltip>
+      )}
+      {isOpen && canOpen && !locked ? (
         <ContextMenu
           ref={popoverRef}
-          testId="automation-setup-model-popover"
+          testId={`${testId}-popover`}
           position="top"
           alignment="left"
           spacing="none"
           className="automation-setup-model-popover z-60 mb-2 overflow-y-auto"
         >
-          <ContextMenuListItem
-            testId="automation-setup-model-option-active"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onChange("");
-              setIsOpen(false);
-            }}
-            className={cn(
-              "flex items-center justify-between gap-2",
-              !pinnedProfileName && "bg-interactive-hover",
-            )}
-          >
-            <span className="truncate">{t(I18nKey.COMMON$ACTIVE_PROFILE)}</span>
-            {!pinnedProfileName ? (
-              <CheckIcon className="size-4 shrink-0" aria-hidden />
-            ) : null}
-          </ContextMenuListItem>
-          {profiles.map((item) => {
-            const isSelected = item.name === pinnedProfileName;
-            const displayModel = formatModelNameForDisplay(item.model);
-            return (
-              <ContextMenuListItem
-                key={item.name}
-                testId={`automation-setup-model-option-${item.name}`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onChange(item.name);
-                  setIsOpen(false);
-                }}
-                className={cn(
-                  "flex flex-col items-stretch gap-0.5",
-                  isSelected && "bg-interactive-hover",
-                )}
-              >
-                <div className="flex min-w-0 items-center justify-between gap-2">
-                  <span className="truncate">{item.name}</span>
-                  {isSelected ? (
-                    <CheckIcon className="size-4 shrink-0" aria-hidden />
-                  ) : null}
-                </div>
-                {displayModel ? (
-                  <span className="truncate text-xs leading-4 text-muted">
-                    {displayModel}
-                  </span>
-                ) : null}
-              </ContextMenuListItem>
-            );
-          })}
+          {children(close)}
         </ContextMenu>
       ) : null}
+    </div>
+  );
+}
+
+export function SetupModelPill({
+  value,
+  onChange,
+  lockedTo,
+}: {
+  value: string;
+  onChange: (profileName: string) => void;
+  /**
+   * The LLM profile an agent profile runs on. The service refuses a model
+   * alongside an agent profile, so the pill shows this one and can't change.
+   */
+  lockedTo?: { llmProfile: string | null; reason: string };
+}) {
+  const { t } = useTranslation("openhands");
+  const { data, isLoading } = useLlmProfiles();
+  const profiles = data?.profiles ?? [];
+  const activeProfileName = data?.active_profile ?? null;
+  const pinnedProfileName = value.trim() || null;
+  const label = lockedTo
+    ? (lockedTo.llmProfile ??
+      activeProfileName ??
+      t(I18nKey.COMMON$ACTIVE_PROFILE))
+    : (pinnedProfileName ??
+      activeProfileName ??
+      t(I18nKey.AUTOMATION_SETUP$MODEL_PLACEHOLDER));
+
+  return (
+    <ProfilePill
+      testId="automation-setup-model"
+      label={label}
+      tooltip={t(I18nKey.LLM$MODEL)}
+      canOpen={!isLoading && profiles.length > 0}
+      lockedReason={lockedTo?.reason}
+    >
+      {(close) => (
+        <>
+          <ProfileMenuItem
+            testId="automation-setup-model-option-active"
+            label={t(I18nKey.COMMON$ACTIVE_PROFILE)}
+            isSelected={!pinnedProfileName}
+            onSelect={() => {
+              onChange("");
+              close();
+            }}
+          />
+          {profiles.map((item) => (
+            <ProfileMenuItem
+              key={item.name}
+              testId={`automation-setup-model-option-${item.name}`}
+              label={item.name}
+              detail={formatModelNameForDisplay(item.model)}
+              isSelected={item.name === pinnedProfileName}
+              onSelect={() => {
+                onChange(item.name);
+                close();
+              }}
+            />
+          ))}
+        </>
+      )}
+    </ProfilePill>
+  );
+}
+
+/**
+ * Picks the agent profile an automation runs from, or None. Each option names
+ * the LLM profile that agent profile would run on.
+ */
+export function SetupAgentProfilePill({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (agentProfileId: string) => void;
+}) {
+  const { t } = useTranslation("openhands");
+  const { data, isLoading } = useAgentProfiles();
+  const { data: llmProfiles } = useLlmProfiles();
+  const activeLlmProfile = llmProfiles?.active_profile ?? null;
+  const profiles = (data?.profiles ?? []).filter(
+    (profile): profile is typeof profile & { id: string } =>
+      Boolean(profile.id),
+  );
+  const selectedId = value.trim() || null;
+  const selected = profiles.find((profile) => profile.id === selectedId);
+  let label = t(I18nKey.AUTOMATION_SETUP$AGENT_PROFILE_NONE);
+  if (selected) label = selected.name;
+  else if (selectedId)
+    label = t(I18nKey.AUTOMATIONS$UNAVAILABLE_AGENT_PROFILE, {
+      id: selectedId,
+    });
+
+  return (
+    <ProfilePill
+      testId="automation-setup-agent-profile"
+      label={label}
+      tooltip={t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER)}
+      canOpen={!isLoading && profiles.length > 0}
+    >
+      {(close) => (
+        <>
+          <ProfileMenuItem
+            testId="automation-setup-agent-profile-option-none"
+            label={t(I18nKey.AUTOMATION_SETUP$AGENT_PROFILE_NONE)}
+            isSelected={!selectedId}
+            onSelect={() => {
+              onChange("");
+              close();
+            }}
+          />
+          {profiles.map((item) => (
+            <ProfileMenuItem
+              key={item.id}
+              testId={`automation-setup-agent-profile-option-${item.id}`}
+              label={item.name}
+              detail={
+                item.agent_kind === "acp"
+                  ? t(I18nKey.CONVERSATION$ACP_AGENT_GENERIC)
+                  : item.llm_profile_ref || activeLlmProfile
+              }
+              isSelected={item.id === selectedId}
+              onSelect={() => {
+                onChange(item.id);
+                close();
+              }}
+            />
+          ))}
+        </>
+      )}
+    </ProfilePill>
+  );
+}
+
+/**
+ * The service refuses an LLM profile next to an agent profile, so while one is
+ * chosen the LLM profile pill shows what it runs on and stays locked. An ACP
+ * agent runs its own model, not an LLM profile.
+ */
+function useModelLockedByAgentProfile(agentProfileId: string) {
+  const { t } = useTranslation("openhands");
+  const { data } = useAgentProfiles();
+  const selectedId = agentProfileId.trim() || null;
+  if (!selectedId) return undefined;
+  const selected = data?.profiles?.find((profile) => profile.id === selectedId);
+  return {
+    llmProfile:
+      selected?.agent_kind === "acp"
+        ? t(I18nKey.CONVERSATION$ACP_AGENT_GENERIC)
+        : selected?.llm_profile_ref || null,
+    reason: t(I18nKey.AUTOMATION_SETUP$LLM_PROFILE_SET_BY_AGENT, {
+      name: selected?.name ?? selectedId,
+    }),
+  };
+}
+
+/**
+ * What a script automation runs with: an agent profile, or an LLM profile;
+ * None hands the choice back to the LLM profile.
+ */
+export function SetupProfilePickers({
+  model,
+  onModelChange,
+  agentProfileId,
+  onAgentProfileChange,
+}: {
+  model: string;
+  onModelChange: (profileName: string) => void;
+  agentProfileId: string;
+  onAgentProfileChange: (agentProfileId: string) => void;
+}) {
+  const { t } = useTranslation("openhands");
+  const modelLock = useModelLockedByAgentProfile(agentProfileId);
+
+  return (
+    <div
+      data-testid="automation-setup-profile-pickers"
+      className="flex flex-wrap items-start gap-x-6 gap-y-3"
+    >
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <span className="text-xs text-muted">
+          {t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER)}
+        </span>
+        <SetupAgentProfilePill
+          value={agentProfileId}
+          onChange={(value) => {
+            // A model would be refused next to the profile; drop it.
+            if (value) onModelChange("");
+            onAgentProfileChange(value);
+          }}
+        />
+      </div>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <span className="text-xs text-muted">
+          {t(I18nKey.AUTOMATIONS$DETAIL$MODEL)}
+        </span>
+        <SetupModelPill
+          value={model}
+          onChange={onModelChange}
+          lockedTo={modelLock}
+        />
+      </div>
     </div>
   );
 }
@@ -268,10 +490,12 @@ export function AutomationSetupPromptStack({
   titleAction,
   showTitle = true,
   model,
+  agentProfileId = "",
   repositoryReadOnly = false,
   onPromptChange,
   onRepositoryChange,
   onModelChange,
+  onAgentProfileChange,
 }: {
   prompt: string;
   repository: string;
@@ -284,13 +508,17 @@ export function AutomationSetupPromptStack({
   /** The setup form owns the title when the kind toggle stays outside the crossfade. */
   showTitle?: boolean;
   model: string;
+  agentProfileId?: string;
   /** Show the repositories without letting them be added or removed. */
   repositoryReadOnly?: boolean;
   onPromptChange: (value: string) => void;
   onRepositoryChange: (value: string) => void;
   onModelChange: (profileName: string) => void;
+  /** Offers the agent profile picker; without it only the model is offered. */
+  onAgentProfileChange?: (agentProfileId: string) => void;
 }) {
   const { t } = useTranslation("openhands");
+  const modelLock = useModelLockedByAgentProfile(agentProfileId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { gripRef, isGripDragging, handleGripMouseDown, handleGripTouchStart } =
     usePromptTextareaResize(textareaRef, { contentKey: prompt });
@@ -447,7 +675,20 @@ export function AutomationSetupPromptStack({
               className="automation-setup-prompt-input w-full resize-none border-0 bg-transparent p-0 text-sm text-content outline-none placeholder:text-tertiary-alt"
             />
             <div className="flex min-w-0 items-center gap-2 pt-2">
-              <SetupModelPill value={model} onChange={onModelChange} />
+              {onAgentProfileChange ? (
+                <SetupAgentProfilePill
+                  value={agentProfileId}
+                  onChange={(value) => {
+                    if (value) onModelChange("");
+                    onAgentProfileChange(value);
+                  }}
+                />
+              ) : null}
+              <SetupModelPill
+                value={model}
+                onChange={onModelChange}
+                lockedTo={onAgentProfileChange ? modelLock : undefined}
+              />
             </div>
             <div
               data-testid="automation-setup-prompt-grip"

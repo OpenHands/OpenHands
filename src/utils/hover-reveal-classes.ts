@@ -28,8 +28,8 @@ const FINE_HOVER_YIELD_CLASSES = [
 
 const FINE_HOVER_RESERVE_CLASSES = [
   "[@media(hover:hover)_and_(pointer:fine)]:min-w-0",
-  "[@media(hover:hover)_and_(pointer:fine)]:group-hover:min-w-[3.75rem]",
-  "[@media(hover:hover)_and_(pointer:fine)]:group-focus-within:min-w-[3.75rem]",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-hover:min-w-15",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-focus-within:min-w-15",
 ] as const;
 
 const FINE_HOVER_PINNED_TIMESTAMP_CLASSES = [
@@ -72,10 +72,10 @@ export function hoverRevealYieldClassName(forceHidden = false): string {
  */
 export function hoverRevealReserveClassName(forceReserved = false): string {
   if (forceReserved) {
-    return "min-w-[3.75rem]";
+    return "min-w-15";
   }
 
-  return cn("min-w-[3.75rem]", ...FINE_HOVER_RESERVE_CLASSES);
+  return cn("min-w-15", ...FINE_HOVER_RESERVE_CLASSES);
 }
 
 /**

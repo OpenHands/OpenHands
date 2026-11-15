@@ -102,6 +102,8 @@ export function setupDraftFromServerDraft(
 
   const savedName = saved.name ?? getStringField(body, "name");
   if (savedName !== undefined) form.name = savedName;
+  const savedRunAsUserId = getStringField(body, "run_as_user_id");
+  if (savedRunAsUserId !== undefined) form.runAsUserId = savedRunAsUserId;
   const savedPrompt = getStringField(body, "prompt");
   if (savedPrompt !== undefined) form.prompt = savedPrompt;
   const savedRepository = getRepositoryField(body);
@@ -180,6 +182,7 @@ export function formFromServerDraft(
     ...base,
     kind: endpointKind,
     name: saved.name ?? getStringField(body, "name") ?? base.name,
+    runAsUserId: getStringField(body, "run_as_user_id") ?? "",
     prompt: getStringField(body, "prompt") ?? base.prompt,
     repository: getRepositoryField(body) ?? base.repository,
     pluginSource: savedPlugins[0]?.source ?? "",

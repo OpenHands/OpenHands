@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HttpError } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
-import { ScriptSection } from "#/components/features/automations/detail/script-section";
+import { ScriptBody } from "#/components/features/automations/detail/script-section";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import {
   __resetActiveStoreForTests,
@@ -32,7 +33,7 @@ function renderSection(subject: Automation = automation) {
   return render(
     <QueryClientProvider client={queryClient}>
       <ActiveBackendProvider>
-        <ScriptSection automation={subject} />
+        <ScriptBody automation={subject} />
       </ActiveBackendProvider>
     </QueryClientProvider>,
   );
@@ -63,14 +64,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("ScriptSection", () => {
+describe("ScriptBody", () => {
   it("lists the bundle's files with the entrypoint first and badged", async () => {
-    // Arrange
+    // Arrange: macOS tar adds an AppleDouble twin for every file.
     vi.spyOn(AutomationService, "fetchTarballBytes").mockResolvedValue(
       new Uint8Array(
         await packTarGzip([
           { name: "lib/util.py", content: "x = 1\n" },
           { name: "main.py", content: "print('hi')\n" },
+          { name: "._main.py", content: "metadata" },
           { name: "config.json", content: "{}\n" },
         ]),
       ),
@@ -90,10 +92,39 @@ describe("ScriptSection", () => {
     expect(
       screen.getAllByText(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_ENTRYPOINT),
     ).toHaveLength(1);
-    expect(
-      screen.getAllByTestId("automation-script-file")[0],
-    ).toHaveTextContent("print('hi')");
     expect(AutomationService.fetchTarballBytes).toHaveBeenCalledWith("auto-1");
+  });
+
+  it("keeps each file's source closed until it is opened", async () => {
+    // Arrange
+    vi.spyOn(AutomationService, "fetchTarballBytes").mockResolvedValue(
+      new Uint8Array(
+        await packTarGzip([
+          { name: "main.py", content: "print('hi')\n" },
+          { name: "config.json", content: "{}\n" },
+        ]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    const [mainFile, configFile] = await screen.findAllByTestId(
+      "automation-script-file",
+    );
+    const mainToggle = screen.getByRole("button", { name: /main\.py/ });
+    const configToggle = screen.getByRole("button", { name: /config\.json/ });
+    expect(mainFile).not.toHaveTextContent("print('hi')");
+    expect(configFile).not.toHaveTextContent("{}");
+    expect(mainToggle).toHaveAttribute("aria-expanded", "false");
+    expect(configToggle).toHaveAttribute("aria-expanded", "false");
+
+    // Act
+    await user.click(mainToggle);
+
+    // Assert
+    expect(mainFile).toHaveTextContent("print('hi')");
+    expect(mainToggle).toHaveAttribute("aria-expanded", "true");
+    expect(configFile).not.toHaveTextContent("{}");
+    expect(configToggle).toHaveAttribute("aria-expanded", "false");
   });
 
   it("shows a loading message until the bundle arrives", () => {

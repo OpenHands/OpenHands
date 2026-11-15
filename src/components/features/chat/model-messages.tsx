@@ -72,30 +72,54 @@ export function ModelMessages({
     <div data-testid="model-messages" className="flex flex-col w-full">
       {entries.map((entry) => {
         if (entry.switchedTo) {
+          const switchKey =
+            entry.initiator === "agent"
+              ? I18nKey.MODEL$AGENT_SWITCHED
+              : entry.initiator === "router"
+                ? I18nKey.MODEL$ROUTER_SWITCHED
+                : entry.initiator === "user"
+                  ? I18nKey.MODEL$USER_SWITCHED
+                  : I18nKey.MODEL$SWITCHED_TO_PROFILE;
           return (
-            <GenericEventMessage
-              key={entry.id}
-              title={
-                <span className="inline-flex items-center gap-1.5 text-contrast">
-                  <InfoCircleIcon
-                    width={14}
-                    height={14}
-                    className="shrink-0 text-text-tertiary"
-                    aria-hidden
-                  />
-                  <Trans
-                    i18nKey={I18nKey.MODEL$SWITCHED_TO_PROFILE}
-                    values={{ name: entry.switchedTo }}
-                    components={{
-                      cmd: (
-                        <span className="font-mono text-contrast bg-surface-raised px-1 rounded" />
-                      ),
-                    }}
-                  />
-                </span>
-              }
-              details=""
-            />
+            <div key={entry.id}>
+              <GenericEventMessage
+                title={
+                  <span className="inline-flex items-center gap-1.5 text-contrast">
+                    <InfoCircleIcon
+                      width={14}
+                      height={14}
+                      className="shrink-0 text-text-tertiary"
+                      aria-hidden
+                    />
+                    <Trans
+                      i18nKey={switchKey}
+                      values={{ name: entry.switchedTo }}
+                      components={{
+                        cmd: (
+                          <span className="font-mono text-contrast bg-surface-raised px-1 rounded" />
+                        ),
+                      }}
+                    />
+                  </span>
+                }
+                details=""
+              />
+              {(entry.initiator === "agent" || entry.initiator === "router") &&
+                entry.reason?.trim() && (
+                  <p className="text-sm text-muted whitespace-pre-wrap break-words pl-5">
+                    <span className="font-medium">
+                      <Trans
+                        i18nKey={
+                          entry.initiator === "router"
+                            ? I18nKey.MODEL$ROUTER_SWITCH_REASON
+                            : I18nKey.MODEL$AGENT_SWITCH_REASON
+                        }
+                      />
+                    </span>{" "}
+                    {entry.reason}
+                  </p>
+                )}
+            </div>
           );
         }
 

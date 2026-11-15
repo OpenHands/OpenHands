@@ -30,8 +30,20 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
   const installations = page?.items;
   const active = useActiveBackend();
 
+  // A GitHub token from a plain OAuth app (OpenHands Enterprise on Docker
+  // Compose, which has no GitHub App) cannot list installations, so the
+  // backend answers with an empty page. That token can still list the user's
+  // repositories directly, so fall back to that flow instead of waiting for
+  // installations that never come. GitHub App tokens keep the installation
+  // flow whenever at least one installation exists.
+  const hasNoGithubInstallations =
+    provider === "github" &&
+    Array.isArray(installations) &&
+    installations.length === 0;
+
   const useInstallationRepos = provider
-    ? shouldUseInstallationRepos(provider, active.backend.kind)
+    ? shouldUseInstallationRepos(provider, active.backend.kind) &&
+      !hasNoGithubInstallations
     : false;
 
   const repos = useInfiniteQuery<

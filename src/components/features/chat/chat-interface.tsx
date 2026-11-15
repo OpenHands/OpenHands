@@ -1,5 +1,14 @@
+import { useSessionActivities } from "#/hooks/use-session-activities";
+import { useSessionActivityStore } from "#/stores/session-activity-store";
+import { ChatProgressContext } from "#/context/chat-progress-context";
+import {
+  CHAT_BODY_CLASS_NAME,
+  CHAT_SCROLL_CLASS_NAME,
+  CHAT_COMPOSER_CLASS_NAME,
+} from "./chat-layout";
+import { TaskStartupProgress } from "./task-startup-progress";
 import React from "react";
-import { createPortal } from "react-dom";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 import { useNavigate } from "react-router";
 import { useTracking } from "#/hooks/use-tracking";
 import { useTranslation } from "react-i18next";
@@ -21,11 +30,10 @@ import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
 import { useClampDragSelection } from "#/hooks/chat/use-clamp-drag-selection";
 import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edit";
 import { WorkspaceFilesForChatProvider } from "./chat-markdown-path-code";
-import { TypingIndicator } from "./typing-indicator";
 import { ChatSuggestions } from "./chat-suggestions";
 import { ScrollProvider } from "#/context/scroll-context";
 import { useSendMessage } from "#/hooks/use-send-message";
-import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
+import { useAgentState } from "#/hooks/use-agent-state";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
 
@@ -37,7 +45,9 @@ import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { ErrorMessageBanner } from "./error-message-banner";
+import { ConnectionRecoveryNotice } from "./connection-recovery-notice";
 import { SkillInstallRestartBanner } from "./skill-install-restart-banner";
+import { ResolvedConversationBanner } from "./resolved-conversation-banner";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { Messages } from "#/components/conversation-events/chat/messages";
@@ -53,7 +63,10 @@ import ChatStatusIndicator from "./chat-status-indicator";
 import { getStatusColor, getStatusText } from "#/utils/utils";
 import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
-import { setConversationState } from "#/utils/conversation-local-storage";
+import {
+  getConversationDraftRevision,
+  setConversationState,
+} from "#/utils/conversation-local-storage";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { hasConversationStarted } from "./components/resolve-picker-kind";
@@ -98,6 +111,7 @@ export function ChatInterface({
     useConversationStore();
   const {
     errorMessage,
+    errorType,
     errorCode,
     errorClassification,
     removeErrorMessage,
@@ -146,7 +160,9 @@ export function ChatInterface({
   } = useNewConversationCommand();
 
   const { curAgentState } = useAgentState();
-  const { isPlanningAgentRunning } = usePlanningAgentState();
+  const { curAgentState: recoveryAgentState } = useAgentState(
+    conversationWebSocket?.recoveryConversationId,
+  );
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
 
   // Cloud conversations whose sandbox is MISSING or ERROR are read-only:
@@ -325,6 +341,64 @@ export function ChatInterface({
     [pendingMessages, conversationId],
   );
 
+  const { key: sessionKey, sessions } = useSessionActivities(conversationId);
+  const session = sessions.at(-1);
+  const isSessionStarting =
+    session?.phase === "pending" || session?.phase === "connecting";
+  // An open socket can still be replaying saved messages after a failed REST
+  // preload. Every tab must wait for replay completion before declaring the
+  // chat empty, including tabs without a local session activity group.
+  const sessionHistoryKnown =
+    conversationWebSocket === null ||
+    (!isSessionStarting &&
+      conversationWebSocket.connectionState === "OPEN" &&
+      conversationWebSocket.isHistoryReady &&
+      !conversationWebSocket.isLoadingHistory);
+  const hasSendingMessages = pendingMessages.some(
+    (message) =>
+      message.status === "sending" &&
+      conversationId &&
+      matchesPendingConversationId(conversationId, message.conversationId),
+  );
+  React.useLayoutEffect(() => {
+    if (
+      session?.phase === "connecting" &&
+      conversationWebSocket?.connectionState === "OPEN" &&
+      !hasSendingMessages
+    ) {
+      useSessionActivityStore.getState().complete(sessionKey, session.id);
+    }
+  }, [
+    sessionKey,
+    session?.id,
+    session?.phase,
+    conversationWebSocket?.connectionState,
+    hasSendingMessages,
+  ]);
+
+  let pendingMessageLabel: string | undefined;
+  if (activeConversation?.id === conversationId) {
+    if (sandboxStatus === "PAUSED" || sandboxStatus === "STARTING") {
+      pendingMessageLabel = t(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX);
+    } else if (
+      sandboxStatus === "RUNNING" &&
+      conversationWebSocket &&
+      conversationWebSocket.connectionState !== "OPEN"
+    ) {
+      pendingMessageLabel = t(I18nKey.CHAT_INTERFACE$CONNECTING);
+    }
+  }
+  const hideConnectionError =
+    pendingMessageLabel !== undefined &&
+    errorType === "connection" &&
+    !errorCode &&
+    errorMessage === SERVER_CONNECTION_ERROR_MESSAGE &&
+    pendingMessages.some(
+      (message) =>
+        message.conversationId === conversationId &&
+        message.status === "sending",
+    );
+
   const hasModelEntries = useModelStore((s) =>
     conversationId
       ? (s.entriesByConversation[conversationId]?.length ?? 0) > 0
@@ -380,6 +454,11 @@ export function ChatInterface({
       return;
     }
 
+    // Capture before attachment conversion/upload can yield to a new edit.
+    const draftRevision = conversationId
+      ? getConversationDraftRevision(conversationId)
+      : undefined;
+
     // Create mutable copies of the arrays
     const images = [...originalImages];
     const files = [...originalFiles];
@@ -414,6 +493,13 @@ export function ChatInterface({
         ? await uploadFiles({ conversationId: conversationId!, files })
         : { skipped_files: [], uploaded_files: [] };
 
+    if (skippedFiles.length && errorCode === STARTUP_UPLOAD_ERROR_CODE) {
+      const composer = useConversationStore.getState();
+      composer.addImages(originalImages);
+      composer.addFiles(originalFiles);
+      composer.setMessageToSend(content, "conversation");
+      return;
+    }
     skippedFiles.forEach((f) => displayErrorToast(f.reason));
 
     const filePrompt = `${t(I18nKey.CHAT_INTERFACE$AUGMENTED_PROMPT_FILES_TITLE)}: ${uploadedFiles.join("\n\n")}`;
@@ -433,6 +519,7 @@ export function ChatInterface({
       // against. They're different when there are file attachments.
       text: content,
       content: prompt,
+      draftRevision,
       imageUrls,
       fileUrls: uploadedFiles,
       timestamp,
@@ -447,6 +534,9 @@ export function ChatInterface({
       await send(
         createChatMessage(prompt, imageUrls, uploadedFiles, timestamp),
       );
+      const errors = useErrorMessageStore.getState();
+      if (errors.errorCode === STARTUP_UPLOAD_ERROR_CODE)
+        errors.removeErrorMessage();
     } catch (sendError) {
       const sendErrorMessage =
         sendError instanceof Error
@@ -503,9 +593,16 @@ export function ChatInterface({
   });
   React.useEffect(() => {
     const target = scrollRef.current;
-    if (!target) return;
+    if (!target || allConversationEvents.length === 0) return;
+    // Initial scrolling is scheduled for the next frame, so scrollTop may still be zero.
+    if (target.scrollHeight > target.clientHeight + SCROLL_TOP_THRESHOLD_PX)
+      return;
     maybeLoadOlderRef.current(target);
-  }, [renderableEvents.length, hasMoreOlderEvents]);
+  }, [
+    allConversationEvents.length,
+    renderableEvents.length,
+    hasMoreOlderEvents,
+  ]);
 
   // Create a ScrollProvider with the scroll hook values
   const scrollProviderValue = {
@@ -543,41 +640,58 @@ export function ChatInterface({
     t,
   });
 
+  const pendingUserMessages = React.useMemo(
+    () => (
+      <PendingUserMessages
+        pendingLabel={pendingMessageLabel}
+        showPendingStatus={!isSessionStarting}
+      />
+    ),
+    [pendingMessageLabel, isSessionStarting],
+  );
   const isComposerDocked = Boolean(composerDockTarget);
   const isMinimalComposer = isComposerDocked || minimalComposer;
   const composer = (
-    <ComposerDockedProvider
-      enabled={isComposerDocked}
-      minimal={isMinimalComposer}
+    <ChatProgressContext.Provider
+      value={
+        isTask || hasPendingUserMessages || curAgentState === AgentState.RUNNING
+      }
     >
-      <InteractiveChatBox
-        onSubmit={(content, images, files) => {
-          if (isComposerDocked) onDockedComposerSubmit?.();
-          return handleSendMessage(content, images, files);
-        }}
-        disabled={isNewConversationPending || llmBlocked}
-        hasStartedConversation={hasStartedConversation}
-        showGitControlBar={showGitControlBar}
-        placeholder={
-          isMinimalComposer
-            ? t(I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER)
-            : composerPlaceholder
-        }
-      />
-    </ComposerDockedProvider>
+      <ComposerDockedProvider
+        enabled={isComposerDocked}
+        minimal={isMinimalComposer}
+      >
+        <InteractiveChatBox
+          onSubmit={(content, images, files) => {
+            if (isComposerDocked) onDockedComposerSubmit?.();
+            return handleSendMessage(content, images, files);
+          }}
+          disabled={isTask || isNewConversationPending || llmBlocked}
+          hasStartedConversation={hasStartedConversation}
+          showGitControlBar={showGitControlBar}
+          placeholder={
+            isMinimalComposer
+              ? t(I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER)
+              : composerPlaceholder
+          }
+        />
+      </ComposerDockedProvider>
+    </ChatProgressContext.Provider>
   );
-  const dockedOrInlineComposer = composerDockTarget
-    ? createPortal(composer, composerDockTarget)
-    : composer;
+  const dockedOrInlineComposer = composerDockTarget ? (
+    <AppearancePortal container={composerDockTarget}>
+      {composer}
+    </AppearancePortal>
+  ) : (
+    composer
+  );
 
   return (
     <WorkspaceFilesForChatProvider>
       <ScrollProvider value={scrollProviderValue}>
-        <div
-          className="relative flex h-full flex-col justify-between px-4"
-          data-testid="chat-interface"
-        >
-          {!hasSubstantiveAgentActions &&
+        <div className={CHAT_BODY_CLASS_NAME} data-testid="chat-interface">
+          {sessionHistoryKnown &&
+            !hasSubstantiveAgentActions &&
             !hasPendingUserMessages &&
             !userEventsExist &&
             !hasModelEntries &&
@@ -586,7 +700,7 @@ export function ChatInterface({
             totalEvents === 0 &&
             !isArchivedConversation &&
             // With no usable LLM the suggestions can't be acted on (the input is
-            // disabled). They're also a `pointer-events-auto` overlay that would
+            // disabled). Their chips would also
             // sit over the LlmNotConfiguredBanner below and swallow clicks on its
             // setup button — so hide them and let the banner be the lone CTA.
             !llmBlocked &&
@@ -605,7 +719,7 @@ export function ChatInterface({
               maybeLoadOlder(e.currentTarget);
             }}
             onWheel={handleWheelForPagination}
-            className="custom-scrollbar-always flex min-h-0 grow flex-col gap-2 overflow-x-hidden overflow-y-auto px-0 pt-4 pb-8 md:px-4"
+            className={CHAT_SCROLL_CLASS_NAME}
           >
             {isChatLoading && isReturningToConversation && (
               <ChatMessagesSkeleton />
@@ -648,32 +762,41 @@ export function ChatInterface({
               anchorEventId={null}
             />
 
-            {showConversationMessages && renderableEvents.length > 0 && (
+            {!isTask && showConversationMessages && (
               <Messages
+                hasOlderEvents={hasMoreOlderEvents}
                 messages={renderableEvents}
                 allEvents={allConversationEvents}
+                pendingMessages={pendingUserMessages}
+                pendingSessionId={isSessionStarting ? session?.id : undefined}
               />
             )}
-
-            {/*
-            Render the local pending-message queue independently so messages
-            the user just submitted show up immediately (with a faded "sending"
-            treatment) even before any real conversation event has come back
-            from the server. Entries drain (FIFO) when the matching
-            UserMessageEvent echoes back over the WebSocket, so this never
-            double-renders alongside the real event list.
-          */}
-            <PendingUserMessages />
+            {isTask && (
+              <>
+                {pendingUserMessages}
+                <TaskStartupProgress />
+              </>
+            )}
 
             {/* Goal-loop status sits at the end of the message flow — above the
               composer and its typing indicator — so progress stays in view. */}
             <GoalStatusBanner conversationId={conversationId} />
           </div>
 
-          <div className="flex shrink-0 flex-col gap-1.5 pb-4">
+          <div className={CHAT_COMPOSER_CLASS_NAME}>
             <SkillInstallRestartBanner conversationId={conversationId} />
             <BtwMessages conversationId={conversationId} />
-            {errorMessage && (
+            {recoveryAgentState === AgentState.RUNNING &&
+              !errorMessage &&
+              !isArchivedConversation &&
+              !(pendingMessageLabel && hasPendingUserMessages) &&
+              conversationWebSocket && (
+                <ConnectionRecoveryNotice
+                  state={conversationWebSocket.recoveryState}
+                  onRetry={conversationWebSocket.reconnect}
+                />
+              )}
+            {errorMessage && !hideConnectionError && (
               <ErrorMessageBanner
                 message={errorMessage}
                 code={errorCode}
@@ -697,6 +820,8 @@ export function ChatInterface({
             {llmBlocked && !isArchivedConversation && (
               <LlmNotConfiguredBanner />
             )}
+
+            {!isArchivedConversation && <ResolvedConversationBanner />}
 
             {isArchivedConversation ? (
               // Archived / sandbox-error: show a read-only notice in place of
@@ -722,26 +847,21 @@ export function ChatInterface({
                   <div className="flex justify-between relative">
                     <div className="flex items-end gap-1 pointer-events-auto">
                       <ConfirmationModeEnabled />
-                      {isStartingStatus && (
-                        <ChatStatusIndicator
-                          statusColor={serverStatusColor}
-                          status={serverStatusText}
-                        />
-                      )}
+                      {isStartingStatus &&
+                        !isTask &&
+                        !hasPendingUserMessages && (
+                          <ChatStatusIndicator
+                            statusColor={serverStatusColor}
+                            status={serverStatusText}
+                          />
+                        )}
                     </div>
 
                     {!hitBottom ? (
                       <div className="absolute left-1/2 transform -translate-x-1/2 bottom-0 pointer-events-auto">
                         <ScrollToBottomButton onClick={scrollDomToBottom} />
                       </div>
-                    ) : (
-                      (curAgentState === AgentState.RUNNING ||
-                        isPlanningAgentRunning) && (
-                        <div className="pointer-events-none absolute inset-x-9 bottom-0 flex justify-center">
-                          <TypingIndicator events={allConversationEvents} />
-                        </div>
-                      )
-                    )}
+                    ) : null}
                   </div>
                 </div>
 
@@ -754,3 +874,4 @@ export function ChatInterface({
     </WorkspaceFilesForChatProvider>
   );
 }
+import { STARTUP_UPLOAD_ERROR_CODE } from "#/utils/restore-startup-attachment-draft";

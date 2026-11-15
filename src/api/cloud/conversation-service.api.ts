@@ -190,12 +190,13 @@ export async function downloadCloudConversation(
  */
 export async function deleteCloudConversation(
   conversationId: string,
+  scope?: { backend: Backend; orgId: string | null },
 ): Promise<void> {
-  const backend = getActiveCloudBackend();
   await callCloudProxy<unknown>({
-    backend,
+    backend: scope?.backend ?? getActiveCloudBackend(),
     method: "DELETE",
     path: `/api/v1/app-conversations/${conversationId}`,
+    ...(scope ? { orgId: scope.orgId } : {}),
   });
 }
 
@@ -217,6 +218,28 @@ export async function updateCloudConversationPublicFlag(
     body: { public: isPublic },
   });
   return data;
+}
+
+/**
+ * Apply a tag merge patch to a cloud v1 app-conversation:
+ * `PATCH /api/v1/app-conversations/{id}` with `{ tags: patch }`, where a
+ * `null` value deletes the key and unmentioned keys are left untouched.
+ * Server-managed keys (`acpserver`, `archiveworkspacepath`,
+ * `agentprofileid`, `agentprofilerevision`) are rejected by the app-server,
+ * so callers must only send caller-owned keys.
+ */
+export async function updateCloudConversationTags(
+  conversationId: string,
+  patch: Record<string, string | null>,
+): Promise<AppConversation> {
+  const backend = getActiveCloudBackend();
+  const data = await callCloudProxy<AppConversation>({
+    backend,
+    method: "PATCH",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    body: { tags: patch },
+  });
+  return overlayStoredRepoSelection(data) as AppConversation;
 }
 
 /**

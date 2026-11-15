@@ -198,35 +198,24 @@ test.describe("active profile deletion + reconciliation", () => {
       await confirm.click();
       await expect(confirm).toBeHidden({ timeout: 30_000 });
 
-      // useEnsureActiveProfile re-activates the only remaining profile. Poll
-      // with reload — the delete + activate mutations may take a moment on CI.
-      await expect
-        .poll(
-          async () => {
-            await page.goto("/settings/llm", {
-              waitUntil: "domcontentloaded",
-            });
-            await waitForTestId(page, "add-llm-profile");
-            const remaining = await rowFor(INACTIVE_PROFILE);
-            if (!remaining) return false;
-            // The deleted profile must be gone, and reconciliation must keep
-            // *some* profile active (the "always have an active profile"
-            // guarantee). We don't assert it's INACTIVE_PROFILE specifically —
-            // other profiles may linger on the shared agent-server and
-            // useEnsureActiveProfile activates the first keyed one.
-            const goneRow = await rowFor(ACTIVE_PROFILE);
-            const activeBadges = await page
-              .getByTestId("profile-active-badge")
-              .count();
-            return goneRow === null && activeBadges > 0;
-          },
-          {
-            message: `"${INACTIVE_PROFILE}" should become active after deleting "${ACTIVE_PROFILE}"`,
-            timeout: 15_000,
-            intervals: [1_000, 2_000, 3_000],
-          },
-        )
-        .toBe(true);
+      // Wait on this page: the delete and useEnsureActiveProfile's activation
+      // both refetch the list here. Reloading instead restarts the list load,
+      // and reading right after `add-llm-profile` (rendered before the list)
+      // saw the loading spinner, so the check failed on slow CI runs.
+      const rows = page.getByTestId("profile-row");
+      await expect(
+        rows.filter({ hasText: ACTIVE_PROFILE }),
+        `"${ACTIVE_PROFILE}" should be gone after deleting it`,
+      ).toHaveCount(0, { timeout: 30_000 });
+      await expect(rows.filter({ hasText: INACTIVE_PROFILE })).toHaveCount(1);
+      // Reconciliation must keep *some* profile active (the "always have an
+      // active profile" guarantee). We don't assert it's INACTIVE_PROFILE
+      // specifically — other profiles may linger on the shared agent-server
+      // and useEnsureActiveProfile activates the first keyed one.
+      await expect(
+        page.getByTestId("profile-active-badge"),
+        `a profile should become active after deleting "${ACTIVE_PROFILE}"`,
+      ).toHaveCount(1, { timeout: 30_000 });
     });
   });
 });

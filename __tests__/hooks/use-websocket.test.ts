@@ -154,6 +154,53 @@ describe("useWebSocket connection lifecycle", () => {
     expect("lastMessage" in result.current).toBe(false);
   });
 
+  it("replaces a same-URL connection when its identity changes and replays with current options", () => {
+    vi.stubGlobal("WebSocket", BrowserWebSocketDouble);
+    let afterSeq = "4";
+    const queryParams = () => ({ after_seq: afterSeq });
+    const originalOnMessage = vi.fn();
+    const latestOnMessage = vi.fn();
+    const initialProps = {
+      connectionKey: "runtime-a",
+      sessionApiKey: "session-a",
+      onMessage: originalOnMessage,
+    };
+    const { result, rerender } = renderHook(
+      (props: typeof initialProps) =>
+        useWebSocket("ws://acme.test/events", { ...props, queryParams }),
+      { initialProps },
+    );
+    const firstSocket = getSocket();
+    act(() => firstSocket.open());
+
+    rerender({ ...initialProps, onMessage: latestOnMessage });
+    act(() => firstSocket.receive("live frame"));
+    expect(BrowserWebSocketDouble.instances).toHaveLength(1);
+    expect(latestOnMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ data: "live frame" }),
+    );
+
+    // Cached history can keep the URL unchanged across an identity switch.
+    // A replacement still needs fresh auth and a freshly resolved cursor.
+    afterSeq = "-1";
+    rerender({
+      connectionKey: "runtime-b",
+      sessionApiKey: "session-b",
+      onMessage: latestOnMessage,
+    });
+
+    expect(firstSocket.close).toHaveBeenCalledOnce();
+    expect(BrowserWebSocketDouble.instances).toHaveLength(2);
+    const replacementSocket = getSocket();
+    expect(replacementSocket.url).toBe("ws://acme.test/events?after_seq=-1");
+    act(() => replacementSocket.open());
+    expect(replacementSocket.send).toHaveBeenCalledExactlyOnceWith(
+      JSON.stringify({ type: "auth", session_api_key: "session-b" }),
+    );
+    expect(result.current.socket).toBe(replacementSocket);
+    expect(result.current.isConnected).toBe(true);
+  });
+
   it("delivers the final asynchronous close after clearing the URL", () => {
     vi.stubGlobal("WebSocket", BrowserWebSocketDouble);
     const onClose = vi.fn();

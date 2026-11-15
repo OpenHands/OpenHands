@@ -33,7 +33,7 @@ describe("ContextMeter", () => {
     const bar = screen.getByTestId("context-meter-bar");
     expect(bar).toHaveClass("bg-foreground");
     expect(bar).toHaveClass("rounded-full");
-    expect(bar.style.width).toBe("50%");
+    expect(bar.style.getPropertyValue("--context-fill-width")).toBe("50%");
   });
 
   it("warns above 70% fill", () => {
@@ -60,7 +60,11 @@ describe("ContextMeter", () => {
   it("caps the bar width at 100%", () => {
     render(<ContextMeter perTurnToken={150} contextWindow={100} />);
 
-    expect(screen.getByTestId("context-meter-bar").style.width).toBe("100%");
+    expect(
+      screen
+        .getByTestId("context-meter-bar")
+        .style.getPropertyValue("--context-fill-width"),
+    ).toBe("100%");
   });
 
   it("shows an unknown-window state instead of 'x / 0' when the window is unreported", () => {

@@ -59,9 +59,10 @@ export default function SharedConversation() {
   const renderableEvents = React.useMemo(
     () =>
       conversationEvents
-        .reduce<
-          OpenHandsEvent[]
-        >((uiEvents, event) => handleEventForUI(event, uiEvents), [])
+        .reduce<OpenHandsEvent[]>(
+          (uiEvents, event) => handleEventForUI(event, uiEvents),
+          [],
+        )
         .filter(shouldRenderEvent),
     [conversationEvents],
   );

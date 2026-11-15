@@ -9,6 +9,11 @@ import {
   removeStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import { AGENT_PROFILES_QUERY_KEYS } from "#/hooks/query/query-keys";
+import {
+  clearPendingHomeModelPick,
+  hasPendingHomeModelPick,
+  markHomeModelPick,
+} from "#/hooks/use-chat-input-llm-profile-state";
 
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
@@ -49,6 +54,22 @@ vi.mock("#/hooks/query/use-llm-profiles", () => ({
 // no-op and drive launches through the service mock below.
 vi.mock("#/hooks/query/use-agent-profiles", () => ({
   useAgentProfiles: () => ({ data: undefined }),
+}));
+
+// Settings + meta-profiles: default to "Run on first message" OFF so the
+// existing payload-snapshot assertions are unaffected. Per-test overrides
+// flip the toggle on to exercise the route-at-start stamp / suppression.
+const { useSettingsMock, useMetaProfilesMock } = vi.hoisted(() => ({
+  useSettingsMock: vi.fn<() => { data: unknown }>(() => ({ data: undefined })),
+  useMetaProfilesMock: vi.fn<() => { data: unknown }>(() => ({
+    data: undefined,
+  })),
+}));
+vi.mock("#/hooks/query/use-settings", () => ({
+  useSettings: () => useSettingsMock(),
+}));
+vi.mock("#/hooks/query/use-meta-profiles", () => ({
+  useMetaProfiles: () => useMetaProfilesMock(),
 }));
 
 // The launch path resolves the active AgentProfile by awaiting
@@ -128,6 +149,10 @@ describe("useCreateConversation", () => {
       active_profile: null,
     });
     useLlmProfilesMock.mockReturnValue({ data: { active_profile: null } });
+    useSettingsMock.mockReturnValue({ data: undefined });
+    useMetaProfilesMock.mockReturnValue({ data: undefined });
+    clearPendingHomeModelPick("local-1", null);
+    clearPendingHomeModelPick("cloud-1", null);
     removeStoredConversationMetadata("conv-with-plugins");
     removeStoredConversationMetadata("conv-ref-stamp");
     removeStoredConversationMetadata("conv-dropdown-override");
@@ -211,6 +236,124 @@ describe("useCreateConversation", () => {
       });
     });
   });
+
+  it("suppresses route-at-start on cloud when suppressRouterAtStart is passed by the home launcher", async () => {
+    // "Run on first message" is on and a router is active, so a plain launch
+    // would stamp the suffix — but the home launcher explicitly passes
+    // `suppressRouterAtStart: true` when a home model pick was made.
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    });
+    useSettingsMock.mockReturnValue({
+      data: { run_router_at_conversation_start: true },
+    });
+    useMetaProfilesMock.mockReturnValue({
+      data: { active_meta_profile: "balanced" },
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: null,
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({
+      query: "hi",
+      suppressRouterAtStart: true,
+    });
+
+    const call = createConversationSpy.mock.lastCall?.[0] ?? {};
+    expect(call).not.toHaveProperty("runRouterAtConversationStart");
+    expect(call).not.toHaveProperty("hasActiveMetaProfile");
+    expect(call.suppressRouterAtStart).toBe(true);
+  });
+
+  it("stamps route-at-start on cloud when no home pick was made", async () => {
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    });
+    useSettingsMock.mockReturnValue({
+      data: { run_router_at_conversation_start: true },
+    });
+    useMetaProfilesMock.mockReturnValue({
+      data: { active_meta_profile: "balanced" },
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: null,
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hi" });
+
+    const call = createConversationSpy.mock.lastCall?.[0] ?? {};
+    expect(call.runRouterAtConversationStart).toBe(true);
+    expect(call.hasActiveMetaProfile).toBe(true);
+  });
+
+  it("does not suppress route-at-start or consume a pending home pick on a non-home launch (#19138)", async () => {
+    // A pending home model pick is owned by the home composer. A non-home
+    // launch (sidebar "New conversation", task-row launch, planning chat) calls
+    // `createConversation` without `suppressRouterAtStart` and must neither
+    // suppress route-at-start nor consume the pending home pick.
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    });
+    useSettingsMock.mockReturnValue({
+      data: { run_router_at_conversation_start: true },
+    });
+    useMetaProfilesMock.mockReturnValue({
+      data: { active_meta_profile: "balanced" },
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: null,
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    markHomeModelPick("cloud-1", null);
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    // Non-home caller launches without `suppressRouterAtStart`.
+    await result.current.mutateAsync({ query: "from-sidebar" });
+
+    const nonHomeCall = createConversationSpy.mock.lastCall?.[0] ?? {};
+    expect(nonHomeCall.runRouterAtConversationStart).toBe(true);
+    expect(nonHomeCall).not.toHaveProperty("suppressRouterAtStart");
+    // The home composer's pending pick is still intact for the actual home send.
+    expect(hasPendingHomeModelPick("cloud-1", null)).toBe(true);
+  });
+
 
   it("launches new local conversations from the active AgentProfile (#3727)", async () => {
     listAgentProfilesMock.mockResolvedValue({

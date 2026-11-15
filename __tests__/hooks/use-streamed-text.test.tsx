@@ -71,39 +71,36 @@ describe("useStreamedText", () => {
     expect(result.current.length).toBeGreaterThan("Hi".length);
     expect(result.current.length).toBeLessThan(202);
 
-    // A 200-character burst is spread over about 1.5s rather than shown at
-    // once: quickly at first, then at the reading pace for the last of it.
-    frames.tick(60);
-    expect(result.current.length).toBeLessThan(202);
-    frames.tick(60);
+    // A received burst must finish within 100ms plus one frame.
+    frames.tick(4);
     expect(result.current).toBe(`Hi${"x".repeat(200)}`);
     expect(frames.pending()).toBe(0);
   });
 
-  it("reveals bursty chunks at a steady pace", () => {
-    // ~55 chars/s: one 12-char burst every 13 frames.
-    const chunk = "x".repeat(12);
-    const framesPerChunk = 13;
+  it("finishes each burst without accumulating a reading-pace backlog", () => {
     const { result, rerender } = renderHook(
       ({ text }) => useStreamedText(text),
-      { initialProps: { text: "" } },
+      {
+        initialProps: { text: "" },
+      },
     );
-
-    const halves: number[] = [];
     for (let i = 1; i <= 8; i += 1) {
-      rerender({ text: chunk.repeat(i) });
-      // Compare the first and second half of each gap between bursts.
-      for (const frameCount of [6, framesPerChunk - 6]) {
-        const before = result.current.length;
-        frames.tick(frameCount);
-        halves.push((result.current.length - before) / frameCount);
-      }
+      rerender({ text: "x".repeat(i * 12) });
+      frames.tick(7);
+      expect(result.current).toBe("x".repeat(i * 12));
     }
+  });
 
-    // Each burst is spread across the gap until the next one rather than
-    // revealed up front and followed by a pause.
-    expect(Math.min(...halves)).toBeGreaterThan(0.5);
-    expect(Math.max(...halves)).toBeLessThan(1.5);
+  it("shows the final reply immediately and stops the reveal clock", () => {
+    const { result, rerender } = renderHook(
+      ({ text, streaming }) => useStreamedText(text, streaming),
+      { initialProps: { text: "Hi", streaming: true } },
+    );
+    rerender({ text: "Hi" + "x".repeat(200), streaming: true });
+    frames.tick();
+    rerender({ text: "Hi" + "x".repeat(210), streaming: false });
+    expect(result.current).toBe("Hi" + "x".repeat(210));
+    expect(frames.pending()).toBe(0);
   });
 
   it("follows a fast model closely and catches up once it stops", () => {
@@ -127,7 +124,7 @@ describe("useStreamedText", () => {
     expect(result.current.length).toBeLessThan(length);
     expect(length - result.current.length).toBeLessThan(600 * 0.6);
 
-    frames.tick(120); // ~2s after the model stopped
+    frames.tick(7); // At most 112ms after the model stopped
     expect(result.current).toBe("x".repeat(length));
     expect(frames.pending()).toBe(0);
   });

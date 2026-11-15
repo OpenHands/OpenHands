@@ -28,7 +28,13 @@ export type SetupFieldType =
   | "plugin-sources"
   | "tarball-upload";
 
-export type SetupGitProvider = "github" | "gitlab" | "bitbucket";
+/**
+ * The provider whose repositories a `repo-picker` lists. The hosted services
+ * and the two integrations an OpenHands Enterprise instance connects to a
+ * self-managed Bitbucket Data Center or to Azure DevOps.
+ */
+export type SetupGitProvider =
+  "github" | "gitlab" | "bitbucket" | "bitbucket_data_center" | "azure_devops";
 
 export type SetupTriggerKind = "cron" | "event";
 
@@ -197,6 +203,8 @@ export interface SetupEntry {
   id: string;
   name: string;
   description: string;
+  /** Mermaid source for a small diagram of what the automation does. */
+  diagram?: string;
   /**
    * Version of the template this entry publishes, sent with the create request
    * as provenance. A bundle declares its own at `setup.bundle.version`; a
@@ -247,6 +255,11 @@ export interface DeploymentCapabilities {
   features: string[];
   /** Providers whose repositories a run clones with the user's token; older services omit it. */
   repoProviders?: string[];
+  /**
+   * Event type patterns per event source that has a catalog; a source missing
+   * here accepts any key. Older services omit it and list GitHub's in `eventTypes`.
+   */
+  eventTypesBySource?: Record<string, string[]>;
 }
 
 /** A single problem with a draft, addressed to the field that caused it. */
@@ -270,9 +283,7 @@ export interface ValidateDraftResponse {
  * path an entry shipping its own tarball uses; the other two are presets.
  */
 export type AutomationDraftEndpoint =
-  | "/v1"
-  | "/v1/preset/prompt"
-  | "/v1/preset/plugin";
+  "/v1" | "/v1/preset/prompt" | "/v1/preset/plugin";
 
 /** `POST /v1/drafts` — create a server-backed automation setup draft. */
 export interface CreateAutomationDraftApiRequest {
@@ -334,18 +345,10 @@ export const INTERFACE_VERSION = "1.0";
 
 /** The closed set of runtime-model properties a client may offer for setting. */
 export type AutomationAttributeName =
-  | "name"
-  | "prompt"
-  | "model"
-  | "timeout"
-  | "schedule";
+  "name" | "prompt" | "model" | "timeout" | "schedule";
 
 export type InterfaceAttributeType =
-  | "text"
-  | "textarea"
-  | "number"
-  | "llm-profile"
-  | "schedule";
+  "text" | "textarea" | "number" | "llm-profile" | "schedule";
 
 /** How one settable attribute of an existing Automation is offered. */
 export interface InterfaceAttribute {
@@ -365,6 +368,8 @@ export interface InterfaceRoutes {
   detail: string;
   /** The templates sub-page. Static: there is no parameter to substitute. */
   templates?: string;
+  /** The event sources sub-page. */
+  events?: string;
 }
 
 /**
@@ -391,6 +396,7 @@ export interface InterfaceEndpoints {
   uploads?: string;
   /** The org's tags with counts. Optional: added after the block shipped. */
   tags?: string;
+  webhooks?: string;
 }
 
 export type InterfaceEndpointName = keyof InterfaceEndpoints;
@@ -417,7 +423,7 @@ export interface InterfaceImportExport {
  * leaves the sub-pages unrendered.
  */
 
-export const INTERFACE_SUB_PAGE_IDS = ["list", "templates"] as const;
+export const INTERFACE_SUB_PAGE_IDS = ["list", "events", "templates"] as const;
 
 export type InterfaceSubPageId = (typeof INTERFACE_SUB_PAGE_IDS)[number];
 
@@ -485,7 +491,7 @@ export interface InterfaceOverview {
 export const DASHBOARD_FILTER_VALUES = {
   status: ["all", "active", "failing", "disabled"],
   trigger: ["all", "schedule", "event"],
-  created_by: ["all", "me", "others"],
+  created_by: ["all", "me", "others", "service"],
 } as const;
 
 export type DashboardFilterId = keyof typeof DASHBOARD_FILTER_VALUES;
@@ -606,6 +612,7 @@ export interface InterfaceManifest {
     detail: { backLabel: string };
     edit: { title: string };
     templates?: InterfaceTemplatesPage;
+    events?: { title: string; description: string };
   };
   docsUrl: string;
   /**

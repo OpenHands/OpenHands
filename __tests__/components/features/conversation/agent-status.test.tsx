@@ -2,6 +2,8 @@ import type { SVGProps } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { NavigationProvider } from "#/context/navigation-context";
+import { ChatProgressContext } from "#/context/chat-progress-context";
 import { AgentStatus } from "#/components/features/controls/agent-status";
 import { AgentState } from "#/types/agent-state";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
@@ -63,6 +65,8 @@ vi.mock("#/icons/u-clock-three.svg?react", () => ({
 }));
 
 interface AgentStatusScenario {
+  routeConversationId?: string;
+  progressInChat?: boolean;
   agentState?: AgentState;
   className?: string;
   conversationId?: string | null;
@@ -74,9 +78,12 @@ interface AgentStatusScenario {
   taskStatus?: AppConversationStartTaskStatus;
   webSocketStatus?: WebSocketConnectionState;
   hasConnectedOnce?: boolean;
+  compact?: boolean;
 }
 
 function renderAgentStatus({
+  routeConversationId,
+  progressInChat = false,
   agentState = AgentState.AWAITING_USER_CONFIRMATION,
   className,
   conversationId = "conversation-1",
@@ -88,6 +95,7 @@ function renderAgentStatus({
   taskStatus,
   webSocketStatus = "OPEN",
   hasConnectedOnce = false,
+  compact,
 }: AgentStatusScenario = {}) {
   const handleResumeAgent = vi.fn();
   const handleStop = vi.fn();
@@ -114,13 +122,25 @@ function renderAgentStatus({
   );
 
   const view = render(
-    <AgentStatus
-      className={className}
-      disabled={disabled}
-      handleResumeAgent={handleResumeAgent}
-      handleStop={handleStop}
-      isPausing={isPausing}
-    />,
+    <NavigationProvider
+      value={{
+        conversationId: routeConversationId ?? null,
+        currentPath: "/",
+        isNavigating: false,
+        navigate: vi.fn(),
+      }}
+    >
+      <ChatProgressContext.Provider value={progressInChat}>
+        <AgentStatus
+          className={className}
+          disabled={disabled}
+          handleResumeAgent={handleResumeAgent}
+          handleStop={handleStop}
+          isPausing={isPausing}
+          compact={compact}
+        />
+      </ChatProgressContext.Provider>
+    </NavigationProvider>,
   );
 
   return {
@@ -137,6 +157,48 @@ afterEach(() => {
 });
 
 describe("AgentStatus", () => {
+  it.each([AgentState.RUNNING, AgentState.STOPPED])(
+    "does not control the previous agent while a new conversation launches from %s",
+    (agentState) => {
+      renderAgentStatus({
+        routeConversationId: "launch-new-conversation",
+        progressInChat: true,
+        agentState,
+        executionStatus: ExecutionStatus.RUNNING,
+      });
+
+      expect(screen.getByTestId("agent-loading-spinner")).toBeInTheDocument();
+      expect(screen.queryByTestId("stop-button")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("play-button")).not.toBeInTheDocument();
+    },
+  );
+
+  it("keeps Stop usable and the label for screen readers when compact", () => {
+    const { container, handleStop } = renderAgentStatus({
+      compact: true,
+      agentState: AgentState.RUNNING,
+      executionStatus: ExecutionStatus.RUNNING,
+    });
+
+    const stop = screen.getByRole("button", { name: I18nKey.BUTTON$STOP });
+    expect(container.querySelector("span[title]")).toHaveClass("sr-only");
+    fireEvent.click(stop);
+
+    expect(handleStop).toHaveBeenCalledOnce();
+  });
+
+  it("keeps Stop accessible when the conversation owns progress text", () => {
+    const { handleStop } = renderAgentStatus({
+      progressInChat: true,
+      agentState: AgentState.RUNNING,
+      executionStatus: ExecutionStatus.RUNNING,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: I18nKey.BUTTON$STOP }));
+
+    expect(handleStop).toHaveBeenCalledOnce();
+  });
+
   it.each([
     {
       label: "the runtime is initializing",
@@ -377,7 +439,6 @@ describe("AgentStatus", () => {
     expect(label.parentElement?.className).not.toContain("Stryker");
     expect(clockIcon.parentElement).toHaveClass(
       "cursor-default",
-      "rounded-[100px]",
       "size-6",
       "transition-all",
     );

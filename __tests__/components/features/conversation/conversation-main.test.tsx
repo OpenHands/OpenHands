@@ -113,7 +113,9 @@ vi.mock("#/components/features/chat/chat-interface", () => {
 vi.mock(
   "#/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content",
   () => ({
-    ConversationTabContent: () => <div data-testid="tab-content" />,
+    ConversationTabContent: () => (
+      <input data-testid="tab-content" aria-label="Panel draft" />
+    ),
   }),
 );
 
@@ -207,6 +209,35 @@ describe("ConversationMain - Layout Transition Stability", () => {
     mockNavigate.mockClear();
     mockSetHasRightPanelToggled.mockClear();
     mockSetIsRightPanelShown.mockClear();
+  });
+
+  it("defers closed tabs until opened and preserves their state when closed again", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderConversationMain();
+    expect(screen.queryByTestId("tab-content")).not.toBeInTheDocument();
+
+    mockIsRightPanelShown = true;
+    rerender(conversationMainTree());
+    const panel = screen.getByRole("textbox", { name: "Panel draft" });
+    await user.type(panel, "unsaved draft");
+
+    mockIsRightPanelShown = false;
+    rerender(conversationMainTree());
+    expect(panel).toBeInTheDocument();
+    mockIsRightPanelShown = true;
+    rerender(conversationMainTree());
+    expect(screen.getByRole("textbox", { name: "Panel draft" })).toHaveValue(
+      "unsaved draft",
+    );
+
+    mockIsRightPanelShown = false;
+    rerender(conversationMainTree("conv-2"));
+    expect(screen.queryByTestId("tab-content")).not.toBeInTheDocument();
+    mockIsRightPanelShown = true;
+    rerender(conversationMainTree("conv-2"));
+    expect(screen.getByRole("textbox", { name: "Panel draft" })).toHaveValue(
+      "",
+    );
   });
 
   it("opens automation setup mode when the conversation has a draft tag", async () => {

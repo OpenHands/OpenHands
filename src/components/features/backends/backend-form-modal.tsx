@@ -40,6 +40,7 @@ import { I18nKey } from "#/i18n/declaration";
 import type { Backend, BackendKind } from "#/api/backend-registry/types";
 import { getUserFacingConnectionErrorMessage } from "#/utils/user-facing-error";
 import { cn } from "#/utils/utils";
+import { statusToneBannerClassName } from "#/utils/status-tone-classes";
 import {
   modalTitleLgClassName,
   modalTitleLgMediumClassName,
@@ -271,7 +272,10 @@ function BackendStatusBadge({
       {disabled ? (
         <div
           data-testid={`${testIdRoot}-status-error`}
-          className="flex flex-col gap-1 rounded-md border border-semantic-danger/40 bg-semantic-danger/5 p-3 text-sm"
+          className={cn(
+            "flex flex-col gap-1 rounded-md p-3 text-sm dark:border-semantic-danger/40 dark:bg-semantic-danger/5",
+            statusToneBannerClassName.danger,
+          )}
         >
           <span className="font-semibold text-feedback-error">
             {t(I18nKey.BACKEND$HEALTH_FAILED_TITLE)}
@@ -659,7 +663,11 @@ export function BackendForm({
           <div
             role="alert"
             data-testid={`${testIdRoot}-error`}
-            className="rounded-md border border-semantic-danger/40 bg-semantic-danger/5 p-3 text-sm text-feedback-error whitespace-pre-wrap break-words"
+            className={cn(
+              "rounded-md p-3 text-sm whitespace-pre-wrap break-words dark:border-semantic-danger/40 dark:bg-semantic-danger/5",
+              statusToneBannerClassName.danger,
+              "text-feedback-error",
+            )}
           >
             {connectionError}
           </div>
@@ -929,7 +937,11 @@ function ManualConnectionColumn({
         <div
           role="alert"
           data-testid={`${testIdRoot}-error`}
-          className="rounded-md border border-semantic-danger/40 bg-semantic-danger/5 p-3 text-sm text-feedback-error whitespace-pre-wrap break-words"
+          className={cn(
+            "rounded-md p-3 text-sm whitespace-pre-wrap break-words dark:border-semantic-danger/40 dark:bg-semantic-danger/5",
+            statusToneBannerClassName.danger,
+            "text-feedback-error",
+          )}
         >
           {connectionError}
         </div>
@@ -1335,7 +1347,7 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
               rel="noopener noreferrer"
               data-testid={`${testIdRoot}-docs-link`}
               tabIndex={isExpanded ? undefined : -1}
-              className="inline-flex w-fit items-center gap-1.5 text-primary hover:underline"
+              className="inline-flex w-fit items-center gap-1.5 text-link hover:underline"
             >
               <span>{docsLabel}</span>
               <ExternalLinkIcon className="size-4 shrink-0" aria-hidden />
@@ -1656,7 +1668,7 @@ function AddBackendAddModeBody({
                   rel="noopener noreferrer"
                   aria-label={t(I18nKey.BACKEND$DEPLOYMENT_OPTIONS)}
                   data-testid="add-backend-deployment-options-link"
-                  className="text-primary hover:underline"
+                  className="text-link hover:underline"
                 >
                   {t(I18nKey.CTA$LEARN_MORE)}
                   <ExternalLinkIcon

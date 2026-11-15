@@ -121,6 +121,15 @@ async function openDropdown() {
   return user;
 }
 
+/** Org rows show only the org name under a backend heading; their title keeps the full label. */
+function menuRow(fullLabel: string) {
+  return within(screen.getByRole("listbox")).getByTitle(fullLabel);
+}
+
+function queryMenuRow(fullLabel: string) {
+  return within(screen.getByRole("listbox")).queryByTitle(fullLabel);
+}
+
 beforeEach(() => {
   window.localStorage.clear();
   vi.stubEnv("VITE_BACKEND_BASE_URL", "http://localhost:9000");
@@ -151,7 +160,7 @@ beforeEach(() => {
   vi.mocked(ServerClient).mockReset();
   vi.mocked(ServerClient).mockImplementation(function ServerClientMock() {
     return {
-      getServerInfo: vi.fn().mockResolvedValue({ version: "1.58.0" }),
+      getServerInfo: vi.fn().mockResolvedValue({ version: "1.59.0" }),
     } as unknown as ServerClient;
   });
   vi.mocked(SettingsClient).mockReset();
@@ -258,11 +267,18 @@ describe("BackendSelector", () => {
     const user = await openDropdown();
 
     await waitFor(() => {
-      expect(screen.getByText("Production – Personal")).toBeInTheDocument();
+      expect(menuRow("Production – Personal")).toBeInTheDocument();
     });
-    expect(screen.getByText("Production – Acme Inc")).toBeInTheDocument();
+    // The backend name is one heading above its org rows, not a prefix on each.
+    const listbox = screen.getByRole("listbox");
+    expect(within(listbox).getAllByText("Production")).toHaveLength(1);
+    expect(menuRow("Production – Personal")).toHaveTextContent(/^Personal$/);
+    expect(menuRow("Production – Acme Inc")).toHaveTextContent(/^Acme Inc$/);
+    expect(
+      within(listbox).getByRole("option", { name: "Production – Acme Inc" }),
+    ).toBeInTheDocument();
 
-    await user.click(screen.getByText("Production – Acme Inc"));
+    await user.click(menuRow("Production – Acme Inc"));
 
     // Selecting an org row updates the active selection locally only —
     // it must never trigger the cloud-mutating /switch call that used to
@@ -319,14 +335,12 @@ describe("BackendSelector", () => {
     await openDropdown();
 
     await waitFor(() => {
-      expect(screen.getByText("ProdPersonal – Personal")).toBeInTheDocument();
+      expect(menuRow("ProdPersonal – Personal")).toBeInTheDocument();
     });
-    expect(screen.getByText("ProdAcme – Acme Inc")).toBeInTheDocument();
+    expect(menuRow("ProdAcme – Acme Inc")).toBeInTheDocument();
     // Inaccessible orgs must not appear under either backend.
-    expect(
-      screen.queryByText("ProdPersonal – Acme Inc"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("ProdAcme – Personal")).not.toBeInTheDocument();
+    expect(queryMenuRow("ProdPersonal – Acme Inc")).not.toBeInTheDocument();
+    expect(queryMenuRow("ProdAcme – Personal")).not.toBeInTheDocument();
     expect(screen.queryByText(/Beta Co/)).not.toBeInTheDocument();
   });
 
@@ -369,11 +383,9 @@ describe("BackendSelector", () => {
     await openDropdown();
 
     await waitFor(() => {
-      expect(
-        screen.getByText("OpenHands Cloud – Personal"),
-      ).toBeInTheDocument();
+      expect(menuRow("OpenHands Cloud – Personal")).toBeInTheDocument();
     });
-    expect(screen.getByText("OpenHands Cloud – Acme Inc")).toBeInTheDocument();
+    expect(menuRow("OpenHands Cloud – Acme Inc")).toBeInTheDocument();
     expect(getCurrentCloudApiKey).not.toHaveBeenCalled();
   });
 
@@ -460,13 +472,13 @@ describe("BackendSelector", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText("Production – BACKEND$PERSONAL_WORKSPACE"),
+        menuRow("Production – BACKEND$PERSONAL_WORKSPACE"),
       ).toBeInTheDocument();
     });
-    expect(screen.getByText("Production – Acme Inc")).toBeInTheDocument();
+    expect(menuRow("Production – Acme Inc")).toBeInTheDocument();
     // The auto-generated org name must NOT be rendered.
     expect(
-      screen.queryByText(`Production – user_${personalOrgId}_org`),
+      queryMenuRow(`Production – user_${personalOrgId}_org`),
     ).not.toBeInTheDocument();
   });
 
@@ -921,9 +933,7 @@ describe("BackendSelector", () => {
 
     // Assert: the org rows render, but no footer actions do.
     await waitFor(() => {
-      expect(
-        screen.getByText("OpenHands Cloud – Acme Inc"),
-      ).toBeInTheDocument();
+      expect(menuRow("OpenHands Cloud – Acme Inc")).toBeInTheDocument();
     });
     expect(
       screen.queryByTestId("manage-backends-menu-item"),
