@@ -18,6 +18,7 @@ import type {
 import { AutomationRunStatus } from "#/types/automation";
 import { MOCK_AUTOMATIONS_RESPONSE } from "./automations.mock";
 import { MOCK_AUTOMATION_RUNS } from "./automation-runs.mock";
+import { randomUUID } from "#/utils/random-uuid";
 
 // The built-in Data Center sources (OpenHands/automation 1.27.0) are newer
 // than the fixture too; these are the event keys the service's catalog lists
@@ -312,7 +313,7 @@ export const AUTOMATION_HANDLERS = [
     const url = new URL(request.url);
     const name = url.searchParams.get("name") || "automation";
     return HttpResponse.json({
-      tarball_path: `oh-internal://uploads/${encodeURIComponent(name)}-${crypto.randomUUID()}.tar.gz`,
+      tarball_path: `oh-internal://uploads/${encodeURIComponent(name)}-${randomUUID()}.tar.gz`,
     });
   }),
 
@@ -331,7 +332,7 @@ export const AUTOMATION_HANDLERS = [
     };
     const now = new Date().toISOString();
     const automation: Automation = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       name: body.name,
       prompt: null,
       model: body.model ?? null,
@@ -366,7 +367,7 @@ export const AUTOMATION_HANDLERS = [
     const now = new Date().toISOString();
     const errors = validateMockDraft(endpoint, draftBody);
     const draft: MockDraft = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       endpoint,
       name: typeof body.name === "string" && body.name ? body.name : null,
       draft_body: draftBody,
@@ -473,9 +474,9 @@ export const AUTOMATION_HANDLERS = [
     draft.dispatchable = true;
     draft.updated_at = new Date().toISOString();
     const run: AutomationRun = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       status: AutomationRunStatus.PENDING,
-      conversation_id: crypto.randomUUID(),
+      conversation_id: randomUUID(),
       bash_command_id: null,
       error_detail: null,
       started_at: new Date().toISOString(),
@@ -502,7 +503,7 @@ export const AUTOMATION_HANDLERS = [
     // Like the service: repositories live only in preset metadata, which the
     // client lifts onto `repositories` when it reads the automation.
     const automation: Automation = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       name: body.name,
       prompt: body.prompt,
       model: body.model ?? null,
@@ -631,7 +632,7 @@ export const AUTOMATION_HANDLERS = [
     }
 
     const run: AutomationRun = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       status: AutomationRunStatus.PENDING,
       conversation_id: null,
       bash_command_id: null,

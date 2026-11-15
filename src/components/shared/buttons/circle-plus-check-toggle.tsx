@@ -107,7 +107,7 @@ export function CirclePlusCheckToggle({
               aria-hidden
               width={14}
               height={14}
-              className="stroke-[2.5]"
+              className="catalog-remove-icon-stroke"
             />
           ) : (
             <CheckmarkIcon aria-hidden width={14} height={14} />

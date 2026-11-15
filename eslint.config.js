@@ -276,7 +276,22 @@ export default [
               message:
                 "Use typed @openhands/typescript-client clients instead of constructing HttpClient directly.",
             },
+            {
+              name: "uuid",
+              importNames: ["v4"],
+              message: "Use randomUUID from #/utils/random-uuid.",
+            },
           ],
+        },
+      ],
+      // crypto.randomUUID is SecureContext-only: it is undefined when Canvas
+      // is served over plain HTTP on a non-loopback host (#19514).
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "crypto",
+          property: "randomUUID",
+          message: "Use randomUUID from #/utils/random-uuid.",
         },
       ],
       // All agent-server API access must go through the typed
@@ -534,6 +549,8 @@ export default [
       "src/components/features/mcp-page/mcp-logo-stack-badge.tsx",
       "src/components/features/settings/llm-settings/openai-subscription-auth-card.tsx",
       "src/components/features/skills/skill-icon-badge.tsx",
+      "src/components/features/skills/build-skill-pills.tsx",
+      "src/components/shared/buttons/circle-plus-check-toggle.tsx",
       "src/routes/device-verify.tsx",
       "src/utils/modal-classes.ts",
     ],

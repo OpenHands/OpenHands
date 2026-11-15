@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "#/utils/random-uuid";
 
 export type BtwStatus = "pending" | "done" | "error";
 
@@ -44,7 +44,7 @@ export const useBtwStore = create<BtwStore>()(
     (set) => ({
       ...initialState,
       addPending: (conversationId, question) => {
-        const id = uuidv4();
+        const id = randomUUID();
         set((s) =>
           updateEntries(s, conversationId, (entries) => [
             ...entries,
