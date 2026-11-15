@@ -445,15 +445,14 @@ describe("AutomationSetupPanel", () => {
       expect(trayStyle.paddingTop).toBe("23px");
     };
     const scheduleWidth = (element: HTMLElement) => {
-      // jsdom keeps var() in computed widths. Resolve it from the actual row
-      // to verify both the field's winning width and the variable's owner.
-      const rowStyle = getComputedStyle(
-        screen.getByTestId("automation-setup-at-row"),
+      // jsdom 31 resolves var()-based widths to pixels instead of retaining
+      // `var(...)`; convert back to the declared rem value via the root font
+      // size so the assertion still checks the schedule row's variable owner.
+      const rootFontSize = parseFloat(
+        getComputedStyle(document.documentElement).fontSize,
       );
-      return getComputedStyle(element).width.replace(
-        /var\((--[\w-]+)\)/g,
-        (_, property: string) => rowStyle.getPropertyValue(property).trim(),
-      );
+      const widthPx = parseFloat(getComputedStyle(element).width);
+      return `${widthPx / rootFontSize}rem`;
     };
 
     try {
