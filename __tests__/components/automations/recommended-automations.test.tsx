@@ -614,6 +614,35 @@ describe("recommended automations", () => {
     };
   }
 
+  it("leaves optional integrations out of the connect-before-launch count", () => {
+    // Arrange: nothing is connected. Custom automation's only integration,
+    // GitHub, is optional; the incident retrospective drafter needs Slack and
+    // Linear and can connect Notion later.
+    render(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    // Assert: optional integrations stay on the card but are not counted.
+    const custom = screen.getByTestId(
+      "recommended-automation-pills-custom-automation-wrap",
+    );
+    expect(custom).toHaveTextContent("GitHub");
+    expect(custom).not.toHaveTextContent(
+      "RECOMMENDED_AUTOMATIONS$MISSING_CONNECT",
+    );
+    const retrospective = screen.getByTestId(
+      "recommended-automation-pills-incident-retrospective-drafter-wrap",
+    );
+    expect(retrospective).toHaveTextContent("Notion");
+    expect(retrospective).toHaveTextContent(
+      "RECOMMENDED_AUTOMATIONS$MISSING_CONNECT:2",
+    );
+  });
+
   it("keeps a non-MCP-installable integration visible on its card instead of dropping it", () => {
     const restoreRequirement = requireNonMcpIntegration();
     // SkillCardPillRow folds pills behind "+N more" when it measures zero

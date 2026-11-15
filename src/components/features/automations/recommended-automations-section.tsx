@@ -30,6 +30,7 @@ import {
   getAutomationIcon,
   getAutomationLaunchPrompt,
   getIntegrationIds,
+  getRequiredIntegrationIds,
   getTemplateIntegrationIds,
   getTemplateLogoIds,
   getTemplateTriggerKinds,
@@ -315,12 +316,18 @@ function AutomationCardGrid({
     <div className={cn("mt-3", extensionModuleCardGridClassName)}>
       {automations.map((automation) => {
         const integrations = getIntegrationEntries(automation);
-        // "N MCPs to connect" only counts entries the install flow can
-        // actually connect (as MCP or natively); an external-setup
-        // integration is surfaced on its own pill instead.
+        const requiredIds = getRequiredIntegrationIds(automation);
+        // "N MCPs to connect" only counts required entries the install flow
+        // can actually connect (as MCP or natively); an optional integration
+        // can be connected later, and an external-setup integration is
+        // surfaced on its own pill instead.
         const missingCount = integrations.filter(
           ({ id, entry, mcpInstallable }) => {
-            if (!entry || findInstalledEntryMatch(entry, installedServers)) {
+            if (
+              !requiredIds.includes(id) ||
+              !entry ||
+              findInstalledEntryMatch(entry, installedServers)
+            ) {
               return false;
             }
             const native = getNativeIntegration(id);
