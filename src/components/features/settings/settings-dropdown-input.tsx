@@ -19,7 +19,9 @@ interface SettingsDropdownInputProps {
   isDisabled?: boolean;
   isLoading?: boolean;
   defaultSelectedKey?: string;
-  selectedKey?: string;
+  selectedKey?: string | null;
+  inputValue?: string;
+  defaultInputValue?: string;
   isClearable?: boolean;
   allowsCustomValue?: boolean;
   required?: boolean;
@@ -103,6 +105,8 @@ export function SettingsDropdownInput({
   isLoading,
   defaultSelectedKey,
   selectedKey,
+  inputValue,
+  defaultInputValue,
   isClearable = false,
   allowsCustomValue,
   required,
@@ -132,6 +136,8 @@ export function SettingsDropdownInput({
         defaultItems={items}
         defaultSelectedKey={defaultSelectedKey}
         selectedKey={selectedKey}
+        inputValue={inputValue}
+        defaultInputValue={defaultInputValue}
         onSelectionChange={onSelectionChange}
         onInputChange={onInputChange}
         isDisabled={isDisabled || isLoading}
