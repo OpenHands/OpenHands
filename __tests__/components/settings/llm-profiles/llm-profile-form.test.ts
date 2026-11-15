@@ -37,11 +37,19 @@ describe("OpenRouter model qualification", () => {
     expect(isOpenRouterBaseUrl(url)).toBe(expected);
   });
 
-  it("prefixes an OpenRouter model ID once", () => {
-    expect(qualifyOpenRouterModel("thinkingmachines/inkling-small:free")).toBe(
+  it.each([
+    [
+      "thinkingmachines/inkling-small:free",
       "openrouter/thinkingmachines/inkling-small:free",
-    );
-    expect(qualifyOpenRouterModel("openrouter/auto")).toBe("openrouter/auto");
+    ],
+    [
+      "openrouter/anthropic/claude-sonnet-4",
+      "openrouter/anthropic/claude-sonnet-4",
+    ],
+    ["openrouter/auto", "openrouter/openrouter/auto"],
+    ["openrouter/openrouter/auto", "openrouter/openrouter/auto"],
+  ])("qualifyOpenRouterModel(%j) is %j", (model, expected) => {
+    expect(qualifyOpenRouterModel(model)).toBe(expected);
   });
 
   it("qualifies the model of a profile linked to an OpenRouter connection", () => {
@@ -60,7 +68,7 @@ describe("OpenRouter model qualification", () => {
     expect(config.base_url).toBe("https://openrouter.ai/api/v1");
   });
 
-  it("keeps a model that already has the openrouter/ prefix", () => {
+  it("keeps a model that already reads openrouter/<vendor>/<model>", () => {
     expect(
       build({ model: "openrouter/anthropic/claude-sonnet-4" }, "conn-or").model,
     ).toBe("openrouter/anthropic/claude-sonnet-4");

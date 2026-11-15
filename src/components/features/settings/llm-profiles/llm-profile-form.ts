@@ -103,12 +103,15 @@ export function isOpenRouterBaseUrl(baseUrl: unknown): boolean {
  * OpenRouter lists its models as `vendor/model` (e.g.
  * `thinkingmachines/inkling-small:free`), which LiteLLM reads as an unknown
  * `vendor` provider. LiteLLM routes them to OpenRouter only with the
- * `openrouter/` prefix.
+ * `openrouter/` prefix, and strips exactly one such prefix, so OpenRouter's
+ * own router models (`openrouter/auto`) need it too. Only an ID that already
+ * reads `openrouter/<vendor>/<model>` is qualified.
  */
 export function qualifyOpenRouterModel(model: string): string {
-  return model.startsWith(`${OPENROUTER_PROVIDER}/`)
+  const prefix = `${OPENROUTER_PROVIDER}/`;
+  return model.startsWith(prefix) && model.slice(prefix.length).includes("/")
     ? model
-    : `${OPENROUTER_PROVIDER}/${model}`;
+    : `${prefix}${model}`;
 }
 
 /**
