@@ -192,12 +192,25 @@ export function MessageReactions({
     }
   }, [pickerOpen]);
 
-  // The user's clicks show at once. The server's events replace them when
-  // they arrive, which can be a while if a tool call is waiting for approval.
+  // The user's clicks show at once. Each emoji's click stays until the
+  // server's events agree with it, which can be a while if a tool call is
+  // waiting for approval; an event for another emoji, or an older one for
+  // this emoji, leaves it in place.
   const [optimistic, setOptimistic] = React.useState<
     Partial<Record<ReactionEmoji, boolean>>
   >({});
-  React.useEffect(() => setOptimistic({}), [key]);
+  React.useEffect(() => {
+    const server = parseKey(key);
+    setOptimistic((current) => {
+      const settled = (Object.keys(current) as ReactionEmoji[]).filter(
+        (emoji) => (server.get(emoji)?.has("user") ?? false) === current[emoji],
+      );
+      if (settled.length === 0) return current;
+      const next = { ...current };
+      for (const emoji of settled) delete next[emoji];
+      return next;
+    });
+  }, [key]);
 
   const reactions = parseKey(key);
   for (const [emoji, on] of Object.entries(optimistic) as [
@@ -220,8 +233,7 @@ export function MessageReactions({
       triggerRef.current?.focus();
     }
     const removed = reactions.get(emoji)?.has("user") ?? false;
-    const before = optimistic;
-    setOptimistic({ ...before, [emoji]: !removed });
+    setOptimistic((current) => ({ ...current, [emoji]: !removed }));
     try {
       await conversationReactionsService.react({
         conversationId,
@@ -230,7 +242,11 @@ export function MessageReactions({
         removed,
       });
     } catch (error) {
-      setOptimistic(before);
+      setOptimistic((current) => {
+        const next = { ...current };
+        delete next[emoji];
+        return next;
+      });
       displayApiErrorToast(error, t(I18nKey.CHAT_INTERFACE$REACTION_FAILED));
     } finally {
       setPending(false);
@@ -289,8 +305,12 @@ export function MessageReactions({
             title={t(I18nKey.CHAT_INTERFACE$ADD_REACTION)}
             aria-label={t(I18nKey.CHAT_INTERFACE$ADD_REACTION)}
             aria-expanded={pickerOpen}
-            disabled={pending}
-            onClick={() => setPickerOpen((open) => !open)}
+            // Not `disabled`: the picker hands focus back to this button as a
+            // request starts, and a disabled button would drop it.
+            aria-disabled={pending}
+            onClick={() => {
+              if (!pending) setPickerOpen((open) => !open);
+            }}
             className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-muted hover:bg-interactive-hover hover:text-foreground"
           >
             <SmilePlus className="size-3.5" strokeWidth={2} aria-hidden />
