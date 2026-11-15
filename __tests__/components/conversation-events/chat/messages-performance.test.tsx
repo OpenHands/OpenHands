@@ -56,11 +56,11 @@ function measureMount(events: OpenHandsEvent[], withScrollParent: boolean) {
   );
   const mountMs = performance.now() - start;
   const domNodes = view.container.querySelectorAll("*").length;
-  // Direct element children of the scroll container: one row per event on the
-  // full path, a single shell on the virtualized path.
-  const renderedRows =
-    view.container.querySelector('[data-testid="scroll-parent"]')?.children
-      .length ?? 0;
+  // Every rendered row carries `data-row-key` in both shapes (the plain
+  // wrapper and the virtual row div), so this counts actual message rows
+  // rather than the single `contents` wrapper / virtual shell that is the
+  // scroll container's only direct child in each mode.
+  const renderedRows = view.container.querySelectorAll("[data-row-key]").length;
   const mountedRows = screen.queryAllByTestId("virtualized-message-row").length;
   view.unmount();
   return { mountMs, domNodes, renderedRows, mountedRows };
