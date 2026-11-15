@@ -121,11 +121,7 @@ export function createPlanComponents(extraClassName?: string) {
     ),
     a: ({ children, className, href }: AnchorProps) => (
       <a
-        className={cn(
-          "text-blue-500 hover:underline",
-          className,
-          extraClassName,
-        )}
+        className={cn("text-link underline", className, extraClassName)}
         href={href}
         target="_blank"
         rel="noopener noreferrer"
@@ -149,8 +145,3 @@ export function createPlanComponents(extraClassName?: string) {
 
 // Default plan components without extra className (for backward compatibility)
 export const planComponents = createPlanComponents();
-
-/**
- * @deprecated Use planComponents instead
- */
-export const planHeadings = planComponents;

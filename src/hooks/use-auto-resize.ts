@@ -273,6 +273,19 @@ export const useAutoResize = (
       return;
     }
 
+    // An empty field's scroll height includes the placeholder. While the chat
+    // column is still width 0 (the agent panel animating open), that
+    // placeholder wraps and the measurement locks in a tall box. Empty text
+    // stays on one line unless the user resized it.
+    if (textIsEmpty && !hasUserResizedRef.current) {
+      applyResizeStrategy(element, {
+        finalHeight: minHeight,
+        overflowY: "hidden",
+      });
+      executeHeightCallback(minHeight, onHeightChange);
+      return;
+    }
+
     // Measure element heights
     const measurements = measureElementHeights(element, minHeight);
     const { currentHeight, contentHeight } = measurements;

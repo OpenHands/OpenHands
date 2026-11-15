@@ -1,0 +1,30 @@
+{
+  "checked_at": "2026-10-16",
+  "product_revision": "b34ac59e691d16354c14291325d5bd44b37226c5",
+  "runtime_revision": "054521cbff8f676d442f8471983cb2ae7361db2d",
+  "run_id": "backfill-18334-refresh",
+  "pins": {
+    "agentServer": "1.55.0",
+    "automation": "1.20.0",
+    "canvas": "1.27.1"
+  },
+  "issue": "https://github.com/OpenHands/software-agent-sdk/issues/5790",
+  "arrangement": "Genuine idle child conversations, one tagged as the planner; no model turn or fabricated browser hints. Full page reload at each boundary.",
+  "control": {
+    "children": 99,
+    "batch_http_status": 200,
+    "observed_session_sockets": [
+      "parent",
+      "planner"
+    ]
+  },
+  "test": {
+    "children": 100,
+    "batch_http_status": 500,
+    "visible_error": "Internal Server Error",
+    "new_observed_session_sockets": [
+      "parent"
+    ]
+  },
+  "limits": "Socket metadata only, no frame bodies. Screenshots and this readback are a current observation, not a baseline/fix proof."
+}

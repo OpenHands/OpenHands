@@ -3,7 +3,17 @@ import { ThinkingBlock } from "#/types/agent-server/core/base/event";
 import {
   isActionEvent,
   isObservationEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
+
+/** Index the retained history once for grouping, summaries, and event cards. */
+export const buildActionById = (events: OpenHandsEvent[]) => {
+  const actions = new Map<string, ActionEvent>();
+  for (const event of events) {
+    if (isActionEvent(event)) actions.set(event.id, event);
+  }
+  return actions;
+};
 
 /**
  * Returns the displayable thought text of an `ActionEvent`, or an empty
@@ -87,7 +97,8 @@ export const splitInlineThink = (
 /**
  * Find the `ActionEvent` whose thought should be rendered alongside the
  * given UI event. For an `ActionEvent` the thought belongs to itself; for
- * an `ObservationEvent` we look up the matching action in `allEvents`.
+ * an `ObservationEvent` (or the `UserRejectObservation` of a rejected
+ * action) we look up the matching action in `allEvents`.
  *
  * `ThinkAction` is intentionally excluded because its thought IS the
  * action body and is rendered through a separate codepath.
@@ -95,16 +106,19 @@ export const splitInlineThink = (
 export const getThoughtSourceAction = (
   event: OpenHandsEvent,
   allEvents: OpenHandsEvent[],
+  actionById?: ReadonlyMap<string, ActionEvent>,
 ): ActionEvent | null => {
   if (isActionEvent(event)) {
     if (event.action.kind === "ThinkAction") return null;
     return hasNonEmptyThought(event) ? event : null;
   }
 
-  if (isObservationEvent(event)) {
-    const action = allEvents.find(
-      (e): e is ActionEvent => isActionEvent(e) && e.id === event.action_id,
-    );
+  if (isObservationEvent(event) || isUserRejectObservation(event)) {
+    const action = actionById
+      ? actionById.get(event.action_id ?? "")
+      : allEvents.find(
+          (e): e is ActionEvent => isActionEvent(e) && e.id === event.action_id,
+        );
     if (!action) return null;
     if (action.action.kind === "ThinkAction") return null;
     return hasNonEmptyThought(action) ? action : null;

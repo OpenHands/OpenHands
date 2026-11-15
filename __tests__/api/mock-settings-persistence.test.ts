@@ -130,8 +130,6 @@ describe("mock settings schemas and state", () => {
       ],
     };
     const expectedAgent = {
-      enable_sub_agents: contract("general", "boolean", false, "major"),
-      enable_switch_llm_tool: contract("general", "boolean", true, "major"),
       tool_concurrency_limit: contract("general", "integer", 1, "major"),
       "llm.model": contract("llm", "string", "openai/gpt-5.6-sol", "critical", {
         required: true,
@@ -230,6 +228,32 @@ describe("mock settings schemas and state", () => {
         choices: ["llm", "none"],
         depends_on: ["confirmation_mode"],
       }),
+      default_runtime: contract("runtime", "string", "local", "major", {
+        choices: ["local", "worktree", "docker"],
+      }),
+      worktree_base: contract("runtime", "string", "default_branch", "major", {
+        choices: ["default_branch", "head", "ref"],
+        depends_on: ["default_runtime=worktree"],
+      }),
+      worktree_base_ref: contract("runtime", "string", null, "major", {
+        depends_on: ["default_runtime=worktree", "worktree_base=ref"],
+      }),
+      worktree_branch_prefix: contract(
+        "runtime",
+        "string",
+        "openhands/",
+        "major",
+        { depends_on: ["default_runtime=worktree"] },
+      ),
+      container_memory: contract("runtime", "string", null, "major", {
+        depends_on: ["default_runtime=docker"],
+      }),
+      container_cpus: contract("runtime", "number", null, "major", {
+        depends_on: ["default_runtime=docker"],
+      }),
+      container_browser: contract("runtime", "boolean", true, "major", {
+        depends_on: ["default_runtime=docker"],
+      }),
     };
     for (const version of ["", "/v1"]) {
       for (const [schema, expected] of [
@@ -307,7 +331,11 @@ describe("mock settings schemas and state", () => {
       expect(response.ok).toBe(true);
       expect(body).toMatchObject({
         model_name: "ConversationSettings",
-        sections: [{ key: "general" }, { key: "verification" }],
+        sections: [
+          { key: "general" },
+          { key: "verification" },
+          { key: "runtime" },
+        ],
       });
     }
   });
@@ -324,7 +352,6 @@ describe("mock settings schemas and state", () => {
       agent_settings: {
         llm: { model: "openai/gpt-5.6-sol" },
         condenser: { enable_default_condenser: true, condenser_max_size: null },
-        enable_sub_agents: false,
         tool_concurrency_limit: 1,
       },
       conversation_settings: { confirmation_mode: false },

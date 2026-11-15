@@ -16,18 +16,20 @@ import { I18nKey } from "#/i18n/declaration";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useForkConversation } from "#/hooks/mutation/use-fork-conversation";
-import { useConversationStore } from "#/stores/conversation-store";
+import { setConversationState } from "#/utils/conversation-local-storage";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 interface UserAssistantEventMessageProps {
   event: MessageEvent;
+  suppressReasoning?: boolean;
   isLastMessage: boolean;
   isFromPlanningAgent: boolean;
 }
 
 function UserAssistantEventMessageComponent({
   event,
+  suppressReasoning = false,
   isFromPlanningAgent,
 }: UserAssistantEventMessageProps) {
   const { t } = useTranslation("openhands");
@@ -36,9 +38,6 @@ function UserAssistantEventMessageComponent({
   const isCloud = useActiveBackend().backend.kind === "cloud";
   const { mutate: forkConversation, isPending: isForking } =
     useForkConversation();
-  const setMessageToSend = useConversationStore(
-    (state) => state.setMessageToSend,
-  );
   // Blocks a same-tick double-click, before `isForking` flips.
   const forkInFlightRef = React.useRef(false);
 
@@ -97,12 +96,14 @@ function UserAssistantEventMessageComponent({
       },
       {
         onSuccess: ({ info, excluded }) => {
-          navigate(`/conversations/${info.id}`);
-          // Prefill only when excluded (else the send duplicates it). Deferred
-          // so the new conversation's composer receives it (as useLaunchSkillInChat).
+          // Prefill only when excluded (else the send duplicates it). Seed the
+          // fork's saved draft before navigating: the composer clears itself
+          // on the conversation switch and then restores that draft, so text
+          // pushed into it before the route settles would be wiped.
           if (excluded) {
-            window.setTimeout(() => setMessageToSend(message), 0);
+            setConversationState(info.id, { draftMessage: message });
           }
+          navigate(`/conversations/${info.id}`);
         },
         onError: (error) =>
           displayErrorToast(error instanceof Error ? error.message : null),
@@ -124,7 +125,9 @@ function UserAssistantEventMessageComponent({
 
   return (
     <>
-      {reasoning && <CollapsibleThinking content={reasoning} />}
+      {!suppressReasoning && reasoning && (
+        <CollapsibleThinking content={reasoning} />
+      )}
       <ChatMessage
         type={event.source}
         message={message}

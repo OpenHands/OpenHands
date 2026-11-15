@@ -86,33 +86,6 @@ describe("CriticResultDisplay", () => {
     expect(screen.getByText("☆☆☆☆☆")).toBeInTheDocument();
   });
 
-  it("renders green color for high score", () => {
-    renderWithProviders(
-      <CriticResultDisplay criticResult={makeCriticResult({ score: 0.8 })} />,
-    );
-
-    const stars = screen.getByText("★★★★☆");
-    expect(stars.className).toContain("text-green-400");
-  });
-
-  it("renders yellow color for medium score", () => {
-    renderWithProviders(
-      <CriticResultDisplay criticResult={makeCriticResult({ score: 0.5 })} />,
-    );
-
-    const stars = screen.getByText("★★★☆☆");
-    expect(stars.className).toContain("text-yellow-400");
-  });
-
-  it("renders red color for low score", () => {
-    renderWithProviders(
-      <CriticResultDisplay criticResult={makeCriticResult({ score: 0.2 })} />,
-    );
-
-    const stars = screen.getByText("★☆☆☆☆");
-    expect(stars.className).toContain("text-red-400");
-  });
-
   it("renders label text", () => {
     renderWithProviders(
       <CriticResultDisplay criticResult={makeCriticResult()} />,

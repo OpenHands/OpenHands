@@ -1,9 +1,5 @@
 export type V1SandboxStatus =
-  | "STARTING"
-  | "RUNNING"
-  | "PAUSED"
-  | "ERROR"
-  | "MISSING";
+  "STARTING" | "RUNNING" | "PAUSED" | "ERROR" | "MISSING";
 
 export interface V1ExposedUrl {
   name: string;

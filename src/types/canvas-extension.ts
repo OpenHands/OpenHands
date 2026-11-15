@@ -21,7 +21,10 @@ export interface CanvasExtensionManifest {
   version: string;
   description?: string | null;
   entrypoint: string;
+  backend?: { secret_refs?: string[] } | null;
   contributes?: CanvasExtensionContributions | null;
+  /** Package-relative SVG path; served by the Agent Server at `/installed/{name}/icon`. */
+  icon?: string | null;
 }
 
 export interface InstalledCanvasExtensionInfo {
@@ -66,6 +69,16 @@ export interface CanvasExtensionAgentServerRequest {
   headers?: Record<string, string>;
 }
 
+export interface CanvasExtensionAppBackendViewMountOptions {
+  container: HTMLElement;
+}
+
+export interface CanvasExtensionAppBackendViewHost {
+  mount: (
+    options: CanvasExtensionAppBackendViewMountOptions,
+  ) => CanvasExtensionDispose;
+}
+
 export interface CanvasExtensionHost {
   readonly apiVersion: typeof CANVAS_EXTENSION_HOST_API_VERSION;
   readonly extension: Readonly<{
@@ -88,6 +101,7 @@ export interface CanvasExtensionHost {
       request: CanvasExtensionAgentServerRequest,
     ) => Promise<T>;
   };
+  readonly appBackendView?: CanvasExtensionAppBackendViewHost;
 }
 
 export interface CanvasExtensionModule {

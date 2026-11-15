@@ -1,5 +1,7 @@
 import React from "react";
-import { createPortal } from "react-dom";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
+import { useEscapeBoundary } from "#/hooks/use-close-on-escape";
+import { useModalFocus } from "./use-modal-focus";
 
 interface ModalBackdropProps {
   children: React.ReactNode;
@@ -23,6 +25,11 @@ export function ModalBackdrop({
   elevated = false,
   "aria-label": ariaLabel,
 }: ModalBackdropProps) {
+  const focus = useModalFocus({ elevated });
+  // The dialog is on top: menus and drawers opened before it never take its
+  // Escape, whether or not it closes on Escape itself.
+  useEscapeBoundary(true);
+
   React.useEffect(() => {
     if (!closeOnEscape) return undefined;
     const handleEscape = (e: KeyboardEvent) => {
@@ -45,21 +52,29 @@ export function ModalBackdrop({
   // onboarding slide rail) would become the containing block and the
   // modal would render trapped inside it instead of overlapping its
   // parent modal.
-  return createPortal(
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={ariaLabel}
-      className={`fixed inset-0 flex items-center justify-center ${
-        elevated ? "z-[70]" : "z-60"
-      }`}
-    >
+  return (
+    <AppearancePortal>
+      {/* Focus and key events from content (including portaled popovers)
+          bubble through the React tree; see useModalFocus. */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
       <div
-        onClick={handleClick}
-        className="fixed inset-0 bg-black opacity-60"
-      />
-      <div className="relative">{children}</div>
-    </div>,
-    document.body,
+        ref={focus.rootRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={ariaLabel}
+        tabIndex={-1}
+        onFocus={focus.onFocus}
+        onKeyDown={focus.onKeyDown}
+        className={`fixed inset-0 flex items-center justify-center outline-none ${
+          elevated ? "z-70" : "z-60"
+        }`}
+      >
+        <div
+          onClick={handleClick}
+          className="fixed inset-0 bg-black opacity-60"
+        />
+        <div className="relative">{children}</div>
+      </div>
+    </AppearancePortal>
   );
 }

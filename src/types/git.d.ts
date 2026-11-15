@@ -44,6 +44,7 @@ interface BranchPage {
 interface RepositoryPage {
   items: GitRepository[];
   next_page_id: string | null;
+  missing_token?: boolean;
 }
 
 /**
@@ -59,10 +60,10 @@ interface GitRepository {
   full_name: string;
   git_provider: Provider;
   is_public: boolean;
-  stargazers_count?: number;
+  stargazers_count?: number | null;
   link_header?: string;
-  pushed_at?: string;
-  main_branch?: string;
+  pushed_at?: string | null;
+  main_branch?: string | null;
 }
 
 interface GitHubCommit {

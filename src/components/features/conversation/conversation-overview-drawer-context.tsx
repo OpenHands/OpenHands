@@ -5,22 +5,12 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import type {
-  ConversationOverviewDrawerOpenOptions,
-  ConversationOverviewDrawerSection,
-} from "./conversation-overview-drawer.types";
+import type { ConversationOverviewDrawerSection } from "./conversation-overview-drawer.types";
 
 interface ConversationOverviewDrawerContextValue {
   section: ConversationOverviewDrawerSection | null;
-  openAdd: boolean;
-  /** Increments when the drawer header Add control is clicked. */
-  addRequestKey: number;
-  openSection: (
-    section: ConversationOverviewDrawerSection,
-    options?: ConversationOverviewDrawerOpenOptions,
-  ) => void;
+  openSection: (section: ConversationOverviewDrawerSection) => void;
   closeDrawer: () => void;
-  requestAdd: () => void;
 }
 
 const ConversationOverviewDrawerContext =
@@ -33,41 +23,12 @@ export function ConversationOverviewDrawerProvider({
 }) {
   const [section, setSection] =
     useState<ConversationOverviewDrawerSection | null>(null);
-  const [openAdd, setOpenAdd] = useState(false);
-  const [addRequestKey, setAddRequestKey] = useState(0);
 
-  const openSection = useCallback(
-    (
-      nextSection: ConversationOverviewDrawerSection,
-      options?: ConversationOverviewDrawerOpenOptions,
-    ) => {
-      setSection(nextSection);
-      setOpenAdd(Boolean(options?.openAdd));
-      setAddRequestKey(0);
-    },
-    [],
-  );
-
-  const closeDrawer = useCallback(() => {
-    setSection(null);
-    setOpenAdd(false);
-    setAddRequestKey(0);
-  }, []);
-
-  const requestAdd = useCallback(() => {
-    setAddRequestKey((previous) => previous + 1);
-  }, []);
+  const closeDrawer = useCallback(() => setSection(null), []);
 
   const value = useMemo(
-    () => ({
-      section,
-      openAdd,
-      addRequestKey,
-      openSection,
-      closeDrawer,
-      requestAdd,
-    }),
-    [addRequestKey, closeDrawer, openAdd, openSection, requestAdd, section],
+    () => ({ section, openSection: setSection, closeDrawer }),
+    [closeDrawer, section],
   );
 
   return (

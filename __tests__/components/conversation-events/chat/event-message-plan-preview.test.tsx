@@ -74,7 +74,6 @@ describe("EventMessage - PlanPreview rendering", () => {
     renderWithProviders(
       <EventMessage
         event={event}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
         planPreviewEventIds={planPreviewEventIds}
@@ -94,7 +93,6 @@ describe("EventMessage - PlanPreview rendering", () => {
     const { container } = renderWithProviders(
       <EventMessage
         event={event}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
         planPreviewEventIds={planPreviewEventIds}
@@ -111,7 +109,6 @@ describe("EventMessage - PlanPreview rendering", () => {
     const { container } = renderWithProviders(
       <EventMessage
         event={event}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
         planPreviewEventIds={undefined}
@@ -129,7 +126,6 @@ describe("EventMessage - PlanPreview rendering", () => {
     const { container } = renderWithProviders(
       <EventMessage
         event={event}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
         planPreviewEventIds={planPreviewEventIds}
@@ -188,7 +184,6 @@ describe("EventMessage - PlanPreview rendering", () => {
     renderWithProviders(
       <EventMessage
         event={event}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
         planPreviewEventIds={planPreviewEventIds}
@@ -209,7 +204,6 @@ describe("EventMessage - PlanPreview rendering", () => {
     renderWithProviders(
       <EventMessage
         event={event}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
         planPreviewEventIds={planPreviewEventIds}
@@ -227,7 +221,6 @@ describe("EventMessage - PlanPreview rendering", () => {
     const { container } = renderWithProviders(
       <EventMessage
         event={event}
-        messages={[]}
         isLastMessage={false}
         isInLast10Actions={false}
         planPreviewEventIds={planPreviewEventIds}
@@ -254,7 +247,6 @@ describe("EventMessage - PlanPreview rendering", () => {
       renderWithProviders(
         <EventMessage
           event={event}
-          messages={[]}
           isLastMessage={true}
           isInLast10Actions={false}
           planPreviewEventIds={planPreviewEventIds}
@@ -281,7 +273,6 @@ describe("EventMessage - PlanPreview rendering", () => {
       renderWithProviders(
         <EventMessage
           event={event}
-          messages={[]}
           isLastMessage={false}
           isInLast10Actions={false}
           planPreviewEventIds={planPreviewEventIds}
@@ -308,7 +299,6 @@ describe("EventMessage - PlanPreview rendering", () => {
       renderWithProviders(
         <EventMessage
           event={event}
-          messages={[]}
           isLastMessage={true}
           isInLast10Actions={false}
           planPreviewEventIds={planPreviewEventIds}
@@ -339,7 +329,6 @@ describe("EventMessage - PlanPreview rendering", () => {
       renderWithProviders(
         <EventMessage
           event={event}
-          messages={[]}
           isLastMessage
           isInLast10Actions={false}
           planPreviewEventIds={planPreviewEventIds}
@@ -366,7 +355,6 @@ describe("EventMessage - PlanPreview rendering", () => {
       renderWithProviders(
         <EventMessage
           event={event}
-          messages={[]}
           isLastMessage={true}
           isInLast10Actions={false}
           planPreviewEventIds={planPreviewEventIds}

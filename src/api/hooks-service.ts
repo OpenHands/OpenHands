@@ -10,8 +10,10 @@ const HOOKS_LOAD_TIMEOUT_MS = 5000;
 
 class HooksService {
   /**
-   * Load workspace hooks from the agent-server by calling POST /api/hooks.
-   * Returns the HookConfig if the workspace has hooks, or null.
+   * Load hooks from the agent-server by calling POST /api/hooks: the
+   * workspace's `.openhands/hooks.json` merged with the user hooks file
+   * (`~/.openhands/hooks.json`) on agent-servers that read it (#5733 in
+   * OpenHands/software-agent-sdk). Returns the HookConfig, or null.
    * Gracefully returns null when no usable local backend is available
    * (cloud backend, unseeded registry, or older agent-server).
    * `projectDir` must be the workspace root: the agent-server checks
@@ -28,12 +30,9 @@ class HooksService {
     }
 
     try {
-      const response = await new HooksClient(
-        getAgentServerClientOptions({ timeout: HOOKS_LOAD_TIMEOUT_MS }),
-      ).loadHooks({
-        project_dir: projectDir ?? getAgentServerWorkingDir(),
-      });
-      return response?.hook_config ?? null;
+      return await HooksService.fetchWorkspaceHooks(
+        projectDir ?? getAgentServerWorkingDir(),
+      );
     } catch (error) {
       // Agent-server may not support the hooks endpoint or may be
       // unreachable; gracefully fall back to null.
@@ -43,6 +42,21 @@ class HooksService {
       );
       return null;
     }
+  }
+
+  /**
+   * POST /api/hooks for `projectDir` (a workspace root, as above) on the
+   * active local backend. Unlike `loadWorkspaceHooks()` it rejects when the
+   * agent-server is unreachable or lacks the endpoint, so a view can tell a
+   * failure from a workspace without hooks (`null`).
+   */
+  static async fetchWorkspaceHooks(
+    projectDir: string,
+  ): Promise<HookConfig | null> {
+    const response = await new HooksClient(
+      getAgentServerClientOptions({ timeout: HOOKS_LOAD_TIMEOUT_MS }),
+    ).loadHooks({ project_dir: projectDir });
+    return response?.hook_config ?? null;
   }
 }
 

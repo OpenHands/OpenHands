@@ -11,7 +11,9 @@ interface BuildAutomationMenuItemsOptions {
   automation: Automation;
   t: (key: I18nKey) => string;
   canManage: boolean;
-  /** Whether the caller may flip `enabled`; non-creators may only turn off. */
+  /** Whether the caller may edit the automation. */
+  canEdit: boolean;
+  /** Whether the caller may flip `enabled`; turning on needs `canEdit`. */
   canToggle: boolean;
   onRunNow: (id: string) => void;
   isRunPending: boolean;
@@ -26,6 +28,7 @@ export function buildAutomationMenuItems({
   automation,
   t,
   canManage,
+  canEdit,
   canToggle,
   onRunNow,
   isRunPending,
@@ -56,7 +59,7 @@ export function buildAutomationMenuItems({
       icon: <Download className="size-4" aria-hidden />,
       onClick: () => onExport(automation),
     },
-    ...(canManage && onEdit
+    ...(canEdit && onEdit
       ? [
           {
             label: t(I18nKey.AUTOMATIONS$EDIT),

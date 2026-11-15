@@ -122,12 +122,16 @@ ANTI-PATTERNS TO AVOID:
 - Escalating routine repo fixes to a premium model on a single vague difficulty signal — most such tasks are solved far cheaper.
 - Routing research/QA tasks to premium coding flagships instead of GPT-5.4/GPT-5.5.
 - Using claude-opus-4-8 as the buildout workhorse when GPT-5.4 covers standard scope at half the cost.
-- Downgrading protected-
+
+You may choose any model listed in the model table below; the recommendations above should be followed unless the task text gives a strong, specific reason to deviate.
+
+{{ model_table }}
+
+Return ONLY valid JSON in this exact shape, with the model field containing an exact model name from the table:
+{"model": "<exact model name>", "reason": "<short reason: category + difficulty tier + why this model>"}
 
 Task:
-{{ instance_text }}
-
-Return ONLY JSON: {"model": "<exact model name>", "reason": "<short reason>"}`;
+{{ instance_text }}`;
 
 export const DEFAULT_ROUTER_FLASH_META_PROFILE_DEFAULT: MetaProfile = {
   classifier_model: "minimax-m3",

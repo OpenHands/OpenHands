@@ -159,6 +159,30 @@ describe("InstalledServerCard connection health", () => {
     );
   });
 
+  it.each([
+    { server: STDIO_SERVER, expectedLabel: "MCP$TEST_ERROR_STDIO_START" },
+    { server: CUSTOM_SERVER, expectedLabel: "MCP$TEST_ERROR_CONNECTION" },
+  ])(
+    "labels a $server.type connection failure with transport-specific copy",
+    async ({ server, expectedLabel }) => {
+      vi.spyOn(McpService, "testServer").mockResolvedValue({
+        ok: false,
+        error: "Client failed to connect",
+        error_kind: "connection",
+      });
+      renderCard(server);
+
+      fireEvent.click(probeButton(server.id));
+
+      // i18n keys are returned as-is in tests.
+      await waitFor(() =>
+        expect(screen.getByTestId(`mcp-health-label-${server.id}`)).toHaveTextContent(
+          expectedLabel,
+        ),
+      );
+    },
+  );
+
   it("renders the health section for remote servers on cloud backends", () => {
     setRegisteredBackends([
       {

@@ -17,6 +17,7 @@ import {
   type SkillCardPill,
 } from "#/components/features/skills/skill-card-pill-row";
 import { CirclePlusBadge } from "#/components/shared/buttons/circle-plus-check-toggle";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { MCPServerConfig } from "#/types/mcp-server";
 import type { NativeGitIntegration } from "#/hooks/query/use-native-git-integrations";
 import {
@@ -28,6 +29,10 @@ import {
   getAutomationIcon,
   getAutomationLaunchPrompt,
   getIntegrationIds,
+  getTemplateIntegrationIds,
+  getTemplateLogoIds,
+  getTemplateTriggerKinds,
+  type TemplateTriggerKind,
 } from "#/utils/automation-catalog";
 import { getAutomationsByPopularity } from "#/utils/recommended-automation-rail";
 import { cn } from "#/utils/utils";
@@ -38,15 +43,35 @@ import {
   extensionModuleCardPillClassName,
   extensionModuleCardSurfaceClassName,
 } from "#/utils/extension-module-card-classes";
+import { AutomationsFilteredEmptyState } from "./dashboard/automations-filtered-empty-state";
+import {
+  EMPTY_TEMPLATE_FILTERS,
+  hasActiveTemplateFilter,
+  TemplateFilterChips,
+  TRIGGER_KIND_ICON,
+  TRIGGER_KIND_LABEL_KEY,
+  type TemplateFilters,
+} from "./template-filter-chips";
 
 type GetNativeIntegration = (entryId: string) => NativeGitIntegration | null;
 
 interface RecommendedAutomationsSectionProps {
   backendKind: "local" | "cloud";
   installedServers: MCPServerConfig[];
+  /** Catalog entries the active backend's deployment does not offer. */
+  hiddenAutomationIds?: ReadonlySet<string>;
+  /** Entries the instance does not appear to support; listed last. */
+  unlikelyAutomations?: ReadonlyMap<string, readonly string[]>;
+  /** Entries using an integration the instance reports; suggested first. */
+  suggestedAutomations?: ReadonlyMap<string, readonly string[]>;
   /** Resolves an integration's native (cloud) connection; none by default. */
   getNativeIntegration?: GetNativeIntegration;
   query?: string;
+  /** Resets the search; with it, a no-match state offers a way back. */
+  onClearQuery?: () => void;
+  /** The integration and trigger filters, when the page offers them. */
+  filters?: TemplateFilters;
+  onFiltersChange?: (next: TemplateFilters) => void;
   onSelect: (automation: RecommendedAutomation) => void;
   /** When true, title, description, and cards share one scroll area. */
   scrollableGrid?: boolean;
@@ -83,6 +108,33 @@ function getIntegrationEntries(
       mcpInstallable: !!entry && isMcpInstallableEntry(entry),
     };
   });
+}
+
+function automationMatchesFilters(
+  automation: RecommendedAutomation,
+  filters: TemplateFilters,
+) {
+  if (
+    filters.integrationId &&
+    !getTemplateIntegrationIds(automation).includes(filters.integrationId)
+  ) {
+    return false;
+  }
+  return (
+    !filters.trigger ||
+    getTemplateTriggerKinds(automation).includes(filters.trigger)
+  );
+}
+
+/** The integrations the templates are about, in first-appearance order. */
+function collectIntegrationIds(automations: RecommendedAutomation[]) {
+  const ids: string[] = [];
+  for (const automation of automations) {
+    for (const id of getTemplateIntegrationIds(automation)) {
+      if (!ids.includes(id)) ids.push(id);
+    }
+  }
+  return ids;
 }
 
 function automationMatchesQuery(
@@ -175,12 +227,10 @@ function buildRecommendedAutomationPills(
  */
 function AutomationCardIcon({
   automation,
-  integrations,
   size,
   testId,
 }: {
   automation: RecommendedAutomation;
-  integrations: AutomationIntegration[];
   size: "base" | "md";
   testId: string;
 }) {
@@ -200,9 +250,38 @@ function AutomationCardIcon({
   }
   return (
     <McpLogoStackBadge
-      entries={integrations.flatMap(({ entry }) => (entry ? [entry] : []))}
+      entries={getTemplateLogoIds(automation).flatMap((id) => {
+        const entry = getMarketplaceEntryById(id, MCP_MARKETPLACE);
+        return entry ? [entry] : [];
+      })}
       testId={testId}
     />
+  );
+}
+
+/** The card's trigger-kind mark: the glyph, with the kind's name on hover. */
+function TriggerKindBadge({
+  kind,
+  automationId,
+  translate,
+}: {
+  kind: TemplateTriggerKind;
+  automationId: string;
+  translate: TFunction;
+}) {
+  const label = translate(TRIGGER_KIND_LABEL_KEY[kind]);
+  const Icon = TRIGGER_KIND_ICON[kind];
+  return (
+    <StyledTooltip content={label} placement="top">
+      <span
+        role="img"
+        aria-label={label}
+        data-testid={`recommended-automation-trigger-${automationId}-${kind}`}
+        className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-base-secondary text-tertiary-alt"
+      >
+        <Icon className="size-3.5" aria-hidden />
+      </span>
+    </StyledTooltip>
   );
 }
 
@@ -253,7 +332,6 @@ function AutomationCardGrid({
             <div className="flex min-w-0 flex-1 items-start gap-3">
               <AutomationCardIcon
                 automation={automation}
-                integrations={integrations}
                 size="md"
                 testId={`recommended-automation-icon-${automation.id}`}
               />
@@ -267,9 +345,19 @@ function AutomationCardGrid({
                       {automation.category}
                     </p>
                   </div>
-                  <CirclePlusBadge
-                    testId={`recommended-automation-plus-${automation.id}`}
-                  />
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {getTemplateTriggerKinds(automation).map((kind) => (
+                      <TriggerKindBadge
+                        key={kind}
+                        kind={kind}
+                        automationId={automation.id}
+                        translate={translate}
+                      />
+                    ))}
+                    <CirclePlusBadge
+                      testId={`recommended-automation-plus-${automation.id}`}
+                    />
+                  </div>
                 </header>
                 <p className="line-clamp-2 text-xs leading-relaxed text-tertiary-light">
                   {automation.description}
@@ -297,26 +385,52 @@ function AutomationCardGrid({
 export function RecommendedAutomationsSection({
   backendKind: _backendKind,
   installedServers,
+  hiddenAutomationIds,
   getNativeIntegration = () => null,
   query = "",
+  onClearQuery,
+  filters,
+  onFiltersChange,
   onSelect,
   scrollableGrid = false,
 }: RecommendedAutomationsSectionProps) {
   const { t } = useTranslation("openhands");
 
-  // Only the query narrows the grid. An automation that declares no
-  // integration needs nothing connected, and one naming an integration this
-  // host cannot resolve is shown with that gap on its pill, so neither is a
-  // reason to hide a card the catalog ships.
-  const visibleAutomations = RECOMMENDED_AUTOMATIONS.filter((automation) =>
-    automationMatchesQuery(
-      automation,
-      getIntegrationEntries(automation),
-      query,
-    ),
+  // Only the deployment's hide list, the filters and the query narrow the
+  // grid. An automation that declares no integration needs nothing connected,
+  // and one naming an integration this host cannot resolve is shown with that
+  // gap on its pill, so neither is a reason to hide a card the catalog ships.
+  const offeredAutomations = RECOMMENDED_AUTOMATIONS.filter(
+    (automation) => !hiddenAutomationIds?.has(automation.id),
+  );
+  const visibleAutomations = offeredAutomations.filter(
+    (automation) =>
+      (!filters || automationMatchesFilters(automation, filters)) &&
+      automationMatchesQuery(
+        automation,
+        getIntegrationEntries(automation),
+        query,
+      ),
   );
 
-  if (visibleAutomations.length === 0) return null;
+  const filterChips =
+    filters && onFiltersChange ? (
+      <TemplateFilterChips
+        integrationIds={collectIntegrationIds(offeredAutomations)}
+        filters={filters}
+        onChange={onFiltersChange}
+      />
+    ) : null;
+
+  if (visibleAutomations.length === 0) {
+    // A search or filter that matches nothing says so, with a way back. A
+    // surface without either control keeps rendering nothing.
+    const canClear = !!onClearQuery || !!onFiltersChange;
+    const isNarrowed =
+      query.trim().length > 0 ||
+      (!!filters && hasActiveTemplateFilter(filters));
+    if (!canClear || !isNarrowed) return null;
+  }
 
   return (
     <section
@@ -328,26 +442,42 @@ export function RecommendedAutomationsSection({
           scrollableGrid ? "recommended-automations-scroll-area" : undefined
         }
         className={cn(
-          "mt-3",
+          filterChips ? "mt-0" : "mt-3",
           extensionModuleCardGridContainerClassName,
           scrollableGrid &&
             "min-h-0 flex-1 overflow-y-auto custom-scrollbar-always",
         )}
       >
-        <h2 className="text-base font-semibold text-foreground">
-          {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE)}
-        </h2>
-        <p className="mt-1 text-sm text-muted">
-          {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_DESCRIPTION)}
-        </p>
+        {filterChips && <div className="mb-4">{filterChips}</div>}
 
-        <AutomationCardGrid
-          automations={visibleAutomations}
-          installedServers={installedServers}
-          getNativeIntegration={getNativeIntegration}
-          onSelect={onSelect}
-          translate={t}
-        />
+        {visibleAutomations.length === 0 && (
+          <AutomationsFilteredEmptyState
+            message={t(I18nKey.RECOMMENDED_AUTOMATIONS$NO_MATCHING_TEMPLATES)}
+            onClear={() => {
+              onClearQuery?.();
+              onFiltersChange?.(EMPTY_TEMPLATE_FILTERS);
+            }}
+          />
+        )}
+
+        {visibleAutomations.length > 0 && (
+          <>
+            <h2 className="text-base font-semibold text-foreground">
+              {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE)}
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_DESCRIPTION)}
+            </p>
+
+            <AutomationCardGrid
+              automations={visibleAutomations}
+              installedServers={installedServers}
+              getNativeIntegration={getNativeIntegration}
+              onSelect={onSelect}
+              translate={t}
+            />
+          </>
+        )}
       </div>
     </section>
   );

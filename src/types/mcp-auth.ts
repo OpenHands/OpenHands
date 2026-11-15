@@ -10,7 +10,6 @@ export type {
 } from "@openhands/typescript-client";
 
 export type MCPAuthenticationConfig = MCPOAuthAuthentication;
-export type MCPOAuthAuthenticationConfig = MCPOAuthAuthentication;
 export type MCPOAuthClientAuthMethod = NonNullable<
   MCPOAuthAuthentication["client_auth_method"]
 >;

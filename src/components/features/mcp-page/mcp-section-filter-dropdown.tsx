@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { EnumFilterDropdown } from "#/components/shared/filters/enum-filter-dropdown";
 import {
@@ -20,6 +21,8 @@ export function McpSectionFilterDropdown({
   value,
   onChange,
 }: McpSectionFilterDropdownProps) {
+  const { t } = useTranslation("openhands");
+
   return (
     <EnumFilterDropdown
       testId="mcp-section-filter"
@@ -27,6 +30,7 @@ export function McpSectionFilterDropdown({
       onChange={onChange}
       options={MCP_SECTION_FILTER_OPTIONS}
       labelKeyByValue={FILTER_LABEL_KEY}
+      ariaLabel={t(I18nKey.MCP$SECTION_FILTER_LABEL)}
     />
   );
 }

@@ -105,7 +105,10 @@ describe("Messages markdown render stability", () => {
       );
     }
 
-    expect(screen.getByText("Live update 5")).toBeInTheDocument();
+    // Streamed words are separate spans, so match the bubble's text.
+    expect(screen.getAllByTestId("agent-message").at(-1)).toHaveTextContent(
+      "Live update 5",
+    );
     expect(recordSyntaxHighlight).not.toHaveBeenCalled();
   });
 });

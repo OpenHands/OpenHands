@@ -14,7 +14,6 @@ export const useChatInputEvents = (
   smartResize: () => void,
   increaseHeightForEmptyContent: () => void,
   checkIsContentEmpty: () => boolean,
-  clearEmptyContentHandler: () => void,
   onFocus?: () => void,
   onBlur?: () => void,
 ) => {

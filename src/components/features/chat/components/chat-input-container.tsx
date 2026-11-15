@@ -17,9 +17,9 @@ interface ChatInputContainerProps {
   hasStartedConversation?: boolean;
   isNewConversationPending?: boolean;
   showButton: boolean;
-  placeholder?: string;
   buttonClassName: string;
   chatInputRef: React.RefObject<HTMLDivElement | null>;
+  placeholder?: string;
   handleFileIconClick: (isDisabled: boolean) => void;
   handleSubmit: () => void;
   onDragOver: (e: React.DragEvent, isDisabled: boolean) => void;
@@ -44,9 +44,9 @@ export function ChatInputContainer({
   hasStartedConversation,
   isNewConversationPending = false,
   showButton,
-  placeholder,
   buttonClassName,
   chatInputRef,
+  placeholder,
   handleFileIconClick,
   handleSubmit,
   onDragOver,
@@ -70,7 +70,7 @@ export function ChatInputContainer({
     <div
       ref={chatContainerRef}
       className={cn(
-        "bg-surface box-border content-stretch flex flex-col items-start justify-center p-4 relative rounded-[15px] w-full",
+        "bg-surface box-border content-stretch flex flex-col items-start justify-center p-4 relative rounded-composer w-full",
         conversationMode === "plan" && "border border-[#597FF4]",
       )}
       onDragOver={(e) => onDragOver(e, disabled)}

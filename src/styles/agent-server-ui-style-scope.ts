@@ -24,6 +24,14 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-color-base-secondary": "var(--cool-grey-925)",
   "--oh-color-danger": "#e76a5e",
   "--oh-color-success": "#a5e75e",
+  // @spec MCP-004 — Form feedback follows readable theme text roles
+  "--oh-feedback-error": "var(--oh-color-danger)",
+  "--oh-feedback-success": "var(--oh-color-success)",
+  "--oh-markdown-alert-note": "#8EC5FF",
+  "--oh-markdown-alert-tip": "#5EE9B5",
+  "--oh-markdown-alert-important": "#D8B4FE",
+  "--oh-markdown-alert-warning": "#FFE02A",
+  "--oh-markdown-alert-caution": "#FFB3BF",
   "--oh-color-basic": "var(--cool-grey-400)",
   "--oh-color-tertiary": "var(--cool-grey-800)",
   "--oh-color-tertiary-light": "var(--cool-grey-300)",
@@ -40,6 +48,8 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-overlay": "var(--cool-grey-925)",
   "--oh-overlay-foreground": "var(--cool-grey-100)",
   "--oh-modal-title-foreground": "#ffffff",
+  "--oh-modal-description-foreground": "#a3a3a3",
+  "--oh-font-heading": "inherit",
   "--oh-muted": "var(--cool-grey-400)",
   "--oh-text-secondary": "var(--cool-grey-300)",
   "--oh-text-tertiary": "var(--cool-grey-200)",
@@ -60,6 +70,8 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-success": "#a5e75e",
   "--oh-success-foreground": "var(--cool-grey-950)",
   "--oh-warning-foreground": "var(--cool-grey-950)",
+  // @spec WN-001 — Embedded roots can override warning text color
+  "--oh-feedback-warning": "#c9b974",
   "--oh-danger": "#e76a5e",
   "--oh-danger-foreground": "var(--cool-grey-50)",
   "--oh-segment": "var(--cool-grey-925)",
@@ -70,10 +82,26 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-border-input": "var(--cool-grey-600)",
   "--oh-border-subtle": "var(--cool-grey-800)",
   "--oh-separator": "rgba(113, 120, 136, 0.5)",
+  "--oh-divider": "var(--oh-border-subtle)",
   "--oh-focus": "#ffffff",
   "--oh-status-success": "#1FBD53",
   "--oh-status-error": "#FF684E",
   "--oh-link": "var(--cool-grey-100)",
+  "--oh-info": "oklch(62.3% 0.214 259.815)",
+  "--oh-success-soft":
+    "color-mix(in srgb, var(--oh-color-success) 10%, transparent)",
+  "--oh-success-soft-foreground":
+    "color-mix(in srgb, var(--oh-color-success) 55%, #ffffff)",
+  "--oh-warning-soft": "color-mix(in srgb, var(--oh-warning) 10%, transparent)",
+  "--oh-warning-soft-foreground":
+    "color-mix(in srgb, var(--oh-warning) 55%, #ffffff)",
+  "--oh-danger-soft":
+    "color-mix(in srgb, var(--oh-color-danger) 10%, transparent)",
+  "--oh-danger-soft-foreground":
+    "color-mix(in srgb, var(--oh-color-danger) 55%, #ffffff)",
+  "--oh-info-soft": "color-mix(in srgb, var(--oh-info) 10%, transparent)",
+  "--oh-info-soft-foreground":
+    "color-mix(in srgb, var(--oh-info) 55%, #ffffff)",
   "--oh-radius": "8px",
   "--oh-field-radius": "8px",
   "--oh-surface-shadow": "none",

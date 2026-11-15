@@ -1,4 +1,10 @@
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import {
+  act,
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import util from "util";
@@ -6,35 +12,102 @@ import { ChatMessage } from "#/components/features/chat/chat-message";
 
 describe("ChatMessage", () => {
   it.each(["user", "agent"] as const)(
-    "shows the recorded timestamp when a %s message is hovered",
+    "shows the exact timestamp from the %s message's relative label",
     async (type) => {
       const user = userEvent.setup();
-      const timestamp = "2026-04-16T19:32:29.828Z";
+      const timestamp = new Date(Date.now() - 30 * 60_000).toISOString();
       const expected = new Date(timestamp).toLocaleString("en", {
         dateStyle: "medium",
         timeStyle: "short",
       });
-
       render(<ChatMessage type={type} message="Hello" timestamp={timestamp} />);
-
-      const message = screen.getByTestId(`${type}-message`);
-      await user.hover(message);
-
-      const tooltip = await screen.findByRole("tooltip");
-      expect(tooltip).toHaveTextContent(expected);
-      expect(tooltip.querySelector("time")).toHaveAttribute(
-        "datetime",
-        timestamp,
-      );
+      await user.hover(screen.getByTestId(`${type}-message`));
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+      const label = screen.getByRole("button", { name: expected });
+      expect(label).toHaveTextContent("30 minutes ago");
+      await user.hover(label);
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(expected);
     },
   );
 
-  it("does not fabricate a timestamp for an invalid value", () => {
-    render(<ChatMessage type="user" message="Hello" timestamp="not-a-date" />);
-
-    expect(screen.getByTestId("user-message")).not.toHaveAttribute("tabindex");
-    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  it("refreshes a visible relative label and catches up when hovered again", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-11-02T12:00:00Z"));
+      render(
+        <ChatMessage
+          type="agent"
+          message="Hello"
+          timestamp="2026-11-02T11:30:00Z"
+        />,
+      );
+      const message = screen.getByTestId("agent-message");
+      fireEvent.mouseEnter(message);
+      expect(screen.getByTestId("message-timestamp")).toHaveTextContent(
+        "30 minutes ago",
+      );
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(screen.getByTestId("message-timestamp")).toHaveTextContent(
+        "31 minutes ago",
+      );
+      fireEvent.mouseLeave(message);
+      act(() => {
+        vi.advanceTimersByTime(3_600_000);
+      });
+      fireEvent.mouseEnter(message);
+      expect(screen.getByTestId("message-timestamp")).toHaveTextContent(
+        "1 hour ago",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
+
+  it("makes the exact timestamp available to keyboard focus", async () => {
+    const timestamp = "2026-04-16T19:32:29.828Z";
+    const expected = new Date(timestamp).toLocaleString("en", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+    render(<ChatMessage type="agent" message="Hello" timestamp={timestamp} />);
+    const button = screen.getByRole("button", { name: expected });
+    await userEvent.setup().tab();
+    expect(button).toHaveFocus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(expected);
+  });
+
+  it.each([undefined, "not-a-date"])(
+    "does not fabricate a timestamp for %s",
+    (timestamp) => {
+      render(<ChatMessage type="user" message="Hello" timestamp={timestamp} />);
+      expect(screen.queryByTestId("message-timestamp")).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(["sending", "error"] as const)(
+    "keeps the timestamp out of %s feedback",
+    (pendingStatus) => {
+      render(
+        <ChatMessage
+          type="user"
+          message="Hello"
+          timestamp="2026-11-02T11:30:00Z"
+          pendingStatus={pendingStatus}
+        />,
+      );
+      fireEvent.mouseEnter(screen.getByTestId("user-message"));
+      expect(screen.queryByTestId("message-timestamp")).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId(
+          pendingStatus === "error"
+            ? "chat-message-error"
+            : "chat-message-sending",
+        ),
+      ).toBeInTheDocument();
+    },
+  );
 
   it("does not update the parent while measuring user-message truncation", async () => {
     // Regression test for the React warning:
@@ -135,6 +208,22 @@ describe("ChatMessage", () => {
     expect(screen.getByText("Hello, World!")).toBeInTheDocument();
   });
 
+  it("blends wide-table fades into the user bubble, not the page", () => {
+    render(<ChatMessage type="user" message="Hello" />);
+    // The bubble sets the fade colour its Markdown tables inherit.
+    expect(screen.getByTestId("user-message")).toHaveClass(
+      "bg-tertiary",
+      "scroll-fade-tertiary",
+    );
+  });
+
+  it("leaves agent replies on the page fade colour", () => {
+    render(<ChatMessage type="agent" message="Hello" />);
+    expect(screen.getByTestId("agent-message")).not.toHaveClass(
+      "scroll-fade-tertiary",
+    );
+  });
+
   it("should support code syntax highlighting", () => {
     const code = "```js\nconsole.log('Hello, World!')\n```";
     render(<ChatMessage type="user" message={code} />);
@@ -191,33 +280,42 @@ describe("ChatMessage", () => {
     expect(codeElement.closest("article")).not.toBeNull();
   });
 
-  it("truncates long sent user messages to five lines with view more on hover", async () => {
-    const longMessage = `${"Here's a long message. ".repeat(40)}`.trim();
-    render(<ChatMessage type="user" message={longMessage} />);
+  it.each([undefined, "sending", "error"] as const)(
+    "keeps long user messages expandable with status %s",
+    async (pendingStatus) => {
+      const longMessage = `${"Here's a long message. ".repeat(40)}`.trim();
+      render(
+        <ChatMessage
+          type="user"
+          message={longMessage}
+          pendingStatus={pendingStatus}
+        />,
+      );
 
-    expect(
-      screen.getByText(longMessage).closest(".line-clamp-5"),
-    ).not.toBeNull();
-    expect(
-      screen.getByTestId("chat-message-truncation-gradient"),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("chat-message-view-more")).toHaveClass(
-      "opacity-0",
-    );
+      expect(
+        screen.getByText(longMessage).closest(".line-clamp-5"),
+      ).not.toBeNull();
+      expect(
+        screen.getByTestId("chat-message-truncation-gradient"),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("chat-message-view-more")).toHaveClass(
+        "opacity-0",
+      );
 
-    fireEvent.mouseEnter(screen.getByTestId("user-message"));
-    expect(screen.getByTestId("chat-message-view-more")).toHaveClass(
-      "opacity-100",
-    );
+      fireEvent.mouseEnter(screen.getByTestId("user-message"));
+      expect(screen.getByTestId("chat-message-view-more")).toHaveClass(
+        "opacity-100",
+      );
 
-    fireEvent.click(screen.getByTestId("chat-message-expand"));
-    expect(
-      screen.queryByTestId("chat-message-truncation-gradient"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("chat-message-view-more"),
-    ).not.toBeInTheDocument();
-  });
+      fireEvent.click(screen.getByTestId("chat-message-expand"));
+      expect(
+        screen.queryByTestId("chat-message-truncation-gradient"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("chat-message-view-more"),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it("shows a stop control for a sending user message and calls onStop when clicked", () => {
     const onStop = vi.fn();
@@ -278,8 +376,6 @@ describe("ChatMessage", () => {
   });
 
   it("renders literal angle-bracket text in a sending user message", () => {
-    // The pending/sending bubble renders through a different branch than the
-    // settled message, so it gets its own guard.
     const { container } = render(
       <ChatMessage type="user" message="<something>" pendingStatus="sending" />,
     );

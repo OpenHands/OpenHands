@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from "react";
 
 const MOBILE_BREAKPOINT = 1024;
 
+/** Compact settings/customization navigation below Tailwind lg (64rem). */
+export const SETTINGS_COMPACT_MAX_WIDTH = 1023;
+
 /**
  * Inclusive max width where the primary sidebar rail is hidden (`max-md:hidden`)
  * and the slide-out drawer is used. Matches typical Tailwind `md` (48rem): rail

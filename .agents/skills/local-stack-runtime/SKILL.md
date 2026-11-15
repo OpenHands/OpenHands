@@ -18,4 +18,4 @@ Maintain the shared configuration and launch plumbing across Vite/static develop
 
 ## Reference
 
-- **`references/guide.md`** — Runtime-services schema and prompt plumbing, launcher environment variables, ingress routes, version synchronization, security, Docker build architecture, README synchronization, and spec-tag conventions.
+- **`references/guide.md`** — Runtime-services schema and prompt plumbing, launcher environment variables, ingress routes, version synchronization, security, Docker build architecture, and README synchronization.
