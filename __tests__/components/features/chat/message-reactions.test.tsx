@@ -342,6 +342,83 @@ describe("MessageReactions", () => {
     );
   });
 
+  it("keeps each pending reaction until the server's events agree with it", async () => {
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockResolvedValue(featureState(true));
+    vi.spyOn(conversationReactionsService, "react")
+      .mockResolvedValueOnce(reaction("a", "heart", "user"))
+      .mockResolvedValueOnce(reaction("bb", "+1", "user"))
+      .mockResolvedValueOnce(reaction("ccc", "heart", "user", true));
+    const user = userEvent.setup();
+
+    renderWithProviders(<Row author="agent" />);
+
+    await user.click(await screen.findByTestId("add-reaction"));
+    await user.click(screen.getByTestId("reaction-picker-heart"));
+    await user.click(screen.getByTestId("add-reaction"));
+    await user.click(screen.getByTestId("reaction-picker-+1"));
+
+    // Only the ❤️ event has arrived: 👍 is still waiting for its own.
+    act(() => {
+      useEventStore.getState().addEvents([reaction("a", "heart", "user")]);
+    });
+    expect(screen.getByTestId("reaction-heart")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByTestId("reaction-+1")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    // Taking ❤️ off, an older add event for it does not bring it back.
+    await user.click(screen.getByTestId("reaction-heart"));
+    act(() => {
+      useEventStore.getState().addEvents([reaction("bb", "+1", "user")]);
+    });
+    expect(screen.queryByTestId("reaction-heart")).not.toBeInTheDocument();
+
+    act(() => {
+      useEventStore
+        .getState()
+        .addEvents([reaction("ccc", "heart", "user", true)]);
+    });
+    expect(screen.queryByTestId("reaction-heart")).not.toBeInTheDocument();
+    expect(screen.getByTestId("reaction-+1")).toBeInTheDocument();
+  });
+
+  it("keeps keyboard focus on the add button while a reaction is saved", async () => {
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockResolvedValue(featureState(true));
+    let finish: () => void = () => {};
+    vi.spyOn(conversationReactionsService, "react").mockImplementation(
+      () =>
+        new Promise<ReactionEvent>((resolve) => {
+          finish = () => resolve(reaction("a", "eyes", "user"));
+        }),
+    );
+    const user = userEvent.setup();
+
+    renderWithProviders(<Row author="agent" />);
+
+    const trigger = await screen.findByTestId("add-reaction");
+    await user.click(trigger);
+    await user.keyboard("{Enter}");
+
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-disabled", "true");
+    await user.click(trigger);
+    expect(screen.queryByTestId("reaction-picker")).not.toBeInTheDocument();
+
+    await act(async () => finish());
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-disabled", "false");
+  });
+
   it("takes the user's own reaction off when its chip is clicked", async () => {
     vi.spyOn(
       experimentalFeaturesService,
@@ -427,6 +504,7 @@ describe("MessageReactions", () => {
     const removed = reaction("bb", "heart", "user", true);
     vi.spyOn(ConversationClient.prototype, "react")
       .mockResolvedValueOnce(added)
+      .mockRejectedValueOnce(new Error("removal failed"))
       .mockResolvedValueOnce(removed);
     const user = userEvent.setup();
     renderWithProviders(<Row author="agent" />);
@@ -434,6 +512,16 @@ describe("MessageReactions", () => {
     await user.click(await screen.findByTestId("add-reaction"));
     await user.click(screen.getByTestId("reaction-picker-heart"));
     await user.click(screen.getByTestId("reaction-heart"));
+    expect(screen.getByTestId("reaction-heart")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await user.click(screen.getByTestId("reaction-heart"));
+    // The server still has no heart while the add and remove are queued.
+    // An unrelated event agreeing with that absence is not an acknowledgement.
+    act(() =>
+      useEventStore.getState().addEvent(reaction("dddd", "eyes", "agent")),
+    );
     act(() => useEventStore.getState().addEvent(added));
     expect(screen.queryByTestId("reaction-heart")).not.toBeInTheDocument();
     act(() => useEventStore.getState().addEvent(removed));

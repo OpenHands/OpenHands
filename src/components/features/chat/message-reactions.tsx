@@ -193,8 +193,8 @@ export function MessageReactions({
     }
   }, [pickerOpen]);
 
-  // The user's clicks show at once. The server's events replace them when
-  // they arrive, which can be a while if a tool call is waiting for approval.
+  // The user's clicks show at once. Each choice stays until its own event
+  // arrives, which can be a while if a tool call is waiting for approval.
   const [optimistic, setOptimistic] = React.useState<
     Partial<Record<ReactionEmoji, { on: boolean; eventId?: string }>>
   >({});
@@ -317,6 +317,8 @@ export function MessageReactions({
             title={t(I18nKey.CHAT_INTERFACE$ADD_REACTION)}
             aria-label={t(I18nKey.CHAT_INTERFACE$ADD_REACTION)}
             aria-expanded={pickerOpen}
+            // Not `disabled`: the picker hands focus back to this button as a
+            // request starts, and a disabled button would drop it.
             aria-disabled={pending}
             onClick={() => {
               if (!pending) setPickerOpen((open) => !open);
