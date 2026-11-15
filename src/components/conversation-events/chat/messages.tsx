@@ -36,6 +36,13 @@ import {
   SecretRequestCard,
   usePendingSecretRequests,
 } from "#/components/features/conversation/secret-request-card";
+import { useIsExperimentalFeatureEnabled } from "#/hooks/query/use-experimental-features";
+import {
+  ASK_USER_EXPERIMENTAL_FEATURE,
+  buildAskUserCards,
+  NO_ASK_USER_CARDS,
+} from "#/components/features/chat/ask-user/ask-user-cards";
+import { AskUserCard } from "#/components/features/chat/ask-user/ask-user-card";
 
 interface MessagesProps {
   messages: OpenHandsEvent[]; // UI events (actions replaced by observations)
@@ -50,13 +57,37 @@ const getLastEvent = (events: OpenHandsEvent[]) => events.at(-1);
 
 export const Messages: React.FC<MessagesProps> = React.memo(
   ({
-    messages,
+    messages: uiMessages,
     allEvents,
     hasOlderEvents = false,
     pendingMessages,
     pendingSessionId,
   }) => {
     const { conversationId } = useOptionalConversationId();
+    // Decision cards: an `ask_user` result shows as a card, and the message a
+    // tap on it sends is shown on the card instead of as a chat bubble. With
+    // the feature off, both render as they always have.
+    const askUserEnabled = useIsExperimentalFeatureEnabled(
+      ASK_USER_EXPERIMENTAL_FEATURE,
+    );
+    const askUserCards = React.useMemo(
+      () => (askUserEnabled ? buildAskUserCards(allEvents) : NO_ASK_USER_CARDS),
+      [askUserEnabled, allEvents],
+    );
+    const messages = React.useMemo(
+      () =>
+        askUserCards.answerMessageIds.size === 0
+          ? uiMessages
+          : uiMessages.filter(
+              (event) => !askUserCards.answerMessageIds.has(event.id ?? ""),
+            ),
+      [uiMessages, askUserCards],
+    );
+    const isAskUserCard = React.useCallback(
+      (event: OpenHandsEvent) =>
+        askUserCards.byObservationId.has(event.id ?? ""),
+      [askUserCards],
+    );
     const { key: sessionKey, sessions } = useSessionActivities(conversationId);
     const visibleSessions = React.useMemo(
       () =>
@@ -152,8 +183,17 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     const isAgentRunning =
       curAgentState === AgentState.RUNNING || isPlanningAgentRunning;
     const renderedItems = React.useMemo(
-      () => groupEvents(messages, 1, allEvents, 1, visibleSessions, actionById),
-      [messages, allEvents, visibleSessions, actionById],
+      () =>
+        groupEvents(
+          messages,
+          1,
+          allEvents,
+          1,
+          visibleSessions,
+          actionById,
+          isAskUserCard,
+        ),
+      [messages, allEvents, visibleSessions, actionById, isAskUserCard],
     );
     const eventIndexes = React.useMemo(
       () => new Map(messages.map((event, index) => [event, index])),
@@ -217,6 +257,18 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       <>
         {renderedItems.map((item, itemIndex) => {
           if (item.kind === "single") {
+            const askUserCard = askUserCards.byObservationId.get(
+              item.event.id ?? "",
+            );
+            if (askUserCard) {
+              return (
+                <AskUserCard
+                  key={`ask-user-${item.event.id}`}
+                  card={askUserCard}
+                  conversationId={conversationId}
+                />
+              );
+            }
             return (
               <React.Fragment key={`single-${getStepKey(item.event)}`}>
                 {/* Thoughts for singles are also hoisted as their own
