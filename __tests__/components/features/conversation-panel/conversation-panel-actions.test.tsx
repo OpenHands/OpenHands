@@ -4,7 +4,7 @@ import {
   DEFAULT_CONVERSATION_PAGE_SIZE,
 } from "#/hooks/query/query-keys";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import {
   screen,
   waitFor,

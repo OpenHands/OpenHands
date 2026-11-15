@@ -3,7 +3,7 @@ import {
   PENDING_AUTOMATION_SETUP_ID,
   initializeAutomationFormSession,
 } from "#/api/automation-form-session";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import type { Automation } from "#/types/automation";
 import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
 

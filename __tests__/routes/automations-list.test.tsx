@@ -68,7 +68,7 @@ vi.mock("#/api/automation-form-session", async (importOriginal) => ({
     mocks.initializeAutomationFormSession(...args),
 }));
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({
     currentPath: "/automations",
     conversationId: null,

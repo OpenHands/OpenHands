@@ -2,7 +2,7 @@ import React from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConversationLaunchView } from "#/components/features/chat/conversation-launch-view";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   setActiveSelection,

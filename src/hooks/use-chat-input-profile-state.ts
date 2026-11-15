@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { useIsMutating } from "@tanstack/react-query";
 import type { AgentProfileSummary } from "#/api/agent-profiles-service/agent-profiles-service.api";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import {

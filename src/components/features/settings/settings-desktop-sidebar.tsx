@@ -1,5 +1,5 @@
 import { CompactSectionNavigation } from "#/components/shared/compact-section-navigation";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
 import { Typography } from "#/ui/typography";

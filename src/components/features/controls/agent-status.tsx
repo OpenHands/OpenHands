@@ -3,7 +3,7 @@ import {
   CONVERSATION_LAUNCH_PREFIX,
   useConversationLaunchStore,
 } from "#/stores/conversation-launch-store";
-import { useChatProgress } from "#/context/chat-progress-context";
+import { useChatProgress } from "#/contexts/chat-progress-context";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { CircleCheck } from "lucide-react";

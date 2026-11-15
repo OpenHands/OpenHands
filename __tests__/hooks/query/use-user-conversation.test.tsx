@@ -4,7 +4,7 @@ import {
   usePersistedConversationHistory,
 } from "#/hooks/query/use-conversation-history";
 import { useConversationDisplayTitleState } from "#/hooks/use-conversation-display-title";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

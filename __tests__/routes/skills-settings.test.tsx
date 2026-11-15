@@ -46,7 +46,7 @@ vi.mock("#/hooks/mutation/sync-agent-profiles", async (importOriginal) => ({
   updateDefaultAgentProfile: updateDefaultAgentProfileMock,
 }));
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({
     navigate: navigateMock,
     currentPath: "/skills",

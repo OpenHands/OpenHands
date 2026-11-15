@@ -3,7 +3,7 @@ import React from "react";
 import { act, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
 import type { AppConversationPage } from "#/api/conversation-service/agent-server-conversation-service.types";
 

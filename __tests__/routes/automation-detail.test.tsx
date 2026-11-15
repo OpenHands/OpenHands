@@ -137,7 +137,7 @@ vi.mock("#/hooks/mutation/use-create-conversation", () => ({
   }),
 }));
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({
     currentPath: "/automations/auto-1",
     conversationId: null,

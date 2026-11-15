@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import {
   SETTINGS_COMPACT_MAX_WIDTH,
   SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,

@@ -23,7 +23,7 @@ vi.mock("react-i18next", async (importOriginal) => ({
   useTranslation: () => ({ t: i18next.getFixedT("en", "app-secret-test") }),
 }));
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({
     navigate: vi.fn(),
     currentPath: "/apps",

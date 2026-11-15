@@ -23,7 +23,7 @@ import {
 import type { WebSocketHookOptions } from "#/hooks/use-websocket";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import { useLiveConversationMetrics } from "#/hooks/use-live-conversation-metrics";
 import type { MessageEvent as AgentMessageEvent } from "#/types/agent-server/core/events/message-event";
 import {

@@ -14,7 +14,7 @@ import SuperAdminSetupGuide from "#/components/features/setup-guide/super-admin-
 import type { SuperAdminSetupStepId } from "#/components/features/setup-guide/super-admin-setup-guide.constants";
 import { notifySuperAdminSetupStep } from "#/components/features/setup-guide/super-admin-setup-step-event";
 import { startSetupGuideTour } from "#/components/features/setup-guide/tour/setup-guide-tour";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { I18nKey } from "#/i18n/declaration";
 import { server } from "#/mocks/node";

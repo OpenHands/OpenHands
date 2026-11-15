@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Blocks, ExternalLink } from "lucide-react";
 import { CompactSectionNavigation } from "#/components/shared/compact-section-navigation";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { cn } from "#/utils/utils";
 import SkillsIcon from "#/icons/skills.svg?react";
