@@ -38,6 +38,14 @@ export type SettingsValueType =
 
 export type SettingProminence = "critical" | "major" | "minor";
 
+export type SettingsFieldConstraints = {
+  min?: number;
+  max?: number;
+  step?: number;
+  exclusive_min?: boolean;
+  exclusive_max?: boolean;
+};
+
 export type SettingsFieldSchema = {
   key: string;
   label: string;
@@ -51,6 +59,7 @@ export type SettingsFieldSchema = {
   prominence: SettingProminence;
   secret: boolean;
   required: boolean;
+  constraints?: SettingsFieldConstraints;
 };
 
 export type SettingsSectionSchema = {

@@ -652,6 +652,8 @@ class SettingsService {
     conversationSettings: Record<string, SettingsValue>;
     secretsEncrypted: boolean;
     skillEnablement: SkillEnablement;
+    gitUserName?: string | null;
+    gitUserEmail?: string | null;
   }> {
     const backend = getActiveBackend().backend;
     const connectionRevision = backend.connectionRevision ?? 0;
@@ -662,11 +664,14 @@ class SettingsService {
       "encrypted",
     );
     if (cached) {
+      const prefs = cached.misc_settings?.app_preferences;
       return {
         agentSettings: cached.agent_settings,
         conversationSettings: cached.conversation_settings,
         secretsEncrypted: true,
         skillEnablement: getSkillEnablement(cached),
+        gitUserName: prefs?.git_user_name,
+        gitUserEmail: prefs?.git_user_email,
       };
     }
 
@@ -677,11 +682,14 @@ class SettingsService {
       clientOptions,
     );
     cacheSettings(backend.id, connectionRevision, "encrypted", response);
+    const prefs = response.misc_settings?.app_preferences;
     return {
       agentSettings: response.agent_settings,
       conversationSettings: response.conversation_settings,
       secretsEncrypted: true,
       skillEnablement: getSkillEnablement(response),
+      gitUserName: prefs?.git_user_name,
+      gitUserEmail: prefs?.git_user_email,
     };
   }
 
