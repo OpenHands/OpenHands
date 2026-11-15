@@ -1357,7 +1357,7 @@ export function buildStartConversationRequest(
   }
 
   const baseHookConfig =
-    ((conversationSettings.hook_config as unknown) as HookConfig | undefined) ??
+    (conversationSettings.hook_config as unknown as HookConfig | undefined) ??
     options.workspaceHookConfig ??
     null;
   const mergedHookConfig = mergeGitIdentityIntoHookConfig(
