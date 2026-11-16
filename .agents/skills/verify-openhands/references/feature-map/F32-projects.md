@@ -9,7 +9,7 @@ needs the user, and the files. Everything sits behind the `projects`
 experimental feature (Settings › Experimental). Insider's Cat persona,
 docked chat and Voice are App features (F30), not this family.
 
-Source: `src/routes/projects.tsx`, `src/routes/project.tsx`, `src/components/features/projects/`, `src/api/projects-service/projects-service.api.ts`, `src/hooks/query/use-projects.ts`, `src/hooks/query/use-project-names.ts`, `src/components/features/conversation/project-badge.tsx`, `src/components/features/chat/project-message-header-line.tsx`, `src/utils/project-message-header.ts`, `src/components/features/sidebar/sidebar-rail-body.tsx`, `src/components/features/sidebar/sidebar-nav-link.tsx`.
+Source: `src/routes/projects.tsx`, `src/routes/project.tsx`, `src/components/features/projects/`, `src/api/projects-service/projects-service.api.ts`, `src/hooks/query/use-projects.ts`, `src/hooks/query/use-project-names.ts`, `src/components/features/conversation/project-badge.tsx`, `src/components/features/chat/project-message-header-line.tsx`, `src/utils/project-message-header.ts`, `src/components/features/sidebar/sidebar-rail-body.tsx`, `src/components/features/sidebar/sidebar-nav-link.tsx`, `src/components/features/chat/chat-add-file-button.tsx`, `src/utils/project-artifact-kind.ts`.
 
 ## Sub-features
 
@@ -21,7 +21,8 @@ Source: `src/routes/projects.tsx`, `src/routes/project.tsx`, `src/components/fea
 - `F32.board`: the conversations the coordinator starts appear on the board without a reload, grouped Needs you (needs_you + needs_input), Working, Done (finished + idle), Resolved; a card that stopped on a question shows that question.
 - `F32.resolve`: Resolve sets `resolved=user` and keeps the other tags; Reopen removes `resolved`; the card moves groups both ways.
 - `F32.membership`: **Add a conversation…** adds a recent non-member; **Remove** drops a member's `project` tag; the coordinator cannot be removed.
-- `F32.files`: Upload adds a file marked "Added by you"; a file a conversation saved names that conversation; clicking a text file shows its contents, other files say there is no preview.
+- `F32.files`: Upload adds a file marked "Added by you"; a file a conversation saved names that conversation; clicking a text file shows its contents, an image or PDF shows inline, other files say there is no preview; Download saves the file; Delete asks first, then removes it.
+- `F32.attach`: in a member conversation, the composer's **+** menu offers **Project file**, which picks one of the project's files and attaches it to the message; it is absent outside a project or with `projects` off.
 - `F32.badge`: a member conversation's header shows the project's name as a link to its project page.
 - `F32.headers`: in the coordinator, the server's `[Update from …]`, `[Sent by …]`, `[Reply in …]`, `[Message from the user in …]` and `[Paused by the user: …]` header lines render as one compact line with a working mention; the user's own bracketed text is untouched.
 
@@ -94,7 +95,17 @@ Preconditions:
   a `testid=project-file` row with `data-source=user` and "Added by you", and
   `testid=project-file-preview` shows the text. Ask the coordinator to save a
   file to the project (`write_artifact`); its row has
-  `data-source=agent` and names the worker that saved it.
+  `data-source=agent` and names the worker that saved it. Upload a PNG and a
+  PDF: `testid=project-file-preview` has `data-kind=image` (an `img`) and
+  `data-kind=pdf` (an `iframe`). `testid=project-file-download` on a row saves
+  the file; `testid=project-file-delete` opens the confirmation modal, and
+  `testid=confirm-button` removes the row.
+
+- **Attach (`F32.attach`).** In a worker, open the composer's **+** and click
+  `testid=add-project-file-button`; `testid=project-file-picker` lists
+  `testid=project-file-pick` rows, and picking one attaches it to the message
+  (`testid=project-file-picker-cancel` closes it). In a conversation outside
+  the project, the item is absent.
 
 - **Badge and headers (`F32.badge`, `F32.headers`).** In a worker,
   `testid=conversation-project-badge` shows QA F32 and leads to the project
