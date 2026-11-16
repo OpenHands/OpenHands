@@ -36,12 +36,22 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
   };
 });
 
-const { useActiveBackendMock, useOptionalConversationIdMock, navigateMock } =
-  vi.hoisted(() => ({
-    useActiveBackendMock: vi.fn(),
-    useOptionalConversationIdMock: vi.fn(),
-    navigateMock: vi.fn(),
-  }));
+const {
+  useActiveBackendMock,
+  useOptionalConversationIdMock,
+  navigateMock,
+  navigationState,
+} = vi.hoisted(() => ({
+  useActiveBackendMock: vi.fn(),
+  useOptionalConversationIdMock: vi.fn(),
+  navigateMock: vi.fn(),
+  // The route the navigation owner supplies. The fork reads only this (and an
+  // optional live getter), never `window.location`.
+  navigationState: {
+    currentPath: "/",
+    getCurrentPath: undefined as (() => string) | undefined,
+  },
+}));
 
 // These provide test context (backend kind, conversation id, navigation); the
 // fork behaviour is exercised through the real hook against a mocked service
@@ -56,7 +66,11 @@ vi.mock("#/contexts/active-backend-context", () => ({
 
 vi.mock("#/context/navigation-context", async (importActual) => ({
   ...(await importActual<object>()),
-  useNavigation: () => ({ navigate: navigateMock }),
+  useNavigation: () => ({
+    navigate: navigateMock,
+    currentPath: navigationState.currentPath,
+    getCurrentPath: navigationState.getCurrentPath,
+  }),
 }));
 
 // test-utils re-inits i18n with empty resources, so `t()` returns the key —
@@ -114,8 +128,9 @@ describe("UserAssistantEventMessage — branch action", () => {
     isMutatingFilters.length = 0;
     localStorage.clear();
     // The fork navigates only while the reader is still on the source
-    // conversation, which the hook reads from `window.location.pathname`.
-    window.history.replaceState({}, "", `/conversations/${CONVERSATION_ID}`);
+    // conversation, which the hook reads from the navigation owner's route.
+    navigationState.currentPath = `/conversations/${CONVERSATION_ID}`;
+    navigationState.getCurrentPath = undefined;
 
     useActiveBackendMock.mockReturnValue({
       backend: { kind: "local" },
