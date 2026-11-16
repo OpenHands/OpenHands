@@ -386,10 +386,19 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
             />
           )}
 
-        {showMobileAutomationForm && automationSetupDraft ? (
+        {/* The setup form stays mounted across the phone Form ↔ Conversation
+            round trip (like the chat panel above) and is hidden with CSS:
+            unmounting it cleared the form session and lost unsaved edits
+            (#19363). The docked composer hides with its parent, so both keep
+            appearing only in the Form view. Desktop renders its own panel in
+            the right drawer instead. */}
+        {isMobile && isAutomationSetupMode && automationSetupDraft ? (
           <div
             data-testid="automation-setup-mobile-form"
-            className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
+            className={cn(
+              "relative flex min-h-0 flex-1 flex-col overflow-hidden",
+              !showMobileAutomationForm && "hidden",
+            )}
           >
             <Suspense fallback={<LoadingSpinner size="small" />}>
               <AutomationSetupPanel

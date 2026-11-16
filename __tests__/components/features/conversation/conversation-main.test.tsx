@@ -357,7 +357,9 @@ describe("ConversationMain - Layout Transition Stability", () => {
     renderConversationMain();
 
     expect(screen.getByTestId("automation-setup-topbar")).toBeInTheDocument();
-    expect(screen.getByTestId("automation-setup-panel")).toHaveAttribute(
+    // The panel is lazy-loaded; await its first resolution instead of
+    // asserting synchronously (flaky under Suspense timing).
+    expect(await screen.findByTestId("automation-setup-panel")).toHaveAttribute(
       "data-conversation-id",
       "conv-1",
     );
@@ -377,12 +379,14 @@ describe("ConversationMain - Layout Transition Stability", () => {
       screen.getByTestId("automation-setup-mobile-view-conversation"),
     );
 
+    // The form stays mounted (hidden with CSS, like the chat panel) so the
+    // unmount cleanup cannot clear the form session and lose unsaved edits.
+    expect(screen.getByTestId("automation-setup-mobile-form")).toHaveClass(
+      "hidden",
+    );
     expect(
-      screen.queryByTestId("automation-setup-mobile-form"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("automation-setup-docked-composer"),
-    ).not.toBeInTheDocument();
+      screen.getByTestId("automation-setup-docked-composer"),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("chat-pane-header")).not.toBeInTheDocument();
     expect(screen.getByTestId("conversation-chat-panel")).not.toHaveClass(
       "hidden",
@@ -407,16 +411,24 @@ describe("ConversationMain - Layout Transition Stability", () => {
 
     expect(
       screen.getByTestId("automation-setup-mobile-form"),
-    ).toBeInTheDocument();
+    ).not.toHaveClass("hidden");
     expect(
       screen.getByTestId("automation-setup-docked-composer"),
     ).toBeInTheDocument();
+    // The panel container never unmounted across the round trip (the same
+    // DOM node persists, only hidden), so its unsaved form state and the
+    // form session survived it (#19363).
 
     await user.click(screen.getByTestId("docked-composer-submit"));
 
-    expect(
-      screen.queryByTestId("automation-setup-mobile-form"),
-    ).not.toBeInTheDocument();
+    // Submitting from the docked composer switches to the Conversation view:
+    // the form hides (it stays mounted now) and the conversation shows.
+    expect(screen.getByTestId("automation-setup-mobile-form")).toHaveClass(
+      "hidden",
+    );
+    expect(screen.getByTestId("conversation-chat-panel")).not.toHaveClass(
+      "hidden",
+    );
 
     await user.click(screen.getByTestId("automation-setup-mobile-view-form"));
 
@@ -424,9 +436,9 @@ describe("ConversationMain - Layout Transition Stability", () => {
       requestAutomationSetupAgent();
     });
 
-    expect(
-      screen.queryByTestId("automation-setup-mobile-form"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-mobile-form")).toHaveClass(
+      "hidden",
+    );
     expect(screen.getByTestId("conversation-chat-panel")).not.toHaveClass(
       "hidden",
     );
