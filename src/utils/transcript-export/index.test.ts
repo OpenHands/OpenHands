@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AskUserAnswerEvent } from "@openhands/typescript-client";
+import type {
+  AskUserAction,
+  AskUserAnswerEvent,
+  AskUserObservation,
+} from "@openhands/typescript-client";
 import type {
   ActionEvent,
   AgentErrorEvent,
@@ -139,7 +143,32 @@ describe("conversation transcript export", () => {
   it.each([
     { option_index: 1, option_label: "PostgreSQL", text: "Use the EU region" },
     { option_index: null, option_label: null, text: "Neither, use JSON" },
-  ])("exports a decision answer once in both formats: %j", (answer) => {
+  ])("exports a complete decision exchange in both formats: %j", (answer) => {
+    const question: ActionEvent<AskUserAction> = {
+      ...terminalAction,
+      id: "question-1",
+      summary: undefined,
+      tool_name: "ask_user",
+      action: {
+        kind: "AskUserAction",
+        question: "Choose storage?",
+        options: [
+          { label: "SQLite", consequence: "Stay on this device." },
+          { label: "PostgreSQL", consequence: "Share across servers." },
+        ],
+        recommended: 1,
+      },
+    };
+    const result: ObservationEvent<AskUserObservation> = {
+      ...terminalObservation(""),
+      action_id: question.id,
+      tool_name: "ask_user",
+      observation: {
+        kind: "AskUserObservation",
+        content: [],
+        is_error: false,
+      },
+    };
     const event: AskUserAnswerEvent = {
       id: "answer-1",
       kind: "AskUserAnswerEvent",
@@ -160,20 +189,24 @@ describe("conversation transcript export", () => {
         ],
       },
     };
-    for (const output of [
-      eventsToMarkdown([event, machine], {
-        ...defaultOptions,
-        includeToolDetails: false,
-      }),
-      eventsToHtml([event, machine], {
-        ...defaultOptions,
-        includeToolDetails: false,
-      }),
-    ]) {
-      expect(output.split(answer.text)).toHaveLength(2);
-      if (answer.option_label) expect(output).toContain(answer.option_label);
-      expect(output).not.toContain("Machine copy");
-      expect(output).not.toContain("Answer to your question");
+    for (const includeToolDetails of [false, true]) {
+      for (const exportTranscript of [eventsToMarkdown, eventsToHtml]) {
+        const output = exportTranscript([question, result, event, machine], {
+          ...defaultOptions,
+          includeToolDetails,
+        });
+        expect(output).toContain("Choose storage?");
+        expect(output).toContain("SQLite");
+        expect(output).toContain("Stay on this device.");
+        expect(output).toContain("PostgreSQL (ASK_USER$RECOMMENDED)");
+        expect(output).toContain("Share across servers.");
+        expect(output.split(answer.text)).toHaveLength(2);
+        expect(output.indexOf("Choose storage?")).toBeLessThan(
+          output.indexOf(answer.text),
+        );
+        expect(output).not.toContain("Machine copy");
+        expect(output).not.toContain("Answer to your question");
+      }
     }
   });
 

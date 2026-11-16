@@ -156,6 +156,10 @@ it("does not offer to resend an answer already saved when run capacity is full",
     "ASK_USER$SAVED_NOT_RUNNING",
   );
   expect(within(card).queryByRole("button")).not.toBeInTheDocument();
+  act(() => useEventStore.getState().addEvent(reply()));
+  expect(within(card).getByRole("alert")).toHaveTextContent(
+    "ASK_USER$SAVED_NOT_RUNNING",
+  );
 });
 
 it("keeps the decision outside collapsed activity and submits a non-default option with words once", async () => {
@@ -225,6 +229,11 @@ it("allows words alone, preserves them after a failed request, and permits retry
     text: "Neither, use JSON",
   });
   expect(send).toBeEnabled();
+  act(() => useEventStore.getState().addEvent(reply()));
+  expect(
+    await within(card).findByText("ASK_USER$ANSWERED_IN_CHAT"),
+  ).toBeVisible();
+  expect(within(card).queryByRole("alert")).not.toBeInTheDocument();
 });
 
 it("ignores relayed messages but settles on the person's chat reply, including history hydration", async () => {
@@ -248,11 +257,10 @@ it("ignores relayed messages but settles on the person's chat reply, including h
   expect(await screen.findByText("ASK_USER$ANSWERED_IN_CHAT")).toBeVisible();
 });
 
-it("keeps existing decisions readable with the feature off and never sends a planner answer to the main conversation", async () => {
+it("keeps existing decisions readable with the feature off", async () => {
   vi.mocked(
     experimentalFeaturesService.listExperimentalFeatures,
   ).mockResolvedValue([]);
-  const answer = vi.spyOn(ConversationClient.prototype, "answerAskUser");
   renderWithProviders(<Transcript />);
   const card = await screen.findByRole("region", {
     name: question.action.question,
@@ -264,6 +272,56 @@ it("keeps existing decisions readable with the feature off and never sends a pla
     within(card).getByText("ASK_USER$RECOMMENDED").parentElement,
   ).toHaveTextContent("PostgreSQL");
   expect(within(card).queryByRole("button")).not.toBeInTheDocument();
+});
+
+it("keeps the first closure for each decision and ignores planner replies in the main conversation", async () => {
+  useEventStore.getState().addEvents([
+    {
+      ...question,
+      id: "question-2",
+      tool_call_id: "call-2",
+      tool_call: { ...question.tool_call, id: "call-2" },
+      action: { ...question.action, question: "Choose the backup location?" },
+    },
+    {
+      ...result,
+      id: "result-2",
+      action_id: "question-2",
+      tool_call_id: "call-2",
+    },
+    { ...reply(), isFromPlanningAgent: true },
+  ]);
+  renderWithProviders(<Transcript />);
+  const earlierCard = await screen.findByRole("region", {
+    name: question.action.question,
+  });
+  const currentCard = await screen.findByRole("region", {
+    name: "Choose the backup location?",
+  });
+  expect(within(earlierCard).getByText("ASK_USER$SUPERSEDED")).toBeVisible();
+  await waitFor(() =>
+    expect(
+      within(currentCard).getByRole("button", { name: /SQLite/ }),
+    ).toBeEnabled(),
+  );
+  act(() =>
+    useEventStore.getState().addEvent({ ...reply(), id: "main-reply" }),
+  );
+  expect(
+    await within(currentCard).findByText("ASK_USER$ANSWERED_IN_CHAT"),
+  ).toBeVisible();
+  expect(within(earlierCard).getByText("ASK_USER$SUPERSEDED")).toBeVisible();
+});
+
+it("never sends a planner answer to the main conversation with the feature enabled", async () => {
+  const answer = vi.spyOn(ConversationClient.prototype, "answerAskUser");
+  renderWithProviders(<Transcript />);
+  const card = await screen.findByRole("region", {
+    name: question.action.question,
+  });
+  await waitFor(() =>
+    expect(within(card).getByRole("button", { name: /SQLite/ })).toBeEnabled(),
+  );
   act(() => {
     useEventStore.getState().clearEventsForConversation("test-conversation-id");
     useEventStore.getState().addEvents([
@@ -271,7 +329,11 @@ it("keeps existing decisions readable with the feature off and never sends a pla
       { ...result, isFromPlanningAgent: true },
     ]);
   });
-  expect(within(card).queryByRole("button")).not.toBeInTheDocument();
+  const plannerCard = await screen.findByRole("region", {
+    name: question.action.question,
+  });
+  expect(within(plannerCard).getByText("ASK_USER$PLANNER")).toBeVisible();
+  expect(within(plannerCard).queryByRole("button")).not.toBeInTheDocument();
   expect(answer).not.toHaveBeenCalled();
 });
 

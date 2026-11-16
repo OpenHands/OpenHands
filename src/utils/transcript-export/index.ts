@@ -476,6 +476,34 @@ const buildTranscriptEntries = (
 
       if (isObservationEvent(event)) {
         const correspondingAction = actionsById.get(event.action_id);
+        if (
+          event.observation.kind === "AskUserObservation" &&
+          !event.observation.is_error &&
+          correspondingAction?.action.kind === "AskUserAction"
+        ) {
+          const { question, options, recommended } = correspondingAction.action;
+          entries.push({
+            kind: "message",
+            author: "assistant",
+            content: [
+              question,
+              ...options.map((option, index) =>
+                [
+                  `${index + 1}. ${option.label}${
+                    recommended === index
+                      ? ` (${translatePlain(I18nKey.ASK_USER$RECOMMENDED)})`
+                      : ""
+                  }`,
+                  option.consequence,
+                ]
+                  .filter(Boolean)
+                  .join("\n"),
+              ),
+            ].join("\n\n"),
+            timestamp: event.timestamp ?? "",
+          });
+          continue;
+        }
         entries.push({
           kind: "tool",
           summary: getObservationSummary(event, correspondingAction),

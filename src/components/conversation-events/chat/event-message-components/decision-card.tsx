@@ -14,7 +14,6 @@ import {
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
 import { useEventStore, type OHEvent } from "#/stores/use-event-store";
-import type { ActionEvent, ObservationEvent } from "#/types/agent-server/core";
 import type { AskUserAction } from "#/types/agent-server/core/base/action";
 import {
   isMessageEvent,
@@ -25,14 +24,41 @@ import { cn } from "#/utils/utils";
 
 export const ASK_USER_EXPERIMENTAL_FEATURE = "ask_user";
 
-export function DecisionCard({
-  question,
-  result,
-  events,
+export function indexDecisionClosures(events: readonly OHEvent[]) {
+  const closures = new Map<string, OHEvent>();
+  const nextClosing = new Map<boolean, OHEvent>();
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    const planner = !!event.isFromPlanningAgent;
+    const isQuestion =
+      isObservationEvent(event) &&
+      event.observation.kind === "AskUserObservation" &&
+      !event.observation.is_error;
+    if (isQuestion) {
+      const closing = nextClosing.get(planner);
+      if (closing) closures.set(event.id, closing);
+    }
+    if (
+      isQuestion ||
+      ("kind" in event && isAskUserAnswerEvent(event)) ||
+      (isMessageEvent(event) && event.source === "user" && !event.sender)
+    ) {
+      nextClosing.set(planner, event);
+    }
+  }
+  return closures;
+}
+
+export const DecisionCard = React.memo(function DecisionCard({
+  askId,
+  action,
+  planner,
+  closing,
 }: {
-  question: ActionEvent<AskUserAction>;
-  result: ObservationEvent & { isFromPlanningAgent?: boolean };
-  events: readonly OHEvent[];
+  askId: string;
+  action: AskUserAction;
+  planner: boolean;
+  closing?: OHEvent;
 }) {
   const { t } = useTranslation("openhands");
   const { conversationId } = useOptionalConversationId();
@@ -49,30 +75,16 @@ export function DecisionCard({
   const inFlight = React.useRef(false);
   const textId = React.useId();
   const questionId = React.useId();
-  const planner = !!result.isFromPlanningAgent;
-  const following = events.slice(
-    events.findIndex((event) => event.id === result.id) + 1,
-  );
-  const closing = following.find(
-    (event) =>
-      !!event.isFromPlanningAgent === planner &&
-      (("kind" in event && isAskUserAnswerEvent(event)) ||
-        (isMessageEvent(event) && event.source === "user" && !event.sender) ||
-        (isObservationEvent(event) &&
-          event.observation.kind === "AskUserObservation" &&
-          !event.observation.is_error)),
-  );
   const answer =
     closing &&
     "kind" in closing &&
     isAskUserAnswerEvent(closing) &&
-    closing.ask_id === question.id
+    closing.ask_id === askId
       ? closing
       : undefined;
   const answeredInChat = closing && isMessageEvent(closing);
   const pending = !closing && !saved;
   const canAnswer = pending && enabled && !planner && !!conversationId;
-  const action = question.action;
 
   const submit = async (optionIndex?: number) => {
     if (
@@ -89,7 +101,7 @@ export function DecisionCard({
     try {
       const answerEvent = await AgentServerConversationService.answerAskUser(
         conversationId,
-        question.id,
+        askId,
         {
           ...(optionIndex === undefined ? {} : { optionIndex }),
           ...(text.trim() ? { text: text.trim() } : {}),
@@ -249,11 +261,11 @@ export function DecisionCard({
           </p>
         </div>
       )}
-      {errorKey && (
+      {errorKey && (!closing || saved) && (
         <p role="alert" className="mt-3 text-feedback-error">
           {t(errorKey)}
         </p>
       )}
     </section>
   );
-}
+});

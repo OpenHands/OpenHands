@@ -10,6 +10,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
 import { OpenHandsEvent } from "#/types/agent-server/core";
+import type { OHEvent } from "#/stores/use-event-store";
 import { I18nKey } from "#/i18n/declaration";
 import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
@@ -26,7 +27,10 @@ import { buildActionById } from "./event-thought-helpers";
 import { getSingleToolEvent } from "./event-message-components/event-group-summary";
 import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
-import { DecisionCard } from "./event-message-components/decision-card";
+import {
+  DecisionCard,
+  indexDecisionClosures,
+} from "./event-message-components/decision-card";
 import { getStepKey, StepDisclosureContext } from "./step-disclosure-context";
 import { useModelStore } from "#/stores/model-store";
 import { ModelMessages } from "#/components/features/chat/model-messages";
@@ -160,6 +164,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       () => new Map(messages.map((event, index) => [event, index])),
       [messages],
     );
+    const decisionClosures = React.useMemo(
+      () => indexDecisionClosures(allEvents),
+      [allEvents],
+    );
     const groupedReasoningIds = new Set(
       renderedItems.flatMap((item) =>
         item.kind === "group"
@@ -175,7 +183,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       );
 
     const renderEventMessage = (
-      event: OpenHandsEvent,
+      event: OHEvent,
       index: number,
       suppressThought: boolean,
       detailsOnly = false,
@@ -193,9 +201,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         return (
           <DecisionCard
             key={stepKey}
-            question={{ ...action, action: action.action }}
-            result={event}
-            events={allEvents}
+            askId={action.id}
+            action={action.action}
+            planner={!!event.isFromPlanningAgent}
+            closing={decisionClosures.get(event.id)}
           />
         );
       }
