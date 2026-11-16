@@ -27,10 +27,8 @@ import { buildActionById } from "./event-thought-helpers";
 import { getSingleToolEvent } from "./event-message-components/event-group-summary";
 import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
-import {
-  DecisionCard,
-  indexDecisionClosures,
-} from "./event-message-components/decision-card";
+import { DecisionCard } from "./event-message-components/decision-card";
+import { indexDecisionClosures } from "#/utils/decision-closures";
 import { getStepKey, StepDisclosureContext } from "./step-disclosure-context";
 import { useModelStore } from "#/stores/model-store";
 import { ModelMessages } from "#/components/features/chat/model-messages";
@@ -48,6 +46,8 @@ interface MessagesProps {
   hasOlderEvents?: boolean;
   pendingMessages?: React.ReactNode;
   pendingSessionId?: string;
+  /** A shared, read-only view: nothing in it can act on the conversation. */
+  readOnly?: boolean;
 }
 
 const getLastEventId = (events: OpenHandsEvent[]) => events.at(-1)?.id;
@@ -60,6 +60,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     hasOlderEvents = false,
     pendingMessages,
     pendingSessionId,
+    readOnly = false,
   }) => {
     const { conversationId } = useOptionalConversationId();
     const { key: sessionKey, sessions } = useSessionActivities(conversationId);
@@ -204,7 +205,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             askId={action.id}
             action={action.action}
             planner={!!event.isFromPlanningAgent}
-            closing={decisionClosures.get(event.id)}
+            closure={decisionClosures.get(event.id)}
+            readOnly={readOnly}
           />
         );
       }

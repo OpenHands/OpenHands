@@ -153,6 +153,7 @@ export default function SharedConversation() {
             <Messages
               messages={renderableEvents}
               allEvents={conversationEvents}
+              readOnly
             />
           ) : (
             <div className="flex items-center justify-center h-full">

@@ -13,57 +13,32 @@ import {
 } from "#/hooks/query/use-experimental-features";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
-import { useEventStore, type OHEvent } from "#/stores/use-event-store";
+import { useEventStore } from "#/stores/use-event-store";
 import type { AskUserAction } from "#/types/agent-server/core/base/action";
+import { isMessageEvent } from "#/types/agent-server/type-guards";
+import type { DecisionClosure } from "#/utils/decision-closures";
 import {
-  isMessageEvent,
-  isObservationEvent,
-} from "#/types/agent-server/type-guards";
+  MessageReactions,
+  useMessageReactions,
+} from "#/components/features/chat/message-reactions";
 import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
 
 export const ASK_USER_EXPERIMENTAL_FEATURE = "ask_user";
 
-export function indexDecisionClosures(events: readonly OHEvent[]) {
-  const closures = new Map<string, OHEvent>();
-  const nextClosing = new Map<boolean, OHEvent>();
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    const planner = !!event.isFromPlanningAgent;
-    if ("kind" in event && isAskUserAnswerEvent(event)) {
-      const closing = nextClosing.get(planner);
-      // An answer without its delivery message stays retryable after a crash.
-      if (closing && isMessageEvent(closing)) nextClosing.set(planner, event);
-      continue;
-    }
-    const isQuestion =
-      isObservationEvent(event) &&
-      event.observation.kind === "AskUserObservation" &&
-      !event.observation.is_error;
-    if (isQuestion) {
-      const closing = nextClosing.get(planner);
-      if (closing) closures.set(event.id, closing);
-    }
-    if (
-      isQuestion ||
-      (isMessageEvent(event) && event.source === "user" && !event.sender)
-    ) {
-      nextClosing.set(planner, event);
-    }
-  }
-  return closures;
-}
-
 export const DecisionCard = React.memo(function DecisionCard({
   askId,
   action,
   planner,
-  closing,
+  closure,
+  readOnly = false,
 }: {
   askId: string;
   action: AskUserAction;
   planner: boolean;
-  closing?: OHEvent;
+  closure?: DecisionClosure;
+  /** A shared, read-only view: the card shows its state but takes no answer. */
+  readOnly?: boolean;
 }) {
   const { t } = useTranslation("openhands");
   const { conversationId } = useOptionalConversationId();
@@ -80,6 +55,12 @@ export const DecisionCard = React.memo(function DecisionCard({
   const inFlight = React.useRef(false);
   const textId = React.useId();
   const questionId = React.useId();
+  const closing = closure?.closing;
+  // The answer's generated message is hidden from the chat, so its
+  // reactions (the agent's 👀 when it picks the answer up) show here.
+  const reactions = useMessageReactions(closure?.delivery?.id, "user", {
+    isFromPlanningAgent: planner,
+  });
   const answer =
     closing &&
     "kind" in closing &&
@@ -89,7 +70,8 @@ export const DecisionCard = React.memo(function DecisionCard({
       : undefined;
   const answeredInChat = closing && isMessageEvent(closing);
   const pending = !closing && !saved;
-  const canAnswer = pending && enabled && !planner && !!conversationId;
+  const canAnswer =
+    pending && enabled && !planner && !readOnly && !!conversationId;
 
   const submit = async (optionIndex?: number) => {
     if (
@@ -182,7 +164,6 @@ export const DecisionCard = React.memo(function DecisionCard({
                   <span className="font-medium">{option.label}</span>
                   {action.recommended === index && (
                     <span className="ml-2 text-xs text-muted">
-                      {" "}
                       {t(I18nKey.ASK_USER$RECOMMENDED)}
                     </span>
                   )}
@@ -238,7 +219,6 @@ export const DecisionCard = React.memo(function DecisionCard({
               {option.label}
               {pending && action.recommended === index && (
                 <span className="ml-2 text-xs text-muted">
-                  {" "}
                   {t(I18nKey.ASK_USER$RECOMMENDED)}
                 </span>
               )}
@@ -262,9 +242,14 @@ export const DecisionCard = React.memo(function DecisionCard({
                     ? I18nKey.ASK_USER$SUPERSEDED
                     : planner
                       ? I18nKey.ASK_USER$PLANNER
-                      : I18nKey.ASK_USER$DISABLED,
+                      : readOnly
+                        ? I18nKey.ASK_USER$WAITING
+                        : I18nKey.ASK_USER$DISABLED,
             )}
           </p>
+          {answer && reactions.visible && (
+            <MessageReactions state={reactions} />
+          )}
         </div>
       )}
       {errorKey && (!closing || saved) && (
