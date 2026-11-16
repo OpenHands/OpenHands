@@ -6,6 +6,9 @@ export interface SecretRequest {
   toolCallId: string;
   name: string;
   reason: string | null;
+  /** True when a secret with this name already exists: the card offers a
+   *  replacement (the stored value is never shown) instead of a first save. */
+  existing?: boolean;
 }
 
 interface SecretRequestState {

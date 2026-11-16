@@ -1061,6 +1061,24 @@
     "ca": "L'agent necessita un secret",
     "id": "Agen membutuhkan secret"
   },
+  "SECRETS$REQUEST_REPLACE_NOTE": {
+    "en": "A secret with this name already exists. Saving replaces its value; the stored value is never shown.",
+    "ja": "この名前のシークレットは既に存在します。保存すると値が置き換えられ、保存済みの値が表示されることはありません。",
+    "zh-CN": "已存在同名密钥。保存将替换其值；已存储的值不会显示。",
+    "zh-TW": "已存在同名密鑰。儲存將替換其值；已儲存的值不會顯示。",
+    "ko-KR": "이 이름의 시크릿이 이미 있습니다. 저장하면 값이 대체되며 저장된 값은 표시되지 않습니다.",
+    "no": "En hemmelighet med dette navnet finnes allerede. Lagring erstatter verdien; den lagrede verdien vises aldri.",
+    "ar": "هناك سر بهذا الاسم موجود بالفعل. الحفظ سيستبدل قيمته؛ القيمة المخزنة لا تظهر أبدًا.",
+    "de": "Ein Secret mit diesem Namen existiert bereits. Speichern ersetzt seinen Wert; der gespeicherte Wert wird nie angezeigt.",
+    "fr": "Un secret portant ce nom existe déjà. Enregistrer remplace sa valeur ; la valeur stockée n'est jamais affichée.",
+    "it": "Esiste già un secret con questo nome. Il salvataggio ne sostituisce il valore; il valore salvato non viene mai mostrato.",
+    "pt": "Já existe um secret com esse nome. Salvar substitui o seu valor; o valor armazenado nunca é exibido.",
+    "es": "Ya existe un secret con este nombre. Guardar reemplaza su valor; el valor almacenado nunca se muestra.",
+    "ca": "Ja existeix un secret amb aquest nom. Desar en reemplaça el valor; el valor emmagatzemat no es mostra mai.",
+    "tr": "Bu ada sahip bir secret zaten var. Kaydetmek değerinin yerini alır; saklanan değer asla gösterilmez.",
+    "uk": "Секрет із такою назвою вже існує. Збереження замінює його значення; збережене значення ніколи не показується.",
+    "id": "Secret dengan nama ini sudah ada. Menyimpan akan menggantikan nilainya; nilai yang tersimpan tidak pernah ditampilkan."
+  },
   "SECRETS$EDIT_SECRET": {
     "en": "Edit secret",
     "ja": "シークレットを編集",

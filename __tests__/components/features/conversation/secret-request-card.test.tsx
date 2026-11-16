@@ -133,4 +133,53 @@ describe("SecretRequestCard", () => {
       null,
     );
   });
+  it("offers a replacement for an existing name without showing the stored value", async () => {
+    await renderCards([{ ...request, existing: true }]);
+
+    // The card explains the replacement and edits the existing secret in
+    // place; the value field starts empty and masked (the stored value is
+    // never fetched or shown).
+    expect(screen.getByTestId("secret-replace-note")).toBeInTheDocument();
+    expect(screen.getByTestId("edit-secret-form")).toBeInTheDocument();
+    expect(screen.getByTestId("name-input")).toHaveValue("GITHUB_TOKEN");
+    const valueInput = screen.getByTestId("value-input");
+    expect(valueInput).toHaveAttribute("type", "password");
+    expect(valueInput).toHaveValue("");
+  });
+
+  it("refuses a blank replacement save and completes only on a real one", async () => {
+    const user = userEvent.setup();
+    const updateSecret = vi
+      .spyOn(SecretsService, "updateSecret")
+      .mockResolvedValue(undefined);
+    const replacement: SecretRequest = { ...request, existing: true };
+    await renderCards([replacement]);
+
+    // A blank value would report "saved" while nothing changed — refused.
+    await user.click(screen.getByTestId("submit-button"));
+    expect(updateSecret).not.toHaveBeenCalled();
+    expect(mockCompleteSecretRequest).not.toHaveBeenCalled();
+    expect(screen.getByTestId("secret-request-card")).toBeInTheDocument();
+
+    // Typing the new value saves through the update path and completes the
+    // request with the secret's identity (never the value).
+    await user.type(screen.getByTestId("value-input"), "ghp_rotated");
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("secret-request-card"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(updateSecret).toHaveBeenCalledWith(
+      "GITHUB_TOKEN",
+      "GITHUB_TOKEN",
+      undefined,
+      "ghp_rotated",
+    );
+    expect(mockCompleteSecretRequest).toHaveBeenNthCalledWith(1, replacement, {
+      name: "GITHUB_TOKEN",
+      description: undefined,
+    });
+  });
 });

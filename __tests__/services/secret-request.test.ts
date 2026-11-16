@@ -94,7 +94,9 @@ describe("handleRequestSecretAction", () => {
     expect(useSecretRequestStore.getState().requests).toEqual([request]);
   });
 
-  it("attaches a secret the user already saved without asking again", async () => {
+  it("queues an existing secret as a replacement request without attaching or reporting", async () => {
+    // #19061: the stored secret may be stale; the user replaces it through
+    // the card, so nothing attaches and nothing reports before that save.
     useSecretRequestStore.setState({ requests: [] });
     mockGetSecretsOrThrow.mockResolvedValueOnce([
       { name: "GITHUB_TOKEN", description: "Saved in Settings" },
@@ -102,12 +104,11 @@ describe("handleRequestSecretAction", () => {
 
     await handleRequestSecretAction(action, CONVERSATION_ID, "tool-call-1");
 
-    expect(useSecretRequestStore.getState().requests).toEqual([]);
-    expect(mockUpdateConversationSecrets).toHaveBeenCalledExactlyOnceWith(
-      CONVERSATION_ID,
-      [{ name: "GITHUB_TOKEN", description: "Saved in Settings" }],
-    );
-    expect(reportedResult()).toEqual({ status: "saved", name: "GITHUB_TOKEN" });
+    expect(useSecretRequestStore.getState().requests).toEqual([
+      { ...request, existing: true },
+    ]);
+    expect(mockUpdateConversationSecrets).not.toHaveBeenCalled();
+    expect(mockSendMessage).not.toHaveBeenCalled();
   });
 });
 

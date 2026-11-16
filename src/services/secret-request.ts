@@ -34,10 +34,13 @@ async function findSavedSecret(
 }
 
 /**
- * Execute a `request_secret` tool call. A secret the user already saved (for
- * example in Settings after this conversation started) is attached straight
- * away, as every saved secret is at conversation start; otherwise the request
- * is queued for its chat card, which reports through {@link completeSecretRequest}.
+ * Execute a `request_secret` tool call and queue it for its chat card, which
+ * reports through {@link completeSecretRequest}. A request for a name the
+ * user already saved (for example in Settings after this conversation
+ * started) is marked as a replacement (#19061): the card lets the user enter
+ * a new value without ever showing the stored one, and `saved` is reported
+ * only after that save — the previous shortcut attached the stored secret and
+ * reported `saved` without the user acting, which blocked rotation.
  */
 export async function handleRequestSecretAction(
   action: RequestSecretAction,
@@ -61,10 +64,9 @@ export async function handleRequestSecretAction(
     reason: action.reason ?? null,
   };
   const savedSecret = await findSavedSecret(request.name);
-  useSecretRequestStore.getState().enqueue(request);
-  if (savedSecret) {
-    await completeSecretRequest(request, savedSecret);
-  }
+  useSecretRequestStore
+    .getState()
+    .enqueue(savedSecret ? { ...request, existing: true } : request);
 }
 
 async function resolveResult(
@@ -75,8 +77,9 @@ async function resolveResult(
     return {
       status: "not_saved",
       name: request.name,
-      guidance:
-        "The user dismissed the form without saving the secret. Ask them how they want to proceed; never ask them to paste it into the chat.",
+      guidance: request.existing
+        ? "The user dismissed the replacement form without saving; the existing secret is unchanged. Ask them how they want to proceed; never ask them to paste it into the chat."
+        : "The user dismissed the form without saving the secret. Ask them how they want to proceed; never ask them to paste it into the chat.",
     };
   }
 

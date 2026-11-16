@@ -22,6 +22,9 @@ interface SecretFormProps {
   defaultName?: string;
   /** Keep the form open after a failed save so the user can retry. */
   keepOpenOnError?: boolean;
+  /** In edit mode, refuse a blank save: a replacement must carry a new value
+   *  (the stored value is never shown to prefill it). */
+  requireValueOnEdit?: boolean;
 }
 
 export function SecretForm({
@@ -31,6 +34,7 @@ export function SecretForm({
   onSaved,
   defaultName = "",
   keepOpenOnError = false,
+  requireValueOnEdit = false,
 }: SecretFormProps) {
   const queryClient = useQueryClient();
   const { t } = useTranslation("openhands");
@@ -142,7 +146,12 @@ export function SecretForm({
         handleCreateSecret(trimmedName, trimmedValue, normalizedDescription);
       } else if (mode === "edit" && selectedSecret) {
         // Blank value means "keep the existing secret"; only send a value when
-        // the user typed a replacement (#16134).
+        // the user typed a replacement (#16134). A replacement request must
+        // carry a new value, so the caller can refuse the blank keep-save.
+        if (requireValueOnEdit && !trimmedValue) {
+          setError(t(I18nKey.SECRETS$SECRET_VALUE_REQUIRED));
+          return;
+        }
         handleEditSecret(
           selectedSecret,
           trimmedName,

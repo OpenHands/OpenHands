@@ -41,14 +41,26 @@ export function SecretRequestCard({ request }: { request: SecretRequest }) {
         {request.reason ? (
           <span className="text-sm text-muted">{request.reason}</span>
         ) : null}
+        {request.existing ? (
+          <span
+            className="text-sm text-muted"
+            data-testid="secret-replace-note"
+          >
+            {t(I18nKey.SECRETS$REQUEST_REPLACE_NOTE)}
+          </span>
+        ) : null}
       </div>
       {/* SecretForm also calls onCancel after a successful save; the request
-          is already complete by then, so that call is a no-op. */}
+          is already complete by then, so that call is a no-op. A replacement
+          (the name already exists) edits that secret in place: the stored
+          value is never fetched or shown, and a new value is required so the
+          agent never gets a "saved" report without a real change (#19061). */}
       <SecretForm
-        mode="add"
-        selectedSecret={null}
+        mode={request.existing ? "edit" : "add"}
+        selectedSecret={request.existing ? request.name : null}
         defaultName={request.name}
         keepOpenOnError
+        requireValueOnEdit={request.existing}
         onSaved={(secret) => void completeSecretRequest(request, secret)}
         onCancel={() => void completeSecretRequest(request, null)}
       />
