@@ -109,10 +109,7 @@ export type RenderedItem =
  *
  * `trailingMinSize` applies to the run at the very end of `events`. While the
  * agent is working, pass 1 so the stage it is on is a group from its first
- * step and does not jump from a lone row into a group when a second arrives. *
- * `standalone` names events that render as their own item (an `ask_user`
- * decision card) even though they are tool steps; their narration still
- * shows above them.
+ * step and does not jump from a lone row into a group when a second arrives.
  */
 export const groupEvents = (
   events: OpenHandsEvent[],
@@ -121,7 +118,6 @@ export const groupEvents = (
   trailingMinSize: number = minSize,
   sessions: readonly SessionActivity[] = [],
   actionById: ReadonlyMap<string, ActionEvent> = buildActionById(allEvents),
-  standalone: (event: OpenHandsEvent) => boolean = () => false,
 ): RenderedItem[] => {
   if (minSize < 1 || trailingMinSize < 1) {
     throw new Error("minSize must be at least 1");
@@ -274,12 +270,6 @@ export const groupEvents = (
       // The reaction itself shows as a chip on its message, so its tool card
       // is dropped; what the agent said while reacting stays.
       keepNarration();
-      return;
-    }
-    if (standalone(event)) {
-      keepNarration();
-      flushRun();
-      items.push({ kind: "single", event, index });
       return;
     }
     if (isGroupableEvent(event, correspondingAction)) {
