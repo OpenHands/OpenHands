@@ -1,22 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
-import { HttpError } from "@openhands/typescript-client";
+import { act, screen, waitFor } from "@testing-library/react";
+import {
+  HttpError,
+  type ReactionEmoji,
+  type ReactionEvent,
+} from "@openhands/typescript-client";
 import userEvent from "@testing-library/user-event";
+import {
+  ConversationClient,
+  SettingsClient,
+} from "@openhands/typescript-client/clients";
 import { renderWithProviders } from "test-utils";
 import {
   MessageReactions,
   useMessageReactions,
 } from "#/components/features/chat/message-reactions";
 import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
+import { conversationReactionsService } from "#/api/conversation-reactions-service/conversation-reactions-service.api";
 import { useEventStore } from "#/stores/use-event-store";
-import type { OHEvent } from "#/stores/use-event-store";
-
-vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackend: () => ({
-    backend: { id: "local-1", kind: "local" },
-    orgId: null,
-  }),
-}));
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 
 const { displayApiErrorToast } = vi.hoisted(() => ({
   displayApiErrorToast: vi.fn(),
@@ -29,20 +35,19 @@ vi.mock("#/hooks/use-conversation-id", () => ({
 
 const reaction = (
   id: string,
-  emoji: string,
+  emoji: ReactionEmoji,
   source: "agent" | "user",
   removed = false,
   target = "msg-1",
-) =>
-  ({
-    id,
-    kind: "ReactionEvent",
-    timestamp: `2026-11-07T00:00:0${id.length}Z`,
-    source,
-    target_event_id: target,
-    emoji,
-    removed,
-  }) as unknown as OHEvent;
+): ReactionEvent => ({
+  id,
+  kind: "ReactionEvent",
+  timestamp: `2026-11-07T00:00:0${id.length}Z`,
+  source,
+  target_event_id: target,
+  emoji,
+  removed,
+});
 
 function Row({
   eventId = "msg-1",
@@ -74,10 +79,57 @@ const featureState = (enabled: boolean) => [
 describe("MessageReactions", () => {
   beforeEach(() => {
     useEventStore.getState().clearEvents();
+    setRegisteredBackends([
+      {
+        id: "local",
+        name: "Local",
+        kind: "local",
+        host: "http://local.test",
+        apiKey: "",
+      },
+    ]);
+    setActiveSelection({ backendId: "local", orgId: null });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("isolates an enabled Local flag from Cloud and restores it on return", async () => {
+    const list = vi
+      .spyOn(SettingsClient.prototype, "listExperimentalFeatures")
+      .mockResolvedValue(featureState(true));
+    setRegisteredBackends([
+      {
+        id: "local",
+        name: "Local",
+        kind: "local",
+        host: "http://local.test",
+        apiKey: "",
+      },
+      {
+        id: "cloud",
+        name: "Cloud",
+        kind: "cloud",
+        host: "https://cloud.test",
+        apiKey: "",
+      },
+    ]);
+    setActiveSelection({ backendId: "local", orgId: null });
+    renderWithProviders(
+      <ActiveBackendProvider>
+        <Row author="agent" />
+      </ActiveBackendProvider>,
+    );
+    expect(await screen.findByTestId("add-reaction")).toBeInTheDocument();
+    list.mockClear();
+
+    act(() => setActiveSelection({ backendId: "cloud", orgId: "qa-org" }));
+    expect(screen.queryByTestId("add-reaction")).not.toBeInTheDocument();
+    expect(list).not.toHaveBeenCalled();
+
+    act(() => setActiveSelection({ backendId: "local", orgId: null }));
+    expect(await screen.findByTestId("add-reaction")).toBeInTheDocument();
   });
 
   it("shows the agent's reaction on the user's message", async () => {
@@ -229,7 +281,7 @@ describe("MessageReactions", () => {
       experimentalFeaturesService,
       "listExperimentalFeatures",
     ).mockResolvedValue(featureState(true));
-    vi.spyOn(experimentalFeaturesService, "react").mockRejectedValue(
+    vi.spyOn(conversationReactionsService, "react").mockRejectedValue(
       new HttpError(409, "Conflict", {
         detail: "Conversation reactions are turned off",
       }),
@@ -258,8 +310,10 @@ describe("MessageReactions", () => {
       "listExperimentalFeatures",
     ).mockResolvedValue(featureState(true));
     const react = vi
-      .spyOn(experimentalFeaturesService, "react")
-      .mockResolvedValue();
+      .spyOn(conversationReactionsService, "react")
+      .mockImplementation(async ({ emoji, removed }) =>
+        reaction(removed ? "bb" : "a", emoji, "user", removed),
+      );
     const user = userEvent.setup();
 
     renderWithProviders(<Row author="agent" />);
@@ -288,14 +342,91 @@ describe("MessageReactions", () => {
     );
   });
 
+  it("keeps each pending reaction until the server's events agree with it", async () => {
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockResolvedValue(featureState(true));
+    vi.spyOn(conversationReactionsService, "react")
+      .mockResolvedValueOnce(reaction("a", "heart", "user"))
+      .mockResolvedValueOnce(reaction("bb", "+1", "user"))
+      .mockResolvedValueOnce(reaction("ccc", "heart", "user", true));
+    const user = userEvent.setup();
+
+    renderWithProviders(<Row author="agent" />);
+
+    await user.click(await screen.findByTestId("add-reaction"));
+    await user.click(screen.getByTestId("reaction-picker-heart"));
+    await user.click(screen.getByTestId("add-reaction"));
+    await user.click(screen.getByTestId("reaction-picker-+1"));
+
+    // Only the ❤️ event has arrived: 👍 is still waiting for its own.
+    act(() => {
+      useEventStore.getState().addEvents([reaction("a", "heart", "user")]);
+    });
+    expect(screen.getByTestId("reaction-heart")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByTestId("reaction-+1")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    // Taking ❤️ off, an older add event for it does not bring it back.
+    await user.click(screen.getByTestId("reaction-heart"));
+    act(() => {
+      useEventStore.getState().addEvents([reaction("bb", "+1", "user")]);
+    });
+    expect(screen.queryByTestId("reaction-heart")).not.toBeInTheDocument();
+
+    act(() => {
+      useEventStore
+        .getState()
+        .addEvents([reaction("ccc", "heart", "user", true)]);
+    });
+    expect(screen.queryByTestId("reaction-heart")).not.toBeInTheDocument();
+    expect(screen.getByTestId("reaction-+1")).toBeInTheDocument();
+  });
+
+  it("keeps keyboard focus on the add button while a reaction is saved", async () => {
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockResolvedValue(featureState(true));
+    let finish: () => void = () => {};
+    vi.spyOn(conversationReactionsService, "react").mockImplementation(
+      () =>
+        new Promise<ReactionEvent>((resolve) => {
+          finish = () => resolve(reaction("a", "eyes", "user"));
+        }),
+    );
+    const user = userEvent.setup();
+
+    renderWithProviders(<Row author="agent" />);
+
+    const trigger = await screen.findByTestId("add-reaction");
+    await user.click(trigger);
+    await user.keyboard("{Enter}");
+
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-disabled", "true");
+    await user.click(trigger);
+    expect(screen.queryByTestId("reaction-picker")).not.toBeInTheDocument();
+
+    await act(async () => finish());
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-disabled", "false");
+  });
+
   it("takes the user's own reaction off when its chip is clicked", async () => {
     vi.spyOn(
       experimentalFeaturesService,
       "listExperimentalFeatures",
     ).mockResolvedValue(featureState(true));
     const react = vi
-      .spyOn(experimentalFeaturesService, "react")
-      .mockResolvedValue();
+      .spyOn(conversationReactionsService, "react")
+      .mockResolvedValue(reaction("bb", "heart", "user", true));
     useEventStore.getState().addEvents([reaction("a", "heart", "user")]);
     const user = userEvent.setup();
 
@@ -306,5 +437,172 @@ describe("MessageReactions", () => {
     expect(react).toHaveBeenCalledWith(
       expect.objectContaining({ emoji: "heart", removed: true }),
     );
+  });
+
+  it("keeps other optimistic choices when one request is acknowledged", async () => {
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockResolvedValue(featureState(true));
+    const heartAdded = reaction("a", "heart", "user");
+    const thumbAdded = reaction("bb", "+1", "user");
+    const heartRemoved = reaction("ccc", "heart", "user", true);
+    const react = vi.spyOn(ConversationClient.prototype, "react");
+    react.mockResolvedValueOnce(heartAdded);
+    let resolveThumb!: (event: ReactionEvent) => void;
+    react.mockImplementationOnce(
+      () =>
+        new Promise<ReactionEvent>((resolve) => {
+          resolveThumb = resolve;
+        }),
+    );
+    react.mockResolvedValueOnce(heartRemoved);
+    const user = userEvent.setup();
+    renderWithProviders(<Row author="agent" />);
+    const trigger = await screen.findByTestId("add-reaction");
+
+    await user.click(trigger);
+    await user.click(screen.getByTestId("reaction-picker-heart"));
+    await user.click(trigger);
+    await user.click(screen.getByTestId("reaction-picker-+1"));
+    act(() => useEventStore.getState().addEvent(heartAdded));
+    expect(screen.getByTestId("reaction-+1")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await act(async () => resolveThumb(thumbAdded));
+    await user.click(screen.getByTestId("reaction-heart"));
+    expect(screen.queryByTestId("reaction-heart")).not.toBeInTheDocument();
+
+    act(() =>
+      useEventStore.getState().addEvent(reaction("dddd", "eyes", "agent")),
+    );
+    expect(screen.getByTestId("reaction-+1")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.queryByTestId("reaction-heart")).not.toBeInTheDocument();
+    act(() => useEventStore.getState().addEvents([thumbAdded, heartRemoved]));
+    expect(screen.getByTestId("reaction-+1")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.queryByTestId("reaction-heart")).not.toBeInTheDocument();
+    // Once acknowledged, subsequent server changes must take over.
+    act(() =>
+      useEventStore.getState().addEvent(reaction("eeeee", "+1", "user", true)),
+    );
+    expect(screen.queryByTestId("reaction-+1")).not.toBeInTheDocument();
+  });
+
+  it("does not resurrect a removed reaction when its earlier add arrives late", async () => {
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockResolvedValue(featureState(true));
+    const added = reaction("a", "heart", "user");
+    const removed = reaction("bb", "heart", "user", true);
+    vi.spyOn(ConversationClient.prototype, "react")
+      .mockResolvedValueOnce(added)
+      .mockRejectedValueOnce(new Error("removal failed"))
+      .mockResolvedValueOnce(removed);
+    const user = userEvent.setup();
+    renderWithProviders(<Row author="agent" />);
+
+    await user.click(await screen.findByTestId("add-reaction"));
+    await user.click(screen.getByTestId("reaction-picker-heart"));
+    await user.click(screen.getByTestId("reaction-heart"));
+    expect(screen.getByTestId("reaction-heart")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await user.click(screen.getByTestId("reaction-heart"));
+    // The server still has no heart while the add and remove are queued.
+    // An unrelated event agreeing with that absence is not an acknowledgement.
+    act(() =>
+      useEventStore.getState().addEvent(reaction("dddd", "eyes", "agent")),
+    );
+    act(() => useEventStore.getState().addEvent(added));
+    expect(screen.queryByTestId("reaction-heart")).not.toBeInTheDocument();
+    act(() => useEventStore.getState().addEvent(removed));
+    expect(screen.queryByTestId("reaction-heart")).not.toBeInTheDocument();
+    act(() =>
+      useEventStore.getState().addEvent(reaction("ccc", "heart", "user")),
+    );
+    expect(screen.getByTestId("reaction-heart")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("rolls back only the failed choice when another acknowledgement arrives during the request", async () => {
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockResolvedValue(featureState(true));
+    const heartAdded = reaction("a", "heart", "user");
+    let rejectThumb!: (error: Error) => void;
+    vi.spyOn(ConversationClient.prototype, "react")
+      .mockResolvedValueOnce(heartAdded)
+      .mockImplementationOnce(
+        () =>
+          new Promise<ReactionEvent>((_, reject) => {
+            rejectThumb = reject;
+          }),
+      );
+    const user = userEvent.setup();
+    renderWithProviders(<Row author="agent" />);
+    const trigger = await screen.findByTestId("add-reaction");
+    await user.click(trigger);
+    await user.click(screen.getByTestId("reaction-picker-heart"));
+    await user.click(trigger);
+    await user.click(screen.getByTestId("reaction-picker-+1"));
+    act(() => useEventStore.getState().addEvent(heartAdded));
+    await act(async () => rejectThumb(new Error("request failed")));
+    expect(screen.queryByTestId("reaction-+1")).not.toBeInTheDocument();
+    act(() =>
+      useEventStore.getState().addEvent(reaction("bb", "heart", "user", true)),
+    );
+    expect(screen.queryByTestId("reaction-heart")).not.toBeInTheDocument();
+  });
+
+  it("keeps keyboard focus at the trigger and prevents activation while saving", async () => {
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockResolvedValue(featureState(true));
+    let resolveReaction!: (event: ReactionEvent) => void;
+    const react = vi
+      .spyOn(ConversationClient.prototype, "react")
+      .mockImplementation(
+        () =>
+          new Promise<ReactionEvent>((resolve) => {
+            resolveReaction = resolve;
+          }),
+      );
+    const user = userEvent.setup();
+    renderWithProviders(<Row author="agent" />);
+    const trigger = await screen.findByTestId("add-reaction");
+    trigger.focus();
+    await user.keyboard("{Enter}");
+    await user.keyboard("{Enter}");
+
+    expect(trigger).toHaveFocus();
+    expect(trigger).not.toBeDisabled();
+    expect(trigger).toHaveAttribute("aria-disabled", "true");
+    await user.keyboard("{Enter}");
+    expect(screen.queryByTestId("reaction-picker")).not.toBeInTheDocument();
+    const added = reaction("a", "eyes", "user");
+    // The WebSocket can beat the HTTP response as well as follow it.
+    act(() => useEventStore.getState().addEvent(added));
+    await act(async () => resolveReaction(added));
+    expect(trigger).toHaveFocus();
+    act(() =>
+      useEventStore.getState().addEvent(reaction("bb", "eyes", "user", true)),
+    );
+    expect(screen.queryByTestId("reaction-eyes")).not.toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    expect(screen.getByTestId("reaction-picker")).toBeInTheDocument();
+    expect(react).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,9 +1,7 @@
 import {
-  ConversationClient,
   SettingsClient,
   type ExperimentalFeature,
 } from "@openhands/typescript-client/clients";
-import type { ReactionEmoji } from "@openhands/typescript-client";
 import type { Backend } from "../backend-registry/types";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 
@@ -41,23 +39,4 @@ export const experimentalFeaturesService = {
     enabled: boolean;
   }): Promise<ExperimentalFeature> =>
     settingsClient(backend).updateExperimentalFeature(key, enabled),
-
-  /** Put the user's reaction on a message, or take it off. */
-  react: async ({
-    conversationId,
-    emoji,
-    targetEventId,
-    removed,
-  }: {
-    conversationId: string;
-    emoji: ReactionEmoji;
-    targetEventId: string;
-    removed: boolean;
-  }): Promise<void> => {
-    await new ConversationClient(getAgentServerClientOptions()).react(
-      conversationId,
-      emoji,
-      { targetEventId, removed },
-    );
-  },
 };

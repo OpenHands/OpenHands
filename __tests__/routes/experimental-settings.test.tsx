@@ -4,11 +4,17 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import ExperimentalSettingsScreen from "#/routes/experimental-settings";
 import { HttpError } from "@openhands/typescript-client";
+import { SettingsClient } from "@openhands/typescript-client/clients";
 import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
+
+const activeBackend = vi.hoisted(() => ({
+  id: "local-1",
+  kind: "local" as "local" | "cloud",
+}));
 
 vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => ({
-    backend: { id: "local-1", kind: "local" },
+    backend: activeBackend,
     orgId: null,
   }),
 }));
@@ -22,14 +28,22 @@ const reactions = (enabled: boolean) => ({
 
 describe("Features settings", () => {
   afterEach(() => {
+    activeBackend.kind = "local";
     vi.restoreAllMocks();
   });
 
   it("lists the server's experimental features and turns one on", async () => {
+    const anotherFeature = {
+      key: "future_experiment",
+      label: "A server-defined experiment",
+      description: "A feature Canvas does not know about.",
+      enabled: true,
+    };
     // The server's list before and after the switch (read again to reconcile).
-    vi.spyOn(experimentalFeaturesService, "listExperimentalFeatures")
-      .mockResolvedValueOnce([reactions(false)])
-      .mockResolvedValue([reactions(true)]);
+    const list = vi
+      .spyOn(experimentalFeaturesService, "listExperimentalFeatures")
+      .mockResolvedValueOnce([reactions(false), anotherFeature])
+      .mockResolvedValue([reactions(true), anotherFeature]);
     const update = vi
       .spyOn(experimentalFeaturesService, "updateExperimentalFeature")
       .mockResolvedValue(reactions(true));
@@ -45,6 +59,9 @@ describe("Features settings", () => {
       screen.getByText("The agent can put an emoji reaction on your messages."),
     ).toBeInTheDocument();
     expect(toggle).not.toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: anotherFeature.label }),
+    ).toBeChecked();
     expect(screen.getByTestId("experimental-notice")).toHaveTextContent(
       "SETTINGS$EXPERIMENTAL_NOTICE",
     );
@@ -60,6 +77,41 @@ describe("Features settings", () => {
       expect.anything(),
     );
     await waitFor(() => expect(toggle).toBeChecked());
+    expect(
+      screen.getByRole("checkbox", { name: anotherFeature.label }),
+    ).toBeChecked();
+
+    list.mockResolvedValue([
+      reactions(true),
+      { ...anotherFeature, enabled: false },
+    ]);
+    update.mockResolvedValue({ ...anotherFeature, enabled: false });
+    await user.click(
+      screen.getByRole("checkbox", { name: anotherFeature.label }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("checkbox", { name: anotherFeature.label }),
+      ).not.toBeChecked(),
+    );
+    expect(toggle).toBeChecked();
+    expect(update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ key: anotherFeature.key, enabled: false }),
+      expect.anything(),
+    );
+  });
+
+  it("shows no Cloud features without contacting the local settings API", async () => {
+    activeBackend.kind = "cloud";
+    const list = vi.spyOn(SettingsClient.prototype, "listExperimentalFeatures");
+
+    renderWithProviders(<ExperimentalSettingsScreen />);
+
+    expect(
+      await screen.findByText("SETTINGS$EXPERIMENTAL_EMPTY"),
+    ).toBeInTheDocument();
+    expect(list).not.toHaveBeenCalled();
   });
 
   it("says so when the server has no experimental features", async () => {

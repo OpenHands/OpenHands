@@ -2,14 +2,14 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { SmilePlus } from "lucide-react";
 import type { ReactionEmoji } from "@openhands/typescript-client";
-import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
-import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useShallow } from "zustand/react/shallow";
+import { conversationReactionsService } from "#/api/conversation-reactions-service/conversation-reactions-service.api";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useIsExperimentalFeatureEnabled } from "#/hooks/query/use-experimental-features";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { I18nKey } from "#/i18n/declaration";
-import { useEventStore } from "#/stores/use-event-store";
+import { useEventStore, type OHEvent } from "#/stores/use-event-store";
 import { cn } from "#/utils/utils";
 import { displayApiErrorToast } from "#/utils/custom-toast-handlers";
 
@@ -32,14 +32,6 @@ const EMOJI_FONT = "font-emoji";
 type ReactionSource = "agent" | "user";
 type ReactionAuthor = "user" | "agent";
 
-interface StoredReaction {
-  kind?: string;
-  target_event_id?: string;
-  emoji?: string;
-  removed?: boolean;
-  source?: string;
-}
-
 const compareEmoji = (a: string, b: string) =>
   EMOJI_ORDER.indexOf(a.split(":")[0] as ReactionEmoji) -
     EMOJI_ORDER.indexOf(b.split(":")[0] as ReactionEmoji) || a.localeCompare(b);
@@ -53,19 +45,13 @@ const compareEmoji = (a: string, b: string) =>
  */
 const reactionIndexes = new WeakMap<object, Map<string, string>>();
 
-function reactionIndex(events: readonly unknown[]): Map<string, string> {
+function reactionIndex(events: readonly OHEvent[]): Map<string, string> {
   const cached = reactionIndexes.get(events);
   if (cached) return cached;
 
   const current = new Map<string, Map<string, boolean>>();
-  for (const raw of events) {
-    const event = raw as StoredReaction;
-    if (
-      event.kind === "ReactionEvent" &&
-      event.target_event_id &&
-      event.emoji &&
-      (event.source === "agent" || event.source === "user")
-    ) {
+  for (const event of events) {
+    if ("kind" in event && event.kind === "ReactionEvent") {
       const pairs = current.get(event.target_event_id) ?? new Map();
       pairs.set(`${event.emoji}:${event.source}`, !event.removed);
       current.set(event.target_event_id, pairs);
@@ -125,12 +111,10 @@ export function useMessageReactions(
   const enabled = useIsExperimentalFeatureEnabled(
     CONVERSATION_REACTIONS_EXPERIMENTAL_FEATURE,
   );
-  const isCloud = useActiveBackend().backend.kind === "cloud";
   const { conversationId } = useOptionalConversationId();
   const canReact =
     !!eventId &&
     enabled &&
-    !isCloud &&
     !!conversationId &&
     author === "agent" &&
     !isFromPlanningAgent;
@@ -209,17 +193,33 @@ export function MessageReactions({
     }
   }, [pickerOpen]);
 
-  // The user's clicks show at once. The server's events replace them when
-  // they arrive, which can be a while if a tool call is waiting for approval.
+  // The user's clicks show at once. Each choice stays until its own event
+  // arrives, which can be a while if a tool call is waiting for approval.
   const [optimistic, setOptimistic] = React.useState<
-    Partial<Record<ReactionEmoji, boolean>>
+    Partial<Record<ReactionEmoji, { on: boolean; eventId?: string }>>
   >({});
-  React.useEffect(() => setOptimistic({}), [key]);
+  const acknowledged = useEventStore(
+    useShallow(({ eventIds }) =>
+      Object.values(optimistic)
+        .map((change) => change.eventId)
+        .filter((id): id is string => !!id && eventIds.has(id)),
+    ),
+  );
+  React.useEffect(() => {
+    if (acknowledged.length === 0) return;
+    setOptimistic((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(
+          ([, change]) => !acknowledged.includes(change.eventId ?? ""),
+        ),
+      ),
+    );
+  }, [acknowledged]);
 
   const reactions = parseKey(key);
-  for (const [emoji, on] of Object.entries(optimistic) as [
+  for (const [emoji, { on }] of Object.entries(optimistic) as [
     ReactionEmoji,
-    boolean,
+    { on: boolean },
   ][]) {
     const sources = reactions.get(emoji) ?? new Set<ReactionSource>();
     if (on) sources.add("user");
@@ -237,17 +237,28 @@ export function MessageReactions({
       triggerRef.current?.focus();
     }
     const removed = reactions.get(emoji)?.has("user") ?? false;
-    const before = optimistic;
-    setOptimistic({ ...before, [emoji]: !removed });
+    const before = optimistic[emoji];
+    setOptimistic((current) => ({ ...current, [emoji]: { on: !removed } }));
     try {
-      await experimentalFeaturesService.react({
+      const event = await conversationReactionsService.react({
         conversationId,
         emoji,
         targetEventId: eventId,
         removed,
       });
+      // Only this request's event acknowledges this choice. Another emoji,
+      // an agent reaction, or an earlier add must not erase a newer removal.
+      setOptimistic((current) => ({
+        ...current,
+        [emoji]: { on: !removed, eventId: event.id },
+      }));
     } catch (error) {
-      setOptimistic(before);
+      setOptimistic((current) => {
+        const next = { ...current };
+        if (before) next[emoji] = before;
+        else delete next[emoji];
+        return next;
+      });
       displayApiErrorToast(error, t(I18nKey.CHAT_INTERFACE$REACTION_FAILED));
     } finally {
       setPending(false);
@@ -279,7 +290,7 @@ export function MessageReactions({
           title={describe(sources)}
           aria-label={`${EMOJI_GLYPHS[emoji]} ${describe(sources)}`}
           aria-pressed={sources.has("user")}
-          aria-disabled={!canReact}
+          aria-disabled={!canReact || pending}
           onClick={() => toggle(emoji)}
           className={cn(
             "flex h-6 items-center gap-1 rounded-full border border-border px-2 text-xs leading-none",
@@ -306,8 +317,12 @@ export function MessageReactions({
             title={t(I18nKey.CHAT_INTERFACE$ADD_REACTION)}
             aria-label={t(I18nKey.CHAT_INTERFACE$ADD_REACTION)}
             aria-expanded={pickerOpen}
-            disabled={pending}
-            onClick={() => setPickerOpen((open) => !open)}
+            // Not `disabled`: the picker hands focus back to this button as a
+            // request starts, and a disabled button would drop it.
+            aria-disabled={pending}
+            onClick={() => {
+              if (!pending) setPickerOpen((open) => !open);
+            }}
             className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-muted hover:bg-interactive-hover hover:text-foreground"
           >
             <SmilePlus className="size-3.5" strokeWidth={2} aria-hidden />

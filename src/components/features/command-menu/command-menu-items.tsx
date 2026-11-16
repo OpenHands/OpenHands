@@ -24,7 +24,7 @@ import {
   hasAutomationInterface,
 } from "#/manifests/automation-interface";
 import { getLockedCloudHost } from "#/api/agent-server-config";
-import { getActiveBackend } from "#/api/backend-registry/active-store";
+import type { BackendKind } from "#/api/backend-registry/types";
 import { LOCKED_CLOUD_SETTINGS_NAV_PATH } from "#/constants/settings-nav";
 import { isApplePlatform } from "#/utils/utils";
 
@@ -120,8 +120,10 @@ export const COMMAND_MENU_GROUP_ORDER: CommandMenuGroupId[] = [
 
 export const createCommandMenuItems = ({
   toggleSidebar,
+  backendKind,
 }: {
   toggleSidebar: () => void;
+  backendKind: BackendKind;
 }): CommandMenuItemDefinition[] => {
   const items: CommandMenuItemDefinition[] = [
     {
@@ -280,7 +282,7 @@ export const createCommandMenuItems = ({
   // the OHE settings shell owns the rest (OHE-3168).
   const isLockedToCloud = getLockedCloudHost() !== null;
   // Locally each agent profile has its own condenser.
-  const isCloud = getActiveBackend().backend.kind === "cloud";
+  const isCloud = backendKind === "cloud";
 
   return items.filter(
     (item) =>
