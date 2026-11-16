@@ -548,6 +548,23 @@ export interface CreateConversationOptions {
 }
 
 class AgentServerConversationService {
+  static async answerAskUser(
+    conversationId: string,
+    askId: string,
+    answer: { optionIndex?: number; text?: string },
+    runtime?: ConversationRuntimeContext | null,
+  ) {
+    if (
+      getActiveBackend().backend.kind === "cloud" &&
+      (!runtime?.conversationUrl || !runtime.sessionApiKey)
+    ) {
+      throw new Error("Conversation sandbox is still starting.");
+    }
+    return new ConversationClient(
+      getAgentServerClientOptions(runtime ?? {}),
+    ).answerAskUser(conversationId, askId, answer);
+  }
+
   static async sendMessage(
     conversationId: string,
     message: SendMessageRequest,
