@@ -114,7 +114,7 @@ function ProjectCard({
     >
       <NavigationLink
         to={conversationPath(conversation.conversation_id)}
-        className="text-sm font-medium text-foreground hover:underline"
+        className="break-words text-sm font-medium text-foreground hover:underline"
         title={conversation.conversation_id}
       >
         {title}
