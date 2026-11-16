@@ -1,5 +1,6 @@
 import { CHILD_CONVERSATION_RESULT_PREFIX } from "#/constants/child-conversation";
 import { SECRET_REQUEST_RESULT_PREFIX } from "#/constants/secret-request";
+import { ASK_USER_ANSWER_PREFIX } from "#/utils/decision-closures";
 import { MessageEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
@@ -67,17 +68,17 @@ const STOP_HOOK_FEEDBACK_PREFIX = "[Stop hook feedback]";
 const isStopHookFeedback = (event: MessageEvent): boolean =>
   environmentMessageStartsWith(event, STOP_HOOK_FEEDBACK_PREFIX);
 
-// The frontend posts the outcome of a `launch_child_conversation` or
-// `request_secret` call back as a `user` message because client tools have no
-// result channel (see `services/child-conversation-launch.ts` and
-// `services/secret-request.ts`). It is a JSON payload addressed to the agent,
-// which relays the outcome in its own reply, so the raw message does not
-// belong in the chat.
+// Tool results that reach the agent as `user` messages. The frontend posts the
+// outcome of a `launch_child_conversation` or `request_secret` call this way
+// because client tools have no result channel (see
+// `services/child-conversation-launch.ts` and `services/secret-request.ts`);
+// the agent relays the outcome in its own reply. The server saves an answer
+// picked on a decision card the same way, and the card shows that answer.
+// None of these raw messages belong in the chat.
 const TOOL_RESULT_PREFIXES = [
   CHILD_CONVERSATION_RESULT_PREFIX,
   SECRET_REQUEST_RESULT_PREFIX,
-  // ANSWER_HEADER_PREFIX in the SDK's event/ask_user.py is a client contract.
-  '[Answer to your question: "',
+  ASK_USER_ANSWER_PREFIX,
 ];
 
 const isToolResult = (event: MessageEvent): boolean => {

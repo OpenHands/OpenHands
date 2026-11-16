@@ -210,6 +210,68 @@ describe("conversation transcript export", () => {
     }
   });
 
+  it("exports only the answer that reached the agent after a crash and retry", () => {
+    const question: ActionEvent<AskUserAction> = {
+      ...terminalAction,
+      id: "question-1",
+      summary: undefined,
+      tool_name: "ask_user",
+      action: {
+        kind: "AskUserAction",
+        question: "Choose storage?",
+        options: [
+          { label: "SQLite", consequence: "" },
+          { label: "PostgreSQL", consequence: "" },
+        ],
+        recommended: null,
+      },
+    };
+    const result: ObservationEvent<AskUserObservation> = {
+      ...terminalObservation(""),
+      action_id: question.id,
+      tool_name: "ask_user",
+      observation: { kind: "AskUserObservation", content: [], is_error: false },
+    };
+    const answer = (
+      id: string,
+      option_label: string,
+      text: string,
+    ): AskUserAnswerEvent => ({
+      id,
+      kind: "AskUserAnswerEvent",
+      source: "user",
+      timestamp,
+      ask_id: question.id,
+      option_index: option_label === "SQLite" ? 0 : 1,
+      option_label,
+      text,
+    });
+    const machine: MessageEvent = {
+      ...userMessage,
+      llm_message: {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: '[Answer to your question: "Choose storage?"]\nPostgreSQL',
+          },
+        ],
+      },
+    };
+    const events = [
+      question,
+      result,
+      answer("orphan", "SQLite", "Lost before delivery"),
+      answer("delivered", "PostgreSQL", "Now delivered"),
+      machine,
+    ];
+    for (const exportTranscript of [eventsToMarkdown, eventsToHtml]) {
+      const output = exportTranscript(events, defaultOptions);
+      expect(output).toContain("Now delivered");
+      expect(output).not.toContain("Lost before delivery");
+    }
+  });
+
   it("exports messages and collapsed tool details as GitHub-ready Markdown", () => {
     const markdown = eventsToMarkdown(
       [

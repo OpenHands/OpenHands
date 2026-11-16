@@ -7,6 +7,7 @@ import { HttpError } from "@openhands/typescript-client";
 import { Messages } from "#/components/conversation-events/chat/messages";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 import { useEventStore } from "#/stores/use-event-store";
+import { ASK_USER_ANSWER_PREFIX } from "#/utils/decision-closures";
 import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
 import {
   SecurityRisk,
@@ -67,13 +68,27 @@ const reply = (sender?: string): MessageEvent => ({
   activated_skills: [],
   extended_content: [],
 });
-function Transcript() {
+const delivery = (id: string, label: string): MessageEvent => ({
+  ...reply(),
+  id,
+  llm_message: {
+    role: "user",
+    content: [
+      {
+        type: "text",
+        text: `[Answer to your question: "${question.action.question}"]\n${label}`,
+      },
+    ],
+  },
+});
+function Transcript({ readOnly = false }: { readOnly?: boolean }) {
   const events = useEventStore((s) => s.events);
   const messages = useEventStore((s) => s.uiEvents);
   return (
     <Messages
       messages={messages.filter(shouldRenderEvent)}
       allEvents={events}
+      readOnly={readOnly}
     />
   );
 }
@@ -173,7 +188,10 @@ it("keeps an undelivered answer retryable after hydration and settles on the del
         option_label: "PostgreSQL",
         text: "Now delivered",
       },
-      { ...reply(), timestamp: "2026-11-15T12:00:04Z" },
+      {
+        ...delivery("delivery-1", "PostgreSQL"),
+        timestamp: "2026-11-15T12:00:04Z",
+      },
     ]);
   });
   expect(await within(card).findByText("Now delivered")).toBeVisible();
@@ -402,4 +420,86 @@ it("preserves the agent's narration and reasoning after the question result repl
   expect(
     screen.getByRole("region", { name: question.action.question }),
   ).toBeVisible();
+});
+
+it("reads an ordinary reply after an undelivered answer as an answer in the chat", async () => {
+  useEventStore.getState().addEvents([
+    {
+      id: "orphan-answer",
+      kind: "AskUserAnswerEvent",
+      timestamp: "2026-11-15T12:00:02Z",
+      source: "user",
+      ask_id: question.id,
+      option_index: 0,
+      option_label: "SQLite",
+      text: "Lost before delivery",
+    },
+    reply(),
+  ]);
+  renderWithProviders(<Transcript />);
+  const card = await screen.findByRole("region", {
+    name: question.action.question,
+  });
+  expect(
+    await within(card).findByText("ASK_USER$ANSWERED_IN_CHAT"),
+  ).toBeVisible();
+  expect(
+    within(card).queryByRole("img", { name: "ASK_USER$ANSWERED" }),
+  ).not.toBeInTheDocument();
+  expect(
+    within(card).queryByText("Lost before delivery"),
+  ).not.toBeInTheDocument();
+  expect(screen.getByText("Use a file instead")).toBeVisible();
+});
+
+it("takes no answer in a read-only view", async () => {
+  const answer = vi.spyOn(ConversationClient.prototype, "answerAskUser");
+  renderWithProviders(<Transcript readOnly />);
+  const card = await screen.findByRole("region", {
+    name: question.action.question,
+  });
+  expect(await within(card).findByText("ASK_USER$WAITING")).toBeVisible();
+  expect(within(card).queryByRole("button")).not.toBeInTheDocument();
+  expect(within(card).queryByRole("textbox")).not.toBeInTheDocument();
+  expect(answer).not.toHaveBeenCalled();
+});
+
+it("shows the agent's reaction on the hidden answer message on the card", async () => {
+  useEventStore.getState().addEvents([
+    {
+      id: "answer-1",
+      timestamp: "2026-11-15T12:00:02Z",
+      kind: "AskUserAnswerEvent",
+      source: "user",
+      ask_id: question.id,
+      option_index: 1,
+      option_label: "PostgreSQL",
+      text: null,
+    },
+    delivery("delivery-1", "PostgreSQL"),
+    {
+      id: "reaction-1",
+      timestamp: "2026-11-15T12:00:05Z",
+      kind: "ReactionEvent",
+      source: "agent",
+      target_event_id: "delivery-1",
+      emoji: "eyes",
+      removed: false,
+    },
+  ]);
+  renderWithProviders(<Transcript />);
+  const card = await screen.findByRole("region", {
+    name: question.action.question,
+  });
+  expect(await within(card).findByText("👀")).toBeVisible();
+  expect(
+    screen.queryByText(/\[Answer to your question:/),
+  ).not.toBeInTheDocument();
+});
+
+it("hides the answer message by the SDK's ANSWER_HEADER_PREFIX", () => {
+  // Must match ANSWER_HEADER_PREFIX in openhands/sdk/event/ask_user.py.
+  expect(ASK_USER_ANSWER_PREFIX).toBe("[Answer to your question");
+  expect(shouldRenderEvent(delivery("delivery-1", "SQLite"))).toBe(false);
+  expect(shouldRenderEvent(reply())).toBe(true);
 });

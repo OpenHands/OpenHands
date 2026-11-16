@@ -125,6 +125,24 @@
     "ca": "Les targetes de decisió estan desactivades. Pots respondre al xat.",
     "id": "Kartu keputusan dinonaktifkan. Anda tetap dapat menjawab di obrolan."
   },
+  "ASK_USER$WAITING": {
+    "en": "Waiting for an answer.",
+    "ja": "回答を待っています。",
+    "zh-CN": "正在等待回答。",
+    "zh-TW": "正在等待回答。",
+    "ko-KR": "답변을 기다리는 중입니다.",
+    "no": "Venter på svar.",
+    "it": "In attesa di una risposta.",
+    "pt": "Aguardando uma resposta.",
+    "es": "Esperando una respuesta.",
+    "ar": "في انتظار إجابة.",
+    "fr": "En attente d'une réponse.",
+    "tr": "Yanıt bekleniyor.",
+    "de": "Wartet auf eine Antwort.",
+    "uk": "Очікує на відповідь.",
+    "ca": "Esperant una resposta.",
+    "id": "Menunggu jawaban."
+  },
   "ASK_USER$PLANNER": {
     "en": "This question belongs to the planning conversation.",
     "ja": "この質問は計画用の会話に属しています。",

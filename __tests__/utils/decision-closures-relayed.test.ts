@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { indexDecisionClosures } from "#/components/conversation-events/chat/event-message-components/decision-card";
+import { indexDecisionClosures } from "#/utils/decision-closures";
 import type { OHEvent } from "#/stores/use-event-store";
 
 const COORDINATOR = "conversation:cc000000000040008000000000000001";
@@ -52,7 +52,8 @@ describe("indexDecisionClosures in a project", () => {
       answer("a1", "action-q1"),
       message("delivery", COORDINATOR),
     ]);
-    expect(closures.get("q1")?.id).toBe("a1");
+    expect(closures.get("q1")?.closing.id).toBe("a1");
+    expect(closures.get("q1")?.delivery?.id).toBe("delivery");
   });
 
   it("keeps an answer that was never delivered retryable", () => {
@@ -78,7 +79,7 @@ describe("indexDecisionClosures in a project", () => {
       question("q2"),
       message("delivery", COORDINATOR),
     ]);
-    expect(closures.get("q1")?.id).toBe("q2");
+    expect(closures.get("q1")?.closing.id).toBe("q2");
     expect(closures.has("q2")).toBe(false);
   });
 });

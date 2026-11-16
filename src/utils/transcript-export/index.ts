@@ -1,4 +1,5 @@
 import { isAskUserAnswerEvent } from "@openhands/typescript-client";
+import { deliveredAnswerIds } from "#/utils/decision-closures";
 import type {
   ActionEvent,
   OpenHandsEvent,
@@ -282,9 +283,14 @@ const buildTranscriptEntries = (
   );
   const entries: TranscriptEntry[] = [];
   const emittedNarrationActionIds = new Set<string>();
+  // Only answers that reached the agent: one lost in a crash and picked again
+  // would otherwise show twice.
+  const deliveredAnswers = deliveredAnswerIds(events);
   const renderableEvents = uiEvents.filter(
     (event) =>
-      ("kind" in event && isAskUserAnswerEvent(event)) ||
+      ("kind" in event &&
+        isAskUserAnswerEvent(event) &&
+        deliveredAnswers.has(event.id ?? "")) ||
       (isSwitchLLMObservationEvent(event) && !event.observation.is_error) ||
       (isClassifyAndSwitchLLMObservationEvent(event) &&
         !event.observation.is_error) ||
