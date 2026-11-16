@@ -889,7 +889,6 @@ describe("ChatInterface - Pending message queue", () => {
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.ERROR,
       executionStatus: null,
-      isAgentRunning: false,
     });
 
     useErrorMessageStore.setState({
