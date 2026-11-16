@@ -43145,6 +43145,24 @@
     "ca": "No s'ha pogut canviar la funció. Torna-ho a provar.",
     "id": "Tidak dapat mengubah fitur. Silakan coba lagi."
   },
+  "CHAT_INTERFACE$MESSAGE_EDITED": {
+    "en": "edited",
+    "ja": "編集済み",
+    "zh-CN": "已编辑",
+    "zh-TW": "已編輯",
+    "ko-KR": "수정됨",
+    "no": "redigert",
+    "it": "modificato",
+    "pt": "editado",
+    "es": "editado",
+    "ar": "معدّل",
+    "fr": "modifié",
+    "tr": "düzenlendi",
+    "de": "bearbeitet",
+    "uk": "змінено",
+    "ca": "editat",
+    "id": "diedit"
+  },
   "CHAT_INTERFACE$ADD_REACTION": {
     "en": "Add reaction",
     "ja": "リアクションを追加",

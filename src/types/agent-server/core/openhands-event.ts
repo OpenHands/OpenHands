@@ -1,4 +1,7 @@
-import type { ReactionEvent } from "@openhands/typescript-client";
+import type {
+  MessageEditEvent,
+  ReactionEvent,
+} from "@openhands/typescript-client";
 
 // Import all event types
 import {
@@ -29,6 +32,7 @@ export type OpenHandsEvent =
   | ActionEvent
   | MessageEvent
   | ReactionEvent
+  | MessageEditEvent
   | ObservationEvent
   | UserRejectObservation
   | AgentErrorEvent
