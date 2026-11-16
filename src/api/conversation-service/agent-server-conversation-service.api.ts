@@ -12,7 +12,7 @@ import {
   ProfilesClient,
   VSCodeClient,
 } from "@openhands/typescript-client/clients";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "#/utils/random-uuid";
 import { AgentKind, Provider } from "#/types/settings";
 import type { ConversationRuntimeContext } from "#/api/conversation-file-upload.api";
 import { getAgentServerWorkingDir } from "../agent-server-config";
@@ -697,7 +697,7 @@ class AgentServerConversationService {
       profiles,
       agentLlmProfileRef,
     );
-    const conversationId = uuidv4();
+    const conversationId = randomUUID();
     const resolvedWorkspaceMode =
       workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
     const inContainer = resolvedWorkspaceMode === "docker_container";
@@ -1472,7 +1472,7 @@ class AgentServerConversationService {
       // the profile config would otherwise default it to stream=False.
       stream: true,
       // Avoid stale first-write-wins entries in the backend LLM registry.
-      usage_id: `profile:${profileName}:${uuidv4()}`,
+      usage_id: `profile:${profileName}:${randomUUID()}`,
     } as LLMConfig);
   }
 

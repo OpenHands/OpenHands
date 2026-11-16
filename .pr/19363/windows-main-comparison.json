@@ -1,0 +1,16 @@
+{
+  "branch_passed": 10020,
+  "branch_failed": 61,
+  "main_control_failed": 60,
+  "matching_failed_names": 60,
+  "new_failed_names": [
+    "library i18n namespace scoping does not initialize the global i18next singleton when importing the library entry"
+  ],
+  "additional_current_main_control": {
+    "test": "library-namespace.test.ts",
+    "passed": 2,
+    "failed": 1,
+    "failed_reason": "same30000ms library-import timeout"
+  },
+  "new_failed_names_after_additional_control": []
+}
