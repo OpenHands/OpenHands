@@ -792,7 +792,9 @@ describe("static-server.mjs", () => {
 
       try {
         const server = await startStaticServer({
-          ...parseArgs(["--host", "0.0.0.0"], { SESSION_API_KEY: "lan-secret" }),
+          ...parseArgs(["--host", "0.0.0.0"], {
+            SESSION_API_KEY: "lan-secret",
+          }),
           port: 0,
           dir: buildDir,
         });
@@ -1085,6 +1087,74 @@ describe("static-server.mjs", () => {
     expect(response.body).toContain("Bad Gateway");
     expect(response.body).toContain("Invalid URL");
     expect(server.listening).toBe(true);
+  });
+
+  describe("provider upload limits injection", () => {
+    async function startServerWithProviderLimits(
+      dir: string,
+      providerUploadLimits: string,
+    ) {
+      return startServer(dir, { providerUploadLimits });
+    }
+
+    it("parses --provider-upload-limits", () => {
+      const config = parseArgs([
+        "--provider-upload-limits",
+        '{"anthropic":10}',
+      ]);
+      expect(config.providerUploadLimits).toBe('{"anthropic":10}');
+    });
+
+    it("falls back to the environment variable", () => {
+      const config = parseArgs([], {
+        AGENT_CANVAS_PROVIDER_UPLOAD_LIMITS: '{"gemini":25}',
+      } as NodeJS.ProcessEnv);
+      expect(config.providerUploadLimits).toBe('{"gemini":25}');
+    });
+
+    it("prefers the flag over the environment variable", () => {
+      const config = parseArgs(
+        ["--provider-upload-limits", '{"anthropic":10}'],
+        {
+          AGENT_CANVAS_PROVIDER_UPLOAD_LIMITS: '{"gemini":25}',
+        } as NodeJS.ProcessEnv,
+      );
+      expect(config.providerUploadLimits).toBe('{"anthropic":10}');
+    });
+
+    it("exposes the limits on window.__AGENT_CANVAS_PROVIDER_UPLOAD_LIMITS__", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServerWithProviderLimits(
+        buildDir,
+        '{"anthropic":10}',
+      );
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).toContain("window.__AGENT_CANVAS_PROVIDER_UPLOAD_LIMITS__");
+      // The value is injected as a JSON string (the same shape the other
+      // runtime globals use), so the quotes are escaped in the inline script.
+      expect(body).toContain('{\\"anthropic\\":10}');
+    });
+
+    it("does not inject the global when no limits are configured", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServer(buildDir);
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).not.toContain("__AGENT_CANVAS_PROVIDER_UPLOAD_LIMITS__");
+    });
   });
 });
 

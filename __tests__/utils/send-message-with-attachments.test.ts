@@ -5,6 +5,7 @@ import { sendMessageWithAttachments } from "#/utils/send-message-with-attachment
 const mocks = vi.hoisted(() => ({
   partition: vi.fn(),
   validate: vi.fn(),
+  validateIndividual: vi.fn(),
   convert: vi.fn(),
   resolveRuntime: vi.fn(),
   upload: vi.fn(),
@@ -18,6 +19,14 @@ vi.mock("#/components/features/chat/utils/chat-input.utils", () => ({
 
 vi.mock("#/utils/file-validation", () => ({
   validateFiles: mocks.validate,
+  validateIndividualFileSizes: mocks.validateIndividual,
+  resolveUploadLimits: (provider?: string | null) => ({
+    imageLimitBytes: 3 * 1024 * 1024,
+    imageLimitMb: 3,
+    attachmentLimitBytes: 3 * 1024 * 1024,
+    attachmentLimitMb: 3,
+    provider: provider ?? null,
+  }),
 }));
 
 vi.mock("#/utils/convert-image-to-base-64", () => ({
@@ -69,6 +78,7 @@ describe("sendMessageWithAttachments", () => {
       imagesAsFiles: [imageFile],
     });
     mocks.validate.mockReturnValue({ isValid: true });
+    mocks.validateIndividual.mockReturnValue({ isValid: true });
     mocks.convert.mockResolvedValue("data:image/png;base64,aW1hZ2U=");
     mocks.resolveRuntime.mockResolvedValue({ kind: "remote" });
     mocks.upload.mockResolvedValue({
@@ -85,11 +95,17 @@ describe("sendMessageWithAttachments", () => {
       [image, imageFile],
       ["large.png"],
     );
-    expect(mocks.validate).toHaveBeenCalledWith([
-      image,
-      documentFile,
-      imageFile,
-    ]);
+    // The embedded image is checked against the transport bound and the
+    // uploaded files against the provider's limit, in two separate calls.
+    expect(mocks.validateIndividual).toHaveBeenCalledWith(
+      [image],
+      expect.objectContaining({ imageLimitBytes: 3 * 1024 * 1024 }),
+    );
+    expect(mocks.validate).toHaveBeenCalledWith(
+      [documentFile, imageFile],
+      [],
+      expect.objectContaining({ attachmentLimitBytes: 3 * 1024 * 1024 }),
+    );
     expect(mocks.upload).toHaveBeenCalledWith("conversation-1", [
       documentFile,
       imageFile,

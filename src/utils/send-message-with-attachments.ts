@@ -10,7 +10,12 @@ import type { SendMessageRequest } from "#/api/conversation-service/agent-server
 import { convertImageToBase64 } from "#/utils/convert-image-to-base-64";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { partitionImagesForUpload } from "#/components/features/chat/utils/chat-input.utils";
-import { validateFiles } from "#/utils/file-validation";
+import {
+  resolveUploadLimits,
+  validateFiles,
+  validateIndividualFileSizes,
+} from "#/utils/file-validation";
+import { MAX_EMBEDDED_IMAGE_BYTES } from "#/utils/provider-upload-limits";
 import { I18nKey } from "#/i18n/declaration";
 
 export interface SendMessageWithAttachmentsResult {
@@ -29,6 +34,8 @@ export async function sendMessageWithAttachments(options: {
   imagesMarkedUploadAsFile: string[];
   t: TFunction;
   requireAllAttachments?: boolean;
+  /** The provider that will receive the attachments, for its image limit. */
+  provider?: string | null;
 }): Promise<SendMessageWithAttachmentsResult> {
   const environment = getActiveBackend();
   const {
@@ -38,6 +45,7 @@ export async function sendMessageWithAttachments(options: {
     files,
     imagesMarkedUploadAsFile,
     t,
+    provider,
   } = options;
 
   const { imagesToEmbed, imagesAsFiles } = partitionImagesForUpload(
@@ -46,9 +54,30 @@ export async function sendMessageWithAttachments(options: {
   );
   const filesToUpload = [...files, ...imagesAsFiles];
 
-  const validation = validateFiles([...imagesToEmbed, ...filesToUpload]);
-  if (!validation.isValid) {
-    throw new Error(validation.errorMessage ?? "Invalid attachments");
+  const limits = resolveUploadLimits(provider ?? null);
+
+  // An embedded image is base64-encoded into the chat event, which the agent
+  // server forwards to the browser as a WebSocket frame. The server drops the
+  // connection for a frame larger than 4 MiB, so the embed path stays bounded
+  // by the transport even when the provider would accept more.
+  const embedLimitBytes = Math.min(
+    limits.imageLimitBytes,
+    MAX_EMBEDDED_IMAGE_BYTES,
+  );
+  const embedValidation = validateIndividualFileSizes(imagesToEmbed, {
+    ...limits,
+    imageLimitBytes: embedLimitBytes,
+    imageLimitMb: embedLimitBytes / (1024 * 1024),
+  });
+  if (!embedValidation.isValid) {
+    throw new Error(embedValidation.errorMessage ?? "Invalid attachments");
+  }
+
+  // Files uploaded to the workspace travel over HTTP and are bounded only by
+  // the provider's limit for images and by the generic limit for other types.
+  const uploadValidation = validateFiles(filesToUpload, [], limits);
+  if (!uploadValidation.isValid) {
+    throw new Error(uploadValidation.errorMessage ?? "Invalid attachments");
   }
 
   const imageUrls = await Promise.all(
