@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Decision cards — Canvas design review</title>
+    <style>
+      :root {
+        --bg: #fdfcf8;
+        --fg: #242722;
+        --muted: #62685f;
+        --rule: #dcded5;
+        --card: #fff;
+        --accent: #315846;
+        --accent-soft: #e8f0e9;
+        --warn: #a34f17;
+        --warm: #fbefe3;
+        --mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+        --sans: system-ui, -apple-system, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 16px/1.6 var(--sans);
+      }
+      .wrap {
+        max-width: 1180px;
+        margin: auto;
+        padding: 40px 28px 80px;
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 44px;
+      }
+      nav {
+        position: sticky;
+        top: 24px;
+        align-self: start;
+        font-size: 13px;
+      }
+      nav a {
+        display: block;
+        padding: 5px 0;
+        color: var(--muted);
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 3px;
+      }
+      h1 {
+        font-size: 38px;
+        letter-spacing: -1px;
+        line-height: 1.15;
+        margin: 12px 0;
+      }
+      h2 {
+        font-size: 24px;
+        line-height: 1.3;
+        margin: 42px 0 14px;
+      }
+      h3 {
+        font-size: 18px;
+        margin: 24px 0 8px;
+      }
+      p {
+        max-width: 75ch;
+      }
+      .eyebrow {
+        font: 12px var(--mono);
+        letter-spacing: 1px;
+        color: var(--accent);
+        text-transform: uppercase;
+      }
+      .lede {
+        font-size: 19px;
+        color: var(--muted);
+      }
+      .callout {
+        padding: 16px 20px;
+        border-left: 4px solid var(--warn);
+        background: var(--warm);
+      }
+      code,
+      pre {
+        font-family: var(--mono);
+        font-size: 13px;
+      }
+      code {
+        overflow-wrap: anywhere;
+      }
+      pre {
+        padding: 14px;
+        background: var(--accent-soft);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .src {
+        font-size: 12px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      td,
+      th {
+        text-align: left;
+        vertical-align: top;
+        border-bottom: 1px solid var(--rule);
+        padding: 10px 8px;
+      }
+      th {
+        color: var(--muted);
+      }
+      details {
+        border: 1px solid var(--rule);
+        padding: 12px 16px;
+        margin: 14px 0;
+      }
+      summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .fig {
+        margin: 20px 0;
+      }
+      .fig svg {
+        width: 100%;
+        height: auto;
+        background: var(--card);
+        border: 1px solid var(--rule);
+      }
+      figcaption {
+        font-size: 13px;
+        color: var(--muted);
+        margin-top: 8px;
+      }
+      .before {
+        fill: var(--bg);
+        stroke: var(--muted);
+        stroke-dasharray: 5 4;
+      }
+      .after {
+        fill: var(--accent-soft);
+        stroke: var(--accent);
+        stroke-width: 2;
+      }
+      .edge {
+        stroke: var(--muted);
+        stroke-width: 1.5;
+        fill: none;
+      }
+      .delta {
+        stroke: var(--warn);
+        stroke-width: 2;
+        stroke-dasharray: 5 3;
+        fill: none;
+      }
+      .node {
+        fill: var(--fg);
+        font: 600 14px var(--sans);
+      }
+      .detail {
+        fill: var(--muted);
+        font: 11px var(--mono);
+      }
+      .label {
+        fill: var(--warn);
+        font: 600 12px var(--sans);
+      }
+      footer {
+        margin-top: 40px;
+        border-top: 1px solid var(--rule);
+        padding-top: 16px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      @media (max-width: 760px) {
+        .wrap {
+          grid-template-columns: 1fr;
+          padding: 24px 16px;
+          gap: 12px;
+        }
+        nav {
+          position: static;
+        }
+        nav a {
+          display: inline-block;
+          margin-right: 14px;
+        }
+        h1 {
+          font-size: 30px;
+        }
+        table {
+          font-size: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <nav aria-label="Contents">
+        <strong>Decision cards</strong><a href="#flow">1. Before and after</a
+        ><a href="#state">2. Event-owned answers</a
+        ><a href="#transport">3. Typed transport</a
+        ><a href="#files">4. Changed files</a
+        ><a href="#proof">5. Evidence and gates</a>
+      </nav>
+      <main>
+        <header>
+          <div class="eyebrow">Canvas · draft review · 15 November 2026</div>
+          <h1>Ask once. Answer on the card.</h1>
+          <p class="lede">
+            Canvas renders successful <code>ask_user</code> calls as persistent
+            decision cards. An option tap or text-only answer resumes the agent;
+            an ordinary chat reply closes the card too.
+          </p>
+        </header>
+        <div class="callout">
+          <strong>Not merge-ready.</strong> The published 1.62.0 TypeScript
+          client lacks this API. Release the SDK/client first, update the Canvas
+          dependency and lockfile, raise
+          <code>compatibility.minimumAgentServer</code>, then pass clean-install
+          CI. No release number is guessed here.
+        </div>
+        <p class="src">
+          Source:
+          <a
+            href="https://github.com/enyst/OpenHands/blob/ce93903694a8267c6502aa224aa2af53b2a8feeb/src/components/conversation-events/chat/event-message-components/decision-card.tsx#L26-L125"
+            >DecisionCard</a
+          >
+          ·
+          <a href="https://github.com/OpenHands/software-agent-sdk/pull/6852"
+            >SDK #6852</a
+          >
+          ·
+          <a href="https://github.com/enyst/OpenHands/issues/136"
+            >fork issue #136</a
+          >
+        </p>
+        <p>
+          This page isolates the decision-card changes from the inherited
+          Settings › Experimental and reactions work in
+          <a href="https://github.com/OpenHands/OpenHands/pull/19503"
+            >Canvas #19503</a
+          >. The incremental baseline is <code>6011cbb68c</code>; the fork PR
+          against main also includes that prerequisite. Product links below are
+          pinned to verified head <code>ce93903694</code>.
+        </p>
+
+        <section id="flow">
+          <h2>1. A successful ask stays outside activity</h2>
+          <figure class="fig">
+            <svg
+              viewBox="0 0 840 380"
+              role="img"
+              aria-labelledby="flow-title flow-desc"
+            >
+              <title id="flow-title">
+                Messages renders DecisionCard instead of a grouped generic
+                observation
+              </title>
+              <desc id="flow-desc">
+                Before: the ask observation follows generic activity rendering.
+                After: Messages recognizes a successful ask and renders a card.
+                An option or text answer calls the typed client; returned events
+                settle the card and resume the agent.
+              </desc>
+              <defs>
+                <marker
+                  id="arrow"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="7"
+                  markerHeight="7"
+                  orient="auto"
+                >
+                  <path d="M0,0 L10,5 L0,10 Z" fill="var(--muted)" />
+                </marker>
+                <marker
+                  id="changed"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="7"
+                  markerHeight="7"
+                  orient="auto"
+                >
+                  <path d="M0,0 L10,5 L0,10 Z" fill="var(--warn)" />
+                </marker>
+              </defs>
+              <text x="30" y="30" class="label">
+                BEFORE · prerequisite head 6011cbb68c
+              </text>
+              <a
+                href="https://github.com/enyst/OpenHands/blob/6011cbb68c08f95203ca897930632156f66923dd/src/components/conversation-events/chat/messages.tsx#L177-L195"
+              >
+                <rect
+                  x="30"
+                  y="48"
+                  width="310"
+                  height="65"
+                  rx="5"
+                  class="before"
+                />
+                <text x="48" y="75" class="node">
+                  Messages.renderEventMessage
+                </text>
+                <text x="48" y="95" class="detail">
+                  messages.tsx:177 · generic EventMessage
+                </text>
+              </a>
+              <path d="M340,81 H470" class="edge" marker-end="url(#arrow)" />
+              <a
+                href="https://github.com/enyst/OpenHands/blob/6011cbb68c08f95203ca897930632156f66923dd/src/components/conversation-events/chat/group-events.ts#L54-L68"
+              >
+                <rect
+                  x="480"
+                  y="48"
+                  width="325"
+                  height="65"
+                  rx="5"
+                  class="before"
+                />
+                <text x="498" y="75" class="node">isGroupableEvent</text>
+                <text x="498" y="95" class="detail">
+                  group-events.ts:54 · no ask exception
+                </text>
+              </a>
+              <text x="30" y="155" class="label">
+                AFTER · added card and answer path
+              </text>
+              <a
+                href="https://github.com/enyst/OpenHands/blob/ce93903694a8267c6502aa224aa2af53b2a8feeb/src/components/conversation-events/chat/messages.tsx#L183-L201"
+              >
+                <rect
+                  x="30"
+                  y="175"
+                  width="310"
+                  height="65"
+                  rx="5"
+                  class="after"
+                />
+                <text x="48" y="202" class="node">Messages → DecisionCard</text>
+                <text x="48" y="222" class="detail">
+                  messages.tsx:183 · successful asks only
+                </text>
+              </a>
+              <path
+                d="M340,207 H470"
+                class="delta"
+                marker-end="url(#changed)"
+              />
+              <a
+                href="https://github.com/enyst/OpenHands/blob/ce93903694a8267c6502aa224aa2af53b2a8feeb/src/components/conversation-events/chat/event-message-components/decision-card.tsx#L73-L105"
+              >
+                <rect
+                  x="480"
+                  y="175"
+                  width="325"
+                  height="65"
+                  rx="5"
+                  class="after"
+                />
+                <text x="498" y="202" class="node">DecisionCard.submit</text>
+                <text x="498" y="222" class="detail">
+                  decision-card.tsx:73 · choice + note
+                </text>
+              </a>
+              <path
+                d="M642,240 V278"
+                class="delta"
+                marker-end="url(#changed)"
+              />
+              <a
+                href="https://github.com/enyst/OpenHands/blob/ce93903694a8267c6502aa224aa2af53b2a8feeb/src/api/conversation-service/agent-server-conversation-service.api.ts#L550-L566"
+              >
+                <rect
+                  x="480"
+                  y="289"
+                  width="325"
+                  height="65"
+                  rx="5"
+                  class="after"
+                />
+                <text x="498" y="316" class="node">
+                  ConversationClient.answerAskUser
+                </text>
+                <text x="498" y="336" class="detail">
+                  service.ts:550 · server saves and runs
+                </text>
+              </a>
+              <path
+                d="M480,321 H340"
+                class="delta"
+                marker-end="url(#changed)"
+              />
+              <a
+                href="https://github.com/enyst/OpenHands/blob/ce93903694a8267c6502aa224aa2af53b2a8feeb/src/components/conversation-events/chat/event-message-components/decision-card.tsx#L49-L70"
+              >
+                <rect
+                  x="30"
+                  y="289"
+                  width="310"
+                  height="65"
+                  rx="5"
+                  class="after"
+                />
+                <text x="48" y="316" class="node">
+                  AskUserAnswerEvent → answered
+                </text>
+                <text x="48" y="336" class="detail">
+                  decision-card.tsx:49 · event history
+                </text>
+              </a>
+            </svg>
+            <figcaption>
+              The existing event log owns the answer. The card is a presentation
+              and submission surface, not a second pending-question store.
+            </figcaption>
+          </figure>
+          <details>
+            <summary>Decision-carrying diff</summary>
+            <pre>
+isGroupableEvent:
+- TaskTrackerObservation only
++ TaskTrackerObservation or AskUserObservation stays outside the group
+
+Messages.renderEventMessage:
++ successful AskUserObservation + matching AskUserAction → DecisionCard
+
+shouldRenderEvent:
++ SDK answer-header prefix joins hidden tool-result messages</pre>
+          </details>
+        </section>
+
+        <section id="state">
+          <h2>2. History settles the card after reload</h2>
+          <p>
+            <code>DecisionCard</code> scans events following the successful
+            observation in the same main/planning scope. An answer event shows
+            the selected option and note; an own user message shows “Answered in
+            chat”; a newer successful ask supersedes the old card.
+            Sender-bearing relayed messages do not answer it.
+          </p>
+          <p class="src">
+            Source:
+            <a
+              href="https://github.com/enyst/OpenHands/blob/ce93903694a8267c6502aa224aa2af53b2a8feeb/src/components/conversation-events/chat/event-message-components/decision-card.tsx#L48-L70"
+              >decision-card.tsx:48–70</a
+            >
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Condition</th>
+                <th>Visible result</th>
+                <th>Retry policy</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Pending + feature enabled</td>
+                <td>Options, consequences, recommendation, optional words</td>
+                <td>One in-flight request; repeated taps disabled</td>
+              </tr>
+              <tr>
+                <td>Transport failure</td>
+                <td>Error; words retained</td>
+                <td>Check chat, then retry or reply there</td>
+              </tr>
+              <tr>
+                <td>HTTP 429</td>
+                <td>Answer saved; agent not running</td>
+                <td>Never offer to resend an already-saved answer</td>
+              </tr>
+              <tr>
+                <td>HTTP 409</td>
+                <td>Failure and refreshed feature state</td>
+                <td>Feature-off card remains readable</td>
+              </tr>
+              <tr>
+                <td>Planning-agent card</td>
+                <td>Read-only</td>
+                <td>Do not send a planner ask ID to the main conversation</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="src">
+            Source:
+            <a
+              href="https://github.com/enyst/OpenHands/blob/ce93903694a8267c6502aa224aa2af53b2a8feeb/src/components/conversation-events/chat/event-message-components/decision-card.tsx#L73-L125"
+              >submit and recovery</a
+            >
+            ·
+            <a
+              href="https://github.com/enyst/OpenHands/blob/ce93903694a8267c6502aa224aa2af53b2a8feeb/__tests__/components/conversation-events/chat/decision-card.test.tsx"
+              >six behavioral tests</a
+            >
+          </p>
+          <h3>The answer is not repeated as a machine bubble</h3>
+          <p>
+            The SDK documents <code>[Answer to your question</code> as a
+            recognizable message header. <code>shouldRenderEvent</code> now
+            filters that generated user message alongside existing tool results.
+            The card remains readable, and ordinary user chat still renders.
+          </p>
+          <p class="src">
+            Before:
+            <a
+              href="https://github.com/enyst/OpenHands/blob/6011cbb68c08f95203ca897930632156f66923dd/src/components/conversation-events/chat/event-content-helpers/should-render-event.ts#L76-L88"
+              >two tool-result prefixes</a
+            >
+            · After:
+            <a
+              href="https://github.com/enyst/OpenHands/blob/ce93903694a8267c6502aa224aa2af53b2a8feeb/src/components/conversation-events/chat/event-content-helpers/should-render-event.ts#L76-L89"
+              >SDK answer prefix included</a
+            >
+          </p>
+        </section>
+
+        <section id="transport">
+          <h2>3. Canvas calls the SDK, not a parallel endpoint</h2>
+          <p>
+            Before this feature, Canvas had no ask-answer service method. The
+            additive method accepts an option index, words, or both:
+          </p>
+          <pre>
+AgentServerConversationService.answerAskUser(
+  conversationId, askId,
+  { optionIndex?: number, text?: string }, runtime?
+)
+→ new ConversationClient(getAgentServerClientOptions(runtime))
+    .answerAskUser(conversationId, askId, answer)</pre>
+          <p>
+            Cloud requires an explicit runtime URL and session key rather than
+            falling back to a local server. This guard is not a claim of live
+            Cloud support: Cloud experimental settings returned no features
+            during verification.
+          </p>
+          <p class="src">
+            Source:
+            <a
+              href="https://github.com/enyst/OpenHands/blob/ce93903694a8267c6502aa224aa2af53b2a8feeb/src/api/conversation-service/agent-server-conversation-service.api.ts#L550-L566"
+              >service method</a
+            >
+            ·
+            <a href="https://github.com/OpenHands/software-agent-sdk/pull/6852"
+              >canonical server and TypeScript contract</a
+            >
+          </p>
+        </section>
+
+        <section id="files">
+          <h2>4. Review the behavior before the type additions</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Area / incremental change</th>
+                <th>Review focus</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Added: <code>decision-card.tsx</code> (+240)</td>
+                <td>
+                  Event-derived lifecycle, one-tap answers, retained drafts and
+                  capacity handling
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  Changed: <code>messages.tsx</code> (+19),
+                  <code>group-events.ts</code> (+4/−1)
+                </td>
+                <td>
+                  Successful asks escape collapsed activity; other observations
+                  retain their path
+                </td>
+              </tr>
+              <tr>
+                <td>Changed: <code>should-render-event.ts</code> (+6/−4)</td>
+                <td>Generated answer hidden without removing ordinary chat</td>
+              </tr>
+              <tr>
+                <td>Changed: conversation service (+17)</td>
+                <td>Typed call and explicit Cloud runtime guard</td>
+              </tr>
+              <tr>
+                <td>Added: card tests (+268)</td>
+                <td>
+                  Hydration, choices with notes, text-only failure, chat/relay
+                  distinction, feature-off/planner safety, 429
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  Mechanical: action, observation, base, message and event types
+                  (+21/−1)
+                </td>
+                <td>
+                  Ask action/result/answer recognized; sender available to
+                  distinguish relays
+                </td>
+              </tr>
+              <tr>
+                <td>Copy: <code>translation.json</code> (+180)</td>
+                <td>New localized UI keys in all existing locales</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="src">
+            Source:
+            <a
+              href="https://github.com/enyst/OpenHands/compare/6011cbb68c08f95203ca897930632156f66923dd...ce93903694a8267c6502aa224aa2af53b2a8feeb"
+              >complete incremental product diff</a
+            >. The main-based draft includes prerequisite #19503 too.
+          </p>
+        </section>
+
+        <section id="proof">
+          <h2>5. Live proof passes; release gates remain</h2>
+          <p>
+            Real DeepSeek Flash runs in Paper exercised option plus note,
+            text-only answers, offline failure and recovery, ordinary chat
+            closure, feature-off behavior, reload, restart and keyboard input.
+            Final product build <code>ce93903694</code> passed doctor with
+            matching build inputs and a clean browser-error ledger. The latest
+            SDK mirror <code>9b42766</code> also passed a fresh live Tea answer
+            after restart.
+          </p>
+          <details>
+            <summary>Executed checks and honest limits</summary>
+            <ul>
+              <li>
+                Final focused Canvas run: 72 files / 932 tests passed.
+                Typecheck, lint, app and library builds passed with the locally
+                built client.
+              </li>
+              <li>
+                Full suite at the initial implementation: 10,708 tests passed;
+                16 failed in Docker shell/environment tests and independent
+                verify-map coverage. The small answer-bubble fix was verified by
+                the focused suite, not a second full run.
+              </li>
+              <li>
+                SDK initial coverage: 2,642 Python and 438 TypeScript tests
+                passed; latest wording/helper change: 31 focused tests passed.
+              </li>
+              <li>
+                Cloud decision-card interactions, ACP-native asks and
+                delegated/planning-agent answers are not claimed as verified
+                support.
+              </li>
+              <li>
+                A clean install from committed dependency pins remains blocked.
+                A local client tarball is validation evidence, not a substitute
+                for a release.
+              </li>
+            </ul>
+          </details>
+          <p>
+            Running-Canvas screenshots are included in the PR description and
+            committed beside this page under <code>.pr/decision-cards/</code>.
+            They contain test conversations only. This document has no external
+            assets or scripts.
+          </p>
+        </section>
+        <footer>
+          Temporary PR review material. Fork-first verification; no merge,
+          deployment or package release is authorized by this page.
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>
