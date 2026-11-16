@@ -165,3 +165,26 @@ export function useProjectArtifactText(
     meta: { disableToast: true },
   });
 }
+
+/** A file's bytes for an image or PDF preview; refetched when it changes. */
+export function useProjectArtifactBlob(
+  projectId: string | undefined,
+  name: string | null,
+  updatedAt: string | undefined,
+) {
+  const { backend } = useActiveBackend();
+  return useQuery({
+    queryKey: [
+      ...projectsQueryRoot(backend),
+      "artifact-blob",
+      projectId,
+      name,
+      updatedAt,
+    ],
+    queryFn: () => ProjectsService.downloadArtifact(projectId!, name!),
+    enabled: !!projectId && !!name,
+    staleTime: Infinity,
+    gcTime: 60_000,
+    meta: { disableToast: true },
+  });
+}

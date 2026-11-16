@@ -9,6 +9,7 @@
 import { AgentServerClient } from "@openhands/typescript-client/clients";
 
 import { getAgentServerClientOptions } from "../agent-server-client-options";
+import { artifactMediaType } from "#/utils/project-artifact-kind";
 
 export interface ProjectSummary {
   id: string;
@@ -248,6 +249,22 @@ class ProjectsService {
     return typeof response === "string"
       ? response
       : JSON.stringify(response, null, 2);
+  }
+
+  /**
+   * A file's bytes. The server always answers `application/octet-stream`, so
+   * the blob is re-typed from the file name for previews and attachments.
+   */
+  static async downloadArtifact(
+    projectId: string,
+    name: string,
+  ): Promise<Blob> {
+    const blob = await client().request<Blob>({
+      method: "GET",
+      path: artifactPath(projectId, name),
+      responseType: "blob",
+    });
+    return new Blob([blob], { type: artifactMediaType(name) });
   }
 
   /** The project's memory files, `MEMORY.md` first. */
