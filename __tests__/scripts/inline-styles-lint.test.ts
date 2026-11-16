@@ -66,6 +66,9 @@ describe("Canvas inline-style error adoption", () => {
     "src/ui/toggle-switch.tsx",
     "src/ui/combobox-caret.tsx",
     "src/components/features/backends/backend-status-dot.tsx",
+    "src/components/features/chat/components/context-window-meter.tsx",
+    "src/components/features/chat/components/context-window-ring.tsx",
+    "src/components/features/conversation/usage-panel/context-meter.tsx",
   ])(
     "rejects inline styling in migrated appearance owner %s while retaining variables",
     async (filePath) => {

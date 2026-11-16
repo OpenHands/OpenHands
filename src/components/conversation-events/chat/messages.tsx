@@ -1,5 +1,6 @@
 import { useSessionActivities } from "#/hooks/use-session-activities";
 import { useSessionActivityStore } from "#/stores/session-activity-store";
+import { parseDateAsUTC } from "#/utils/format-time-delta";
 import { SessionActivityDetails } from "./event-message-components/session-activity";
 import {
   CollapsibleThinking,
@@ -66,7 +67,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             !hasOlderEvents ||
             (session.kind === "resume" &&
               (messages.some((event) => event.id === session.afterEventId) ||
-                session.startedAt >= Date.parse(messages[0]?.timestamp ?? ""))),
+                session.startedAt >=
+                  parseDateAsUTC(messages[0]?.timestamp ?? "").getTime())),
         ),
       [sessions, hasOlderEvents, messages],
     );

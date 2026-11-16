@@ -8,6 +8,8 @@
 # entrypoint takes the whole container down with it.
 #
 # Usage: docker/smoke-test.sh <image> [host-port]
+# Set SMOKE_CANVAS_BASE_PATH (e.g. /canvas) to also open the Canvas page in a
+# browser; that needs `playwright` on NODE_PATH and Chromium installed.
 set -euo pipefail
 
 IMAGE="${1:?usage: docker/smoke-test.sh <image> [host-port]}"
@@ -71,6 +73,13 @@ print(version("openhands-agent-server"))') ||
   [ "$installed" = "$EXPECTED_AGENT_SERVER_VERSION" ] ||
     fail "system Python has openhands-agent-server ${installed}, expected ${EXPECTED_AGENT_SERVER_VERSION}"
   docker exec "$NAME" python -m pip check || fail "pip check found broken requirements"
+fi
+
+# /health says nothing about the page: the 1.36.0 image served a blank Canvas
+# at its base path (#19405). Open it in a browser when Playwright is set up.
+if [ -n "${SMOKE_CANVAS_BASE_PATH:-}" ]; then
+  node "$(dirname "$0")/smoke-canvas-page.cjs" "http://127.0.0.1:${PORT}" "$SMOKE_CANVAS_BASE_PATH" ||
+    fail "Canvas at ${SMOKE_CANVAS_BASE_PATH} rendered a blank page"
 fi
 
 echo "Smoke test passed for ${IMAGE}"

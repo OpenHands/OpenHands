@@ -19,19 +19,26 @@ import { LOCAL_PLANNER_PARENT_TAG_KEY } from "#/utils/plan-file";
 
 const capturedUrlPerRender: (string | null | undefined)[] = [];
 const capturedSubConversationIdsPerRender: (readonly string[])[] = [];
+const capturedSubConversationsPerRender: (
+  | readonly AppConversation[]
+  | undefined
+)[] = [];
 
 vi.mock("#/contexts/conversation-websocket-context", () => ({
   ConversationWebSocketProvider: ({
     conversationUrl,
     subConversationIds,
+    subConversations,
     children,
   }: {
     conversationUrl?: string | null;
     subConversationIds?: readonly string[];
+    subConversations?: readonly AppConversation[];
     children?: React.ReactNode;
   }) => {
     capturedUrlPerRender.push(conversationUrl);
     capturedSubConversationIdsPerRender.push(subConversationIds ?? []);
+    capturedSubConversationsPerRender.push(subConversations);
     return <>{children}</>;
   },
 }));
@@ -92,6 +99,7 @@ describe("WebSocketProviderWrapper — conversationUrl gating", () => {
   beforeEach(() => {
     capturedUrlPerRender.length = 0;
     capturedSubConversationIdsPerRender.length = 0;
+    capturedSubConversationsPerRender.length = 0;
     vi.clearAllMocks();
     mockUseActiveBackend.mockReturnValue({ backend: { kind: "local" } });
     mockUseSubConversations.mockReturnValue({ data: [] });
@@ -192,6 +200,7 @@ describe("WebSocketProviderWrapper — subConversationIds reference stability", 
   beforeEach(() => {
     capturedUrlPerRender.length = 0;
     capturedSubConversationIdsPerRender.length = 0;
+    capturedSubConversationsPerRender.length = 0;
     vi.clearAllMocks();
     mockUseActiveBackend.mockReturnValue({ backend: { kind: "local" } });
   });
@@ -248,6 +257,7 @@ describe("WebSocketProviderWrapper — stale cross-conversation localPlanningCon
   beforeEach(() => {
     capturedUrlPerRender.length = 0;
     capturedSubConversationIdsPerRender.length = 0;
+    capturedSubConversationsPerRender.length = 0;
     vi.clearAllMocks();
     mockUseActiveBackend.mockReturnValue({ backend: { kind: "local" } });
     mockUseSubConversations.mockReturnValue({ data: [] });
@@ -287,5 +297,140 @@ describe("WebSocketProviderWrapper — stale cross-conversation localPlanningCon
     );
 
     expect(capturedSubConversationIdsPerRender.at(-1)).toEqual(["planner-B"]);
+  });
+});
+
+describe("WebSocketProviderWrapper — filteredSubConversations reference stability", () => {
+  beforeEach(() => {
+    capturedUrlPerRender.length = 0;
+    capturedSubConversationIdsPerRender.length = 0;
+    capturedSubConversationsPerRender.length = 0;
+    vi.clearAllMocks();
+    mockUseActiveBackend.mockReturnValue({ backend: { kind: "local" } });
+  });
+
+  it("passes undefined when subConversations data is undefined", () => {
+    mockUseActiveConversation.mockReturnValue({
+      data: makeConversation({ id: "conv-1" }),
+    });
+    mockUseSubConversations.mockReturnValue({ data: undefined });
+
+    render(
+      <WebSocketProviderWrapper conversationId="conv-1">
+        <div />
+      </WebSocketProviderWrapper>,
+    );
+
+    expect(capturedSubConversationsPerRender.at(-1)).toBeUndefined();
+  });
+
+  it("preserves array reference across re-renders when subConversations and planningConversationIds do not change", () => {
+    mockUseActiveConversation.mockReturnValue({
+      data: makeConversation({
+        id: "conv-1",
+        sub_conversation_ids: ["planner-1"],
+      }),
+    });
+    const subConv1 = makeConversation({
+      id: "planner-1",
+      tags: { [LOCAL_PLANNER_PARENT_TAG_KEY]: "conv-1" },
+    });
+    const subConv2 = makeConversation({
+      id: "unrelated-sub",
+      tags: {},
+    });
+    const subConversationsList = [subConv1, subConv2];
+    mockUseSubConversations.mockReturnValue({ data: subConversationsList });
+
+    const { rerender } = render(
+      <WebSocketProviderWrapper conversationId="conv-1">
+        <div />
+      </WebSocketProviderWrapper>,
+    );
+    rerender(
+      <WebSocketProviderWrapper conversationId="conv-1">
+        <div />
+      </WebSocketProviderWrapper>,
+    );
+
+    expect(capturedSubConversationsPerRender.length).toBeGreaterThanOrEqual(2);
+    expect(capturedSubConversationsPerRender.at(-1)).toEqual([subConv1]);
+    expect(capturedSubConversationsPerRender.at(-1)).toBe(
+      capturedSubConversationsPerRender.at(-2),
+    );
+  });
+
+  it("updates filteredSubConversations reference when subConversations change", () => {
+    mockUseActiveConversation.mockReturnValue({
+      data: makeConversation({
+        id: "conv-1",
+        sub_conversation_ids: ["planner-1"],
+      }),
+    });
+    const subConvInitial = makeConversation({
+      id: "planner-1",
+      tags: { [LOCAL_PLANNER_PARENT_TAG_KEY]: "conv-1" },
+      title: "Initial Planner",
+    });
+    mockUseSubConversations.mockReturnValue({ data: [subConvInitial] });
+
+    const { rerender } = render(
+      <WebSocketProviderWrapper conversationId="conv-1">
+        <div />
+      </WebSocketProviderWrapper>,
+    );
+
+    const subConvUpdated = makeConversation({
+      id: "planner-1",
+      tags: { [LOCAL_PLANNER_PARENT_TAG_KEY]: "conv-1" },
+      title: "Updated Planner",
+    });
+    mockUseSubConversations.mockReturnValue({ data: [subConvUpdated] });
+
+    rerender(
+      <WebSocketProviderWrapper conversationId="conv-1">
+        <div />
+      </WebSocketProviderWrapper>,
+    );
+
+    expect(capturedSubConversationsPerRender.at(-1)).toEqual([subConvUpdated]);
+    expect(capturedSubConversationsPerRender.at(-1)).not.toBe(
+      capturedSubConversationsPerRender.at(-2),
+    );
+  });
+
+  it("updates filteredSubConversations when planningConversationIds change but subConversations keeps its reference", () => {
+    const planner = makeConversation({
+      id: "planner-1",
+      tags: { [LOCAL_PLANNER_PARENT_TAG_KEY]: "conv-1" },
+    });
+    mockUseSubConversations.mockReturnValue({ data: [planner] });
+    mockUseActiveConversation.mockReturnValue({
+      data: makeConversation({
+        id: "conv-stale",
+        sub_conversation_ids: ["planner-1"],
+      }),
+    });
+
+    const { rerender } = render(
+      <WebSocketProviderWrapper conversationId="conv-1">
+        <div />
+      </WebSocketProviderWrapper>,
+    );
+    expect(capturedSubConversationsPerRender.at(-1)).toEqual([]);
+
+    mockUseActiveConversation.mockReturnValue({
+      data: makeConversation({
+        id: "conv-1",
+        sub_conversation_ids: ["planner-1"],
+      }),
+    });
+    rerender(
+      <WebSocketProviderWrapper conversationId="conv-1">
+        <div />
+      </WebSocketProviderWrapper>,
+    );
+
+    expect(capturedSubConversationsPerRender.at(-1)).toEqual([planner]);
   });
 });

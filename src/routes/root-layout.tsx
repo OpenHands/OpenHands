@@ -12,6 +12,7 @@ import { useConfig } from "#/hooks/query/use-config";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
 import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
 import { SidebarMobileMenuBar } from "#/components/features/sidebar/sidebar-mobile-menu-bar";
+import { LicenseBanner } from "#/components/features/alerts/license-banner";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useEnsureActiveProfile } from "#/hooks/use-ensure-active-profile";
 import { useMigrateDefaultAgentProfile } from "#/hooks/use-migrate-default-agent-profile";
@@ -74,7 +75,7 @@ function TitleBarDragRegion() {
 function ErrorShell({ children }: { children: React.ReactNode }) {
   const showTitleBarBand = useShowTitleBarBand();
   return (
-    <div className={cn(showTitleBarBand && "pt-7")}>
+    <div className={cn(showTitleBarBand && "app-shell-titlebar-inset")}>
       <TitleBarDragRegion />
       {children}
     </div>
@@ -160,11 +161,8 @@ function MainAppContent() {
     );
   }
 
-  // Conversation + full-screen panel routes put the mobile menu control in the
-  // chat / panel header; omit the extra top row so we don't duplicate chrome.
-  const hideMobileSidebarMenuBar = /^\/conversations\/[^/]+/.test(
-    location.pathname,
-  );
+  const isConversationRoute = /^\/conversations\/[^/]+/.test(location.pathname);
+  const hideMobileSidebarMenuBar = isConversationRoute;
   const showOnboardingPreview = isOnboardingPreviewActive(location.search);
 
   return (
@@ -174,8 +172,8 @@ function MainAppContent() {
           <div
             data-testid="root-layout"
             className={cn(
-              "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-canvas-base overflow-hidden p-0",
-              showTitleBarBand && "pt-7",
+              "app-shell-safe-area h-dvh lg:min-w-5xl flex flex-col md:flex-row bg-canvas-base overflow-hidden p-0",
+              showTitleBarBand && "app-shell-titlebar-inset",
             )}
           >
             <DocumentTitle />
@@ -184,6 +182,7 @@ function MainAppContent() {
 
             <div className="flex min-h-0 flex-col w-full min-w-0 h-full gap-3">
               {!hideMobileSidebarMenuBar ? <SidebarMobileMenuBar /> : null}
+              <LicenseBanner />
               {config.data &&
                 (config.data.maintenance_start_time ||
                   (config.data.faulty_models &&
@@ -200,7 +199,10 @@ function MainAppContent() {
                 )}
               <div
                 id="root-outlet"
-                className="relative flex-1 overflow-auto px-0 custom-scrollbar"
+                className={cn(
+                  "relative min-h-0 flex-1 px-0 custom-scrollbar",
+                  isConversationRoute ? "overflow-hidden" : "overflow-auto",
+                )}
               >
                 <Outlet />
               </div>

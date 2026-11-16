@@ -22,13 +22,13 @@ export function TaskItem({ task }: TaskItemProps) {
   const icon = useMemo(() => {
     switch (task.status) {
       case "todo":
-        return <CircleIcon className="w-4 h-4 text-[#ffffff]" />;
+        return <CircleIcon className="w-4 h-4 text-contrast" />;
       case "in_progress":
-        return <CheckCircleHalfIcon className="w-4 h-4 text-[#ffffff]" />;
+        return <CheckCircleHalfIcon className="w-4 h-4 text-contrast" />;
       case "done":
         return <CheckCircleIcon className="w-4 h-4 text-muted" />;
       default:
-        return <CircleIcon className="w-4 h-4 text-[#ffffff]" />;
+        return <CircleIcon className="w-4 h-4 text-contrast" />;
     }
   }, [task.status]);
 

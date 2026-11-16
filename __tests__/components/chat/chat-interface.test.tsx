@@ -42,7 +42,11 @@ import {
 import { useGoalStore } from "#/stores/goal-store";
 import { act } from "@testing-library/react";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
-import { getConversationState } from "#/utils/conversation-local-storage";
+import {
+  getConversationState,
+  getConversationDraftRevision,
+  setConversationState,
+} from "#/utils/conversation-local-storage";
 
 import { makeDefaultLocalBackend } from "#/api/backend-registry/default-backend";
 import { NO_BACKEND } from "#/api/backend-registry/active-store";
@@ -922,6 +926,53 @@ describe("ChatInterface - Pending message queue", () => {
     expect(messages[0]).toHaveTextContent("first");
     expect(messages[1]).toHaveTextContent("second");
   });
+
+  function seedResolvedConversation(sandboxStatus = "RUNNING") {
+    queryClient.setQueryData(
+      [
+        "user",
+        "conversation",
+        "test-conversation-id",
+        (makeDefaultLocalBackend() ?? NO_BACKEND).id,
+        null,
+      ],
+      {
+        id: "test-conversation-id",
+        sandbox_status: sandboxStatus,
+        tags: { resolved: "auto", project: "abc" },
+      },
+    );
+  }
+
+  it("shows the resolved banner above a usable composer", () => {
+    seedResolvedConversation();
+
+    renderInterface();
+
+    const banner = screen.getByTestId("resolved-conversation-banner");
+    expect(banner).toHaveTextContent(I18nKey.CHAT_INTERFACE$RESOLVED_TITLE);
+    expect(screen.getByTestId("chat-input")).toHaveAttribute(
+      "contenteditable",
+      "true",
+    );
+    expect(
+      banner.compareDocumentPosition(screen.getByTestId("chat-input")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("does not show the resolved banner on an archived conversation", () => {
+    seedResolvedConversation("MISSING");
+
+    renderInterface();
+
+    expect(
+      screen.getByTestId("archived-conversation-banner"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("resolved-conversation-banner"),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("ChatInterface - Saved draft after submit", () => {
@@ -1532,6 +1583,72 @@ describe("ChatInterface - Build plan keyboard shortcut", () => {
 });
 
 describe("ChatInterface - initial attachment recovery", () => {
+  it("captures the submitted draft before an attachment upload yields to a newer edit", async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    useConversationStore.getState().resetConversationState();
+    useConversationStore.getState().clearMessageToSend();
+    useConversationStore.getState().clearAllFiles();
+    useErrorMessageStore.getState().removeErrorMessage();
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+    useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
+    const file = new File(["notes"], "notes.txt");
+    useConversationStore.getState().addFiles([file]);
+    let finishUpload!: (result: {
+      skipped_files: [];
+      uploaded_files: string[];
+    }) => void;
+    const upload = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finishUpload = resolve;
+        }),
+    );
+    vi.mocked(useUnifiedUploadFiles).mockReturnValue({
+      mutateAsync: upload,
+      isLoading: false,
+    } as never);
+    vi.mocked(useConfig).mockReturnValue({ data: {} } as never);
+    mockSend.mockReset().mockResolvedValue({ queued: false });
+    setConversationState("test-conversation-id", {
+      draftMessage: "Read my notes",
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const page = renderWithQueryClient(<ChatInterface />, queryClient);
+    const input = screen.getByTestId("chat-input");
+    Object.defineProperty(input, "innerText", {
+      configurable: true,
+      get() {
+        return this.textContent ?? "";
+      },
+    });
+    input.textContent = "Read my notes";
+    fireEvent.input(input);
+    const submittedRevision = getConversationDraftRevision(
+      "test-conversation-id",
+    );
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(upload).toHaveBeenCalledOnce());
+
+    // The same text typed again while upload is in flight is a different draft.
+    input.textContent = "Read my notes";
+    fireEvent.input(input);
+    expect(getConversationDraftRevision("test-conversation-id")).not.toBe(
+      submittedRevision,
+    );
+    await act(async () =>
+      finishUpload({ skipped_files: [], uploaded_files: [file.name] }),
+    );
+    await waitFor(() => expect(mockSend).toHaveBeenCalledOnce());
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages[0].draftRevision,
+    ).toBe(submittedRevision);
+    page.unmount();
+    queryClient.clear();
+  });
+
   it("keeps a second failed upload unsent and clears the error after a successful retry", async () => {
     localStorage.clear();
     sessionStorage.clear();

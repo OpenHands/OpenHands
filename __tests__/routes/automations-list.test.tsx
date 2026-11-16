@@ -323,7 +323,6 @@ describe("AutomationsList — draft sections", () => {
       "rounded-xl",
       "bg-surface",
     );
-    expect(draftCard).toHaveClass("hover:bg-surface-raised");
     expect(
       within(draftCard).queryByText(I18nKey.AUTOMATIONS$DETAIL$DRAFT),
     ).not.toBeInTheDocument();

@@ -74,7 +74,7 @@ function ScriptFile({
         aria-expanded={isBinary ? undefined : isOpen}
         disabled={isBinary}
         onClick={() => setIsOpen((open) => !open)}
-        className="flex w-full items-center gap-2 bg-black/20 px-3 py-2 text-left font-mono text-xs text-content enabled:hover:bg-surface-raised"
+        className="flex w-full items-center gap-2 bg-surface-deep px-3 py-2 text-left font-mono text-xs text-content enabled:hover:bg-surface-raised dark:bg-black/20"
       >
         <ChevronRight
           className={cn(

@@ -9,7 +9,11 @@ import {
   removeStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import { AGENT_PROFILES_QUERY_KEYS } from "#/hooks/query/query-keys";
-import { useModelStore } from "#/stores/model-store";
+import {
+  clearPendingHomeModelPick,
+  hasPendingHomeModelPick,
+  markHomeModelPick,
+} from "#/hooks/use-chat-input-llm-profile-state";
 
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
@@ -147,7 +151,8 @@ describe("useCreateConversation", () => {
     useLlmProfilesMock.mockReturnValue({ data: { active_profile: null } });
     useSettingsMock.mockReturnValue({ data: undefined });
     useMetaProfilesMock.mockReturnValue({ data: undefined });
-    useModelStore.getState().setHomeManualModelPick(false);
+    clearPendingHomeModelPick("local-1", null);
+    clearPendingHomeModelPick("cloud-1", null);
     removeStoredConversationMetadata("conv-with-plugins");
     removeStoredConversationMetadata("conv-ref-stamp");
     removeStoredConversationMetadata("conv-dropdown-override");
@@ -232,10 +237,10 @@ describe("useCreateConversation", () => {
     });
   });
 
-  it("suppresses route-at-start on cloud when a home model pick was made, and clears the flag", async () => {
+  it("suppresses route-at-start on cloud when suppressRouterAtStart is passed by the home launcher", async () => {
     // "Run on first message" is on and a router is active, so a plain launch
-    // would stamp the suffix — but a home model pick (flag set by the UI
-    // handler) suppresses it for this one launch, then clears the flag.
+    // would stamp the suffix — but the home launcher explicitly passes
+    // `suppressRouterAtStart: true` when a home model pick was made.
     mockUseActiveBackend.mockReturnValue({
       backend: { id: "cloud-1", kind: "cloud" },
       orgId: null,
@@ -254,8 +259,6 @@ describe("useCreateConversation", () => {
         agent_server_url: "http://agent-server.local",
       } as never);
 
-    useModelStore.getState().setHomeManualModelPick(true);
-
     const { result } = renderHook(() => useCreateConversation(), {
       wrapper: ({ children }) => (
         <QueryClientProvider client={new QueryClient()}>
@@ -264,14 +267,15 @@ describe("useCreateConversation", () => {
       ),
     });
 
-    await result.current.mutateAsync({ query: "hi" });
+    await result.current.mutateAsync({
+      query: "hi",
+      suppressRouterAtStart: true,
+    });
 
     const call = createConversationSpy.mock.lastCall?.[0] ?? {};
     expect(call).not.toHaveProperty("runRouterAtConversationStart");
     expect(call).not.toHaveProperty("hasActiveMetaProfile");
     expect(call.suppressRouterAtStart).toBe(true);
-    // Read-and-clear: the flag is gone after the launch consumes it.
-    expect(useModelStore.getState().homeManualModelPick).toBe(false);
   });
 
   it("stamps route-at-start on cloud when no home pick was made", async () => {
@@ -308,10 +312,11 @@ describe("useCreateConversation", () => {
     expect(call.hasActiveMetaProfile).toBe(true);
   });
 
-  it("does not suppress route-at-start on a second launch after the first consumed the flag", async () => {
-    // The flag is read-and-cleared by the first launch. A second launch —
-    // even immediately after — routes as normal because the flag is gone,
-    // so a consumed pick can't leak to an unrelated launch.
+  it("does not suppress route-at-start or consume a pending home pick on a non-home launch (#19138)", async () => {
+    // A pending home model pick is owned by the home composer. A non-home
+    // launch (sidebar "New conversation", task-row launch, planning chat) calls
+    // `createConversation` without `suppressRouterAtStart` and must neither
+    // suppress route-at-start nor consume the pending home pick.
     mockUseActiveBackend.mockReturnValue({
       backend: { id: "cloud-1", kind: "cloud" },
       orgId: null,
@@ -330,51 +335,7 @@ describe("useCreateConversation", () => {
         agent_server_url: "http://agent-server.local",
       } as never);
 
-    // First launch consumes (and clears) the flag.
-    useModelStore.getState().setHomeManualModelPick(true);
-    const { result } = renderHook(() => useCreateConversation(), {
-      wrapper: ({ children }) => (
-        <QueryClientProvider client={new QueryClient()}>
-          {children}
-        </QueryClientProvider>
-      ),
-    });
-    await result.current.mutateAsync({ query: "pick" });
-    createConversationSpy.mockClear();
-
-    // Second launch: no pick made, flag is already false.
-    await result.current.mutateAsync({ query: "follow-up" });
-
-    const call = createConversationSpy.mock.lastCall?.[0] ?? {};
-    expect(call.runRouterAtConversationStart).toBe(true);
-    expect(call).not.toHaveProperty("suppressRouterAtStart");
-  });
-
-  it("suppresses route-at-start on a retry after the first launch was rejected", async () => {
-    // A home pick sets the flag; the first launch rejects (e.g. agent-server
-    // 500). The retry must still suppress routing — the user's manual pick
-    // hasn't been honored by a successful launch yet, so clearing the flag
-    // before the launch resolves would lose it on rejection.
-    mockUseActiveBackend.mockReturnValue({
-      backend: { id: "cloud-1", kind: "cloud" },
-      orgId: null,
-    });
-    useSettingsMock.mockReturnValue({
-      data: { run_router_at_conversation_start: true },
-    });
-    useMetaProfilesMock.mockReturnValue({
-      data: { active_meta_profile: "balanced" },
-    });
-    const createConversationSpy = vi
-      .spyOn(AgentServerConversationService, "createConversation")
-      .mockRejectedValueOnce(new Error("agent-server 500"))
-      .mockResolvedValue({
-        id: "task-id",
-        app_conversation_id: null,
-        agent_server_url: "http://agent-server.local",
-      } as never);
-
-    useModelStore.getState().setHomeManualModelPick(true);
+    markHomeModelPick("cloud-1", null);
     const { result } = renderHook(() => useCreateConversation(), {
       wrapper: ({ children }) => (
         <QueryClientProvider client={new QueryClient()}>
@@ -383,18 +344,14 @@ describe("useCreateConversation", () => {
       ),
     });
 
-    // First launch rejects; the flag must survive so a retry still suppresses.
-    await expect(
-      result.current.mutateAsync({ query: "pick" }),
-    ).rejects.toThrow("agent-server 500");
-    createConversationSpy.mockClear();
+    // Non-home caller launches without `suppressRouterAtStart`.
+    await result.current.mutateAsync({ query: "from-sidebar" });
 
-    // Retry: no new pick, but the prior pick was never honored.
-    await result.current.mutateAsync({ query: "pick" });
-
-    const call = createConversationSpy.mock.lastCall?.[0] ?? {};
-    expect(call.suppressRouterAtStart).toBe(true);
-    expect(call).not.toHaveProperty("runRouterAtConversationStart");
+    const nonHomeCall = createConversationSpy.mock.lastCall?.[0] ?? {};
+    expect(nonHomeCall.runRouterAtConversationStart).toBe(true);
+    expect(nonHomeCall).not.toHaveProperty("suppressRouterAtStart");
+    // The home composer's pending pick is still intact for the actual home send.
+    expect(hasPendingHomeModelPick("cloud-1", null)).toBe(true);
   });
 
 

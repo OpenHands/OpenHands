@@ -68,6 +68,7 @@ function toAgentSettingsOverride(
       acp_command: profile.acp_command ? parseCommand(profile.acp_command) : [],
       acp_args: profile.acp_args ?? [],
       acp_model: profile.acp_model ?? "",
+      acp_effort: profile.acp_effort ?? "",
     };
   }
   const stored = profile as typeof profile & {

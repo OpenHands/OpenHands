@@ -22,7 +22,11 @@ const harness = vi.hoisted(() => ({
   stopConversation: vi.fn(),
   updatePublicFlag: vi.fn(),
   downloadConversation: vi.fn(),
-  conversation: null as { public: boolean } | null,
+  conversation: null as {
+    id?: string;
+    public: boolean;
+    sandbox_status?: string | null;
+  } | null,
   systemMessage: null as {
     content: string;
     tools: null;
@@ -391,6 +395,30 @@ describe("useConversationNameContextMenu", () => {
     };
     act(() => options.onSuccess());
     expect(harness.navigate).toHaveBeenCalledWith("/conversations");
+  });
+
+  it("keeps Stop available for a running cloud sandbox after the agent is interrupted", () => {
+    harness.conversation = {
+      id: "conv-cloud",
+      public: false,
+      sandbox_status: "RUNNING",
+    };
+    const props = {
+      conversationId: "conv-cloud",
+      executionStatus: ExecutionStatus.PAUSED,
+    };
+    const { result, rerender } = renderHook(() =>
+      useConversationNameContextMenu(props),
+    );
+
+    expect(result.current.shouldShowStop).toBe(true);
+
+    harness.conversation = {
+      ...harness.conversation,
+      sandbox_status: "PAUSED",
+    };
+    rerender();
+    expect(result.current.shouldShowStop).toBe(false);
   });
 
   it("closes the menu without rethrowing when the download fails", async () => {

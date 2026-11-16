@@ -61,3 +61,20 @@ export function conversationTagFlagPatch(
   }
   return patch;
 }
+
+/**
+ * Projects mark a finished thread with `resolved=<who>` (`user` when a person
+ * resolved it, `auto` when the Agent Server resolved it from a passing
+ * critic score). Reopening removes the key; the Agent Server also removes it
+ * when a new user message arrives.
+ */
+export const RESOLVED_CONVERSATION_TAG_KEY = "resolved";
+
+export type ConversationResolution = "user" | "auto";
+
+export function getConversationResolution(
+  tags: Record<string, string> | null | undefined,
+): ConversationResolution | null {
+  const value = tags?.[RESOLVED_CONVERSATION_TAG_KEY];
+  return value === "user" || value === "auto" ? value : null;
+}

@@ -17,6 +17,12 @@ vi.mock("#/hooks/query/use-agent-profiles", () => ({
       profiles: [
         { id: "agent-reviewer", name: "Reviewer", llm_profile_ref: "fast" },
         { id: "agent-plain", name: "Plain", llm_profile_ref: null },
+        {
+          id: "agent-claude",
+          name: "Claude",
+          agent_kind: "acp",
+          llm_profile_ref: null,
+        },
       ],
     },
     isLoading: false,
@@ -152,6 +158,18 @@ describe("ActionSection", () => {
     expect(
       screen.getByTestId("automation-agent-profile-llm"),
     ).toHaveTextContent("everyday");
+  });
+
+  it("names the ACP agent, not an LLM profile, for an ACP agent profile", () => {
+    render(
+      <ActionSection
+        automation={{ ...automation, agent_profile_id: "agent-claude" }}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("automation-agent-profile-llm"),
+    ).toHaveTextContent("CONVERSATION$ACP_AGENT_GENERIC");
   });
 
   it("flags a profile the library no longer has", () => {

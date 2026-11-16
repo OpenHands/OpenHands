@@ -197,6 +197,19 @@ export async function startGuidedTour(
   }
 
   let index = 0;
+  // The guide starts a tour only once its own state has loaded, so the admin
+  // may have clicked already and be in a dialog that covers the first stop.
+  // The tour then starts on the stop in that dialog, or not at all.
+  const dialog = document.querySelector('[aria-modal="true"]');
+  if (dialog && !dialog.contains(firstAnchor)) {
+    const anchors = stops.map((stop) => queryFirst(stop.anchor));
+    index = anchors.findIndex((el) => el !== null && dialog.contains(el));
+    const anchor = anchors[index];
+    if (!anchor) {
+      return;
+    }
+    resolvedAnchors.set(stops[index].id, anchor);
+  }
   let anchorClickHandler: ((event: Event) => void) | null = null;
   const isWaiting = (stop: GuidedTourStop | undefined) =>
     Boolean(stop?.waitForComplete || stop?.advanceOnClick);
@@ -303,6 +316,16 @@ export async function startGuidedTour(
     },
   };
 
+  // The element of a stop that waits for its step can leave the page first,
+  // e.g. the admin closes the dialog. driver.js would keep the popover and
+  // move it to the page's top-left corner, so the tour ends instead.
+  const anchorWatcher = new MutationObserver(() => {
+    const anchor = resolvedAnchors.get(stops[index].id);
+    if (stops[index].waitForComplete && anchor && !anchor.isConnected) {
+      stopGuidedTour();
+    }
+  });
+
   const instance = driver({
     showProgress: stops.length > 1,
     progressText: "{{current}}/{{total}}",
@@ -388,6 +411,7 @@ export async function startGuidedTour(
     },
     onDestroyed: () => {
       tourCtl.clearAnchorClickHandler();
+      anchorWatcher.disconnect();
       if (!isCurrent()) {
         return;
       }
@@ -402,8 +426,9 @@ export async function startGuidedTour(
 
   activeDriver = instance;
   setTourActive(true);
-  setInteractive(stops[0]);
-  instance.drive();
+  setInteractive(stops[index]);
+  instance.drive(index);
+  anchorWatcher.observe(document.body, { childList: true, subtree: true });
   window.setTimeout(() => {
     if (!isCurrent()) {
       return;

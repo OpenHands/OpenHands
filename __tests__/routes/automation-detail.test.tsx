@@ -111,6 +111,7 @@ function mockServiceAccountsEnabled(isServiceAccountsEnabled: boolean) {
     isSlackEnabled: false,
     deploymentMode: null,
     isOrgMcpServersEnabled: false,
+    isAgentProfilesEnabled: false,
     isServiceAccountsEnabled,
   };
   vi.mocked(fetchCloudIntegrationsConfig).mockResolvedValue(config);

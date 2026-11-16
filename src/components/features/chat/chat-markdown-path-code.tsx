@@ -93,7 +93,7 @@ function ChatMarkdownPathLink({
       title={path}
       className={cn(
         className,
-        "cursor-pointer rounded border border-surface-raised bg-surface-raised px-[0.4em] py-[0.2em] font-mono text-foreground hover:underline",
+        "cursor-pointer rounded border border-surface-raised bg-surface-raised px-code-inline-x py-code-inline-y font-mono text-foreground hover:underline",
       )}
       onClick={(event) => {
         event.stopPropagation();

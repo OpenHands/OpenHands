@@ -269,8 +269,8 @@ export function SetupModelPill({
 }
 
 /**
- * Picks the agent profile a script automation runs from, or None. Each
- * option names the LLM profile that agent profile would run on.
+ * Picks the agent profile an automation runs from, or None. Each option names
+ * the LLM profile that agent profile would run on.
  */
 export function SetupAgentProfilePill({
   value,
@@ -319,7 +319,11 @@ export function SetupAgentProfilePill({
               key={item.id}
               testId={`automation-setup-agent-profile-option-${item.id}`}
               label={item.name}
-              detail={item.llm_profile_ref || activeLlmProfile}
+              detail={
+                item.agent_kind === "acp"
+                  ? t(I18nKey.CONVERSATION$ACP_AGENT_GENERIC)
+                  : item.llm_profile_ref || activeLlmProfile
+              }
               isSelected={item.id === selectedId}
               onSelect={() => {
                 onChange(item.id);
@@ -334,10 +338,30 @@ export function SetupAgentProfilePill({
 }
 
 /**
- * What a script automation runs with: an agent profile, or an LLM profile.
- * The service refuses both, so while an agent profile is chosen the LLM
- * profile pill shows the one that profile runs on and stays locked; None
- * hands the choice back.
+ * The service refuses an LLM profile next to an agent profile, so while one is
+ * chosen the LLM profile pill shows what it runs on and stays locked. An ACP
+ * agent runs its own model, not an LLM profile.
+ */
+function useModelLockedByAgentProfile(agentProfileId: string) {
+  const { t } = useTranslation("openhands");
+  const { data } = useAgentProfiles();
+  const selectedId = agentProfileId.trim() || null;
+  if (!selectedId) return undefined;
+  const selected = data?.profiles?.find((profile) => profile.id === selectedId);
+  return {
+    llmProfile:
+      selected?.agent_kind === "acp"
+        ? t(I18nKey.CONVERSATION$ACP_AGENT_GENERIC)
+        : selected?.llm_profile_ref || null,
+    reason: t(I18nKey.AUTOMATION_SETUP$LLM_PROFILE_SET_BY_AGENT, {
+      name: selected?.name ?? selectedId,
+    }),
+  };
+}
+
+/**
+ * What a script automation runs with: an agent profile, or an LLM profile;
+ * None hands the choice back to the LLM profile.
  */
 export function SetupProfilePickers({
   model,
@@ -351,16 +375,7 @@ export function SetupProfilePickers({
   onAgentProfileChange: (agentProfileId: string) => void;
 }) {
   const { t } = useTranslation("openhands");
-  const { data } = useAgentProfiles();
-  const selectedId = agentProfileId.trim() || null;
-  const selected = selectedId
-    ? data?.profiles?.find((profile) => profile.id === selectedId)
-    : undefined;
-  const lockReason = selectedId
-    ? t(I18nKey.AUTOMATION_SETUP$LLM_PROFILE_SET_BY_AGENT, {
-        name: selected?.name ?? selectedId,
-      })
-    : null;
+  const modelLock = useModelLockedByAgentProfile(agentProfileId);
 
   return (
     <div
@@ -387,14 +402,7 @@ export function SetupProfilePickers({
         <SetupModelPill
           value={model}
           onChange={onModelChange}
-          lockedTo={
-            lockReason
-              ? {
-                  llmProfile: selected?.llm_profile_ref || null,
-                  reason: lockReason,
-                }
-              : undefined
-          }
+          lockedTo={modelLock}
         />
       </div>
     </div>
@@ -482,10 +490,12 @@ export function AutomationSetupPromptStack({
   titleAction,
   showTitle = true,
   model,
+  agentProfileId = "",
   repositoryReadOnly = false,
   onPromptChange,
   onRepositoryChange,
   onModelChange,
+  onAgentProfileChange,
 }: {
   prompt: string;
   repository: string;
@@ -498,13 +508,17 @@ export function AutomationSetupPromptStack({
   /** The setup form owns the title when the kind toggle stays outside the crossfade. */
   showTitle?: boolean;
   model: string;
+  agentProfileId?: string;
   /** Show the repositories without letting them be added or removed. */
   repositoryReadOnly?: boolean;
   onPromptChange: (value: string) => void;
   onRepositoryChange: (value: string) => void;
   onModelChange: (profileName: string) => void;
+  /** Offers the agent profile picker; without it only the model is offered. */
+  onAgentProfileChange?: (agentProfileId: string) => void;
 }) {
   const { t } = useTranslation("openhands");
+  const modelLock = useModelLockedByAgentProfile(agentProfileId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { gripRef, isGripDragging, handleGripMouseDown, handleGripTouchStart } =
     usePromptTextareaResize(textareaRef, { contentKey: prompt });
@@ -661,7 +675,20 @@ export function AutomationSetupPromptStack({
               className="automation-setup-prompt-input w-full resize-none border-0 bg-transparent p-0 text-sm text-content outline-none placeholder:text-tertiary-alt"
             />
             <div className="flex min-w-0 items-center gap-2 pt-2">
-              <SetupModelPill value={model} onChange={onModelChange} />
+              {onAgentProfileChange ? (
+                <SetupAgentProfilePill
+                  value={agentProfileId}
+                  onChange={(value) => {
+                    if (value) onModelChange("");
+                    onAgentProfileChange(value);
+                  }}
+                />
+              ) : null}
+              <SetupModelPill
+                value={model}
+                onChange={onModelChange}
+                lockedTo={onAgentProfileChange ? modelLock : undefined}
+              />
             </div>
             <div
               data-testid="automation-setup-prompt-grip"
