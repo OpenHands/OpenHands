@@ -1,3 +1,4 @@
+import { isAskUserAnswerEvent } from "@openhands/typescript-client";
 import type {
   ActionEvent,
   OpenHandsEvent,
@@ -283,6 +284,7 @@ const buildTranscriptEntries = (
   const emittedNarrationActionIds = new Set<string>();
   const renderableEvents = uiEvents.filter(
     (event) =>
+      ("kind" in event && isAskUserAnswerEvent(event)) ||
       (isSwitchLLMObservationEvent(event) && !event.observation.is_error) ||
       (isClassifyAndSwitchLLMObservationEvent(event) &&
         !event.observation.is_error) ||
@@ -322,6 +324,17 @@ const buildTranscriptEntries = (
 
     const { event } = item;
     try {
+      if ("kind" in event && isAskUserAnswerEvent(event)) {
+        entries.push({
+          kind: "message",
+          author: "user",
+          content: [event.option_label, event.text]
+            .filter(Boolean)
+            .join("\n\n"),
+          timestamp: event.timestamp ?? "",
+        });
+        continue;
+      }
       const narrationAction = isActionEvent(event)
         ? event
         : isObservationEvent(event) || isUserRejectObservation(event)

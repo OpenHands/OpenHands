@@ -129,6 +129,9 @@ it("hydrates the answered card without repeating the machine answer as a chat bu
     name: question.action.question,
   });
   expect(within(card).getByText("Use the EU region")).toBeVisible();
+  expect(
+    within(card).getByRole("img", { name: "ASK_USER$ANSWERED" }).parentElement,
+  ).toHaveTextContent("PostgreSQL");
   expect(within(card).getByRole("status")).toHaveTextContent(
     "ASK_USER$ANSWERED",
   );
@@ -255,6 +258,11 @@ it("keeps existing decisions readable with the feature off and never sends a pla
     name: question.action.question,
   });
   expect(await within(card).findByText("ASK_USER$DISABLED")).toBeVisible();
+  expect(within(card).getByText("Share data across servers.")).toBeVisible();
+  expect(within(card).getByText("Keep data on this device.")).toBeVisible();
+  expect(
+    within(card).getByText("ASK_USER$RECOMMENDED").parentElement,
+  ).toHaveTextContent("PostgreSQL");
   expect(within(card).queryByRole("button")).not.toBeInTheDocument();
   act(() => {
     useEventStore.getState().clearEventsForConversation("test-conversation-id");
@@ -265,4 +273,27 @@ it("keeps existing decisions readable with the feature off and never sends a pla
   });
   expect(within(card).queryByRole("button")).not.toBeInTheDocument();
   expect(answer).not.toHaveBeenCalled();
+});
+
+it("preserves the agent's narration and reasoning after the question result replaces its action", async () => {
+  useEventStore.getState().clearEventsForConversation("test-conversation-id");
+  useEventStore.getState().addEvents([
+    {
+      ...question,
+      thought: [{ type: "text", text: "The storage choice affects sharing." }],
+      reasoning_content: "Consider whether several servers need access.",
+    } satisfies ActionEvent<AskUserAction>,
+    result,
+  ]);
+  renderWithProviders(<Transcript />);
+  expect(
+    await screen.findByText("The storage choice affects sharing."),
+  ).toBeVisible();
+  await userEvent.click(screen.getByRole("button", { expanded: false }));
+  expect(
+    await screen.findByText("Consider whether several servers need access."),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("region", { name: question.action.question }),
+  ).toBeVisible();
 });

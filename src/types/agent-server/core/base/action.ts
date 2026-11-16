@@ -1,3 +1,4 @@
+import type { AskUserAction } from "@openhands/typescript-client";
 import { AUTOMATION_FORM_UPDATE_ACTION_KIND } from "#/constants/automation-form";
 import { CANVAS_UI_CLIENT_ACTION_KIND } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_ACTION_KIND } from "#/constants/child-conversation";
@@ -5,11 +6,7 @@ import { REQUEST_SECRET_ACTION_KIND } from "#/constants/secret-request";
 import { ActionBase } from "./base";
 import { TaskItem } from "./common";
 
-export interface AskUserAction extends ActionBase<"AskUserAction"> {
-  question: string;
-  options: { label: string; consequence: string }[];
-  recommended?: number | null;
-}
+export type { AskUserAction };
 
 export interface MCPToolAction extends ActionBase<"MCPToolAction"> {
   /**

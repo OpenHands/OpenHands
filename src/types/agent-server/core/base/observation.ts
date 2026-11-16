@@ -1,3 +1,4 @@
+import type { AskUserObservation } from "@openhands/typescript-client";
 import { ObservationBase } from "./base";
 import {
   CmdOutputMetadata,
@@ -6,10 +7,7 @@ import {
   ImageContent,
 } from "./common";
 
-export interface AskUserObservation extends ObservationBase<"AskUserObservation"> {
-  content: Array<TextContent | ImageContent>;
-  is_error: boolean;
-}
+export type { AskUserObservation };
 
 export interface MCPToolObservation extends ObservationBase<"MCPToolObservation"> {
   /**

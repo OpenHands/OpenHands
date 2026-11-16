@@ -280,6 +280,12 @@ export const groupEvents = (
       if (!run) run = { events: [], startIndex: index };
       run.events.push(event);
     } else {
+      if (
+        isObservationEvent(event) &&
+        event.observation.kind === "AskUserObservation"
+      ) {
+        keepNarration();
+      }
       flushRun();
       items.push({ kind: "single", event, index });
     }

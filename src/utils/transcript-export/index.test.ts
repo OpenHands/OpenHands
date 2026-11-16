@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { AskUserAnswerEvent } from "@openhands/typescript-client";
 import type {
   ActionEvent,
   AgentErrorEvent,
@@ -135,6 +136,47 @@ const defaultOptions = {
 };
 
 describe("conversation transcript export", () => {
+  it.each([
+    { option_index: 1, option_label: "PostgreSQL", text: "Use the EU region" },
+    { option_index: null, option_label: null, text: "Neither, use JSON" },
+  ])("exports a decision answer once in both formats: %j", (answer) => {
+    const event: AskUserAnswerEvent = {
+      id: "answer-1",
+      kind: "AskUserAnswerEvent",
+      source: "user",
+      timestamp,
+      ask_id: "question-1",
+      ...answer,
+    };
+    const machine: MessageEvent = {
+      ...userMessage,
+      llm_message: {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: '[Answer to your question: "Choose storage?"]\nMachine copy',
+          },
+        ],
+      },
+    };
+    for (const output of [
+      eventsToMarkdown([event, machine], {
+        ...defaultOptions,
+        includeToolDetails: false,
+      }),
+      eventsToHtml([event, machine], {
+        ...defaultOptions,
+        includeToolDetails: false,
+      }),
+    ]) {
+      expect(output.split(answer.text)).toHaveLength(2);
+      if (answer.option_label) expect(output).toContain(answer.option_label);
+      expect(output).not.toContain("Machine copy");
+      expect(output).not.toContain("Answer to your question");
+    }
+  });
+
   it("exports messages and collapsed tool details as GitHub-ready Markdown", () => {
     const markdown = eventsToMarkdown(
       [

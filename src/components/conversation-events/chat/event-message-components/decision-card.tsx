@@ -23,6 +23,8 @@ import {
 import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
 
+export const ASK_USER_EXPERIMENTAL_FEATURE = "ask_user";
+
 export function DecisionCard({
   question,
   result,
@@ -36,7 +38,9 @@ export function DecisionCard({
   const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
   const { backend } = useActiveBackend();
-  const enabled = useIsExperimentalFeatureEnabled("ask_user");
+  const enabled = useIsExperimentalFeatureEnabled(
+    ASK_USER_EXPERIMENTAL_FEATURE,
+  );
   const queryClient = useQueryClient();
   const [text, setText] = React.useState("");
   const [sending, setSending] = React.useState(false);
@@ -207,9 +211,24 @@ export function DecisionCard({
               )}
             >
               {answer?.option_index === index && (
-                <Check className="mr-1 inline h-4 w-4" aria-hidden="true" />
+                <Check
+                  className="mr-1 inline h-4 w-4"
+                  role="img"
+                  aria-label={t(I18nKey.ASK_USER$ANSWERED)}
+                />
               )}
               {option.label}
+              {pending && action.recommended === index && (
+                <span className="ml-2 text-xs text-muted">
+                  {" "}
+                  {t(I18nKey.ASK_USER$RECOMMENDED)}
+                </span>
+              )}
+              {pending && option.consequence && (
+                <span className="mt-1 block text-muted">
+                  {option.consequence}
+                </span>
+              )}
             </div>
           ))}
           {answer?.text && (
