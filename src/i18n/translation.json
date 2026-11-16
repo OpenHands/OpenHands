@@ -43666,5 +43666,23 @@
     "uk": "Розмови, розпочаті без профілю агента, використовують власний список інструментів: {{names}}.",
     "ca": "Les converses iniciades sense un perfil d'agent fan servir una llista d'eines personalitzada: {{names}}.",
     "id": "Percakapan yang dimulai tanpa profil agen menggunakan daftar alat khusus: {{names}}."
+  },
+  "CHAT_INTERFACE$SANDBOX_OUT_OF_MEMORY": {
+    "en": "Your sandbox ran out of memory. Running tasks were interrupted. Try fewer parallel tasks, or ask your administrator or support team to increase the sandbox memory limit.",
+    "es": "Tu entorno de ejecución se quedó sin memoria. Las tareas en curso se interrumpieron. Prueba con menos tareas en paralelo o pide al administrador o al equipo de soporte que aumente el límite de memoria del entorno.",
+    "fr": "Votre environnement d’exécution a manqué de mémoire. Les tâches en cours ont été interrompues. Réduisez le nombre de tâches parallèles ou demandez à votre administrateur ou au support d’augmenter sa limite de mémoire.",
+    "de": "Deiner Sandbox ist der Arbeitsspeicher ausgegangen. Laufende Aufgaben wurden unterbrochen. Führe weniger Aufgaben parallel aus oder bitte die Administration oder den Support, das Speicherlimit der Sandbox zu erhöhen.",
+    "it": "La sandbox ha esaurito la memoria. Le attività in corso sono state interrotte. Prova con meno attività in parallelo oppure chiedi all’amministratore o al supporto di aumentare il limite di memoria della sandbox.",
+    "pt": "A memória do seu ambiente de execução se esgotou. As tarefas em andamento foram interrompidas. Tente executar menos tarefas em paralelo ou peça ao administrador ou ao suporte para aumentar o limite de memória.",
+    "ja": "サンドボックスのメモリが不足し、実行中のタスクが中断されました。並列実行するタスクを減らすか、管理者またはサポートチームにサンドボックスのメモリ上限の引き上げを依頼してください。",
+    "zh-TW": "沙盒記憶體不足，執行中的工作已中斷。請減少平行工作，或聯絡管理員或支援團隊提高沙盒記憶體上限。",
+    "ar": "نفدت ذاكرة بيئة التشغيل المعزولة، وتوقفت المهام الجارية. جرّب تشغيل عدد أقل من المهام بالتوازي، أو اطلب من المسؤول أو فريق الدعم زيادة حد الذاكرة.",
+    "tr": "Korumalı alanınızın belleği tükendi. Çalışan görevler kesintiye uğradı. Daha az görevi paralel çalıştırın veya yöneticinizden ya da destek ekibinden bellek sınırını artırmasını isteyin.",
+    "ca": "L’entorn d’execució s’ha quedat sense memòria. Les tasques en curs s’han interromput. Prova amb menys tasques en paral·lel o demana a l’administrador o al suport que n’augmenti el límit de memòria.",
+    "zh-CN": "沙盒内存不足，正在运行的任务已中断。请减少并行任务，或联系管理员或支持团队提高沙盒内存上限。",
+    "ko-KR": "샌드박스의 메모리가 부족하여 실행 중인 작업이 중단되었습니다. 병렬 작업 수를 줄이거나 관리자 또는 지원팀에 샌드박스 메모리 한도 증설을 요청하세요.",
+    "uk": "У пісочниці закінчилася пам’ять. Поточні завдання було перервано. Спробуйте виконувати менше завдань паралельно або попросіть адміністратора чи службу підтримки збільшити ліміт пам’яті пісочниці.",
+    "no": "Sandkassen gikk tom for minne. Pågående oppgaver ble avbrutt. Prøv færre parallelle oppgaver, eller be administratoren eller brukerstøtten om å øke minnegrensen for sandkassen.",
+    "id": "Memori sandbox Anda habis. Tugas yang berjalan terhenti. Coba kurangi tugas paralel, atau minta administrator atau tim dukungan meningkatkan batas memori sandbox."
   }
 }
