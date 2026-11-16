@@ -74,7 +74,7 @@
     "vite": "8.3.6",
     "winston": "3.19.0",
     "winston-daily-rotate-file": "5.0.0",
-    "ws": "8.22.1",
+    "ws": "8.22.2",
     "zustand": "5.1.0"
   },
   "scripts": {
