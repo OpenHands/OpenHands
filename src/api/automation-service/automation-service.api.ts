@@ -7,6 +7,8 @@ import type {
   AutomationSpec,
   AutomationTagCount,
   AutomationTrigger,
+  Factory,
+  FactoryListResponse,
   AutomationsResponse,
   AutomationRunsResponse,
   ChangeRunAsRequest,
@@ -60,7 +62,10 @@ import {
   AGENT_CANVAS_CLIENT_HEADERS,
   OPENHANDS_TELEMETRY_DISTINCT_ID_HEADER,
 } from "../client-source";
-import { AUTOMATION_DRAFTS_FEATURE } from "#/constants/automation-form";
+import {
+  AUTOMATION_DRAFTS_FEATURE,
+  FACTORIES_FEATURE,
+} from "#/constants/automation-form";
 import { randomUUID } from "#/utils/random-uuid";
 
 const AUTOMATION_BASE_PATH = "/api/automation";
@@ -523,9 +528,11 @@ class AutomationService {
       runAs?: AutomationRunAsFilter;
       /** Only automations carrying this tag. */
       tag?: string;
+      /** Only automations in this factory. */
+      factoryId?: string;
     } = {},
   ): Promise<AutomationsResponse> {
-    const { limit = 50, offset = 0, runAs, tag } = params;
+    const { limit = 50, offset = 0, runAs, tag, factoryId } = params;
     const active = getActiveBackend().backend;
 
     let response: AutomationsResponse;
@@ -533,13 +540,15 @@ class AutomationService {
       response = await callCloudProxy<AutomationsResponse>({
         backend: active,
         method: "GET",
-        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { run_as: runAs, tag })}`,
+        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { run_as: runAs, tag, factory_id: factoryId })}`,
         headers: await buildAutomationRequestHeaders(),
       });
     } else {
       const { data } = await localAutomationAxios.get<AutomationsResponse>(
         `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
-        { params: { limit, offset, run_as: runAs, tag } },
+        {
+          params: { limit, offset, run_as: runAs, tag, factory_id: factoryId },
+        },
       );
       response = data;
     }
@@ -559,8 +568,42 @@ class AutomationService {
     offset = 0,
     runAs?: AutomationRunAsFilter,
     tag?: string,
+    factoryId?: string,
   ): Promise<AutomationsResponse> {
-    return AutomationService.listAutomations({ limit, offset, runAs, tag });
+    return AutomationService.listAutomations({
+      limit,
+      offset,
+      runAs,
+      tag,
+      factoryId,
+    });
+  }
+
+  /**
+   * The org's factories, newest first. Factories live under the automation
+   * list path (`/v1/factories`), so they follow it rather than adding a
+   * manifest endpoint of their own.
+   */
+  static async listFactories(
+    params: { limit?: number; offset?: number } = {},
+  ): Promise<FactoryListResponse> {
+    const { limit = 100, offset = 0 } = params;
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}/factories`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<FactoryListResponse>({
+        backend: active,
+        method: "GET",
+        path: `${path}?${buildListQuery(limit, offset)}`,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.get<FactoryListResponse>(path, {
+      params: { limit, offset },
+    });
+    return data;
   }
 
   /** The org's tags, each with how many live automations carry it. */
@@ -1036,6 +1079,30 @@ class AutomationService {
     capabilities: DeploymentCapabilities | null | undefined,
   ): boolean {
     return Boolean(capabilities?.features?.includes(AUTOMATION_DRAFTS_FEATURE));
+  }
+
+  static async getFactory(id: string): Promise<Factory> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}/factories/${encodeURIComponent(id)}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Factory>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.get<Factory>(path);
+    return data;
+  }
+
+  /** Whether the active deployment advertises factories. */
+  static supportsFactories(
+    capabilities: DeploymentCapabilities | null | undefined,
+  ): boolean {
+    return Boolean(capabilities?.features?.includes(FACTORIES_FEATURE));
   }
 
   /**

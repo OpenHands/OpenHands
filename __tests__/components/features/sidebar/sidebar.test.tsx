@@ -42,6 +42,15 @@ vi.mock("react-i18next", async () => {
   };
 });
 
+const factoriesSupport = vi.hoisted(() => ({ isSupported: false }));
+
+vi.mock("#/hooks/query/use-factories", () => ({
+  useFactoriesSupported: () => ({
+    isLoading: false,
+    isSupported: factoriesSupport.isSupported,
+  }),
+}));
+
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({ data: { feature_flags: {} } }),
 }));
@@ -243,6 +252,7 @@ describe("Sidebar", () => {
     // Zustand store is a module singleton; reset it so collapsed state from
     // a prior test doesn't bleed into this one.
     useSidebarStore.setState({ collapsed: false });
+    factoriesSupport.isSupported = false;
   });
 
   afterEach(() => {
@@ -645,6 +655,24 @@ describe("Sidebar", () => {
       checklist.compareDocumentPosition(backendBar) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("hides the Factories link when the automation service has no factories", () => {
+    renderSidebar("/conversations");
+
+    expect(
+      screen.queryByTestId("sidebar-factories-link"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("links to the factories list when the automation service has factories", () => {
+    factoriesSupport.isSupported = true;
+
+    renderSidebar("/conversations");
+
+    const link = screen.getByTestId("sidebar-factories-link");
+    expect(link).toHaveTextContent("Factories");
+    expect(link).toHaveAttribute("href", "/factories");
   });
 
   it("renders icons for every top-level nav item so they remain meaningful in the collapsed rail", () => {
