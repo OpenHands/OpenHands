@@ -21,6 +21,8 @@ interface SecretFormProps {
   onSaved?: (secret: CustomSecretInput) => void;
   /** Name to prefill in add mode. */
   defaultName?: string;
+  /** Allow replacing only the requested default name, never another saved name. */
+  allowReplaceDefaultName?: boolean;
   /** Keep the form open after a failed save so the user can retry. */
   keepOpenOnError?: boolean;
   /**
@@ -47,6 +49,7 @@ export function SecretForm({
   onSaved,
   defaultName = "",
   keepOpenOnError = false,
+  allowReplaceDefaultName = false,
   initialDraft,
   onDraftChange,
   mutationKey,
@@ -175,6 +178,12 @@ export function SecretForm({
     );
   };
 
+  const isReplacingDefaultName =
+    mode === "add" &&
+    allowReplaceDefaultName &&
+    name.trim() === defaultName &&
+    secrets.some((secret) => secret.name === defaultName);
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -189,7 +198,7 @@ export function SecretForm({
         (secret) =>
           secret.name === trimmedName && secret.name !== selectedSecret,
       );
-      if (isNameAlreadyUsed) {
+      if (isNameAlreadyUsed && !isReplacingDefaultName) {
         setError(t(I18nKey.SECRETS$SECRET_ALREADY_EXISTS));
         return;
       }
@@ -341,7 +350,12 @@ export function SecretForm({
           variant="primary"
           isDisabled={isSubmitDisabled || isSaving}
         >
-          {mode === "add" && t(I18nKey.SECRETS$ADD_SECRET)}
+          {mode === "add" &&
+            t(
+              isReplacingDefaultName
+                ? I18nKey.SECRETS$EDIT_SECRET
+                : I18nKey.SECRETS$ADD_SECRET,
+            )}
           {mode === "edit" && t(I18nKey.SECRETS$EDIT_SECRET)}
         </BrandButton>
       </div>

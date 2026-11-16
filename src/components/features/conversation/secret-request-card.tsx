@@ -97,6 +97,7 @@ export function SecretRequestCard({ request }: { request: SecretRequest }) {
         mode="add"
         selectedSecret={null}
         defaultName={request.name}
+        allowReplaceDefaultName
         keepOpenOnError
         initialDraft={draft}
         mutationKey={secretRequestMutationKey(request.toolCallId)}
