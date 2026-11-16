@@ -1567,6 +1567,102 @@ describe("recommended automations", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("still offers GitLab setup when no cloud connection or token exists", async () => {
+    await activateCloudBackend({ deploymentMode: "self_hosted" });
+    renderLauncher({ withBackendProvider: true });
+
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-gitlab-issue-to-mr",
+      ),
+    );
+
+    await screen.findByTestId("provider-setup-notice");
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("opens local GitLab issue-to-MR token setup instead of installing MCP", async () => {
+    renderLauncher();
+
+    fireEvent.click(
+      screen.getByTestId("recommended-automation-card-gitlab-issue-to-mr"),
+    );
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      "/automations/new/gitlab-issue-to-mr",
+    );
+    expect(screen.queryByTestId("mcp-install-modal")).toBeNull();
+  });
+
+  it("opens GitLab issue-to-MR setup without reinstalling a self-managed MCP server", async () => {
+    await activateCloudBackend({
+      deploymentMode: "self_hosted",
+      settings: settingsWithMcpConfig({
+        gitlab: { url: "https://gitlab.example.com/api/v4/mcp" },
+      }),
+    });
+    renderLauncher({ withBackendProvider: true });
+
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-gitlab-issue-to-mr",
+      ),
+    );
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        "/automations/new/gitlab-issue-to-mr",
+      ),
+    );
+    expect(screen.queryByTestId("provider-setup-notice")).toBeNull();
+    expect(screen.queryByTestId("mcp-install-modal")).toBeNull();
+  });
+
+  it.each(["GITLAB_TOKEN", "gitlab_token"])(
+    "opens GitLab issue-to-MR setup without reinstalling an existing %s secret",
+    async (name) => {
+      vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([{ name }]);
+      await activateCloudBackend({ deploymentMode: "self_hosted" });
+      renderLauncher({ withBackendProvider: true });
+
+      fireEvent.click(
+        await screen.findByTestId(
+          "recommended-automation-card-gitlab-issue-to-mr",
+        ),
+      );
+
+      await waitFor(() =>
+        expect(mockNavigate).toHaveBeenCalledWith(
+          "/automations/new/gitlab-issue-to-mr",
+        ),
+      );
+      expect(screen.queryByTestId("provider-setup-notice")).toBeNull();
+      expect(screen.queryByTestId("mcp-install-modal")).toBeNull();
+    },
+  );
+
+  it("opens GitLab issue-to-MR setup with an existing GitLab sign-in", async () => {
+    await activateCloudBackend({
+      deploymentMode: "self_hosted",
+      settings: { provider_tokens_set: { gitlab: null } },
+    });
+    renderLauncher({ withBackendProvider: true });
+
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-gitlab-issue-to-mr",
+      ),
+    );
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        "/automations/new/gitlab-issue-to-mr",
+      ),
+    );
+    expect(screen.queryByTestId("provider-setup-notice")).toBeNull();
+    expect(screen.queryByTestId("mcp-install-modal")).toBeNull();
+  });
+
   it("sets up a template the instance looks ready for", async () => {
     // Arrange
     await activateCloudBackend({

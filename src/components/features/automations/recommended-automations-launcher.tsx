@@ -116,7 +116,7 @@ export function RecommendedAutomationsLauncher({
 }: RecommendedAutomationsLauncherProps) {
   const activeBackend = useActiveBackend();
   const { navigate } = useNavigation();
-  const { data: settings } = useSettings();
+  const { data: settings, isLoading: isSettingsLoading } = useSettings();
   const { trackPrebuiltAutomationEnabled } = useTracking();
   const createConversation = useCreateConversation();
   const ensureResponderUrlSecret = useResponderUrlSecret();
@@ -163,14 +163,19 @@ export function RecommendedAutomationsLauncher({
       slackEnabled: isSlackEnabled,
       jiraEnabled: isJiraEnabled,
     });
-  // A self-hosted instance that configures none of a template's git providers
-  // natively may still have one set up through an MCP server or a saved token
-  // secret; the secrets list says which.
   const isSelfHostedCloud =
     activeBackend.backend.kind === "cloud" && deploymentMode === "self_hosted";
   const { data: secrets, isLoading: isSecretsLoading } = useSearchSecrets({
-    enabled: isSelfHostedCloud,
+    enabled: activeBackend.backend.kind === "cloud",
   });
+  const hasGitLabToken =
+    secrets.some(
+      ({ name }) =>
+        name === "GITLAB_TOKEN" ||
+        (activeBackend.backend.kind === "cloud" && name === "gitlab_token"),
+    ) ||
+    (activeBackend.backend.kind === "cloud" &&
+      Object.hasOwn(settings?.provider_tokens_set ?? {}, "gitlab"));
 
   const installedMcpConfig = useMemo(
     () =>
@@ -278,12 +283,27 @@ export function RecommendedAutomationsLauncher({
   const getMissingEntries = useCallback(
     (automation: RecommendedAutomation) =>
       getRequiredEntries(automation).filter((entry) => {
+        if (entry.id === "gitlab") {
+          if (hasGitLabToken) return false;
+          // Local GitLab setup forms require a token; their worker cannot call MCP.
+          if (
+            activeBackend.backend.kind === "local" &&
+            SETUP_REGISTRY.findById(automation.id)
+          ) {
+            return false;
+          }
+        }
         if (findInstalledEntryMatch(entry, installedMcpConfig)) return false;
         const native = getNativeIntegration(entry.id);
         if (native) return !native.isConnected;
         return isMcpInstallableEntry(entry);
       }),
-    [getNativeIntegration, installedMcpConfig],
+    [
+      activeBackend.backend.kind,
+      getNativeIntegration,
+      hasGitLabToken,
+      installedMcpConfig,
+    ],
   );
 
   const proceedWithLocalLaunch = (automation: RecommendedAutomation) => {
@@ -332,7 +352,11 @@ export function RecommendedAutomationsLauncher({
     return getTemplateGitProviderIds(automation).flatMap((id) => {
       if (getNativeIntegration(id)) return [];
       const entry = getMarketplaceEntryById(id, MCP_MARKETPLACE);
-      if (!entry || findInstalledEntryMatch(entry, installedMcpConfig)) {
+      if (
+        !entry ||
+        (id === "gitlab" && hasGitLabToken) ||
+        findInstalledEntryMatch(entry, installedMcpConfig)
+      ) {
         return [];
       }
       const secretName =
@@ -498,11 +522,13 @@ export function RecommendedAutomationsLauncher({
 
   if (isRail && isAutomationsLoading) return null;
 
-  // Which integrations a card still needs depends on what the cloud instance
-  // connects natively; a card shown before that is known could be launched
-  // with the wrong install queue. On a self-hosted instance the saved secrets
-  // decide the same way whether a git provider counts as set up.
-  if (isNativeIntegrationsLoading || (isSelfHostedCloud && isSecretsLoading)) {
+  // Wait for settings and saved secrets before deciding which integrations
+  // a card needs; otherwise an existing connection can trigger an install.
+  if (
+    isSettingsLoading ||
+    isNativeIntegrationsLoading ||
+    (activeBackend.backend.kind === "cloud" && isSecretsLoading)
+  ) {
     return null;
   }
 
