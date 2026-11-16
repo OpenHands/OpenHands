@@ -70,6 +70,8 @@ interface UseAutomationsOptions {
   pageSize?: number;
   runAs?: AutomationRunAsFilter;
   tag?: string;
+  /** Only the automations in this factory. */
+  factoryId?: string;
   enabled?: boolean;
 }
 
@@ -122,18 +124,25 @@ export function useAutomations(options: UseAutomationsOptions = {}) {
     pageSize = AUTOMATIONS_PAGE_SIZE,
     runAs,
     tag,
+    factoryId,
     enabled = true,
   } = options;
   const active = useActiveBackend();
   return useInfiniteQuery({
     queryKey: [
       ...AUTOMATIONS_QUERY_KEY,
-      { pageSize, runAs, tag },
+      { pageSize, runAs, tag, factoryId },
       active.backend.id,
       active.orgId,
     ],
     queryFn: ({ pageParam }) =>
-      AutomationService.getAutomations(pageSize, pageParam, runAs, tag),
+      AutomationService.getAutomations(
+        pageSize,
+        pageParam,
+        runAs,
+        tag,
+        factoryId,
+      ),
     initialPageParam: 0,
     getNextPageParam: (lastPage, _pages, lastOffset) => {
       const nextOffset = lastOffset + lastPage.automations.length;
