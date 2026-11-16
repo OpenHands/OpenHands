@@ -115,10 +115,7 @@ export function buildAskUserCards(
   const answerMessageIds = new Set<string>();
   const questions = new Map<string, Omit<AskUserCard, "askId" | "status">>();
   let waiting: AskUserCard | null = null;
-  // A tap saves its answer event, then the message the agent reads; only
-  // that message closes the question (as on the server), so a tap whose
-  // message never landed leaves the card waiting.
-  let tapped: { card: AskUserCard; status: AskUserStatus } | null = null;
+  let answerMessageDue = false;
 
   for (const event of events) {
     if (isActionEvent(event) && event.tool_name === ASK_USER_TOOL_NAME) {
@@ -143,30 +140,27 @@ export function buildAskUserCards(
       }
     } else if (isAskUserAnswerEvent(event)) {
       const card = byAskId.get(event.ask_id);
-      if (card && card === waiting) {
-        tapped = {
-          card,
-          status: {
-            kind: "answered",
-            optionIndex: event.option_index ?? null,
-            optionLabel: event.option_label ?? null,
-            text: event.text ?? null,
-          },
+      if (card) {
+        card.status = {
+          kind: "answered",
+          optionIndex: event.option_index ?? null,
+          optionLabel: event.option_label ?? null,
+          text: event.text ?? null,
         };
+        if (waiting === card) waiting = null;
+        answerMessageDue = true;
       }
     } else if (isUserOwnMessage(event)) {
       if (
-        tapped?.card === waiting &&
-        tapped &&
+        answerMessageDue &&
         messageText(event).startsWith(ASK_USER_ANSWER_PREFIX)
       ) {
-        tapped.card.status = tapped.status;
         answerMessageIds.add(event.id);
       } else if (waiting) {
         waiting.status = { kind: "answered_in_chat" };
+        waiting = null;
       }
-      waiting = null;
-      tapped = null;
+      answerMessageDue = false;
     }
   }
 
