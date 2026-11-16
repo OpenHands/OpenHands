@@ -698,3 +698,100 @@ describe("AutomationService.pluginSpecPreflight", () => {
     expect(result.manifest.name).toBe("recipe");
   });
 });
+
+describe("AutomationService factories", () => {
+  const factory = {
+    id: "factory-1",
+    name: "Core SDLC",
+    automation_count: 3,
+    created_at: "2026-11-01T00:00:00Z",
+    updated_at: "2026-11-01T00:00:00Z",
+  };
+
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("lists factories from the local automation backend", async () => {
+    localAxios.get.mockResolvedValueOnce({
+      data: { factories: [factory], total: 1 },
+    });
+
+    await expect(AutomationService.listFactories()).resolves.toEqual({
+      factories: [factory],
+      total: 1,
+    });
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1/factories",
+      {
+        params: { limit: 100, offset: 0 },
+      },
+    );
+  });
+
+  it("lists factories through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    callCloudProxy.mockResolvedValueOnce({ factories: [factory], total: 1 });
+
+    await AutomationService.listFactories();
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "GET",
+        path: "/api/automation/v1/factories?limit=100&offset=0",
+      }),
+    );
+  });
+
+  it("gets one factory by id", async () => {
+    localAxios.get.mockResolvedValueOnce({ data: factory });
+
+    await expect(AutomationService.getFactory("factory-1")).resolves.toEqual(
+      factory,
+    );
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1/factories/factory-1",
+    );
+  });
+
+  it("scopes the automation list to a factory", async () => {
+    localAxios.get.mockResolvedValueOnce({
+      data: { automations: [], total: 0 },
+    });
+
+    await AutomationService.listAutomations({ factoryId: "factory-1" });
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1",
+      expect.objectContaining({
+        params: expect.objectContaining({ factory_id: "factory-1" }),
+      }),
+    );
+  });
+
+  it.each([
+    [["automationDrafts", "factories"], true],
+    [["automationDrafts"], false],
+    [undefined, false],
+  ])("reads factory support from capabilities %j", (features, expected) => {
+    const capabilities = features ? { features } : undefined;
+
+    expect(
+      AutomationService.supportsFactories(
+        capabilities as Parameters<
+          typeof AutomationService.supportsFactories
+        >[0],
+      ),
+    ).toBe(expected);
+  });
+});
