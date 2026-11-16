@@ -93,10 +93,17 @@ const BackendFormModal = React.lazy(() =>
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    // translate="no" keeps browser translation engines (Chrome Translate and
+    // similar extensions) from rewriting React-managed text nodes: their DOM
+    // mutations break React's commit phase with removeChild/insertBefore
+    // NotFoundErrors that repeat on every re-render. Canvas ships its own
+    // language switcher (Settings > Application > Language).
+    <html lang="en" translate="no" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* Google-specific opt-out for browsers that ignore translate="no". */}
+        <meta name="google" content="notranslate" />
         <Meta />
         <Links />
         <script
