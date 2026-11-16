@@ -1,6 +1,6 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAcpAuthStatus } from "#/hooks/query/use-acp-auth-status";
@@ -132,5 +132,67 @@ describe("useAcpAuthStatus", () => {
     await Promise.resolve();
     expect(result.current.status).toBe("unknown");
     expect(getAuthStatus).not.toHaveBeenCalled();
+  });
+  it("re-probes when the surface remounts, so CLI sign-in shows up", async () => {
+    // #19730: the status used to be cached for the whole session; a user who
+    // signs in via the CLI and re-opens Settings must see the fresh state.
+    getAuthStatus.mockResolvedValue("unauthenticated");
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const first = renderHook(() => useAcpAuthStatus("claude-code"), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    await waitFor(() => expect(first.result.current.status).toBe("unauthenticated"));
+    first.unmount();
+
+    // The user signs in via the CLI outside Canvas; the probe now says so.
+    getAuthStatus.mockResolvedValue("authenticated");
+    const second = renderHook(() => useAcpAuthStatus("claude-code"), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    await waitFor(() => expect(second.result.current.status).toBe("authenticated"));
+    expect(getAuthStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-probes on window focus and keeps the previous status visible while refetching", async () => {
+    getAuthStatus.mockResolvedValue("unauthenticated");
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const { result } = renderHook(() => useAcpAuthStatus("claude-code"), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
+
+    // Sign in via the CLI, then return focus to the Canvas tab: the probe
+    // re-runs, and the stale "unauthenticated" stays on screen (no flash of
+    // the initial checking state) until the fresh status lands.
+    getAuthStatus.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve("authenticated"), 50),
+        ),
+    );
+    await act(async () => {
+      // React Query's focus manager listens for focus/visibility changes.
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: "visible",
+      });
+      // React Query v5's focus manager listens for `visibilitychange` on
+      // window (jsdom never fires it for real focus changes).
+      window.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(result.current.status).toBe("unauthenticated");
+    expect(result.current.isChecking).toBe(false);
+    await waitFor(() => expect(result.current.status).toBe("authenticated"));
+    expect(getAuthStatus).toHaveBeenCalledTimes(2);
   });
 });
