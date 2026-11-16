@@ -340,6 +340,25 @@ describe("root layout", () => {
     expect(screen.queryByTestId("mobile-menu-bar")).not.toBeInTheDocument();
   });
 
+  it("bounds conversation routes inside the dynamic safe-area viewport", () => {
+    renderMainApp("/conversations/abc-123");
+
+    expect(screen.getByTestId("root-layout")).toHaveClass(
+      "h-dvh",
+      "app-shell-safe-area",
+    );
+    expect(document.getElementById("root-outlet")).toHaveClass(
+      "min-h-0",
+      "overflow-hidden",
+    );
+  });
+
+  it("keeps non-conversation routes scrollable in the app outlet", () => {
+    renderMainApp("/settings");
+
+    expect(document.getElementById("root-outlet")).toHaveClass("overflow-auto");
+  });
+
   it("does not hide the mobile menu for a nested non-conversation route", () => {
     renderMainApp("/settings/conversations/abc-123");
 
@@ -428,7 +447,9 @@ describe("root layout", () => {
         "aria-hidden",
         "true",
       );
-      expect(screen.getByTestId("root-layout")).toHaveClass("pt-7");
+      expect(screen.getByTestId("root-layout")).toHaveClass(
+        "app-shell-titlebar-inset",
+      );
     });
 
     it("adds no band in a browser tab, where the shell owns no window chrome", () => {
@@ -437,7 +458,9 @@ describe("root layout", () => {
       expect(
         screen.queryByTestId("titlebar-drag-region"),
       ).not.toBeInTheDocument();
-      expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+      expect(screen.getByTestId("root-layout")).not.toHaveClass(
+        "app-shell-titlebar-inset",
+      );
     });
 
     it.each(["win32", "linux"])(
@@ -450,7 +473,9 @@ describe("root layout", () => {
         expect(
           screen.queryByTestId("titlebar-drag-region"),
         ).not.toBeInTheDocument();
-        expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+        expect(screen.getByTestId("root-layout")).not.toHaveClass(
+          "app-shell-titlebar-inset",
+        );
       },
     );
 
@@ -471,7 +496,7 @@ describe("root layout", () => {
       expect(await screen.findByText("Kaboom")).toBeInTheDocument();
       expect(
         screen.getByTestId("titlebar-drag-region").parentElement,
-      ).toHaveClass("pt-7");
+      ).toHaveClass("app-shell-titlebar-inset");
     });
 
     it("drops the band once the window goes fullscreen, where macOS hides the traffic lights", async () => {
@@ -497,7 +522,9 @@ describe("root layout", () => {
       expect(
         screen.queryByTestId("titlebar-drag-region"),
       ).not.toBeInTheDocument();
-      expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+      expect(screen.getByTestId("root-layout")).not.toHaveClass(
+        "app-shell-titlebar-inset",
+      );
 
       await act(async () => emit?.(false));
 
@@ -517,7 +544,9 @@ describe("root layout", () => {
       expect(
         screen.queryByTestId("titlebar-drag-region"),
       ).not.toBeInTheDocument();
-      expect(screen.getByTestId("root-layout")).not.toHaveClass("pt-7");
+      expect(screen.getByTestId("root-layout")).not.toHaveClass(
+        "app-shell-titlebar-inset",
+      );
     });
   });
 });
