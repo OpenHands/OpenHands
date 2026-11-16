@@ -32,15 +32,28 @@ describe("buildInitialMeasurements", () => {
   });
 
   it("falls back to the measured average for a row whose height was not captured", () => {
-    const items = buildInitialMeasurements(["a", "b", "c"], [100, 0, 300], 0);
+    const items = buildInitialMeasurements(
+      ["a", "b", "c"],
+      [100, null, 300],
+      0,
+    );
 
-    // Average of the two captured rows (200) stands in for the missing one, so
-    // the seeded total is not dragged down by a zero.
+    // Average of the two captured rows (200) stands in for the unmeasured one,
+    // so the seeded total is not dragged down by a missing height.
     expect(items.map((item) => item.size)).toEqual([100, 200, 300]);
   });
 
+  it("keeps a row measured at zero at zero instead of the average", () => {
+    // A row that renders nothing but stays in the virtual list (an empty
+    // `ThinkAction`) is measured at 0, not left unmeasured: seeding it at the
+    // average would make the shell taller than the plain list it replaces.
+    const items = buildInitialMeasurements(["a", "b", "c"], [100, 0, 300], 0);
+
+    expect(items.map((item) => item.size)).toEqual([100, 1, 300]);
+  });
+
   it("returns no seed when nothing was measured, leaving the estimate in place", () => {
-    expect(buildInitialMeasurements(["a", "b"], [0, 0], 8)).toEqual([]);
+    expect(buildInitialMeasurements(["a", "b"], [null, null], 8)).toEqual([]);
     expect(buildInitialMeasurements([], [100], 8)).toEqual([]);
   });
 });
@@ -278,14 +291,17 @@ describe("applyBufferedScrollCorrection", () => {
 });
 
 describe("ScrollCorrectionBuffer", () => {
-  it("sums corrections added in one batch and drains them once", () => {
+  it("sums corrections added in one batch and reports them until cleared", () => {
     const buffer = new ScrollCorrectionBuffer();
     buffer.add({ delta: 50, pinned: false });
     buffer.add({ delta: -20, pinned: true });
 
-    expect(buffer.drain()).toEqual({ delta: 30, pinned: true });
-    // A second drain is empty: the correction is not re-applied.
-    expect(buffer.drain()).toBeNull();
+    expect(buffer.peek()).toEqual({ delta: 30, pinned: true });
+    // `peek` does not consume: the correction stays until it is applied.
+    expect(buffer.peek()).toEqual({ delta: 30, pinned: true });
+
+    buffer.clear();
+    expect(buffer.peek()).toBeNull();
   });
 
   it("drops a batch whose deltas cancel instead of carrying a stale remainder", () => {
@@ -295,8 +311,7 @@ describe("ScrollCorrectionBuffer", () => {
     buffer.add({ delta: 50, pinned: true });
     buffer.add({ delta: -50, pinned: true });
 
-    expect(buffer.drain()).toEqual({ delta: 0, pinned: true });
-    expect(buffer.drain()).toBeNull();
+    expect(buffer.peek()).toEqual({ delta: 0, pinned: true });
   });
 
   it("clears a buffered correction when the reader scrolls manually", () => {
@@ -305,6 +320,6 @@ describe("ScrollCorrectionBuffer", () => {
 
     buffer.clear();
 
-    expect(buffer.drain()).toBeNull();
+    expect(buffer.peek()).toBeNull();
   });
 });

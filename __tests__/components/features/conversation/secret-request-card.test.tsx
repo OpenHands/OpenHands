@@ -91,6 +91,49 @@ describe("SecretRequestCard", () => {
     expect(screen.queryByTestId("secret-request-card")).not.toBeInTheDocument();
   });
 
+  it("restores focus to the field the reader was editing across a remount", async () => {
+    // Crossing the virtualization threshold moves the card between render trees,
+    // so the form remounts. The reader must not lose the field they were filling
+    // while the agent kept working.
+    useSecretRequestStore.setState({ requests: [request] });
+    useSecretRequestDraftStore.setState({ drafts: {} });
+    const { rerender } = renderWithProviders(
+      <RemountableSecretRequestCards remountKey={0} />,
+    );
+    await screen.findByTestId("secret-request-card");
+
+    const valueInput = screen.getByTestId("value-input");
+    valueInput.focus();
+    expect(valueInput).toHaveFocus();
+
+    rerender(<RemountableSecretRequestCards remountKey={1} />);
+
+    expect(screen.getByTestId("value-input")).toHaveFocus();
+  });
+
+  it("does not steal focus back when the reader had moved on", async () => {
+    // A focusout that lands outside the card means the reader chose to leave;
+    // a later remount must not yank focus back into the card.
+    useSecretRequestStore.setState({ requests: [request] });
+    useSecretRequestDraftStore.setState({ drafts: {} });
+    const { rerender } = renderWithProviders(
+      <RemountableSecretRequestCards remountKey={0} />,
+    );
+    await screen.findByTestId("secret-request-card");
+
+    const valueInput = screen.getByTestId("value-input");
+    valueInput.focus();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+    expect(valueInput).not.toHaveFocus();
+
+    rerender(<RemountableSecretRequestCards remountKey={1} />);
+
+    expect(screen.getByTestId("value-input")).not.toHaveFocus();
+    outside.remove();
+  });
+
   it("saves the value to the secrets store and completes with the secret's identity", async () => {
     const user = userEvent.setup();
     const createSecret = vi

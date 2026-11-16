@@ -4,6 +4,7 @@ import { ChatProgressContext } from "#/context/chat-progress-context";
 import {
   CHAT_BODY_CLASS_NAME,
   CHAT_SCROLL_CLASS_NAME,
+  CHAT_SCROLL_BOTTOM_PADDING_CLASS_NAME,
   CHAT_COMPOSER_CLASS_NAME,
 } from "./chat-layout";
 import { TaskStartupProgress } from "./task-startup-progress";
@@ -68,7 +69,7 @@ import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { matchesPendingConversationId } from "#/utils/pending-task-message-link";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
 import ChatStatusIndicator from "./chat-status-indicator";
-import { getStatusColor, getStatusText } from "#/utils/utils";
+import { getStatusColor, getStatusText, cn } from "#/utils/utils";
 import { useNewConversationCommand } from "#/hooks/mutation/use-new-conversation-command";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import {
@@ -798,7 +799,10 @@ export function ChatInterface({
               maybeLoadOlder(e.currentTarget);
             }}
             onWheel={handleWheelForPagination}
-            className={CHAT_SCROLL_CLASS_NAME}
+            className={cn(
+              CHAT_SCROLL_CLASS_NAME,
+              CHAT_SCROLL_BOTTOM_PADDING_CLASS_NAME,
+            )}
           >
             {isChatLoading && isReturningToConversation && (
               <ChatMessagesSkeleton />

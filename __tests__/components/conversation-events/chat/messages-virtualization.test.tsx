@@ -1702,4 +1702,64 @@ describe("Messages virtualization", () => {
       cleanup();
     }
   });
+
+  it("trims agent text that follows a hidden planning observation", () => {
+    // A non-preview `PlanningFileEditorObservation` renders nothing, so a tool
+    // row and the agent text after it are still adjacent in the DOM even though
+    // the hidden row sits between them in `renderedItems`. The plain list keeps
+    // that row, so the trim must look past it to the tool row; on main the
+    // hidden row rendered null and `[&+article]:mt-2` matched across it. Only
+    // the last PLAN.md observation of a phase renders the preview, so the
+    // earlier one here is the hidden row.
+    const bashAction: OpenHandsEvent = {
+      id: "bash-1",
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      thought: [],
+      thinking_blocks: [],
+      action: {
+        kind: "ExecuteBashAction",
+        command: "echo hi",
+        is_input: false,
+        timeout: null,
+        reset: false,
+      },
+      tool_name: "execute_bash",
+      tool_call_id: "call_bash-1",
+      tool_call: {
+        id: "call_bash-1",
+        type: "function",
+        function: {
+          name: "execute_bash",
+          arguments: JSON.stringify({ command: "echo hi" }),
+        },
+      },
+      llm_response_id: "response_bash-1",
+      security_risk: SecurityRisk.UNKNOWN,
+    } as unknown as OpenHandsEvent;
+    const agentMessage: OpenHandsEvent = {
+      id: "reply",
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      llm_message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Reply" }],
+      },
+      activated_skills: [],
+      extended_content: [],
+    };
+
+    const events: OpenHandsEvent[] = [
+      createUserMessageEvent("message-0"),
+      bashAction,
+      createPlanningObservationEvent("plan-1", "act-1"),
+      agentMessage,
+      createPlanningObservationEvent("plan-2", "act-2"),
+    ];
+    renderMessages(events, false);
+
+    const replyRow = document.querySelector('[data-row-key^="single-reply"]');
+    expect(replyRow).not.toBeNull();
+    expect(replyRow?.className).toContain("[&>article]:mt-2");
+  });
 });

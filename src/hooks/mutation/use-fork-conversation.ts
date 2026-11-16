@@ -5,7 +5,6 @@ import { useNavigation } from "#/context/navigation-context";
 import { setConversationState } from "#/utils/conversation-local-storage";
 import i18n from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
-import { getAgentCanvasBasePath } from "#/utils/base-path";
 import {
   displayErrorToast,
   displaySuccessToastWithLink,
@@ -18,25 +17,15 @@ const conversationPath = (conversationId: string) =>
 /**
  * The active app-relative route, read from the navigation owner rather than the
  * document URL. Prefers the owner's live getter (correct even after the caller
- * unmounts and when an embedding host routes without updating the URL), then
- * the route the owner last supplied, and only falls back to the document URL
- * for a provider-less context. `window.location` alone is wrong when an
- * embedding host drives routing without changing it.
+ * unmounts and when an embedding host routes without updating the URL), and
+ * otherwise the route the owner last supplied. `window.location` is never read:
+ * the navigation context always exposes a route (its default is `/`), and it is
+ * wrong when an embedding host drives routing without changing the document URL.
  */
 const resolveCurrentAppPath = (
-  getCurrentPath?: () => string,
-  ownerPath?: string | null,
-): string => {
-  const live = getCurrentPath?.();
-  if (typeof live === "string") return live;
-  if (typeof ownerPath === "string") return ownerPath;
-  if (typeof window === "undefined") return "";
-  const base = getAgentCanvasBasePath();
-  const { pathname } = window.location;
-  return base && pathname.startsWith(base)
-    ? pathname.slice(base.length)
-    : pathname;
-};
+  getCurrentPath: (() => string) | undefined,
+  ownerPath: string,
+): string => getCurrentPath?.() ?? ownerPath;
 
 /**
  * Whether `path` is the conversation the fork branched from (or a sub-route of

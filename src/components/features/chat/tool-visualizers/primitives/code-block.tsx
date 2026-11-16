@@ -21,6 +21,12 @@ interface CodeBlockProps {
   expandable?: boolean;
   /** Wrap long lines instead of horizontal-only scrolling. Defaults to false. */
   wrapLongLines?: boolean;
+  /**
+   * Expansion-control key within the current event card. Distinct blocks in one
+   * card must pass distinct keys, or their expand controls toggle together.
+   * Only relevant when `expandable` is set.
+   */
+  expansionKey?: string;
 }
 
 /**
@@ -36,14 +42,12 @@ export function CodeBlock({
   placeholder,
   expandable = false,
   wrapLongLines = false,
+  expansionKey = "code-block",
 }: CodeBlockProps) {
   const { t } = useTranslation("openhands");
   const colorTheme = useColorTheme();
-  const expansionKey = useEventExpansionKey("code-block");
-  const [isExpanded, toggleExpanded] = usePersistentExpansion(
-    expansionKey,
-    false,
-  );
+  const key = useEventExpansionKey(expansionKey);
+  const [isExpanded, toggleExpanded] = usePersistentExpansion(key, false);
   const isTruncated = code.length > MAX_CONTENT_LENGTH;
   const display =
     isTruncated && !(expandable && isExpanded)

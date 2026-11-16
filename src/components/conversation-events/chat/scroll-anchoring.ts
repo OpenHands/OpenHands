@@ -17,21 +17,27 @@ export { BOTTOM_THRESHOLD_PX };
  *
  * Returns `[]` when no heights were captured (or none are usable), which leaves
  * the virtualizer on its own estimate.
+ *
+ * A row whose height was never captured (`null`) falls back to the average of
+ * the captured rows, so a single unmeasured row cannot distort the total; a row
+ * that was measured at `0` — one that renders nothing but stays in the virtual
+ * list, an empty `ThinkAction` for example — keeps that zero instead of being
+ * inflated to the average, which would make the shell taller than the plain list
+ * it replaces.
  */
 export const buildInitialMeasurements = (
   keys: string[],
-  heights: number[],
+  heights: (number | null)[],
   gapPx: number,
 ): VirtualItem[] => {
   if (keys.length === 0) return [];
   const fallback = measuredAverage(heights);
   if (fallback === null) return [];
 
-  // Rows whose height was not captured fall back to the average of the ones
-  // that were, so a single unmeasured row cannot distort the total.
   let start = 0;
   return keys.map((key, index) => {
-    const size = Math.max(1, Math.round(heights[index] || fallback)) + gapPx;
+    const measured = heights[index];
+    const size = Math.max(1, Math.round(measured ?? fallback)) + gapPx;
     const item: VirtualItem = {
       index,
       key,
@@ -50,8 +56,10 @@ export const buildInitialMeasurements = (
  * when none were captured. Shared by the seed's fallback and the post-switch
  * estimate so the two agree.
  */
-export const measuredAverage = (heights: number[]): number | null => {
-  const measured = heights.filter((height) => height > 0);
+export const measuredAverage = (heights: (number | null)[]): number | null => {
+  const measured = heights.filter(
+    (height): height is number => height !== null && height > 0,
+  );
   if (measured.length === 0) return null;
   return (
     measured.reduce((total, height) => total + height, 0) / measured.length
@@ -92,13 +100,18 @@ const occupiedRowHeight = (first: Element, last: Element): number => {
 /**
  * Measures one plain row (a `data-row-key` wrapper whose children are the row's
  * boxes) and returns its key with the height it occupies. Returns `null` for a
- * wrapper that has no key or no children yet.
+ * wrapper that has no key yet. A keyed wrapper with no children renders nothing
+ * (an empty `ThinkAction`, say) and is reported at `0`, not as unmeasured, so the
+ * shell does not seed it at the average height and grow taller than the plain
+ * list it replaces; a child added later is caught by the wrapper's child-list
+ * observer.
  */
 export const measurePlainRow = (wrapper: Element): [string, number] | null => {
   const rowKey = (wrapper as HTMLElement).dataset.rowKey;
+  if (!rowKey) return null;
   const first = wrapper.firstElementChild;
   const last = wrapper.lastElementChild;
-  if (!rowKey || !first || !last) return null;
+  if (!first || !last) return [rowKey, 0];
   return [rowKey, occupiedRowHeight(first, last)];
 };
 
@@ -157,13 +170,6 @@ export class ScrollCorrectionBuffer {
   /** Replaces the accumulated correction; `null` clears it. */
   set(next: PendingScrollCorrection | null): void {
     this.pending = next;
-  }
-
-  /** Returns the accumulated correction and clears it. */
-  drain(): PendingScrollCorrection | null {
-    const pending = this.pending;
-    this.pending = null;
-    return pending;
   }
 
   /** Drops any buffered correction (e.g. the reader scrolled manually). */

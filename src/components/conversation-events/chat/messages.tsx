@@ -363,6 +363,26 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       [plainItems, shouldVirtualize, isHiddenPlanningObservation],
     );
 
+    // Whether the row at each index should trim its top margin, true when the
+    // nearest preceding *visible* row is a tool row. Hidden planning
+    // observations render nothing, so they are skipped rather than counted as
+    // the predecessor: in the plain list they stay in `renderedItems`, but they
+    // contribute no box, so the tool row and the text that follows it are still
+    // adjacent in the DOM — the same trim the `[&+article]` selector used to
+    // apply before each row got its own wrapper. The virtual path has already
+    // dropped those rows, so its immediate predecessor is the visible one.
+    const trimsAfterToolRow = React.useMemo(() => {
+      const flags: boolean[] = [];
+      let previousVisible: RenderedItem | undefined;
+      for (const item of renderedItems) {
+        flags.push(
+          previousVisible !== undefined && isToolRowItem(previousVisible),
+        );
+        if (!isHiddenPlanningObservation(item)) previousVisible = item;
+      }
+      return flags;
+    }, [renderedItems, isHiddenPlanningObservation]);
+
     const eventIndexes = React.useMemo(
       () => new Map(messages.map((event, index) => [event, index])),
       [messages],
@@ -792,7 +812,6 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       rowKeys,
       getPlainRowObserver,
       syncPlainRowMutationObserver,
-      measurePlainRowWrapper,
     ]);
 
     React.useEffect(
@@ -822,7 +841,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     if (shouldVirtualize) {
       if (initialMeasurementsCacheRef.current === undefined) {
         const heights = rowKeys.map(
-          (key) => plainItemHeights.current.get(key) ?? 0,
+          (key) => plainItemHeights.current.get(key) ?? null,
         );
         const average = measuredAverage(heights);
         measuredAverageRef.current =
@@ -1128,9 +1147,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
               // way `EventGroup`'s own `[&+article]:mt-2` did when rows were
               // direct children of the scroll column. Each row now has its own
               // wrapper, so the `<article>` is no longer a sibling of the tool
-              // row and the trim is applied from the wrapper instead.
-              const trimsFollowingText =
-                index > 0 && isToolRowItem(renderedItems[index - 1]);
+              // row and the trim is applied from the wrapper instead. The flag
+              // skips a hidden planning observation, which renders no box, so
+              // the tool row and the following text stay visually adjacent.
+              const trimsFollowingText = trimsAfterToolRow[index] ?? false;
               return (
                 <div
                   key={itemKey}
@@ -1178,8 +1198,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             // follows a tool row, applied here because the row wrapper breaks
             // the sibling relationship `[&+article]` relied on.
             const trimsFollowingText =
-              virtualRow.index > 0 &&
-              isToolRowItem(renderedItems[virtualRow.index - 1]);
+              trimsAfterToolRow[virtualRow.index] ?? false;
             return (
               <div
                 key={virtualRow.key}

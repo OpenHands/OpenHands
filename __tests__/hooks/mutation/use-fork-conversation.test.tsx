@@ -13,12 +13,11 @@ import {
 
 const { navigateMock, navigationState } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
-  // The route the navigation owner last supplied, plus its optional live
-  // getter. Left unset so tests that only set `window.location` keep exercising
-  // the document-URL fallback; an embedded host supplies the route (and may
-  // supply a getter) without touching the URL.
+  // The route the navigation owner supplies, plus its optional live getter. The
+  // hook reads only these: the context always exposes a route (its default is
+  // `/`), so there is no `window.location` fallback to exercise.
   navigationState: {
-    currentPath: undefined as string | undefined,
+    currentPath: "/" as string,
     getCurrentPath: undefined as (() => string) | undefined,
   },
 }));
@@ -47,15 +46,8 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToastWithLink: vi.fn(),
 }));
 
-// The hook falls back to `window.location.pathname` when the navigation owner
-// exposes no route, so each test parks the jsdom URL there.
-const setLocation = (pathname: string) => {
-  window.history.replaceState({}, "", pathname);
-};
-
 beforeEach(() => {
-  setLocation("/conversations/conv-1");
-  navigationState.currentPath = undefined;
+  navigationState.currentPath = "/conversations/conv-1";
   navigationState.getCurrentPath = undefined;
 });
 
@@ -174,7 +166,7 @@ describe("useForkConversation", () => {
     // The mutation callback outlives the row, so the reader may have navigated
     // away while the fork was in flight. Dragging them into the fork would
     // hijack that navigation; they get a toast with a link instead.
-    setLocation("/conversations/conv-2");
+    navigationState.currentPath = "/conversations/conv-2";
     vi.mocked(
       AgentServerConversationService.forkConversation,
     ).mockResolvedValue({ id: "fork-1" } as never);
@@ -200,7 +192,7 @@ describe("useForkConversation", () => {
   it("still navigates from a sub-route of the source conversation", async () => {
     // The conversation's panel route is a sub-path of the conversation, so the
     // reader is still "in" the source and the fork should open.
-    setLocation("/conversations/conv-1/panel");
+    navigationState.currentPath = "/conversations/conv-1/panel";
     vi.mocked(
       AgentServerConversationService.forkConversation,
     ).mockResolvedValue({ id: "fork-1" } as never);
@@ -219,10 +211,9 @@ describe("useForkConversation", () => {
   });
 
   it("opens the fork through the host when an embedded Canvas supplies the route without changing the document URL", async () => {
-    // The host supplies the route: the browser stays on /workspace while Canvas
+    // The host supplies the route: the browser URL is untouched while Canvas
     // shows conv-1. Reading `window.location` would report the reader as having
     // left the source, so the fork would only be linked.
-    setLocation("/workspace");
     navigationState.currentPath = "/conversations/conv-1";
     vi.mocked(
       AgentServerConversationService.forkConversation,
@@ -245,7 +236,6 @@ describe("useForkConversation", () => {
     // The row rendered while Canvas showed conv-1, but the reader navigated to
     // conv-2 before the fork settled. The getter reflects that; the captured
     // `currentPath` would not, and would wrongly pull the reader into the fork.
-    setLocation("/workspace");
     navigationState.currentPath = "/conversations/conv-1";
     let route = "/conversations/conv-1";
     navigationState.getCurrentPath = () => route;
@@ -276,7 +266,6 @@ describe("useForkConversation", () => {
     // The reader moved on, so the fork is announced rather than opened. The
     // toast link must still route through the owner: a plain browser link would
     // navigate the whole host page out of the embedded Canvas.
-    setLocation("/workspace");
     navigationState.currentPath = "/conversations/conv-2";
     vi.mocked(
       AgentServerConversationService.forkConversation,
