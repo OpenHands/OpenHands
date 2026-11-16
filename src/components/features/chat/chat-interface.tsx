@@ -53,6 +53,7 @@ import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { Messages } from "#/components/conversation-events/chat/messages";
 import { PendingUserMessages } from "./pending-user-messages";
 import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files";
+import { useResumeConversation } from "#/hooks/mutation/use-resume-conversation";
 import { validateFiles } from "#/utils/file-validation";
 import { useConversationStore } from "#/stores/conversation-store";
 import ConfirmationModeEnabled from "./confirmation-mode-enabled";
@@ -247,6 +248,13 @@ export function ChatInterface({
     return goal?.active ? `${goal.iteration}:${goal.status}` : null;
   });
   const { mutateAsync: uploadFiles } = useUnifiedUploadFiles();
+  const resumeConversationMutation = useResumeConversation();
+
+  const handleRetryTurn = React.useCallback(() => {
+    if (!conversationId) return;
+    removeErrorMessage();
+    resumeConversationMutation.mutate({ conversationId });
+  }, [conversationId, removeErrorMessage, resumeConversationMutation]);
 
   // Lazy "scroll up to load older events" backfill. Initial REST fetch only
   // returns the most recent page; this hook paginates older events into the
@@ -805,6 +813,11 @@ export function ChatInterface({
                 onRetry={
                   errorMessage === SERVER_CONNECTION_ERROR_MESSAGE
                     ? () => conversationWebSocket?.reconnect()
+                    : (curAgentState === AgentState.ERROR ||
+                        curAgentState === AgentState.RATE_LIMITED ||
+                        errorType === "conversation") &&
+                      conversationId
+                    ? handleRetryTurn
                     : undefined
                 }
                 // Locked-to-Cloud blocks the Canvas agent settings page
