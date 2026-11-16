@@ -1187,6 +1187,10 @@ code .token {
   stroke-width: 1.75;
 }
 
+@utility catalog-remove-icon-stroke {
+  stroke-width: 2.5;
+}
+
 /* Menu geometry keeps its existing pixel, rem and viewport units. */
 @utility tools-menu-offset {
   left: -16px;
