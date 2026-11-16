@@ -10,10 +10,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
-import {
-  SetupAcpSecretsStep,
-  backendRequiresAcpCredentials,
-} from "#/components/features/onboarding/steps/setup-acp-secrets-step";
+import { SetupAcpSecretsStep } from "#/components/features/onboarding/steps/setup-acp-secrets-step";
 import { type OnboardingAgentId } from "#/components/features/onboarding/steps/choose-agent-step";
 import { SecretsService } from "#/api/secrets-service";
 import { I18nKey } from "#/i18n/declaration";
@@ -226,7 +223,7 @@ describe("SetupAcpSecretsStep", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the 'already signed in' banner when authenticated, keeping the key fields", () => {
+  it("allows an authenticated user to continue without entering credentials", () => {
     acpAuthStatusMock.mockReturnValue({
       status: "authenticated",
       isChecking: false,
@@ -237,10 +234,15 @@ describe("SetupAcpSecretsStep", () => {
     expect(
       screen.getByTestId("onboarding-acp-auth-detected"),
     ).toBeInTheDocument();
-    // The fields stay visible (now optional) even when already logged in.
     expect(
       screen.getByTestId("onboarding-acp-secret-ANTHROPIC_API_KEY"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("onboarding-acp-secrets-next"),
+    ).not.toBeDisabled();
+    expect(
+      screen.queryByTestId("onboarding-acp-secrets-blocked"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders Gemini's credential fields and the 'signed in' banner together", () => {
@@ -505,29 +507,5 @@ describe("SetupAcpSecretsStep", () => {
     expect(
       screen.getByTestId("acp-credential-conflict-warning"),
     ).toBeInTheDocument();
-  });
-});
-
-describe("backendRequiresAcpCredentials", () => {
-  it("never requires credentials when a login is already detected", () => {
-    expect(backendRequiresAcpCredentials("local", "authenticated")).toBe(false);
-    expect(backendRequiresAcpCredentials("cloud", "authenticated")).toBe(false);
-  });
-
-  it("always requires credentials on a cloud backend (no host login)", () => {
-    expect(backendRequiresAcpCredentials("cloud", "unauthenticated")).toBe(
-      true,
-    );
-    expect(backendRequiresAcpCredentials("cloud", "unknown")).toBe(true);
-  });
-
-  it("requires credentials on a logged-out local backend (a fresh container)", () => {
-    expect(backendRequiresAcpCredentials("local", "unauthenticated")).toBe(
-      true,
-    );
-  });
-
-  it("stays permissive on a local backend the probe can't classify", () => {
-    expect(backendRequiresAcpCredentials("local", "unknown")).toBe(false);
   });
 });

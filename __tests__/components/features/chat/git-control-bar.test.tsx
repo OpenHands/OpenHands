@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   modalLaunchHandler: {
     current: null as ((repo: unknown, branch: unknown) => void) | null,
   },
+  sendMessage: vi.fn(),
 }));
 
 vi.mock("#/hooks/use-conversation-id", () => ({
@@ -84,52 +85,6 @@ const makeBackend = (kind: "local" | "cloud") => ({
     kind,
   },
   orgId: null,
-});
-
-describe("GitControlBar clone prompt format", () => {
-  // Helper function that mirrors the logic in git-control-bar.tsx
-  const generateClonePrompt = (
-    fullName: string,
-    gitProvider: string,
-    branchName: string,
-  ) => {
-    const providerName =
-      gitProvider.charAt(0).toUpperCase() + gitProvider.slice(1);
-    return `Clone ${fullName} from ${providerName} and checkout branch ${branchName}.`;
-  };
-
-  it("should include GitHub in clone prompt for github provider", () => {
-    const prompt = generateClonePrompt("user/repo", "github", "main");
-    expect(prompt).toBe(
-      "Clone user/repo from Github and checkout branch main.",
-    );
-  });
-
-  it("should include GitLab in clone prompt for gitlab provider", () => {
-    const prompt = generateClonePrompt("group/project", "gitlab", "develop");
-    expect(prompt).toBe(
-      "Clone group/project from Gitlab and checkout branch develop.",
-    );
-  });
-
-  it("should handle different branch names", () => {
-    const prompt = generateClonePrompt(
-      "hieptl.developer-group/hieptl.developer-project",
-      "gitlab",
-      "add-batman-microagent",
-    );
-    expect(prompt).toBe(
-      "Clone hieptl.developer-group/hieptl.developer-project from Gitlab and checkout branch add-batman-microagent.",
-    );
-  });
-
-  it("should capitalize first letter of provider name", () => {
-    const githubPrompt = generateClonePrompt("a/b", "github", "main");
-    const gitlabPrompt = generateClonePrompt("a/b", "gitlab", "main");
-
-    expect(githubPrompt).toContain("from Github");
-    expect(gitlabPrompt).toContain("from Gitlab");
-  });
 });
 
 describe("GitControlBar repo button visibility", () => {
@@ -214,6 +169,7 @@ describe("GitControlBar repo button visibility", () => {
 describe("GitControlBar - Auto-scroll on clone (issue #817)", () => {
   beforeEach(() => {
     mocks.modalLaunchHandler.current = null;
+    mocks.sendMessage.mockReset().mockResolvedValue(undefined);
     vi.mocked(useActiveBackend).mockReturnValue(makeBackend("cloud"));
     vi.mocked(useActiveConversation).mockReturnValue({
       data: { id: "test-conversation-id" },
@@ -226,7 +182,7 @@ describe("GitControlBar - Auto-scroll on clone (issue #817)", () => {
     } as unknown as ReturnType<typeof useLocalGitInfo>);
     vi.mocked(useUnifiedWebSocketStatus).mockReturnValue("OPEN");
     vi.mocked(useSendMessage).mockReturnValue({
-      send: vi.fn().mockResolvedValue(undefined),
+      send: mocks.sendMessage,
     } as unknown as ReturnType<typeof useSendMessage>);
     // updateRepository mocked to invoke onSuccess synchronously so the
     // post-update branch (where the scroll now lives) runs deterministically.
@@ -279,5 +235,12 @@ describe("GitControlBar - Auto-scroll on clone (issue #817)", () => {
     // Assert: the optimistic clone bubble must pull the chat back to the
     // bottom even if the user had scrolled up.
     expect(scrollDomToBottom).toHaveBeenCalledTimes(1);
+    expect(mocks.sendMessage).toHaveBeenCalledWith({
+      action: "message",
+      args: {
+        content: "Clone user/repo from Github and checkout branch main.",
+        timestamp: expect.any(String),
+      },
+    });
   });
 });
