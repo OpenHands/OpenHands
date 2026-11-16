@@ -11,7 +11,7 @@ describe("ErrorMessage", () => {
   it("renders the error message", () => {
     render(<ErrorMessage defaultMessage="LLM connection timed out" />);
 
-    expect(screen.getByText("CHAT_INTERFACE$AGENT_ERROR_MESSAGE")).toBeInTheDocument();
+    expect(screen.getByTestId("error-message-title")).toBeInTheDocument();
     expect(screen.queryByTestId("error-message-retry")).not.toBeInTheDocument();
   });
 
@@ -63,9 +63,7 @@ describe("ErrorMessage", () => {
 
     expect(screen.queryByText("Detailed stack trace")).not.toBeInTheDocument();
 
-    const toggle = screen.getByRole("button", {
-      name: /COMMON\$VIEW_MORE/i,
-    });
+    const toggle = screen.getByTestId("error-message-toggle");
     await user.click(toggle);
 
     expect(screen.getByText("Detailed stack trace")).toBeInTheDocument();

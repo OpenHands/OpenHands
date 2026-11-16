@@ -7,17 +7,13 @@ import { useResumeConversation } from "#/hooks/mutation/use-resume-conversation"
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useEventStore } from "#/stores/use-event-store";
 import { AgentState } from "#/types/agent-state";
-import { ErrorMessage } from "../../../features/chat/error-message";
+import { ErrorMessage } from "#/components/features/chat/error-message";
 
 interface ErrorEventMessageProps {
   event: AgentErrorEvent;
 }
 
 export function ErrorEventMessage({ event }: ErrorEventMessageProps) {
-  if (!isAgentErrorEvent(event)) {
-    return null;
-  }
-
   const { conversationId } = useOptionalConversationId();
   const { curAgentState } = useAgentState();
   const resumeConversationMutation = useResumeConversation();
@@ -26,8 +22,18 @@ export function ErrorEventMessage({ event }: ErrorEventMessageProps) {
   const isLatestError = useEventStore((state) => {
     const errorEvents = state.uiEvents.filter(isAgentErrorEvent);
     const lastError = errorEvents.at(-1);
-    return lastError ? lastError.id === event.id : true;
+    return lastError ? lastError.id === event?.id : true;
   });
+
+  const handleRetry = React.useCallback(() => {
+    if (!conversationId) return;
+    removeErrorMessage();
+    resumeConversationMutation.mutate({ conversationId });
+  }, [conversationId, removeErrorMessage, resumeConversationMutation]);
+
+  if (!isAgentErrorEvent(event)) {
+    return null;
+  }
 
   const canRetry =
     Boolean(conversationId) &&
@@ -36,12 +42,6 @@ export function ErrorEventMessage({ event }: ErrorEventMessageProps) {
       curAgentState === AgentState.RATE_LIMITED ||
       curAgentState === AgentState.STOPPED ||
       curAgentState === AgentState.PAUSED);
-
-  const handleRetry = React.useCallback(() => {
-    if (!conversationId) return;
-    removeErrorMessage();
-    resumeConversationMutation.mutate({ conversationId });
-  }, [conversationId, removeErrorMessage, resumeConversationMutation]);
 
   return (
     <ErrorMessage

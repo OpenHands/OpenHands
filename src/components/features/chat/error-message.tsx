@@ -30,12 +30,16 @@ export function ErrorMessage({
   return (
     <div className="flex flex-col gap-2 my-2 py-2 text-sm w-full">
       <div className="flex items-center justify-between gap-2">
-        <div className="font-bold text-danger flex items-center">
+        <div
+          className="font-bold text-danger flex items-center"
+          data-testid="error-message-title"
+        >
           {t(errorKey)}
           <button
             type="button"
             onClick={() => setShowDetails((prev) => !prev)}
             className="cursor-pointer text-left"
+            data-testid="error-message-toggle"
             aria-label={
               showDetails
                 ? t(I18nKey.COMMON$VIEW_LESS)
