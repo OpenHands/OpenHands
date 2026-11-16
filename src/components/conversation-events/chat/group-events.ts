@@ -13,7 +13,10 @@ import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visua
 import type { SessionActivity } from "#/stores/session-activity-store";
 import { parseDateAsUTC } from "#/utils/format-time-delta";
 import { parseMessageFromEvent } from "./event-content-helpers/parse-message-from-event";
-import { isReactionResult } from "./event-content-helpers/should-render-event";
+import {
+  isMessageEditResult,
+  isReactionResult,
+} from "./event-content-helpers/should-render-event";
 import {
   getReasoningContent,
   splitInlineThink,
@@ -269,9 +272,10 @@ export const groupEvents = (
         }
       }
     };
-    if (isReactionResult(event)) {
-      // The reaction itself shows as a chip on its message, so its tool card
-      // is dropped; what the agent said while reacting stays.
+    if (isReactionResult(event) || isMessageEditResult(event)) {
+      // The reaction shows as a chip on its message, and an edit in place
+      // on its message, so their tool cards are dropped; what the agent said
+      // while reacting or editing stays.
       keepNarration();
       return;
     }

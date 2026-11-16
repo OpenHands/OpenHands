@@ -838,3 +838,46 @@ describe("groupEvents - reactions", () => {
     expect(groupEvents([result_], undefined, [action, result_])).toEqual([]);
   });
 });
+
+describe("groupEvents - message edits", () => {
+  const editAction = (thought: TextContent[]): ActionEvent =>
+    ({
+      ...makeBashAction("edit-1", thought),
+      action: {
+        kind: "EditMessageAction",
+        old_str: "Port?",
+        new_str: "~~Port?~~ [Edit: 8080.]",
+      },
+      tool_name: "edit_message",
+    }) as unknown as ActionEvent;
+  const editResult = (actionId: string): ObservationEvent =>
+    ({
+      ...makeBashObservation("edit-obs-1", actionId),
+      tool_name: "edit_message",
+      observation: {
+        kind: "EditMessageObservation",
+        content: [{ type: "text", text: "Edited." }],
+        is_error: false,
+        target_event_id: "msg-1",
+        edited_text: "~~Port?~~ [Edit: 8080.]",
+      },
+    }) as unknown as ObservationEvent;
+
+  it("keeps the agent's narration on an edit and drops its card", () => {
+    const action = editAction([
+      { type: "text", text: "Striking my question." },
+    ]);
+    const result_ = editResult(action.id);
+
+    const result = groupEvents([result_], undefined, [action, result_]);
+
+    expect(result).toEqual([{ kind: "thought", action, index: 0 }]);
+  });
+
+  it("renders nothing for an edit without narration", () => {
+    const action = editAction([]);
+    const result_ = editResult(action.id);
+
+    expect(groupEvents([result_], undefined, [action, result_])).toEqual([]);
+  });
+});
