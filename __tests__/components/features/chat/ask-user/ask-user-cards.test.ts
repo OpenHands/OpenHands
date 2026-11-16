@@ -42,6 +42,13 @@ describe("buildAskUserCards", () => {
     expect([...cards.answerMessageIds]).toEqual(["answer-msg"]);
   });
 
+  it("keeps waiting when a tap's message never landed, as the server does", () => {
+    const cards = buildAskUserCards([askAction(), askShown(), answer()]);
+
+    expect(cards.byObservationId.get("obs-ask-1")?.status.kind).toBe("pending");
+    expect(cards.answerMessageIds.size).toBe(0);
+  });
+
   it("closes a question the user answered in the chat, and keeps that message", () => {
     const cards = buildAskUserCards([
       askAction(),
