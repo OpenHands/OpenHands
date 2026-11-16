@@ -32,6 +32,9 @@ vi.mock(
   () => ({
     default: {
       switchProfile: vi.fn(),
+      // stampActiveLlmProfile mirrors the profile onto the conversation's
+      // server-side tag (#16766); keep that off the network here.
+      syncActiveProfileTag: vi.fn().mockResolvedValue(undefined),
     },
   }),
 );
@@ -338,6 +341,9 @@ describe("useSwitchLlmProfile", () => {
       // Client-clock ISO timestamp; the mutation path has no event timestamp.
       stamped_at: expect.any(String),
     });
+    expect(
+      vi.mocked(AgentServerConversationService.syncActiveProfileTag),
+    ).toHaveBeenCalledWith("conv-1", "claude-sonnet-4.6");
   });
 
   it("preserves metadata fields the switch does not know about, such as the local planner id", async () => {
