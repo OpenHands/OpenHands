@@ -61,7 +61,9 @@ vi.mock("#/hooks/use-send-message", () => ({
 
 vi.mock("#/hooks/query/use-config");
 vi.mock("#/hooks/mutation/use-unified-upload-files");
-const mockResumeConversation = vi.fn();
+const { mockResumeConversation } = vi.hoisted(() => ({
+  mockResumeConversation: vi.fn(),
+}));
 vi.mock("#/hooks/mutation/use-resume-conversation", () => ({
   useResumeConversation: () => ({
     mutate: mockResumeConversation,
