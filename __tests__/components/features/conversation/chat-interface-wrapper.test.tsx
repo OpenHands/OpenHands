@@ -39,7 +39,7 @@ describe("ChatInterfaceWrapper", () => {
 
   it("uses the overview grid layout when space is available", () => {
     useConversationStore.setState({ isOverviewPanelShown: true });
-    render(<ChatInterfaceWrapper isRightPanelShown={false} />);
+    render(<ChatInterfaceWrapper />);
 
     expect(
       screen.getByTestId("conversation-overview-column"),
@@ -51,9 +51,7 @@ describe("ChatInterfaceWrapper", () => {
 
   it("keeps the thread in a height-constrained flex column when overview is shown", () => {
     useConversationStore.setState({ isOverviewPanelShown: true });
-    const { container } = render(
-      <ChatInterfaceWrapper isRightPanelShown={false} />,
-    );
+    const { container } = render(<ChatInterfaceWrapper />);
 
     const threadColumn = container.querySelector(".overflow-hidden.flex-1");
     expect(threadColumn).toBeInTheDocument();
@@ -64,7 +62,7 @@ describe("ChatInterfaceWrapper", () => {
     mockUseConversationOverviewColumnSpace.mockReturnValue(false);
     useConversationStore.setState({ isOverviewPanelShown: true });
 
-    render(<ChatInterfaceWrapper isRightPanelShown={false} />);
+    render(<ChatInterfaceWrapper />);
 
     expect(
       screen.queryByTestId("conversation-overview-column"),

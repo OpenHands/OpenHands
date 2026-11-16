@@ -1,5 +1,5 @@
 // These are provider names, not user-facing text
-export const MAP_PROVIDER = {
+const MAP_PROVIDER = {
   openai: "OpenAI",
   azure: "Azure",
   azure_ai: "Azure AI Studio",

@@ -237,10 +237,8 @@ export function SetupAcpSecretsStep({
  * - **local + ``"authenticated"`` / ``"unknown"``** → optional: either a login
  *   exists, or the probe couldn't classify it (CLI missing, odd output) — in
  *   which case we stay permissive rather than block a working native dev.
- *
- * Exported for unit testing the matrix without rendering the modal.
  */
-export function backendRequiresAcpCredentials(
+function backendRequiresAcpCredentials(
   backendKind: "local" | "cloud",
   authStatus: "authenticated" | "unauthenticated" | "unknown",
 ): boolean {
