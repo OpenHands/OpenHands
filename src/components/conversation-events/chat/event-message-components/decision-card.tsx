@@ -27,13 +27,22 @@ export const ASK_USER_EXPERIMENTAL_FEATURE = "ask_user";
 export function indexDecisionClosures(events: readonly OHEvent[]) {
   const closures = new Map<string, OHEvent>();
   const nextClosing = new Map<boolean, OHEvent>();
+  // Whether a user-side message follows, before the next question. In a
+  // project the user answers a worker's question on the coordinator's card,
+  // and the server delivers the answer to the worker with the coordinator as
+  // its `sender`; that delivery closes the question too, as the Agent
+  // Server's `find_pending_ask` reads it.
+  const deliveredAfter = new Map<boolean, boolean>();
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     const planner = !!event.isFromPlanningAgent;
     if ("kind" in event && isAskUserAnswerEvent(event)) {
-      const closing = nextClosing.get(planner);
       // An answer without its delivery message stays retryable after a crash.
-      if (closing && isMessageEvent(closing)) nextClosing.set(planner, event);
+      // One delivery settles one answer: an earlier, lost one stays unsent.
+      if (deliveredAfter.get(planner)) {
+        nextClosing.set(planner, event);
+        deliveredAfter.set(planner, false);
+      }
       continue;
     }
     const isQuestion =
@@ -49,6 +58,10 @@ export function indexDecisionClosures(events: readonly OHEvent[]) {
       (isMessageEvent(event) && event.source === "user" && !event.sender)
     ) {
       nextClosing.set(planner, event);
+    }
+    if (isQuestion) deliveredAfter.set(planner, false);
+    else if (isMessageEvent(event) && event.source === "user") {
+      deliveredAfter.set(planner, true);
     }
   }
   return closures;
