@@ -211,8 +211,9 @@ export function AgentStatus({
             disabled={disabled}
           />
         )}
-        {!isLoading && shouldShownAgentError && (
-          canRetryError ? (
+        {!isLoading &&
+          shouldShownAgentError &&
+          (canRetryError ? (
             <button
               type="button"
               onClick={handleResumeAgent}
@@ -231,8 +232,7 @@ export function AgentStatus({
               className="w-4 h-4 text-current"
               data-testid="circle-error-icon"
             />
-          )
-        )}
+          ))}
         {!isLoading &&
           !shouldShownAgentStop &&
           !shouldShownAgentResume &&

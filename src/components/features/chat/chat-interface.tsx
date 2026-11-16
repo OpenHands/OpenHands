@@ -814,11 +814,11 @@ export function ChatInterface({
                   errorMessage === SERVER_CONNECTION_ERROR_MESSAGE
                     ? () => conversationWebSocket?.reconnect()
                     : (curAgentState === AgentState.ERROR ||
-                        curAgentState === AgentState.RATE_LIMITED ||
-                        errorType === "conversation") &&
-                      conversationId
-                    ? handleRetryTurn
-                    : undefined
+                          curAgentState === AgentState.RATE_LIMITED ||
+                          errorType === "conversation") &&
+                        conversationId
+                      ? handleRetryTurn
+                      : undefined
                 }
                 // Locked-to-Cloud blocks the Canvas agent settings page
                 // (OHE-3457).
