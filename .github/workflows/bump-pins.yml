@@ -50,4 +50,9 @@ jobs:
       expect: ${{ inputs.expect || github.event.client_payload.expect || '' }}
       dry-run: ${{ inputs.dry-run || false }}
       node-version: "24.22.1"
-      command: node scripts/bump-pins.mjs
+      # required-by follows only openhands-sdk; the checker also compares the
+      # other SDK packages the automation release pins, and a failure here
+      # stops the run before anything is pushed.
+      command: |
+        node scripts/bump-pins.mjs
+        node scripts/check-sdk-version-sync.mjs
