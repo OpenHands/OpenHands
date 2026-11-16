@@ -56,7 +56,9 @@ cheaper than the next and catches a different kind of rot.
    `map coverage` and `map testids`. A `Source:` path that is gone, or a test
    id the map drives that no literal in `src/` accounts for, is drift found
    before any browser opens. Fix it in the map
-   with a live drive later today, or report it. Zero unresolved test ids is
+   with a live drive later today, or report it. `control-openhands map
+   controls --base "$BASE" --target "$TARGET"` lists the controls in the
+   day's changed files that no bullet names: tier 2 operates each one. Zero unresolved test ids is
    the normal state; treat a new one as a rename until a drive says otherwise.
 2. **Changed (the core).** `control-openhands map affected --target $TARGET`
    (`--base` defaults to the recorded baseline). Launch, doctor, then drive
@@ -67,6 +69,11 @@ cheaper than the next and catches a different kind of rot.
    reads it; pick the families whose `Source:` lines name those consumers, not
    one convenient screen). An `unmapped` path under `src/` is a map gap: a new
    surface to map per [mapping.md](mapping.md), or a `Source:` line to extend.
+   A change that does what its PR says is half the check. For each changed
+   surface also ask the questions in [scenarios.md](scenarios.md) that have
+   an answer there (the item edited later, the action taken mid-save, data
+   that is long or many, another backend or time zone) and drive those too;
+   a new control or form field gets them all.
    Resolve each merged commit in `BASE..TARGET` to its PR and keep intent
    (`documented`, `undocumented`, `contradictory`) separate from runtime
    results, as [maintenance.md](maintenance.md) step 2 describes. The delta

@@ -6,6 +6,7 @@ import { getActiveBackend } from "../backend-registry/active-store";
 import {
   getCloudInstallations,
   getCloudRepositoryBranches,
+  getCloudRepositoryDetails,
   searchCloudRepositories,
 } from "../cloud/git-service.api";
 
@@ -123,6 +124,24 @@ class GitService {
       limit,
       pageId,
     });
+  }
+
+  /**
+   * The repository's default branch, for repositories whose list entry has
+   * no `main_branch`. Null when it is unknown.
+   */
+  static async getRepositoryDefaultBranch(
+    repository: string,
+    provider: string,
+  ): Promise<string | null> {
+    if (isInvalidProvider(provider) || !isCloudActive()) {
+      return null;
+    }
+    const details = await getCloudRepositoryDetails({
+      provider: safeProvider(provider),
+      repository,
+    });
+    return details?.main_branch ?? null;
   }
 
   static async getRepositoryBranches(

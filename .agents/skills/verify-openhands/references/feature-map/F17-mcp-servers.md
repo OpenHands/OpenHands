@@ -11,6 +11,8 @@ conversation's agent.
 
 Source: `src/routes/extensions-hub.tsx`, `src/routes/mcp.tsx`, `src/components/features/skills/extensions-navigation.tsx`, `src/components/shared/compact-section-navigation.tsx`, `src/components/features/skills/extensions-mobile-hub.tsx`, `src/components/features/mcp-page/`, `src/components/features/mcp-logo-badge.tsx`, `src/components/features/settings/mcp-settings/mcp-server-form.tsx`, `src/utils/mcp-marketplace-utils.ts`, `src/api/mcp-health/`, `src/hooks/mutation/use-add-mcp-server.ts`, `src/hooks/use-cloud-mcp-settings-url.ts`, `src/utils/mobile-section-nav.ts`.
 
+Server: F19.
+
 ## Sub-features
 
 - `F17.customize-redirect`: on desktop, the sidebar **Customize** link, the URL `/customize` and the command-menu items **Customize** and **MCP servers** all land on `/mcp`.
@@ -120,6 +122,7 @@ Preconditions:
 
 ## Gotchas
 
+- Known issue [#19646](https://github.com/OpenHands/OpenHands/issues/19646) (`F17.custom-validation`): with the **Server Type** listbox open in the custom server editor, Escape closes the whole editor instead of only the listbox (reproduced 2026-11-11); pick an option or click the field again to close the listbox.
 - Server errors on MCP mutations show one toast with the server's message, or `An error occurred` when the body has none. A custom server's **Save Server** or **Add Server** action whose pre-save connection test fails keeps the editor open. To check backend loss, stop the owned Agent Server with the editor open, click Save, then restore it with `control-openhands restart`; background settings polls can add separate error toasts, so count only the toast caused by the click. That Save fails at its pre-save connection test (one `GET /server_info` `502`, toast `An error occurred`, editor open) and sends no `PATCH`. A delete or enable toggle with no answer or a 5xx answer is sent three times in all (`withRetry` in `src/api/with-retry.ts`) before its single toast: on `/mcp` with a card loaded, run `browser toasts --history --clear`, `browser network --clear` and `service stop agent-server`, then `browser click 'testid=mcp-installed-toggle-<name>' --hover-first`; `browser network --filter '/api/settings/mcp/<name>'` has `total` `3` (three `PATCH` `502`s, 0.5 s and 1 s apart) and `browser toasts --history` has exactly one entry, `An error occurred` (`control-openhands restart` afterwards); a 4xx answer other than 408 or 429 is not retried: the stale delete in `F17.delete-server` sends one `DELETE` that answers `404`.
 - Desktop `/customize` is a client-side redirect: `browser url` may still read `/customize` for a moment; use `wait-url '/mcp(\?|$)'`.
 - From 768 to 1023 px the sidebar rail stays and the phone top bar is gone. The compact Customize selector above each detail page provides sibling navigation; the rail's **Customize** link (`sidebar-skills-link`, unscoped at this width) still returns to the hub.

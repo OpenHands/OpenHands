@@ -8,6 +8,8 @@ pages it contributes from the main sidebar rail at `/extensions/<name>/<path>`.
 
 Source: `src/routes/canvas-extensions.tsx`, `src/routes/canvas-extension-page.tsx`, `src/components/features/canvas-extensions/`, `src/hooks/mutation/use-manage-canvas-extensions.ts`, `src/api/canvas-extensions-service.ts`, `src/utils/parse-git-tree-url.ts`, `src/components/features/sidebar/sidebar-rail-body.tsx`, `src/fixtures/canvas-extensions/demo-page/`, `src/hooks/use-app-title.ts`.
 
+Server: F28, F29.
+
 ## Sub-features
 
 - `F20.entry-points`: the Apps page is reached from the sidebar **Customize** link (lands on `/mcp`) then **Apps** in the Customize navigation, from the command menu's **Customize** command plus **Apps**, from the phone Customize hub, and by direct URL `/apps`; there is no bare `/extensions` page and no "Apps" command.

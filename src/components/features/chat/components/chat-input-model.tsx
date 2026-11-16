@@ -4,6 +4,7 @@ import {
   type ChatInputModelState,
 } from "#/hooks/use-chat-input-model-state";
 import { useSwitchAcpModel } from "#/hooks/mutation/use-switch-acp-model";
+import { useSwitchAcpEffort } from "#/hooks/mutation/use-switch-acp-effort";
 import { ComboboxCaretInline } from "#/ui/combobox-caret";
 import SettingsGearIcon from "#/icons/settings-gear.svg?react";
 import CheckIcon from "#/icons/checkmark.svg?react";
@@ -52,6 +53,7 @@ export function ChatInputModelMenuContent({
 }: ChatInputModelMenuContentProps) {
   const { t } = useTranslation("openhands");
   const switchAcpModel = useSwitchAcpModel();
+  const switchAcpEffort = useSwitchAcpEffort();
   const hasModelRows = model.showAcpPicker || Boolean(model.displayModel);
   // Locked-to-Cloud blocks the Canvas settings pages this links to (OHE-3457).
   const showSettingsLink = getLockedCloudHost() === null;
@@ -65,6 +67,23 @@ export function ChatInputModelMenuContent({
       switchAcpModel.mutate({
         conversationId: model.switchConversationId,
         model: modelId,
+      });
+    }
+    onClose();
+  };
+
+  const effortOptions = [
+    ...(model.agentDefaultEffortLabel
+      ? [{ value: null, label: model.agentDefaultEffortLabel }]
+      : []),
+    ...model.effortChoices,
+  ];
+
+  const handleSelectAcpEffort = (effort: string | null) => {
+    if (effort !== model.selectedEffort) {
+      switchAcpEffort.mutate({
+        conversationId: model.switchConversationId,
+        effort,
       });
     }
     onClose();
@@ -120,6 +139,39 @@ export function ChatInputModelMenuContent({
               </ContextMenuListItem>
             );
           })}
+          {model.effortChoices.length > 0 && (
+            <li role="presentation" className="px-2 pt-2 pb-1">
+              <Typography.Text className="text-2xs font-medium text-text-dim uppercase tracking-wide leading-4">
+                {t(I18nKey.SCHEMA$LLM$REASONING_EFFORT$LABEL)}
+              </Typography.Text>
+              <div
+                role="group"
+                aria-label={t(I18nKey.SCHEMA$LLM$REASONING_EFFORT$LABEL)}
+                className="mt-1 flex flex-wrap gap-1"
+              >
+                {effortOptions.map((option) => (
+                  <button
+                    key={option.value ?? ""}
+                    type="button"
+                    data-testid={`chat-input-acp-effort-option-${option.value ?? "agent-default"}`}
+                    aria-pressed={option.value === model.selectedEffort}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      handleSelectAcpEffort(option.value);
+                    }}
+                    className={cn(
+                      "rounded-pill border border-border px-2 text-xs leading-5 text-foreground hover:bg-interactive-hover transition-colors",
+                      option.value === model.selectedEffort &&
+                        "bg-interactive-hover",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </li>
+          )}
         </>
       ) : model.displayModel ? (
         <li className="text-sm">
