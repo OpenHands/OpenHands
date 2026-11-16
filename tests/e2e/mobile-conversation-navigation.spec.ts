@@ -110,3 +110,37 @@ test("desktop sidebar rows retain their compact dimensions", async ({
       .height,
   ).toBe(36);
 });
+
+test("shared conversation keeps its header inside mobile safe areas", async ({
+  page,
+}) => {
+  const conversationId = "mobile-safe-area";
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setSafeAreaInsetsOverride", {
+    insets: { top: 44, right: 0, bottom: 34, left: 0 },
+  });
+  await page.goto(`/shared/conversations/${conversationId}`);
+
+  const heading = page.getByRole("heading", {
+    name: "Shared mobile conversation",
+  });
+  await expect(heading).toBeVisible();
+  const headerBounds = await heading.boundingBox();
+  const returnLinkBounds = await page
+    .getByRole("link", { name: "OpenHands" })
+    .boundingBox();
+  expect(headerBounds!.y).toBeGreaterThanOrEqual(44);
+  expect(returnLinkBounds!.y).toBeGreaterThanOrEqual(44);
+  const shell = page.locator(".app-shell-safe-area");
+  await expect(shell).toHaveCSS("padding-top", "44px");
+  await expect(shell).toHaveCSS("padding-bottom", "34px");
+  expect(
+    await page.evaluate(() =>
+      Math.max(
+        document.documentElement.scrollHeight,
+        document.body.scrollHeight,
+      ),
+    ),
+  ).toBe(844);
+  await cdp.detach();
+});
