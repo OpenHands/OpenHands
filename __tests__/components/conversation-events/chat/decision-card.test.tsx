@@ -141,6 +141,50 @@ it("hydrates the answered card without repeating the machine answer as a chat bu
   expect(screen.getByText("Keep the backups too.")).toBeVisible();
 });
 
+it("keeps an undelivered answer retryable after hydration and settles on the delivered retry", async () => {
+  useEventStore.getState().addEvent({
+    id: "orphan-answer",
+    kind: "AskUserAnswerEvent",
+    timestamp: "2026-11-15T12:00:02Z",
+    source: "user",
+    ask_id: question.id,
+    option_index: 0,
+    option_label: "SQLite",
+    text: "Lost before delivery",
+  });
+  renderWithProviders(<Transcript />);
+  const card = await screen.findByRole("region", {
+    name: question.action.question,
+  });
+  await waitFor(() =>
+    expect(
+      within(card).getByRole("button", { name: /PostgreSQL/ }),
+    ).toBeEnabled(),
+  );
+  act(() => {
+    useEventStore.getState().addEvents([
+      {
+        id: "delivered-answer",
+        kind: "AskUserAnswerEvent",
+        timestamp: "2026-11-15T12:00:03Z",
+        source: "user",
+        ask_id: question.id,
+        option_index: 1,
+        option_label: "PostgreSQL",
+        text: "Now delivered",
+      },
+      { ...reply(), timestamp: "2026-11-15T12:00:04Z" },
+    ]);
+  });
+  expect(await within(card).findByText("Now delivered")).toBeVisible();
+  expect(
+    within(card).getByRole("img", { name: "ASK_USER$ANSWERED" }).parentElement,
+  ).toHaveTextContent("PostgreSQL");
+  expect(
+    within(card).queryByText("Lost before delivery"),
+  ).not.toBeInTheDocument();
+});
+
 it("does not offer to resend an answer already saved when run capacity is full", async () => {
   vi.spyOn(ConversationClient.prototype, "answerAskUser").mockRejectedValue(
     new HttpError(429, "Too Many Requests"),

@@ -30,6 +30,12 @@ export function indexDecisionClosures(events: readonly OHEvent[]) {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     const planner = !!event.isFromPlanningAgent;
+    if ("kind" in event && isAskUserAnswerEvent(event)) {
+      const closing = nextClosing.get(planner);
+      // An answer without its delivery message stays retryable after a crash.
+      if (closing && isMessageEvent(closing)) nextClosing.set(planner, event);
+      continue;
+    }
     const isQuestion =
       isObservationEvent(event) &&
       event.observation.kind === "AskUserObservation" &&
@@ -40,7 +46,6 @@ export function indexDecisionClosures(events: readonly OHEvent[]) {
     }
     if (
       isQuestion ||
-      ("kind" in event && isAskUserAnswerEvent(event)) ||
       (isMessageEvent(event) && event.source === "user" && !event.sender)
     ) {
       nextClosing.set(planner, event);
@@ -120,6 +125,7 @@ export const DecisionCard = React.memo(function DecisionCard({
       ) {
         current.addEvent(answerEvent);
       }
+      setSaved(true);
     } catch (error) {
       const capacity = error instanceof HttpError && error.status === 429;
       setSaved(capacity);
