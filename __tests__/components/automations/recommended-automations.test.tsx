@@ -239,7 +239,7 @@ describe("recommended automations", () => {
     __resetActiveStoreForTests();
   });
 
-  it("renders the suggested automations before the rest, each in popularity order", () => {
+  it("renders every automation in popularity order", () => {
     render(
       <RecommendedAutomationsSection
         backendKind="local"
@@ -256,37 +256,14 @@ describe("recommended automations", () => {
           ?.replace("recommended-automation-card-", ""),
       );
 
-    expect(cardIds).toEqual([
-      "github-pr-reviewer",
-      "custom-automation",
-      "github-issue-to-pr",
-      "slack-channel-monitor",
-      "github-agents-md-maintainer",
-      "news-digest",
-      "github-repo-monitor",
-      "slack-standup-digest",
-      "linear-triage-assistant",
-      "linear-issue-to-github-pr",
-      "gitlab-issue-to-mr",
-      "linear-issue-to-gitlab-mr",
-      "linear-issue-to-bitbucket-pr",
-      "jira-issue-to-pr",
-      "qa-changes",
-      "jira-data-center-issue-to-bitbucket-data-center-pr",
-      "jira-issue-to-gitlab-mr",
-      "research-brief-writer",
-      "bitbucket-data-center-pr-reviewer",
-      "jira-issue-to-bitbucket-pr",
-      "github-delivery-watchdog",
-      "github-issue-triage",
-      "upstream-fork-sync",
-      "incident-retrospective-drafter",
-      "github-stale-ci-pr-closer",
-      "github-comment-cleanup",
-    ]);
+    expect(cardIds).toEqual(
+      getAutomationsByPopularity(AUTOMATION_CATALOG).map(
+        (automation) => automation.id,
+      ),
+    );
   });
 
-  it("suggests the proven automations and lists the rest, tagged Beta, under More templates", () => {
+  it("renders one ungrouped grid without Beta labels", () => {
     render(
       <RecommendedAutomationsSection
         backendKind="local"
@@ -295,40 +272,27 @@ describe("recommended automations", () => {
       />,
     );
 
-    const suggestedHeading = screen.getByText(
-      I18nKey.RECOMMENDED_AUTOMATIONS$SUGGESTED_TITLE,
-    ).parentElement!;
-    expect(within(suggestedHeading).getByText("6")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_DESCRIPTION),
     ).toBeInTheDocument();
 
-    const moreHeading = screen.getByTestId(
-      "recommended-automations-beta-heading",
-    );
-    expect(moreHeading).toHaveTextContent(
-      I18nKey.RECOMMENDED_AUTOMATIONS$MORE_TITLE,
-    );
-    expect(within(moreHeading).getByText("20")).toBeInTheDocument();
-
-    const moreSection = screen.getByTestId(
-      "recommended-automations-beta-section",
-    );
     expect(
-      within(moreSection).getByTestId(
-        "recommended-automation-card-slack-standup-digest",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      within(moreSection).queryByTestId(
-        "recommended-automation-card-github-pr-reviewer",
-      ),
+      screen.queryByTestId("recommended-automations-beta-heading"),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByTestId("recommended-automation-beta-slack-standup-digest"),
+      screen.queryByTestId("recommended-automations-beta-section"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("recommended-automation-card-slack-standup-digest"),
     ).toBeInTheDocument();
     expect(
-      screen.queryByTestId("recommended-automation-beta-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId(/^recommended-automation-beta-/),
     ).not.toBeInTheDocument();
   });
 
@@ -1343,7 +1307,7 @@ describe("recommended automations", () => {
       );
   }
 
-  it("lists what an Enterprise instance on Data Center does not report after everything else, without hiding it", async () => {
+  it("keeps templates an Enterprise instance does not report visible without regrouping", async () => {
     await withBuiltInRequirement(
       ["jira_dc", "bitbucket_data_center"],
       async () => {
@@ -1357,7 +1321,7 @@ describe("recommended automations", () => {
         // Act
         renderLauncher({ withBackendProvider: true });
 
-        // Assert — every Beta card the instance looks ready for comes first.
+        // Assert — deployment support does not hide or regroup templates.
         await screen.findByTestId("recommended-automation-card-news-digest");
         const order = cardOrder();
         const unlikely = [
@@ -1366,14 +1330,15 @@ describe("recommended automations", () => {
           "linear-issue-to-bitbucket-pr",
         ];
         for (const id of unlikely) expect(order).toContain(id);
-        expect(order.indexOf("research-brief-writer")).toBeLessThan(
-          Math.min(...unlikely.map((id) => order.indexOf(id))),
-        );
+        expect(order).toContain("research-brief-writer");
+        expect(
+          screen.queryByTestId("recommended-automations-beta-section"),
+        ).not.toBeInTheDocument();
       },
     );
   });
 
-  it("suggests the proven templates on an Enterprise instance with nothing set up", async () => {
+  it("keeps one ungrouped template grid on an Enterprise instance with nothing set up", async () => {
     // Arrange — sign-up by password, no git provider or integration.
     await activateCloudBackend({ deploymentMode: "self_hosted" });
 
@@ -1382,19 +1347,21 @@ describe("recommended automations", () => {
 
     // Assert
     await screen.findByTestId("recommended-automation-card-github-pr-reviewer");
-    const more = screen.getByTestId("recommended-automations-beta-section");
+    expect(
+      screen.queryByTestId("recommended-automations-beta-section"),
+    ).not.toBeInTheDocument();
     for (const id of [
       "github-pr-reviewer",
       "github-issue-to-pr",
       "news-digest",
     ]) {
       expect(
-        within(more).queryByTestId(`recommended-automation-card-${id}`),
-      ).not.toBeInTheDocument();
+        screen.getByTestId(`recommended-automation-card-${id}`),
+      ).toBeInTheDocument();
     }
   });
 
-  it("suggests a template using an MCP server the user installed", async () => {
+  it("does not regroup a template when its MCP server is installed", async () => {
     // Arrange
     await activateCloudBackend({
       settings: settingsWithMcpConfig({
@@ -1409,15 +1376,15 @@ describe("recommended automations", () => {
     await screen.findByTestId(
       "recommended-automation-card-linear-triage-assistant",
     );
-    expect(cardOrder()[0]).toBe("linear-triage-assistant");
     expect(
-      within(
-        screen.getByTestId("recommended-automations-beta-section"),
-      ).queryByTestId("recommended-automation-card-linear-triage-assistant"),
+      screen.getByTestId("recommended-automation-card-linear-triage-assistant"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("recommended-automations-beta-section"),
     ).not.toBeInTheDocument();
   });
 
-  it("suggests first the templates using an integration an Enterprise instance reports", async () => {
+  it("does not regroup templates for integrations an Enterprise instance reports", async () => {
     await withBuiltInRequirement(["bitbucket_data_center"], async () => {
       // Arrange
       await activateCloudBackend({
@@ -1429,18 +1396,15 @@ describe("recommended automations", () => {
       // Act
       renderLauncher({ withBackendProvider: true });
 
-      // Assert — ahead of the proven templates; the catalog's own Data Center
-      // templates use the reported integrations too.
+      // Assert — integration availability does not create a second group.
       await screen.findByTestId("recommended-automation-card-news-digest");
-      const order = cardOrder();
-      expect(order.indexOf("news-digest")).toBeLessThan(
-        order.indexOf("slack-channel-monitor"),
-      );
+      expect(cardOrder()).toContain("news-digest");
       expect(
-        within(
-          screen.getByTestId("recommended-automations-beta-section"),
-        ).getByTestId("recommended-automation-card-github-pr-reviewer"),
+        screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
       ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("recommended-automations-beta-section"),
+      ).not.toBeInTheDocument();
     });
   });
 

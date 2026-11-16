@@ -25,7 +25,6 @@ import {
   getMarketplaceEntryById,
   isMcpInstallableEntry,
 } from "#/utils/mcp-marketplace-utils";
-import { getFeaturedAutomationIds } from "#/manifests/automation-interface";
 import {
   getAutomationIcon,
   getAutomationLaunchPrompt,
@@ -33,7 +32,6 @@ import {
   getTemplateIntegrationIds,
   getTemplateLogoIds,
   getTemplateTriggerKinds,
-  splitBySuggestion,
   type TemplateTriggerKind,
 } from "#/utils/automation-catalog";
 import { getAutomationsByPopularity } from "#/utils/recommended-automation-rail";
@@ -46,7 +44,6 @@ import {
   extensionModuleCardSurfaceClassName,
 } from "#/utils/extension-module-card-classes";
 import { AutomationsFilteredEmptyState } from "./dashboard/automations-filtered-empty-state";
-import { StatusBadge } from "./status-badge";
 import {
   EMPTY_TEMPLATE_FILTERS,
   hasActiveTemplateFilter,
@@ -83,14 +80,6 @@ interface RecommendedAutomationsSectionProps {
 export { getAutomationsByPopularity };
 
 const RECOMMENDED_AUTOMATIONS = getAutomationsByPopularity(AUTOMATION_CATALOG);
-
-// Proven automations are suggested on any backend; the rest carry a Beta tag.
-// The set is owned by the interface manifest (falling back to the host
-// default), not derived from popularityRank: slack-standup-digest@94 outranks
-// slack-channel-monitor@92 yet is Beta.
-function isProvenAutomation(automation: RecommendedAutomation): boolean {
-  return getFeaturedAutomationIds().includes(automation.id);
-}
 
 export interface AutomationIntegration {
   id: string;
@@ -354,16 +343,6 @@ function AutomationCardGrid({
                     </h3>
                     <p className="mt-0.5 truncate text-xs text-tertiary-alt">
                       {automation.category}
-                      {!isProvenAutomation(automation) && (
-                        <span
-                          data-testid={`recommended-automation-beta-${automation.id}`}
-                          className="ml-2 rounded border border-border px-1.5 text-xs leading-none"
-                        >
-                          {translate(
-                            I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
-                          )}
-                        </span>
-                      )}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
@@ -407,8 +386,6 @@ export function RecommendedAutomationsSection({
   backendKind: _backendKind,
   installedServers,
   hiddenAutomationIds,
-  unlikelyAutomations,
-  suggestedAutomations,
   getNativeIntegration = () => null,
   query = "",
   onClearQuery,
@@ -455,12 +432,6 @@ export function RecommendedAutomationsSection({
     if (!canClear || !isNarrowed) return null;
   }
 
-  const { suggested, more } = splitBySuggestion(
-    visibleAutomations,
-    isProvenAutomation,
-    { suggested: suggestedAutomations, unlikely: unlikelyAutomations },
-  );
-
   return (
     <section
       data-testid="recommended-automations-section"
@@ -489,53 +460,23 @@ export function RecommendedAutomationsSection({
           />
         )}
 
-        {suggested.length > 0 && (
+        {visibleAutomations.length > 0 && (
           <>
-            <div className="flex items-center">
-              <h2 className="text-base font-semibold text-foreground">
-                {t(I18nKey.RECOMMENDED_AUTOMATIONS$SUGGESTED_TITLE)}
-              </h2>
-              <StatusBadge count={suggested.length} />
-            </div>
+            <h2 className="text-base font-semibold text-foreground">
+              {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE)}
+            </h2>
             <p className="mt-1 text-sm text-muted">
               {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_DESCRIPTION)}
             </p>
 
             <AutomationCardGrid
-              automations={suggested}
+              automations={visibleAutomations}
               installedServers={installedServers}
               getNativeIntegration={getNativeIntegration}
               onSelect={onSelect}
               translate={t}
             />
           </>
-        )}
-
-        {/* The test ids predate the More templates name; the verify-openhands
-            feature map cites them. */}
-        {more.length > 0 && (
-          <section
-            data-testid="recommended-automations-beta-section"
-            className={cn(suggested.length > 0 && "mt-8")}
-          >
-            <div
-              data-testid="recommended-automations-beta-heading"
-              className="flex items-center"
-            >
-              <h2 className="text-base font-semibold text-foreground">
-                {t(I18nKey.RECOMMENDED_AUTOMATIONS$MORE_TITLE)}
-              </h2>
-              <StatusBadge count={more.length} />
-            </div>
-
-            <AutomationCardGrid
-              automations={more}
-              installedServers={installedServers}
-              getNativeIntegration={getNativeIntegration}
-              onSelect={onSelect}
-              translate={t}
-            />
-          </section>
         )}
       </div>
     </section>

@@ -28961,24 +28961,6 @@
     "uk": "Кожен шаблон містить запит для агента, ескіз реалізації та MCP, потрібні, щоб зробити його корисним. Виберіть один, щоб відкрити попередньо заповнену розмову й завершити деталі з агентом.",
     "id": "Setiap templat menyertakan prompt agen, sketsa implementasi, dan MCP yang diperlukan agar berguna. Pilih satu untuk membuka percakapan yang sudah terisi dan selesaikan detailnya bersama agen."
   },
-  "RECOMMENDED_AUTOMATIONS$BETA_LABEL": {
-    "en": "Beta",
-    "ja": "ベータ",
-    "zh-CN": "测试版",
-    "zh-TW": "測試版",
-    "ko-KR": "베타",
-    "no": "Beta",
-    "ar": "تجريبي",
-    "de": "Beta",
-    "fr": "Bêta",
-    "it": "Beta",
-    "pt": "Beta",
-    "es": "Beta",
-    "ca": "Beta",
-    "tr": "Beta",
-    "uk": "Бета",
-    "id": "Beta"
-  },
   "RECOMMENDED_AUTOMATIONS$PROVIDER_NOT_CONFIGURED": {
     "en": "This OpenHands Enterprise instance does not have the Built-in {{provider}} Integration configured.",
     "ja": "この OpenHands Enterprise インスタンスでは、組み込みの {{provider}} 連携が設定されていません。",
