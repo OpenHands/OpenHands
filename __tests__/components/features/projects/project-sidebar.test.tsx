@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SidebarConversationList } from "#/components/features/sidebar/sidebar-conversation-list";
+import { NavigationProvider } from "#/context/navigation-context";
 import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
 import {
   AUDIT,
@@ -16,9 +17,6 @@ import {
 const view = vi.hoisted(() => ({
   conversationId: null as string | null,
   conversation: undefined as { tags?: Record<string, string> } | undefined,
-}));
-vi.mock("#/hooks/use-conversation-id", () => ({
-  useOptionalConversationId: () => ({ conversationId: view.conversationId }),
 }));
 vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => ({ data: view.conversation }),
@@ -41,7 +39,16 @@ function renderSidebar(path = `/conversations/${view.conversationId}`) {
       }
     >
       <MemoryRouter initialEntries={[path]}>
-        <SidebarConversationList collapsed={false} />
+        <NavigationProvider
+          value={{
+            currentPath: path,
+            conversationId: view.conversationId,
+            isNavigating: false,
+            navigate: () => {},
+          }}
+        >
+          <SidebarConversationList collapsed={false} />
+        </NavigationProvider>
       </MemoryRouter>
     </QueryClientProvider>,
   );

@@ -47,6 +47,7 @@ import { useCanvasExtensionsRuntime } from "#/components/features/canvas-extensi
 import { CanvasExtensionIcon } from "#/components/features/canvas-extensions/canvas-extension-icon";
 import type { Backend } from "#/api/backend-registry/types";
 import { useProjectsEnabled } from "#/hooks/query/use-projects";
+import { useProjectView } from "#/hooks/query/use-conversation-project";
 import { NEW_PROJECT_PATH, PROJECTS_PATH } from "#/utils/project-paths";
 import { useNavigation } from "#/context/navigation-context";
 
@@ -101,6 +102,7 @@ export function SidebarRailBody({
 }: SidebarRailBodyProps) {
   const { t } = useTranslation("openhands");
   const projectsEnabled = useProjectsEnabled();
+  const inProject = useProjectView() !== undefined;
   const { navigate } = useNavigation();
   const { pages: canvasExtensionPages } = useCanvasExtensionsRuntime();
   const backendCloseTimerRef = collapsedBackendCloseTimer;
@@ -272,20 +274,31 @@ export function SidebarRailBody({
             )}
           />
         )}
-        {projectsEnabled && (
-          <SidebarNavLink
-            to={PROJECTS_PATH}
-            label={t(I18nKey.PROJECTS$TITLE)}
-            testId="sidebar-projects-link"
-            collapsed={collapsed}
-            icon={<FolderKanban width={ICON_SIZE} height={ICON_SIZE} />}
-            addAction={{
-              label: t(I18nKey.PROJECTS$NEW),
-              testId: "sidebar-new-project",
-              onClick: () => navigate(NEW_PROJECT_PATH),
-            }}
-          />
-        )}
+        {projectsEnabled &&
+          // In a project, the row leads back out to all projects.
+          (inProject ? (
+            <SidebarNavLink
+              to={PROJECTS_PATH}
+              end
+              label={t(I18nKey.PROJECTS$TITLE)}
+              testId="sidebar-projects-link"
+              collapsed={collapsed}
+              icon={<ChevronLeft width={ICON_SIZE} height={ICON_SIZE} />}
+            />
+          ) : (
+            <SidebarNavLink
+              to={PROJECTS_PATH}
+              label={t(I18nKey.PROJECTS$TITLE)}
+              testId="sidebar-projects-link"
+              collapsed={collapsed}
+              icon={<FolderKanban width={ICON_SIZE} height={ICON_SIZE} />}
+              addAction={{
+                label: t(I18nKey.PROJECTS$NEW),
+                testId: "sidebar-new-project",
+                onClick: () => navigate(NEW_PROJECT_PATH),
+              }}
+            />
+          ))}
         {canvasExtensionPages.map((page) => (
           <SidebarNavLink
             key={`${page.extension.name}:${page.contribution.id}`}

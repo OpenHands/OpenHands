@@ -1,5 +1,6 @@
 import React from "react";
-import { useMatch } from "react-router";
+import { matchPath } from "react-router";
+import { useNavigation } from "#/context/navigation-context";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { PROJECTS_PATH } from "#/utils/project-paths";
 import { useActiveConversation } from "./use-active-conversation";
@@ -30,7 +31,10 @@ export function useConversationProjectId(): string | undefined {
  */
 export function useProjectView(): ProjectView | undefined {
   const enabled = useProjectsEnabled();
-  const page = useMatch(`${PROJECTS_PATH}/:projectId`);
+  // The navigation context, not the router: the sidebar also renders
+  // without a router (desktop shell, tests).
+  const { currentPath } = useNavigation();
+  const page = matchPath(`${PROJECTS_PATH}/:projectId`, currentPath);
   const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
   const last = React.useRef<ProjectView | undefined>(undefined);
