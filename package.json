@@ -36,7 +36,7 @@
     "axios": "1.21.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
-    "downshift": "9.4.1",
+    "downshift": "9.5.0",
     "driver.js": "1.11.0",
     "framer-motion": "14.10.1",
     "httpxy": "0.5.6",
