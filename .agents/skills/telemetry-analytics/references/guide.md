@@ -73,5 +73,18 @@ Excluded CTAs (per the one-canonical-capture rule above):
 Known limitation: middle-click (`auxclick`) opens are not captured; tracking
 uses React `onClick` only and never prevents default navigation.
 
+### Event dictionary: enterprise_docs_link_clicked
+
+One stable event for every in-app OpenHands Enterprise docs callout
+(`EnterpriseDocsCallout`). New callouts extend the unions in
+`src/constants/enterprise-docs.ts`; never add one-off events per destination.
+
+- `cta_id` (`EnterpriseCalloutId`): which callout, e.g. `compare_options`
+- `surface` (`EnterpriseCalloutSurface`): where it rendered, e.g. `backend_chooser`
+- `is_external` (boolean): always `true`; callouts open the public docs
+
+Callouts render only on open source and OpenHands Cloud backends, never on a
+self-hosted Enterprise instance or a Canvas locked to a Cloud host.
+
 ### Env vars
 `VITE_POSTHOG_API_KEY` is the sole build-time PostHog key. Unconfigured source builds use staging; official release workflows set production explicitly. Precompiled consumers use runtime configuration instead.

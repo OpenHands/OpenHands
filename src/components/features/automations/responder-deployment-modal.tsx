@@ -3,6 +3,7 @@ import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
+import { EnterpriseDocsCallout } from "#/components/shared/enterprise-docs-callout";
 import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import {
@@ -98,6 +99,12 @@ export function ResponderDeploymentModal({
             );
           })}
         </div>
+        <EnterpriseDocsCallout
+          ctaId="org_automations"
+          surface="responder_modal"
+          variant="footer"
+          className="mx-6 mb-6"
+        />
       </div>
     </ModalBackdrop>
   );
