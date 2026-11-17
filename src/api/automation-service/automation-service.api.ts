@@ -61,6 +61,7 @@ import {
   OPENHANDS_TELEMETRY_DISTINCT_ID_HEADER,
 } from "../client-source";
 import { AUTOMATION_DRAFTS_FEATURE } from "#/constants/automation-form";
+import { randomUUID } from "#/utils/random-uuid";
 
 const AUTOMATION_BASE_PATH = "/api/automation";
 
@@ -378,13 +379,7 @@ function buildImportedTrigger(spec: AutomationSpec): AutomationTrigger {
 }
 
 function generatePendingImportEvent(): string {
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
-  ) {
-    return `pending.${crypto.randomUUID()}`;
-  }
-  return `pending.${Date.now()}.${Math.random().toString(36).slice(2, 10)}`;
+  return `pending.${randomUUID()}`;
 }
 
 function buildCreateAutomationRequest(spec: AutomationSpec) {
