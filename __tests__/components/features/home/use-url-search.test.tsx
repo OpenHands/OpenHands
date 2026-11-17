@@ -278,4 +278,171 @@ describe("useUrlSearch", () => {
     // the non-matching HTTPS URL must not issue a second request.
     expect(mockSearchGitRepositories).toHaveBeenCalledTimes(1);
   });
+
+  describe("superseded in-flight searches (#17108)", () => {
+    it("should not write a result that resolves after the input was cleared", async () => {
+      let resolveSearch: (value: unknown) => void;
+      const searchPromise = new Promise((resolve) => {
+        resolveSearch = resolve;
+      });
+      mockSearchGitRepositories.mockReturnValueOnce(
+        searchPromise as Promise<{
+          items: [];
+          next_page_id: null;
+        }>,
+      );
+
+      const { result, rerender } = renderHook(
+        ({ inputValue, provider }) => useUrlSearch(inputValue, provider),
+        {
+          initialProps: {
+            inputValue: "https://github.com/owner/repo-119",
+            provider: "github" as const,
+          },
+        },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isUrlSearchLoading).toBe(true);
+      });
+
+      // Clear the field while the request is still in flight.
+      rerender({ inputValue: "", provider: "github" as const });
+
+      await waitFor(() => {
+        expect(result.current.isUrlSearchLoading).toBe(false);
+      });
+
+      // The request completes afterwards; its result must not be written.
+      await act(async () => {
+        resolveSearch!({
+          items: [
+            {
+              id: "repo-119",
+              full_name: "user/repo-119",
+              git_provider: "github",
+              is_public: true,
+            },
+          ],
+          next_page_id: null,
+        });
+      });
+
+      expect(result.current.urlSearchResults).toEqual([]);
+      expect(result.current.isUrlSearchLoading).toBe(false);
+    });
+
+    it("should keep the spinner for the current search when a superseded one resolves", async () => {
+      let resolveFirst: (value: unknown) => void;
+      const firstPromise = new Promise((resolve) => {
+        resolveFirst = resolve;
+      });
+      let resolveSecond: (value: unknown) => void;
+      const secondPromise = new Promise((resolve) => {
+        resolveSecond = resolve;
+      });
+      mockSearchGitRepositories
+        .mockReturnValueOnce(
+          firstPromise as Promise<{
+            items: [];
+            next_page_id: null;
+          }>,
+        )
+        .mockReturnValueOnce(
+          secondPromise as Promise<{
+            items: [];
+            next_page_id: null;
+          }>,
+        );
+
+      const { result, rerender } = renderHook(
+        ({ inputValue, provider }) => useUrlSearch(inputValue, provider),
+        {
+          initialProps: {
+            inputValue: "https://github.com/owner/repo-119",
+            provider: "github" as const,
+          },
+        },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isUrlSearchLoading).toBe(true);
+      });
+
+      // A new search starts for the edited input; it now owns the spinner.
+      rerender({
+        inputValue: "https://github.com/owner/repo-120",
+        provider: "github" as const,
+      });
+
+      // The first search resolves late and must not touch the state.
+      await act(async () => {
+        resolveFirst!({
+          items: [
+            {
+              id: "repo-119",
+              full_name: "user/repo-119",
+              git_provider: "github",
+              is_public: true,
+            },
+          ],
+          next_page_id: null,
+        });
+      });
+
+      expect(result.current.urlSearchResults).toEqual([]);
+      expect(result.current.isUrlSearchLoading).toBe(true);
+
+      await act(async () => {
+        resolveSecond!({
+          items: [
+            {
+              id: "repo-120",
+              full_name: "user/repo-120",
+              git_provider: "github",
+              is_public: true,
+            },
+          ],
+          next_page_id: null,
+        });
+      });
+
+      expect(result.current.urlSearchResults[0]?.full_name).toBe("user/repo-120");
+      expect(result.current.isUrlSearchLoading).toBe(false);
+    });
+
+    it("should stop the spinner when the input becomes a non-URL while a request is in flight", async () => {
+      let resolveSearch: (value: unknown) => void;
+      const searchPromise = new Promise((resolve) => {
+        resolveSearch = resolve;
+      });
+      mockSearchGitRepositories.mockReturnValueOnce(
+        searchPromise as Promise<{
+          items: [];
+          next_page_id: null;
+        }>,
+      );
+
+      const { result, rerender } = renderHook(
+        ({ inputValue, provider }) => useUrlSearch(inputValue, provider),
+        {
+          initialProps: {
+            inputValue: "https://github.com/owner/repo",
+            provider: "github" as const,
+          },
+        },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isUrlSearchLoading).toBe(true);
+      });
+
+      rerender({ inputValue: "plain text", provider: "github" as const });
+
+      await waitFor(() => {
+        expect(result.current.isUrlSearchLoading).toBe(false);
+      });
+      expect(result.current.urlSearchResults).toEqual([]);
+    });
+  });
 });
