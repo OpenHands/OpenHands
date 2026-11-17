@@ -162,7 +162,7 @@ function fakeEnterprise({ path }: { path: string }): unknown {
     }
     const slug = pathname.slice(WORKLOGS_URL.length + 1).split("/")[0];
     const contentType = params.get("content_type");
-    const cursor = params.get("since");
+    const cursor = params.get("before");
     const limit = Number(params.get("limit"));
     expect(params.get("order")).toBe("desc");
     const matching = worklogsById[slug].entries
