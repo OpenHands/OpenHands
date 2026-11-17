@@ -24,6 +24,8 @@ import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useCloudOrgMember } from "#/hooks/query/use-cloud-org-member";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
+import { factoryPath } from "#/constants/factories";
+import { useFactoryContext } from "#/hooks/use-factory-context";
 import {
   automationListPath,
   hasAutomationInterface,
@@ -102,6 +104,10 @@ export default function AutomationDetail() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showChangeRunAsModal, setShowChangeRunAsModal] = useState(false);
   const { openEditor } = useOpenAutomationEditor();
+  const factoryContext = useFactoryContext();
+  const backPath = factoryContext
+    ? factoryPath(factoryContext)
+    : automationListPath();
 
   const {
     data: healthData,
@@ -228,7 +234,7 @@ export default function AutomationDetail() {
   const handleDelete = () => {
     deleteMutation.mutate(automation.id, {
       onSuccess: () => {
-        navigate?.(automationListPath());
+        navigate?.(backPath);
       },
     });
   };
@@ -355,6 +361,7 @@ export default function AutomationDetail() {
           canToggleKeepAlive ? handleToggleKeepAlive : undefined
         }
         isKeepAlivePending={keepAliveMutation.isPending}
+        backTo={backPath}
         onEdit={() => openEditor(automation)}
         onDelete={() => setShowDeleteModal(true)}
         onChangeRunAs={

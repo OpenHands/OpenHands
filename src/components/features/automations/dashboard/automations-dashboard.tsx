@@ -29,6 +29,7 @@ import type { AutomationSetupKind } from "#/api/automation-setup-types";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
+import { withFactoryContext } from "#/constants/factories";
 import { SearchInput } from "#/components/features/automations/search-input";
 import { AutomationGroup } from "#/components/features/automations/automation-group";
 import { AutomationViewToggle } from "#/components/features/automations/automation-view-toggle";
@@ -651,7 +652,7 @@ export function AutomationsDashboard({
           displaySuccessToastWithLink(
             t(I18nKey.AUTOMATIONS$IMPORT_SUCCESS, { name: created.name }),
             t(I18nKey.AUTOMATIONS$IMPORT_VIEW),
-            automationDetailPath(created.id),
+            withFactoryContext(automationDetailPath(created.id), factoryId),
           );
         },
         onError: (error) => {

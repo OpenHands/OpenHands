@@ -107,6 +107,13 @@ const triager = createAutomation({
   factory_id: "f-core",
 });
 
+function LocationProbe({ testId }: { testId: string }) {
+  const location = useLocation();
+  return (
+    <div data-testid={testId}>{`${location.pathname}${location.search}`}</div>
+  );
+}
+
 function RouterNavigation({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -114,6 +121,7 @@ function RouterNavigation({ children }: { children: React.ReactNode }) {
     <NavigationProvider
       value={{
         currentPath: location.pathname,
+        currentSearch: location.search,
         conversationId: null,
         isNavigating: false,
         navigate: (to, options) => navigate(to, { replace: options?.replace }),
@@ -139,7 +147,11 @@ function renderAt(path: string) {
               <Route path="/automate" element={<AutomationsDashboard />} />
               <Route
                 path="/automations/setup"
-                element={<div data-testid="setup-route" />}
+                element={<LocationProbe testId="setup-route" />}
+              />
+              <Route
+                path="/automations/:automationId"
+                element={<LocationProbe testId="detail-route" />}
               />
             </Routes>
           </RouterNavigation>
@@ -334,7 +346,9 @@ describe("FactoryDetail", () => {
     await user.click(screen.getByTestId("automations-add-automation-create"));
 
     // Assert
-    expect(screen.getByTestId("setup-route")).toBeInTheDocument();
+    expect(screen.getByTestId("setup-route")).toHaveTextContent(
+      "/automations/setup?factory=f-core",
+    );
     expect(
       getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID)?.factoryId,
     ).toBe("f-core");
@@ -351,8 +365,40 @@ describe("FactoryDetail", () => {
     await user.click(screen.getByTestId("automations-add-automation-create"));
 
     // Assert
-    expect(screen.getByTestId("setup-route")).toBeInTheDocument();
+    expect(screen.getByTestId("setup-route")).toHaveTextContent(
+      /^\/automations\/setup$/,
+    );
     expect(getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID)).toBeNull();
+  });
+
+  it("opens an automation from a factory with the factory context", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderAt("/factories/f-core");
+    const card = await screen.findByTestId("automation-card-a-reviewer");
+
+    // Act
+    await user.click(within(card).getByText("PR reviewer"));
+
+    // Assert
+    expect(screen.getByTestId("detail-route")).toHaveTextContent(
+      "/automations/a-reviewer?factory=f-core",
+    );
+  });
+
+  it("opens an automation from the Automate dashboard with no factory context", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderAt("/automate");
+    const card = await screen.findByTestId("automation-card-a-reviewer");
+
+    // Act
+    await user.click(within(card).getByText("PR reviewer"));
+
+    // Assert
+    expect(screen.getByTestId("detail-route")).toHaveTextContent(
+      /^\/automations\/a-reviewer$/,
+    );
   });
 
   it("shows the empty state for a factory with no automations", async () => {
