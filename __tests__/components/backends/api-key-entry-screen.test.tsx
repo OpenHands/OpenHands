@@ -101,6 +101,17 @@ afterEach(() => {
 // ── Tests ────────────────────────────────────────────────────────────
 
 describe("ApiKeyEntryScreen", () => {
+  it("says why the key is asked when a pairing link did not work", () => {
+    window.sessionStorage.setItem("openhands-pairing-failed", "1");
+
+    renderScreen();
+
+    expect(
+      screen.getByTestId("api-key-entry-pairing-failed"),
+    ).toHaveTextContent("AUTH$PAIRING_LINK_FAILED");
+    window.sessionStorage.clear();
+  });
+
   // @spec — UI: name + host (disabled) + api key + connect
   it("renders name, host (disabled), api key, and connect button", () => {
     renderScreen();
@@ -393,6 +404,25 @@ describe("ApiKeyEntryScreen", () => {
 
     expect(activeAfter).toMatchObject({ id: active.id, apiKey: "new-key" });
     expect(stored.find((backend) => backend.id === first.id)).toEqual(first);
+  });
+
+  it("saves the key for this origin, not on a backend the build points elsewhere", async () => {
+    vi.stubEnv("VITE_BACKEND_BASE_URL", "https://remote.openhands.dev");
+    const remote: Backend = {
+      id: "remote-default",
+      name: "Remote",
+      host: "https://remote.openhands.dev",
+      apiKey: "remote-key",
+      kind: "local",
+    };
+
+    const { stored, activeAfter } = await recoverWith([remote], remote.id);
+
+    expect(stored.find((backend) => backend.id === remote.id)).toEqual(remote);
+    expect(activeAfter).toMatchObject({
+      host: window.location.origin,
+      apiKey: "new-key",
+    });
   });
 
   it("selects the root when the active record is a DigitalOcean entry an older recovery rewrote to the origin", async () => {

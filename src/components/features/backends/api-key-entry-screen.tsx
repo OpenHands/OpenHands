@@ -4,8 +4,8 @@ import { SettingsClient } from "@openhands/typescript-client/clients";
 import { I18nKey } from "#/i18n/declaration";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
-import { isServedOriginHost } from "#/api/agent-server-config";
 import type { Backend } from "#/api/backend-registry/types";
+import { isCanvasRootBackend } from "#/api/mars/canvas-root-backend";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import {
@@ -14,22 +14,11 @@ import {
 } from "#/components/shared/modals/modal-body";
 import { cn } from "#/utils/utils";
 import { BackendStatusDot } from "./backend-status-dot";
+import { PairingFailedNote } from "./pairing-failed-note";
 import {
   BackendForm,
   type BackendFormSubmitPayload,
 } from "./backend-form-modal";
-
-/**
- * The record holding the hosting Canvas key: the same served-origin match the
- * MARS web bridge reads it back with (`getMarsBridgeHeaders`).
- */
-function isCanvasRoot(backend: Backend): boolean {
-  return (
-    backend.kind === "local" &&
-    !backend.marsSessionId &&
-    isServedOriginHost(backend.host)
-  );
-}
 
 /** A DigitalOcean guest the web build proxies under `/mars/sessions/<id>`. */
 function isLiveMarsGuest(backend: Backend): boolean {
@@ -56,11 +45,13 @@ export default function ApiKeyEntryScreen() {
     useActiveBackendContext();
 
   const host = window.location.origin;
+  // The key goes on the Canvas root's record: the one the MARS web bridge
+  // reads it back from (`getMarsBridgeHeaders`) and a pairing link saves to.
   // Prefer the active record when it is a root, so a duplicate earlier in the
   // list cannot take the key while the selected one stays stale.
-  const rootBackend = isCanvasRoot(active.backend)
+  const rootBackend = isCanvasRootBackend(active.backend)
     ? active.backend
-    : backends.find(isCanvasRoot);
+    : backends.find(isCanvasRootBackend);
   const keepGuest = isLiveMarsGuest(active.backend);
 
   const [isValidating, setIsValidating] = React.useState(false);
@@ -142,6 +133,10 @@ export default function ApiKeyEntryScreen() {
         </div>
 
         <div className="px-6 pb-6 pt-2">
+          <PairingFailedNote
+            testId="api-key-entry-pairing-failed"
+            className="mb-3"
+          />
           <BackendForm
             mode="add"
             backend={{ ...active.backend, host, apiKey: "", name: "" }}

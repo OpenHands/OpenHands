@@ -10,16 +10,22 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 
 const bakedSessionApiKey = vi.hoisted(() => ({ value: null as string | null }));
+/** `VITE_BACKEND_BASE_URL`; unset means the page's own origin. */
+const configuredBackendUrl = vi.hoisted(() => ({
+  value: null as string | null,
+}));
 const registeredBackends = vi.hoisted(() => ({ value: [] as Backend[] }));
 const activeLocalBackend = vi.hoisted(() => ({
   value: null as Backend | null,
 }));
 
-// Only the baked key is faked: `isServedOriginHost` is the real one, so the
-// tests exercise the actual origin match against the jsdom page origin.
+// Only the baked key and the configured backend are faked; the origin match
+// is the real one, against the jsdom page origin.
 vi.mock("#/api/agent-server-config", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#/api/agent-server-config")>()),
   getBakedSessionApiKey: () => bakedSessionApiKey.value,
+  getAgentServerBaseUrl: () =>
+    configuredBackendUrl.value ?? window.location.origin,
 }));
 
 vi.mock("#/api/backend-registry/active-store", () => ({
@@ -40,6 +46,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   delete window.marsBridge;
   bakedSessionApiKey.value = null;
+  configuredBackendUrl.value = null;
   registeredBackends.value = [];
   activeLocalBackend.value = null;
 });
@@ -240,6 +247,36 @@ describe("createMarsWebBridge", () => {
         body: JSON.stringify({ args: ["s2"] }),
       },
     );
+  });
+
+  it("keeps the key of a backend the build points elsewhere off the page's own bridge", () => {
+    configuredBackendUrl.value = "https://remote.openhands.dev";
+    bakedSessionApiKey.value = "remote-baked-key";
+    registeredBackends.value = [
+      {
+        id: "default-local",
+        name: "Local",
+        host: "https://remote.openhands.dev",
+        apiKey: "remote-key",
+        kind: "local",
+      },
+    ];
+
+    expect(getMarsBridgeHeaders()).toEqual({});
+
+    registeredBackends.value = [
+      ...registeredBackends.value,
+      {
+        id: "canvas",
+        name: "Canvas",
+        host: `${PAGE_ORIGIN}/`,
+        apiKey: "canvas-key",
+        kind: "local",
+      },
+    ];
+    expect(getMarsBridgeHeaders()).toEqual({
+      "X-Session-API-Key": "canvas-key",
+    });
   });
 
   it("never offers OAuth", async () => {
