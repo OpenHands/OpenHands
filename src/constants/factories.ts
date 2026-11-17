@@ -13,3 +13,7 @@ export function withFactoryContext(path: string, factoryId?: string | null) {
   const separator = path.includes("?") ? "&" : "?";
   return `${path}${separator}${FACTORY_CONTEXT_PARAM}=${encodeURIComponent(factoryId)}`;
 }
+
+export function factoryWorklogsPath(id: string): string {
+  return `${factoryPath(id)}/worklogs`;
+}
