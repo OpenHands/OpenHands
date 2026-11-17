@@ -6,6 +6,8 @@ export interface NavigationOptions {
 
 export interface NavigationContextValue {
   currentPath: string;
+  /** The URL's query string, with its leading `?` when not empty. */
+  currentSearch?: string;
   conversationId: string | null;
   isNavigating: boolean;
   navigate: (to: string, options?: NavigationOptions) => void;

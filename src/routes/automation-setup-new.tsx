@@ -21,7 +21,8 @@ import {
   automationListPath,
 } from "#/manifests/automation-interface";
 import { AutomationPageHeader } from "#/components/features/automations/automation-page-header";
-import { factoryPath } from "#/constants/factories";
+import { factoryPath, withFactoryContext } from "#/constants/factories";
+import { useFactoryContext } from "#/hooks/use-factory-context";
 import { buildAutomationDraftTags } from "#/utils/automation-draft-tags";
 import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
@@ -37,6 +38,7 @@ const BLANK_DRAFT: AutomationSetupDraft = { prompt: "", kind: "prompt" };
 export default function AutomationSetupNew() {
   const { t } = useTranslation("openhands");
   const [searchParams] = useSearchParams();
+  const factoryContext = useFactoryContext();
   const automationId = searchParams.get("automationId")?.trim() ?? "";
   const draftId = searchParams.get("draftId")?.trim() ?? "";
   const { startConversationFromPrompt, isPending } = useStartAutomationSetup();
@@ -102,6 +104,10 @@ export default function AutomationSetupNew() {
     };
   }, [automationId, draftId]);
 
+  const closeFactoryId = draft?.factoryId ?? factoryContext;
+  const closePath = closeFactoryId
+    ? factoryPath(closeFactoryId)
+    : automationListPath();
   const title = draft?.form?.name?.trim() || t(I18nKey.AUTOMATION_SETUP$TITLE);
   const conversationTags = draft?.serverDraftId
     ? buildAutomationDraftTags(
@@ -118,10 +124,11 @@ export default function AutomationSetupNew() {
         title={title}
         backTo={
           automationId
-            ? automationDetailPath(automationId)
-            : draft?.factoryId
-              ? factoryPath(draft.factoryId)
-              : automationListPath()
+            ? withFactoryContext(
+                automationDetailPath(automationId),
+                factoryContext,
+              )
+            : closePath
         }
         actionsRef={setToolbarElement}
       />

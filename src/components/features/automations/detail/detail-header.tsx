@@ -25,6 +25,8 @@ interface DetailHeaderProps {
   isKeepAlivePending?: boolean;
   /** When provided (and the user can edit), the header shows an Edit button. */
   onEdit?: () => void;
+  /** Where the back link goes. Defaults to the automations list. */
+  backTo?: string;
   onDelete: () => void;
   /** When provided, the kebab menu shows a Change Runs As entry. */
   onChangeRunAs?: () => void;
@@ -52,6 +54,7 @@ export function DetailHeader({
   onToggleKeepAlive,
   isKeepAlivePending = false,
   onEdit,
+  backTo,
   onDelete,
   onChangeRunAs,
   onExport,
@@ -125,7 +128,7 @@ export function DetailHeader({
     <AutomationPageHeader
       testId="automation-detail-header"
       title={automation.name}
-      backTo={automationListPath()}
+      backTo={backTo ?? automationListPath()}
       badge={<ActiveStatusBadge automation={automation} />}
     >
       {canManage && onRunNow && (

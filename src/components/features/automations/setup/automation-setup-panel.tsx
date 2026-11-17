@@ -116,6 +116,8 @@ import {
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
 import { useNavigation } from "#/context/navigation-context";
+import { factoryPath, withFactoryContext } from "#/constants/factories";
+import { useFactoryContext } from "#/hooks/use-factory-context";
 import type {
   AutomationDraftApiResponse,
   DeploymentCapabilities,
@@ -791,6 +793,7 @@ export function AutomationSetupPanel({
 }: AutomationSetupPanelProps) {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
+  const factoryContext = useFactoryContext();
   const deploymentCapabilities = useDeploymentCapabilities();
   // Connected self-hosted providers name their hosts here; a repository on
   // one of them is sent with its provider so the run can authenticate, as
@@ -1658,9 +1661,13 @@ export function AutomationSetupPanel({
     );
     setIsTaggedDraftMissing(false);
     if (isPendingAutomationSetupId(conversationId) && !serverDraftId) {
-      navigate(`/automations/setup?draftId=${encodeURIComponent(saved.id)}`, {
-        replace: true,
-      });
+      navigate(
+        withFactoryContext(
+          `/automations/setup?draftId=${encodeURIComponent(saved.id)}`,
+          factoryContext,
+        ),
+        { replace: true },
+      );
     }
     await updateConversationDraftTags(saved.id);
     return saved;
@@ -1894,7 +1901,9 @@ export function AutomationSetupPanel({
         }
       }
       if (typeof created.id === "string")
-        navigate(automationDetailPath(created.id));
+        navigate(
+          withFactoryContext(automationDetailPath(created.id), factoryContext),
+        );
     } catch (error) {
       displayErrorToast(
         getApiErrorMessage(error, t(I18nKey.SETUP$SUBMIT_FAILED)),
@@ -2045,8 +2054,13 @@ export function AutomationSetupPanel({
   const closeEditor = () => {
     navigate(
       isEditingExisting
-        ? automationDetailPath(editingAutomationId)
-        : automationListPath(),
+        ? withFactoryContext(
+            automationDetailPath(editingAutomationId),
+            factoryContext,
+          )
+        : factoryContext
+          ? factoryPath(factoryContext)
+          : automationListPath(),
     );
   };
 
