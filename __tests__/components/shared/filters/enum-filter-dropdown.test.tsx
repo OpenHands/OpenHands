@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { EnumFilterDropdown } from "#/components/shared/filters/enum-filter-dropdown";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
+import { HideOlderConversationsRow } from "#/components/features/conversation-panel/hide-older-conversations-row";
 
 const OPTIONS = ["status", "tag"] as const;
 
@@ -54,6 +55,37 @@ describe("EnumFilterDropdown", () => {
 
     // Assert
     expect(screen.queryByTestId("qa-group-by-menu")).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("HideOlderConversationsRow cutoff inside a dialog", () => {
+  it("closes the cutoff menu first and the dialog on the next Escape", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(
+      <ModalBackdrop onClose={onClose}>
+        <HideOlderConversationsRow />
+      </ModalBackdrop>,
+    );
+    await user.click(
+      within(screen.getByTestId("older-conversation-cutoff")).getByTestId(
+        "dropdown-trigger",
+      ),
+    );
+    expect(
+      screen.getByTestId("older-conversation-cutoff-menu"),
+    ).toBeInTheDocument();
+
+    // Act + Assert
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByTestId("older-conversation-cutoff-menu"),
+    ).not.toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
 
     await user.keyboard("{Escape}");
