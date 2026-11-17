@@ -196,6 +196,8 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
     typeof value.materializedAutomationId === "string"
       ? value.materializedAutomationId.trim()
       : null;
+  const factoryId =
+    typeof value.factoryId === "string" ? value.factoryId.trim() : "";
   const appliedAgentEventIds = Array.isArray(value.appliedAgentEventIds)
     ? [
         ...new Set(
@@ -222,6 +224,7 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
     ...(serverDraftId ? { serverDraftId } : {}),
     ...(savedDraftRequestKey ? { savedDraftRequestKey } : {}),
     ...(materializedAutomationId ? { materializedAutomationId } : {}),
+    ...(factoryId ? { factoryId } : {}),
     ...(fieldMetadata ? { fieldMetadata } : {}),
     ...(appliedAgentEventIds && appliedAgentEventIds.length > 0
       ? { appliedAgentEventIds }

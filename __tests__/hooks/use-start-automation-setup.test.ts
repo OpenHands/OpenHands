@@ -39,7 +39,7 @@ const draft = {
     eventFilter: "contains(repos, repository.full_name)",
   },
 };
-function mount() {
+function mount(options?: { factoryId?: string }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -61,7 +61,7 @@ function mount() {
         }),
       ),
     );
-  return renderHook(() => useStartAutomationSetup(), { wrapper });
+  return renderHook(() => useStartAutomationSetup(options), { wrapper });
 }
 
 beforeEach(() => {
@@ -80,6 +80,32 @@ beforeEach(() => {
     },
   ]);
   setActiveSelection({ backendId: "local-test", orgId: null });
+});
+
+describe("starting automation setup", () => {
+  it("opens the form for a new automation in the given factory", () => {
+    const hook = mount({ factoryId: "factory-1" });
+
+    act(() => hook.result.current.startSetup());
+
+    expect(navigate).toHaveBeenCalledWith("/automations/setup");
+    expect(
+      getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID)?.factoryId,
+    ).toBe("factory-1");
+  });
+
+  it("opens a form with no factory otherwise, dropping a stale one", () => {
+    initializeAutomationFormSession(PENDING_AUTOMATION_SETUP_ID, {
+      ...draft,
+      factoryId: "stale-factory",
+    });
+    const hook = mount();
+
+    act(() => hook.result.current.startSetup());
+
+    expect(navigate).toHaveBeenCalledWith("/automations/setup");
+    expect(getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID)).toBeNull();
+  });
 });
 
 describe("automation setup conversation handoff", () => {

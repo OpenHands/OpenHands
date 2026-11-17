@@ -352,7 +352,7 @@ export function AutomationsDashboard({
   const [deleteDraftTarget, setDeleteDraftTarget] =
     useState<AutomationDraftApiResponse | null>(null);
   const { openEditor } = useOpenAutomationEditor();
-  const { startSetup } = useStartAutomationSetup();
+  const { startSetup } = useStartAutomationSetup({ factoryId });
   const [importSpec, setImportSpec] = useState<AutomationSpec | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
 
@@ -459,7 +459,7 @@ export function AutomationsDashboard({
   const deleteDraftMutation = useDeleteAutomationDraft();
   const dispatchMutation = useDispatchAutomation();
   const dispatchDraftMutation = useDispatchAutomationDraft();
-  const importMutation = useImportAutomation();
+  const importMutation = useImportAutomation({ factoryId });
 
   const visible = useMemo(() => {
     if (!dashboardSpec) {
@@ -819,31 +819,27 @@ export function AutomationsDashboard({
             {interfaceCopy.listSubtitle}
           </p>
         </div>
-        {/* Git sync and new automations are org-level, so a factory's view
-            has neither. */}
-        {factoryId === undefined && (
-          <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            {/* Git sync is org-level config, so it follows manage_automations
-                (admins/owners) on every backend kind, not the local-only edit
-                gate. */}
-            {canManage && (
-              <BrandButton
-                type="button"
-                variant="secondary"
-                testId="automations-git-sync"
-                className="whitespace-nowrap"
-                onClick={() => navigate?.("/automations/git-sync")}
-                startContent={<RefreshCw className="size-4" aria-hidden />}
-              >
-                {t(I18nKey.AUTOMATIONS$GIT_SYNC$NAV_BUTTON)}
-              </BrandButton>
-            )}
-            <AddAutomationMenu
-              onAdd={startSetup}
-              onImport={() => setIsImportOpen(true)}
-            />
-          </div>
-        )}
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          {/* Git sync is org-level config, so a factory's view omits it. It
+              follows manage_automations (admins/owners) on every backend kind,
+              not the local-only edit gate. */}
+          {factoryId === undefined && canManage && (
+            <BrandButton
+              type="button"
+              variant="secondary"
+              testId="automations-git-sync"
+              className="whitespace-nowrap"
+              onClick={() => navigate?.("/automations/git-sync")}
+              startContent={<RefreshCw className="size-4" aria-hidden />}
+            >
+              {t(I18nKey.AUTOMATIONS$GIT_SYNC$NAV_BUTTON)}
+            </BrandButton>
+          )}
+          <AddAutomationMenu
+            onAdd={startSetup}
+            onImport={() => setIsImportOpen(true)}
+          />
+        </div>
       </div>
 
       {/* Overview tiles — dashboard mode only */}
