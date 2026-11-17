@@ -251,6 +251,7 @@ describe("EventService", () => {
         EventService.searchEvents("conversation-cloud", null, null, {
           limit: 250,
           pageId: "page-1",
+          kind: "SystemPromptEvent",
           sortOrder: "TIMESTAMP_DESC",
           timestampGte: "2026-07-12T00:00:00.000Z",
           timestampLt: "2026-07-13T00:00:00.000Z",
@@ -260,7 +261,7 @@ describe("EventService", () => {
       expect(callCloudProxyMock).toHaveBeenCalledWith({
         backend: cloudBackend,
         method: "GET",
-        path: "/api/v1/conversation/conversation-cloud/events/search?limit=100&sort_order=TIMESTAMP_DESC&page_id=page-1&timestamp__gte=2026-07-12T00%3A00%3A00.000Z&timestamp__lt=2026-07-13T00%3A00%3A00.000Z",
+        path: "/api/v1/conversation/conversation-cloud/events/search?limit=100&sort_order=TIMESTAMP_DESC&page_id=page-1&timestamp__gte=2026-07-12T00%3A00%3A00.000Z&timestamp__lt=2026-07-13T00%3A00%3A00.000Z&kind__eq=SystemPromptEvent",
       });
     });
 
@@ -392,6 +393,7 @@ describe("EventService", () => {
             limit: 40,
             excludeFullState: true,
             pageId: "local-page-1",
+            kind: "SystemPromptEvent",
             sortOrder: "TIMESTAMP",
             timestampGte: "2026-07-11T00:00:00.000Z",
             timestampLt: "2026-07-12T00:00:00.000Z",
@@ -418,6 +420,7 @@ describe("EventService", () => {
       expect(remoteSearchMock).toHaveBeenCalledWith({
         limit: 40,
         page_id: "local-page-1",
+        kind: "SystemPromptEvent",
         sort_order: "TIMESTAMP",
         timestamp__gte: "2026-07-11T00:00:00.000Z",
         timestamp__lt: "2026-07-12T00:00:00.000Z",

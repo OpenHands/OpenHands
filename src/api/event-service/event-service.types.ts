@@ -20,6 +20,11 @@ export interface EventSearchOptions {
   timestampGte?: string;
   /** Filter: event timestamp < this value (ISO 8601). */
   timestampLt?: string;
+  /**
+   * Filter by event kind, e.g. `SystemPromptEvent`. Sent as `kind` to the
+   * Agent Server and as `kind__eq` to the Cloud App API.
+   */
+  kind?: string;
   /** Omit full state snapshots from Cloud display history when supported. */
   excludeFullState?: boolean;
   /**
