@@ -1312,6 +1312,12 @@ code .token {
   width: calc(100% + 3rem);
 }
 
+@utility assistant-code-block {
+  background-color: var(--oh-surface);
+  border: 1px solid var(--oh-border);
+  border-inline-start-width: 4px;
+}
+
 /* Fixed content columns shared by metadata and automation summaries. */
 /* Markdown artifact cards blend table edges into their existing surface. */
 @utility scroll-fade-surface {
