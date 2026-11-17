@@ -70,7 +70,11 @@ const BOARD = {
     member(AUDIT, "Audit auth flows", {
       attention: "resolved",
       resolved: "user",
-      pull_requests: [{ owner: "acme", repo: "lib", number: 9 }],
+      // Also named by "Fix login retry": counted and listed once.
+      pull_requests: [
+        { owner: "acme", repo: "lib", number: 9 },
+        { owner: "acme", repo: "app", number: 412 },
+      ],
     }),
   ],
 };

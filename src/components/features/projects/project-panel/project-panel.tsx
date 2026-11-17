@@ -8,6 +8,7 @@ import {
   useProjectArtifacts,
   useProjectConversations,
 } from "#/hooks/query/use-projects";
+import { pullRequestRef } from "#/hooks/query/use-pull-request-status";
 import { projectPath } from "#/utils/project-paths";
 import { cn } from "#/utils/utils";
 import { ProjectPanelConversations } from "./project-panel-conversations";
@@ -34,12 +35,12 @@ export function ProjectPanel({
   const { data: project } = useProject(projectId);
   const { data: artifacts } = useProjectArtifacts(projectId);
   const { data: board } = useProjectConversations(projectId);
-  const pullRequestCount = board
-    ? [board.coordinator, ...board.conversations].reduce(
-        (sum, c) => sum + (c?.pull_requests.length ?? 0),
-        0,
-      )
-    : 0;
+  // Two conversations can name the same pull request; count it once.
+  const pullRequestCount = new Set(
+    [board?.coordinator, ...(board?.conversations ?? [])].flatMap(
+      (c) => c?.pull_requests.map(pullRequestRef) ?? [],
+    ),
+  ).size;
   const counted = (label: string, count: number | undefined) =>
     count ? `${label} · ${count}` : label;
   const [view, setView] = React.useState<ProjectPanelView>("conversations");
