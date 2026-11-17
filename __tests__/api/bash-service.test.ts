@@ -121,6 +121,26 @@ describe("BashService.listOutputs — local backend", () => {
     });
     expect(callCloudProxy).not.toHaveBeenCalled();
     expect(outputs).toEqual([OUTPUT_1, OUTPUT_2]);
+    expect(outputs.isTruncated).toBe(false);
+  });
+
+  it("marks isTruncated as true when outputs exceed MAX_OUTPUT_PAGES", async () => {
+    for (let i = 0; i < 20; i += 1) {
+      searchEventsMock.mockResolvedValueOnce({
+        items: [OUTPUT_1],
+        next_page_id: `page-${i + 1}`,
+      });
+    }
+
+    const outputs = await BashService.listOutputs(
+      CONVERSATION_URL,
+      SESSION_KEY,
+      BASH_CMD_ID,
+    );
+
+    expect(searchEventsMock).toHaveBeenCalledTimes(20);
+    expect(outputs).toHaveLength(20);
+    expect(outputs.isTruncated).toBe(true);
   });
 
   it("searches the server-level bash events for a run that has a conversation", async () => {

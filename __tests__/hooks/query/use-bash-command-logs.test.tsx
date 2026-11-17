@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AxiosError, AxiosHeaders } from "axios";
 import { HttpError } from "@openhands/typescript-client";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { AutomationRunStatus } from "#/types/automation";
 import { useBashCommandLogs } from "#/hooks/query/use-bash-command-logs";
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -676,5 +677,61 @@ describe("useBashCommandLogs — local runs without a conversation", () => {
     await waitFor(() => expect(listOutputsMock).toHaveBeenCalledTimes(1));
     expect(listOutputsMock).toHaveBeenCalledWith(null, null, "cmd-1");
     expect(batchGetCloudSandboxesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("useBashCommandLogs — run status & truncation diagnostics", () => {
+  beforeEach(() => {
+    setActiveBackend("local");
+    setNoConversation();
+  });
+
+  it("reports isRunActive=true when runStatus is RUNNING", async () => {
+    listOutputsMock.mockResolvedValue([]);
+
+    const { result } = renderHook(
+      () =>
+        useBashCommandLogs({
+          conversationId: null,
+          bashCommandId: "cmd-1",
+          runStatus: AutomationRunStatus.RUNNING,
+        }),
+      { wrapper },
+    );
+
+    expect(result.current.isRunActive).toBe(true);
+  });
+
+  it("reports isTruncated=true when outputs carry truncation metadata", async () => {
+    const truncatedOutputs = [
+      {
+        id: "o1",
+        kind: "BashOutput",
+        timestamp: "2026-01-01T10:00:00Z",
+        command_id: "cmd-1",
+        order: 0,
+        stdout: "out",
+        stderr: null,
+      },
+    ];
+    Object.defineProperty(truncatedOutputs, "isTruncated", {
+      value: true,
+      enumerable: false,
+    });
+    listOutputsMock.mockResolvedValue(truncatedOutputs);
+
+    const { result } = renderHook(
+      () =>
+        useBashCommandLogs({
+          conversationId: null,
+          bashCommandId: "cmd-1",
+          runStatus: AutomationRunStatus.COMPLETED,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.isRunActive).toBe(false);
+    expect(result.current.isTruncated).toBe(true);
   });
 });

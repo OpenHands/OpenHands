@@ -15,6 +15,10 @@ interface SearchOptions {
   limit?: number;
 }
 
+export interface BashOutputsResult extends Array<BashOutput> {
+  isTruncated?: boolean;
+}
+
 const MAX_OUTPUT_PAGES = 20; // safety cap; >2000 output events is unlikely.
 
 function isBashOutput(event: BashEvent): event is BashOutput {
@@ -52,9 +56,10 @@ class BashService {
     conversationUrl: string | null,
     sessionApiKey: string | null | undefined,
     bashCommandId: string,
-  ): Promise<BashOutput[]> {
-    const outputs: BashOutput[] = [];
+  ): Promise<BashOutputsResult> {
+    const outputs: BashOutputsResult = [];
     let pageId: string | undefined;
+    let isTruncated = false;
     for (let i = 0; i < MAX_OUTPUT_PAGES; i += 1) {
       const page = await BashService.searchEvents(
         conversationUrl,
@@ -70,8 +75,17 @@ class BashService {
         if (isBashOutput(event)) outputs.push(event);
       });
       if (!page.next_page_id) break;
+      if (i === MAX_OUTPUT_PAGES - 1 && page.next_page_id) {
+        isTruncated = true;
+      }
       pageId = page.next_page_id;
     }
+    Object.defineProperty(outputs, "isTruncated", {
+      value: isTruncated,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
     return outputs;
   }
 
