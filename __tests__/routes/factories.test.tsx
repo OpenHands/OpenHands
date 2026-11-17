@@ -42,6 +42,19 @@ vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
   };
 });
 
+const permissionMocks = vi.hoisted(() => ({ canManage: true }));
+vi.mock("#/hooks/use-automation-permissions", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/hooks/use-automation-permissions")
+  >()),
+  useAutomationPermissions: () => ({
+    canView: true,
+    canManage: permissionMocks.canManage,
+    userId: null,
+    isLoading: false,
+  }),
+}));
+
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
     getAutomations: vi.fn(),
@@ -53,6 +66,8 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     supportsFactories: vi.fn(),
     listFactories: vi.fn(),
     getFactory: vi.fn(),
+    createFactory: vi.fn(),
+    renameFactory: vi.fn(),
     checkHealth: vi.fn(),
   },
 }));
@@ -162,6 +177,7 @@ function renderAt(path: string) {
 }
 
 beforeEach(() => {
+  permissionMocks.canManage = true;
   __resetActiveStoreForTests();
   vi.mocked(AutomationService.checkHealth).mockResolvedValue({ status: "ok" });
   vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
@@ -274,6 +290,124 @@ describe("FactoriesList", () => {
       await screen.findByTestId("factories-unsupported"),
     ).toBeInTheDocument();
     expect(AutomationService.listFactories).not.toHaveBeenCalled();
+  });
+});
+
+describe("creating a factory", () => {
+  it("creates a factory from its name and opens it", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    vi.mocked(AutomationService.createFactory).mockResolvedValue(docsFactory);
+    renderAt("/factories");
+    await screen.findByTestId("factories-list");
+
+    // Act
+    await user.click(screen.getByTestId("factories-new"));
+    await user.type(
+      screen.getByTestId("factory-name-input"),
+      "  Release train ",
+    );
+    await user.click(screen.getByTestId("factory-name-submit"));
+
+    // Assert
+    await waitFor(() =>
+      expect(AutomationService.createFactory).toHaveBeenCalledWith(
+        "Release train",
+      ),
+    );
+    expect(await screen.findByTestId("factory-navbar-desktop")).toBeVisible();
+  });
+
+  it("does not submit a blank name", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderAt("/factories");
+    await screen.findByTestId("factories-list");
+
+    // Act
+    await user.click(screen.getByTestId("factories-new"));
+    await user.type(screen.getByTestId("factory-name-input"), "   ");
+
+    // Assert
+    expect(screen.getByTestId("factory-name-submit")).toBeDisabled();
+    expect(AutomationService.createFactory).not.toHaveBeenCalled();
+  });
+
+  it("offers New factory only to those who manage automations", async () => {
+    // Arrange
+    permissionMocks.canManage = false;
+
+    // Act
+    renderAt("/factories");
+    await screen.findByTestId("factories-list");
+
+    // Assert
+    expect(screen.queryByTestId("factories-new")).not.toBeInTheDocument();
+  });
+});
+
+describe("renaming a factory", () => {
+  it("renames the factory from its page", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    vi.mocked(AutomationService.renameFactory).mockResolvedValue({
+      ...coreFactory,
+      name: "Core delivery",
+    });
+    renderAt("/factories/f-core");
+    await screen.findByTestId("automation-card-a-reviewer");
+
+    // Act
+    await user.click(screen.getByTestId("factory-rename"));
+    const input = screen.getByTestId("factory-name-input");
+    expect(input).toHaveValue(coreFactory.name);
+    await user.clear(input);
+    await user.type(input, "Core delivery");
+    await user.click(screen.getByTestId("factory-name-submit"));
+
+    // Assert
+    await waitFor(() =>
+      expect(AutomationService.renameFactory).toHaveBeenCalledWith(
+        "f-core",
+        "Core delivery",
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("factory-name-modal"),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("offers Rename only to those who manage automations", async () => {
+    // Arrange
+    permissionMocks.canManage = false;
+
+    // Act
+    renderAt("/factories/f-core");
+    await screen.findByTestId("automation-card-a-reviewer");
+
+    // Assert
+    expect(screen.queryByTestId("factory-rename")).not.toBeInTheDocument();
+  });
+
+  it("hides Add Automation in a factory from those who cannot put automations in it, but not on Automate", async () => {
+    // Arrange
+    permissionMocks.canManage = false;
+
+    // Act
+    const factory = renderAt("/factories/f-core");
+    await screen.findByTestId("automation-card-a-reviewer");
+
+    // Assert
+    expect(
+      screen.queryByTestId("automations-add-automation"),
+    ).not.toBeInTheDocument();
+    factory.unmount();
+
+    renderAt("/automate");
+    await screen.findByTestId("automation-card-a-reviewer");
+    expect(screen.getByTestId("automations-add-automation")).toBeVisible();
   });
 });
 

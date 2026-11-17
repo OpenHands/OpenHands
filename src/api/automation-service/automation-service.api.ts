@@ -1117,6 +1117,44 @@ class AutomationService {
     return data;
   }
 
+  /** Create a factory. Needs `manage_automations`. */
+  static async createFactory(name: string): Promise<Factory> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}/factories`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Factory>({
+        backend: active,
+        method: "POST",
+        path,
+        body: { name },
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<Factory>(path, { name });
+    return data;
+  }
+
+  /** Rename a factory. Needs `manage_automations`. */
+  static async renameFactory(id: string, name: string): Promise<Factory> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}/factories/${encodeURIComponent(id)}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Factory>({
+        backend: active,
+        method: "PATCH",
+        path,
+        body: { name },
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.patch<Factory>(path, { name });
+    return data;
+  }
+
   /** Whether the active deployment advertises factories. */
   static supportsFactories(
     capabilities: DeploymentCapabilities | null | undefined,
