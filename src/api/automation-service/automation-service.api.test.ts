@@ -800,6 +800,40 @@ describe("AutomationService factories", () => {
     );
   });
 
+  it("creates a factory from a name", async () => {
+    localAxios.post.mockResolvedValueOnce({ data: factory });
+
+    await expect(AutomationService.createFactory("Core SDLC")).resolves.toEqual(
+      factory,
+    );
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/factories",
+      { name: "Core SDLC" },
+    );
+  });
+
+  it("renames a factory", async () => {
+    localAxios.patch.mockResolvedValueOnce({ data: factory });
+
+    await AutomationService.renameFactory("factory-1", "Renamed");
+
+    expect(localAxios.patch).toHaveBeenCalledWith(
+      "/api/automation/v1/factories/factory-1",
+      { name: "Renamed" },
+    );
+  });
+
+  it("takes an automation out of its factory with a null factory_id", async () => {
+    localAxios.patch.mockResolvedValueOnce({ data: { id: "a-1" } });
+
+    await AutomationService.updateAutomation("a-1", { factory_id: null });
+
+    expect(localAxios.patch).toHaveBeenCalledWith("/api/automation/v1/a-1", {
+      factory_id: null,
+    });
+  });
+
   it("scopes the automation list to a factory", async () => {
     localAxios.get.mockResolvedValueOnce({
       data: { automations: [], total: 0 },

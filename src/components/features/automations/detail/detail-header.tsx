@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Server } from "lucide-react";
+import { ArrowRightLeft, Factory, Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
@@ -28,6 +28,8 @@ interface DetailHeaderProps {
   /** Where the back link goes. Defaults to the automations list. */
   backTo?: string;
   onDelete: () => void;
+  /** When provided, the kebab menu shows a Change factory entry. */
+  onChangeFactory?: () => void;
   /** When provided, the kebab menu shows a Change Runs As entry. */
   onChangeRunAs?: () => void;
   onExport: () => void;
@@ -56,6 +58,7 @@ export function DetailHeader({
   onEdit,
   backTo,
   onDelete,
+  onChangeFactory,
   onChangeRunAs,
   onExport,
   onDownloadTarball,
@@ -101,6 +104,15 @@ export function DetailHeader({
             icon: <Server className="size-4" aria-hidden />,
             onClick: onToggleKeepAlive,
             disabled: isKeepAlivePending,
+          },
+        ]
+      : []),
+    ...(onChangeFactory
+      ? [
+          {
+            label: t(I18nKey.AUTOMATIONS$CHANGE_FACTORY),
+            icon: <Factory className="size-4" aria-hidden />,
+            onClick: onChangeFactory,
           },
         ]
       : []),

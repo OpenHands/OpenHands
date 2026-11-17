@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { hasAutomationInterface } from "#/manifests/automation-interface";
@@ -40,5 +40,26 @@ export function useFactory(id: string, { enabled = true } = {}) {
     queryFn: () => AutomationService.getFactory(id),
     staleTime: 0,
     enabled: enabled && id !== "",
+  });
+}
+
+export function useCreateFactory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => AutomationService.createFactory(name),
+    meta: { disableToast: true },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: FACTORIES_QUERY_KEY }),
+  });
+}
+
+export function useRenameFactory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      AutomationService.renameFactory(id, name),
+    meta: { disableToast: true },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: FACTORIES_QUERY_KEY }),
   });
 }

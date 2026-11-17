@@ -836,10 +836,13 @@ export function AutomationsDashboard({
               {t(I18nKey.AUTOMATIONS$GIT_SYNC$NAV_BUTTON)}
             </BrandButton>
           )}
-          <AddAutomationMenu
-            onAdd={startSetup}
-            onImport={() => setIsImportOpen(true)}
-          />
+          {/* Putting an automation in a factory needs manage_automations. */}
+          {(factoryId === undefined || canManage) && (
+            <AddAutomationMenu
+              onAdd={startSetup}
+              onImport={() => setIsImportOpen(true)}
+            />
+          )}
         </div>
       </div>
 

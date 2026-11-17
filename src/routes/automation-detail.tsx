@@ -14,6 +14,7 @@ import {
   useDeleteAutomation,
   useDispatchAutomation,
   useUpdateAutomationKeepAlive,
+  useChangeAutomationFactory,
   useChangeRunAs,
 } from "#/hooks/query/use-automations";
 import {
@@ -24,9 +25,14 @@ import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useCloudOrgMember } from "#/hooks/query/use-cloud-org-member";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
-import { factoryPath } from "#/constants/factories";
+import { factoryPath, withFactoryContext } from "#/constants/factories";
+import {
+  useFactories,
+  useFactoriesSupported,
+} from "#/hooks/query/use-factories";
 import { useFactoryContext } from "#/hooks/use-factory-context";
 import {
+  automationDetailPath,
   automationListPath,
   hasAutomationInterface,
 } from "#/manifests/automation-interface";
@@ -44,6 +50,7 @@ import { NotFoundState } from "#/components/features/automations/detail/not-foun
 import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
+import { ChangeFactoryModal } from "#/components/features/automations/change-factory-modal";
 import { ChangeRunAsModal } from "#/components/features/automations/change-run-as-modal";
 import { useOpenAutomationEditor } from "#/hooks/use-open-automation-editor";
 import { useTracking } from "#/hooks/use-tracking";
@@ -103,6 +110,7 @@ export default function AutomationDetail() {
   const { navigate } = useNavigation();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showChangeRunAsModal, setShowChangeRunAsModal] = useState(false);
+  const [showChangeFactoryModal, setShowChangeFactoryModal] = useState(false);
   const { openEditor } = useOpenAutomationEditor();
   const factoryContext = useFactoryContext();
   const backPath = factoryContext
@@ -145,6 +153,9 @@ export default function AutomationDetail() {
   const dispatchMutation = useDispatchAutomation();
   const keepAliveMutation = useUpdateAutomationKeepAlive();
   const changeRunAsMutation = useChangeRunAs();
+  const changeFactoryMutation = useChangeAutomationFactory();
+  const { isSupported: isFactoriesSupported } = useFactoriesSupported();
+  const factoriesQuery = useFactories({ enabled: showChangeFactoryModal });
   // Change Runs As and the service-account name need the service account list,
   // which only managers on a cloud team workspace with the capability can read.
   const serviceAccountRunAsEnabled = useServiceAccountRunAsEnabled();
@@ -270,6 +281,46 @@ export default function AutomationDetail() {
     );
   };
 
+  const handleChangeFactory = (nextFactoryId: string | null) => {
+    changeFactoryMutation.mutate(
+      { id: automation.id, factoryId: nextFactoryId },
+      {
+        onSuccess: () => {
+          setShowChangeFactoryModal(false);
+          const nextFactory = factoriesQuery.data?.find(
+            (factory) => factory.id === nextFactoryId,
+          );
+          displaySuccessToast(
+            nextFactory
+              ? t(I18nKey.AUTOMATIONS$CHANGE_FACTORY_SUCCESS, {
+                  name: automation.name,
+                  factory: nextFactory.name,
+                })
+              : t(I18nKey.AUTOMATIONS$CHANGE_FACTORY_REMOVED, {
+                  name: automation.name,
+                }),
+          );
+          // The page's factory context follows the automation.
+          navigate?.(
+            withFactoryContext(
+              automationDetailPath(automation.id),
+              nextFactoryId,
+            ),
+            { replace: true },
+          );
+        },
+        onError: (error) => {
+          displayErrorToast(
+            getApiErrorMessage(
+              error,
+              t(I18nKey.AUTOMATIONS$CHANGE_FACTORY_ERROR),
+            ),
+          );
+        },
+      },
+    );
+  };
+
   const handleChangeRunAs = (body: ChangeRunAsRequest) => {
     changeRunAsMutation.mutate(
       { id: automation.id, body },
@@ -350,6 +401,9 @@ export default function AutomationDetail() {
   const runsAs = runsAsService ? serviceAccountName : person;
   const createdBy = runsAsService ? person : null;
   const canChangeRunAs = serviceAccountRunAsEnabled && !isDraft;
+  // A factory change needs manage_automations, even for the owner.
+  const canChangeFactory =
+    isFactoriesSupported && hasManagePermission && !isDraft;
   const canEditTags = canEdit && !isDraft;
 
   return (
@@ -364,6 +418,9 @@ export default function AutomationDetail() {
         backTo={backPath}
         onEdit={() => openEditor(automation)}
         onDelete={() => setShowDeleteModal(true)}
+        onChangeFactory={
+          canChangeFactory ? () => setShowChangeFactoryModal(true) : undefined
+        }
         onChangeRunAs={
           canChangeRunAs ? () => setShowChangeRunAsModal(true) : undefined
         }
@@ -420,6 +477,16 @@ export default function AutomationDetail() {
           <ActivityLogSection
             automation={automation}
             highlightedRunId={highlightedRunId}
+          />
+          <ChangeFactoryModal
+            automationName={automation.name}
+            isOpen={showChangeFactoryModal}
+            factories={factoriesQuery.data ?? []}
+            currentFactoryId={automation.factory_id}
+            isLoading={factoriesQuery.isLoading}
+            isPending={changeFactoryMutation.isPending}
+            onConfirm={handleChangeFactory}
+            onCancel={() => setShowChangeFactoryModal(false)}
           />
           <ChangeRunAsModal
             automationName={automation.name}
