@@ -16,6 +16,7 @@ import {
 } from "#/api/backend-registry/storage";
 import type { Backend } from "#/api/backend-registry/types";
 import { buildAgentCanvasPath } from "#/utils/base-path";
+import { randomUUID } from "#/utils/random-uuid";
 import { isCanvasRootBackend } from "./canvas-root-backend";
 
 /** The page a pairing link opens, under the Canvas base path. */
@@ -23,17 +24,6 @@ export const PAIR_PAGE_PATH = "/pair";
 const PAIR_ROUTE = "/mars/pair";
 /** Set for this tab when a link did not work, so the key screen can say so. */
 export const PAIRING_FAILED_STORAGE_KEY = "openhands-pairing-failed";
-
-/** `crypto.randomUUID` exists only on HTTPS and localhost; a LAN address is plain HTTP. */
-function newBackendId(): string {
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
-  ) {
-    return crypto.randomUUID();
-  }
-  return `backend-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
 
 /**
  * Keep the key where a typed key goes: this origin's own backend, never a
@@ -46,7 +36,7 @@ function saveLocalBackendKey(host: string, apiKey: string): void {
     ? { ...existing, apiKey }
     : {
         id: backends.some((backend) => backend.id === SEEDED_DEFAULT_BACKEND_ID)
-          ? newBackendId()
+          ? randomUUID()
           : SEEDED_DEFAULT_BACKEND_ID,
         name: DEFAULT_LOCAL_BACKEND_NAME,
         host,

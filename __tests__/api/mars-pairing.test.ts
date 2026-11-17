@@ -143,7 +143,9 @@ describe("redeemPairingLink", () => {
     const added = storedBackends().find(
       (backend) => backend.host === window.location.origin,
     );
-    expect(added?.id).toMatch(/^backend-/);
+    expect(added?.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
     expect(typeof crypto.randomUUID).toBe("function");
   });
 
