@@ -66,9 +66,9 @@ function eventTriggerExtras(
   );
 }
 
-function scheduleFields(
+export function scheduleFields(
   schedule: string | undefined,
-  timezone: string | undefined,
+  timezone?: string,
 ): AutomationSetupFormPatch {
   const raw = schedule?.trim() ?? "";
   const zone = timezone?.trim() ?? "";

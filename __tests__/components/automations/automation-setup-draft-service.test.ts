@@ -187,4 +187,81 @@ describe("setupDraftFromServerDraft", () => {
     expect(form.eventKey).toBe("push,release.published");
     expect(form.runAsUserId).toBe("sa-2");
   });
+
+  it.each([
+    {
+      label: "hourly",
+      schedule: "0 * * * *",
+      expected: {
+        triggerKind: "cron",
+        frequency: "hourly",
+        timezone: "UTC",
+      },
+    },
+    {
+      label: "daily",
+      schedule: "15 14 * * *",
+      expected: {
+        triggerKind: "cron",
+        frequency: "daily",
+        time: "14:15",
+        timezone: "UTC",
+      },
+    },
+    {
+      label: "weekdays",
+      schedule: "30 9 * * 1-5",
+      expected: {
+        triggerKind: "cron",
+        frequency: "weekdays",
+        time: "09:30",
+        timezone: "UTC",
+      },
+    },
+    {
+      label: "weekly",
+      schedule: "30 10 * * 3",
+      expected: {
+        triggerKind: "cron",
+        frequency: "weekly",
+        weekday: "3",
+        time: "10:30",
+        timezone: "UTC",
+      },
+    },
+    {
+      label: "custom",
+      schedule: "*/17 * * * *",
+      expected: {
+        triggerKind: "cron",
+        frequency: "custom",
+        customSchedule: "*/17 * * * *",
+        timezone: "UTC",
+      },
+    },
+  ])(
+    "restores $label schedule presets when hydrating or updating from a saved draft",
+    ({ schedule, expected }) => {
+      const saved = {
+        ...baseSavedDraft,
+        draft: {
+          prompt: "Triage issues",
+          trigger: {
+            type: "cron",
+            schedule,
+            timezone: "UTC",
+          },
+        },
+      } satisfies AutomationDraftApiResponse;
+
+      expect(setupDraftFromServerDraft(saved).form).toMatchObject(expected);
+      expect(
+        formFromServerDraft(saved, {
+          ...baseForm,
+          frequency: "custom",
+          customSchedule: "0 0 1 1 *",
+        }),
+      ).toMatchObject(expected);
+    },
+  );
 });
