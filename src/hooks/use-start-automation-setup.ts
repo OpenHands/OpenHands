@@ -13,6 +13,7 @@ import {
 import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
+import { withFactoryContext } from "#/constants/factories";
 import { useCreateAutomationSetupConversation } from "#/hooks/use-create-automation-setup-conversation";
 import { useTracking } from "#/hooks/use-tracking";
 import {
@@ -50,7 +51,7 @@ export function useStartAutomationSetup({
         factoryId,
       });
     }
-    navigate?.("/automations/setup");
+    navigate?.(withFactoryContext("/automations/setup", factoryId));
   }, [active.backend.kind, factoryId, navigate, trackAutomationCreatedButton]);
 
   const startConversationFromPrompt = useCallback(

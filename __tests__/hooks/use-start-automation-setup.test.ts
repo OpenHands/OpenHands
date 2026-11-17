@@ -88,7 +88,9 @@ describe("starting automation setup", () => {
 
     act(() => hook.result.current.startSetup());
 
-    expect(navigate).toHaveBeenCalledWith("/automations/setup");
+    expect(navigate).toHaveBeenCalledWith(
+      "/automations/setup?factory=factory-1",
+    );
     expect(
       getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID)?.factoryId,
     ).toBe("factory-1");

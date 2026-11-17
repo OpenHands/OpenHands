@@ -223,10 +223,11 @@ function getDesktopSidebar(collapsed?: boolean): HTMLElement {
   return sidebar;
 }
 
-function renderSidebar(currentPath: string) {
+function renderSidebar(currentPath: string, currentSearch = "") {
   const navigate = vi.fn();
   const value: NavigationContextValue = {
     currentPath,
+    currentSearch,
     conversationId: null,
     isNavigating: false,
     navigate,
@@ -673,6 +674,35 @@ describe("Sidebar", () => {
     const link = screen.getByTestId("sidebar-factories-link");
     expect(link).toHaveTextContent("Factories");
     expect(link).toHaveAttribute("href", "/factories");
+  });
+
+  it("keeps Factories selected on an automation page opened from a factory", () => {
+    factoriesSupport.isSupported = true;
+
+    renderSidebar("/automations/setup", "?factory=factory-1");
+
+    expect(screen.getByTestId("sidebar-factories-link")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByTestId("sidebar-automations-link")).toHaveAttribute(
+      "aria-current",
+      "false",
+    );
+  });
+
+  it("selects Automate on the same pages when no factory is in play", () => {
+    factoriesSupport.isSupported = true;
+
+    renderSidebar("/automations/setup");
+
+    expect(screen.getByTestId("sidebar-automations-link")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByTestId("sidebar-factories-link")).not.toHaveAttribute(
+      "aria-current",
+    );
   });
 
   it("renders icons for every top-level nav item so they remain meaningful in the collapsed rail", () => {
