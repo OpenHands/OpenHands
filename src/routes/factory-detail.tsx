@@ -1,4 +1,5 @@
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { Pencil } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router";
 import AutomationsIcon from "#/icons/automations.svg?react";
@@ -10,9 +11,18 @@ import {
   ManifestSubpageLayout,
   type SubPageNavItem,
 } from "#/components/features/manifest/manifest-subpage-layout";
+import { BrandButton } from "#/components/features/settings/brand-button";
+import { FactoryNameModal } from "#/components/features/factories/factory-name-modal";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { FACTORIES_PATH, factoryPath } from "#/constants/factories";
-import { useFactory, useFactoriesSupported } from "#/hooks/query/use-factories";
+import {
+  useFactory,
+  useFactoriesSupported,
+  useRenameFactory,
+} from "#/hooks/query/use-factories";
+import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
+import { getApiErrorMessage } from "#/utils/api-error-message";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { getErrorStatus } from "#/hooks/query/use-settings";
 import { hasAutomationInterface } from "#/manifests/automation-interface";
 
@@ -27,6 +37,10 @@ export const clientLoader = () => {
 export default function FactoryDetail() {
   const { t } = useTranslation("openhands");
   const { factoryId = "" } = useParams();
+  const { canManage, isLoading: isPermissionsLoading } =
+    useAutomationPermissions();
+  const renameFactory = useRenameFactory();
+  const [isRenameOpen, setIsRenameOpen] = useState(false);
   const { isLoading: isCapabilitiesLoading, isSupported } =
     useFactoriesSupported();
   const {
@@ -96,7 +110,40 @@ export default function FactoryDetail() {
       navTestIdBase="factory-navbar"
       items={navItems}
     >
-      {backLink}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {backLink}
+        {canManage && !isPermissionsLoading && (
+          <BrandButton
+            type="button"
+            variant="secondary"
+            testId="factory-rename"
+            onClick={() => setIsRenameOpen(true)}
+            startContent={<Pencil className="size-4" aria-hidden />}
+          >
+            {t(I18nKey.FACTORIES$RENAME)}
+          </BrandButton>
+        )}
+      </div>
+      <FactoryNameModal
+        isOpen={isRenameOpen}
+        title={t(I18nKey.FACTORIES$RENAME_TITLE)}
+        submitLabel={t(I18nKey.FACTORIES$RENAME)}
+        initialName={factory.name}
+        isPending={renameFactory.isPending}
+        onSubmit={(name) =>
+          renameFactory.mutate(
+            { id: factory.id, name },
+            {
+              onSuccess: () => setIsRenameOpen(false),
+              onError: (error) =>
+                displayErrorToast(
+                  getApiErrorMessage(error, t(I18nKey.FACTORIES$RENAME_ERROR)),
+                ),
+            },
+          )
+        }
+        onCancel={() => setIsRenameOpen(false)}
+      />
       <AutomationsDashboard factoryId={factory.id} embedded />
     </ManifestSubpageLayout>
   );

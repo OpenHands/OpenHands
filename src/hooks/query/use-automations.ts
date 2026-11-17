@@ -262,6 +262,20 @@ export function useChangeRunAs() {
   });
 }
 
+/** Put an automation in a factory, or take it out of its factory with `null`. */
+export function useChangeAutomationFactory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, factoryId }: { id: string; factoryId: string | null }) =>
+      AutomationService.updateAutomation(id, { factory_id: factoryId }),
+    meta: { disableToast: true },
+    onSuccess: () => {
+      invalidateAutomationLists(queryClient);
+      queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
+    },
+  });
+}
+
 export function useDeleteAutomationDraft() {
   const queryClient = useQueryClient();
   return useMutation({
