@@ -22,7 +22,7 @@ import {
   setStoredConversationMetadata,
   toPluginCoordinates,
 } from "#/api/conversation-metadata-store";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import {
   consumePendingTaskDraft,

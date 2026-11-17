@@ -6,7 +6,7 @@ import type { Automation } from "#/types/automation";
 import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { KebabMenu } from "./kebab-menu";
 import { useAutomationAccess } from "#/hooks/use-automation-access";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import PlayIcon from "#/icons/play.svg?react";
 import { SkillCardPillRow } from "#/components/features/skills/skill-card-pill-row";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";

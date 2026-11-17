@@ -10,7 +10,7 @@ import {
   NEW_CHAT_PATH,
   type MarsSession,
 } from "#/api/mars/mars-tunnel-backend";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { I18nKey } from "#/i18n/declaration";
 import { useMarsTunnelBackend } from "./use-mars-tunnel-backend";
 

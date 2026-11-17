@@ -22,7 +22,7 @@ import { ConversationStatusDot } from "#/components/features/conversation-panel/
 import { NEW_CONVERSATION_DROPDOWN_SURFACE } from "#/components/features/conversation-panel/new-conversation-dropdown-styles";
 import { ErrorAlert } from "#/components/shared/error-alert";
 import { NavigationLink } from "#/components/shared/navigation-link";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import {
   getUsableConnectionId,
   useMarsAgents,

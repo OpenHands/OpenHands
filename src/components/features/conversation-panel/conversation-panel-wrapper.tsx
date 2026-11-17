@@ -1,4 +1,4 @@
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { cn } from "#/utils/utils";
 import { AppearancePortal } from "#/components/shared/appearance-portal";
 

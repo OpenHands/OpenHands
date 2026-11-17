@@ -2,7 +2,7 @@ import React from "react";
 import {
   useNavigation,
   type NavigationOptions,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import { buildAgentCanvasPath } from "#/utils/base-path";
 
 interface NavigationLinkClassNameState {

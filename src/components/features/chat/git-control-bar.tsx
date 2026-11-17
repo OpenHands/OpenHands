@@ -25,7 +25,7 @@ import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useUserProviders } from "#/hooks/use-user-providers";
-import { useOptionalScrollContext } from "#/context/scroll-context";
+import { useOptionalScrollContext } from "#/contexts/scroll-context";
 
 interface GitControlBarProps {
   onSuggestionsClick: (value: string) => void;

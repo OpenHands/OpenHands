@@ -11,7 +11,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpError } from "@openhands/typescript-client";
 import { TaskStartupProgress } from "#/components/features/chat/task-startup-progress";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useConversationStore } from "#/stores/conversation-store";
 import {

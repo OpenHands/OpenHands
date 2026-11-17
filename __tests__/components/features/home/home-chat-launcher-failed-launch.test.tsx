@@ -28,7 +28,7 @@ const backendState = vi.hoisted(() => ({
   orgId: null as string | null,
 }));
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({
     currentPath: "/",
     conversationId: null,

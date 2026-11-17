@@ -40,7 +40,7 @@ import { ContextMenu } from "#/ui/context-menu";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { cn } from "#/utils/utils";
-import { useComposerDockedMinimal } from "#/context/composer-docked-context";
+import { useComposerDockedMinimal } from "#/contexts/composer-docked-context";
 import {
   chatInputIconButtonClassName,
   formControlTransitionClassName,

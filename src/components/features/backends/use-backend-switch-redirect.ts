@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 
 /**
  * @spec BM-002 — Switching the active backend (or org) makes a

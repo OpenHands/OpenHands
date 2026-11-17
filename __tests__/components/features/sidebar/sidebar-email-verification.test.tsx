@@ -6,7 +6,7 @@ import { Sidebar } from "#/components/features/sidebar/sidebar";
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {

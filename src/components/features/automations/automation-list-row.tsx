@@ -6,7 +6,7 @@ import type { Automation } from "#/types/automation";
 import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { KebabMenu } from "./kebab-menu";
 import { useAutomationAccess } from "#/hooks/use-automation-access";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import PlayIcon from "#/icons/play.svg?react";
 import ClockIcon from "#/icons/clock.svg?react";

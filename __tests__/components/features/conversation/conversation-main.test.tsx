@@ -5,7 +5,7 @@ import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import { requestAutomationSetupAgent } from "#/components/features/automations/setup/automation-setup-agent-request";
 import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 

@@ -1,6 +1,6 @@
 import { useSessionActivities } from "#/hooks/use-session-activities";
 import { useSessionActivityStore } from "#/stores/session-activity-store";
-import { ChatProgressContext } from "#/context/chat-progress-context";
+import { ChatProgressContext } from "#/contexts/chat-progress-context";
 import {
   CHAT_BODY_CLASS_NAME,
   CHAT_SCROLL_CLASS_NAME,
@@ -31,7 +31,7 @@ import { useClampDragSelection } from "#/hooks/chat/use-clamp-drag-selection";
 import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edit";
 import { WorkspaceFilesForChatProvider } from "./chat-markdown-path-code";
 import { ChatSuggestions } from "./chat-suggestions";
-import { ScrollProvider } from "#/context/scroll-context";
+import { ScrollProvider } from "#/contexts/scroll-context";
 import { useSendMessage } from "#/hooks/use-send-message";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
@@ -70,7 +70,7 @@ import {
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { hasConversationStarted } from "./components/resolve-picker-kind";
-import { ComposerDockedProvider } from "#/context/composer-docked-context";
+import { ComposerDockedProvider } from "#/contexts/composer-docked-context";
 import { isContentEmpty } from "./utils/chat-input.utils";
 
 // Ctrl/Cmd+Enter in a text field that holds text belongs to that field (the

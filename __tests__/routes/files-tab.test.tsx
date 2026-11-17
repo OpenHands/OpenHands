@@ -12,7 +12,7 @@ import { downloadBlob } from "#/utils/utils";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import { FILES_TAB_TREE_WIDTH_STORAGE_KEY } from "#/components/features/files-tab/files-tab-tree.constants";
 import {
   LOCAL_STORAGE_KEYS,

@@ -2,7 +2,7 @@ import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import {

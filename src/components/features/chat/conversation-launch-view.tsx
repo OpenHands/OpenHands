@@ -2,7 +2,7 @@ import { InteractiveChatBox } from "./interactive-chat-box";
 import { ChatMessage } from "./chat-message";
 import { ConversationMain } from "../conversation/conversation-main/conversation-main";
 import { ConversationOverviewDrawerProvider } from "../conversation/conversation-overview-drawer-context";
-import { ChatProgressContext } from "#/context/chat-progress-context";
+import { ChatProgressContext } from "#/contexts/chat-progress-context";
 import {
   CHAT_BODY_CLASS_NAME,
   CHAT_SCROLL_CLASS_NAME,
@@ -12,7 +12,7 @@ import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { useConversationStore } from "#/stores/conversation-store";
 import { I18nKey } from "#/i18n/declaration";
 import { ConversationStartupProgress } from "./conversation-startup-progress";

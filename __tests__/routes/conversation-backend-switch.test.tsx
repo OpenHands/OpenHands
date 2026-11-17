@@ -13,7 +13,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import ConversationView from "#/routes/conversation";
 import { resumeCloudSandbox } from "#/api/cloud/conversation-service.api";
 import type { Backend } from "#/api/backend-registry/types";

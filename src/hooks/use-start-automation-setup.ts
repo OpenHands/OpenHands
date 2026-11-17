@@ -12,7 +12,7 @@ import {
 } from "#/api/automation-form-session";
 import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { useCreateAutomationSetupConversation } from "#/hooks/use-create-automation-setup-conversation";
 import { useTracking } from "#/hooks/use-tracking";
 import {

@@ -9,7 +9,7 @@ import {
   setActiveSelection,
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { useConversationDisplayTitleState } from "#/hooks/use-conversation-display-title";
 import { CONVERSATION_QUERY_KEYS } from "#/hooks/query/query-keys";

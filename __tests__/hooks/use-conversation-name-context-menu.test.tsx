@@ -42,7 +42,7 @@ vi.mock("#/hooks/use-select-conversation-tab", () => ({
   useSelectConversationTab: () => ({ navigateToTab: harness.navigateToTab }),
 }));
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({
     currentPath: "/",
     conversationId: harness.currentConversationId,

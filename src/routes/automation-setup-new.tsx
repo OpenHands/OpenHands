@@ -13,7 +13,7 @@ import type { AutomationSetupDraft } from "#/api/automation-setup-types";
 import { setupDraftFromServerDraft } from "#/components/features/automations/setup/automation-setup-draft-service";
 import { AutomationSetupPanel } from "#/components/features/automations/setup/automation-setup-panel";
 import { InteractiveChatBox } from "#/components/features/chat/interactive-chat-box";
-import { ComposerDockedProvider } from "#/context/composer-docked-context";
+import { ComposerDockedProvider } from "#/contexts/composer-docked-context";
 import { useStartAutomationSetup } from "#/hooks/use-start-automation-setup";
 import { I18nKey } from "#/i18n/declaration";
 import {

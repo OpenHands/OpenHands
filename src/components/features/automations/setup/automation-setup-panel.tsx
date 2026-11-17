@@ -112,7 +112,7 @@ import {
 } from "#/hooks/mutation/conversation-mutation-utils";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import type {
   AutomationDraftApiResponse,
   DeploymentCapabilities,

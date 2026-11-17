@@ -17,7 +17,7 @@ import { AxiosError } from "axios";
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import {
   AGENT_FIELD_STREAM_CHARACTER_DELAY_MS,
   AGENT_FIELD_STREAM_SETTLE_DELAY_MS,

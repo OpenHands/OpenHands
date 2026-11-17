@@ -282,6 +282,13 @@ export default [
               message: "Use randomUUID from #/utils/random-uuid.",
             },
           ],
+          patterns: [
+            {
+              group: ["\\#/context/*"],
+              message:
+                "Import from '#/contexts/*' instead. The singular src/context/ directory has been consolidated into src/contexts/.",
+            },
+          ],
         },
       ],
       // crypto.randomUUID is SecureContext-only: it is undefined when Canvas

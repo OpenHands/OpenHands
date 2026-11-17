@@ -11,7 +11,7 @@ import {
   getAutomationFormSession,
   initializeAutomationFormSession,
 } from "#/api/automation-form-session";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   setActiveSelection,
