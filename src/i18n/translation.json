@@ -45557,24 +45557,6 @@
     "ca": "Projecte",
     "id": "Proyek"
   },
-  "PROJECTS$OPEN_PROJECT_PAGE": {
-    "en": "Open project",
-    "ja": "プロジェクトを開く",
-    "zh-CN": "打开项目",
-    "zh-TW": "開啟專案",
-    "ko-KR": "프로젝트 열기",
-    "no": "Åpne prosjekt",
-    "it": "Apri progetto",
-    "pt": "Abrir projeto",
-    "es": "Abrir proyecto",
-    "ar": "فتح المشروع",
-    "fr": "Ouvrir le projet",
-    "tr": "Projeyi aç",
-    "de": "Projekt öffnen",
-    "uk": "Відкрити проєкт",
-    "ca": "Obre el projecte",
-    "id": "Buka proyek"
-  },
   "PROJECTS$YOU_ARE_HERE": {
     "en": "You are here",
     "ja": "現在地",
@@ -45693,7 +45675,7 @@
     "it": "{{count}} file",
     "pt": "{{count}} arquivo",
     "es": "{{count}} archivo",
-    "ar": "ملف واحد",
+    "ar": "{{count}} ملف",
     "fr": "{{count}} fichier",
     "tr": "{{count}} dosya",
     "de": "{{count}} Datei",

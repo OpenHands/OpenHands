@@ -1,11 +1,10 @@
-# Project tab: live run
+# Project views: live run
 
-Agent Server from OpenHands/software-agent-sdk#6922 (on top of #6602), Canvas dev server on this branch, Paper theme, DeepSeek as the model.
+Agent Server from OpenHands/software-agent-sdk#6922 (on top of #6602), Canvas dev server on this branch, Paper theme, DeepSeek as the model. A coordinator had already started three workers (`gh pr create` was a demo stub printing real PR URLs, and the agents were told so; PR state and checks come from the real GitHub API). In this take a message went to the "Rate-limit login" worker, which really edited the project file.
 
-A coordinator started three workers. `gh pr create` was a demo stub that printed real PR URLs (the agents were told up front it was a stub); every other `gh` call went to the real CLI, and the PR state and checks come from the real GitHub API through the Agent Server's PR route.
-
-- `final-1-conversations.png`: Conversations view. The coordinator is pinned with "You are here"; workers grouped like the board, Resolved folded; PR chips with CI marks and a file count.
-- `final-2-files-preview.png`: Files view, "From agents" and "From you", a text file previewed in place.
-- `final-3-attached.png`: the file attached to the message being written.
-- `final-4-prs.png`: PRs view. Open (#6922, failing CI) and Merged (#6910), each with the conversation that opened it.
-- `final-5-worker.png`: after opening a worker from the panel, the panel stays on the Project tab.
+- `1-coordinator.png`: in the coordinator, the sidebar lists the project's conversations instead of all conversations. The coordinator is pinned and marked "You are here".
+- `3-working.png`: after the message, the worker's row moves to Working.
+- `4-done.png`: it finishes; the row goes back to Idle with the agent's latest line.
+- `5-files.png`, `6-prs.png`: the right-side Project tab keeps Files and PRs.
+- `7-project-page.png`: on the project's page, the sidebar shows the same list, with the project name marked.
+- `8-all.png`: outside a project, the regular conversation list is back.

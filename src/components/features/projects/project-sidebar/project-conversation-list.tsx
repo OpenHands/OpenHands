@@ -21,12 +21,11 @@ import {
   autoResolveMessage,
   parseAutoResolveNote,
 } from "#/utils/conversation-tag-flags";
-import { setConversationState } from "#/utils/conversation-local-storage";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import { conversationStateLabel } from "#/utils/project-conversation-state";
 import { cn } from "#/utils/utils";
-import { ProjectPanelGroup } from "./project-panel-group";
-import { ChecksIcon } from "./project-panel-prs";
+import { ProjectPanelGroup } from "#/components/features/projects/project-panel/project-panel-group";
+import { ChecksIcon } from "#/components/features/projects/project-panel/project-panel-prs";
 
 type StateMark = (typeof BOARD_GROUPS)[number]["id"];
 
@@ -122,15 +121,12 @@ function ConversationRow({
     <li>
       <NavigationLink
         to={`/conversations/${id}`}
-        data-testid="project-panel-conversation"
+        data-testid="project-conversation"
         data-attention={conversation.attention}
         aria-current={isCurrent ? "page" : undefined}
         title={id}
-        // Land on this tab in the next conversation too, so the user can
-        // walk the project without reopening it.
-        onClick={() => setConversationState(id, { selectedTab: "project" })}
         className={cn(
-          "-mx-2 flex gap-2.5 rounded-lg px-2 py-1.5 hover:bg-contrast/5",
+          "flex gap-2.5 rounded-lg px-2 py-1.5 hover:bg-contrast/5",
           isCurrent && "bg-surface",
         )}
       >
@@ -138,7 +134,7 @@ function ConversationRow({
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="truncate text-sm text-foreground">{title}</span>
           <span
-            data-testid="project-panel-conversation-status"
+            data-testid="project-conversation-status"
             className="line-clamp-2 text-xs text-muted"
           >
             {isCurrent ? `${t(I18nKey.PROJECTS$YOU_ARE_HERE)} · ` : null}
@@ -151,7 +147,7 @@ function ConversationRow({
                 return (
                   <span
                     key={pullRequestRef(pr)}
-                    data-testid="project-panel-conversation-pr"
+                    data-testid="project-conversation-pr"
                     title={status?.title ?? pullRequestRef(pr)}
                     className={cn(CHIP, "inline-flex items-center gap-1")}
                   >
@@ -164,10 +160,7 @@ function ConversationRow({
                 );
               })}
               {fileCount ? (
-                <span
-                  data-testid="project-panel-conversation-files"
-                  className={CHIP}
-                >
+                <span data-testid="project-conversation-files" className={CHIP}>
                   {t(I18nKey.PROJECTS$FILE_COUNT, { count: fileCount })}
                 </span>
               ) : null}
@@ -181,19 +174,21 @@ function ConversationRow({
 
 /**
  * The project's conversations grouped as on the board, with the coordinator
- * pinned on top and the open conversation marked.
+ * pinned on top and the open conversation marked. In a project view it takes
+ * the place of the sidebar's conversation list.
  */
-export function ProjectPanelConversations({
+export function ProjectConversationList({
   projectId,
   conversationId,
 }: {
   projectId: string;
-  conversationId: string;
+  /** The open conversation, if it belongs to the project. */
+  conversationId?: string;
 }) {
   const { t } = useTranslation("openhands");
   const { data: board, isError } = useProjectConversations(projectId);
   const { data: artifacts } = useProjectArtifacts(projectId);
-  const current = projectIdKey(conversationId);
+  const current = conversationId ? projectIdKey(conversationId) : null;
   const pullRequests = React.useMemo(
     () =>
       [
@@ -240,10 +235,7 @@ export function ProjectPanelConversations({
   };
 
   return (
-    <div
-      data-testid="project-panel-conversations"
-      className="flex flex-col gap-3"
-    >
+    <div data-testid="project-conversations" className="flex flex-col gap-3">
       {board.coordinator ? (
         <ul>{row(board.coordinator, t(I18nKey.PROJECTS$COORDINATOR))}</ul>
       ) : null}
@@ -257,7 +249,11 @@ export function ProjectPanelConversations({
             id={group.id}
             label={t(group.label)}
             count={items.length}
-            defaultOpen={group.id !== "resolved"}
+            // Resolved starts folded, unless the open conversation is in it.
+            defaultOpen={
+              group.id !== "resolved" ||
+              items.some((c) => projectIdKey(c.conversation_id) === current)
+            }
             emphasized={group.id === "needs_you"}
           >
             {items.map((conversation) =>
