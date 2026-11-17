@@ -85,7 +85,7 @@ export async function listWorklogEntries(
   { limit, cursor, contentType }: ListWorklogEntriesOptions,
 ): Promise<WorklogEntryPage> {
   const query = new URLSearchParams({ order: "desc", limit: String(limit) });
-  if (cursor) query.set("since", cursor);
+  if (cursor) query.set("before", cursor);
   if (contentType) query.set("content_type", contentType);
   return callCloudProxy<WorklogEntryPage>({
     backend: getActiveCloudBackend(),
