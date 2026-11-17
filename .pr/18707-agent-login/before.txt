@@ -1,0 +1,22 @@
+#18707 head 64fdc4028, launcher on 127.0.0.1 with MARS_WEB=1, session tunnel open
+
+### (c) wrong key in the X-Session-API-Key header
+upgrade ACCEPTED (101) despite the wrong key
+closed 4001 after 10.0s
+
+### (b) no key at all, one 32 MiB frame before any login
+[0.0s] upgrade response: HTTP/1.1 101 Switching Protocols
+[0.1s] sent big:32 frame (33554432 bytes)
+[0.1s] server closed with code 4001
+ingress RSS:  57376 KB -> 167008 KB
+
+### (a) '#' in the socket path, then a valid login frame
+[0.0s] upgrade response: HTTP/1.1 101 Switching Protocols
+[0.0s] sent auth frame (50 bytes)
+[0.0s] socket closed
+Canvas still up? /mars/health -> 000
+[ingress] SyntaxError: The URL contains a fragment identifier
+[ingress] Exited with code 1
+
+### agent openTunnel
+{"result":{"sessionId":"sess_ready","status":"connected","remotePort":8000,"localPort":63360,"upstreamFailure":null,"transport":"tunnel", ...}}

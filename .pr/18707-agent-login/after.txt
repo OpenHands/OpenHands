@@ -1,0 +1,24 @@
+this branch (a43d1cc04), same launcher, stand-in and session
+
+### (c) wrong key in the X-Session-API-Key header
+refused at upgrade HTTP 401
+
+### (b) no key at all, one 32 MiB frame before any login
+[0.0s] upgrade response: HTTP/1.1 101 Switching Protocols
+[0.1s] sent big:32 frame (33554432 bytes)
+[0.1s] error EPIPE
+ingress RSS:  86096 KB ->  86112 KB
+
+### (a) '#' in the socket path, then a valid login frame
+[0.0s] upgrade response: HTTP/1.1 400 Bad Request
+[0.0s] socket closed
+Canvas still up? /mars/health -> 200
+
+### agent openTunnel (now says how preparing the sandbox went)
+{"result":{"sessionId":"sess_ready","status":"connected","remotePort":8000,"localPort":50622,"upstreamFailure":null,"sandbox":"prepared","transport":"tunnel", ...}}
+
+### event socket, unchanged
+key in header: closed 4004 (Conversation not found) after 0.0s
+SDK first frame, right key: closed 4004 (Conversation not found) after 0.0s
+SDK first frame, wrong key: closed 4001 (Authentication failed) after 0.0s
+no header, no first frame (silent): closed 4001 (Authentication failed) after 10.0s

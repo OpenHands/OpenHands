@@ -2,7 +2,16 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { server as mswServer } from "#/mocks/node";
 
 import {
   MARS_TUNNEL_IPC,
@@ -24,6 +33,8 @@ import {
   createEncryptedFileStore,
   createMemoryStore,
 } from "../../scripts/mars-secret-store.mjs";
+import { startGuestTunnel } from "../../scripts/mars-guest-front.mjs";
+import { standInTunnel, startKeyedGuest, statusOf } from "./keyed-guest";
 
 vi.mock("../../scripts/mars-oauth.mjs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../scripts/mars-oauth.mjs")>()),
@@ -132,7 +143,12 @@ function fakeApi() {
 function setup({
   realRegistry = false,
   env = {},
-}: { realRegistry?: boolean; env?: Record<string, string> } = {}) {
+  startTunnel,
+}: {
+  realRegistry?: boolean;
+  env?: Record<string, string>;
+  startTunnel?: typeof startGuestTunnel;
+} = {}) {
   const registry = fakeRegistry();
   const api = fakeApi();
   const credentials = createCredentialStore({
@@ -147,6 +163,7 @@ function setup({
     api,
     credentials,
     ensureAwake,
+    ...(startTunnel ? { startTunnel } : {}),
     env: { MARS_API_BASE_URL: API_URL, ...env },
   });
   const ipcMain = fakeIpcMain();
@@ -1175,5 +1192,39 @@ describe("signing in with DigitalOcean (code + PKCE)", () => {
 
     expect(await getAccessToken()).toBeNull();
     expect(bridge.getAuthState().active).toMatchObject({ isExpired: true });
+  });
+});
+
+describe("reaching a session through its tunnel", () => {
+  // Real loopback servers end to end; see mars-guest-front.test.ts.
+  beforeAll(() => mswServer.close());
+  afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
+
+  it("hands callers the front's port, which adds the guest's own key", async () => {
+    const guest = await startKeyedGuest("guest-key");
+    // Only the dial to DigitalOcean is stood in: the raw tunnel's port is
+    // the guest's own.
+    const raw = standInTunnel(guest.port);
+    const startTunnel = vi.fn<typeof startGuestTunnel>((options) =>
+      startGuestTunnel(options, { startTunnel: raw.startTunnel }),
+    );
+    const { ipcMain, bridge } = setup({ realRegistry: true, startTunnel });
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+
+    try {
+      const tunnel = (await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, {
+        sessionId: "sess_a",
+      })) as { host: string };
+      const status = await statusOf(`${tunnel.host}/api/settings`);
+
+      expect(startTunnel).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionId: "sess_a", remotePort: 8000 }),
+      );
+      expect(status).toBe(200);
+      expect(guest.keysSeen).toEqual(["guest-key"]);
+    } finally {
+      await bridge.dispose();
+      await guest.close();
+    }
   });
 });
