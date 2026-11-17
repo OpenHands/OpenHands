@@ -21,6 +21,7 @@ import {
   automationListPath,
 } from "#/manifests/automation-interface";
 import { AutomationPageHeader } from "#/components/features/automations/automation-page-header";
+import { factoryPath } from "#/constants/factories";
 import { buildAutomationDraftTags } from "#/utils/automation-draft-tags";
 import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
@@ -118,7 +119,9 @@ export default function AutomationSetupNew() {
         backTo={
           automationId
             ? automationDetailPath(automationId)
-            : automationListPath()
+            : draft?.factoryId
+              ? factoryPath(draft.factoryId)
+              : automationListPath()
         }
         actionsRef={setToolbarElement}
       />

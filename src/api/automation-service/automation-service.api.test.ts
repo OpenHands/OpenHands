@@ -368,6 +368,42 @@ describe("AutomationService.createAutomation", () => {
     );
   });
 
+  it("creates the automation in a factory only when one is given", async () => {
+    await AutomationService.createAutomation(spec, "factory-1");
+    await AutomationService.createAutomation(spec);
+
+    const [inFactory, outsideFactory] = localAxios.post.mock.calls.map(
+      ([, body]) => body,
+    );
+    expect(inFactory).toHaveProperty("factory_id", "factory-1");
+    expect(outsideFactory).not.toHaveProperty("factory_id");
+  });
+
+  it("creates a script automation in a factory in its single create request", async () => {
+    const scriptSpec: AutomationSpec = {
+      name: "Socials monitor",
+      prompt: null,
+      trigger: { type: "cron", schedule: "0 9 * * *", timezone: "UTC" },
+      enabled: false,
+      script: {
+        entrypoint: "python3 main.py",
+        tarball_base64: bytesToBase64(new Uint8Array([0x1f, 0x8b, 8])),
+      },
+    };
+    localAxios.post.mockResolvedValueOnce({
+      data: { tarball_path: "oh-internal://uploads/socials-monitor" },
+    });
+
+    await AutomationService.createAutomation(scriptSpec, "factory-1");
+
+    expect(localAxios.post).toHaveBeenNthCalledWith(
+      2,
+      "/api/automation/v1",
+      expect.objectContaining({ factory_id: "factory-1" }),
+      expect.anything(),
+    );
+  });
+
   it("uploads the bundle and creates a script automation disabled in one request", async () => {
     const bundle = new Uint8Array([0x1f, 0x8b, 8, 0, 1, 2, 3]);
     const scriptSpec: AutomationSpec = {

@@ -27,7 +27,12 @@ import {
  * The form now opens with the conversation drawer hidden, and a conversation
  * starts only after the user sends a prompt.
  */
-export function useStartAutomationSetup() {
+export function useStartAutomationSetup({
+  factoryId,
+}: {
+  /** Create the new automation in this factory. */
+  factoryId?: string;
+} = {}) {
   const { t } = useTranslation("openhands");
   const active = useActiveBackend();
   const { navigate } = useNavigation();
@@ -38,8 +43,15 @@ export function useStartAutomationSetup() {
   const startSetup = useCallback(() => {
     trackAutomationCreatedButton({ backendKind: active.backend.kind });
     clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
+    if (factoryId) {
+      initializeAutomationFormSession(PENDING_AUTOMATION_SETUP_ID, {
+        prompt: "",
+        kind: "prompt",
+        factoryId,
+      });
+    }
     navigate?.("/automations/setup");
-  }, [active.backend.kind, navigate, trackAutomationCreatedButton]);
+  }, [active.backend.kind, factoryId, navigate, trackAutomationCreatedButton]);
 
   const startConversationFromPrompt = useCallback(
     (prompt: string) => {

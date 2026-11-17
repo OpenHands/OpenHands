@@ -1,11 +1,13 @@
 import {
   type InfiniteData,
+  type QueryClient,
   useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { FACTORIES_QUERY_KEY } from "#/hooks/query/use-factories";
 import {
   getAutomationEndpoint,
   hasAutomationInterface,
@@ -283,17 +285,28 @@ export function useDispatchAutomationDraft() {
   });
 }
 
-export function useImportAutomation() {
+/** Refresh what a new automation changes: the lists and each factory's count. */
+export function invalidateAutomationLists(queryClient: QueryClient) {
+  queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
+  queryClient.invalidateQueries({ queryKey: FACTORIES_QUERY_KEY });
+}
+
+export function useImportAutomation({
+  factoryId,
+}: { factoryId?: string } = {}) {
   const queryClient = useQueryClient();
   const active = useActiveBackend();
   const { trackAutomationImported } = useTracking();
   return useMutation({
     mutationFn: (spec: AutomationSpec) =>
-      AutomationService.createAutomation({ ...spec, enabled: false }),
+      AutomationService.createAutomation(
+        { ...spec, enabled: false },
+        factoryId,
+      ),
     // Callers toast the API message themselves; skip the generic global toast.
     meta: { disableToast: true },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
+      invalidateAutomationLists(queryClient);
       trackAutomationImported({ backendKind: active.backend.kind });
     },
   });
