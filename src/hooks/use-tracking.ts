@@ -165,10 +165,37 @@ export const useTracking = () => {
    */
   const trackAutomationSetupOpened = ({
     automationId,
+    entryPoint,
   }: {
     automationId: string;
+    entryPoint?: string;
   }) => {
-    track("automation_setup_opened", { automation_id: automationId });
+    track("automation_setup_opened", {
+      automation_id: automationId,
+      ...(entryPoint ? { entry_point: entryPoint } : {}),
+    });
+  };
+
+  const trackAutomationSetupBlocked = ({
+    automationId,
+    stage,
+    reason,
+    field,
+    errorCode,
+  }: {
+    automationId: string;
+    stage: "prerequisites" | "form" | "preflight" | "submit";
+    reason: string;
+    field?: string;
+    errorCode?: string;
+  }) => {
+    track("automation_setup_blocked", {
+      automation_id: automationId,
+      stage,
+      reason,
+      ...(field ? { field } : {}),
+      ...(errorCode ? { error_code: errorCode } : {}),
+    });
   };
 
   const trackAutomationSetupValidated = ({
@@ -471,6 +498,7 @@ export const useTracking = () => {
     trackUserSignupCompleted,
     trackPrebuiltAutomationEnabled,
     trackAutomationSetupOpened,
+    trackAutomationSetupBlocked,
     trackAutomationSetupValidated,
     trackAutomationSetupCreated,
     trackAutomationSetupFailed,

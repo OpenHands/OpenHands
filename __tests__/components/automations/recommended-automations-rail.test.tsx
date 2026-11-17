@@ -65,6 +65,7 @@ describe("RecommendedAutomationsRail", () => {
       );
 
     expect(cardIds).toEqual([
+      "cve-remediation-factory",
       "custom-automation",
       "github-issue-to-pr",
       "slack-channel-monitor",
@@ -124,6 +125,7 @@ describe("RecommendedAutomationsRail", () => {
     const { container } = render(
       <RecommendedAutomationsRail
         installedAutomations={[
+          { name: "GitHub CVE Remediation Factory" },
           { name: "GitHub code review" },
           { name: "GitHub issue to PR" },
           { name: "Custom automation" },
