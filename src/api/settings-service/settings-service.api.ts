@@ -477,7 +477,9 @@ const getSkillEnablement = (response: SettingsApiResponse): SkillEnablement => {
  * `SettingsService.getSettingsForConversation` to pass git identity through
  * to the planner conversation without re-fetching full redacted settings.
  */
-const getGitIdentity = (response: SettingsApiResponse): {
+const getGitIdentity = (
+  response: SettingsApiResponse,
+): {
   gitUserName?: string | null;
   gitUserEmail?: string | null;
 } => {
