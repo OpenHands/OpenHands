@@ -16,6 +16,7 @@ import {
   CANVAS_DEMO_EVENTS,
   CANVAS_DEMO_FILE_PATH,
   CANVAS_DEMO_MARKDOWN,
+  CANVAS_DEMO_MENTION_TARGET_ID,
 } from "#/fixtures/canvas-demo-conversation";
 
 /** Map from conversation id → events returned by GET /events/search */
@@ -130,6 +131,16 @@ const conversations: MockConversation[] = [
     title: "Generated canvas demo",
     created_at: new Date(now - 12 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date(now - 12 * 60 * 60 * 1000).toISOString(),
+    execution_status: "idle",
+    workspace: { working_dir: "/workspace/project" },
+  },
+  // Target of the canvas demo's `conversation:` mention — exists so the
+  // mention chip in mock mode opens a real conversation.
+  {
+    id: CANVAS_DEMO_MENTION_TARGET_ID,
+    title: "Build notes",
+    created_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
     execution_status: "idle",
     workspace: { working_dir: "/workspace/project" },
   },

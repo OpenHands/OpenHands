@@ -15,6 +15,14 @@ import type { FileEditorObservation } from "#/types/agent-server/core/base/obser
 export const CANVAS_DEMO_CONVERSATION_ID = "canvas-demo";
 export const CANVAS_DEMO_FILE_PATH = "canvas.md";
 
+/**
+ * Conversation the demo agent message mentions with a `conversation:` link
+ * (dashed-UUID form; the mention href itself uses the 32-hex form the Agent
+ * Server's `conversation_mention()` emits).
+ */
+export const CANVAS_DEMO_MENTION_TARGET_ID =
+  "3f2a9d1c-8b4e-4f6a-9c2d-7e5b1a0f8c3d";
+
 export const CANVAS_DEMO_MARKDOWN = [
   "# Agent Canvas Demo",
   "",
@@ -125,7 +133,7 @@ export const CANVAS_DEMO_EVENTS: OpenHandsEvent[] = [
   createMessage(
     "canvas-demo-agent",
     "assistant",
-    "I generated the project canvas. Open it from the file chip above.",
+    "I generated the project canvas. Open it from the file chip above. Full notes are in [Build notes](conversation:3f2a9d1c8b4e4f6a9c2d7e5b1a0f8c3d).",
     3,
   ),
 ];

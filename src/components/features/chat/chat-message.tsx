@@ -15,6 +15,7 @@ import {
   chatBubbleMarkdownComponents,
   USER_MESSAGE_LINE_HEIGHT_PX,
 } from "./user-message-body";
+import { CHAT_BUBBLE_HREF_PROTOCOLS } from "./chat-markdown-path-code";
 
 export type ChatMessagePendingStatus = "sending" | "error";
 
@@ -142,6 +143,7 @@ export function ChatMessage({
         includeStandard
         includeHeadings
         allowHtml
+        additionalHrefProtocols={CHAT_BUBBLE_HREF_PROTOCOLS}
         components={chatBubbleMarkdownComponents}
         streaming={isStreaming}
       >

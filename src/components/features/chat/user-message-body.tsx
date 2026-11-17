@@ -3,7 +3,12 @@ import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
-import { ChatAnchor, ChatCode, ChatStrong } from "./chat-markdown-path-code";
+import {
+  CHAT_BUBBLE_HREF_PROTOCOLS,
+  ChatAnchor,
+  ChatCode,
+  ChatStrong,
+} from "./chat-markdown-path-code";
 
 const USER_MESSAGE_MAX_LINES = 5;
 const USER_MESSAGE_LENGTH_THRESHOLD = 360;
@@ -86,6 +91,7 @@ export function UserMessageBody({
           includeStandard
           includeHeadings
           allowHtml={false}
+          additionalHrefProtocols={CHAT_BUBBLE_HREF_PROTOCOLS}
           components={chatBubbleMarkdownComponents}
         >
           {message}

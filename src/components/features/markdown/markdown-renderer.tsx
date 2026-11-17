@@ -1,11 +1,17 @@
 import React from "react";
-import Markdown, { Components } from "react-markdown";
+import Markdown, {
+  defaultUrlTransform,
+  type Components,
+  type UrlTransform,
+} from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import type { Schema } from "hast-util-sanitize";
 import type { PluggableList } from "unified";
+import type { Root } from "hast";
+import { visit } from "unist-util-visit";
 import { code } from "./code";
 import { ul, ol, li } from "./list";
 import { paragraph } from "./paragraph";
@@ -125,6 +131,15 @@ interface MarkdownRendererProps {
    */
   allowHtml?: boolean;
   /**
+   * Extra href protocols to pass through both sanitizing layers, beyond
+   * the schema's `http`/`https`/`mailto`/`tel` set (e.g. the chat-only
+   * `conversation:` mention scheme). Pass a stable array (module-level
+   * constant) — renderer blocks are memoized on it. Callers that receive
+   * these URLs are responsible for validating the payload before acting
+   * on it; consumers that do not opt in keep today's sanitizing.
+   */
+  additionalHrefProtocols?: ReadonlyArray<string>;
+  /**
    * The content is still being appended to (a streamed reply). Finished
    * blocks are then parsed once and only the tail is re-parsed per update,
    * so a long reply does not cost a full parse every frame. Newly revealed
@@ -148,16 +163,81 @@ const htmlRehypePlugins: PluggableList = [
   [rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
 ];
 
+/**
+ * Extend react-markdown's URL transform with additional protocols. The
+ * default transform returns "" for any scheme outside its safe list, so a
+ * mention-style `conversation:<id>` href would be emptied before components
+ * ever see it. Only the explicitly listed schemes are re-allowed; everything
+ * else (including `javascript:` and `data:`) keeps the default stripping.
+ */
+function buildUrlTransform(
+  additionalProtocols: ReadonlyArray<string>,
+): UrlTransform {
+  const allowed = new Set(
+    additionalProtocols.map((protocol) => `${protocol.toLowerCase()}:`),
+  );
+  return (value, key) => {
+    const transformed = defaultUrlTransform(value);
+    if (key === "href" && transformed === "" && value.includes(":")) {
+      const colon = value.indexOf(":");
+      if (allowed.has(value.slice(0, colon + 1).toLowerCase())) {
+        return value;
+      }
+    }
+    return transformed;
+  };
+}
+
+/** Normalize only opted-in href schemes before the case-sensitive sanitizer. */
+function rehypeNormalizeHrefProtocols(
+  additionalProtocols: ReadonlyArray<string>,
+) {
+  const allowed = new Set(
+    additionalProtocols.map((protocol) => protocol.toLowerCase()),
+  );
+  return (tree: Root) => {
+    visit(tree, "element", (node) => {
+      const { properties } = node;
+      const { href } = properties;
+      if (typeof href !== "string") return;
+      const colon = href.indexOf(":");
+      const protocol = href.slice(0, colon).toLowerCase();
+      if (colon !== -1 && allowed.has(protocol)) {
+        properties.href = protocol + href.slice(colon);
+      }
+    });
+  };
+}
+
+/** Extend only href protocols; callers without an opt-in use the shared schema. */
+function extendSanitizeSchema(
+  additionalProtocols: ReadonlyArray<string>,
+): Schema {
+  return {
+    ...MARKDOWN_SANITIZE_SCHEMA,
+    protocols: {
+      ...MARKDOWN_SANITIZE_SCHEMA.protocols,
+      href: [
+        ...(MARKDOWN_SANITIZE_SCHEMA.protocols?.href ?? []),
+        ...additionalProtocols.map((protocol) => protocol.toLowerCase()),
+      ],
+    },
+  };
+}
+
 function MarkdownBlockComponent({
   source,
   components,
   rehypePlugins,
+  urlTransform,
   clock,
   blockStart,
 }: {
   source: string;
   components: Components;
   rehypePlugins: PluggableList | undefined;
+  /** Extra-protocol URL transform, or undefined to keep react-markdown's. */
+  urlTransform: UrlTransform | undefined;
   /** Set while streaming: fade in words as they are revealed. */
   clock: RevealClock | undefined;
   blockStart: number;
@@ -174,6 +254,7 @@ function MarkdownBlockComponent({
             ]
           : rehypePlugins
       }
+      urlTransform={urlTransform}
     >
       {source}
     </Markdown>
@@ -239,6 +320,7 @@ function MarkdownRendererComponent({
   includeStandard = false,
   includeHeadings = false,
   allowHtml = true,
+  additionalHrefProtocols,
   streaming = false,
 }: MarkdownRendererProps) {
   // Build the components object with defaults and optional additions.
@@ -275,7 +357,25 @@ function MarkdownRendererComponent({
     content ?? children ?? "",
     streaming,
   );
-  const rehypePlugins = allowHtml ? htmlRehypePlugins : undefined;
+
+  // Both memoized on the caller's (stable) array so unchanged messages keep
+  // their MarkdownBlock identity and skip re-parsing on unrelated updates.
+  const urlTransform = React.useMemo(
+    () =>
+      additionalHrefProtocols?.length
+        ? buildUrlTransform(additionalHrefProtocols)
+        : undefined,
+    [additionalHrefProtocols],
+  );
+  const rehypePlugins = React.useMemo(() => {
+    if (!allowHtml) return undefined;
+    if (!additionalHrefProtocols?.length) return htmlRehypePlugins;
+    return [
+      rehypeRaw,
+      [rehypeNormalizeHrefProtocols, additionalHrefProtocols],
+      [rehypeSanitize, extendSanitizeSchema(additionalHrefProtocols)],
+    ] satisfies PluggableList;
+  }, [allowHtml, additionalHrefProtocols]);
 
   // Blocks render as siblings in one wrapper, joined by the newline the
   // parser puts between top-level blocks, so the DOM (and `first:` / `last:`
@@ -290,6 +390,7 @@ function MarkdownRendererComponent({
             source={source}
             components={components}
             rehypePlugins={rehypePlugins}
+            urlTransform={urlTransform}
             clock={clock}
             blockStart={start}
           />
