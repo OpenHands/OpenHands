@@ -673,11 +673,14 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   "agentprofileid",
   "agentprofilerevision",
   // Projects board state the Agent Server owns: whether the agent ended on
-  // a question (`turn`, `ask`) and why it resolved a conversation. The board
-  // and the resolved banner show these; a tag PATCH cannot change them.
+  // a question (`turn`, `ask`), why it resolved a conversation, and what a
+  // member did (`lastmessage`, `prs`). The board, the resolved banner and the
+  // Project tab show these; a tag PATCH cannot change them.
   "turn",
   "ask",
   "resolvenote",
+  "lastmessage",
+  "prs",
 ]);
 
 /**
@@ -700,6 +703,8 @@ export const SERVER_OWNED_PROJECT_TAG_KEYS: ReadonlySet<string> = new Set([
   "ask",
   "resolved",
   "resolvenote",
+  "lastmessage",
+  "prs",
 ]);
 
 /** The tags a user can edit: the displayed ones minus Projects state. */

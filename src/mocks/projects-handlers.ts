@@ -5,6 +5,7 @@ import type {
   ProjectConversation,
   ProjectMemoryFile,
 } from "#/api/projects-service/projects-service.api";
+import { randomUUID } from "#/utils/random-uuid";
 
 /**
  * MSW handlers for the agent-server's Projects API (`/api/projects`) and the
@@ -33,6 +34,8 @@ const conversation = (
   resolve_note: null,
   turn: "answered",
   ask: null,
+  last_message: null,
+  pull_requests: [],
   automation_id: null,
   parent_conversation_id: COORDINATOR_ID,
   created_at: NOW,
@@ -187,8 +190,8 @@ export const PROJECTS_HANDLERS = [
     const body = (await request.json()) as Partial<Project> & {
       coordinator?: { title?: string };
     };
-    const id = crypto.randomUUID();
-    const coordinatorId = body.coordinator ? crypto.randomUUID() : null;
+    const id = randomUUID();
+    const coordinatorId = body.coordinator ? randomUUID() : null;
     const project: Project = {
       id,
       name: body.name ?? "",

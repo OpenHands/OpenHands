@@ -33,6 +33,8 @@ const member = (
   resolved: attention === "resolved" ? "user" : null,
   turn: null,
   ask: null,
+  last_message: null,
+  pull_requests: [],
   automation_id: null,
   parent_conversation_id: COORDINATOR_ID,
   created_at: "2026-11-09T10:00:00Z",

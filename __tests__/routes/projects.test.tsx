@@ -32,6 +32,8 @@ const member = (
   resolved: null,
   turn: null,
   ask: null,
+  last_message: null,
+  pull_requests: [],
   automation_id: null,
   parent_conversation_id: null,
   created_at: NOW,

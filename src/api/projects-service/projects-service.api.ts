@@ -35,6 +35,13 @@ export const PROJECT_ATTENTION_ORDER = [
 
 export type ProjectAttention = (typeof PROJECT_ATTENTION_ORDER)[number];
 
+/** A GitHub pull request a project conversation's agent opened. */
+export interface ProjectPullRequest {
+  owner: string;
+  repo: string;
+  number: number;
+}
+
 export interface ProjectConversation {
   conversation_id: string;
   title: string | null;
@@ -45,6 +52,10 @@ export interface ProjectConversation {
   resolve_note?: string | null;
   turn: "asked" | "answered" | null;
   ask: string | null;
+  /** The first line of the agent's latest message, kept across turns. */
+  last_message: string | null;
+  /** GitHub pull requests the agent opened, oldest first. */
+  pull_requests: ProjectPullRequest[];
   automation_id: string | null;
   parent_conversation_id: string | null;
   created_at: string;
