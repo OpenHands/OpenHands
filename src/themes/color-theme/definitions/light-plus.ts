@@ -89,6 +89,7 @@ export const LIGHT_PLUS_TOKENS: Partial<
   "--oh-overlay": "#FFFFFF",
   "--oh-overlay-foreground": "#1F1F1F",
   "--oh-modal-title-foreground": "#1F1F1F",
+  "--oh-modal-description-foreground": "#616161",
   // Muted details also appear on the darker interactive-hover surface.
   "--oh-muted": "#595959",
   "--oh-text-secondary": "#424242",
