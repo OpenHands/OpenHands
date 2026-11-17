@@ -20,6 +20,12 @@ import {
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { NavigationProvider } from "#/context/navigation-context";
 import { I18nKey } from "#/i18n/declaration";
+import { AutomationsDashboard } from "#/components/features/automations/dashboard/automations-dashboard";
+import {
+  PENDING_AUTOMATION_SETUP_ID,
+  clearAutomationFormSession,
+  getAutomationFormSession,
+} from "#/api/automation-form-session";
 import FactoriesList from "#/routes/factories-list";
 import FactoryDetail from "#/routes/factory-detail";
 import type { Backend } from "#/api/backend-registry/types";
@@ -130,6 +136,11 @@ function renderAt(path: string) {
             <Routes>
               <Route path="/factories" element={<FactoriesList />} />
               <Route path="/factories/:factoryId" element={<FactoryDetail />} />
+              <Route path="/automate" element={<AutomationsDashboard />} />
+              <Route
+                path="/automations/setup"
+                element={<div data-testid="setup-route" />}
+              />
             </Routes>
           </RouterNavigation>
         </MemoryRouter>
@@ -189,6 +200,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
   vi.clearAllMocks();
   __resetActiveStoreForTests();
   window.localStorage.clear();
@@ -290,18 +302,57 @@ describe("FactoryDetail", () => {
     expect(within(nav).getAllByRole("link")).toHaveLength(1);
   });
 
-  it("leaves org-level controls off a factory's dashboard", async () => {
-    // Act
+  it("offers Add Automation with import, but not the org-level Git Sync", async () => {
+    // Arrange
+    const user = userEvent.setup();
     renderAt("/factories/f-core");
     await screen.findByTestId("automation-card-a-reviewer");
 
+    // Act
+    await user.click(screen.getByTestId("automations-add-automation"));
+
     // Assert
+    expect(
+      screen.getByTestId("automations-add-automation-create"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automations-import-automation"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByTestId("automations-git-sync"),
     ).not.toBeInTheDocument();
+  });
+
+  it("opens the setup form for a new automation in this factory", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderAt("/factories/f-core");
+    await screen.findByTestId("automation-card-a-reviewer");
+
+    // Act
+    await user.click(screen.getByTestId("automations-add-automation"));
+    await user.click(screen.getByTestId("automations-add-automation-create"));
+
+    // Assert
+    expect(screen.getByTestId("setup-route")).toBeInTheDocument();
     expect(
-      screen.queryByTestId("automations-add-automation-menu"),
-    ).not.toBeInTheDocument();
+      getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID)?.factoryId,
+    ).toBe("f-core");
+  });
+
+  it("still opens the setup form with no factory from the Automate dashboard", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderAt("/automate");
+    await screen.findByTestId("automation-card-a-reviewer");
+
+    // Act
+    await user.click(screen.getByTestId("automations-add-automation"));
+    await user.click(screen.getByTestId("automations-add-automation-create"));
+
+    // Assert
+    expect(screen.getByTestId("setup-route")).toBeInTheDocument();
+    expect(getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID)).toBeNull();
   });
 
   it("shows the empty state for a factory with no automations", async () => {

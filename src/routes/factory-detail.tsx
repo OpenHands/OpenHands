@@ -1,11 +1,11 @@
 import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router";
+import AutomationsIcon from "#/icons/automations.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { AutomationsDashboard } from "#/components/features/automations/dashboard/automations-dashboard";
 import { AutomationCardSkeleton } from "#/components/features/automations/automation-card-skeleton";
 import { ErrorState } from "#/components/features/automations/error-state";
-import { MANIFEST_ICON_BY_SLUG } from "#/components/features/manifest/manifest-icons";
 import {
   ManifestSubpageLayout,
   type SubPageNavItem,
@@ -42,7 +42,7 @@ export default function FactoryDetail() {
       {
         to: factoryPath(factoryId),
         label: t(I18nKey.FACTORIES$AUTOMATIONS_NAV),
-        Icon: MANIFEST_ICON_BY_SLUG.bot,
+        Icon: AutomationsIcon,
         testId: "factory-navigation-automations",
       },
     ],

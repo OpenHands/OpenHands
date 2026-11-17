@@ -660,3 +660,61 @@ describe("automation mutation hooks — error toasts", () => {
     await waitFor(() => expect(errorToast).toHaveBeenCalledTimes(1));
   });
 });
+
+describe("useImportAutomation — factories", () => {
+  function setup(factoryId?: string) {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <ActiveBackendProvider>{children}</ActiveBackendProvider>
+      </QueryClientProvider>
+    );
+    const { result } = renderHook(() => useImportAutomation({ factoryId }), {
+      wrapper,
+    });
+    return { result, invalidate };
+  }
+
+  const spec = {
+    name: "Test",
+    prompt: "p",
+    trigger: automation.trigger,
+    enabled: false,
+  };
+
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    vi.mocked(AutomationService.createAutomation).mockReset();
+    vi.mocked(AutomationService.createAutomation).mockResolvedValue(automation);
+  });
+
+  it("imports into the given factory and refreshes the lists and factory counts", async () => {
+    const { result, invalidate } = setup("factory-1");
+
+    act(() => result.current.mutate(spec));
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(AutomationService.createAutomation).toHaveBeenCalledWith(
+      spec,
+      "factory-1",
+    );
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["automations"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["factories"] });
+  });
+
+  it("imports with no factory by default", async () => {
+    const { result } = setup();
+
+    act(() => result.current.mutate(spec));
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(AutomationService.createAutomation).toHaveBeenCalledWith(
+      spec,
+      undefined,
+    );
+  });
+});

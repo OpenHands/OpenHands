@@ -105,7 +105,10 @@ import {
   useServiceAccounts,
 } from "#/hooks/query/use-service-accounts";
 import { AUTOMATION_DETAIL_QUERY_KEY } from "#/hooks/query/use-automation-detail";
-import { AUTOMATIONS_QUERY_KEY } from "#/hooks/query/use-automations";
+import {
+  AUTOMATIONS_QUERY_KEY,
+  invalidateAutomationLists,
+} from "#/hooks/query/use-automations";
 import {
   invalidateConversationQueries,
   patchConversationInCache,
@@ -1426,6 +1429,10 @@ export function AutomationSetupPanel({
   // Only a new automation picks who it runs as; an existing one uses Change Runs As.
   const showRunAsPicker = serviceAccountRunAsEnabled && !isEditingExisting;
   const newAutomationRunAsId = showRunAsPicker ? runAsUserId : "";
+  // Only a new automation is placed in a factory; an edit leaves it where it is.
+  const newAutomationFactoryId = isEditingExisting
+    ? ""
+    : (draft.factoryId?.trim() ?? "");
   const buildPresetBody = (): SetupRequestBody => {
     const trimmedPrompt = prompt.trim();
     const body: SetupRequestBody = {
@@ -1452,6 +1459,7 @@ export function AutomationSetupPanel({
     if (selectedAgentProfileId) body.agent_profile_id = selectedAgentProfileId;
     else if (model.trim()) body.model = model.trim();
     if (newAutomationRunAsId) body.run_as_user_id = newAutomationRunAsId;
+    if (newAutomationFactoryId) body.factory_id = newAutomationFactoryId;
     return body;
   };
   const buildCustomBody = (tarballPath: string): SetupRequestBody =>
@@ -1471,6 +1479,7 @@ export function AutomationSetupPanel({
         ? { timeout: Number(timeoutSeconds) }
         : {}),
       ...(newAutomationRunAsId ? { run_as_user_id: newAutomationRunAsId } : {}),
+      ...(newAutomationFactoryId ? { factory_id: newAutomationFactoryId } : {}),
     }) as SetupRequestBody;
   /**
    * The request body sent to a server-backed draft. Custom drafts reference a
@@ -1869,6 +1878,7 @@ export function AutomationSetupPanel({
       }
       setSaveState("saved");
       toast.success(t(I18nKey.AUTOMATION_SETUP$CREATED));
+      invalidateAutomationLists(queryClient);
       // The draft has been finalized into a real automation; drop the
       // persisted draft row so it does not linger as an incomplete setup.
       if (serverDraftId) {

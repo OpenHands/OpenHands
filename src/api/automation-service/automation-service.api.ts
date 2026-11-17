@@ -146,6 +146,8 @@ export interface CreatePluginSpecAutomationRequest {
   trigger?: unknown;
   timeout?: number;
   enabled?: boolean;
+  /** Factory to create the automation in (OpenHands/automation#751). */
+  factory_id?: string;
   template?: {
     id: string;
     version?: number | string;
@@ -387,7 +389,10 @@ function generatePendingImportEvent(): string {
   return `pending.${randomUUID()}`;
 }
 
-function buildCreateAutomationRequest(spec: AutomationSpec) {
+function buildCreateAutomationRequest(
+  spec: AutomationSpec,
+  factoryId?: string,
+) {
   if (!spec.prompt) {
     throw new Error("An automation prompt is required for import.");
   }
@@ -427,6 +432,7 @@ function buildCreateAutomationRequest(spec: AutomationSpec) {
         plugins: spec.plugins.map((source) => ({ source })),
       }),
       ...(spec.timeout != null && { timeout: spec.timeout }),
+      ...(factoryId && { factory_id: factoryId }),
     },
   };
 }
@@ -440,6 +446,7 @@ function buildCreateScriptAutomationBody(
   spec: AutomationSpec,
   script: AutomationScriptBundle,
   tarballPath: string,
+  factoryId?: string,
 ) {
   return {
     name: spec.name,
@@ -452,6 +459,7 @@ function buildCreateScriptAutomationBody(
     }),
     ...(spec.model && { model: spec.model }),
     ...(spec.timeout != null && { timeout: spec.timeout }),
+    ...(factoryId && { factory_id: factoryId }),
   };
 }
 
@@ -647,16 +655,21 @@ class AutomationService {
     return withPresetSources(automation);
   }
 
-  static async createAutomation(spec: AutomationSpec): Promise<Automation> {
+  static async createAutomation(
+    spec: AutomationSpec,
+    /** Create the automation in this factory (OpenHands/automation#751). */
+    factoryId?: string,
+  ): Promise<Automation> {
     const active = getActiveBackend();
     if (spec.script) {
       return AutomationService.createScriptAutomation(
         active,
         spec,
         spec.script,
+        factoryId,
       );
     }
-    const { path, body } = buildCreateAutomationRequest(spec);
+    const { path, body } = buildCreateAutomationRequest(spec, factoryId);
 
     let created: Automation;
     if (active.backend.kind === "cloud") {
@@ -733,6 +746,7 @@ class AutomationService {
     active: ResolvedActiveBackend,
     spec: AutomationSpec,
     script: AutomationScriptBundle,
+    factoryId?: string,
   ): Promise<Automation> {
     // Resolve the endpoint before uploading, so a deployment without bundle
     // support fails without leaving an upload behind.
@@ -741,7 +755,12 @@ class AutomationService {
       spec.name.slice(0, 255),
       base64ToBytes(script.tarball_base64),
     );
-    const body = buildCreateScriptAutomationBody(spec, script, tarballPath);
+    const body = buildCreateScriptAutomationBody(
+      spec,
+      script,
+      tarballPath,
+      factoryId,
+    );
 
     if (active.backend.kind === "cloud") {
       return callCloudProxy<Automation>({
