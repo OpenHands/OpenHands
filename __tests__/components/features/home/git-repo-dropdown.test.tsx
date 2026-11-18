@@ -249,7 +249,9 @@ describe("GitRepoDropdown", () => {
 
     it("keeps repository options uniquely keyed when results reorder", async () => {
       const user = userEvent.setup();
-      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
       const view = renderDropdown();
       const input = screen.getByTestId("git-repo-dropdown");
 
@@ -491,9 +493,7 @@ describe("GitRepoDropdown", () => {
       expect(selectedOption).toHaveAttribute("aria-selected", "true");
       expect(selectedOption).toHaveClass("bg-interactive-selected");
       expect(unselectedOption).toHaveAttribute("aria-selected", "false");
-      expect(unselectedOption).toHaveClass(
-        "hover:bg-interactive-hover",
-      );
+      expect(unselectedOption).toHaveClass("hover:bg-interactive-hover");
     });
 
     it("uses the latest callback when a selected repository is cleared", async () => {
@@ -565,6 +565,7 @@ describe("GitRepoDropdown", () => {
             inputText,
             undefined,
             undefined,
+            undefined,
           );
         });
       },
@@ -620,6 +621,78 @@ describe("GitRepoDropdown", () => {
       await user.type(screen.getByTestId("git-repo-dropdown"), "repo-two");
       expect(screen.getAllByRole("option")).toHaveLength(1);
       expect(screen.getByText("user/repo-two")).toBeInTheDocument();
+    });
+
+    describe("with a chosen git provider connection", () => {
+      const gitlabRepository = (
+        id: string,
+        gitProviderId?: number,
+      ): GitRepository => ({
+        id,
+        full_name: `team/${id}`,
+        git_provider: "gitlab",
+        is_public: true,
+        git_provider_id: gitProviderId,
+      });
+
+      it("loads and searches through that connection", () => {
+        renderDropdown({ provider: "gitlab", gitProviderId: 9 });
+
+        expect(mockUseRepositoryData).toHaveBeenLastCalledWith(
+          "gitlab",
+          false,
+          "",
+          [],
+          "",
+          undefined,
+          undefined,
+          9,
+        );
+        expect(mockUseUrlSearch).toHaveBeenLastCalledWith("", "gitlab", 9);
+      });
+
+      it("reports the picked repository stamped with the connection", async () => {
+        const user = userEvent.setup();
+        renderDropdown({ provider: "gitlab", gitProviderId: 9 });
+
+        await user.click(screen.getByTestId("git-repo-dropdown"));
+        await user.click(await screen.findByText("user/repo-two"));
+
+        expect(mockOnChange).toHaveBeenCalledExactlyOnceWith({
+          ...MOCK_REPOSITORIES[1],
+          git_provider_id: 9,
+        });
+      });
+
+      it("reports a repository without an id when no connection is chosen", async () => {
+        const user = userEvent.setup();
+        const stale = { ...MOCK_REPOSITORIES[1], git_provider_id: 4 };
+        renderDropdown({}, { repositories: [stale] });
+
+        await user.click(screen.getByTestId("git-repo-dropdown"));
+        await user.click(await screen.findByText("user/repo-two"));
+
+        expect(mockOnChange).toHaveBeenCalledExactlyOnceWith(
+          MOCK_REPOSITORIES[1],
+        );
+      });
+
+      it("lists only the recent repositories picked through that connection", async () => {
+        const user = userEvent.setup();
+        renderDropdown({ provider: "gitlab", gitProviderId: 9 }, {}, {}, [
+          gitlabRepository("from-nine", 9),
+          gitlabRepository("from-four", 4),
+          gitlabRepository("from-none"),
+        ]);
+
+        await user.click(screen.getByTestId("git-repo-dropdown"));
+
+        expect(screen.getAllByRole("option")[0]?.textContent).toBe(
+          "team/from-nine",
+        );
+        expect(screen.queryByText("team/from-four")).not.toBeInTheDocument();
+        expect(screen.queryByText("team/from-none")).not.toBeInTheDocument();
+      });
     });
 
     it("updates and case-folds recent repositories as the search changes", async () => {
