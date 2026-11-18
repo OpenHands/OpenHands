@@ -744,6 +744,44 @@ describe("Messages virtualization", () => {
     expect(rows[0]).toHaveAttribute("data-row-key", "single-message-0");
   });
 
+  it("reports where the virtualizer places a row outside the window", () => {
+    // The load-older restore falls back to the virtualizer's row starts when
+    // the anchored row has been pushed out of the window and is not mounted.
+    const messagesRef = React.createRef<MessagesHandle>();
+    renderWithProviders(
+      <Harness
+        events={buildEvents(400)}
+        withScrollParent
+        messagesRef={messagesRef}
+      />,
+    );
+
+    const mountedKeys = screen
+      .getAllByTestId("virtualized-message-row")
+      .map((row) => row.getAttribute("data-row-key"));
+    expect(mountedKeys).not.toContain("single-message-399");
+    const first = messagesRef.current?.getRowScrollStart("single-message-0");
+    const last = messagesRef.current?.getRowScrollStart("single-message-399");
+    expect(first).toEqual(expect.any(Number));
+    expect(last).toBeGreaterThan(first as number);
+    expect(messagesRef.current?.getRowScrollStart("no-such-row")).toBeNull();
+  });
+
+  it("reports no row start while the list is plain", () => {
+    const messagesRef = React.createRef<MessagesHandle>();
+    renderWithProviders(
+      <Harness
+        events={buildEvents(10)}
+        withScrollParent
+        messagesRef={messagesRef}
+      />,
+    );
+
+    expect(
+      messagesRef.current?.getRowScrollStart("single-message-0"),
+    ).toBeNull();
+  });
+
   it("anchors the load-older restore on a virtual row after older events prepend", () => {
     // Regression for the reported bug: virtual rows had no `data-row-key`, so
     // `captureScrollAnchor` returned null and the second restoration pass did

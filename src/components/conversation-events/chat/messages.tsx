@@ -106,6 +106,14 @@ export interface MessagesHandle {
    * restore is authoritative once it has run.
    */
   clearPendingScrollCorrection: () => void;
+  /**
+   * Where the virtualizer places the row with this `data-row-key`, as a start
+   * offset in the scroll element's coordinates (the same space as
+   * `scrollTop`), or `null` when the list is not virtualized or has no such
+   * row. Lets the "load older" restore reach an anchored row that is outside
+   * the virtual window, so not in the DOM.
+   */
+  getRowScrollStart: (key: string) => number | null;
 }
 
 /**
@@ -968,9 +976,13 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       // Row heights are unknown until they mount (code blocks, images,
       // expanded output), so measure the live DOM and let the virtualizer
       // correct the offsets. The gap is added here because absolutely
-      // positioned rows are outside the container's flex `gap`.
-      measureElement: (element) =>
-        Math.round(element.getBoundingClientRect().height) + ROW_GAP_PX,
+      // positioned rows are outside the container's flex `gap`. A row that
+      // renders nothing takes no gap, as in the plain list, where its empty
+      // `display: contents` wrapper is not a flex item.
+      measureElement: (element) => {
+        const height = Math.round(element.getBoundingClientRect().height);
+        return height === 0 ? 0 : height + ROW_GAP_PX;
+      },
     });
 
     // Rows are measured before the shell re-renders at its new total height, so
@@ -1046,8 +1058,15 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             scrollCorrectionFrameRef.current = null;
           }
         },
+        getRowScrollStart: (key) => {
+          if (!shouldVirtualize) return null;
+          const row = rowVirtualizer.measurementsCache.find(
+            (item) => item.key === key,
+          );
+          return row ? row.start : null;
+        },
       }),
-      [],
+      [shouldVirtualize, rowVirtualizer],
     );
 
     // Re-pin once the total size has changed, when `scrollTop + delta` is no

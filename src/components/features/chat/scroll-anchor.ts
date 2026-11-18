@@ -99,3 +99,27 @@ export function scrollAnchorOffset(
   }
   return null;
 }
+
+/**
+ * The `scrollTop` that puts the first candidate the virtualizer knows back at
+ * its recorded offset, from the virtualizer's own row starts instead of the
+ * DOM, or `null` when it knows none of them.
+ *
+ * Used when no candidate is mounted: the older page's rows can be taller than
+ * the estimate by more than the window, so the anchored row has been pushed
+ * out of it and {@link scrollAnchorOffset} cannot find it. The virtualizer
+ * still places the row, so scrolling to that place mounts it and the next pass
+ * can restore it exactly from the DOM. `rowStart` returns a row's start in the
+ * scroll element's coordinates (the same space as `scrollTop`).
+ */
+export function virtualAnchorOffset(
+  anchor: ScrollAnchor,
+  rowStart: (key: string) => number | null,
+): number | null {
+  for (const candidate of anchor.candidates) {
+    const start = rowStart(candidate.key);
+    if (start === null) continue;
+    return Math.max(0, start - candidate.offset);
+  }
+  return null;
+}

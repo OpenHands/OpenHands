@@ -23,7 +23,8 @@ export { BOTTOM_THRESHOLD_PX };
  * that was measured at `0` — one that renders nothing but stays in the virtual
  * list, an empty `ThinkAction` for example — keeps that zero instead of being
  * inflated to the average, which would make the shell taller than the plain list
- * it replaces.
+ * it replaces. It also takes no gap: in the plain list its empty
+ * `display: contents` wrapper is not a flex item, so no `gap` is laid out for it.
  */
 export const buildInitialMeasurements = (
   keys: string[],
@@ -37,7 +38,10 @@ export const buildInitialMeasurements = (
   let start = 0;
   return keys.map((key, index) => {
     const measured = heights[index];
-    const size = Math.max(1, Math.round(measured ?? fallback)) + gapPx;
+    const size =
+      measured === 0
+        ? 0
+        : Math.max(1, Math.round(measured ?? fallback)) + gapPx;
     const item: VirtualItem = {
       index,
       key,

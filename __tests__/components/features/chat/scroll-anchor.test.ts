@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   captureScrollAnchor,
   scrollAnchorOffset,
+  virtualAnchorOffset,
 } from "#/components/features/chat/scroll-anchor";
 
 /** Build a scroll container whose rows sit at the given tops (viewport space). */
@@ -159,5 +160,51 @@ describe("scrollAnchorOffset", () => {
         candidates: [{ key: "edge", offset: 12 }],
       }),
     ).toBe(1076);
+  });
+});
+
+describe("virtualAnchorOffset", () => {
+  const starts: Record<string, number> = { top: 5000, below: 5300 };
+  const rowStart = (key: string) => starts[key] ?? null;
+
+  it("puts the first known candidate back at its recorded offset", () => {
+    expect(
+      virtualAnchorOffset(
+        { candidates: [{ key: "top", offset: 40 }] },
+        rowStart,
+      ),
+    ).toBe(4960);
+  });
+
+  it("skips candidates the virtualizer does not know", () => {
+    expect(
+      virtualAnchorOffset(
+        {
+          candidates: [
+            { key: "gone", offset: 0 },
+            { key: "below", offset: 300 },
+          ],
+        },
+        rowStart,
+      ),
+    ).toBe(5000);
+  });
+
+  it("returns null when no candidate is known", () => {
+    expect(
+      virtualAnchorOffset(
+        { candidates: [{ key: "gone", offset: 0 }] },
+        () => null,
+      ),
+    ).toBeNull();
+  });
+
+  it("never returns a negative offset", () => {
+    expect(
+      virtualAnchorOffset(
+        { candidates: [{ key: "top", offset: 9000 }] },
+        rowStart,
+      ),
+    ).toBe(0);
   });
 });

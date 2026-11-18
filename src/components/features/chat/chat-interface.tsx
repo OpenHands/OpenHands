@@ -33,6 +33,7 @@ import {
   type ScrollAnchor,
   captureScrollAnchor,
   scrollAnchorOffset,
+  virtualAnchorOffset,
 } from "./scroll-anchor";
 import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edit";
 import { WorkspaceFilesForChatProvider } from "./chat-markdown-path-code";
@@ -294,6 +295,9 @@ export function ChatInterface({
   //                 as more pages arrive until there's overflow or the
   //                 server runs out of older events.
   const SCROLL_TOP_THRESHOLD_PX = 80;
+  // Frames the "load older" restore may spend scrolling to an anchored row that
+  // is outside the virtual window before giving up (see `restoreScrollAnchor`).
+  const MAX_ANCHOR_RESTORE_ATTEMPTS = 3;
   const preserveScrollPosition = React.useRef<{
     scrollHeight: number;
     scrollTop: number;
@@ -311,19 +315,50 @@ export function ChatInterface({
   const oldestEventIdRef = React.useRef<string | undefined>(undefined);
   oldestEventIdRef.current = allConversationEvents[0]?.id;
   const oldestEventIdAtLoadRef = React.useRef<string | undefined>(undefined);
+  // A follow-up frame of the restore below, scheduled when the anchored row was
+  // outside the virtual window. Cancelled when a new load starts, on a
+  // conversation switch and on unmount.
+  const anchorRetryFrameRef = React.useRef<number | null>(null);
+  const cancelAnchorRetry = React.useCallback(() => {
+    if (anchorRetryFrameRef.current === null) return;
+    cancelAnimationFrame(anchorRetryFrameRef.current);
+    anchorRetryFrameRef.current = null;
+  }, []);
   const restoreScrollAnchor = React.useCallback(() => {
     const anchor = preserveScrollAnchor.current;
     const element = scrollRef.current;
     preserveScrollAnchor.current = null;
     if (!anchor || !element) return;
-    const next = scrollAnchorOffset(element, anchor);
-    if (next === null) return;
-    element.scrollTop = next;
-    // The anchor restore already accounts for the prepended rows' real heights.
-    // A correction still buffered from measuring those same rows describes the
-    // very shift just undone, so applying it on the next frame would move the
-    // reader a second time. The restore is authoritative.
-    messagesRef.current?.clearPendingScrollCorrection();
+    const run = (attempt: number) => {
+      anchorRetryFrameRef.current = null;
+      const next = scrollAnchorOffset(element, anchor);
+      if (next !== null) {
+        element.scrollTop = next;
+        // The anchor restore already accounts for the prepended rows' real
+        // heights. A correction still buffered from measuring those same rows
+        // describes the very shift just undone, so applying it on the next
+        // frame would move the reader a second time. The restore is
+        // authoritative.
+        messagesRef.current?.clearPendingScrollCorrection();
+        return;
+      }
+      // No candidate is mounted: the prepended rows came out taller than the
+      // estimate by more than the window, pushing the anchored row out of it.
+      // Scroll to where the virtualizer places the row, which mounts it, and
+      // restore it exactly from the DOM on the next frame.
+      if (attempt >= MAX_ANCHOR_RESTORE_ATTEMPTS) return;
+      const virtualNext = virtualAnchorOffset(
+        anchor,
+        (key) => messagesRef.current?.getRowScrollStart(key) ?? null,
+      );
+      if (virtualNext === null) return;
+      element.scrollTop = virtualNext;
+      messagesRef.current?.clearPendingScrollCorrection();
+      anchorRetryFrameRef.current = requestAnimationFrame(() =>
+        run(attempt + 1),
+      );
+    };
+    run(0);
   }, []);
 
   React.useEffect(() => {
@@ -332,7 +367,9 @@ export function ChatInterface({
     // next conversation's scroll restoration.
     preserveScrollPosition.current = null;
     preserveScrollAnchor.current = null;
-  }, [conversationId]);
+    cancelAnchorRetry();
+  }, [conversationId, cancelAnchorRetry]);
+  React.useEffect(() => cancelAnchorRetry, [cancelAnchorRetry]);
 
   const maybeLoadOlder = React.useCallback(
     (target: HTMLElement) => {
@@ -351,6 +388,7 @@ export function ChatInterface({
       };
       // Captured for both list shapes: the plain path restores from the height
       // delta, the virtualized path also uses it for the settling second pass.
+      cancelAnchorRetry();
       preserveScrollAnchor.current = captureScrollAnchor(target);
       oldestEventIdAtLoadRef.current = oldestEventIdRef.current;
       loadOlder().catch((error) => {
@@ -364,6 +402,7 @@ export function ChatInterface({
       });
     },
     [
+      cancelAnchorRetry,
       hasMoreOlderEvents,
       isLoadingOlderEvents,
       isProvisioningTask,

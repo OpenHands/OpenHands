@@ -49,7 +49,20 @@ describe("buildInitialMeasurements", () => {
     // average would make the shell taller than the plain list it replaces.
     const items = buildInitialMeasurements(["a", "b", "c"], [100, 0, 300], 0);
 
-    expect(items.map((item) => item.size)).toEqual([100, 1, 300]);
+    expect(items.map((item) => item.size)).toEqual([100, 0, 300]);
+  });
+
+  it("gives a row measured at zero no gap, so the next row starts where the plain list puts it", () => {
+    // The plain list lays out no `gap` for an empty `display: contents`
+    // wrapper, so two empty rows between `a` and `b` must not push `b` down.
+    const items = buildInitialMeasurements(
+      ["a", "empty1", "empty2", "b"],
+      [100, 0, 0, 100],
+      8,
+    );
+
+    expect(items.map((item) => item.size)).toEqual([108, 0, 0, 108]);
+    expect(items.map((item) => item.start)).toEqual([0, 108, 108, 108]);
   });
 
   it("returns no seed when nothing was measured, leaving the estimate in place", () => {
