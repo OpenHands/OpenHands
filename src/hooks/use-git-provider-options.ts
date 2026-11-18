@@ -3,6 +3,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCloudGitProviders } from "#/hooks/query/use-cloud-git-providers";
 import { useCloudIntegrationsConfig } from "#/hooks/query/use-cloud-integrations-config";
 import { useUserProviders } from "#/hooks/use-user-providers";
+import { useSettings } from "#/hooks/query/use-settings";
 import type { GitProviderOption } from "#/utils/git-provider-option";
 import { getProviderName } from "#/utils/utils";
 
@@ -23,6 +24,7 @@ export function useGitProviderOptions() {
   const isScoped = isCloud && config?.isOauthV2LoginEnabled === true;
   const { data: connections, isPending: isConnectionsPending } =
     useCloudGitProviders({ enabled: isScoped });
+  const { data: settings } = useSettings();
 
   const options = React.useMemo<GitProviderOption[]>(() => {
     if (isScoped) {
@@ -33,14 +35,18 @@ export function useGitProviderOptions() {
           provider: connection.providerType,
           gitProviderId: connection.id,
           label: connection.title,
+          host: connection.host,
         }));
     }
+    // For non-OAuth v2 backends, get hosts from settings
+    const providerHosts = settings?.provider_tokens_set ?? {};
     return providers.map((provider) => ({
       provider,
       gitProviderId: null,
       label: getProviderName(provider),
+      host: providerHosts[provider] ?? null,
     }));
-  }, [isScoped, connections, providers]);
+  }, [isScoped, connections, providers, settings?.provider_tokens_set]);
 
   return {
     options,

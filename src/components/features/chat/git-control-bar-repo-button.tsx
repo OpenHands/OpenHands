@@ -6,7 +6,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { GitProviderIcon } from "#/components/shared/git-provider-icon";
 import { GitExternalLinkIcon } from "./git-external-link-icon";
 import RepoForkedIcon from "#/icons/repo-forked.svg?react";
-import { useSettings } from "#/hooks/query/use-settings";
+import { useProviderHosts } from "#/hooks/use-provider-hosts";
 
 interface GitControlBarRepoButtonProps {
   selectedRepository: string | null | undefined;
@@ -26,7 +26,7 @@ export function GitControlBarRepoButton({
   disabled,
 }: GitControlBarRepoButtonProps) {
   const { t } = useTranslation("openhands");
-  const { data: settings } = useSettings();
+  const { hosts: providerHosts } = useProviderHosts();
 
   // Render as an external link only when we know both the repo and the
   // provider (so the URL is well-defined). Local-workspace fallbacks may
@@ -36,7 +36,7 @@ export function GitControlBarRepoButton({
 
   // Get the host for the current provider from settings
   const providerHost = gitProvider
-    ? settings?.provider_tokens_set[gitProvider]
+    ? (providerHosts[gitProvider] ?? null)
     : null;
 
   const repositoryUrl = hasLinkableRepo

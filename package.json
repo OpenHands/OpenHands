@@ -172,6 +172,7 @@
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-unused-imports": "4.4.1",
+    "fast-check": "4.10.2",
     "globals": "17.14.0",
     "husky": "9.1.7",
     "jsdom": "31.0.1",

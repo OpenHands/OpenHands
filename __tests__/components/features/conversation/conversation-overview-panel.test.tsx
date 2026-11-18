@@ -59,6 +59,10 @@ vi.mock("#/hooks/query/use-settings", () => ({
   }),
 }));
 
+vi.mock("#/hooks/use-provider-hosts", () => ({
+  useProviderHosts: () => ({ hosts: {}, isLoading: false }),
+}));
+
 vi.mock("#/hooks/use-conversation-primary-repository", () => ({
   useConversationPrimaryRepository: () => ({
     repository: "openhands/agent-canvas",

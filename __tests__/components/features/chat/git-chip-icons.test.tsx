@@ -9,8 +9,8 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("#/hooks/query/use-settings", () => ({
-  useSettings: () => ({ data: { provider_tokens_set: {} } }),
+vi.mock("#/hooks/use-provider-hosts", () => ({
+  useProviderHosts: () => ({ hosts: {}, isLoading: false }),
 }));
 
 // Chip icons must take the theme's ink through `currentColor`, from the same

@@ -9,7 +9,7 @@ import { useUnifiedGitCommits } from "#/hooks/query/use-unified-git-commits";
 import { useConversationPrimaryRepository } from "#/hooks/use-conversation-primary-repository";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
-import { useSettings } from "#/hooks/query/use-settings";
+import { useProviderHosts } from "#/hooks/use-provider-hosts";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
 import { I18nKey } from "#/i18n/declaration";
 import { cn, constructBranchUrl, constructRepositoryUrl } from "#/utils/utils";
@@ -39,7 +39,7 @@ export function ConversationOverviewGitSection() {
   const { state } = useConversationLocalStorageState(conversationId);
   const { navigateToCommits } = useSelectConversationTab();
   const overviewDrawer = useConversationOverviewDrawerOptional();
-  const { data: settings } = useSettings();
+  const { hosts: providerHosts } = useProviderHosts();
   const { repository, provider, branch, isConnected } =
     useConversationPrimaryRepository();
 
@@ -76,7 +76,7 @@ export function ConversationOverviewGitSection() {
     return null;
   }
 
-  const providerHost = settings?.provider_tokens_set?.[provider] ?? null;
+  const providerHost = providerHosts[provider] ?? null;
   const repoUrl = constructRepositoryUrl(provider, repository, providerHost);
   const branchUrl = branch
     ? constructBranchUrl(provider, repository, branch, providerHost)

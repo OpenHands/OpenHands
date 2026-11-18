@@ -12,6 +12,12 @@ export interface CloudGitProvider {
   connected: boolean;
   /** The provider rejected the linked token; only re-linking fixes it. */
   needsReconnect: boolean;
+  /**
+   * The base URL of a self-hosted instance (e.g., "gitlab.technogise.com" or
+   * "https://git.example.com:8443"). Null for hosted services (github.com,
+   * gitlab.com) or when the server does not report one.
+   */
+  host: string | null;
 }
 
 interface GitProviderResponse {
@@ -20,6 +26,8 @@ interface GitProviderResponse {
   provider_type: string;
   connected: boolean;
   needs_reconnect: boolean;
+  /** Optional host field for self-hosted instances. */
+  host?: string | null;
 }
 
 function getActiveCloudBackend(): Backend {
@@ -28,6 +36,19 @@ function getActiveCloudBackend(): Backend {
     throw new Error("Cloud git providers call requires a cloud backend.");
   }
   return active;
+}
+
+/**
+ * Normalize a host value from the API: non-empty trimmed string → use value,
+ * otherwise → null. This ensures consistent handling of absent, null,
+ * undefined, empty, or whitespace-only host values.
+ */
+function normalizeHost(host: string | null | undefined): string | null {
+  if (typeof host === "string") {
+    const trimmed = host.trim();
+    return trimmed !== "" ? trimmed : null;
+  }
+  return null;
 }
 
 /**
@@ -50,6 +71,7 @@ export async function listCloudGitProviders(): Promise<CloudGitProvider[]> {
             providerType: row.provider_type,
             connected: row.connected,
             needsReconnect: row.needs_reconnect,
+            host: normalizeHost(row.host),
           },
         ]
       : [],

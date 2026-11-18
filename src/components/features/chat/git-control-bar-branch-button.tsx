@@ -4,7 +4,7 @@ import { constructBranchUrl, cn } from "#/utils/utils";
 import { Provider } from "#/types/settings";
 import { I18nKey } from "#/i18n/declaration";
 import { GitExternalLinkIcon } from "./git-external-link-icon";
-import { useSettings } from "#/hooks/query/use-settings";
+import { useProviderHosts } from "#/hooks/use-provider-hosts";
 
 interface GitControlBarBranchButtonProps {
   selectedBranch: string | null | undefined;
@@ -18,10 +18,10 @@ export function GitControlBarBranchButton({
   gitProvider,
 }: GitControlBarBranchButtonProps) {
   const { t } = useTranslation("openhands");
-  const { data: settings } = useSettings();
+  const { hosts: providerHosts } = useProviderHosts();
 
   const providerHost = gitProvider
-    ? settings?.provider_tokens_set[gitProvider]
+    ? (providerHosts[gitProvider] ?? null)
     : null;
 
   // Render the linked styling only when we have enough info to build a URL.

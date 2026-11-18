@@ -86,7 +86,7 @@ import { ContextMenuListItem } from "#/components/features/context-menu/context-
 import { formatTriggerSourceLabel } from "#/components/features/home/featured-automations/automation-run-health";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
-import { useSettings } from "#/hooks/query/use-settings";
+import { useProviderHosts } from "#/hooks/use-provider-hosts";
 import { usePromptTextareaResize } from "#/hooks/use-prompt-textarea-resize";
 import { useSendMessage } from "#/hooks/use-send-message";
 import {
@@ -805,7 +805,7 @@ export function AutomationSetupPanel({
   // Connected self-hosted providers name their hosts here; a repository on
   // one of them is sent with its provider so the run can authenticate, as
   // long as the service can clone from that provider at all.
-  const providerHosts = useSettings().data?.provider_tokens_set;
+  const { hosts: providerHosts } = useProviderHosts();
   const cloneProviders = automationCloneProviders(
     deploymentCapabilities.data?.repoProviders,
   );

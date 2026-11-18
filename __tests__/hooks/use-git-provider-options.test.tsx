@@ -121,8 +121,8 @@ describe("useGitProviderOptions", () => {
       await waitFor(() => expect(result.current.options).toHaveLength(2));
       expect(result.current.isScoped).toBe(true);
       expect(result.current.options).toEqual([
-        { provider: "gitlab", gitProviderId: 4, label: "Work GitLab" },
-        { provider: "gitlab", gitProviderId: 9, label: "Self-hosted GitLab" },
+        { provider: "gitlab", gitProviderId: 4, label: "Work GitLab", host: null },
+        { provider: "gitlab", gitProviderId: 9, label: "Self-hosted GitLab", host: null },
       ]);
     });
 
@@ -174,6 +174,26 @@ describe("useGitProviderOptions", () => {
       expect(result.current.isLoading).toBe(true);
       await waitFor(() => expect(result.current.isLoading).toBe(false));
     });
+
+    it("includes host field from self-hosted connections", async () => {
+      serveCloud({
+        oauthV2LoginEnabled: true,
+        connections: [
+          connection(4, "GitLab Cloud", { host: null }),
+          connection(9, "Self-hosted GitLab", { host: "gitlab.technogise.com" }),
+        ],
+      });
+
+      const { result } = renderHook(() => useGitProviderOptions(), {
+        wrapper,
+      });
+
+      await waitFor(() => expect(result.current.options).toHaveLength(2));
+      expect(result.current.options).toEqual([
+        { provider: "gitlab", gitProviderId: 4, label: "GitLab Cloud", host: null },
+        { provider: "gitlab", gitProviderId: 9, label: "Self-hosted GitLab", host: "gitlab.technogise.com" },
+      ]);
+    });
   });
 
   describe("without enable_oauth_v2_login", () => {
@@ -192,8 +212,8 @@ describe("useGitProviderOptions", () => {
       await waitFor(() => expect(result.current.isLoading).toBe(false));
       expect(result.current.isScoped).toBe(false);
       expect(result.current.options).toEqual([
-        { provider: "github", gitProviderId: null, label: "GitHub" },
-        { provider: "gitlab", gitProviderId: null, label: "GitLab" },
+        { provider: "github", gitProviderId: null, label: "GitHub", host: null },
+        { provider: "gitlab", gitProviderId: null, label: "GitLab", host: null },
       ]);
       expect(requestedPaths()).not.toContain("/oauth/git-providers");
     });

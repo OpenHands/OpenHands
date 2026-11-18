@@ -3,7 +3,7 @@ import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { GitRepoDropdown } from "#/components/features/home/git-repo-dropdown";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useSettings } from "#/hooks/query/use-settings";
+import { useProviderHosts } from "#/hooks/use-provider-hosts";
 import { useUserProviders } from "#/hooks/use-user-providers";
 import { I18nKey } from "#/i18n/declaration";
 import {
@@ -84,12 +84,12 @@ export function SetupFormField({
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
   const { providers: connectedProviders } = useUserProviders();
-  const providerHosts = useSettings().data?.provider_tokens_set;
+  const { hosts: providerHosts } = useProviderHosts();
   const testId = `setup-field-${name}`;
   const help = <p className="text-xs text-muted">{field.help}</p>;
 
   const provider: SetupGitProvider = field.provider ?? "github";
-  const providerHost = providerHosts?.[provider];
+  const providerHost = providerHosts[provider] ?? null;
 
   // Listing a user's repositories is a cloud-backend capability: `GitService`
   // answers with an empty page on any other backend, so the picker would offer

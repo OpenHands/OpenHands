@@ -9,6 +9,11 @@ export interface GitProviderOption {
    */
   gitProviderId: number | null;
   label: string;
+  /**
+   * The base URL of a self-hosted instance, or null for hosted services
+   * (github.com, gitlab.com) or when the server does not report one.
+   */
+  host?: string | null;
 }
 
 export const gitProviderOptionKey = (option: GitProviderOption): string =>
