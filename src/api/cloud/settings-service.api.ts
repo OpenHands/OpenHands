@@ -269,6 +269,12 @@ export interface CloudIntegrationsConfig {
    * so a user can have several of one type, such as two GitLab hosts.
    */
   isOauthV2LoginEnabled: boolean;
+  /**
+   * Whether the instance forwards client tools such as `request_secret` to the
+   * agent and can attach a saved secret to a running conversation
+   * (`feature_flags.enable_client_tools`). Older instances omit it.
+   */
+  isClientToolsEnabled: boolean;
 }
 
 export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsConfig> {
@@ -285,6 +291,7 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
       enable_agent_profiles_page?: boolean;
       enable_service_accounts?: boolean;
       enable_oauth_v2_login?: boolean;
+      enable_client_tools?: boolean;
     };
   }>({
     backend,
@@ -305,6 +312,7 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
     isServiceAccountsEnabled:
       config.feature_flags?.enable_service_accounts === true,
     isOauthV2LoginEnabled: config.feature_flags?.enable_oauth_v2_login === true,
+    isClientToolsEnabled: config.feature_flags?.enable_client_tools === true,
   };
 }
 

@@ -12,12 +12,13 @@ import {
   resumeGoal,
   startGoal,
   stopGoal,
-  updateConversationSecrets,
+  attachConversationSecret,
 } from "#/hooks/mutation/conversation-mutation-utils";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
 const mocks = vi.hoisted(() => ({
   askAgent: vi.fn(),
+  attachCloudConversationSecret: vi.fn(),
   batchGetAppConversations: vi.fn(),
   getActiveBackend: vi.fn(),
   getAgentServerClientOptions: vi.fn(),
@@ -51,6 +52,7 @@ vi.mock("#/api/backend-registry/active-store", () => ({
 }));
 
 vi.mock("#/api/cloud/conversation-service.api", () => ({
+  attachCloudConversationSecret: mocks.attachCloudConversationSecret,
   pauseCloudSandbox: mocks.pauseCloudSandbox,
   resumeCloudSandbox: mocks.resumeCloudSandbox,
 }));
@@ -307,16 +309,17 @@ describe("conversation runtime commands", () => {
     expect(mocks.resumeCloudSandbox).not.toHaveBeenCalled();
     expect(mocks.runConversation).not.toHaveBeenCalled();
   });
-  it("hands saved secrets to a local conversation as value-free lookups", async () => {
+  it("hands a saved secret to a local conversation as a value-free lookup", async () => {
     const conversation = prepareRuntimeConversation();
     mocks.getActiveBackend.mockReturnValueOnce({ backend: { kind: "local" } });
     mocks.updateSecrets.mockResolvedValueOnce({ success: true });
 
     await expect(
-      updateConversationSecrets(CONV_ID, [
-        { name: "GITHUB_TOKEN", description: "Factory repo access" },
-      ]),
-    ).resolves.toBeUndefined();
+      attachConversationSecret(CONV_ID, {
+        name: "GITHUB_TOKEN",
+        description: "Factory repo access",
+      }),
+    ).resolves.toEqual({ status: "attached" });
 
     expectRuntimeClient(CONV_ID, conversation);
     expect(mocks.updateSecrets).toHaveBeenCalledOnce();
@@ -331,13 +334,21 @@ describe("conversation runtime commands", () => {
     });
   });
 
-  it("leaves cloud conversations to resolve secrets server-side", async () => {
+  it("asks the cloud instance to attach a secret by name and returns its answer", async () => {
     mocks.getActiveBackend.mockReturnValueOnce({ backend: { kind: "cloud" } });
+    mocks.attachCloudConversationSecret.mockResolvedValueOnce({
+      status: "deferred",
+      message: "Sandbox is PAUSED",
+    });
 
     await expect(
-      updateConversationSecrets(CONV_ID, [{ name: "GITHUB_TOKEN" }]),
-    ).resolves.toBeUndefined();
+      attachConversationSecret(CONV_ID, { name: "GITHUB_TOKEN" }),
+    ).resolves.toEqual({ status: "deferred", message: "Sandbox is PAUSED" });
 
+    expect(mocks.attachCloudConversationSecret).toHaveBeenCalledExactlyOnceWith(
+      CONV_ID,
+      "GITHUB_TOKEN",
+    );
     expect(mocks.batchGetAppConversations).not.toHaveBeenCalled();
     expect(mocks.updateSecrets).not.toHaveBeenCalled();
   });

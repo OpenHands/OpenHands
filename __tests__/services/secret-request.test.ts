@@ -15,15 +15,12 @@ import {
 } from "#/stores/secret-request-store";
 import type { RequestSecretAction } from "#/types/agent-server/core";
 
-const {
-  mockSendMessage,
-  mockUpdateConversationSecrets,
-  mockDisplayErrorToast,
-} = vi.hoisted(() => ({
-  mockSendMessage: vi.fn(),
-  mockUpdateConversationSecrets: vi.fn(),
-  mockDisplayErrorToast: vi.fn(),
-}));
+const { mockSendMessage, mockAttachConversationSecret, mockDisplayErrorToast } =
+  vi.hoisted(() => ({
+    mockSendMessage: vi.fn(),
+    mockAttachConversationSecret: vi.fn(),
+    mockDisplayErrorToast: vi.fn(),
+  }));
 
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: mockDisplayErrorToast,
@@ -35,7 +32,7 @@ vi.mock(
 );
 
 vi.mock("#/hooks/mutation/conversation-mutation-utils", () => ({
-  updateConversationSecrets: mockUpdateConversationSecrets,
+  attachConversationSecret: mockAttachConversationSecret,
 }));
 
 const CONVERSATION_ID = "conversation-1";
@@ -75,7 +72,7 @@ beforeEach(() => {
   useSecretRequestStore.setState({ requests: [request] });
   vi.clearAllMocks();
   mockSendMessage.mockResolvedValue(undefined);
-  mockUpdateConversationSecrets.mockResolvedValue(undefined);
+  mockAttachConversationSecret.mockResolvedValue({ status: "attached" });
 });
 
 describe("handleRequestSecretAction", () => {
@@ -85,7 +82,7 @@ describe("handleRequestSecretAction", () => {
     await handleRequestSecretAction(action, CONVERSATION_ID, "tool-call-1");
 
     expect(useSecretRequestStore.getState().requests).toEqual([request]);
-    expect(mockUpdateConversationSecrets).not.toHaveBeenCalled();
+    expect(mockAttachConversationSecret).not.toHaveBeenCalled();
     expect(mockSendMessage).not.toHaveBeenCalled();
   });
 });
@@ -98,9 +95,9 @@ describe("completeSecretRequest", () => {
     });
 
     expect(useSecretRequestStore.getState().requests).toEqual([]);
-    expect(mockUpdateConversationSecrets).toHaveBeenCalledExactlyOnceWith(
+    expect(mockAttachConversationSecret).toHaveBeenCalledExactlyOnceWith(
       CONVERSATION_ID,
-      [{ name: "GH_FACTORY_TOKEN", description: "Factory repo access" }],
+      { name: "GH_FACTORY_TOKEN", description: "Factory repo access" },
     );
     expect(reportedResult()).toEqual({
       status: "saved",
@@ -111,7 +108,7 @@ describe("completeSecretRequest", () => {
   it("reports a closed form as not saved without attaching anything", async () => {
     await completeSecretRequest(request, null);
 
-    expect(mockUpdateConversationSecrets).not.toHaveBeenCalled();
+    expect(mockAttachConversationSecret).not.toHaveBeenCalled();
     expect(reportedResult()).toMatchObject({
       status: "not_saved",
       name: "GITHUB_TOKEN",
@@ -119,7 +116,7 @@ describe("completeSecretRequest", () => {
   });
 
   it("reports an error when the saved secret cannot reach the conversation", async () => {
-    mockUpdateConversationSecrets.mockRejectedValueOnce(
+    mockAttachConversationSecret.mockRejectedValueOnce(
       new Error("Conversation not found"),
     );
 
@@ -135,11 +132,53 @@ describe("completeSecretRequest", () => {
     );
   });
 
+  it("reports a secret the sandbox could not take yet as not saved", async () => {
+    mockAttachConversationSecret.mockResolvedValueOnce({
+      status: "deferred",
+      message: "Sandbox is PAUSED",
+    });
+
+    await completeSecretRequest(request, { name: "GITHUB_TOKEN" });
+
+    const result = reportedResult();
+    expect(result).toMatchObject({ status: "not_saved", name: "GITHUB_TOKEN" });
+    expect(result.guidance).toContain("not attached to this conversation");
+    expect(mockDisplayErrorToast).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "not_found",
+      "The saved secret GITHUB_TOKEN could not be found.",
+      "Settings > Secrets",
+    ],
+    ["error", "Agent server error: 500", "available in new conversations"],
+  ])(
+    "reports an attach answered %s as an error",
+    async (status, error, guidance) => {
+      mockAttachConversationSecret.mockResolvedValueOnce({
+        status,
+        message: status === "error" ? "Agent server error: 500" : "ignored",
+      });
+
+      await completeSecretRequest(request, { name: "GITHUB_TOKEN" });
+
+      const result = reportedResult();
+      expect(result).toMatchObject({
+        status: "error",
+        name: "GITHUB_TOKEN",
+        error,
+      });
+      expect(result.guidance).toContain(guidance);
+      expect(mockDisplayErrorToast).toHaveBeenCalledWith(error);
+    },
+  );
+
   it("reports a request only once when the form settles after a cancel", async () => {
     await completeSecretRequest(request, null);
     await completeSecretRequest(request, { name: "GITHUB_TOKEN" });
 
-    expect(mockUpdateConversationSecrets).not.toHaveBeenCalled();
+    expect(mockAttachConversationSecret).not.toHaveBeenCalled();
     expect(mockSendMessage).toHaveBeenCalledOnce();
     expect(reportedResult()).toMatchObject({ status: "not_saved" });
   });
@@ -161,7 +200,7 @@ describe("completeSecretRequest", () => {
 
     await completeSecretRequest(request, { name: "GITHUB_TOKEN" });
 
-    expect(mockUpdateConversationSecrets).toHaveBeenCalledOnce();
+    expect(mockAttachConversationSecret).toHaveBeenCalledOnce();
     expect(mockSendMessage).not.toHaveBeenCalled();
   });
 });
