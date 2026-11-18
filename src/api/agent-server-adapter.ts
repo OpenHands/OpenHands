@@ -1264,11 +1264,12 @@ export function buildStartConversationRequest(
     max_iterations: resolveMaxIterations(conversationSettings.max_iterations),
     stuck_detection: true,
     // A linked work item already names the conversation, so title generation
-    // is suppressed and the snapshot title is sent verbatim — no LLM call is
-    // needed when a complete reference provides a valid name. Any other launch
-    // keeps autotitling.
+    // is suppressed — no LLM call is needed when a complete reference provides
+    // a valid name. Any other launch keeps autotitling. The name itself cannot
+    // ride this request: the agent-server's create payload has no `title`
+    // field (only `autotitle`), so the caller applies it with a follow-up
+    // rename once the conversation exists (see createConversation).
     autotitle: !workItemTitle,
-    ...(workItemTitle ? { title: workItemTitle } : {}),
     ...(options.titleLlmProfile
       ? { title_llm_profile: options.titleLlmProfile }
       : {}),

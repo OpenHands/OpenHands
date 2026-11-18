@@ -1227,6 +1227,84 @@ describe("AgentServerConversationService", () => {
       const [payloadCall] = mockHttpPost.mock.calls;
       expect(payloadCall[1]).toMatchObject({ conversation_runtime: "local" });
     });
+
+    // The agent-server's create payload has no `title` field — only `autotitle`,
+    // which the builder already suppresses for a linked work item. The name is
+    // therefore applied with a follow-up rename on the created conversation.
+    it("renames the conversation from a linked work item after creation", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "conv-work-item",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+      mockUpdateConversation.mockResolvedValue(undefined);
+
+      const created = await AgentServerConversationService.createConversation({
+        agentProfileId: "profile-1",
+        workItem: {
+          provider: "github",
+          id: "142",
+          title: "Mission Provider Filtering",
+        },
+      });
+
+      // Autotitling is off on the create request; the title rides the follow-up
+      // rename and is echoed on the start task so the pending name shows at once.
+      expect(mockHttpPost).toHaveBeenCalledWith(
+        "/api/conversations",
+        expect.objectContaining({ autotitle: false }),
+      );
+      expect(mockUpdateConversation).toHaveBeenCalledWith(
+        "conv-work-item",
+        expect.objectContaining({
+          title: "GH-142 \u2014 Mission Provider Filtering",
+        }),
+      );
+      expect(created.request.title).toBe(
+        "GH-142 \u2014 Mission Provider Filtering",
+      );
+    });
+
+    it("keeps AI titling and skips the rename for an ordinary launch", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "conv-plain",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      const created = await AgentServerConversationService.createConversation({
+        agentProfileId: "profile-1",
+      });
+
+      expect(mockHttpPost).toHaveBeenCalledWith(
+        "/api/conversations",
+        expect.objectContaining({ autotitle: true }),
+      );
+      expect(mockUpdateConversation).not.toHaveBeenCalled();
+      expect(created.request.title).toBeUndefined();
+    });
   });
 
   describe("downloadConversation local branch", () => {

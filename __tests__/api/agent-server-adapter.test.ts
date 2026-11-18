@@ -206,7 +206,7 @@ describe("buildStartConversationRequest", () => {
   });
 
   describe("work-item naming", () => {
-    it("names the conversation after a linked work item and suppresses AI titling", () => {
+    it("suppresses AI titling for a linked work item and leaves the name to the follow-up rename", () => {
       const payload = buildStartConversationRequest({
         ...PROFILE,
         settings: DEFAULT_SETTINGS,
@@ -217,7 +217,9 @@ describe("buildStartConversationRequest", () => {
         },
       });
 
-      expect(payload.title).toBe("GH-142 \u2014 Mission Provider Filtering");
+      // The create payload carries no `title`: the agent-server ignores that
+      // field, so the caller renames the conversation after creation.
+      expect(payload).not.toHaveProperty("title");
       expect(payload.autotitle).toBe(false);
     });
 
@@ -264,14 +266,14 @@ describe("buildStartConversationRequest", () => {
       });
     });
 
-    it("names the conversation from the identifier alone when the title is missing", () => {
+    it("suppresses AI titling from the identifier alone when the title is missing", () => {
       const payload = buildStartConversationRequest({
         ...PROFILE,
         settings: DEFAULT_SETTINGS,
         workItem: { provider: "jira", id: "SYN-241", title: "" },
       });
 
-      expect(payload.title).toBe("SYN-241");
+      expect(payload).not.toHaveProperty("title");
       expect(payload.autotitle).toBe(false);
     });
   });

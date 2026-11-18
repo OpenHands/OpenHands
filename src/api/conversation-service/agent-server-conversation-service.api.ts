@@ -802,15 +802,29 @@ class AgentServerConversationService {
     }
 
     const telemetryDistinctId = await getTelemetryDistinctId();
-    const data = await new ConversationClient(
+    const client = new ConversationClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
-    ).createConversation<DirectConversationInfo>({
+    );
+    const data = await client.createConversation<DirectConversationInfo>({
       ...payload,
       ...(conversationRuntime
         ? { conversation_runtime: conversationRuntime }
         : {}),
       ...(telemetryDistinctId ? { user_id: telemetryDistinctId } : {}),
     });
+
+    // A linked work item names the conversation from its launch-time snapshot.
+    // The agent-server's create payload has no `title` field (only `autotitle`,
+    // already suppressed in the builder), so the name is applied with a
+    // follow-up rename. Best effort: a failed rename must not fail the launch —
+    // the snapshot tags still carry the name for the display path.
+    const workItemTitle = formatWorkItemTitle(workItem);
+    if (workItemTitle) {
+      await client
+        .updateConversation(data.id, { title: workItemTitle })
+        .catch(() => undefined);
+    }
+
     const localBackend = getEffectiveLocalBackend();
     if (!localBackend) throw new NoBackendAvailableError();
 
@@ -843,6 +857,7 @@ class AgentServerConversationService {
         initial_message: payload.initial_message as
           AppConversationStartRequest["initial_message"] | undefined,
         plugins: plugins ?? null,
+        ...(workItemTitle ? { title: workItemTitle } : {}),
       },
       created_at: data.created_at,
       updated_at: data.updated_at,
