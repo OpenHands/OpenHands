@@ -88,6 +88,10 @@ export function Sidebar() {
   );
   const settingsErrorStatus = getErrorStatus(settingsError);
   const desktopSidebarRef = React.useRef<HTMLElement>(null);
+  // The sidebar element that had focus last, so a toggle that unmounts it can
+  // be noticed after the fact and focus can be handed on deliberately.
+  const lastSidebarFocusRef = React.useRef<HTMLElement | null>(null);
+  const wasCollapsedRef = React.useRef(collapsed);
   const {
     drawerWidth: sidebarWidth,
     isDragging: isResizingSidebar,
@@ -105,6 +109,43 @@ export function Sidebar() {
   React.useEffect(() => {
     closeMobileNav();
   }, [currentPath, closeMobileNav]);
+
+  // The collapsed popover only exists while collapsed, so its open flag would
+  // outlive it and reopen the popover on the way back. Reset it (and the
+  // pending hover-out timer) with the layout it belongs to.
+  React.useEffect(() => {
+    setCollapsedBackendPopoverOpen(false);
+    if (collapsedBackendCloseTimer.current) {
+      clearTimeout(collapsedBackendCloseTimer.current);
+      collapsedBackendCloseTimer.current = null;
+    }
+  }, [collapsed]);
+
+  // Toggling unmounts whatever had focus in the part of the rail that goes
+  // away, and the browser then drops focus to <body> without telling anyone.
+  // Hand it to the toggle for the new state so keyboard and screen-reader
+  // users stay in the sidebar instead of losing their place.
+  React.useEffect(() => {
+    if (wasCollapsedRef.current === collapsed) {
+      return;
+    }
+    wasCollapsedRef.current = collapsed;
+
+    const focusedBefore = lastSidebarFocusRef.current;
+    lastSidebarFocusRef.current = null;
+    if (!focusedBefore || focusedBefore.isConnected) {
+      return;
+    }
+
+    const sidebar = desktopSidebarRef.current;
+    if (!sidebar || sidebar.contains(document.activeElement)) {
+      return;
+    }
+
+    sidebar
+      .querySelector<HTMLElement>('[data-testid="sidebar-collapse-toggle"]')
+      ?.focus();
+  }, [collapsed]);
 
   React.useEffect(() => {
     if (isMobileNavOpen) {
@@ -225,6 +266,11 @@ export function Sidebar() {
         aria-label={t(I18nKey.SIDEBAR$NAVIGATION_LABEL)}
         data-collapsed={collapsed ? "true" : "false"}
         onClick={handleCollapsedRailClick}
+        onFocus={(event) => {
+          if (event.target instanceof HTMLElement) {
+            lastSidebarFocusRef.current = event.target;
+          }
+        }}
         onMouseEnter={() => {
           if (collapsed) {
             setCollapsedRailHovered(true);

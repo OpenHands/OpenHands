@@ -26,6 +26,7 @@ import { getLockedCloudHost } from "#/api/agent-server-config";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { LOCKED_CLOUD_SETTINGS_NAV_PATH } from "#/constants/settings-nav";
 import { isApplePlatform } from "#/utils/utils";
+import { TOGGLE_SIDEBAR_ARIA_SHORTCUTS } from "#/hooks/use-toggle-sidebar-shortcut";
 
 const ICON_SIZE = 18;
 
@@ -75,6 +76,8 @@ export interface CommandMenuItemDefinition {
   title?: string;
   description?: string;
   keywords?: string;
+  /** `aria-keyshortcuts` for an item the app also binds globally. */
+  ariaKeyshortcuts?: string;
   icon: React.ReactElement;
   to?: string;
   perform?: () => void;
@@ -259,6 +262,7 @@ export const createCommandMenuItems = ({
       titleKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_TITLE,
       descriptionKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_DESCRIPTION,
       keywordsKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_KEYWORDS,
+      ariaKeyshortcuts: TOGGLE_SIDEBAR_ARIA_SHORTCUTS,
       icon: <Keyboard size={ICON_SIZE} />,
       perform: toggleSidebar,
     },
