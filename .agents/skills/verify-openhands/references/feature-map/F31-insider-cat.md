@@ -1,4 +1,4 @@
-# F30 — Insider Cat and its travelling Voice companion
+# F31 — Insider Cat and its travelling Voice companion
 
 Insider Cat is an installed App with a Projects page, a saved OpenHands agent
 conversation, and Voice controls that follow that conversation around Canvas.
@@ -11,28 +11,28 @@ Source: `src/components/features/canvas-extensions/`, `src/routes/canvas-extensi
 
 ## Sub-features
 
-- `F30.entry`: the enabled App contributes a Cat icon and a Projects entry; its page and nested conversation URLs load inside the selected backend.
-- `F30.create`: the first accepted typed request creates exactly one top-level Cat on the local runtime, with its own ID, host workspace and durable user event; opening New Cat alone creates nothing.
-- `F30.profile-capabilities`: a new Cat inherits the active OpenHands agent profile's tools and enabled skills, Canvas confirmation/security settings, plus Insider instructions and advertised runtime context; changing an LLM does not supply missing tools.
-- `F30.selected-work`: selecting work preserves the draft and supplies that worker's full identity as data to the next typed Cat request without messaging the worker.
-- `F30.work-filter`: title/ID and workspace filters apply to loaded work; coverage and Load more distinguish a partial list from the whole backend.
-- `F30.resume`: old saved Cats can be selected and resumed with their original ID and history; remembered selections are scoped to backend and organization and revalidated.
-- `F30.invalid-controller`: missing, worker or child IDs cannot become the active Cat or receive a Voice call; legacy controller identity must not produce a misleading badge-to-page dead end.
-- `F30.continuity`: messages sent from Projects and the regular conversation view share one saved history; page navigation preserves an unsent App draft while the App stays active.
-- `F30.badges`: Cat identity is visible in the normal conversation header and conversation list/panel, with a link back to that Cat; worker and child conversations remain distinct.
-- `F30.new-command`: New Cat and `/new` prepare a fresh Cat through the App, including `/new` from regular chat; neither sends the command to the old Cat nor silently creates an ordinary worker.
-- `F30.condense-app`: App `/condense` compacts the chosen saved conversation without changing its ID or sending an ordinary agent turn; running/approval states explain the refusal and preserve the command draft.
-- `F30.condense-host`: regular-view compaction ends that Cat's current Voice call before requesting compaction; a failed compaction does not silently retain a call with stale context.
-- `F30.companion`: leaving Projects exposes one compact companion in the shell, with the same Cat and call; returning restores page controls without overlapping duplicate controls.
-- `F30.voice-availability`: Talk explains missing selection or unavailable Voice, checks availability before acquiring a microphone, and reports a useful setup or retry action without disabling typed chat.
-- `F30.voice-start`: Talk establishes a conversation-bound call, displays connecting/listening state and releases resources after a denied permission or failed connection.
-- `F30.voice-handoff`: a spoken task reaches the saved OpenHands Cat exactly once, runs its real tools and returns the result through Voice; failures are visible and an unrelated or stale result is never presented as success.
-- `F30.voice-mute`: Mute toggles microphone input independently of output playback, saved agent work and ending the call.
-- `F30.voice-output`: Stop speaking suppresses audible output; Codex stays suppressed until Resume audio, while the OpenAI API transport cancels the current response; neither silently ends the call or mutes input.
-- `F30.voice-end`: End call releases microphone, peer connection and provider call while preserving the saved conversation and already accepted agent work.
-- `F30.voice-cleanup`: choosing another Cat, New Cat, changing backend, disabling or updating the App disposes the old call; late setup/results cannot revive or cross into the new selection.
-- `F30.run-attention`: the Cat rests, wakes, listens, speaks and works with text status alongside its pose; approval, paused, error and unknown states remain visible and actionable.
-- `F30.phone-motion`: the page and companion remain contained and usable on phone/tablet, keyboard focus is visible, and reduced motion removes animation without hiding state.
+- `F31.entry`: the enabled App contributes a Cat icon and a Projects entry; its page and nested conversation URLs load inside the selected backend.
+- `F31.create`: the first accepted typed request creates exactly one top-level Cat on the local runtime, with its own ID, host workspace and durable user event; opening New Cat alone creates nothing.
+- `F31.profile-capabilities`: a new Cat inherits the active OpenHands agent profile's tools and enabled skills, Canvas confirmation/security settings, plus Insider instructions and advertised runtime context; changing an LLM does not supply missing tools.
+- `F31.selected-work`: selecting work preserves the draft and supplies that worker's full identity as data to the next typed Cat request without messaging the worker.
+- `F31.work-filter`: title/ID and workspace filters apply to loaded work; coverage and Load more distinguish a partial list from the whole backend.
+- `F31.resume`: old saved Cats can be selected and resumed with their original ID and history; remembered selections are scoped to backend and organization and revalidated.
+- `F31.invalid-controller`: missing, worker or child IDs cannot become the active Cat or receive a Voice call; legacy controller identity must not produce a misleading badge-to-page dead end.
+- `F31.continuity`: messages sent from Projects and the regular conversation view share one saved history; page navigation preserves an unsent App draft while the App stays active.
+- `F31.badges`: Cat identity is visible in the normal conversation header and conversation list/panel, with a link back to that Cat; worker and child conversations remain distinct.
+- `F31.new-command`: New Cat and `/new` prepare a fresh Cat through the App, including `/new` from regular chat; neither sends the command to the old Cat nor silently creates an ordinary worker.
+- `F31.condense-app`: App `/condense` compacts the chosen saved conversation without changing its ID or sending an ordinary agent turn; running/approval states explain the refusal and preserve the command draft.
+- `F31.condense-host`: regular-view compaction ends that Cat's current Voice call before requesting compaction; a failed compaction does not silently retain a call with stale context.
+- `F31.companion`: leaving Projects exposes one compact companion in the shell, with the same Cat and call; returning restores page controls without overlapping duplicate controls.
+- `F31.voice-availability`: Talk explains missing selection or unavailable Voice, checks availability before acquiring a microphone, and reports a useful setup or retry action without disabling typed chat.
+- `F31.voice-start`: Talk establishes a conversation-bound call, displays connecting/listening state and releases resources after a denied permission or failed connection.
+- `F31.voice-handoff`: a spoken task reaches the saved OpenHands Cat exactly once, runs its real tools and returns the result through Voice; failures are visible and an unrelated or stale result is never presented as success.
+- `F31.voice-mute`: Mute toggles microphone input independently of output playback, saved agent work and ending the call.
+- `F31.voice-output`: Stop speaking suppresses audible output; Codex stays suppressed until Resume audio, while the OpenAI API transport cancels the current response; neither silently ends the call or mutes input.
+- `F31.voice-end`: End call releases microphone, peer connection and provider call while preserving the saved conversation and already accepted agent work.
+- `F31.voice-cleanup`: choosing another Cat, New Cat, changing backend, disabling or updating the App disposes the old call; late setup/results cannot revive or cross into the new selection.
+- `F31.run-attention`: the Cat rests, wakes, listens, speaks and works with text status alongside its pose; approval, paused, error and unknown states remain visible and actionable.
+- `F31.phone-motion`: the page and companion remain contained and usable on phone/tablet, keyboard focus is visible, and reduced motion removes animation without hiding state.
 
 ## How to get to it (user POV)
 
@@ -82,8 +82,8 @@ Preconditions:
   checks must actually supply Terminal, the file editor, default enabled skills
   and `openhands-api`; a model-only profile is not an equivalent precondition.
   Keep secret values out of recorded prompts and artifacts.
-- Run `control-openhands fixture git-repo --name qa-f30`, then
-  `control-openhands conversation start --workspace qa-f30 --prompt "Reply QA_F30_WORKER. Do not run tools or change files." --wait`.
+- Run `control-openhands fixture git-repo --name qa-f31`, then
+  `control-openhands conversation start --workspace qa-f31 --prompt "Reply QA_F31_WORKER. Do not run tools or change files." --wait`.
   Record its `<worker-id>` and full `<workspace>` from
   `control-openhands conversation status <worker-id>`. This owned worker supplies
   a workspace option and is retained until all recipes finish. Record its event
@@ -111,23 +111,23 @@ Preconditions:
   `data-action`/`data-role` selectors, not Canvas-style test IDs. Scope them to
   `.insider-app` or `.insider-voice` because both views can exist in the DOM.
 
-- **Entry and resting state (`F30.entry`).** Run
+- **Entry and resting state (`F31.entry`).** Run
   `control-openhands browser click 'testid=sidebar-canvas-extension-insider-cat-projects' --expect-url '/extensions/insider-cat/projects(\?|$)'`,
   `control-openhands browser snapshot '.insider-app'`,
   `control-openhands browser attr '.insider-app .insider-cat-avatar' data-pose`
-  and `control-openhands browser screenshot --feature F30.entry --name projects`.
+  and `control-openhands browser screenshot --feature F31.entry --name projects`.
   The page shows the SVG Cat, one Talk button, conversation controls, composer
   and Your work. With no Cat running, its pose is `sleeping`. Read the rail
   element's snapshot and SVG to verify its Cat icon. Repeat via
   `control-openhands browser goto /extensions/insider-cat/projects`; the same
   page loads on the same backend. No conversation is created by either visit.
 
-- **First saved Cat (`F30.create`).** Record
+- **First saved Cat (`F31.create`).** Record
   `control-openhands api GET /api/conversations/count`. Click
   `control-openhands browser click '.insider-app [data-action="new-cat"]'`
   and read the count again: unchanged. Select
   `control-openhands browser select '.insider-app [data-action="workspace"]' '<workspace>'`,
-  fill `control-openhands browser fill '.insider-app [data-action="draft"]' 'Reply QA_F30_CAT_A. Do not run tools or change files.'`,
+  fill `control-openhands browser fill '.insider-app [data-action="draft"]' 'Reply QA_F31_CAT_A. Do not run tools or change files.'`,
   then `control-openhands browser click '.insider-app [data-action="send"]'`.
   `control-openhands browser wait-url '/projects/conversations/'` and
   `control-openhands browser url` print `<cat-a>`. Wait with
@@ -141,7 +141,7 @@ Preconditions:
   backend. Reload and inspect the App history: the accepted request remains, the composer
   is clear, and there is no second Cat or duplicate user event.
 
-- **Real tools, skills and backend access (`F30.profile-capabilities`).** Open
+- **Real tools, skills and backend access (`F31.profile-capabilities`).** Open
   `control-openhands browser click '.insider-app [data-action="open-controller"]' --expect-url '/conversations/'`.
   Use `F07.agent-tools-modal` and `F07.skills-modal` to inspect the actual system
   message, configured tools and loaded skills, not the model's self-report.
@@ -158,9 +158,9 @@ Preconditions:
   claim or a count of loaded cards. Read the saved agent configuration and policy
   against the active profile; the stored profile itself must remain unchanged.
 
-- **Selected worker and display (`F30.selected-work`).** Return with
+- **Selected worker and display (`F31.selected-work`).** Return with
   `control-openhands browser goto /extensions/insider-cat/projects/conversations/<cat-a>`.
-  Fill `control-openhands browser fill '.insider-app [data-action="draft"]' 'QA_F30_SELECTED: acknowledge the selected work only. Do not message it, run tools or change files.'`
+  Fill `control-openhands browser fill '.insider-app [data-action="draft"]' 'QA_F31_SELECTED: acknowledge the selected work only. Do not message it, run tools or change files.'`
   and `control-openhands browser fill '.insider-app [data-action="search"]' '<worker-id>'`.
   Click `control-openhands browser click '.insider-app [data-action="select-worker"]'`;
   `control-openhands browser value '.insider-app [data-action="draft"]'` stays
@@ -172,9 +172,9 @@ Preconditions:
   user-authored JSON is not stripped. Clear selection with
   `control-openhands browser click '.insider-app [data-role="target"] button'`.
 
-- **Work filters and coverage (`F30.work-filter`).** With `<worker-id>` still in
+- **Work filters and coverage (`F31.work-filter`).** With `<worker-id>` still in
   search, `control-openhands browser count '.insider-app .cat-card'` is `1`.
-  Fill the search with `QA_F30_NO_MATCH` and the count is `0`, with readable empty
+  Fill the search with `QA_F31_NO_MATCH` and the count is `0`, with readable empty
   text. Clear it, select `<workspace>` using
   `control-openhands browser select '.insider-app [data-action="project"]' '<workspace>'`,
   and read `control-openhands browser text '.insider-app [data-role="coverage"]'`.
@@ -186,18 +186,18 @@ Preconditions:
   compare the filtered cards and coverage. Reset both filters (project value
   `''`); the Cat controllers are not ordinary Your work cards.
 
-- **Same conversation in both views (`F30.continuity`).** On `<cat-a>` Projects,
-  fill the draft with `QA_F30_UNSENT`, open Full conversation and use its composer
-  to send `QA_F30_REGULAR: acknowledge only; do not run tools or change files.`
+- **Same conversation in both views (`F31.continuity`).** On `<cat-a>` Projects,
+  fill the draft with `QA_F31_UNSENT`, open Full conversation and use its composer
+  to send `QA_F31_REGULAR: acknowledge only; do not run tools or change files.`
   Wait for the saved turn, then click
   `control-openhands browser click 'role=link[name="Open Insider Cat"][exact]' --expect-url '/projects/conversations/<cat-a>'`.
   The picker still selects `<cat-a>`, its history includes the regular-view
-  request, and `browser value` of the App draft remains `QA_F30_UNSENT`.
-  The saved user events contain no `QA_F30_UNSENT`. Clear this draft before the
+  request, and `browser value` of the App draft remains `QA_F31_UNSENT`.
+  The saved user events contain no `QA_F31_UNSENT`. Clear this draft before the
   next recipe. Reload: accepted history remains; unsent drafts are not promised
   across reloads, disablement or backend changes.
 
-- **Badges in regular views (`F30.badges`).** Open Full conversation and run
+- **Badges in regular views (`F31.badges`).** Open Full conversation and run
   `control-openhands browser snapshot 'testid=chat-pane-header'` and
   `control-openhands browser count 'testid=chat-pane-header >> testid=insider-cat-badge'`:
   one labelled Cat badge links to its App URL. Inspect its row in the normal
@@ -205,15 +205,15 @@ Preconditions:
   Cat styling belongs to the controller, not every conversation in its workspace.
   Use `control-openhands browser viewport phone`, visit
   `/conversations/<cat-a>/panel`, and capture
-  `control-openhands browser screenshot --feature F30.badges --name phone-panel`.
+  `control-openhands browser screenshot --feature F31.badges --name phone-panel`.
   The identity remains distinguishable alongside normal status/archived styling.
   Return to desktop and `<cat-a>` Projects.
 
-- **New Cat from both composers (`F30.new-command`).** Save the current count
+- **New Cat from both composers (`F31.new-command`).** Save the current count
   and `<cat-a>` user events. In App draft enter `/new` and click Send: the new-Cat
   view opens, count and old events stay unchanged, and no ordinary worker is
   created. Select `<workspace>` and send
-  `QA_F30_CAT_B: acknowledge only; do not run tools or change files.` Record the
+  `QA_F31_CAT_B: acknowledge only; do not run tools or change files.` Record the
   new URL as `<cat-b>`, wait, and read its API record: new ID, controller tags,
   same configured profile capabilities. Open `<cat-a>` in regular chat, fill
   `testid=chat-input` with `/new`, press Escape to close suggestions, then Enter
@@ -222,7 +222,7 @@ Preconditions:
   sending. The old Cat is still resumable. Also inspect the regular slash menu:
   `/new` is offered for a local Cat even though ordinary local chats differ.
 
-- **Resume and scoped selection (`F30.resume`).** On Projects use
+- **Resume and scoped selection (`F31.resume`).** On Projects use
   `control-openhands browser select '.insider-app [data-action="controller"]' '<cat-b>'`.
   Wait for its nested URL, reload, and read the select value and recent history:
   `<cat-b>` remains selected, without duplicating it or replacing its configuration.
@@ -232,7 +232,7 @@ Preconditions:
   switch away/back and verify each selected ID against that backend's API.
   Browser storage alone does not prove scoping or controller validity.
 
-- **Invalid and legacy identity (`F30.invalid-controller`).** First visit
+- **Invalid and legacy identity (`F31.invalid-controller`).** First visit
   `/extensions/insider-cat/projects/conversations/<worker-id>` and inspect the
   status, disabled Send and Talk, and request log: the App must not turn that
   ordinary worker into a Cat. Repeat with a missing owned ID and a tagged child
@@ -244,7 +244,7 @@ Preconditions:
   controller rule to accept children or arbitrary workers to make this pass.
   Return to the valid `<cat-a>` URL and verify its controls recover.
 
-- **Compaction from the App (`F30.condense-app`).** Settle `<cat-a>`, note its
+- **Compaction from the App (`F31.condense-app`).** Settle `<cat-a>`, note its
   message-event count and ID, fill its App draft with `/condense`, clear the
   network log, then click Send. Inspect
   `control-openhands browser network --filter 'condense|voice/realtime' --bodies`,
@@ -257,7 +257,7 @@ Preconditions:
   preserves `/condense` and sends no compaction request. An error response keeps
   an actionable notice rather than reporting success. Clear any retained draft.
 
-- **Compaction from regular Canvas (`F30.condense-host`).** With a live call on
+- **Compaction from regular Canvas (`F31.condense-host`).** With a live call on
   `<cat-a>`, use Full conversation (do not reload) and F05's context-window
   **Compact context** action, or regular `/condense` when offered. Clear the
   network log before the action and inspect its `condense|voice/realtime` requests,
@@ -266,7 +266,7 @@ Preconditions:
   conversation's compaction must not end `<cat-a>`'s call. This is a host
   notification check; App-only `/condense` does not cover it.
 
-- **Availability without audio (`F30.voice-availability`).** In the new-Cat
+- **Availability without audio (`F31.voice-availability`).** In the new-Cat
   view, `browser enabled` on `.insider-app [data-action="voice-start"]` is false
   with a short selection instruction. Select `<cat-a>`, inspect
   `control-openhands api GET /api/conversations/<cat-a>/voice`, clear network and
@@ -275,11 +275,11 @@ Preconditions:
   acquired, readable reason appears, and typed chat still works. Missing API key
   offers Settings → Secrets; missing Codex sign-in/install names that remedy
   without dumping provider errors or trying the other provider automatically.
-  Capture `control-openhands browser screenshot --feature F30.voice-availability --name unavailable`.
+  Capture `control-openhands browser screenshot --feature F31.voice-availability --name unavailable`.
   Test absent host companion support separately if a supported older host is
   available; disabling Voice must not disable typed Cat chat.
 
-- **Start a call (`F30.voice-start`).** With confirmed availability and microphone
+- **Start a call (`F31.voice-start`).** With confirmed availability and microphone
   permission, select `<cat-a>`, clear `browser media`/`browser network`, and click
   `.insider-app [data-action="voice-start"]`. Observe waking/connecting, then
   listening text and peaked ears; End call and Mute become usable. Inspect
@@ -308,20 +308,20 @@ Preconditions:
   Stop the owned browser, restore its original flags, start it again and require
   a successful call retry. Record the denial and recovery separately.
 
-- **Travelling call (`F30.companion`).** While the call is live, open Full
+- **Travelling call (`F31.companion`).** While the call is live, open Full
   conversation by click. `control-openhands browser visible '.insider-voice'`
   is true; its title belongs to `<cat-a>`, and `.insider-voice [data-action="end"]`
   operates the same call. There is no second realtime POST merely from navigation.
   Click the Cat badge back to Projects: the companion is hidden and the page's
   controls are active. Repeat via an unrelated normal conversation and the phone
   panel route. Inspect `browser media` across the transitions and capture
-  `control-openhands browser screenshot --feature F30.companion --name regular-view`.
+  `control-openhands browser screenshot --feature F31.companion --name regular-view`.
   The dock takes layout space and must not cover the composer or leave a blank
   duplicate control block on Projects.
 
-- **Saved agent handoff (`F30.voice-handoff`).** Record `<cat-a>`'s newest event
-  and speak a unique bounded task: “QA_F30_VOICE: use Terminal to run
-  `printf QA_F30_TOOL_RESULT` only, then tell me its result.” Read
+- **Saved agent handoff (`F31.voice-handoff`).** Record `<cat-a>`'s newest event
+  and speak a unique bounded task: “QA_F31_VOICE: use Terminal to run
+  `printf QA_F31_TOOL_RESULT` only, then tell me its result.” Read
   `control-openhands conversation events <cat-a> --kinds MessageEvent,ActionEvent,ObservationEvent --last 30`
   and `control-openhands browser media --voice`. Require exactly one saved user request,
   the named terminal action and matching observation, a settled agent answer
@@ -363,7 +363,7 @@ Preconditions:
   task. Record this branch separately from a normal handoff; transcript-only
   proof does not establish physical speaker silence or all audio barge-in races.
 
-- **Mute input (`F30.voice-mute`).** During that call click
+- **Mute input (`F31.voice-mute`).** During that call click
   `control-openhands browser click '.insider-app [data-action="mute"]'`;
   `control-openhands browser attr '.insider-app [data-action="mute"]' aria-pressed`
   is `true`, its label becomes Unmute, and status explains muted input. Verify
@@ -373,7 +373,7 @@ Preconditions:
   `aria-pressed` is `false`, the track is enabled, the same call listens and
   accepts a new bounded request. Neither click sends a new call setup or end.
 
-- **Stop output (`F30.voice-output`).** During real output click
+- **Stop output (`F31.voice-output`).** During real output click
   `control-openhands browser click '.insider-app [data-action="interrupt"]'`.
   With Codex the label becomes Resume audio and
   `control-openhands browser media --voice` shows that call's output element
@@ -385,7 +385,7 @@ Preconditions:
   current response is cancelled instead; do not expect a Codex Resume control.
   Media state proves browser suppression, not what a physical speaker emitted.
 
-- **End the call (`F30.voice-end`).** Click the visible view's
+- **End the call (`F31.voice-end`).** Click the visible view's
   `[data-action="end"]`, then inspect `browser network --filter 'voice/realtime'`,
   `browser media --voice`, its status and Talk button. There is one scoped hangup;
   that call's audio element has `hasSrcObject: false`, its captured microphone
@@ -396,7 +396,7 @@ Preconditions:
   Repeat while a previously accepted bounded tool task is running: ending Voice
   must not pause/delete that OpenHands task or duplicate it on reconnection.
 
-- **Disposal and late completion (`F30.voice-cleanup`).** Start a fresh call on
+- **Disposal and late completion (`F31.voice-cleanup`).** Start a fresh call on
   `<cat-a>` immediately before each separate transition: choose `<cat-b>`, click
   New Cat, switch to the second owned backend through F25, disable the App through
   F20, then update the reviewed App through F20. After each, require old media and
@@ -406,8 +406,8 @@ Preconditions:
   once, never revived. A call-state race needs its own evidence; a normal idle
   disable is not coverage of pending setup or a handoff in flight.
 
-- **Work and attention states (`F30.run-attention`).** Send the bounded typed
-  prompt `Run only: sleep 15. Then reply QA_F30_DONE.` in `<cat-a>` and observe
+- **Work and attention states (`F31.run-attention`).** Send the bounded typed
+  prompt `Run only: sleep 15. Then reply QA_F31_DONE.` in `<cat-a>` and observe
   `data-pose=working` with text status during the run; when it settles, inactive
   Voice returns to sleeping. Repeat on an owned confirmation-enabled Cat:
   waiting-for-confirmation must show an attention pose and approval text, and
@@ -416,10 +416,10 @@ Preconditions:
   provider error, preserve the error text/status and recovery controls. A run
   ending is not itself proof that the requested task succeeded.
 
-- **Phone, keyboard and reduced motion (`F30.phone-motion`).** On `<cat-a>`
+- **Phone, keyboard and reduced motion (`F31.phone-motion`).** On `<cat-a>`
   Projects run `control-openhands browser viewport phone`,
   `control-openhands browser bbox '.insider-app'`,
-  `control-openhands browser screenshot --feature F30.phone-motion --name page-phone`.
+  `control-openhands browser screenshot --feature F31.phone-motion --name page-phone`.
   The controls fit with no horizontal overflow or hidden Talk button. Tab through
   picker, New Cat, voice actions and composer: focus remains visible. Repeat at
   `browser viewport tablet`. On a live call navigate to regular chat and check

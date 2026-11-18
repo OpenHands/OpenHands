@@ -7,7 +7,7 @@ starts workers, and project files. Canvas shows what the server stores: a
 Projects list, a project page with the coordinator, a board grouped by what
 needs the user, and the files. Everything sits behind the `projects`
 experimental feature (Settings › Experimental). Insider's Cat persona,
-docked chat and Voice are App features (F30), not this family.
+docked chat and Voice are App features (F31), not this family.
 
 Source: `src/routes/projects.tsx`, `src/routes/project.tsx`, `src/components/features/projects/`, `src/api/projects-service/projects-service.api.ts`, `src/hooks/query/use-projects.ts`, `src/hooks/query/use-project-names.ts`, `src/components/features/conversation/project-badge.tsx`, `src/components/features/chat/project-message-header-line.tsx`, `src/utils/project-message-header.ts`, `src/components/features/sidebar/sidebar-rail-body.tsx`, `src/components/features/sidebar/sidebar-nav-link.tsx`, `src/components/features/chat/chat-add-file-button.tsx`, `src/utils/project-artifact-kind.ts`.
 
@@ -134,5 +134,5 @@ on #19495 cover `F32.off`, `F32.entry`, `F32.create`, `F32.coordinator`,
   than reloading, which would hide a refresh bug.
 - While a conversation is running, the server can return tags from before a
   PATCH; resolve a finished card, as the resolved banner does.
-- The Insider App's Projects page (F30) is a different surface at
+- The Insider App's Projects page (F31) is a different surface at
   `/extensions/insider-cat/projects`; do not mix its evidence into F32.
