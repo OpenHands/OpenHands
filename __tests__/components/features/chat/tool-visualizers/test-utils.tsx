@@ -16,6 +16,7 @@ import {
   FileEditorObservation,
   GrepObservation,
   GlobObservation,
+  MCPToolObservation,
   TerminalObservation,
   TaskObservation,
 } from "#/types/agent-server/core/base/observation";
@@ -212,6 +213,19 @@ export const taskObservation = (
     task_id: "task_00000001",
     subagent: "code-explorer",
     status: "completed",
+    ...observation,
+  },
+});
+
+export const mcpObservation = (
+  observation: Partial<MCPToolObservation> = {},
+): ObservationEvent<MCPToolObservation> => ({
+  ...observationEnvelope("mcp", "mcp"),
+  observation: {
+    kind: "MCPToolObservation",
+    content: [{ type: "text", text: "server started" }],
+    is_error: false,
+    tool_name: "start_server",
     ...observation,
   },
 });
