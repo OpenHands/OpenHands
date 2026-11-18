@@ -1,6 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import {
+  CheckCheck,
   Clock3,
   Folder,
   ListFilter,
@@ -110,6 +111,8 @@ export interface ConversationLayoutsMenuProps {
   automationNameFacets: readonly string[];
   totalConversationsCount: number;
   onRequestDeleteAll: () => void;
+  onMarkAllAsRead?: () => void;
+  hasUnreadConversations?: boolean;
 }
 
 export function ConversationLayoutsMenu({
@@ -121,6 +124,8 @@ export function ConversationLayoutsMenu({
   automationNameFacets,
   totalConversationsCount,
   onRequestDeleteAll,
+  onMarkAllAsRead,
+  hasUnreadConversations,
 }: ConversationLayoutsMenuProps) {
   const { t } = useTranslation("openhands");
   const preferences = useConversationPanelPreferencesStore();
@@ -280,6 +285,21 @@ export function ConversationLayoutsMenu({
           />
 
           <MenuSeparator />
+          {onMarkAllAsRead && (
+            <>
+              <MenuRow
+                testId="mark-all-conversations-as-read"
+                icon={CheckCheck}
+                label={t(I18nKey.CONVERSATION$MARK_ALL_AS_READ)}
+                disabled={!hasUnreadConversations}
+                onClick={() => {
+                  onMarkAllAsRead();
+                  setMenuOpen(false);
+                }}
+              />
+              <MenuSeparator />
+            </>
+          )}
           <MenuRow
             testId="delete-all-conversations"
             icon={Trash2}

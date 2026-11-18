@@ -24,6 +24,7 @@ import { ConversationCardFooter } from "./conversation-card-footer";
 import { ConversationStatusBadges } from "./conversation-status-badges";
 import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 import { useDownloadConversation } from "#/hooks/use-download-conversation";
+import { useConversationReadStateStore } from "#/stores/conversation-read-state-store";
 
 interface ConversationCardProps {
   onClick?: () => void;
@@ -131,6 +132,27 @@ export function ConversationCard({
   const displayTags = getDisplayConversationTags(tags);
   const hasDisplayTags = displayTags.length > 0;
   const showTagChipRow = showTags && hasDisplayTags;
+
+  const isUnread = useConversationReadStateStore((state) =>
+    conversationId
+      ? state.isConversationUnread({
+          conversationId,
+          lastUpdatedAt,
+          executionStatus,
+          isCurrent: isActive,
+        })
+      : false,
+  );
+  const markAsRead = useConversationReadStateStore((state) => state.markAsRead);
+  const markAsUnread = useConversationReadStateStore(
+    (state) => state.markAsUnread,
+  );
+
+  React.useEffect(() => {
+    if (isActive && conversationId) {
+      markAsRead(conversationId);
+    }
+  }, [isActive, conversationId, markAsRead]);
 
   // Effective archived state: an explicit prop (the panel passes the user's
   // archive plus the missing-runtime inference), or the missing-runtime
@@ -244,6 +266,31 @@ export function ConversationCard({
     onTogglePin?.();
   };
 
+  const handleCardClick = () => {
+    if (conversationId) {
+      markAsRead(conversationId);
+    }
+    onClick?.();
+  };
+
+  const handleMarkAsRead = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (conversationId) {
+      markAsRead(conversationId);
+    }
+    onContextMenuToggle?.(false);
+  };
+
+  const handleMarkAsUnread = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (conversationId) {
+      markAsUnread(conversationId);
+    }
+    onContextMenuToggle?.(false);
+  };
+
   const renderPinButton = () => (
     <button
       type="button"
@@ -277,7 +324,8 @@ export function ConversationCard({
     onUnarchive ||
     onChangeTitle ||
     onEditTags ||
-    showOptions
+    showOptions ||
+    conversationId
   );
   const hasHoverActions = hasContextMenu || !!onTogglePin;
   const showPersistentPinIcon = alwaysShowPinIcon && isPinned && !!onTogglePin;
@@ -292,7 +340,7 @@ export function ConversationCard({
       data-testid="conversation-card"
       data-context-menu-open={contextMenuOpen.toString()}
       data-active={isActive ? "true" : "false"}
-      onClick={onClick}
+      onClick={handleCardClick}
       className={cn(
         "group relative h-auto w-full cursor-pointer rounded-md py-1 pl-2 pr-1 transition-colors max-md:flex max-md:min-h-12 max-md:flex-col max-md:justify-center",
         !contextMenuOpen && "hover:bg-surface",
@@ -310,6 +358,7 @@ export function ConversationCard({
             isStarting={isStarting}
             sandboxStatus={sandboxStatus}
             isArchived={effectiveArchived}
+            isUnread={isUnread}
           />
           {sandboxStatus === "ERROR" && !effectiveArchived && (
             <ConversationStatusBadges />
@@ -375,6 +424,13 @@ export function ConversationCard({
                       onEditTags={onEditTags && handleEditTags}
                       onDownloadViaVSCode={handleDownloadViaVSCode}
                       onDownloadConversation={handleDownloadConversation}
+                      isUnread={isUnread}
+                      onMarkAsRead={
+                        conversationId ? handleMarkAsRead : undefined
+                      }
+                      onMarkAsUnread={
+                        conversationId ? handleMarkAsUnread : undefined
+                      }
                       executionStatus={executionStatus}
                       sandboxStatus={sandboxStatus}
                       conversationId={conversationId}
@@ -410,6 +466,11 @@ export function ConversationCard({
                   onEditTags={onEditTags && handleEditTags}
                   onDownloadViaVSCode={handleDownloadViaVSCode}
                   onDownloadConversation={handleDownloadConversation}
+                  isUnread={isUnread}
+                  onMarkAsRead={conversationId ? handleMarkAsRead : undefined}
+                  onMarkAsUnread={
+                    conversationId ? handleMarkAsUnread : undefined
+                  }
                   executionStatus={executionStatus}
                   sandboxStatus={sandboxStatus}
                   conversationId={conversationId}
