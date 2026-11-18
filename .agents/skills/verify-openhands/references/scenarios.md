@@ -125,7 +125,10 @@ share. Where a family's behavior can depend on one, it gets a bullet, or a
 - A **base path**, with and without the trailing slash, and a hostname that
   happens to contain the mount path.
 - A **plain-HTTP origin that is not loopback** (browser APIs for secure
-  contexts are absent there).
+  contexts are absent there). Every run has one: `$OH_VERIFY_LAN_URL`,
+  driven by `F26.lan-http-origin`. A change that calls `crypto.randomUUID`,
+  `navigator.clipboard`, a service worker or another secure-context API is
+  driven there too.
 - A browser **time zone** other than the server's (`browser timezone`), and
   a server host that is not in UTC (`TZ=<zone> control-openhands launch
   --new`; the launcher hands `TZ` to the services).

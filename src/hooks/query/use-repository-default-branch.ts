@@ -10,10 +10,22 @@ export const useRepositoryDefaultBranch = (
   repository: string | null,
   provider: Provider,
   enabled: boolean,
+  gitProviderId?: number | null,
 ) =>
   useQuery({
-    queryKey: ["repository", repository, "default-branch", provider],
-    queryFn: () => GitService.getRepositoryDefaultBranch(repository!, provider),
+    queryKey: [
+      "repository",
+      repository,
+      "default-branch",
+      provider,
+      gitProviderId ?? null,
+    ],
+    queryFn: () =>
+      GitService.getRepositoryDefaultBranch(
+        repository!,
+        provider,
+        gitProviderId,
+      ),
     enabled: enabled && !!repository && !!provider,
     staleTime: 1000 * 60 * 5, // 5 minutes
     retry: false,

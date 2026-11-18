@@ -11,6 +11,10 @@ interface OutputPaneProps {
   /** Show a hover copy button that yields the full, untruncated output.
    *  Defaults to true; suppressed automatically when there is no output. */
   copy?: boolean;
+  /** Expansion-control key for the output block within its card. Distinct
+   *  output blocks in one card need distinct keys so they don't toggle
+   *  together; see `CodeBlock`. */
+  expansionKey?: string;
 }
 
 /**
@@ -19,7 +23,12 @@ interface OutputPaneProps {
  * to the same limit the markdown path uses, with an inline control to reveal
  * the full output. The copy button always yields the untruncated output.
  */
-export function OutputPane({ output, exitCode, copy = true }: OutputPaneProps) {
+export function OutputPane({
+  output,
+  exitCode,
+  copy = true,
+  expansionKey,
+}: OutputPaneProps) {
   const { t } = useTranslation("openhands");
   const showExitBadge = exitCode != null && exitCode !== 0 && exitCode !== -1;
 
@@ -37,6 +46,7 @@ export function OutputPane({ output, exitCode, copy = true }: OutputPaneProps) {
         placeholder={t(I18nKey.OBSERVATION$COMMAND_NO_OUTPUT)}
         expandable
         wrapLongLines
+        expansionKey={expansionKey}
       />
     </div>
   );
