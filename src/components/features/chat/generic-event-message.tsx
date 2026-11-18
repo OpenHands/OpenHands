@@ -13,6 +13,7 @@ import {
   StepDisclosureContext,
   useStepDisclosure,
 } from "#/components/conversation-events/chat/step-disclosure-context";
+import { useRowExpansionKey } from "#/components/features/chat/row-expansion-context";
 
 interface GenericEventMessageProps {
   title: React.ReactNode;
@@ -26,6 +27,14 @@ interface GenericEventMessageProps {
   /** Optional icon rendered before the title text. */
   titleIcon?: React.ReactNode;
   timestamp?: string;
+  /**
+   * Control id for the disclosure state. When the message renders outside a
+   * step (a /model listing), the open state is keyed by this id within the
+   * current row so virtualization remounting the row does not collapse it.
+   */
+  disclosureId?: string;
+  /** Extra classes for the row's outer element, e.g. to adjust its margins. */
+  className?: string;
 }
 
 export function GenericEventMessage({
@@ -37,15 +46,21 @@ export function GenericEventMessage({
   titleTrailing,
   titleIcon,
   timestamp,
+  disclosureId,
+  className,
 }: GenericEventMessageProps) {
   const { t, i18n } = useTranslation("openhands");
+  const persistedDisclosureKey = useRowExpansionKey(disclosureId ?? "details");
+  const [showDetails, toggleDetails] = useStepDisclosure(
+    initiallyExpanded,
+    persistedDisclosureKey,
+  );
   const disclosure = React.useContext(StepDisclosureContext);
   const detailsOnly = disclosure?.detailsOnly;
   React.useEffect(() => {
     // Keep revealed output open when another tool restores individual rows.
     if (detailsOnly && disclosure.open !== true) disclosure.setOpen(true);
   }, [detailsOnly, disclosure]);
-  const [showDetails, toggleDetails] = useStepDisclosure(initiallyExpanded);
   const [hasFocusWithin, setHasFocusWithin] = React.useState(false);
   const timestampLabel = formatEventTimestamp(timestamp, i18n?.language);
   const {
@@ -136,7 +151,12 @@ export function GenericEventMessage({
   );
 
   return (
-    <div className="flex flex-col gap-1.5 my-1 py-1 text-sm w-full">
+    <div
+      className={cn(
+        "flex flex-col gap-1.5 my-1 py-1 text-sm w-full",
+        className,
+      )}
+    >
       {!detailsOnly && titleRow}
       {(detailsOnly || showDetails) && (
         <div

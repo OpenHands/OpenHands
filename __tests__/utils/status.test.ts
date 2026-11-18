@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { getStatusCode, getTaskStatusI18nKey } from "#/utils/status";
+import {
+  canStopRuntime,
+  getStatusCode,
+  getTaskStatusI18nKey,
+} from "#/utils/status";
 import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import type { AppConversationStartTaskStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -102,5 +106,22 @@ describe("getTaskStatusI18nKey", () => {
     ["RUNNING_SETUP_SCRIPT", I18nKey.CONVERSATION$STARTING_CONVERSATION],
   ] as const)("maps %s to its i18n key", (taskStatus, expectedKey) => {
     expect(getTaskStatusI18nKey(taskStatus)).toBe(expectedKey);
+  });
+});
+
+describe("canStopRuntime", () => {
+  it("allows stopping while the agent is active", () => {
+    expect(canStopRuntime(ExecutionStatus.RUNNING)).toBe(true);
+    expect(canStopRuntime(ExecutionStatus.IDLE, null)).toBe(true);
+  });
+
+  it("allows stopping a running cloud sandbox after the agent is paused", () => {
+    expect(canStopRuntime(ExecutionStatus.PAUSED, "RUNNING")).toBe(true);
+  });
+
+  it("hides stop once the sandbox is paused or the local agent is paused", () => {
+    expect(canStopRuntime(ExecutionStatus.PAUSED, "PAUSED")).toBe(false);
+    expect(canStopRuntime(ExecutionStatus.PAUSED, null)).toBe(false);
+    expect(canStopRuntime(null, "MISSING")).toBe(false);
   });
 });

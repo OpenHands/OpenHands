@@ -7,10 +7,14 @@ import { useUnifiedPauseConversation } from "./mutation/use-unified-stop-convers
 import { useUpdateConversationPublicFlag } from "./mutation/use-update-conversation-public-flag";
 import { useActiveConversation } from "./query/use-active-conversation";
 import { useEventStore } from "#/stores/use-event-store";
-import { displaySuccessToast } from "#/utils/custom-toast-handlers";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import { buildAgentCanvasUrl } from "#/utils/base-path";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 
 import { useDownloadConversation } from "./use-download-conversation";
 import {
@@ -18,7 +22,7 @@ import {
   SystemMessageForModal,
 } from "#/utils/system-message-adapter";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
-import { isExecutionActive } from "#/utils/status";
+import { canStopRuntime, isExecutionActive } from "#/utils/status";
 import { useSelectConversationTab } from "./use-select-conversation-tab";
 
 interface UseConversationNameContextMenuProps {
@@ -183,8 +187,13 @@ export function useConversationNameContextMenu({
       return;
     }
 
-    navigator.clipboard.writeText(shareUrl);
-    displaySuccessToast(t(I18nKey.CONVERSATION$LINK_COPIED));
+    void copyToClipboard(shareUrl).then((ok) => {
+      if (ok) {
+        displaySuccessToast(t(I18nKey.CONVERSATION$LINK_COPIED));
+      } else {
+        displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
+      }
+    });
   };
 
   return {
@@ -221,7 +230,10 @@ export function useConversationNameContextMenu({
     // Data
     systemMessage,
 
-    shouldShowStop: isExecutionActive(executionStatus),
+    shouldShowStop: canStopRuntime(
+      executionStatus,
+      conversation?.id === conversationId ? conversation?.sandbox_status : null,
+    ),
     shouldShowDownloadConversation: Boolean(conversationId && showOptions),
     shouldShowDisplayCost: showOptions,
     shouldShowAgentTools: Boolean(showOptions && systemMessage),

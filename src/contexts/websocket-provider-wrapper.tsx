@@ -88,11 +88,13 @@ export function WebSocketProviderWrapper({
     trustedLocalPlanningConversationId,
   ]);
 
-  const filteredSubConversations = subConversations?.filter(
-    (subConversation): subConversation is AppConversation =>
-      subConversation !== null &&
-      planningConversationIds.includes(subConversation.id),
-  );
+  const filteredSubConversations = React.useMemo(() => {
+    return subConversations?.filter(
+      (subConversation): subConversation is AppConversation =>
+        subConversation !== null &&
+        planningConversationIds.includes(subConversation.id),
+    );
+  }, [subConversations, planningConversationIds]);
 
   // A paused or unavailable runtime cannot accept a WebSocket connection. Its
   // persisted event history remains available through the backend API.

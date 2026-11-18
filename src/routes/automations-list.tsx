@@ -39,6 +39,14 @@ import {
   writeStoredAutomationViewMode,
   type AutomationViewMode,
 } from "#/components/features/automations/automation-view-mode";
+import {
+  AUTOMATION_GROUP_BY_VALUES,
+  groupAutomationsByTag,
+  readStoredAutomationGroupBy,
+  writeStoredAutomationGroupBy,
+  type AutomationGroupBy,
+} from "#/components/features/automations/automation-group-by";
+import { EnumFilterDropdown } from "#/components/shared/filters/enum-filter-dropdown";
 import { AutomationCardSkeleton } from "#/components/features/automations/automation-card-skeleton";
 import { EmptyState } from "#/components/features/automations/empty-state";
 import { ErrorState } from "#/components/features/automations/error-state";
@@ -56,6 +64,7 @@ import {
   useAutomationCreatorFilterUserId,
   useAutomationPermissions,
 } from "#/hooks/use-automation-permissions";
+import { useCloudIntegrationsConfig } from "#/hooks/query/use-cloud-integrations-config";
 import type {
   Automation,
   AutomationExportFile,
@@ -102,6 +111,11 @@ import { StatusBadge } from "#/components/features/automations/status-badge";
 import { setupDraftFromServerDraft } from "#/components/features/automations/setup/automation-setup-draft-service";
 
 const PAGE_SIZE = 50;
+
+const GROUP_BY_LABEL_KEYS: Record<AutomationGroupBy, I18nKey> = {
+  status: I18nKey.AUTOMATIONS$GROUP_BY_STATUS,
+  tag: I18nKey.AUTOMATIONS$GROUP_BY_TAG,
+};
 
 /**
  * The page renders the interface manifest's copy, so without an admitted
@@ -326,6 +340,9 @@ export default function AutomationsList() {
   const [viewMode, setViewMode] = useState<AutomationViewMode>(() =>
     readStoredAutomationViewMode(),
   );
+  const [groupBy, setGroupBy] = useState<AutomationGroupBy>(() =>
+    readStoredAutomationGroupBy(),
+  );
   const [draftLimit, setDraftLimit] = useState(PAGE_SIZE);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
@@ -344,12 +361,19 @@ export default function AutomationsList() {
   // manage_automations (admins/owners) on every backend kind.
   const { canManage } = useAutomationPermissions();
   const creatorFilterUserId = useAutomationCreatorFilterUserId();
-  // The creator the server filters by; undefined while the filter is hidden
-  // or set to "all".
-  const serverCreatedBy =
+  // The owner (run-as identity) the server filters by; undefined while the
+  // filter is hidden or set to "all".
+  const serverRunAs =
     creatorFilterUserId !== null && createdByFilter !== "all"
       ? createdByFilter
       : undefined;
+  // The Service accounts option follows the instance's service accounts flag,
+  // like the run-as UI; the config is read only where the filter is shown.
+  const { data: cloudConfig } = useCloudIntegrationsConfig({
+    enabled: creatorFilterUserId !== null,
+  });
+  const canFilterByServiceAccount =
+    cloudConfig?.isServiceAccountsEnabled === true;
 
   const {
     data: healthData,
@@ -371,10 +395,10 @@ export default function AutomationsList() {
     isPlaceholderData,
   } = useAutomations({
     enabled: isBackendHealthy,
-    // The server filters by creator so pages and `total` cover only matches;
+    // The server filters by owner so pages and `total` cover only matches;
     // the client predicate in applyDashboardView stays as the fallback for
     // an automation service that ignores the param.
-    createdBy: serverCreatedBy,
+    runAs: serverRunAs,
     // Same for the tag: the server filters, the client predicate backs it up.
     tag: tagFilter ?? undefined,
   });
@@ -388,6 +412,10 @@ export default function AutomationsList() {
     () => (tagCounts ?? []).map((entry) => entry.tag),
     [tagCounts],
   );
+  // Grouping by tag is offered where the tag filter is: only when the org has
+  // tags. Without them a stored choice falls back to the status sections.
+  const canGroupByTag = tagOptions.length > 0;
+  const isGroupedByTag = canGroupByTag && groupBy === "tag";
   const {
     data: draftsData,
     isLoading: isDraftsLoading,
@@ -474,6 +502,35 @@ export default function AutomationsList() {
     [visible],
   );
   const inactive = useMemo(() => visible.filter((a) => !a.enabled), [visible]);
+  const sections = useMemo(() => {
+    if (!isGroupedByTag) {
+      return [
+        {
+          key: "active",
+          title: t(I18nKey.AUTOMATIONS$ACTIVE),
+          automations: activeAutomations,
+        },
+        {
+          key: "inactive",
+          title: t(I18nKey.AUTOMATIONS$INACTIVE),
+          automations: inactive,
+        },
+      ];
+    }
+    const { tagged, untagged } = groupAutomationsByTag(visible);
+    return [
+      ...tagged.map(({ tag, automations }) => ({
+        key: `tag:${tag}`,
+        title: tag,
+        automations,
+      })),
+      {
+        key: "untagged",
+        title: t(I18nKey.AUTOMATIONS$NO_TAGS),
+        automations: untagged,
+      },
+    ];
+  }, [isGroupedByTag, visible, activeAutomations, inactive, t]);
 
   const handleToggle = (id: string, currentEnabled: boolean) => {
     const willEnable = !currentEnabled;
@@ -626,6 +683,11 @@ export default function AutomationsList() {
   const handleViewModeChange = useCallback((view: AutomationViewMode) => {
     setViewMode(view);
     writeStoredAutomationViewMode(view);
+  }, []);
+
+  const handleGroupByChange = useCallback((value: AutomationGroupBy) => {
+    setGroupBy(value);
+    writeStoredAutomationGroupBy(value);
   }, []);
 
   // Resets what filters to nothing: search and the dropdowns, never the sort.
@@ -787,7 +849,13 @@ export default function AutomationsList() {
           dashboard ? "flex-wrap" : "mt-6",
         )}
       >
-        <SearchInput value={searchQuery} onChange={setSearchQuery} />
+        <SearchInput
+          value={searchQuery}
+          onChange={setSearchQuery}
+          // Beside the group-by control the search keeps a basis, so a narrow
+          // row wraps its controls instead of squeezing the search to its icon.
+          className={canGroupByTag ? "basis-40" : undefined}
+        />
         {dashboard && (
           <AutomationsDashboardControls
             spec={dashboard.spec}
@@ -795,6 +863,7 @@ export default function AutomationsList() {
             trigger={triggerFilter}
             createdBy={createdByFilter}
             canFilterByCreator={creatorFilterUserId !== null}
+            canFilterByServiceAccount={canFilterByServiceAccount}
             tag={tagFilter}
             tagOptions={tagOptions}
             sort={sortValue}
@@ -803,6 +872,17 @@ export default function AutomationsList() {
             onCreatedByChange={setCreatedByFilter}
             onTagChange={setTagFilter}
             onSortChange={setSortValue}
+          />
+        )}
+        {canGroupByTag && (
+          <EnumFilterDropdown
+            testId="automations-group-by"
+            value={groupBy}
+            onChange={handleGroupByChange}
+            options={AUTOMATION_GROUP_BY_VALUES}
+            labelKeyByValue={GROUP_BY_LABEL_KEYS}
+            ariaLabel={t(I18nKey.AUTOMATIONS$GROUP_BY)}
+            triggerClassName="h-9 py-0"
           />
         )}
         <AutomationViewToggle
@@ -861,40 +941,26 @@ export default function AutomationsList() {
                     : null
                 }
               />
-              <AutomationGroup
-                title={t(I18nKey.AUTOMATIONS$ACTIVE)}
-                count={activeAutomations.length}
-                automations={activeAutomations}
-                view={viewMode}
-                onToggle={handleToggle}
-                onRunNow={handleRunNow}
-                runPendingId={
-                  dispatchMutation.isPending
-                    ? (dispatchMutation.variables ?? null)
-                    : null
-                }
-                onDelete={handleDeleteRequest}
-                onExport={handleExport}
-                onEdit={handleEditRequest}
-                insights={groupInsights}
-              />
-              <AutomationGroup
-                title={t(I18nKey.AUTOMATIONS$INACTIVE)}
-                count={inactive.length}
-                automations={inactive}
-                view={viewMode}
-                onToggle={handleToggle}
-                onRunNow={handleRunNow}
-                runPendingId={
-                  dispatchMutation.isPending
-                    ? (dispatchMutation.variables ?? null)
-                    : null
-                }
-                onDelete={handleDeleteRequest}
-                onExport={handleExport}
-                onEdit={handleEditRequest}
-                insights={groupInsights}
-              />
+              {sections.map((section) => (
+                <AutomationGroup
+                  key={section.key}
+                  title={section.title}
+                  count={section.automations.length}
+                  automations={section.automations}
+                  view={viewMode}
+                  onToggle={handleToggle}
+                  onRunNow={handleRunNow}
+                  runPendingId={
+                    dispatchMutation.isPending
+                      ? (dispatchMutation.variables ?? null)
+                      : null
+                  }
+                  onDelete={handleDeleteRequest}
+                  onExport={handleExport}
+                  onEdit={handleEditRequest}
+                  insights={groupInsights}
+                />
+              ))}
             </>
           ))}
 

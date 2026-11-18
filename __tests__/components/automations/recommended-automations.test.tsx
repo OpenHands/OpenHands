@@ -257,6 +257,7 @@ describe("recommended automations", () => {
       );
 
     expect(cardIds).toEqual([
+      "cve-remediation-factory",
       "github-pr-reviewer",
       "custom-automation",
       "github-issue-to-pr",
@@ -298,7 +299,7 @@ describe("recommended automations", () => {
     const suggestedHeading = screen.getByText(
       I18nKey.RECOMMENDED_AUTOMATIONS$SUGGESTED_TITLE,
     ).parentElement!;
-    expect(within(suggestedHeading).getByText("6")).toBeInTheDocument();
+    expect(within(suggestedHeading).getByText("7")).toBeInTheDocument();
     expect(
       screen.getByText(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_DESCRIPTION),
     ).toBeInTheDocument();
@@ -410,6 +411,29 @@ describe("recommended automations", () => {
       screen.queryByTestId("automations-filtered-empty"),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("template-filters")).toBe(filterRail);
+  });
+
+  it("names a built-in provider's filter chip after the product, with the logo it stands for", () => {
+    render(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        filters={{ integrationId: null, trigger: null }}
+        onFiltersChange={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    // The Data Center templates are Bitbucket Data Center's only through
+    // their repository picker; the integration catalog has no such entry.
+    const chip = screen.getByTestId(
+      "template-filter-integration-bitbucket_data_center",
+    );
+    expect(chip).toHaveTextContent(/^Bitbucket Data Center$/);
+    expect(chip.querySelector('img[alt="Bitbucket logo"]')).toBeInTheDocument();
+    expect(
+      screen.getByTestId("template-filter-integration-bitbucket"),
+    ).toHaveTextContent(/^Bitbucket$/);
   });
 
   it("shows a left-aligned MCP icon stack on each card", () => {

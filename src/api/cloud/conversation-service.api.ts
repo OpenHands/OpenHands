@@ -40,6 +40,11 @@ function overlayStoredRepoSelection(
     selected_branch:
       conversation.selected_branch ?? stored.selected_branch ?? null,
     git_provider: conversation.git_provider ?? stored.git_provider ?? null,
+    // The id belongs to the repository it was saved with, so a server-held
+    // repository without one must not pick up a stale cached id.
+    git_provider_id: conversation.selected_repository
+      ? (conversation.git_provider_id ?? null)
+      : (stored.git_provider_id ?? null),
     selected_workspace:
       conversation.selected_workspace ?? stored.selected_workspace ?? null,
   };
@@ -190,12 +195,13 @@ export async function downloadCloudConversation(
  */
 export async function deleteCloudConversation(
   conversationId: string,
+  scope?: { backend: Backend; orgId: string | null },
 ): Promise<void> {
-  const backend = getActiveCloudBackend();
   await callCloudProxy<unknown>({
-    backend,
+    backend: scope?.backend ?? getActiveCloudBackend(),
     method: "DELETE",
     path: `/api/v1/app-conversations/${conversationId}`,
+    ...(scope ? { orgId: scope.orgId } : {}),
   });
 }
 
@@ -269,6 +275,7 @@ export async function updateCloudConversationRepository(
   repository: string | null,
   branch: string | null,
   gitProvider: Provider | null,
+  gitProviderId?: number | null,
 ): Promise<AppConversation> {
   const backend = getActiveCloudBackend();
   return callCloudProxy<AppConversation>({
@@ -279,6 +286,7 @@ export async function updateCloudConversationRepository(
       selected_repository: repository,
       selected_branch: branch,
       git_provider: gitProvider,
+      ...(gitProviderId != null ? { git_provider_id: gitProviderId } : {}),
     },
   });
 }

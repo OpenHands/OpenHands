@@ -355,7 +355,7 @@ export function PluginLaunchModal({
                 value={triggerSchedule}
                 onChange={(e) => setTriggerSchedule(e.target.value)}
                 placeholder={t(I18nKey.LAUNCH$TRIGGER_SCHEDULE_PLACEHOLDER)}
-                className="w-full rounded-md border border-tertiary-light bg-input px-3 py-2 text-sm text-contrast focus:border-primary focus:outline-none"
+                className="w-full rounded-md border border-tertiary-light bg-tertiary px-3 py-2 text-sm text-contrast focus:border-primary focus:outline-none"
               />
               <label
                 htmlFor="plugin-trigger-timezone"
@@ -370,7 +370,7 @@ export function PluginLaunchModal({
                 value={triggerTimezone}
                 onChange={(e) => setTriggerTimezone(e.target.value)}
                 placeholder={t(I18nKey.LAUNCH$TRIGGER_TIMEZONE_PLACEHOLDER)}
-                className="w-full rounded-md border border-tertiary-light bg-input px-3 py-2 text-sm text-contrast focus:border-primary focus:outline-none"
+                className="w-full rounded-md border border-tertiary-light bg-tertiary px-3 py-2 text-sm text-contrast focus:border-primary focus:outline-none"
               />
               <p className="text-xs text-tertiary leading-relaxed">
                 {t(I18nKey.LAUNCH$TRIGGER_EDIT_HINT, {

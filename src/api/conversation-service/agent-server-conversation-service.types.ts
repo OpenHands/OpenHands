@@ -3,7 +3,10 @@ import type { ClientToolSpec } from "../canvas-ui-client-tool";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
 import { ExecutionStatus } from "#/types/agent-server/core";
-import type { ACPModelOption } from "#/constants/acp-providers";
+import type {
+  ACPEffortChoice,
+  ACPModelOption,
+} from "#/constants/acp-providers";
 
 /**
  * Lifecycle state of a cloud sandbox. Mirrors OpenHands' V1SandboxStatus.
@@ -83,6 +86,8 @@ export interface AppConversationStartRequest {
   selected_repository?: string | null;
   selected_branch?: string | null;
   git_provider?: Provider | null;
+  /** Cloud only: the connected git provider to clone with; omit for the type's default. */
+  git_provider_id?: number;
   suggested_task?: SuggestedTask | null;
   title?: string | null;
   trigger?: ConversationTrigger | null;
@@ -157,6 +162,7 @@ export interface AppConversation {
   selected_repository: string | null;
   selected_branch: string | null;
   git_provider: Provider | null;
+  git_provider_id?: number | null;
   title: string | null;
   trigger: ConversationTrigger | null;
   pr_number: number[];
@@ -188,6 +194,10 @@ export interface AppConversation {
    * Empty before the session starts and on servers that don't report models.
    */
   acp_available_models?: ACPModelOption[] | null;
+  /** Reasoning effort the ACP session reports for its current model. */
+  acp_current_effort?: string | null;
+  /** Effort levels the ACP session offers for its current model. */
+  acp_available_efforts?: ACPEffortChoice[] | null;
   /**
    * Server-side key-value tags from the agent-server's
    * ``ConversationInfo.tags`` (settable at creation and via
@@ -325,4 +335,8 @@ export interface RuntimeConversationInfo {
   stats: RuntimeConversationStats;
   /** Models an ACP session reported; empty otherwise. */
   available_models: ACPModelOption[];
+  /** Reasoning effort an ACP session reports for its current model. */
+  current_effort?: string | null;
+  /** Effort levels an ACP session offers for its current model. */
+  available_efforts?: ACPEffortChoice[];
 }
