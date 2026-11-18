@@ -661,6 +661,30 @@ describe("Conversation websocket behavior", () => {
     },
   );
 
+  it("stores a transient frame's event flagged isTransient, unlike a durable one", () => {
+    renderProvider();
+    // The connect-time `full_state` snapshot arrives as a transient frame and
+    // is never persisted server-side. The flag must travel with the event into
+    // the store (not just the routed tuple), because `getNewestEventId` reads
+    // it off the stored event to skip such frames when anchoring a `/model`
+    // stamp — a regression here re-introduces issue #19104's rollback.
+    dispatchMainFrame({
+      type: "transient",
+      event: makeStateEvent("connect-snapshot", "full_state", {
+        execution_status: "idle",
+      }),
+    });
+    dispatchMain(makeStateEvent("live-status", "execution_status", "running"));
+
+    const events = useEventStore.getState().events;
+    expect(
+      events.find((event) => event.id === "connect-snapshot")?.isTransient,
+    ).toBe(true);
+    expect(
+      events.find((event) => event.id === "live-status")?.isTransient,
+    ).toBeFalsy();
+  });
+
   it("keeps the main and planning replay boundaries independent", () => {
     renderProvider({
       subConversations: [makeSubConversation()],

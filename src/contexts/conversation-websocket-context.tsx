@@ -248,7 +248,16 @@ const routeSessionFrame = (
         isTransient: false,
       };
     case "transient":
-      return { event: frame.event, isReplay: false, isTransient: true };
+      // Mark the event itself (not just the routed tuple) so the flag travels
+      // with the event into the store: `getNewestEventId` reads it off the
+      // stored event to skip never-persisted transient frames (e.g. the
+      // connect-time `full_state` snapshot) when anchoring a `/model` stamp.
+      // The tuple-level flag is still consumed for replay-status ownership.
+      return {
+        event: { ...frame.event, isTransient: true },
+        isReplay: false,
+        isTransient: true,
+      };
     case "error":
       // The server answers a rejected inbound message with an ErrorFrame and
       // keeps the socket open ("not worth dropping over"), so there is no
