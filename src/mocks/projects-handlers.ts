@@ -244,27 +244,6 @@ export const PROJECTS_HANDLERS = [
     });
   }),
 
-  http.put(
-    "*/api/projects/:projectId/conversations/:conversationId",
-    ({ params }) => {
-      const found = find(params.projectId);
-      if (found instanceof Response) return found;
-      const id = String(params.conversationId);
-      if (
-        !found.conversations.some((c) => key(c.conversation_id) === key(id))
-      ) {
-        found.conversations.push(
-          conversation(id, null as unknown as string, {
-            execution_status: "idle",
-            turn: null,
-            parent_conversation_id: null,
-          }),
-        );
-      }
-      return HttpResponse.json(found.project);
-    },
-  ),
-
   http.delete(
     "*/api/projects/:projectId/conversations/:conversationId",
     ({ params }) => {

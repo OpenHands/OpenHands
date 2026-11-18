@@ -1,144 +1,30 @@
 import React from "react";
 import { useParams } from "react-router";
 import { useTranslation } from "react-i18next";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, MessageSquare, Pencil, Plus } from "lucide-react";
+import { ArrowLeft, MessageSquare, Pencil } from "lucide-react";
 import { HttpError } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
 import { NavigationLink } from "#/components/shared/navigation-link";
-import { BrandButton } from "#/components/features/settings/brand-button";
 import { ProjectBoard } from "#/components/features/projects/project-board";
 import { ProjectFiles } from "#/components/features/projects/project-files";
 import { ProjectMemory } from "#/components/features/projects/project-memory";
 import { EditProjectModal } from "#/components/features/projects/edit-project-modal";
 import { ProjectsOffNotice } from "#/components/features/projects/projects-off-notice";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
-import ProjectsService, {
-  projectIdKey,
-} from "#/api/projects-service/projects-service.api";
-import { useActiveBackend } from "#/contexts/active-backend-context";
+import { projectIdKey } from "#/api/projects-service/projects-service.api";
 import {
-  projectsQueryRoot,
   useProject,
   useProjectConversations,
   useProjectsEnabled,
 } from "#/hooks/query/use-projects";
-import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useNavigation } from "#/context/navigation-context";
-import { displayApiErrorToast } from "#/utils/custom-toast-handlers";
 import {
   conversationStateLabel,
   needsUser,
 } from "#/utils/project-conversation-state";
-import {
-  formControlButtonClassName,
-  formControlFieldClassName,
-} from "#/utils/form-control-classes";
+import { formControlButtonClassName } from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
 import { settingsLikeMainScrollClassName } from "#/utils/settings-like-page-layout-classes";
 import { PROJECTS_PATH } from "#/utils/project-paths";
-
-/** Pick a recent conversation that is not in this project yet, and add it. */
-function AddConversation({
-  projectId,
-  memberIds,
-}: {
-  projectId: string;
-  memberIds: Set<string>;
-}) {
-  const { t } = useTranslation("openhands");
-  const queryClient = useQueryClient();
-  const { backend } = useActiveBackend();
-  const [selected, setSelected] = React.useState("");
-  const { data } = useQuery({
-    queryKey: [...projectsQueryRoot(backend), "recent-conversations"],
-    queryFn: () => AgentServerConversationService.searchConversations(50),
-    staleTime: 30_000,
-    meta: { disableToast: true },
-  });
-  const candidates = (data?.items ?? []).filter(
-    (c) => !memberIds.has(projectIdKey(c.id)),
-  );
-  const add = useMutation({
-    mutationFn: () => ProjectsService.addConversation(projectId, selected),
-    meta: { disableToast: true },
-    onSuccess: () => setSelected(""),
-    onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: projectsQueryRoot(backend) }),
-    onError: (error) =>
-      displayApiErrorToast(error, t(I18nKey.PROJECTS$UPDATE_FAILED)),
-  });
-  if (!candidates.length) return null;
-  return (
-    <form
-      className="flex items-center gap-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (selected) add.mutate();
-      }}
-    >
-      <select
-        data-testid="project-add-conversation"
-        aria-label={t(I18nKey.PROJECTS$ADD_CONVERSATION)}
-        className={`${formControlFieldClassName} max-w-80`}
-        value={selected}
-        onChange={(event) => setSelected(event.target.value)}
-      >
-        <option value="">{t(I18nKey.PROJECTS$ADD_CONVERSATION)}</option>
-        {candidates.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.title || c.id}
-          </option>
-        ))}
-      </select>
-      <BrandButton
-        type="submit"
-        variant="secondary"
-        isDisabled={!selected || add.isPending}
-      >
-        {t(I18nKey.BUTTON$ADD)}
-      </BrandButton>
-    </form>
-  );
-}
-
-/** Start a conversation that belongs to this project from its first message. */
-function NewConversation({ projectId }: { projectId: string }) {
-  const { t } = useTranslation("openhands");
-  const queryClient = useQueryClient();
-  const { backend } = useActiveBackend();
-  const { navigate } = useNavigation();
-  const { mutateAsync: createConversation } = useCreateConversation({
-    disableToast: true,
-  });
-  const start = useMutation({
-    mutationFn: async () => {
-      const created = await createConversation({ entryPoint: "project_page" });
-      await ProjectsService.addConversation(projectId, created.conversation_id);
-      return created.conversation_id;
-    },
-    meta: { disableToast: true },
-    onSuccess: (conversationId) => {
-      queryClient.invalidateQueries({ queryKey: projectsQueryRoot(backend) });
-      navigate(`/conversations/${conversationId}`);
-    },
-    onError: (error) =>
-      displayApiErrorToast(error, t(I18nKey.PROJECTS$UPDATE_FAILED)),
-  });
-  return (
-    <BrandButton
-      testId="project-new-conversation"
-      type="button"
-      variant="secondary"
-      isDisabled={start.isPending}
-      aria-busy={start.isPending}
-      startContent={<Plus width={14} height={14} />}
-      onClick={() => start.mutate()}
-    >
-      {t(I18nKey.PROJECTS$NEW_CONVERSATION)}
-    </BrandButton>
-  );
-}
 
 /** /projects/:projectId: the coordinator, the board, the files and the memory. */
 export default function ProjectPage() {
@@ -159,15 +45,6 @@ export default function ProjectPage() {
     }
     return map;
   }, [coordinator, conversations]);
-  const memberIds = React.useMemo(
-    () =>
-      new Set(
-        [...(coordinator ? [coordinator] : []), ...conversations].map((c) =>
-          projectIdKey(c.conversation_id),
-        ),
-      ),
-    [coordinator, conversations],
-  );
   const coordinatorId =
     coordinator?.conversation_id ?? project?.coordinator_conversation_id;
 
@@ -259,18 +136,12 @@ export default function ProjectPage() {
           aria-labelledby="project-board-title"
           className="flex flex-col gap-3"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2
-              id="project-board-title"
-              className="text-base font-medium text-foreground"
-            >
-              {t(I18nKey.PROJECTS$CONVERSATIONS)}
-            </h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <AddConversation projectId={projectId} memberIds={memberIds} />
-              <NewConversation projectId={projectId} />
-            </div>
-          </div>
+          <h2
+            id="project-board-title"
+            className="text-base font-medium text-foreground"
+          >
+            {t(I18nKey.PROJECTS$CONVERSATIONS)}
+          </h2>
           <ProjectBoard projectId={projectId} conversations={conversations} />
         </section>
 

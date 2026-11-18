@@ -10,11 +10,6 @@ import ProjectsService, {
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
 import { I18nKey } from "#/i18n/declaration";
-import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
-
-vi.mock("#/hooks/mutation/use-create-conversation", () => ({
-  useCreateConversation: vi.fn(() => ({ mutateAsync: vi.fn() })),
-}));
 
 const PROJECT_ID = "aa000000000040008000000000000001";
 const COORDINATOR_ID = "cc000000000040008000000000000001";
@@ -346,29 +341,5 @@ describe("ProjectPage", () => {
     expect(remove).not.toHaveBeenCalled();
     await userEvent.click(screen.getByTestId("confirm-button"));
     await waitFor(() => expect(remove).toHaveBeenCalledWith(PROJECT_ID));
-  });
-  it("starts a new conversation inside the project", async () => {
-    setProjectsFeature(true);
-    vi.mocked(useCreateConversation).mockReturnValue({
-      mutateAsync: vi.fn().mockResolvedValue({
-        conversation_id: "09000000000040008000000000000001",
-        session_api_key: null,
-        url: null,
-      }),
-    } as unknown as ReturnType<typeof useCreateConversation>);
-    const add = vi
-      .spyOn(ProjectsService, "addConversation")
-      .mockResolvedValue(undefined);
-    renderPage();
-
-    await userEvent.click(
-      await screen.findByTestId("project-new-conversation"),
-    );
-    await waitFor(() =>
-      expect(add).toHaveBeenCalledWith(
-        PROJECT_ID,
-        "09000000000040008000000000000001",
-      ),
-    );
   });
 });
