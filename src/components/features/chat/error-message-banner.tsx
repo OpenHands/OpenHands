@@ -2,6 +2,7 @@ import React from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Check, CircleAlert, CircleX, Copy, X } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { getAcpErrorHeaderKey } from "#/utils/acp-error-codes";
 import { cn } from "#/utils/utils";
@@ -43,10 +44,10 @@ export function ErrorMessageBanner({
   const isCollapsed = shouldShowToggle && !isExpanded;
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(displayTextForLength);
+    const success = await copyToClipboard(displayTextForLength);
+    if (success) {
       setIsCopied(true);
-    } catch {
+    } else {
       displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
     }
   };

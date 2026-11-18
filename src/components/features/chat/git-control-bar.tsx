@@ -154,6 +154,7 @@ export function GitControlBar({ onSuggestionsClick }: GitControlBarProps) {
         repository: repository.full_name,
         branch: branch.name,
         gitProvider: repository.git_provider,
+        gitProviderId: repository.git_provider_id,
       },
       {
         onSuccess: () => {
@@ -294,6 +295,7 @@ export function GitControlBar({ onSuggestionsClick }: GitControlBarProps) {
         onClose={() => setIsOpenRepoModalOpen(false)}
         onLaunch={handleLaunchRepository}
         defaultProvider={gitProvider}
+        defaultGitProviderId={conversation?.git_provider_id}
       />
     </div>
   );
