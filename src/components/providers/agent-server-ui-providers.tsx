@@ -18,7 +18,10 @@ import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-organization-boundary";
 import { useHydrateFreeModels } from "#/hooks/query/use-free-models";
 import type { TelemetryConfig } from "#/services/telemetry";
-import type { FeaturePolicy } from "#/feature-policy/feature-policy";
+import {
+  type FeaturePolicy,
+  readInjectedFeaturePolicy,
+} from "#/feature-policy/feature-policy";
 import { FeaturePolicyProvider } from "#/feature-policy/feature-policy-context";
 import { TelemetryProvider } from "./telemetry-provider";
 import {
@@ -114,12 +117,14 @@ export function AgentServerUIProviders({
           uiHost: analytics.uiHost,
         }
       : false;
-  const gatedChildren = featurePolicy ? (
-    <FeaturePolicyProvider policy={featurePolicy}>
+  // Always mounted, so a host that supplies the prop after its first render
+  // does not remount everything below.
+  const gatedChildren = (
+    <FeaturePolicyProvider
+      policy={featurePolicy ?? readInjectedFeaturePolicy()}
+    >
       {children}
     </FeaturePolicyProvider>
-  ) : (
-    children
   );
   const content = (
     <TelemetryProvider config={posthogConfig}>
