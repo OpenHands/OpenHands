@@ -237,6 +237,86 @@ describe("useCreateConversation", () => {
     });
   });
 
+  it("associates an OPEN_ISSUE suggested task with the conversation as a work item", async () => {
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        status: "READY",
+        app_conversation_id: null,
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    const suggestedTask: SuggestedTask = {
+      git_provider: "gitlab",
+      issue_number: 87,
+      repo: "team/app",
+      title: "Refactor Inventory Service",
+      task_type: "OPEN_ISSUE",
+    };
+
+    await result.current.mutateAsync({
+      query: "Work on the issue",
+      repository: { name: "team/app", gitProvider: "gitlab", branch: "main" },
+      suggestedTask,
+    });
+
+    await waitFor(() => {
+      expect(createConversationSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workItem: {
+            provider: "gitlab",
+            id: "87",
+            title: "Refactor Inventory Service",
+            repository: "team/app",
+          },
+        }),
+      );
+    });
+  });
+
+  it("does not associate a review chore suggested task with a work item", async () => {
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        status: "READY",
+        app_conversation_id: null,
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    const suggestedTask: SuggestedTask = {
+      git_provider: "github",
+      issue_number: 12,
+      repo: "owner/repo",
+      title: "Fix the failing check",
+      task_type: "FAILING_CHECKS",
+    };
+
+    await result.current.mutateAsync({ query: "Fix it", suggestedTask });
+
+    await waitFor(() => {
+      expect(createConversationSpy).toHaveBeenCalled();
+    });
+    expect(createConversationSpy.mock.lastCall?.[0]).not.toHaveProperty(
+      "workItem",
+    );
+  });
+
   it.each([
     {
       case: "names the git provider connection the repository came from",

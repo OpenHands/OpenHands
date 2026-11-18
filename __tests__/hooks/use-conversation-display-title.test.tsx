@@ -302,3 +302,56 @@ it("shows a manual rename immediately and restores both titles if saving fails",
   await waitFor(() => expect(result.current.title.pending).toBe(true));
   save.mockRestore();
 });
+
+it("names a conversation after its linked work item, from tags, even without a server title", () => {
+  useConversationLaunchStore
+    .getState()
+    .update(launchId, { conversationId: id });
+  client.setQueryData(detailKey, {
+    ...metadata(""),
+    tags: {
+      workitemprovider: "github",
+      workitemid: "142",
+      workitemtitle: "Mission Provider Filtering",
+    },
+  });
+  const { result } = renderHook(
+    () => useConversationDisplayTitleState()(id).title,
+    { wrapper },
+  );
+  expect(result.current).toBe("GH-142 \u2014 Mission Provider Filtering");
+});
+
+it("prefers an explicit server title (a user rename) over the work-item snapshot", () => {
+  useConversationLaunchStore
+    .getState()
+    .update(launchId, { conversationId: id });
+  client.setQueryData(detailKey, {
+    ...metadata("Renamed by the user"),
+    tags: {
+      workitemprovider: "github",
+      workitemid: "142",
+      workitemtitle: "Mission Provider Filtering",
+    },
+  });
+  const { result } = renderHook(
+    () => useConversationDisplayTitleState()(id).title,
+    { wrapper },
+  );
+  expect(result.current).toBe("Renamed by the user");
+});
+
+it("keeps existing prompt-based naming when there is no work-item snapshot", () => {
+  useConversationLaunchStore
+    .getState()
+    .update(launchId, { conversationId: id });
+  client.setQueryData(detailKey, {
+    ...metadata(""),
+    tags: { origin: "slack" },
+  });
+  const { result } = renderHook(
+    () => useConversationDisplayTitleState()(id).title,
+    { wrapper },
+  );
+  expect(result.current).toBe(prompt);
+});

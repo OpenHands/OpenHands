@@ -205,6 +205,77 @@ describe("buildStartConversationRequest", () => {
     expect(payload.title_llm_profile).toBe("Titles");
   });
 
+  describe("work-item naming", () => {
+    it("names the conversation after a linked work item and suppresses AI titling", () => {
+      const payload = buildStartConversationRequest({
+        ...PROFILE,
+        settings: DEFAULT_SETTINGS,
+        workItem: {
+          provider: "github",
+          id: "142",
+          title: "Mission Provider Filtering",
+        },
+      });
+
+      expect(payload.title).toBe("GH-142 \u2014 Mission Provider Filtering");
+      expect(payload.autotitle).toBe(false);
+    });
+
+    it("keeps AI titling and sends no title for an ordinary launch", () => {
+      const payload = buildStartConversationRequest({
+        ...PROFILE,
+        settings: DEFAULT_SETTINGS,
+      });
+
+      expect(payload).not.toHaveProperty("title");
+      expect(payload.autotitle).toBe(true);
+    });
+
+    it("keeps AI titling when a work-item reference has no usable identifier", () => {
+      const payload = buildStartConversationRequest({
+        ...PROFILE,
+        settings: DEFAULT_SETTINGS,
+        workItem: { provider: "github", id: "   ", title: "Ignored" },
+      });
+
+      expect(payload).not.toHaveProperty("title");
+      expect(payload.autotitle).toBe(true);
+    });
+
+    it("stamps the launch-time snapshot as tags", () => {
+      const payload = buildStartConversationRequest({
+        ...PROFILE,
+        settings: DEFAULT_SETTINGS,
+        workItem: {
+          provider: "gitlab",
+          id: "87",
+          title: "Refactor Inventory Service",
+          url: "https://gitlab.com/owner/repo/-/issues/87",
+          repository: "owner/repo",
+        },
+      });
+
+      expect(payload.tags).toMatchObject({
+        workitemprovider: "gitlab",
+        workitemid: "87",
+        workitemtitle: "Refactor Inventory Service",
+        workitemurl: "https://gitlab.com/owner/repo/-/issues/87",
+        workitemrepository: "owner/repo",
+      });
+    });
+
+    it("names the conversation from the identifier alone when the title is missing", () => {
+      const payload = buildStartConversationRequest({
+        ...PROFILE,
+        settings: DEFAULT_SETTINGS,
+        workItem: { provider: "jira", id: "SYN-241", title: "" },
+      });
+
+      expect(payload.title).toBe("SYN-241");
+      expect(payload.autotitle).toBe(false);
+    });
+  });
+
   it("sends no runtime options while Settings → Runtime is at its defaults", () => {
     const payload = buildStartConversationRequest({
       ...PROFILE,
