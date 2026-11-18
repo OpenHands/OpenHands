@@ -23,6 +23,13 @@ import {
   FileEditorAction,
 } from "#/types/agent-server/core/base/action";
 import { ExecuteBashObservation } from "#/types/agent-server/core/base/observation";
+import {
+  parseSkillContent,
+  styleImportantTags,
+} from "#/components/conversation-events/chat/event-message-components/skill-item-expanded";
+import { SkillReadyContentList } from "#/components/conversation-events/chat/event-message-components/skill-ready-content-list";
+import { SkillReadyItem } from "#/components/conversation-events/chat/event-content-helpers/create-skill-ready-event";
+import { I18nKey } from "#/i18n/declaration";
 
 const makeBashAction = (
   id: string,
@@ -644,4 +651,245 @@ it("uses the session state while setup details are not yet available", () => {
     />,
   );
   expect(details).toHaveTextContent("EVENT_GROUP$SESSION_INITIALIZED");
+});
+
+describe("skill-item-expanded", () => {
+  describe("parseSkillContent", () => {
+    it("should extract matchInfo from content", () => {
+      const content =
+        "The following information has been included based on keyword match\nIt may or may not be relevant\n\nActual body content";
+      const result = parseSkillContent(content);
+
+      expect(result.matchInfo).toBe(
+        "The following information has been included based on keyword match",
+      );
+      expect(result.body).toBe("Actual body content");
+    });
+
+    it("should extract filePath from content", () => {
+      const content = "Skill location: /path/to/skill.md\n\nBody here";
+      const result = parseSkillContent(content);
+
+      expect(result.filePath).toBe("/path/to/skill.md");
+      expect(result.body).toBe("Body here");
+    });
+
+    it("should handle content with both matchInfo and filePath", () => {
+      const content =
+        "The following information has been included based on keyword match\nIt may or may not be relevant\nSkill location: /path/to/skill.md\n(Use this path to resolve imports)\n\nBody content";
+      const result = parseSkillContent(content);
+
+      expect(result.matchInfo).toBe(
+        "The following information has been included based on keyword match",
+      );
+      expect(result.filePath).toBe("/path/to/skill.md");
+      expect(result.body).toBe("Body content");
+    });
+
+    it("should handle content with no metadata", () => {
+      const content = "Just plain body content\nWith multiple lines";
+      const result = parseSkillContent(content);
+
+      expect(result.matchInfo).toBeNull();
+      expect(result.filePath).toBeNull();
+      expect(result.body).toBe("Just plain body content\nWith multiple lines");
+    });
+
+    it("should handle empty content", () => {
+      const result = parseSkillContent("");
+
+      expect(result.matchInfo).toBeNull();
+      expect(result.filePath).toBeNull();
+      expect(result.body).toBe("");
+    });
+
+    it("should skip blank lines between metadata and body", () => {
+      const content =
+        "Skill location: /path/to/skill.md\n\n\nBody after blanks";
+      const result = parseSkillContent(content);
+
+      expect(result.filePath).toBe("/path/to/skill.md");
+      expect(result.body).toBe("Body after blanks");
+    });
+  });
+
+  describe("styleImportantTags", () => {
+    it("should wrap important tag content with bold markers", () => {
+      const text = "Some text <important>critical info</important> more text";
+      const result = styleImportantTags(text);
+
+      expect(result).toBe("Some text **critical info** more text");
+    });
+
+    it("should handle multiple important tags", () => {
+      const text =
+        "<important>first</important> and <important>second</important>";
+      const result = styleImportantTags(text);
+
+      expect(result).toBe("**first** and **second**");
+    });
+
+    it("should handle multiline content inside important tags", () => {
+      const text = "<important>line1\nline2</important>";
+      const result = styleImportantTags(text);
+
+      expect(result).toBe("**line1\nline2**");
+    });
+
+    it("should be case-insensitive", () => {
+      const text = "<IMPORTANT>test</IMPORTANT>";
+      const result = styleImportantTags(text);
+
+      expect(result).toBe("**test**");
+    });
+
+    it("should return text unchanged if no important tags", () => {
+      const text = "No important tags here";
+      const result = styleImportantTags(text);
+
+      expect(result).toBe("No important tags here");
+    });
+
+    it("should trim whitespace inside important tags", () => {
+      const text = "<important>  spaced  </important>";
+      const result = styleImportantTags(text);
+
+      expect(result).toBe("**spaced**");
+    });
+  });
+});
+
+describe("skill-ready-content-list", () => {
+  const makeItems = (...entries: [string, string][]): SkillReadyItem[] =>
+    entries.map(([name, content]) => ({ name, content }));
+
+  describe("SkillReadyContentList", () => {
+    it("renders all skill names", () => {
+      const items = makeItems(["docker", "content1"], ["gitlab", "content2"]);
+
+      renderWithProviders(<SkillReadyContentList items={items} />);
+
+      expect(screen.getByText("docker")).toBeInTheDocument();
+      expect(screen.getByText("gitlab")).toBeInTheDocument();
+    });
+
+    it("renders the header label", () => {
+      const items = makeItems(["docker", "content"]);
+
+      renderWithProviders(<SkillReadyContentList items={items} />);
+
+      expect(
+        screen.getByText("SKILLS$TRIGGERED_SKILL_KNOWLEDGE"),
+      ).toBeInTheDocument();
+    });
+
+    it("renders a custom header label when titleKey is provided", () => {
+      const items = makeItems(["docker", "content"]);
+
+      renderWithProviders(
+        <SkillReadyContentList
+          items={items}
+          titleKey={I18nKey.SKILLS$INVOKED_SKILL_KNOWLEDGE}
+        />,
+      );
+
+      expect(
+        screen.getByText("SKILLS$INVOKED_SKILL_KNOWLEDGE"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("SKILLS$TRIGGERED_SKILL_KNOWLEDGE"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("does not show content before clicking", () => {
+      const items = makeItems(["docker", "Docker usage guide"]);
+
+      renderWithProviders(<SkillReadyContentList items={items} />);
+
+      expect(screen.queryByText("Docker usage guide")).not.toBeInTheDocument();
+    });
+
+    it("expands skill content on click", async () => {
+      const user = userEvent.setup();
+      const items = makeItems(["docker", "Docker usage guide"]);
+
+      renderWithProviders(<SkillReadyContentList items={items} />);
+
+      await user.click(screen.getByText("docker"));
+
+      expect(screen.getByText("Docker usage guide")).toBeInTheDocument();
+    });
+
+    it("collapses skill content on second click", async () => {
+      const user = userEvent.setup();
+      const items = makeItems(["docker", "Docker usage guide"]);
+
+      renderWithProviders(<SkillReadyContentList items={items} />);
+
+      await user.click(screen.getByText("docker"));
+      expect(screen.getByText("Docker usage guide")).toBeInTheDocument();
+
+      await user.click(screen.getByText("docker"));
+      expect(screen.queryByText("Docker usage guide")).not.toBeInTheDocument();
+    });
+
+    it("expands skills independently", async () => {
+      const user = userEvent.setup();
+      const items = makeItems(
+        ["docker", "Docker guide"],
+        ["gitlab", "GitLab guide"],
+      );
+
+      renderWithProviders(<SkillReadyContentList items={items} />);
+
+      await user.click(screen.getByText("docker"));
+
+      expect(screen.getByText("Docker guide")).toBeInTheDocument();
+      expect(screen.queryByText("GitLab guide")).not.toBeInTheDocument();
+    });
+
+    it("renders <important> content as bold text", async () => {
+      const user = userEvent.setup();
+      const content =
+        "Some text <important>critical info</important> more text";
+      const items = makeItems(["docker", content]);
+
+      renderWithProviders(<SkillReadyContentList items={items} />);
+
+      await user.click(screen.getByText("docker"));
+
+      // The important text should be rendered as bold (strong element)
+      const boldElement = screen.getByText("critical info");
+      expect(boldElement).toBeInTheDocument();
+      expect(boldElement.tagName).toBe("STRONG");
+    });
+
+    it("parses and displays file path from metadata", async () => {
+      const user = userEvent.setup();
+      const content = [
+        'The following information has been included based on a keyword match for "docker".',
+        "It may or may not be relevant to the user's request.",
+        "Skill location: /home/openhands/.openhands/skills/docker/SKILL.md",
+        "(Use this path to resolve relative file references)",
+        "",
+        "Docker Usage Guide",
+      ].join("\n");
+      const items = makeItems(["docker", content]);
+
+      renderWithProviders(<SkillReadyContentList items={items} />);
+
+      await user.click(screen.getByText("docker"));
+
+      // File path rendered in code element
+      expect(
+        screen.getByText("/home/openhands/.openhands/skills/docker/SKILL.md"),
+      ).toBeInTheDocument();
+      // Actual skill body rendered
+      expect(screen.getByText("Docker Usage Guide")).toBeInTheDocument();
+      // Metadata preamble lines are not rendered as-is in the body
+      expect(
+        screen.queryByText("It may or may not be relevant"),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

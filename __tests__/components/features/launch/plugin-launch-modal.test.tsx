@@ -1,3 +1,4 @@
+import { PluginLaunchPluginSection } from "#/components/features/launch/plugin-launch-plugin-section";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
@@ -232,7 +233,6 @@ describe("PluginLaunchModal", () => {
     });
 
     it("should update number parameter value when typing", async () => {
-      const user = userEvent.setup();
       renderModal([
         {
           source: "github:owner/repo",
@@ -720,5 +720,33 @@ describe("automation mode preflight", () => {
     const input = screen.getByTestId("plugin-0-param-feeds");
     expect(input.tagName).toBe("TEXTAREA");
     expect(input).toHaveValue("a\nb");
+  });
+});
+
+describe("plugin-launch-plugin-section", () => {
+  function renderSection(plugin: PluginSpec) {
+    return render(
+      <PluginLaunchPluginSection
+        plugin={plugin}
+        originalIndex={0}
+        isExpanded={false}
+        onToggle={vi.fn()}
+        getPluginDisplayName={(p) => p.source}
+        onParameterChange={vi.fn()}
+      />,
+    );
+  }
+
+  describe("PluginLaunchPluginSection", () => {
+    it("highlights the header button on hover with the mid-surface hover token", () => {
+      renderSection({
+        source: "github:owner/repo",
+        parameters: { apiKey: "test-key" },
+      });
+
+      const button = screen.getByTestId("plugin-section-0");
+      expect(button).toHaveClass("hover:bg-interactive-hover");
+      expect(button).not.toHaveClass("hover:bg-tertiary");
+    });
   });
 });

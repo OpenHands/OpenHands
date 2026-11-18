@@ -1,3 +1,9 @@
+import {
+  ONBOARDING_PREVIEW_STEP_QUERY_PARAM,
+  isOnboardingPreviewActive,
+  readOnboardingPreviewStep,
+} from "#/components/features/onboarding/onboarding-preview";
+import { OnboardingProgressBar } from "#/components/features/onboarding/onboarding-progress-bar";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -424,5 +430,72 @@ describe("ChooseAgentStep on a cloud backend", () => {
       screen.queryByTestId("onboarding-agent-option-opencode"),
     ).not.toBeInTheDocument();
     expect(onSelect).toHaveBeenCalledWith("openhands");
+  });
+});
+
+describe("onboarding-preview", () => {
+  it("reads a valid preview step from the query string", () => {
+    expect(
+      readOnboardingPreviewStep(`?${ONBOARDING_PREVIEW_STEP_QUERY_PARAM}=3`),
+    ).toBe(3);
+  });
+
+  it("rejects out-of-range preview steps", () => {
+    expect(
+      readOnboardingPreviewStep(`?${ONBOARDING_PREVIEW_STEP_QUERY_PARAM}=9`),
+    ).toBeNull();
+  });
+
+  it("detects when preview mode is active", () => {
+    expect(
+      isOnboardingPreviewActive(`?${ONBOARDING_PREVIEW_STEP_QUERY_PARAM}=2`),
+    ).toBe(true);
+    expect(isOnboardingPreviewActive("?foo=bar")).toBe(false);
+  });
+});
+
+describe("OnboardingProgressBar", () => {
+  it("renders one segment per step and marks the current segment", () => {
+    render(<OnboardingProgressBar currentStep={1} totalSteps={4} />);
+
+    const bar = screen.getByTestId("onboarding-progress-bar");
+    expect(bar).toHaveAttribute("aria-valuenow", "2");
+    expect(bar).toHaveAttribute("aria-valuemin", "1");
+    expect(bar).toHaveAttribute("aria-valuemax", "4");
+
+    // Segment states match the current step.
+    expect(screen.getByTestId("onboarding-progress-step-0")).toHaveAttribute(
+      "data-state",
+      "completed",
+    );
+    expect(screen.getByTestId("onboarding-progress-step-1")).toHaveAttribute(
+      "data-state",
+      "current",
+    );
+    expect(screen.getByTestId("onboarding-progress-step-2")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
+    expect(screen.getByTestId("onboarding-progress-step-3")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
+  });
+
+  it("treats the first step as current with no completed segments", () => {
+    render(<OnboardingProgressBar currentStep={0} totalSteps={3} />);
+
+    expect(screen.getByTestId("onboarding-progress-step-0")).toHaveAttribute(
+      "data-state",
+      "current",
+    );
+    expect(screen.getByTestId("onboarding-progress-step-1")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
+    expect(screen.getByTestId("onboarding-progress-step-2")).toHaveAttribute(
+      "data-state",
+      "upcoming",
+    );
   });
 });

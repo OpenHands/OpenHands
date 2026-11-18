@@ -118,3 +118,174 @@ describe("Canvas UI appearance contracts", () => {
     ).toEqual([]);
   });
 });
+
+describe("raw colors", () => {
+  const eslint = new ESLint({
+    overrideConfig: [
+      {
+        languageOptions: { parserOptions: { project: null } },
+        rules: { "@typescript-eslint/prefer-optional-chain": "off" },
+      },
+    ],
+  });
+
+  const probe = `
+export function Probe() {
+  return <>
+    <div className="text-red-500" />
+    <div className="text-unregistered-color" />
+    <svg><path fill="#ec4899" /></svg>
+    <div className="text-danger bg-surface text-foreground" />
+    <div className="bg-background bg-content1 text-primary-foreground text-base" />
+    <div className="bg-status-fail-bg text-status-fail-text text-content-muted text-modal-muted" />
+    <div className="bg-content9" />
+  </>;
+}
+`;
+
+  describe("Canvas raw color rollout", () => {
+    it.each([
+      "src/components/features/backends/backend-status-dot.tsx",
+      "src/components/features/markdown/blockquote.tsx",
+      "src/components/features/mcp-page/mcp-server-health.tsx",
+    ])("rejects raw palette recipes in migrated owner %s", async (filePath) => {
+      const [result] = await eslint.lintText(
+        `
+const toneClasses = {
+  warning: "text-yellow-500",
+  muted: "text-muted",
+};
+export function Probe({ tone }: { tone: keyof typeof toneClasses }) {
+  return <div className={toneClasses[tone]} />;
+}
+`,
+        { filePath },
+      );
+
+      expect(
+        result.messages.filter(
+          (message) => message.ruleId === "shadcn/no-raw-colors",
+        ),
+      ).toEqual([
+        expect.objectContaining({
+          severity: 2,
+          messageId: expect.stringMatching(/^paletteClass/),
+        }),
+      ]);
+    });
+
+    it("keeps unrelated program tags outside broad string scanning", async () => {
+      const [result] = await eslint.lintText(
+        'export type Variant = "default" | "text-like";',
+        { filePath: "src/components/shared/buttons/modal-button.tsx" },
+      );
+
+      expect(result.fatalErrorCount).toBe(0);
+      expect(
+        result.messages.filter(
+          (message) => message.ruleId === "shadcn/no-raw-colors",
+        ),
+      ).toEqual([]);
+    });
+
+    it("keeps bracketed color literals under the separately staged arbitrary-value rule", async () => {
+      const [result] = await eslint.lintText(
+        'export function Probe() { return <div className="text-[#ec4899]" />; }',
+        { filePath: "src/routes/color-probe.tsx" },
+      );
+      expect(result.fatalErrorCount).toBe(0);
+      expect(
+        result.messages.filter(
+          ({ ruleId }) => ruleId === "shadcn/no-raw-colors",
+        ),
+      ).toEqual([]);
+      expect(
+        result.messages
+          .filter(({ ruleId }) => ruleId === "shadcn/no-arbitrary-values")
+          .map(({ severity }) => severity),
+      ).toEqual([1]);
+    });
+
+    it("accepts SVG classes that disable paint", async () => {
+      const [result] = await eslint.lintText(
+        'export function Probe() { return <svg className="fill-none stroke-none" />; }',
+        { filePath: "src/routes/paint-probe.tsx" },
+      );
+
+      expect(result.fatalErrorCount).toBe(0);
+      expect(
+        result.messages.filter(
+          (message) => message.ruleId === "shadcn/no-raw-colors",
+        ),
+      ).toEqual([]);
+    });
+
+    it.each(["src/routes/color-probe.tsx", "src/ui/color-probe.tsx"])(
+      "rejects raw colors and unknown tokens while accepting verified tokens in %s",
+      async (filePath) => {
+        const [result] = await eslint.lintText(probe, { filePath });
+        expect(result.fatalErrorCount).toBe(0);
+        expect(
+          result.messages
+            .filter((message) => message.ruleId === "shadcn/no-raw-colors")
+            .map(({ line, severity }) => ({ line, severity })),
+        ).toEqual([
+          { line: 4, severity: 2 },
+          { line: 5, severity: 2 },
+          { line: 6, severity: 2 },
+          { line: 10, severity: 2 },
+        ]);
+      },
+    );
+  });
+});
+describe("static classes", () => {
+  const probe = `
+import { Typography as Type } from "#/ui/typography";
+import { ComboboxCaretIcon as Caret } from "#/ui/combobox-caret";
+export function Probe({ color, wide, className }: { color: string; wide: boolean; className?: string }) {
+  return <>
+    <Type.Text className={\`text-\${color}\`} />
+    <Caret className={unresolvedClasses()} />
+    <Type.Text className={wide ? "w-full" : "w-auto"} />
+    <Caret className={className} />
+    <div className="flex-cols" />
+  </>;
+}
+`;
+
+  describe("Canvas static class policy", () => {
+    it("rejects opaque UI classes while permitting static choices and forwarding", async () => {
+      const [result] = await eslint.lintText(probe, {
+        filePath: "src/routes/lint-probe.tsx",
+      });
+      expect(result.fatalErrorCount).toBe(0);
+      const findings = result.messages.filter(
+        (message) => message.ruleId === "shadcn/require-static-classes",
+      );
+      expect(
+        findings.map(({ line, severity }) => ({ line, severity })),
+      ).toEqual([
+        { line: 6, severity: 2 },
+        { line: 7, severity: 2 },
+      ]);
+    });
+
+    it("exempts primitive internals but still rejects unknown utilities there", async () => {
+      const [result] = await eslint.lintText(probe, {
+        filePath: "src/ui/lint-probe.tsx",
+      });
+      expect(result.fatalErrorCount).toBe(0);
+      expect(
+        result.messages.filter(
+          (message) => message.ruleId === "shadcn/require-static-classes",
+        ),
+      ).toEqual([]);
+      expect(
+        result.messages
+          .filter((message) => message.ruleId === "shadcn/no-unknown-classes")
+          .map(({ line, severity }) => ({ line, severity })),
+      ).toEqual([{ line: 10, severity: 2 }]);
+    });
+  });
+});
