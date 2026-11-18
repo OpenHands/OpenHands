@@ -20,7 +20,7 @@ Source: `src/routes/projects.tsx`, `src/routes/project.tsx`, `src/components/fea
 - `F32.coordinator`: the project page's **Talk to the coordinator** opens the coordinator in the normal chat view; a message sent there reaches it like any conversation.
 - `F32.board`: the conversations the coordinator starts appear on the board without a reload, grouped Needs you (needs_you + needs_input), Working, Done (finished + idle), Resolved; a card that stopped on a question shows that question.
 - `F32.resolve`: Resolve sets `resolved=user` and keeps the other tags; Reopen removes `resolved`; the card moves groups both ways.
-- `F32.membership`: **Add a conversation…** adds a recent non-member; **Remove** drops a member's `project` tag; the coordinator cannot be removed.
+- `F32.membership`: only the coordinator adds conversations (the project page has no New conversation button or Add a conversation picker); **Remove** drops a member's `project` tag; the coordinator cannot be removed.
 - `F32.files`: Upload adds a file marked "Added by you"; a file a conversation saved names that conversation; clicking a text file shows its contents, an image or PDF shows inline, other files say there is no preview; Download saves the file; Delete asks first, then removes it.
 - `F32.attach`: in a member conversation, the composer's **+** menu offers **Project file**, which picks one of the project's files and attaches it to the message; it is absent outside a project or with `projects` off.
 - `F32.badge`: a member conversation's header shows the project's name as a link to its project page.
@@ -86,10 +86,12 @@ Preconditions:
   `resolved: user` with the others kept. Click Reopen on it; it moves back and
   `resolved` is gone.
 
-- **Membership (`F32.membership`).** Start an unrelated conversation, choose it
-  in `testid=project-add-conversation` and Add; it joins the board and gains
-  `project=<id>`. Remove it with `testid=project-card-remove`; the tag is gone
-  and the conversation still exists.
+- **Membership (`F32.membership`).** The project page offers no way to start or
+  add a conversation: no New conversation button and no Add a conversation
+  picker above the board. Ask the coordinator to start a
+  worker; it joins the board with `project=<id>`. Remove it with
+  `testid=project-card-remove`; the tag is gone and the conversation still
+  exists.
 
 - **Files (`F32.files`).** `control-openhands browser upload 'testid=project-file-input' <plan.md>`:
   a `testid=project-file` row with `data-source=user` and "Added by you", and
