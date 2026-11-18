@@ -230,6 +230,23 @@ describe("static-server.mjs", () => {
       expect(config.disableTelemetry).toBe(false);
     });
 
+    it.each([
+      [undefined, false],
+      ["0", false],
+      ["1", true],
+      ["true", true],
+    ])("parses AGENT_CANVAS_SKIP_ONBOARDING=%s", (value, expected) => {
+      const config = parseArgs([], { AGENT_CANVAS_SKIP_ONBOARDING: value });
+      expect(config.skipOnboarding).toBe(expected);
+    });
+
+    it("lets --skip-onboarding enable the flag over a falsy environment value", () => {
+      const config = parseArgs(["--skip-onboarding"], {
+        AGENT_CANVAS_SKIP_ONBOARDING: "0",
+      });
+      expect(config.skipOnboarding).toBe(true);
+    });
+
     it("defaults basePath to root", () => {
       const config = parseArgs([]);
       expect(config.basePath).toBe("/");
@@ -640,6 +657,33 @@ describe("static-server.mjs", () => {
     });
   });
 
+  describe("skip-onboarding injection", () => {
+    it.each([
+      { skipOnboarding: true, route: "/" },
+      { skipOnboarding: true, route: "/settings/agents" },
+      { skipOnboarding: false, route: "/" },
+      { skipOnboarding: false, route: "/settings/agents" },
+    ])("serves $route with skipOnboarding=$skipOnboarding", async (config) => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServer(buildDir, {
+        skipOnboarding: config.skipOnboarding,
+      });
+      const response = await fetch(`${origin}${config.route}`);
+      const body = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(
+        body.includes("window.__AGENT_CANVAS_SKIP_ONBOARDING__=true"),
+      ).toBe(config.skipOnboarding);
+    });
+  });
+
   describe("session key injection", () => {
     async function startServerWithKey(dir: string, sessionApiKey: string) {
       const server = await startStaticServer({
@@ -792,7 +836,9 @@ describe("static-server.mjs", () => {
 
       try {
         const server = await startStaticServer({
-          ...parseArgs(["--host", "0.0.0.0"], { SESSION_API_KEY: "lan-secret" }),
+          ...parseArgs(["--host", "0.0.0.0"], {
+            SESSION_API_KEY: "lan-secret",
+          }),
           port: 0,
           dir: buildDir,
         });

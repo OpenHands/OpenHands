@@ -96,6 +96,8 @@ ENVIRONMENT VARIABLES:
   OH_AGENT_SERVER_LOCAL_PATH   Path to local SDK checkout (for development)
   OH_AGENT_SERVER_VERSION      Specific PyPI version for agent-server
   UV_PYTHON                    Python version/range for uvx-run services
+  AGENT_CANVAS_SKIP_ONBOARDING  Set to 1 or true to skip first-run onboarding
+                               on a pre-configured shared server (not login)
 
 Note: LLM settings are configured through the web UI settings page,
 not environment variables.

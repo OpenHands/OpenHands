@@ -7,6 +7,15 @@ import React from "react";
  */
 export const ONBOARDING_COMPLETED_STORAGE_KEY = "openhands-onboarded";
 
+/** Runtime operator opt-in; never writes the browser's completion state. */
+export function isOnboardingSkippedByOperator(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SKIP_ONBOARDING__ === true
+  );
+}
+
 function readCompletedFromStorage(): boolean {
   if (typeof window === "undefined") return true;
   try {
