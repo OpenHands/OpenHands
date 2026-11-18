@@ -1,28 +1,24 @@
-import { v4 as uuidv4 } from "uuid";
-import type { LLMConfig } from "@openhands/typescript-client";
 import {
   ConversationClient,
   type ConversationClientOptions,
 } from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
-import ProfilesService from "#/api/profiles-service/profiles-service.api";
-import { assertSubscriptionAuthReady } from "#/api/agent-server-adapter";
 
 export interface ModelRouterRouteInfo {
-  key: string;
-  model: string;
-  label: string;
+  name: string;
+  model?: string | null;
+  label?: string | null;
 }
 
 export interface ModelRouterSelection {
   mode: "auto" | "manual";
-  manual_route_key?: string | null;
+  manual_route_name?: string | null;
 }
 
 export interface ModelRouterStatus {
   enabled: boolean;
-  selection: ModelRouterSelection | null;
-  last_route_key: string | null;
+  selection?: ModelRouterSelection | null;
+  last_route_name?: string | null;
   routes: ModelRouterRouteInfo[];
 }
 
@@ -50,13 +46,17 @@ class ModelRouterConversationClient extends ConversationClient {
 
   async addModelRouterRoute(
     conversationId: string,
-    routeKey: string,
-    llm: LLMConfig,
-    baseRouteKey = "default",
+    profileName: string,
+    routeName?: string,
+    baseRouteName = "default",
   ): Promise<ModelRouterStatus> {
     const response = await this.transport.post<ModelRouterStatus>(
       `/api/conversations/${conversationId}/model_router/routes`,
-      { route_key: routeKey, llm, base_route_key: baseRouteKey },
+      {
+        profile_name: profileName,
+        route_name: routeName,
+        base_route_name: baseRouteName,
+      },
     );
     return response.data;
   }
@@ -74,11 +74,11 @@ class ModelRouterConversationClient extends ConversationClient {
 
   async switchModelRouter(
     conversationId: string,
-    routeKey: string,
+    routeName: string,
   ): Promise<ModelRouterStatus> {
     return this.updateModelRouter(conversationId, {
       mode: "manual",
-      manual_route_key: routeKey,
+      manual_route_name: routeName,
     });
   }
 
@@ -121,35 +121,23 @@ class ModelRouterService {
     conversationUrl: string | null | undefined,
     sessionApiKey: string | null | undefined,
     profileName: string,
-    routeKey: string,
+    routeName: string,
   ): Promise<ModelRouterStatus> {
-    const profile = await ProfilesService.getProfile(profileName, "encrypted");
-    const model =
-      typeof profile.config.model === "string" ? profile.config.model : "";
-    if (!model) throw new Error(`Profile '${profileName}' has no model.`);
-
-    await assertSubscriptionAuthReady({ llm: profile.config });
-
     return modelRouterClient(
       conversationUrl,
       sessionApiKey,
-    ).addModelRouterRoute(conversationId, routeKey, {
-      ...profile.config,
-      model,
-      stream: true,
-      usage_id: `profile:${profileName}:${uuidv4()}`,
-    } as LLMConfig);
+    ).addModelRouterRoute(conversationId, profileName, routeName);
   }
 
   static async switchRoute(
     conversationId: string,
     conversationUrl: string | null | undefined,
     sessionApiKey: string | null | undefined,
-    routeKey: string,
+    routeName: string,
   ): Promise<ModelRouterStatus> {
     return modelRouterClient(conversationUrl, sessionApiKey).switchModelRouter(
       conversationId,
-      routeKey,
+      routeName,
     );
   }
 

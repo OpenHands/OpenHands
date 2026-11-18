@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ModelRouterService from "#/api/conversation-service/model-router-service.api";
-import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
-import { assertSubscriptionAuthReady } from "#/api/agent-server-adapter";
 import { ConversationClient } from "@openhands/typescript-client/clients";
 
 const transport = vi.hoisted(() => ({
@@ -10,8 +8,6 @@ const transport = vi.hoisted(() => ({
   post: vi.fn(),
   patch: vi.fn(),
 }));
-
-vi.mock("uuid", () => ({ v4: () => "uuid-1" }));
 
 vi.mock("@openhands/typescript-client/clients", () => ({
   ConversationClient: vi.fn(function ConversationClientMock(
@@ -34,14 +30,6 @@ vi.mock("#/api/agent-server-client-options", () => ({
   })),
 }));
 
-vi.mock("#/api/profiles-service/profiles-service.api", () => ({
-  default: { getProfile: vi.fn() },
-}));
-
-vi.mock("#/api/agent-server-adapter", () => ({
-  assertSubscriptionAuthReady: vi.fn(),
-}));
-
 describe("ModelRouterService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -55,7 +43,7 @@ describe("ModelRouterService", () => {
       data: {
         enabled: false,
         selection: null,
-        last_route_key: null,
+        last_route_name: null,
         routes: [],
       },
     });
@@ -81,22 +69,15 @@ describe("ModelRouterService", () => {
     expect(status.enabled).toBe(false);
   });
 
-  it("adds an encrypted LLM profile as a model-router route", async () => {
-    vi.mocked(ProfilesService.getProfile).mockResolvedValue({
-      config: {
-        model: "openrouter/example-model",
-        api_key: "encrypted-key",
-        custom_llm_provider: "openrouter",
-      },
-    } as never);
+  it("adds a saved LLM profile as a model-router route", async () => {
     transport.post.mockResolvedValue({
       data: {
         enabled: true,
         selection: { mode: "auto" },
-        last_route_key: null,
+        last_route_name: null,
         routes: [
           {
-            key: "reviewer",
+            name: "reviewer",
             model: "openrouter/example-model",
             label: "reviewer",
           },
@@ -112,29 +93,12 @@ describe("ModelRouterService", () => {
       "reviewer",
     );
 
-    expect(ProfilesService.getProfile).toHaveBeenCalledWith(
-      "Reviewer",
-      "encrypted",
-    );
-    expect(assertSubscriptionAuthReady).toHaveBeenCalledWith({
-      llm: {
-        model: "openrouter/example-model",
-        api_key: "encrypted-key",
-        custom_llm_provider: "openrouter",
-      },
-    });
     expect(transport.post).toHaveBeenCalledWith(
       "/api/conversations/conv-1/model_router/routes",
       {
-        route_key: "reviewer",
-        base_route_key: "default",
-        llm: {
-          model: "openrouter/example-model",
-          api_key: "encrypted-key",
-          custom_llm_provider: "openrouter",
-          stream: true,
-          usage_id: "profile:Reviewer:uuid-1",
-        },
+        profile_name: "Reviewer",
+        route_name: "reviewer",
+        base_route_name: "default",
       },
     );
     expect(status.routes).toHaveLength(1);
@@ -144,8 +108,8 @@ describe("ModelRouterService", () => {
     transport.patch.mockResolvedValue({
       data: {
         enabled: true,
-        selection: { mode: "manual", manual_route_key: "reviewer" },
-        last_route_key: null,
+        selection: { mode: "manual", manual_route_name: "reviewer" },
+        last_route_name: null,
         routes: [],
       },
     });
@@ -159,8 +123,8 @@ describe("ModelRouterService", () => {
 
     expect(transport.patch).toHaveBeenCalledWith(
       "/api/conversations/conv-1/model_router",
-      { selection: { mode: "manual", manual_route_key: "reviewer" } },
+      { selection: { mode: "manual", manual_route_name: "reviewer" } },
     );
-    expect(status.selection?.manual_route_key).toBe("reviewer");
+    expect(status.selection?.manual_route_name).toBe("reviewer");
   });
 });

@@ -20,11 +20,11 @@ import ModelRouterService, {
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 
-function routeKeyForProfile(
+function routeNameForProfile(
   profileName: string,
   status: ModelRouterStatus,
 ): string {
-  const reserved = new Set(status.routes.map((route) => route.key));
+  const reserved = new Set(status.routes.map((route) => route.name));
   if (!status.enabled) reserved.add("default");
   if (!reserved.has(profileName)) return profileName;
 
@@ -43,15 +43,15 @@ function wasProfileAdded(
 ): boolean {
   return status.routes.some(
     (route) =>
-      route.key === profile.name || route.key.startsWith(`${profile.name}-`),
+      route.name === profile.name || route.name.startsWith(`${profile.name}-`),
   );
 }
 
-function currentRouteKey(status: ModelRouterStatus): string | null {
+function currentRouteName(status: ModelRouterStatus): string | null {
   if (status.selection?.mode === "manual") {
-    return status.selection.manual_route_key ?? null;
+    return status.selection.manual_route_name ?? null;
   }
-  return status.last_route_key;
+  return status.last_route_name ?? null;
 }
 
 function routeDescription(route: { model?: string | null }) {
@@ -122,20 +122,20 @@ export function ConversationModelRouterControl() {
         conversationUrl,
         sessionApiKey,
         profileName,
-        routeKeyForProfile(profileName, status),
+        routeNameForProfile(profileName, status),
       );
     },
     onSuccess: updateCachedStatus,
   });
 
   const switchRoute = useMutation({
-    mutationFn: async (routeKey: string) => {
+    mutationFn: async (routeName: string) => {
       if (!conversationId) throw new Error("Conversation is not loaded.");
       return ModelRouterService.switchRoute(
         conversationId,
         conversationUrl,
         sessionApiKey,
-        routeKey,
+        routeName,
       );
     },
     onSuccess: updateCachedStatus,
@@ -160,9 +160,9 @@ export function ConversationModelRouterControl() {
   const addableProfiles = profiles.filter(
     (profile) => !wasProfileAdded(profile, status),
   );
-  const activeRouteKey = currentRouteKey(status);
+  const activeRouteName = currentRouteName(status);
   const activeRoute = status.routes.find(
-    (route) => route.key === activeRouteKey,
+    (route) => route.name === activeRouteName,
   );
   const isMutating =
     addRoute.isPending || switchRoute.isPending || resumeAutoRouting.isPending;
@@ -170,7 +170,7 @@ export function ConversationModelRouterControl() {
     addRoute.error ?? switchRoute.error ?? resumeAutoRouting.error ?? null;
   const buttonLabel =
     activeRoute?.label ||
-    activeRoute?.key ||
+    activeRoute?.name ||
     conversation?.llm_model ||
     t(I18nKey.CONVERSATION_MODEL_ROUTER$BUTTON_LABEL);
 
@@ -245,15 +245,15 @@ export function ConversationModelRouterControl() {
               )}
 
               {status.routes.map((route) => {
-                const isActive = activeRouteKey === route.key;
+                const isActive = activeRouteName === route.name;
                 return (
                   <ContextMenuListItem
-                    key={route.key}
-                    testId={`conversation-model-router-route-${route.key}`}
+                    key={route.name}
+                    testId={`conversation-model-router-route-${route.name}`}
                     isDisabled={isActive || isMutating}
                     onClick={(event) => {
                       event.preventDefault();
-                      switchRoute.mutate(route.key);
+                      switchRoute.mutate(route.name);
                     }}
                     className={cn(
                       "flex flex-col items-stretch gap-0.5",
@@ -262,7 +262,7 @@ export function ConversationModelRouterControl() {
                   >
                     <span className="flex items-center gap-2">
                       <span className="flex-1 truncate text-sm leading-5">
-                        {route.label || route.key}
+                        {route.label || route.name}
                       </span>
                       {isActive && (
                         <CheckIcon className="size-3.5 shrink-0" aria-hidden />

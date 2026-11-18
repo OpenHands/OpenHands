@@ -52,7 +52,7 @@ describe("ConversationModelRouterControl", () => {
     vi.mocked(ModelRouterService.getModelRouter).mockResolvedValue({
       enabled: false,
       selection: null,
-      last_route_key: null,
+      last_route_name: null,
       routes: [],
     });
   });
@@ -61,8 +61,10 @@ describe("ConversationModelRouterControl", () => {
     vi.mocked(ModelRouterService.addProfileRoute).mockResolvedValue({
       enabled: true,
       selection: { mode: "auto" },
-      last_route_key: null,
-      routes: [{ key: "Reviewer", label: "Reviewer", model: "reviewer-model" }],
+      last_route_name: null,
+      routes: [
+        { name: "Reviewer", label: "Reviewer", model: "reviewer-model" },
+      ],
     });
 
     renderWithProviders(<ConversationModelRouterControl />);
@@ -91,14 +93,18 @@ describe("ConversationModelRouterControl", () => {
     vi.mocked(ModelRouterService.getModelRouter).mockResolvedValue({
       enabled: true,
       selection: { mode: "auto" },
-      last_route_key: null,
-      routes: [{ key: "Reviewer", label: "Reviewer", model: "reviewer-model" }],
+      last_route_name: null,
+      routes: [
+        { name: "Reviewer", label: "Reviewer", model: "reviewer-model" },
+      ],
     });
     vi.mocked(ModelRouterService.switchRoute).mockResolvedValue({
       enabled: true,
-      selection: { mode: "manual", manual_route_key: "Reviewer" },
-      last_route_key: null,
-      routes: [{ key: "Reviewer", label: "Reviewer", model: "reviewer-model" }],
+      selection: { mode: "manual", manual_route_name: "Reviewer" },
+      last_route_name: null,
+      routes: [
+        { name: "Reviewer", label: "Reviewer", model: "reviewer-model" },
+      ],
     });
 
     renderWithProviders(<ConversationModelRouterControl />);
