@@ -5,8 +5,6 @@ import ArrowUp from "#/icons/angle-up-solid.svg?react";
 import i18n from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
-import { useEventExpansionKey } from "./row-expansion-context";
-import { usePersistentExpansion } from "#/stores/message-expansion-store";
 
 interface ErrorMessageProps {
   errorId?: string;
@@ -22,11 +20,7 @@ export function ErrorMessage({
   isRetrying = false,
 }: ErrorMessageProps) {
   const { t } = useTranslation("openhands");
-  const expansionKey = useEventExpansionKey("error-details");
-  const [showDetails, toggleDetails] = usePersistentExpansion(
-    expansionKey,
-    false,
-  );
+  const [showDetails, setShowDetails] = React.useState(false);
 
   const hasValidTranslationId = !!errorId && i18n.exists(errorId);
   const errorKey = hasValidTranslationId
@@ -35,16 +29,16 @@ export function ErrorMessage({
 
   return (
     <div className="flex flex-col gap-2 my-2 py-2 text-sm w-full">
-        <div className="flex items-center justify-between gap-2">
-          <div
-            className="font-bold text-danger flex items-center"
-            data-testid="error-message-title"
-          >
-            {t(errorKey)}
-            <button
-              type="button"
-              onClick={() => toggleDetails()}
-              className="cursor-pointer text-left"
+      <div className="flex items-center justify-between gap-2">
+        <div
+          className="font-bold text-danger flex items-center"
+          data-testid="error-message-title"
+        >
+          {t(errorKey)}
+          <button
+            type="button"
+            onClick={() => setShowDetails((prev) => !prev)}
+            className="cursor-pointer text-left"
             data-testid="error-message-toggle"
             aria-label={
               showDetails
