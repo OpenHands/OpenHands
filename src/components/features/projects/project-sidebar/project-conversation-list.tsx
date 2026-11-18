@@ -77,7 +77,7 @@ function StateIcon({ mark }: { mark: StateMark }) {
  */
 function StatusLine({ conversation }: { conversation: ProjectConversation }) {
   const { t } = useTranslation("openhands");
-  if (conversation.turn === "asked" && conversation.ask) {
+  if (conversation.turn === "asking" && conversation.ask) {
     return (
       <>
         {t(I18nKey.PROJECTS$ASKS)} {conversation.ask}

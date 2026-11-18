@@ -24,7 +24,7 @@ export const member = (
   execution_status: "finished",
   attention: "idle",
   resolved: null,
-  turn: "answered",
+  turn: "finished",
   ask: null,
   last_message: null,
   pull_requests: [],
@@ -43,8 +43,8 @@ export const BOARD = {
   }),
   conversations: [
     member(LIMITS, "Rate-limit login", {
-      attention: "needs_input",
-      turn: "asked",
+      attention: "asking",
+      turn: "asking",
       ask: "5 or 10 tries per minute?",
       last_message: "Here is the comparison.",
     }),
