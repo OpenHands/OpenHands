@@ -30,6 +30,13 @@ const postJson = (path: string, body: unknown) =>
     body: JSON.stringify(body),
   });
 
+const patchJson = (path: string, body: unknown) =>
+  fetch(`http://localhost:3000${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
 const listWorkspaces = () => fetch("http://localhost:3000/api/workspaces");
 
 const deleteByPath = (path: string, workspacePath: string) =>
@@ -67,7 +74,9 @@ describe("mock workspaces handlers", () => {
     });
   });
 
-  it("upserts a workspace when path already exists", async () => {
+  it("skips a workspace whose path is already registered", async () => {
+    // The real route dedupes by `path`, so a re-post keeps the first entry —
+    // it cannot rename. Renaming goes through PATCH.
     await installWorkspacesHandlers();
     await postJson("/api/workspaces", {
       workspaces: [
@@ -84,10 +93,47 @@ describe("mock workspaces handlers", () => {
 
     await expect(response.json()).resolves.toEqual({
       workspaces: [
-        { id: "w4", name: "Other updated", path: "/workspace/other" },
-        { id: "w3", name: "New", path: "/workspace/project" },
+        { id: "w1", name: "Other", path: "/workspace/other" },
+        { id: "w2", name: "Old", path: "/workspace/project" },
       ],
       workspaceParents: [],
+    });
+  });
+
+  it("renames a workspace by path, keeping its identity", async () => {
+    await installWorkspacesHandlers();
+    await postJson("/api/workspaces", {
+      workspaces: [
+        { id: "w1", name: "Project", path: "/workspace/project" },
+        { id: "w2", name: "Other", path: "/workspace/other" },
+      ],
+    });
+
+    const response = await patchJson(
+      "/api/workspaces?path=%2Fworkspace%2Fproject",
+      { name: "Renamed" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      workspaces: [
+        { id: "w1", name: "Renamed", path: "/workspace/project" },
+        { id: "w2", name: "Other", path: "/workspace/other" },
+      ],
+      workspaceParents: [],
+    });
+  });
+
+  it("404s a rename for an unknown workspace path", async () => {
+    await installWorkspacesHandlers();
+
+    const response = await patchJson("/api/workspaces?path=%2Fmissing", {
+      name: "Renamed",
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      detail: "Workspace not found",
     });
   });
 
@@ -177,7 +223,7 @@ describe("mock workspaces handlers", () => {
     });
   });
 
-  it("replaces a workspace parent when its path is already registered", async () => {
+  it("skips a workspace parent whose path is already registered", async () => {
     await installWorkspacesHandlers();
     await postJson("/api/workspaces/parents", {
       parents: [
@@ -197,9 +243,39 @@ describe("mock workspaces handlers", () => {
     await expect(response.json()).resolves.toEqual({
       workspaces: [],
       workspaceParents: [
-        { id: "p4", name: "Other updated", path: "/workspace/other" },
-        { id: "p3", name: "New", path: "/workspace/repos" },
+        { id: "p1", name: "Other", path: "/workspace/other" },
+        { id: "p2", name: "Old", path: "/workspace/repos" },
       ],
+    });
+  });
+
+  it("renames a workspace parent by path and 404s an unknown one", async () => {
+    await installWorkspacesHandlers();
+    await postJson("/api/workspaces/parents", {
+      parents: [{ id: "p1", name: "Repos", path: "/workspace/repos" }],
+    });
+
+    const renamed = await patchJson(
+      "/api/workspaces/parents?path=%2Fworkspace%2Frepos",
+      { name: "Repositories" },
+    );
+
+    expect(renamed.status).toBe(200);
+    await expect(renamed.json()).resolves.toEqual({
+      workspaces: [],
+      workspaceParents: [
+        { id: "p1", name: "Repositories", path: "/workspace/repos" },
+      ],
+    });
+
+    const missing = await patchJson(
+      "/api/workspaces/parents?path=%2Fworkspace%2Fmissing",
+      { name: "Repositories" },
+    );
+
+    expect(missing.status).toBe(404);
+    await expect(missing.json()).resolves.toEqual({
+      detail: "Workspace parent not found",
     });
   });
 

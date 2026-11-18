@@ -10,6 +10,8 @@ import {
   useAddWorkspaceParents,
   useRemoveWorkspace,
   useRemoveWorkspaceParent,
+  useRenameWorkspace,
+  useRenameWorkspaceParent,
 } from "#/hooks/mutation/use-local-workspaces-mutations";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
@@ -78,6 +80,8 @@ export function WorkspaceSelectionForm({
   const { mutate: removeWorkspace } = useRemoveWorkspace();
   const { mutate: addWorkspaceParents } = useAddWorkspaceParents();
   const { mutate: removeWorkspaceParent } = useRemoveWorkspaceParent();
+  const { mutateAsync: renameWorkspace } = useRenameWorkspace();
+  const { mutateAsync: renameWorkspaceParent } = useRenameWorkspaceParent();
   const {
     workspaces,
     parents: resolvedParents,
@@ -204,7 +208,14 @@ export function WorkspaceSelectionForm({
           onChange={handleWorkspaceChange}
           onAddClick={() => setIsBrowserOpen(true)}
           onManageClick={() => setIsManageOpen(true)}
-          key={selectedWorkspace?.path ?? "empty-workspace-selection"}
+          // The dropdown seeds its own input value from the selected name and
+          // never syncs prop changes, so the name is part of the key: renaming
+          // the selected workspace remounts it with the new label.
+          key={
+            selectedWorkspace
+              ? `${selectedWorkspace.path}:${selectedWorkspace.name}`
+              : "empty-workspace-selection"
+          }
         />
 
         {showWorkspaceStatus && workspaceStatusText && (
@@ -274,6 +285,15 @@ export function WorkspaceSelectionForm({
           }
           removeWorkspaceParent(path);
         }}
+        onRename={(path, name) => {
+          // The selection is keyed by path, so a rename only needs the new
+          // label reflected in the closed dropdown control.
+          if (selectedWorkspace?.path === path) {
+            handleWorkspaceChange({ ...selectedWorkspace, name });
+          }
+          return renameWorkspace({ path, name });
+        }}
+        onRenameParent={(path, name) => renameWorkspaceParent({ path, name })}
       />
     </div>
   );
