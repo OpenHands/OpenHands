@@ -355,3 +355,94 @@ it("keeps existing prompt-based naming when there is no work-item snapshot", () 
   );
   expect(result.current).toBe(prompt);
 });
+
+it("prefixes an automation name to a linked work-item name, replacing the SDK machine title", () => {
+  useConversationLaunchStore
+    .getState()
+    .update(launchId, { conversationId: id });
+  client.setQueryData(detailKey, {
+    ...metadata("\u{1F9EC} CIPHER \u2014 2026-11-18 19:21:42 UTC"),
+    tags: {
+      automationname: "\u{1F9EC} CIPHER",
+      automationtrigger: "automation",
+      workitemprovider: "github",
+      workitemid: "142",
+      workitemtitle: "Mission Provider Filtering",
+    },
+  });
+  const { result } = renderHook(
+    () => useConversationDisplayTitleState()(id).title,
+    { wrapper },
+  );
+  expect(result.current).toBe(
+    "\u{1F9EC} CIPHER: GH-142 \u2014 Mission Provider Filtering",
+  );
+});
+
+it("keeps the automation machine title when no work item is linked", () => {
+  useConversationLaunchStore
+    .getState()
+    .update(launchId, { conversationId: id });
+  const machineTitle = "\u{1F9EC} CIPHER \u2014 2026-11-18 19:21:42 UTC";
+  client.setQueryData(detailKey, {
+    ...metadata(machineTitle),
+    tags: {
+      automationname: "\u{1F9EC} CIPHER",
+      automationtrigger: "automation",
+    },
+  });
+  const { result } = renderHook(
+    () => useConversationDisplayTitleState()(id).title,
+    { wrapper },
+  );
+  expect(result.current).toBe(machineTitle);
+});
+
+it("preserves a user rename of an automation + work-item conversation", () => {
+  useConversationLaunchStore
+    .getState()
+    .update(launchId, { conversationId: id });
+  client.setQueryData(detailKey, {
+    ...metadata("My custom name"),
+    tags: {
+      automationname: "\u{1F9EC} CIPHER",
+      automationtrigger: "automation",
+      workitemprovider: "github",
+      workitemid: "142",
+      workitemtitle: "Mission Provider Filtering",
+    },
+  });
+  const { result } = renderHook(
+    () => useConversationDisplayTitleState()(id).title,
+    { wrapper },
+  );
+  expect(result.current).toBe("My custom name");
+});
+
+it("beats an AI-generated title for an automation + work-item conversation", () => {
+  useConversationLaunchStore
+    .getState()
+    .update(launchId, { conversationId: id });
+  client.setQueryData(detailKey, {
+    ...metadata("\u{1F9EC} CIPHER \u2014 2026-11-18 19:21:42 UTC"),
+    tags: {
+      automationname: "\u{1F9EC} CIPHER",
+      automationtrigger: "automation",
+      workitemprovider: "github",
+      workitemid: "142",
+      workitemtitle: "Mission Provider Filtering",
+    },
+    title_generation: {
+      status: "generated",
+      title: "Investigate the mission provider bug",
+      deadline_at: new Date(Date.now() - 1000).toISOString(),
+    },
+  });
+  const { result } = renderHook(
+    () => useConversationDisplayTitleState()(id).title,
+    { wrapper },
+  );
+  expect(result.current).toBe(
+    "\u{1F9EC} CIPHER: GH-142 \u2014 Mission Provider Filtering",
+  );
+});
