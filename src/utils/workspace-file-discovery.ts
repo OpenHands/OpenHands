@@ -123,11 +123,11 @@ export function buildWindowsWorkspaceFileListCommand(
           `\\${pattern.toLowerCase()}\\`,
         ),
     )
-    .map((pattern) => `/c:"\\${pattern}\\"`);
+    .map((pattern) => `/c:"\\\\${pattern.replaceAll("\\", "\\\\")}\\\\"`);
   const filter = excludes.length
-    ? ` | findstr /v /i ${excludes.join(" ")}`
+    ? ` | findstr /v /i /l ${excludes.join(" ")}`
     : "";
-  return `dir /b /s /a:-d 2>nul${filter} | sort`;
+  return `dir /b /s /a:-d 2>nul${filter} | sort /M 65536`;
 }
 
 export function parseWindowsWorkspaceFileList(
