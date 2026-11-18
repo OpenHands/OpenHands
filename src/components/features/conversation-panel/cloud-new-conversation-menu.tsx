@@ -7,7 +7,7 @@ import { useNavigation } from "#/context/navigation-context";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
 import { useGitRepositories } from "#/hooks/query/use-git-repositories";
 import { useSearchRepositories } from "#/hooks/query/use-search-repositories";
-import { useUserProviders } from "#/hooks/use-user-providers";
+import { useGitProviderOptions } from "#/hooks/use-git-provider-options";
 import { useDebounce } from "#/hooks/use-debounce";
 import { useHomeStore } from "#/stores/home-store";
 import { I18nKey } from "#/i18n/declaration";
@@ -19,7 +19,11 @@ import {
   dropdownMenuRowIconWrapperClassName,
 } from "#/utils/dropdown-classes";
 import { GitRepository } from "#/types/git";
-import { Provider } from "#/types/settings";
+import {
+  gitProviderOptionKey,
+  gitProviderOptionsMatch,
+  type GitProviderOption,
+} from "#/utils/git-provider-option";
 import RepoIcon from "#/icons/repo.svg?react";
 import SearchIcon from "#/icons/search.svg?react";
 import { GitProviderIcon } from "#/components/shared/git-provider-icon";
@@ -89,8 +93,12 @@ export function CloudNewConversationMenu({
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
 
-  const { providers } = useUserProviders();
-  const { lastSelectedProvider, setLastSelectedProvider } = useHomeStore();
+  const { options } = useGitProviderOptions();
+  const {
+    lastSelectedProvider,
+    lastSelectedGitProviderId,
+    setLastSelectedProvider,
+  } = useHomeStore();
 
   const [open, setOpen] = React.useState(false);
   const popoverRef = React.useRef<HTMLDivElement>(null);
@@ -99,23 +107,25 @@ export function CloudNewConversationMenu({
     open,
     enabled: useFixedPlacement,
   });
-  const [selectedProvider, setSelectedProvider] =
-    React.useState<Provider | null>(lastSelectedProvider ?? null);
+  const [pickedOption, setPickedOption] =
+    React.useState<GitProviderOption | null>(null);
   const [query, setQuery] = React.useState("");
   const debouncedQuery = useDebounce(query, 300);
 
-  React.useEffect(() => {
-    if (providers.length === 0) {
-      if (selectedProvider !== null) setSelectedProvider(null);
-      return;
-    }
-    if (selectedProvider && providers.includes(selectedProvider)) return;
-    const fallback =
-      lastSelectedProvider && providers.includes(lastSelectedProvider)
-        ? lastSelectedProvider
-        : providers[0];
-    setSelectedProvider(fallback);
-  }, [providers, selectedProvider, lastSelectedProvider]);
+  const selectedOption = React.useMemo(
+    () =>
+      options.find((option) => gitProviderOptionsMatch(option, pickedOption)) ??
+      options.find(
+        (option) =>
+          option.provider === lastSelectedProvider &&
+          option.gitProviderId === (lastSelectedGitProviderId ?? null),
+      ) ??
+      options[0] ??
+      null,
+    [options, pickedOption, lastSelectedProvider, lastSelectedGitProviderId],
+  );
+  const selectedProvider = selectedOption?.provider ?? null;
+  const selectedGitProviderId = selectedOption?.gitProviderId ?? null;
 
   const repositoryQueriesEnabled = open && !!selectedProvider;
   const {
@@ -127,6 +137,7 @@ export function CloudNewConversationMenu({
     fetchNextPage,
   } = useGitRepositories({
     provider: selectedProvider,
+    gitProviderId: selectedGitProviderId,
     enabled: repositoryQueriesEnabled,
   });
 
@@ -135,6 +146,8 @@ export function CloudNewConversationMenu({
       debouncedQuery,
       selectedProvider,
       !repositoryQueriesEnabled,
+      undefined,
+      selectedGitProviderId,
     );
 
   const allRepositories = React.useMemo(
@@ -183,6 +196,7 @@ export function CloudNewConversationMenu({
       branch = await GitService.getRepositoryDefaultBranch(
         repo.full_name,
         repo.git_provider,
+        selectedGitProviderId,
       ).catch(() => null);
       setIsResolvingBranch(false);
     }
@@ -192,6 +206,9 @@ export function CloudNewConversationMenu({
           name: repo.full_name,
           gitProvider: repo.git_provider,
           branch: branch ?? undefined,
+          ...(selectedGitProviderId !== null
+            ? { gitProviderId: selectedGitProviderId }
+            : {}),
         },
         entryPoint: "sidebar_cloud_menu",
       },
@@ -204,9 +221,9 @@ export function CloudNewConversationMenu({
     );
   };
 
-  const handleProviderChange = (provider: Provider) => {
-    setSelectedProvider(provider);
-    setLastSelectedProvider(provider);
+  const handleProviderChange = (option: GitProviderOption) => {
+    setPickedOption(option);
+    setLastSelectedProvider(option.provider, option.gitProviderId);
     setQuery("");
   };
 
@@ -272,19 +289,23 @@ export function CloudNewConversationMenu({
           )}
           style={fixedStyle}
         >
-          {providers.length > 1 && (
+          {options.length > 1 && (
             <div
               className="flex items-center gap-1 px-1 py-1"
               data-testid="cloud-provider-tabs"
             >
-              {providers.map((provider) => {
-                const isActive = provider === selectedProvider;
+              {options.map((option) => {
+                const isActive = gitProviderOptionsMatch(
+                  option,
+                  selectedOption,
+                );
+                const optionKey = gitProviderOptionKey(option);
                 return (
                   <button
-                    key={provider}
+                    key={optionKey}
                     type="button"
-                    data-testid={`cloud-provider-tab-${provider}`}
-                    onClick={() => handleProviderChange(provider)}
+                    data-testid={`cloud-provider-tab-${optionKey}`}
+                    onClick={() => handleProviderChange(option)}
                     className={cn(
                       "flex items-center gap-1 rounded border px-2 py-1 text-xs",
                       dropdownInstantColorClassName,
@@ -293,8 +314,8 @@ export function CloudNewConversationMenu({
                         : "border-transparent text-text-secondary hover:text-contrast",
                     )}
                   >
-                    <GitProviderIcon gitProvider={provider} />
-                    <span className="capitalize">{provider}</span>
+                    <GitProviderIcon gitProvider={option.provider} />
+                    <span>{option.label}</span>
                   </button>
                 );
               })}

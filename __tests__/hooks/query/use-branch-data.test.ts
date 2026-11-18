@@ -135,6 +135,7 @@ describe("useBranchData", () => {
       "openhands/agent-canvas",
       30,
       "github",
+      undefined,
     );
     expect(mocks.searchBranches).toHaveBeenNthCalledWith(
       1,
@@ -142,6 +143,7 @@ describe("useBranchData", () => {
       "feature",
       30,
       "github",
+      undefined,
     );
     expect(mocks.searchBranches).toHaveBeenNthCalledWith(
       2,
@@ -149,6 +151,7 @@ describe("useBranchData", () => {
       "",
       30,
       "github",
+      undefined,
     );
   });
 
@@ -188,6 +191,7 @@ describe("useBranchData", () => {
       "main",
       30,
       "github",
+      undefined,
     );
 
     dependencies.paginated.data = getPaginatedData(
@@ -215,6 +219,7 @@ describe("useBranchData", () => {
       "",
       30,
       "github",
+      undefined,
     );
   });
 
@@ -261,6 +266,7 @@ describe("useBranchData", () => {
         "",
         30,
         "github",
+        undefined,
       );
     },
   );
@@ -380,6 +386,7 @@ describe("useBranchData", () => {
         "main",
         30,
         "github",
+        undefined,
       );
     },
   );
