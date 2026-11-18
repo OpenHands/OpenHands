@@ -180,20 +180,6 @@ class ProjectsService {
     };
   }
 
-  /** Add an existing conversation; it leaves any other project. */
-  static async addConversation(
-    projectId: string,
-    conversationId: string,
-  ): Promise<void> {
-    await client().request({
-      method: "PUT",
-      path: projectPath(
-        projectId,
-        `/conversations/${encodeURIComponent(conversationId)}`,
-      ),
-    });
-  }
-
   /**
    * Resolve or reopen a member through the server's own routes, which also
    * clear the resolve note. Throws an HttpError with status 404 when the

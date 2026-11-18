@@ -44261,24 +44261,6 @@
     "ca": "No s'ha pogut actualitzar el projecte.",
     "id": "Tidak dapat memperbarui proyek."
   },
-  "PROJECTS$ADD_CONVERSATION": {
-    "en": "Add a conversation…",
-    "ja": "会話を追加…",
-    "zh-CN": "添加会话…",
-    "zh-TW": "新增對話…",
-    "ko-KR": "대화 추가…",
-    "no": "Legg til en samtale…",
-    "it": "Aggiungi una conversazione…",
-    "pt": "Adicionar uma conversa…",
-    "es": "Añadir una conversación…",
-    "ar": "إضافة محادثة…",
-    "fr": "Ajouter une conversation…",
-    "tr": "Konuşma ekle…",
-    "de": "Unterhaltung hinzufügen…",
-    "uk": "Додати розмову…",
-    "ca": "Afegeix una conversa…",
-    "id": "Tambahkan percakapan…"
-  },
   "PROJECTS$FILES": {
     "en": "Files",
     "ja": "ファイル",
@@ -44926,24 +44908,6 @@
     "uk": "Видалити «{{name}}»? Його файли й пам'ять буде видалено. Розмови залишаться.",
     "ca": "Vols suprimir «{{name}}»? Se'n suprimeixen els fitxers i la memòria. Les converses es conserven.",
     "id": "Hapus \"{{name}}\"? Berkas dan memorinya dihapus. Percakapannya tetap disimpan."
-  },
-  "PROJECTS$NEW_CONVERSATION": {
-    "en": "New conversation",
-    "ja": "新しい会話",
-    "zh-CN": "新对话",
-    "zh-TW": "新對話",
-    "ko-KR": "새 대화",
-    "no": "Ny samtale",
-    "it": "Nuova conversazione",
-    "pt": "Nova conversa",
-    "es": "Nueva conversación",
-    "ar": "محادثة جديدة",
-    "fr": "Nouvelle conversation",
-    "tr": "Yeni konuşma",
-    "de": "Neue Unterhaltung",
-    "uk": "Нова розмова",
-    "ca": "Conversa nova",
-    "id": "Percakapan baru"
   },
   "PROJECTS$MEMORY": {
     "en": "Memory",
