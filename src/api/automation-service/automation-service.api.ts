@@ -1155,6 +1155,27 @@ class AutomationService {
     return data;
   }
 
+  /**
+   * Delete a factory. Needs `manage_automations`. The service answers 409
+   * while a live automation still belongs to the factory.
+   */
+  static async deleteFactory(id: string): Promise<void> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}/factories/${encodeURIComponent(id)}`;
+
+    if (active.kind === "cloud") {
+      await callCloudProxy<unknown>({
+        backend: active,
+        method: "DELETE",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return;
+    }
+
+    await localAutomationAxios.delete(path);
+  }
+
   /** Whether the active deployment advertises factories. */
   static supportsFactories(
     capabilities: DeploymentCapabilities | null | undefined,

@@ -63,3 +63,17 @@ export function useRenameFactory() {
       queryClient.invalidateQueries({ queryKey: FACTORIES_QUERY_KEY }),
   });
 }
+
+export function useDeleteFactory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => AutomationService.deleteFactory(id),
+    meta: { disableToast: true },
+    onSuccess: (_data, id) => {
+      // Drop the deleted factory's own query first, so the invalidation below
+      // does not refetch it into a 404 while its page is still mounted.
+      queryClient.removeQueries({ queryKey: [...FACTORIES_QUERY_KEY, id] });
+      void queryClient.invalidateQueries({ queryKey: FACTORIES_QUERY_KEY });
+    },
+  });
+}

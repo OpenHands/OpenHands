@@ -142,6 +142,14 @@ function fakeEnterprise({ path }: { path: string }): unknown {
       features: licenseFeatures,
     } satisfies LicenseStatus;
   }
+  if (pathname === `/api/organizations/${ORG_ID}/me`) {
+    return {
+      org_id: ORG_ID,
+      user_id: "u-1",
+      role: "owner",
+      permissions: ["view_automations", "manage_automations"],
+    };
+  }
   if (pathname === "/api/organizations") {
     return { items: [{ id: ORG_ID, name: "Org" }], current_org_id: ORG_ID };
   }
@@ -267,6 +275,33 @@ describe("Factory worklogs", () => {
     // Assert
     const links = await screen.findAllByTestId("factory-navigation-worklogs");
     expect(links[0]).toHaveAttribute("href", WORKLOGS_PATH);
+  });
+
+  it("warns on delete that the factory's worklogs go with it when the license grants worklogs", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderAt(`/factories/${FACTORY_ID}`);
+
+    // Act
+    await user.click(await screen.findByTestId("factory-delete"));
+
+    // Assert
+    expect(await screen.findByRole("dialog")).toHaveTextContent(/worklogs/i);
+  });
+
+  it("does not mention worklogs on delete when the license lacks them", async () => {
+    // Arrange
+    licenseFeatures = { sso: false };
+    const user = userEvent.setup();
+    renderAt(`/factories/${FACTORY_ID}`);
+
+    // Act
+    await user.click(await screen.findByTestId("factory-delete"));
+
+    // Assert
+    expect(await screen.findByRole("dialog")).not.toHaveTextContent(
+      /worklogs/i,
+    );
   });
 
   it("leaves the Worklogs item out and explains why on a deep link when the license lacks worklogs", async () => {
