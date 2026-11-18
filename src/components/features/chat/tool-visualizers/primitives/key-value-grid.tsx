@@ -11,7 +11,7 @@ interface KeyValueRow {
  */
 export function KeyValueGrid({ rows }: { rows: KeyValueRow[] }) {
   return (
-    <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+    <div className="grid metadata-grid-columns gap-x-3 gap-y-1 text-xs">
       {rows.map(({ label, value }) => (
         <React.Fragment key={label}>
           <span className="text-muted">{label}</span>

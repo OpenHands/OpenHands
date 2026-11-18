@@ -231,6 +231,13 @@ prerequisite; never substitute a mock and call it a pass.
   `src/` paths no family owns (a map gap) and non-user-facing paths. Drive every entry point those features list at
   desktop and phone viewports, and report with
   [the report contract](references/report.md).
+- **Verify an Agent Server change** (a software-agent-sdk PR or an Agent
+  Server bump): the families whose `Server:` line names the changed server
+  features are where a user could see it ([mapping.md](references/mapping.md)).
+  For a PR, launch the baseline with `--sdk-ref main` and the change with
+  `--sdk-ref <PR branch>` (`launch --new` for each) and drive those families
+  on both. A difference is user-facing; no difference means the change does
+  not reach Canvas users on those paths.
 - **Verify a fix for a known bug** (an open PR or a merged commit that claims
   to fix a bug the map records): launch the baseline and the fix as two runs
   (`launch --new` with each worktree's own `control-openhands`: the CLI
@@ -260,7 +267,11 @@ prerequisite; never substitute a mock and call it a pass.
   yesterday's is at hand.
 - **Create or extend the map**: follow [references/mapping.md](references/mapping.md).
   It teaches how to discover features, write entries against the CLI and prove
-  each one live. `control-openhands map coverage` measures what is still unmapped.
+  each one live. `control-openhands map coverage` measures what is still unmapped,
+  `map controls` lists the controls on mapped pages that no bullet operates, and
+  [references/scenarios.md](references/scenarios.md) lists the situations (the
+  item edited later, two actions at once, real data, another environment) to
+  ask of every sub-feature beyond its happy path.
 - **Maintain the map (periodic or weekly)**: follow
   [references/maintenance.md](references/maintenance.md): index hygiene, a source
   wave, one live pass over every feature, PR-intent reconciliation for the week's

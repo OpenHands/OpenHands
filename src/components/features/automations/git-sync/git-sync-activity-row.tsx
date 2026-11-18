@@ -4,6 +4,7 @@ import { RefreshCw, Check, TriangleAlert } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import { cn } from "#/utils/utils";
+import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
 
 export type GitSyncActivityState = "idle" | "running" | "succeeded" | "failed";
 
@@ -58,8 +59,16 @@ export function GitSyncActivityRow({
       className={cn(
         "mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md px-3 py-2 text-sm",
         isRunning && "bg-tertiary text-content",
-        state === "succeeded" && "bg-status-success/10 text-feedback-success",
-        isFailed && "bg-status-error/10 text-feedback-error",
+        state === "succeeded" &&
+          cn(
+            statusToneBadgeClassName.success,
+            "text-feedback-success dark:bg-status-success/10",
+          ),
+        isFailed &&
+          cn(
+            statusToneBadgeClassName.danger,
+            "text-feedback-error dark:bg-status-error/10",
+          ),
       )}
     >
       {isRunning && <RefreshCw className="size-4 animate-spin" aria-hidden />}

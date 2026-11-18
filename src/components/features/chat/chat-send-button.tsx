@@ -38,13 +38,13 @@ export function ChatSendButton({
       {isPending ? (
         <Loader2
           data-testid="submit-button-pending-icon"
-          className="size-4 animate-spin text-[var(--oh-muted)]"
+          className="size-4 animate-spin text-muted"
           aria-hidden
         />
       ) : (
         <ArrowUp
           className="w-4 h-4"
-          color={disabled ? "var(--oh-muted)" : "white"}
+          color={disabled ? "var(--oh-muted)" : "var(--oh-contrast)"}
         />
       )}
     </button>

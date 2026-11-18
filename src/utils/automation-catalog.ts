@@ -87,6 +87,37 @@ export function getTemplateIntegrationIds(
   return ids;
 }
 
+/** The integration whose logo stands for a built-in provider of another name. */
+const BUILT_IN_LOGO_IDS: Readonly<Record<string, string>> = {
+  bitbucket_data_center: "bitbucket",
+  jira_dc: "jira",
+};
+
+/**
+ * The integration catalog id whose logo stands for a provider name, such as
+ * a built-in integration or an automation's event source.
+ */
+export function getIntegrationLogoId(name: string): string {
+  return BUILT_IN_LOGO_IDS[name] ?? name;
+}
+
+/**
+ * The integrations whose logos stand for a template on its card: the ones it
+ * is about, then the built-in integrations it requires. Templates that use
+ * the connected git account declare no integration and are recognised by
+ * their repository picker; the Data Center templates only by their built-ins.
+ */
+export function getTemplateLogoIds(
+  automation: RecommendedAutomation,
+): string[] {
+  const ids = getTemplateIntegrationIds(automation);
+  for (const name of getRequiredBuiltInIntegrations(automation)) {
+    const id = getIntegrationLogoId(name);
+    if (!ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
 export type TemplateTriggerKind = AutomationTriggerKind;
 
 const TEMPLATE_TRIGGER_KINDS: readonly TemplateTriggerKind[] = [
@@ -131,19 +162,281 @@ const SELF_HOSTED_HIDDEN_AUTOMATION_IDS: ReadonlySet<string> = new Set([
   "custom-automation",
 ]);
 
-const NO_HIDDEN_AUTOMATION_IDS: ReadonlySet<string> = new Set();
+/** Integration ids that are also an instance's built-in git providers. */
+const GIT_PROVIDER_INTEGRATION_IDS: ReadonlySet<string> = new Set([
+  "github",
+  "gitlab",
+  "bitbucket",
+]);
 
 /**
- * The catalog entries to hide for a backend reporting `deploymentMode` (the
- * cloud web-client config's `feature_flags.deployment_mode`). Only a
- * self-hosted (Enterprise) instance hides anything.
+ * The git providers a template is about, by integration id: the ones it
+ * declares and the provider of its repository picker.
  */
-export function getHiddenAutomationIds(
-  deploymentMode: string | null | undefined,
-): ReadonlySet<string> {
-  return deploymentMode === "self_hosted"
-    ? SELF_HOSTED_HIDDEN_AUTOMATION_IDS
-    : NO_HIDDEN_AUTOMATION_IDS;
+export function getTemplateGitProviderIds(
+  automation: RecommendedAutomation,
+): string[] {
+  return getTemplateIntegrationIds(automation).filter((id) =>
+    GIT_PROVIDER_INTEGRATION_IDS.has(id),
+  );
+}
+
+/** Every git provider an instance can report as built in. */
+const BUILT_IN_GIT_PROVIDER_IDS: ReadonlySet<string> = new Set([
+  ...GIT_PROVIDER_INTEGRATION_IDS,
+  "bitbucket_data_center",
+  "azure_devops",
+]);
+
+/** The built-in Jira integrations: Jira Cloud and Jira Data Center. */
+const JIRA_BUILT_IN_IDS: ReadonlySet<string> = new Set(["jira", "jira_dc"]);
+
+/** The most templates the Suggested group shows. */
+export const SUGGESTED_TEMPLATE_LIMIT = 8;
+
+/**
+ * Integration ids that reach only Jira Cloud, never Jira Data Center. The
+ * `atlassian` MCP server is absent: it also serves Jira Data Center.
+ */
+const JIRA_CLOUD_INTEGRATION_IDS: ReadonlySet<string> = new Set([
+  "atlassian-rovo",
+  "jira",
+]);
+
+/** Product names for the built-in integrations an instance reports. */
+export const BUILT_IN_INTEGRATION_NAMES: Readonly<Record<string, string>> = {
+  github: "GitHub",
+  gitlab: "GitLab",
+  bitbucket: "Bitbucket Cloud",
+  bitbucket_data_center: "Bitbucket Data Center",
+  azure_devops: "Azure DevOps",
+  jira: "Jira Cloud",
+  jira_dc: "Jira Data Center",
+  linear: "Linear",
+  slack: "Slack",
+};
+
+/** What the active backend says about the integrations built into it. */
+export interface InstanceIntegrations {
+  /** The cloud web-client config's `feature_flags.deployment_mode`. */
+  deploymentMode: string | null | undefined;
+  /**
+   * The built-in integrations the instance enables, by provider name, or null
+   * while unknown (local backends, loading, an unreadable config).
+   */
+  builtInIntegrations: ReadonlySet<string> | null | undefined;
+  /**
+   * Catalog integration ids the user has set up themselves: installed MCP
+   * servers and connected git providers. Known on every backend.
+   */
+  connectedIntegrations?: ReadonlySet<string> | null;
+}
+
+/**
+ * The built-in integrations an entry cannot run without, read off the raw
+ * entry because the pinned package may predate the field.
+ */
+export function getRequiredBuiltInIntegrations(
+  automation: RecommendedAutomation,
+): string[] {
+  const { builtInIntegrations } = automation.requires as unknown as Record<
+    string,
+    unknown
+  >;
+  return Array.isArray(builtInIntegrations)
+    ? builtInIntegrations.filter(
+        (id): id is string => typeof id === "string" && id.length > 0,
+      )
+    : [];
+}
+
+/**
+ * The built-in integrations, by provider name, a template works with: the ones
+ * it requires, and the ones its integrations or repository picker name.
+ */
+function getUsedBuiltInIntegrations(
+  automation: RecommendedAutomation,
+): string[] {
+  const used = getRequiredBuiltInIntegrations(automation);
+  for (const id of getTemplateIntegrationIds(automation)) {
+    if (JIRA_CLOUD_INTEGRATION_IDS.has(id)) used.push("jira");
+    else if (Object.hasOwn(BUILT_IN_INTEGRATION_NAMES, id)) used.push(id);
+  }
+  return [...new Set(used)];
+}
+
+/**
+ * The built-in integrations an OpenHands Enterprise instance clearly uses
+ * something else for: a git provider it does not configure while it does
+ * configure another, or Jira Cloud on an instance that uses Jira Data Center
+ * instead (reported as `jira`). An instance that reports no git provider gives
+ * no such evidence, so its templates keep their default place. An integration
+ * the user has connected themselves never counts as missing. Empty when the
+ * instance looks ready for the template.
+ */
+function getMissingIntegrations(
+  automation: RecommendedAutomation,
+  builtIns: ReadonlySet<string>,
+  connected: ReadonlySet<string>,
+): string[] {
+  const reportsGitProvider = [...builtIns].some((id) =>
+    BUILT_IN_GIT_PROVIDER_IDS.has(id),
+  );
+  const reportsJira = builtIns.has("jira") || builtIns.has("jira_dc");
+  // A built-in integration the template declares counts as missing only when
+  // the instance reports another of its kind (a different git provider, or
+  // the other Jira); otherwise there is no evidence either way.
+  const missing = getRequiredBuiltInIntegrations(automation).filter(
+    (id) =>
+      !builtIns.has(id) &&
+      ((BUILT_IN_GIT_PROVIDER_IDS.has(id) && reportsGitProvider) ||
+        (JIRA_BUILT_IN_IDS.has(id) && reportsJira)),
+  );
+  // An integration the template can start without never counts against it.
+  const required = getRequiredIntegrationIds(automation);
+  const ids = getTemplateIntegrationIds(automation).filter(
+    (id) =>
+      !connected.has(id) &&
+      (required.includes(id) || !getIntegrationIds(automation).includes(id)),
+  );
+  for (const id of ids) {
+    if (
+      reportsGitProvider &&
+      GIT_PROVIDER_INTEGRATION_IDS.has(id) &&
+      !builtIns.has(id)
+    ) {
+      missing.push(id);
+    }
+  }
+  const usesJiraDcOnly = builtIns.has("jira_dc") && !builtIns.has("jira");
+  if (usesJiraDcOnly && ids.some((id) => JIRA_CLOUD_INTEGRATION_IDS.has(id))) {
+    missing.push("jira");
+  }
+  return [...new Set(missing)];
+}
+
+/** How the active backend should offer the catalog. */
+export interface AutomationAvailability {
+  /** Entries this backend never offers. */
+  hidden: ReadonlySet<string>;
+  /**
+   * Entries an Enterprise instance does not appear to support, with the
+   * built-in integrations each seems to lack, by provider name. They are still
+   * offered, after the ones the instance looks ready for, because the
+   * instance's report of its integrations is a hint rather than a guarantee.
+   */
+  unlikely: ReadonlyMap<string, readonly string[]>;
+  /**
+   * Entries that use something already set up — one of an Enterprise
+   * instance's built-in integrations, or an MCP server or git provider the
+   * user has connected — with the ids each uses.
+   */
+  suggested: ReadonlyMap<string, readonly string[]>;
+}
+
+/**
+ * Which catalog entries to hide, suggest and rank last on the active backend.
+ *
+ * A self-hosted (Enterprise) instance hides the entries it does not offer at
+ * all; every other entry, Data Center ones included, is offered everywhere.
+ * On every backend, an entry using an MCP server or git provider the
+ * user has connected is suggested. Once an Enterprise instance's integrations
+ * are known, an entry using one of them is suggested too, and one the instance
+ * clearly uses something else for is ranked last rather than hidden.
+ */
+export function getAutomationAvailability(
+  {
+    deploymentMode,
+    builtInIntegrations,
+    connectedIntegrations,
+  }: InstanceIntegrations,
+  catalog: readonly RecommendedAutomation[] = AUTOMATION_CATALOG,
+): AutomationAvailability {
+  const isSelfHosted = deploymentMode === "self_hosted";
+  const knownSelfHosted = isSelfHosted ? builtInIntegrations : null;
+  const hidden = new Set(
+    isSelfHosted ? SELF_HOSTED_HIDDEN_AUTOMATION_IDS : undefined,
+  );
+  const unlikely = new Map<string, readonly string[]>();
+  const suggested = new Map<string, readonly string[]>();
+  const connected = connectedIntegrations ?? new Set<string>();
+  for (const automation of catalog) {
+    if (hidden.has(automation.id)) continue;
+    const missing = knownSelfHosted
+      ? getMissingIntegrations(automation, knownSelfHosted, connected)
+      : [];
+    if (missing.length > 0) {
+      unlikely.set(automation.id, missing);
+      continue;
+    }
+    const used = [
+      ...(knownSelfHosted
+        ? getUsedBuiltInIntegrations(automation).filter((id) =>
+            knownSelfHosted.has(id),
+          )
+        : []),
+      ...getTemplateIntegrationIds(automation).filter((id) =>
+        connected.has(id),
+      ),
+    ];
+    if (used.length > 0) suggested.set(automation.id, [...new Set(used)]);
+  }
+  return { hidden, unlikely, suggested };
+}
+
+/**
+ * The entries in their offered order: the ones the instance looks ready for,
+ * then the ones it does not appear to support, each in their existing order.
+ */
+export function rankByAvailability<T extends { id: string }>(
+  automations: readonly T[],
+  unlikely: ReadonlyMap<string, readonly string[]> | undefined,
+): T[] {
+  if (!unlikely?.size) return [...automations];
+  return [
+    ...automations.filter((automation) => !unlikely.has(automation.id)),
+    ...automations.filter((automation) => unlikely.has(automation.id)),
+  ];
+}
+
+/** The Templates page's two groups, each in its offered order. */
+export interface SuggestedTemplates<T> {
+  suggested: T[];
+  more: T[];
+}
+
+/**
+ * Splits entries into the suggested ones and the rest. Suggested are the ones
+ * using something already set up, then the featured ones the instance looks
+ * ready for, up to `SUGGESTED_TEMPLATE_LIMIT`; with nothing set up, that is
+ * just the featured ones. The rest keep their order, with those the instance
+ * does not appear to support last.
+ */
+export function splitBySuggestion<T extends { id: string }>(
+  automations: readonly T[],
+  isFeatured: (automation: T) => boolean,
+  {
+    suggested,
+    unlikely,
+  }: Partial<Pick<AutomationAvailability, "suggested" | "unlikely">>,
+): SuggestedTemplates<T> {
+  const matched = automations.filter(({ id }) => suggested?.has(id));
+  const featured = automations.filter(
+    (automation) =>
+      !suggested?.has(automation.id) &&
+      !unlikely?.has(automation.id) &&
+      isFeatured(automation),
+  );
+  const chosen = new Set(
+    [...matched, ...featured].slice(0, SUGGESTED_TEMPLATE_LIMIT),
+  );
+  return {
+    suggested: [...chosen],
+    more: rankByAvailability(
+      automations.filter((automation) => !chosen.has(automation)),
+      unlikely,
+    ),
+  };
 }
 
 /**
@@ -242,6 +535,29 @@ function getAutomationTemplateEntry(
   const { id } = template as Record<string, unknown>;
   if (typeof id !== "string" || id.length === 0) return null;
   return CATALOG_ENTRY_BY_ID.get(id) ?? null;
+}
+
+/**
+ * What the template an automation was created from says about it: the
+ * catalog description and, when the entry ships one, its Mermaid diagram.
+ * Null without template provenance. Read live from the pinned catalog, so a
+ * reworded template reaches every automation created from it.
+ */
+export function getAutomationTemplateOverview(
+  automation: Automation,
+): { description: string; diagram: string | null } | null {
+  const entry = getAutomationTemplateEntry(automation);
+  if (!entry) return null;
+  return { description: entry.description, diagram: getEntryDiagram(entry) };
+}
+
+/**
+ * A catalog entry's Mermaid diagram, or null. The field is newer than some
+ * catalog releases and is published data, so it is read guarded.
+ */
+export function getEntryDiagram(entry: object): string | null {
+  const { diagram } = entry as { diagram?: unknown };
+  return typeof diagram === "string" && diagram.length > 0 ? diagram : null;
 }
 
 /**

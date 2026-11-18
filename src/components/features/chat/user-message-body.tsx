@@ -78,7 +78,7 @@ export function UserMessageBody({
       <div
         ref={contentRef}
         className={cn(
-          "text-sm leading-6 whitespace-normal [word-break:break-word]",
+          "text-sm leading-6 whitespace-normal message-word-break",
           isCollapsed && "line-clamp-5",
         )}
       >

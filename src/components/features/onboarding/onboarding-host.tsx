@@ -14,8 +14,7 @@ import { useOnboardingCompletion } from "./use-onboarding-completion";
 
 function hasUsableLlm(settings: Settings | undefined): boolean {
   const llm = settings?.agent_settings?.llm as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const hasModel =
     typeof llm?.model === "string" && llm.model.trim().length > 0;
   const hasAuth =

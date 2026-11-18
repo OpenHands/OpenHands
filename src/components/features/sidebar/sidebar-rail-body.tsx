@@ -98,6 +98,7 @@ export function SidebarRailBody({
   const { pages: canvasExtensionPages } = useCanvasExtensionsRuntime();
   const backendCloseTimerRef = collapsedBackendCloseTimer;
   const { isPinnedRoute, togglePinnedRoute } = usePinnedHomeRoute();
+  const [backendMenuOpen, setBackendMenuOpen] = React.useState(false);
 
   const buildPinAction = (path: string, testId: string) => {
     const pinned = isPinnedRoute(path);
@@ -395,7 +396,14 @@ export function SidebarRailBody({
 
       {!collapsed ? (
         <>
-          <div className="mb-2 shrink-0 pr-2.5">
+          {/* Keep the card's space while the backend menu covers it, so the
+              list above doesn't jump when the menu opens on hover. */}
+          <div
+            className={cn(
+              "mb-2 shrink-0 pr-2.5",
+              backendMenuOpen && "invisible",
+            )}
+          >
             <SidebarOnboardingChecklist collapsed={collapsed} />
           </div>
           <div
@@ -405,7 +413,11 @@ export function SidebarRailBody({
             )}
           >
             <AgentCanvasVersionTile hideWhenUpToDate />
-            <BackendSelector sidebarCollapsed={collapsed} openUpward />
+            <BackendSelector
+              sidebarCollapsed={collapsed}
+              openUpward
+              onMenuOpenChange={setBackendMenuOpen}
+            />
           </div>
         </>
       ) : null}

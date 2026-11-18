@@ -8,13 +8,19 @@ import {
 } from "#/constants/status-colors";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { AgentState } from "#/types/agent-state";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
 const mocks = vi.hoisted(() => ({
   conversationId: "conversation-1" as string | undefined,
   conversation: {
     execution_status: "running",
-  } as { execution_status?: ExecutionStatus | null } | undefined,
+  } as
+    | {
+        execution_status?: ExecutionStatus | null;
+        sandbox_status?: string | null;
+      }
+    | undefined,
   curAgentState: "running" as AgentState,
   isTask: false,
   taskStatus: null as string | null,
@@ -157,12 +163,32 @@ function LayerUnderMenu({ onClose }: { onClose: () => void }) {
 describe("conversation name status controls", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useConversationLaunchStore.setState({ launches: {} });
     mocks.conversationId = "conversation-1";
     mocks.conversation = { execution_status: ExecutionStatus.RUNNING };
     mocks.curAgentState = AgentState.RUNNING;
     mocks.isTask = false;
     mocks.taskStatus = null;
     mocks.providers = [{ name: "provider-1" }];
+  });
+
+  it("shows a failed launch instead of the previous conversation status", () => {
+    const launchId = useConversationLaunchStore.getState().begin({
+      backendId: "local",
+      orgId: null,
+      message: "hello",
+      files: [],
+    });
+    useConversationLaunchStore
+      .getState()
+      .update(launchId, { error: "Create failed" });
+    mocks.conversationId = launchId;
+    mocks.conversation = undefined;
+    renderSubject();
+    expect(screen.getByTestId("conversation-status-dot")).toHaveAttribute(
+      "data-color",
+      OH_STATUS_ERROR_COLOR,
+    );
   });
 
   it("pauses an active conversation without triggering its parent", () => {
@@ -218,6 +244,23 @@ describe("conversation name status controls", () => {
     });
     expect(mocks.pauseConversation).not.toHaveBeenCalled();
     expect(onParentClick).not.toHaveBeenCalled();
+  });
+
+  it("offers Stop Runtime for a running cloud sandbox after the agent is interrupted", () => {
+    mocks.conversation = {
+      execution_status: ExecutionStatus.PAUSED,
+      sandbox_status: "RUNNING",
+    };
+    renderSubject();
+
+    openStatusMenu();
+    // The sandbox is already running, so there is nothing to start.
+    expect(screen.queryByTestId("start-server-button")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("stop-server-button"));
+
+    expect(mocks.pauseConversation).toHaveBeenCalledWith({
+      conversationId: "conversation-1",
+    });
   });
 
   it("dismisses the status menu when the child menu requests close", () => {

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "#/utils/random-uuid";
 import type { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 
 export interface ModelSwitchDetails {
@@ -105,7 +105,7 @@ export const useModelStore = create<ModelStore>()(
       show: (conversationId, anchorEventId, profiles) =>
         set((s) =>
           appendEntry(s, conversationId, {
-            id: uuidv4(),
+            id: randomUUID(),
             anchorEventId,
             profiles,
           }),
@@ -124,7 +124,7 @@ export const useModelStore = create<ModelStore>()(
             ? {}
             : appendEntry(s, conversationId, {
                 ...details,
-                id: details.id ?? uuidv4(),
+                id: details.id ?? randomUUID(),
                 initiator: details.initiator ?? "user",
                 anchorEventId,
                 profiles: [],
@@ -141,16 +141,14 @@ export const useModelStore = create<ModelStore>()(
           const existingIds = new Set(existing.map((e) => e.id));
           const additions = switches
             .filter((sw) => !existingIds.has(sw.id))
-            .map(
-              (sw): ModelListEntry => ({
-                id: sw.id,
-                anchorEventId: sw.anchorEventId,
-                profiles: [],
-                switchedTo: sw.profileName,
-                initiator: sw.initiator,
-                reason: sw.reason,
-              }),
-            );
+            .map((sw): ModelListEntry => ({
+              id: sw.id,
+              anchorEventId: sw.anchorEventId,
+              profiles: [],
+              switchedTo: sw.profileName,
+              initiator: sw.initiator,
+              reason: sw.reason,
+            }));
           if (additions.length === 0) return s;
           return {
             entriesByConversation: {

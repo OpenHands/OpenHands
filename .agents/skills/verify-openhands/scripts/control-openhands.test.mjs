@@ -34,7 +34,9 @@ import { baselineLines, parseBaseline, withBaseline } from "./lib/baseline.mjs";
 import {
   affectedFamilies,
   familyHead,
+  parseServerLine,
   parseSourceLine,
+  serverMapIds,
   specMatches,
 } from "./lib/map-sources.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
@@ -42,7 +44,12 @@ import {
   networkTiming,
   orderNetworkEntries,
 } from "./lib/network-timing.mjs";
-import { resolveTestids } from "./lib/testids.mjs";
+import {
+  mapWords,
+  resolveTestids,
+  sourceControls,
+  unnamedControls,
+} from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
 import { HeldKeys, keyDownArguments } from "./lib/held-keys.mjs";
@@ -894,6 +901,11 @@ test("changed paths map to the families whose Source: lines own them", () => {
     "src/components/features/brand-new/page.tsx",
     "src/mocks/conversation-handlers.ts",
     ".agents/skills/verify-openhands/SKILL.md",
+    "src/icons/close.svg",
+    "hero.ts",
+    "eslint.config.js",
+    "vitest.setup.ts",
+    "playwright.live.config.ts",
   ]);
   assert.deepEqual(
     result.families.map((f) => [f.id, f.paths]),
@@ -909,6 +921,8 @@ test("changed paths map to the families whose Source: lines own them", () => {
   assert.deepEqual(result.shared, [
     "src/hooks/query/use-get-secrets.ts",
     "src/i18n/translation.json",
+    "src/icons/close.svg",
+    "hero.ts",
   ]);
   // A src/ path no family owns is a map gap.
   assert.deepEqual(result.unmapped, [
@@ -921,6 +935,9 @@ test("changed paths map to the families whose Source: lines own them", () => {
     "__tests__/components/secrets.test.tsx",
     "src/mocks/conversation-handlers.ts",
     ".agents/skills/verify-openhands/SKILL.md",
+    "eslint.config.js",
+    "vitest.setup.ts",
+    "playwright.live.config.ts",
   ]);
 });
 
@@ -945,6 +962,85 @@ test("map affected reads a path list and classifies its paths", () => {
   // line; the baseline test below covers both states.
 });
 
+test("a Server: line names Agent Server IDs, only in the file's head", () => {
+  assert.deepEqual(parseServerLine("Server: F13, F15.changes, F16."), {
+    ids: ["F13", "F15.changes", "F16"],
+    invalid: [],
+  });
+  assert.deepEqual(parseServerLine("Server: F15, `F14`, git"), {
+    ids: ["F15"],
+    invalid: ["`F14`", "git"],
+  });
+  const head = familyHead(
+    "# F08\n\nText.\n\nSource: `src/routes/files-tab.tsx`.\n\nServer: F15.\n\n## Sub-features\n\nServer: F99\n",
+  );
+  assert.deepEqual(head.server.ids, ["F15"]);
+  assert.deepEqual(familyHead("# F01\n\n## Sub-features\n").server, {
+    ids: [],
+    invalid: [],
+  });
+});
+
+test("the server map declares its families and sub-feature IDs", () => {
+  const ids = serverMapIds([
+    {
+      file: "F15-git.md",
+      text: "# Git\n\n## Sub-features\n\n- `F15.changes`: x\n- `F15.diff`: y\n\n## How to get to it (agent POV)\n\n- `F15.not-declared` in prose\n",
+    },
+    { file: "README.md", text: "- `F99.x`: index" },
+  ]);
+  assert.deepEqual([...ids].sort(), ["F15", "F15.changes", "F15.diff"]);
+});
+
+test("map check --server-map checks Server: IDs against the server map", () => {
+  const sdk = mkdtempSync(join(tmpdir(), "servermap-"));
+  const map = join(
+    sdk,
+    ".agents",
+    "skills",
+    "verify-agent-server",
+    "references",
+    "feature-map",
+  );
+  mkdirSync(map, { recursive: true });
+  // Every family a shipped Server: line names, except F16.
+  for (const n of Array.from({ length: 30 }, (_, i) => i + 1)) {
+    if (n === 16) continue;
+    const id = `F${String(n).padStart(2, "0")}`;
+    writeFileSync(
+      join(map, `${id}-x.md`),
+      `# ${id}\n\n## Sub-features\n\n- \`${id}.x\`: x\n`,
+    );
+  }
+  const res = spawnSync(
+    process.execPath,
+    [cli, "map", "check", "--server-map", sdk],
+    { encoding: "utf8" },
+  );
+  const json = JSON.parse(res.stdout);
+  assert.equal(res.status, 1, res.stdout);
+  assert.equal(json.serverMap, map);
+  assert.ok(
+    json.problems.includes(
+      "F08-workspace-files-and-changes.md: Server: F16 is not in the verify-agent-server map",
+    ),
+    res.stdout,
+  );
+  writeFileSync(join(map, "F16-x.md"), "# F16\n\n## Sub-features\n");
+  const ok = spawnSync(
+    process.execPath,
+    [cli, "map", "check", "--server-map", map],
+    { encoding: "utf8" },
+  );
+  assert.equal(ok.status, 0, ok.stdout);
+  const missing = spawnSync(
+    process.execPath,
+    [cli, "map", "check", "--server-map", join(sdk, "nope")],
+    { encoding: "utf8" },
+  );
+  assert.equal(missing.status, 2, missing.stdout + missing.stderr);
+});
+
 test("map check rejects a Source: path that is gone, and the shipped map is clean", () => {
   const dir = mkdtempSync(join(tmpdir(), "mapcheck-"));
   // The checker reads the real map dir; prove the rules on the parser level
@@ -959,6 +1055,89 @@ test("map check rejects a Source: path that is gone, and the shipped map is clea
   );
   assert.equal(head.sources[0].path, "src/does-not-exist.tsx");
   assert.ok(existsSync(dir));
+});
+
+test("map controls lists interactive elements whose test id the map never names", () => {
+  const root = mkdtempSync(join(tmpdir(), "oh-controls-"));
+  const dir = join(root, "src", "components", "features", "demo");
+  mkdirSync(dir, { recursive: true });
+  mkdirSync(join(root, "src", "mocks"), { recursive: true });
+  writeFileSync(
+    join(dir, "panel.tsx"),
+    [
+      "export function Panel({ items }) {",
+      "  return (",
+      '    <section data-testid="demo-panel">',
+      "      <button",
+      '        type="button"',
+      "        onClick={() => items.filter((i) => i > 1)}",
+      '        data-testid="demo-ask-agent"',
+      "      >",
+      "        Ask Agent",
+      "      </button>",
+      '      <BrandButton testId="demo-save">Save</BrandButton>',
+      "      <MenuItem",
+      "        icon={<EditIcon width={16} height={16} />}",
+      "        onClick={() => items.length > 1 && open()}",
+      '        testId="demo-edit"',
+      "      />",
+      '      <div role="menuitem" data-testid={"demo-menu-item"} />',
+      '      <span data-testid="demo-save-hint">Saved</span>',
+      "    </section>",
+      "  );",
+      "}",
+    ].join("\n"),
+  );
+  writeFileSync(
+    join(dir, "panel.test.tsx"),
+    '<button data-testid="only-in-a-test" />',
+  );
+  writeFileSync(
+    join(root, "src", "mocks", "page.tsx"),
+    '<button data-testid="only-in-mocks" />',
+  );
+  const controls = sourceControls(join(root, "src"), root);
+  assert.deepEqual(
+    controls.map((c) => [c.id, c.tag, c.interactive]),
+    [
+      ["demo-ask-agent", "button", true],
+      // The id follows an element passed as a prop: the row is the menu
+      // item, not the icon.
+      ["demo-edit", "MenuItem", true],
+      ["demo-menu-item", "div", true],
+      ["demo-panel", "section", false],
+      ["demo-save", "BrandButton", true],
+      ["demo-save-hint", "span", false],
+    ],
+  );
+  assert.equal(controls[0].file, "src/components/features/demo/panel.tsx");
+  // The map names a control by its whole id: `demo-save-hint` in a recipe
+  // does not account for `demo-save`, and prose about "Ask Agent" does not
+  // account for the button's id.
+  const words = mapWords(
+    "The form has **Ask Agent**. Run `browser text 'testid=demo-save-hint'` and `browser click 'testid=demo-menu-item >> nth=0'`.",
+  );
+  const result = unnamedControls(controls, words);
+  assert.equal(result.considered, 4);
+  assert.deepEqual(
+    result.unnamed.map((c) => c.id),
+    ["demo-ask-agent", "demo-edit", "demo-save"],
+  );
+  assert.deepEqual(
+    unnamedControls(controls, words, { all: true }).unnamed.map((c) => c.id),
+    ["demo-ask-agent", "demo-edit", "demo-panel", "demo-save"],
+  );
+  // On the live tree the command answers with counts and owning families.
+  const live = spawnSync(
+    process.execPath,
+    [cli, "map", "controls", "--family", "F28"],
+    { encoding: "utf8" },
+  );
+  assert.equal(live.status, 0, live.stderr);
+  const report = JSON.parse(live.stdout);
+  assert.ok(report.controls > 0);
+  assert.ok(report.list.every((c) => c.families.includes("F28")));
+  assert.equal(report.unnamed, report.list.length);
 });
 
 test("cited test ids resolve through literals and dynamic prefixes", () => {
@@ -1154,6 +1333,11 @@ test("help names every fixture kind and the new map verbs", () => {
   });
   assert.match(map.stdout, /map affected \[--base REF\]/);
   assert.match(map.stdout, /map testids \[--strict\]/);
+  assert.match(map.stdout, /map controls \[--family Fnn\]/);
+  const browserHelp = spawnSync(process.execPath, [cli, "help", "browser"], {
+    encoding: "utf8",
+  });
+  assert.match(browserHelp.stdout, /timezone <IANA name> \| --reset/);
   const evidence = spawnSync(process.execPath, [cli, "help", "evidence"], {
     encoding: "utf8",
   });

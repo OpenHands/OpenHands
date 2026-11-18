@@ -78,7 +78,7 @@ export function ErrorToastContent({ message }: { message: ReactNode }) {
       />
       <span
         ref={contentRef}
-        className="min-w-0 flex-1 text-sm leading-5 [word-break:break-word] [overflow-wrap:anywhere]"
+        className="min-w-0 flex-1 text-sm leading-5 message-word-break wrap-anywhere"
       >
         {message}
       </span>
@@ -127,9 +127,7 @@ export const displayApiErrorToast = (error: unknown, fallback: string) => {
 export const displaySuccessToast = (message: string) => {
   const duration = calculateToastDuration(message, 5000);
   toast.success(
-    <span className="[word-break:break-word] [overflow-wrap:anywhere]">
-      {message}
-    </span>,
+    <span className="message-word-break wrap-anywhere">{message}</span>,
     { ...TOAST_OPTIONS, duration },
   );
 };
@@ -141,7 +139,7 @@ export const displaySuccessToastWithLink = (
 ) => {
   const duration = calculateToastDuration(`${message} ${linkLabel}`, 5000);
   toast.success(
-    <span className="[word-break:break-word] [overflow-wrap:anywhere]">
+    <span className="message-word-break wrap-anywhere">
       {message}{" "}
       <a
         className="underline hover:no-underline"
@@ -161,10 +159,9 @@ export const displaySuccessToastWithLink = (
  */
 export const displayWarningToast = (message: string) => {
   const duration = calculateToastDuration(message, 6000);
-  toast(
-    <span className="[word-break:break-word] [overflow-wrap:anywhere]">
-      {message}
-    </span>,
-    { ...TOAST_OPTIONS, icon: "⚠️", duration },
-  );
+  toast(<span className="message-word-break wrap-anywhere">{message}</span>, {
+    ...TOAST_OPTIONS,
+    icon: "⚠️",
+    duration,
+  });
 };

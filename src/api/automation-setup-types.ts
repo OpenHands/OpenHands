@@ -1,24 +1,25 @@
-import type { AutomationRepository } from "#/types/automation";
+import type {
+  AutomationPluginSpec,
+  AutomationRepository,
+} from "#/types/automation";
 
 export type AutomationSetupKind = "prompt" | "plugin" | "custom";
 export type AutomationSetupTriggerKind = "cron" | "event";
 export type AutomationSetupFrequency =
-  | "once"
-  | "hourly"
-  | "daily"
-  | "weekdays"
-  | "weekly"
-  | "custom";
+  "once" | "hourly" | "daily" | "weekdays" | "weekly" | "custom";
 export type AutomationSetupFieldUpdateSource = "agent" | "user";
 
 export interface AutomationSetupFormValues {
   kind: AutomationSetupKind;
   name: string;
+  /** Service account id selected for a new automation; empty means the caller. */
+  runAsUserId: string;
   prompt: string;
   repository: string;
   pluginSource: string;
   pluginRef: string;
   pluginList: string;
+  pluginConfig: string;
   customCode: string;
   entrypoint: string;
   setupScriptPath: string;
@@ -62,10 +63,16 @@ export interface AutomationSetupDraft {
   serverDraftId?: string;
   materializedAutomationId?: string | null;
   existingCustomTarballPath?: string;
+  existingPluginSpec?: AutomationPluginSpec;
   /** Repositories the edited automation clones, as the service stores them. */
   existingRepositories?: AutomationRepository[];
   /** Whether the edited automation's repositories can be changed in place. */
   canUpdateRepositories?: boolean;
+  /**
+   * Fields of the edited event trigger that the form does not edit (such as
+   * `destination`), sent back unchanged so a save does not reset them.
+   */
+  existingEventTrigger?: Record<string, unknown>;
   form?: AutomationSetupFormPatch;
   fieldMetadata?: Partial<
     Record<AutomationSetupField, AutomationSetupFieldMetadata>

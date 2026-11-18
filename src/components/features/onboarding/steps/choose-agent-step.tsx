@@ -25,12 +25,7 @@ import {
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 
 export type OnboardingAgentId =
-  | "openhands"
-  | "claude-code"
-  | "codex"
-  | "gemini-cli"
-  | "pi"
-  | "opencode";
+  "openhands" | "claude-code" | "codex" | "gemini-cli" | "pi" | "opencode";
 
 function getAgentOptionIcon(id: string): AgentBrandIconKind {
   if (id === "openhands") return "openhands";
@@ -119,6 +114,13 @@ export function ChooseAgentStep({
   }, [isSelectionOffered, onSelect]);
 
   const handleNext = () => {
+    // Local launches read the active agent profile, so an ACP pick has nothing
+    // to write here. OpenHands still writes: it restores settings left on ACP.
+    if (backendKind !== "cloud" && selectedAgentId !== "openhands") {
+      onNext();
+      return;
+    }
+
     // The diff builder seeds the preferred default model (Vertex-safe for
     // Gemini) when none is passed.
     const diff = buildAcpAgentSettingsDiff(selectedAgentId);

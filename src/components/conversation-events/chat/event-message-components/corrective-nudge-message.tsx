@@ -19,7 +19,7 @@ export function CorrectiveNudgeMessage({ event }: CorrectiveNudgeMessageProps) {
         className="mt-[5px] shrink-0"
         aria-hidden
       />
-      <span className="leading-6 [word-break:break-word]">
+      <span className="leading-6 message-word-break">
         {parseMessageFromEvent(event)}
       </span>
     </div>

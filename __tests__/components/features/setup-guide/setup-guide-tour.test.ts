@@ -26,10 +26,11 @@ describe("setup guide tours", () => {
       SUPER_ADMIN_SETUP_STEPS.filter(({ id }) => hasSetupGuideTour(id)).map(
         ({ id }) => id,
       ),
-    ).toEqual(["first-automation", "add-integration"]);
+    ).toEqual(["connect-git", "first-automation", "add-integration"]);
   });
 
   it.each<[SuperAdminSetupStepId, string]>([
+    ["connect-git", "/mcp"],
     ["first-automation", "/automations/templates"],
     ["add-integration", "/mcp"],
   ])(
@@ -57,13 +58,14 @@ describe("setup guide tours", () => {
   it("hides the footer only on the stops that wait for a card in a list", async () => {
     await startSetupGuideTour("first-automation", NAV, t);
     await startSetupGuideTour("add-integration", NAV, t);
+    await startSetupGuideTour("connect-git", NAV, t);
 
     const stops = vi
       .mocked(startGuidedTour)
       .mock.calls.flatMap(([tour]) => tour.stops);
     expect(
       stops.filter((stop) => stop.hideFooter).map((stop) => stop.id),
-    ).toEqual(["choose-template", "pick-server"]);
+    ).toEqual(["choose-template", "pick-server", "pick-git-provider"]);
   });
 
   it("starts nothing for a step done in the enterprise app", async () => {

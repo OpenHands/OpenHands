@@ -42,9 +42,7 @@ import { AUTOMATION_SETUP_TAG_KEY } from "#/utils/automation-draft-tags";
  * and inherit ``currentColor`` for the muted chip text.
  */
 export type ConversationTagIcon =
-  | LucideIcon
-  | IconType
-  | ComponentType<SVGProps<SVGSVGElement>>;
+  LucideIcon | IconType | ComponentType<SVGProps<SVGSVGElement>>;
 
 /**
  * Tag keys whose value names a git host / chat source — resolve the icon from
