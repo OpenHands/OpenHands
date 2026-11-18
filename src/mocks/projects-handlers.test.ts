@@ -32,9 +32,7 @@ describe("Projects MSW handlers", () => {
       new Set(
         board.conversations.map((c: { attention: string }) => c.attention),
       ),
-    ).toEqual(
-      new Set(["needs_input", "needs_you", "working", "idle", "resolved"]),
-    );
+    ).toEqual(new Set(["asking", "needs_you", "working", "idle", "resolved"]));
 
     const memory = await (
       await fetch(`${API}/projects/${projects[0].id}/memory`)

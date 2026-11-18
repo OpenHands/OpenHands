@@ -161,7 +161,7 @@ describe("getDisplayConversationTags", () => {
       project: "p1",
       resolved: "auto",
       resolvenote: "0.93 nothing",
-      turn: "asked",
+      turn: "asking",
       ask: "Ship it?",
       team: "web",
     };
@@ -299,7 +299,7 @@ describe("mergeConversationTagEdits", () => {
       mergeConversationTagEdits(
         {
           project: "p1",
-          turn: "asked",
+          turn: "asking",
           ask: "Ship it?",
           resolved: "auto",
           resolvenote: "0.93 nothing",

@@ -111,7 +111,7 @@ export default function ProjectPage() {
                 )}
               >
                 {t(conversationStateLabel(coordinator))}
-                {coordinator.turn === "asked" && coordinator.ask
+                {coordinator.turn === "asking" && coordinator.ask
                   ? `: ${coordinator.ask}`
                   : null}
               </p>

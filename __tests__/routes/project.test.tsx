@@ -81,8 +81,8 @@ describe("ProjectPage", () => {
       project_id: PROJECT_ID,
       coordinator: member(COORDINATOR_ID, "Coordinator", "idle"),
       conversations: [
-        member("01000000000040008000000000000001", "Changelog", "needs_input", {
-          turn: "asked",
+        member("01000000000040008000000000000001", "Changelog", "asking", {
+          turn: "asking",
           ask: "Install from main or a branch?",
         }),
         member("02000000000040008000000000000001", "README", "working", {
@@ -222,8 +222,8 @@ describe("ProjectPage", () => {
         execution_status: "waiting_for_confirmation",
       }),
       conversations: [
-        member("01000000000040008000000000000001", "Asks", "needs_input", {
-          turn: "asked",
+        member("01000000000040008000000000000001", "Asks", "asking", {
+          turn: "asking",
           ask: "Which branch?",
         }),
         member("02000000000040008000000000000001", "Approve", "needs_you", {

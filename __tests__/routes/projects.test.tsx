@@ -77,7 +77,7 @@ describe("ProjectsPage", () => {
               project_id: projectId,
               coordinator: member("needs_you"),
               conversations: [
-                member("needs_input"),
+                member("asking"),
                 member("working"),
                 member("resolved"),
               ],
