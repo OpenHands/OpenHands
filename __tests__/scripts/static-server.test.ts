@@ -8,13 +8,24 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   parseArgs,
   serializeForInlineScript,
   startStaticServer,
 } from "../../scripts/static-server.mjs";
+
+// parseArgs reads process.env by default; keep an operator's exported policy
+// out of these tests, as vite.config.ts does for the dev-server define.
+beforeEach(() => {
+  vi.stubEnv("AGENT_CANVAS_FEATURES", "");
+  vi.stubEnv("AGENT_CANVAS_FEATURES_FILE", "");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("static-server.mjs", () => {
   const servers: Server[] = [];
