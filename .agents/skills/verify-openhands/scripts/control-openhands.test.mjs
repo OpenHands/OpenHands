@@ -1004,7 +1004,7 @@ test("map check --server-map checks Server: IDs against the server map", () => {
   );
   mkdirSync(map, { recursive: true });
   // Every family a shipped Server: line names, except F16.
-  for (const n of Array.from({ length: 30 }, (_, i) => i + 1)) {
+  for (const n of Array.from({ length: 37 }, (_, i) => i + 1)) {
     if (n === 16) continue;
     const id = `F${String(n).padStart(2, "0")}`;
     writeFileSync(
