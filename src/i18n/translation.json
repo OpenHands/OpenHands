@@ -1025,6 +1025,24 @@
     "ca": "Valor del secret (deixa-ho en blanc per mantenir el valor existent)",
     "id": "Nilai Rahasia (biarkan kosong untuk mempertahankan nilai yang ada)"
   },
+  "SECRETS$SECRET_VALUE_REPLACE": {
+    "en": "Secret Value (a new value is required to replace the existing one)",
+    "ja": "シークレット値（既存の値を置き換えるには新しい値が必要です）",
+    "zh-CN": "密钥值（需要输入新值以替换现有值）",
+    "zh-TW": "密鑰值（需要輸入新值以替換現有值）",
+    "ko-KR": "비밀 값 (기존 값을 대체하려면 새 값이 필요합니다)",
+    "no": "Hemmelig verdi (en ny verdi kreves for å erstatte den eksisterende)",
+    "ar": "قيمة السر (قيمة جديدة مطلوبة لاستبدال القيمة الحالية)",
+    "de": "Secret-Wert (ein neuer Wert ist erforderlich, um den vorhandenen zu ersetzen)",
+    "fr": "Valeur du secret (une nouvelle valeur est requise pour remplacer l'existante)",
+    "it": "Valore del segreto (è richiesto un nuovo valore per sostituire quello esistente)",
+    "pt": "Valor do secret (um novo valor é necessário para substituir o existente)",
+    "es": "Valor del secreto (se requiere un nuevo valor para reemplazar el existente)",
+    "ca": "Valor del secret (es requereix un valor nou per reemplaçar l'existent)",
+    "tr": "Gizli Değer (mevcut değerin yerine konması için yeni bir değer gerekli)",
+    "uk": "Значення секрету (потрібне нове значення, щоб замінити наявне)",
+    "id": "Nilai secret (nilai baru diperlukan untuk menggantikan nilai yang ada)"
+  },
   "SECRETS$ADD_SECRET": {
     "en": "Add secret",
     "ja": "シークレットを追加",

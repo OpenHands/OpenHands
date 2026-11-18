@@ -200,7 +200,9 @@ export function SecretForm({
         <label htmlFor={valueInputId} className="text-sm">
           {mode === "add"
             ? t(I18nKey.FORM$VALUE)
-            : t(I18nKey.SECRETS$SECRET_VALUE_LEAVE_BLANK)}
+            : requireValueOnEdit
+              ? t(I18nKey.SECRETS$SECRET_VALUE_REPLACE)
+              : t(I18nKey.SECRETS$SECRET_VALUE_LEAVE_BLANK)}
         </label>
         <div className="flex items-center gap-2">
           <input
