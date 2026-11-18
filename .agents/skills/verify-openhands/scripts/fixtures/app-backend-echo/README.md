@@ -23,9 +23,10 @@ control-openhands api GET /server_info --pick app_backend_ingress_url
 ```
 
 Require `canvas_app_backend_bridge_v1` and the actual owned Agent Server URL.
-In Apps → Add app install this directory and trust it. Read
-`GET /api/canvas-extensions/installed/qa-bridge-echo/backend`; use its exact
-`revision` in the prepare and start POST bodies (`--write`). Once ready, open
+In Apps → Add app install this directory and trust it; confirming the trust
+dialog starts the backend, and
+`GET /api/canvas-extensions/installed/qa-bridge-echo/backend` reads
+`"state": "ready"` within a few seconds. Once ready, open
 the app's actual rail link and inspect `testid=qa-bridge-result` plus a screenshot.
 HTTP must return `QA_HTTP_7731` without forwarded control key/cookie. WebSocket
 must negotiate `qa.echo.v1` and return `QA_ECHO_7731`; connection failure is not a
