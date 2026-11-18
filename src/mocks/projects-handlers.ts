@@ -32,7 +32,7 @@ const conversation = (
   attention: "idle",
   resolved: null,
   resolve_note: null,
-  turn: "answered",
+  turn: "finished",
   ask: null,
   last_message: null,
   pull_requests: [],
@@ -67,8 +67,8 @@ const seed = (): MockProject[] => [
     }),
     conversations: [
       conversation("01000000-0000-4000-8000-000000000001", "Changelog", {
-        attention: "needs_input",
-        turn: "asked",
+        attention: "asking",
+        turn: "asking",
         ask: "Should the changelog cover the beta, or only the final release?",
       }),
       conversation("02000000-0000-4000-8000-000000000001", "Publish script", {

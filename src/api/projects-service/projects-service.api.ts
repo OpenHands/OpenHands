@@ -27,7 +27,7 @@ export interface Project extends ProjectSummary {
 /** What a conversation needs from the user, most urgent first. */
 export const PROJECT_ATTENTION_ORDER = [
   "needs_you",
-  "needs_input",
+  "asking",
   "working",
   "idle",
   "resolved",
@@ -50,7 +50,7 @@ export interface ProjectConversation {
   resolved: "user" | "auto" | null;
   /** Why the server resolved it (`0.93 nothing`, `0.95 critic`); newer servers. */
   resolve_note?: string | null;
-  turn: "asked" | "answered" | null;
+  turn: "asking" | "finished" | null;
   ask: string | null;
   /** The first line of the agent's latest message, kept across turns. */
   last_message: string | null;

@@ -31,7 +31,7 @@ export const BOARD_GROUPS: Array<{
   {
     id: "needs_you",
     label: I18nKey.PROJECTS$GROUP_NEEDS_YOU,
-    attention: ["needs_you", "needs_input"],
+    attention: ["needs_you", "asking"],
   },
   {
     id: "working",
@@ -127,7 +127,7 @@ function ProjectCard({
           {t(...autoResolveMessage(autoNote))}
         </p>
       ) : null}
-      {conversation.turn === "asked" && conversation.ask ? (
+      {conversation.turn === "asking" && conversation.ask ? (
         <p className="line-clamp-3 text-sm text-foreground">
           <span className="text-muted">{t(I18nKey.PROJECTS$ASKS)}</span>{" "}
           {conversation.ask}
