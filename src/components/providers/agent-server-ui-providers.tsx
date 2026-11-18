@@ -19,6 +19,7 @@ import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-
 import { useHydrateFreeModels } from "#/hooks/query/use-free-models";
 import type { TelemetryConfig } from "#/services/telemetry";
 import { TelemetryProvider } from "./telemetry-provider";
+import { installBrowserTranslationDomPatch } from "#/utils/browser-translation-dom-patch";
 import {
   AgentServerUIRoot,
   type AgentServerUIRootProps,
@@ -91,15 +92,15 @@ export function AgentServerUIProviders({
   setQueryClient(resolvedQueryClient);
   setI18n(resolvedI18n);
 
-  React.useEffect(
-    () => () => {
+  React.useEffect(() => {
+    installBrowserTranslationDomPatch();
+    return () => {
       if (previousProvidersRef.current) {
         setQueryClient(previousProvidersRef.current.queryClient);
         setI18n(previousProvidersRef.current.i18n);
       }
-    },
-    [],
-  );
+    };
+  }, []);
 
   const posthogConfig =
     analytics && analytics.provider === "posthog"
