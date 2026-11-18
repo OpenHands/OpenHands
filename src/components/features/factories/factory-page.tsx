@@ -1,11 +1,13 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Pencil, ScrollText } from "lucide-react";
+import { Pencil, ScrollText, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router";
+import { useNavigation } from "#/context/navigation-context";
 import AutomationsIcon from "#/icons/automations.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { AutomationsDashboard } from "#/components/features/automations/dashboard/automations-dashboard";
 import { AutomationCardSkeleton } from "#/components/features/automations/automation-card-skeleton";
+import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
 import { ErrorState } from "#/components/features/automations/error-state";
 import {
   ManifestSubpageLayout,
@@ -21,6 +23,7 @@ import {
   factoryWorklogsPath,
 } from "#/constants/factories";
 import {
+  useDeleteFactory,
   useFactory,
   useFactoriesSupported,
   useRenameFactory,
@@ -56,8 +59,11 @@ export function FactoryPage({
   const { factoryId = "" } = useParams();
   const { canManage, isLoading: isPermissionsLoading } =
     useAutomationPermissions();
+  const { navigate } = useNavigation();
   const renameFactory = useRenameFactory();
+  const deleteFactory = useDeleteFactory();
   const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const { isLoading: isCapabilitiesLoading, isSupported } =
     useFactoriesSupported();
   const {
@@ -138,6 +144,17 @@ export function FactoryPage({
     );
   }
 
+  const handleDelete = () =>
+    deleteFactory.mutate(factory.id, {
+      onSuccess: () => navigate?.(FACTORIES_PATH),
+      onError: (error) => {
+        setIsDeleteOpen(false);
+        displayErrorToast(
+          getApiErrorMessage(error, t(I18nKey.FACTORIES$DELETE_ERROR)),
+        );
+      },
+    });
+
   const renderSection = () => {
     if (section === "worklogs") {
       return isWorklogsSupported ? (
@@ -168,6 +185,11 @@ export function FactoryPage({
                   icon: <Pencil className="size-4" aria-hidden />,
                   onClick: () => setIsRenameOpen(true),
                 },
+                {
+                  label: t(I18nKey.AUTOMATIONS$DELETE),
+                  icon: <Trash2 className="size-4" aria-hidden />,
+                  onClick: () => setIsDeleteOpen(true),
+                },
               ]}
             />
           </div>
@@ -192,6 +214,21 @@ export function FactoryPage({
           )
         }
         onCancel={() => setIsRenameOpen(false)}
+      />
+      <DeleteConfirmationModal
+        automationName={factory.name}
+        isOpen={isDeleteOpen}
+        title={t(I18nKey.FACTORIES$DELETE_TITLE)}
+        message={t(
+          isWorklogsSupported
+            ? I18nKey.FACTORIES$DELETE_CONFIRM_WORKLOGS_MESSAGE
+            : I18nKey.FACTORIES$DELETE_CONFIRM_MESSAGE,
+          { name: factory.name },
+        )}
+        confirmTestId="factory-delete-confirm"
+        isConfirming={deleteFactory.isPending}
+        onConfirm={handleDelete}
+        onCancel={() => setIsDeleteOpen(false)}
       />
       {renderSection()}
     </ManifestSubpageLayout>
