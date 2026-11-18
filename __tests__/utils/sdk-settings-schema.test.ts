@@ -1112,6 +1112,31 @@ describe("sdk settings schema helpers", () => {
       expect(coerceFieldValue(getMockField({ secret: true }), "")).toBe("");
       expect(coerceFieldValue(getMockField(), "value")).toBe("value");
     });
+
+    it("validates optional http(s) URL fields on save", () => {
+      const field = getMockField({
+        key: "llm.base_url",
+        label: "Base URL",
+      });
+
+      expect(coerceFieldValue(field, "")).toBeNull();
+      expect(coerceFieldValue(field, "   ")).toBeNull();
+      expect(coerceFieldValue(field, "https://api.openai.com ")).toBe(
+        "https://api.openai.com",
+      );
+      expect(coerceFieldValue(field, "http://localhost:11434")).toBe(
+        "http://localhost:11434",
+      );
+      expect(() => coerceFieldValue(field, "not-a-url")).toThrow(
+        "Base URL must use http:// or https://",
+      );
+      expect(() => coerceFieldValue(field, "ftp://example.com")).toThrow(
+        "Base URL must use http:// or https://",
+      );
+      expect(() => coerceFieldValue(field, "https://")).toThrow(
+        "Base URL must use http:// or https://",
+      );
+    });
   });
 
   describe("payload construction", () => {

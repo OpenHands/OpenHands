@@ -48,6 +48,7 @@ import {
   LLM_SUBSCRIPTION_VENDOR_KEY,
   OPENAI_SUBSCRIPTION_VENDOR,
 } from "#/constants/llm-subscription";
+import { isValidOptionalHttpUrl } from "#/utils/optional-http-url";
 import {
   buildSdkSettingsPayload,
   getAgentSettingValue,
@@ -543,6 +544,8 @@ export function LlmSettingsLocalView() {
             isSaving ||
             isValidating ||
             !saveControl ||
+            (typeof saveControl.values["llm.base_url"] === "string" &&
+              !isValidOptionalHttpUrl(saveControl.values["llm.base_url"])) ||
             !(
               viewMode === "create" ||
               saveControl.isDirty ||
