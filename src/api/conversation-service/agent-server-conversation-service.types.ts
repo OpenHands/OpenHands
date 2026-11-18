@@ -86,6 +86,8 @@ export interface AppConversationStartRequest {
   selected_repository?: string | null;
   selected_branch?: string | null;
   git_provider?: Provider | null;
+  /** Cloud only: the connected git provider to clone with; omit for the type's default. */
+  git_provider_id?: number;
   suggested_task?: SuggestedTask | null;
   title?: string | null;
   trigger?: ConversationTrigger | null;
@@ -160,6 +162,7 @@ export interface AppConversation {
   selected_repository: string | null;
   selected_branch: string | null;
   git_provider: Provider | null;
+  git_provider_id?: number | null;
   title: string | null;
   trigger: ConversationTrigger | null;
   pr_number: number[];
