@@ -18,6 +18,7 @@ import type {
   AppConversationStartTask,
 } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { isPlaceholderConversationTitle } from "#/utils/conversation-title";
+import { getWorkItemDisplayTitleFromTags } from "#/utils/work-item-reference";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { I18nKey } from "#/i18n/declaration";
@@ -181,10 +182,23 @@ export function useConversationDisplayTitleState() {
           Date.now() < Date.parse(generation.deadline_at)) ||
         optimisticPending
       );
+      // A launch-time work-item snapshot (persisted as conversation tags) names
+      // the conversation. It sits just below the server title — which carries
+      // the explicit user title *and* the same snapshot, so a user rename wins
+      // — and above the prompt/default fallbacks, so a work item keeps its name
+      // even if the server title is unavailable. AI title generation is
+      // suppressed at launch for these conversations, so this never races a
+      // generated title. Tags are read from whichever record we hold, even when
+      // its title is still a placeholder (and so filtered out of `candidates`).
+      const workItemTitle =
+        getWorkItemDisplayTitleFromTags(
+          (conversation ?? active ?? listed)?.tags,
+        ) ?? null;
       const title = pending
         ? t(I18nKey.SIDEBAR$NEW_CHAT)
         : generation?.title?.trim() ||
           serverTitle?.trim() ||
+          workItemTitle ||
           activeTask?.request.title?.trim() ||
           prompt?.trim().replace(/\s+/g, " ") ||
           fallback?.trim() ||
