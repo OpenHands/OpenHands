@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import XMarkIcon from "#/icons/x-mark.svg?react";
@@ -34,6 +34,8 @@ const SANDBOX_ISSUE_I18N: Record<SandboxIssue, I18nKey> = {
 };
 
 type LogTab = "stdout" | "stderr";
+
+const LOG_TABS: LogTab[] = ["stdout", "stderr"];
 
 interface RunLogsModalProps {
   /** Conversation that owns the bash command. */
@@ -207,6 +209,36 @@ export function RunLogsModal({
 }: RunLogsModalProps) {
   const { t } = useTranslation("openhands");
   const [activeTab, setActiveTab] = useState<LogTab>("stdout");
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  /**
+   * WAI-ARIA tabs pattern with automatic activation: arrow keys move
+   * focus and selection together (wrapping at the ends), Home/End jump
+   * to the first/last tab. The roving tabIndex already gives the
+   * tablist a single tab stop; this keeps focus, aria-selected and
+   * the displayed panel on the same tab.
+   */
+  const handleTabKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) => {
+    let nextIndex: number;
+    if (event.key === "ArrowRight") {
+      nextIndex = index === LOG_TABS.length - 1 ? 0 : index + 1;
+    } else if (event.key === "ArrowLeft") {
+      nextIndex = index === 0 ? LOG_TABS.length - 1 : index - 1;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = LOG_TABS.length - 1;
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    setActiveTab(LOG_TABS[nextIndex]);
+    tabRefs.current[nextIndex]?.focus();
+  };
 
   const {
     data: outputs,
@@ -304,7 +336,11 @@ export function RunLogsModal({
               aria-controls="run-logs-panel-stdout"
               id="run-logs-tab-stdout"
               tabIndex={activeTab === "stdout" ? 0 : -1}
+              ref={(el) => {
+                tabRefs.current[0] = el;
+              }}
               onClick={() => setActiveTab("stdout")}
+              onKeyDown={(e) => handleTabKeyDown(e, 0)}
               className={`${tabBaseClass} ${
                 activeTab === "stdout" ? tabActiveClass : tabInactiveClass
               }`}
@@ -318,7 +354,11 @@ export function RunLogsModal({
               aria-controls="run-logs-panel-stderr"
               id="run-logs-tab-stderr"
               tabIndex={activeTab === "stderr" ? 0 : -1}
+              ref={(el) => {
+                tabRefs.current[1] = el;
+              }}
               onClick={() => setActiveTab("stderr")}
+              onKeyDown={(e) => handleTabKeyDown(e, 1)}
               className={`${tabBaseClass} ${
                 activeTab === "stderr" ? tabActiveClass : tabInactiveClass
               }`}
