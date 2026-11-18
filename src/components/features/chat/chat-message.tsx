@@ -15,8 +15,7 @@ import {
   chatBubbleMarkdownComponents,
   USER_MESSAGE_LINE_HEIGHT_PX,
 } from "./user-message-body";
-import { copyToClipboard } from "#/utils/copy-to-clipboard";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { useCopyToClipboard } from "#/hooks/use-copy-to-clipboard";
 
 export type ChatMessagePendingStatus = "sending" | "error";
 
@@ -56,6 +55,7 @@ export function ChatMessage({
   isStreaming = false,
 }: React.PropsWithChildren<ChatMessageProps>) {
   const { t } = useTranslation("openhands");
+  const copy = useCopyToClipboard();
   const [isHovering, setIsHovering] = React.useState(false);
   const [isCopy, setIsCopy] = React.useState(false);
   const [isExpanded, setIsExpanded] = React.useState(false);
@@ -69,10 +69,8 @@ export function ChatMessage({
   }, [message]);
 
   const handleCopyToClipboard = async () => {
-    if (await copyToClipboard(message)) {
+    if (await copy(message)) {
       setIsCopy(true);
-    } else {
-      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
     }
   };
 
