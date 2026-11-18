@@ -38,6 +38,27 @@ export type OnboardingLinkDestinationType =
 /** Onboarding surface that presented the link. */
 export type OnboardingLinkSurface = "landing_checklist" | "onboarding_modal";
 
+export type ConversationStartStage = "preflight" | "request";
+export type ConversationStartFailureReason =
+  "missing_active_conversation" | "request_failed" | "unknown";
+
+export type BackendConnectionStage =
+  "connection_test" | "authorization_request" | "authorization_poll";
+export type BackendConnectionFailureReason =
+  | "connection_test_failed"
+  | "authorization_denied"
+  | "authorization_expired"
+  | "authorization_start_failed"
+  | "authorization_failed"
+  | "unknown";
+
+export function createTrackingAttemptId(): string {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  );
+}
+
 /**
  * Hook that provides tracking functions with automatic data collection
  * from available hooks (settings, etc.)
@@ -85,7 +106,82 @@ export const useTracking = () => {
     track("login_button_clicked", { provider });
   };
 
+  const trackConversationStartAttempted = ({
+    attemptId,
+    hasRepository,
+    gitProvider,
+    hasWorkspace,
+    workspaceMode,
+    hasInitialQuery,
+    agentType,
+    hasParentConversation,
+    entryPoint,
+  }: {
+    attemptId: string;
+    hasRepository: boolean;
+    gitProvider?: Provider;
+    hasWorkspace: boolean;
+    workspaceMode?: WorkspaceMode;
+    hasInitialQuery: boolean;
+    agentType?: "default" | "plan";
+    hasParentConversation: boolean;
+    entryPoint?: string;
+  }) => {
+    track("conversation_start_attempted", {
+      attempt_id: attemptId,
+      has_repository: hasRepository,
+      git_provider: gitProvider,
+      has_workspace: hasWorkspace,
+      workspace_mode: workspaceMode,
+      has_initial_query: hasInitialQuery,
+      agent_type: agentType,
+      has_parent_conversation: hasParentConversation,
+      entry_point: entryPoint,
+    });
+  };
+
+  const trackConversationStartFailed = ({
+    attemptId,
+    stage,
+    reason,
+    hasRepository,
+    gitProvider,
+    hasWorkspace,
+    workspaceMode,
+    hasInitialQuery,
+    agentType,
+    hasParentConversation,
+    entryPoint,
+  }: {
+    attemptId: string;
+    stage: ConversationStartStage;
+    reason: ConversationStartFailureReason;
+    hasRepository: boolean;
+    gitProvider?: Provider;
+    hasWorkspace: boolean;
+    workspaceMode?: WorkspaceMode;
+    hasInitialQuery: boolean;
+    agentType?: "default" | "plan";
+    hasParentConversation: boolean;
+    entryPoint?: string;
+  }) => {
+    track("conversation_start_failed", {
+      attempt_id: attemptId,
+      stage,
+      reason,
+      has_repository: hasRepository,
+      git_provider: gitProvider,
+      has_workspace: hasWorkspace,
+      workspace_mode: workspaceMode,
+      has_initial_query: hasInitialQuery,
+      agent_type: agentType,
+      has_parent_conversation: hasParentConversation,
+      entry_point: entryPoint,
+    });
+  };
+
   const trackConversationCreated = ({
+    attemptId,
     conversationId,
     taskId,
     hasRepository,
@@ -97,6 +193,7 @@ export const useTracking = () => {
     hasParentConversation,
     entryPoint,
   }: {
+    attemptId?: string;
     conversationId: string;
     taskId?: string;
     hasRepository: boolean;
@@ -109,6 +206,7 @@ export const useTracking = () => {
     entryPoint?: string;
   }) => {
     track("conversation_start_requested", {
+      attempt_id: attemptId,
       conversation_id: conversationId,
       task_id: taskId,
       is_start_task: conversationId.startsWith("task-"),
@@ -391,7 +489,65 @@ export const useTracking = () => {
     track("git_sync_triggered", { backend_kind: backendKind });
   };
 
+  const trackBackendConnectionAttempted = ({
+    attemptId,
+    backendKind,
+    connectionMethod,
+    hasApiKey,
+    source,
+    stage,
+  }: {
+    attemptId: string;
+    backendKind: BackendKind;
+    connectionMethod: BackendConnectionMethod;
+    hasApiKey: boolean;
+    source?: CloudConnectionSource;
+    stage: BackendConnectionStage;
+  }) => {
+    track("backend_connection_attempted", {
+      ...getBackendTelemetryProperties({
+        backendKind,
+        connectionMethod,
+      }),
+      attempt_id: attemptId,
+      has_api_key: hasApiKey,
+      source,
+      stage,
+    });
+  };
+
+  const trackBackendConnectionFailed = ({
+    attemptId,
+    backendKind,
+    connectionMethod,
+    hasApiKey,
+    source,
+    stage,
+    reason,
+  }: {
+    attemptId: string;
+    backendKind: BackendKind;
+    connectionMethod: BackendConnectionMethod;
+    hasApiKey: boolean;
+    source?: CloudConnectionSource;
+    stage: BackendConnectionStage;
+    reason: BackendConnectionFailureReason;
+  }) => {
+    track("backend_connection_failed", {
+      ...getBackendTelemetryProperties({
+        backendKind,
+        connectionMethod,
+      }),
+      attempt_id: attemptId,
+      has_api_key: hasApiKey,
+      source,
+      stage,
+      reason,
+    });
+  };
+
   const trackBackendAdded = ({
+    attemptId,
     backendKind,
     connectionMethod,
     hasApiKey,
@@ -399,6 +555,7 @@ export const useTracking = () => {
     agentServerVersion,
     backendVersion,
   }: {
+    attemptId?: string;
     backendKind: BackendKind;
     connectionMethod: BackendConnectionMethod;
     hasApiKey: boolean;
@@ -407,6 +564,7 @@ export const useTracking = () => {
     backendVersion?: string | null;
   }) => {
     track("backend_added", {
+      attempt_id: attemptId,
       ...getBackendTelemetryProperties({
         backendKind,
         agentServerVersion,
@@ -491,6 +649,8 @@ export const useTracking = () => {
 
   return {
     trackLoginButtonClick,
+    trackConversationStartAttempted,
+    trackConversationStartFailed,
     trackConversationCreated,
     trackPushButtonClick,
     trackPullButtonClick,
@@ -519,6 +679,8 @@ export const useTracking = () => {
     trackAutomationImported,
     trackGitSyncConfigUpdated,
     trackGitSyncTriggered,
+    trackBackendConnectionAttempted,
+    trackBackendConnectionFailed,
     trackBackendAdded,
     trackOnboardingStarted,
     trackOnboardingStepViewed,

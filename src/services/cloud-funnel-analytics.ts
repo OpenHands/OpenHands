@@ -33,9 +33,11 @@ function cloudConversationBackendContext() {
 export function trackCloudDeviceAuthorizationStarted(
   _host: string,
   source?: CloudConnectionSource,
+  attemptId?: string,
 ): void {
   trackCloudFunnelEvent("cloud_device_authorization_started", {
     ...cloudLoginBackendContext(),
+    attempt_id: attemptId,
     source,
   });
 }
@@ -43,10 +45,32 @@ export function trackCloudDeviceAuthorizationStarted(
 export function trackCloudDeviceAuthorizationSucceeded(
   _host: string,
   source?: CloudConnectionSource,
+  attemptId?: string,
 ): void {
   trackCloudFunnelEvent("cloud_device_authorization_succeeded", {
     ...cloudLoginBackendContext(),
+    attempt_id: attemptId,
     source,
+  });
+}
+
+export function trackCloudDeviceAuthorizationFailed({
+  source,
+  attemptId,
+  stage,
+  reason,
+}: {
+  source?: CloudConnectionSource;
+  attemptId?: string;
+  stage: "authorization_request" | "authorization_poll";
+  reason: string;
+}): void {
+  trackCloudFunnelEvent("cloud_device_authorization_failed", {
+    ...cloudLoginBackendContext(),
+    attempt_id: attemptId,
+    source,
+    stage,
+    reason,
   });
 }
 

@@ -75,6 +75,7 @@ describe("BackendConnectionOptions — manual backend type", () => {
       }),
       "manual",
       { agentServerVersion: null },
+      expect.any(String),
     );
   });
 });
