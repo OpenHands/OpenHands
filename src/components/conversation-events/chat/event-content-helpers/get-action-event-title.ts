@@ -1,6 +1,7 @@
 import { CANVAS_UI_CLIENT_ACTION_KIND } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_ACTION_KIND } from "#/constants/child-conversation";
 import { REQUEST_SECRET_ACTION_KIND } from "#/constants/secret-request";
+import { ASK_USER_ACTION_KIND } from "#/constants/ask-user";
 import type { ActionEvent } from "#/types/agent-server/core";
 
 export type EventTitleDescriptor =
@@ -144,6 +145,12 @@ export const getActionEventTitleDescriptor = (
         kind: "translation",
         key: "ACTION_MESSAGE$REQUEST_SECRET",
         values: { name: event.action.name },
+      };
+    case ASK_USER_ACTION_KIND:
+      return {
+        kind: "translation",
+        key: "ACTION_MESSAGE$ASK_USER",
+        values: {},
       };
     default:
       return {

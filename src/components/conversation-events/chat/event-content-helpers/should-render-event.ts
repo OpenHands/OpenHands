@@ -1,5 +1,6 @@
 import { CHILD_CONVERSATION_RESULT_PREFIX } from "#/constants/child-conversation";
 import { SECRET_REQUEST_RESULT_PREFIX } from "#/constants/secret-request";
+import { ASK_USER_RESULT_PREFIX } from "#/constants/ask-user";
 import { MessageEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
@@ -76,6 +77,7 @@ const isStopHookFeedback = (event: MessageEvent): boolean =>
 const CLIENT_TOOL_RESULT_PREFIXES = [
   CHILD_CONVERSATION_RESULT_PREFIX,
   SECRET_REQUEST_RESULT_PREFIX,
+  ASK_USER_RESULT_PREFIX,
 ];
 
 const isClientToolResult = (event: MessageEvent): boolean => {

@@ -2,6 +2,7 @@ import { AUTOMATION_FORM_UPDATE_ACTION_KIND } from "#/constants/automation-form"
 import { CANVAS_UI_CLIENT_ACTION_KIND } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_ACTION_KIND } from "#/constants/child-conversation";
 import { REQUEST_SECRET_ACTION_KIND } from "#/constants/secret-request";
+import { ASK_USER_ACTION_KIND } from "#/constants/ask-user";
 import { ActionBase } from "./base";
 import { TaskItem } from "./common";
 
@@ -366,6 +367,21 @@ export interface RequestSecretAction extends ActionBase<
   reason?: string | null;
 }
 
+export interface AskUserOption {
+  label: string;
+  description?: string | null;
+}
+
+/**
+ * Question or clarification request presented to the user as an interactive
+ * decision card, emitted over the WebSocket and intercepted by handleAskUserAction.
+ */
+export interface AskUserAction extends ActionBase<typeof ASK_USER_ACTION_KIND> {
+  question: string;
+  options: AskUserOption[];
+  recommended?: string | null;
+}
+
 export type Action =
   | MCPToolAction
   | FinishAction
@@ -394,4 +410,5 @@ export type Action =
   | CanvasUIAction
   | AutomationFormUpdateAction
   | LaunchChildConversationAction
-  | RequestSecretAction;
+  | RequestSecretAction
+  | AskUserAction;
