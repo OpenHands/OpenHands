@@ -24,7 +24,8 @@ interface BackendRowProps {
   orgLabel?: string;
   onSelect: () => void;
   onEdit: () => void;
-  onRemove: () => void;
+  /** Omit to hide Remove, e.g. on the last backend when adding is off. */
+  onRemove?: () => void;
   onLogin?: (apiKey: string) => void;
 }
 
@@ -155,7 +156,7 @@ export function BackendRow({
             <Pencil aria-hidden className="size-4" strokeWidth={2} />
           </button>
         )}
-        {!lockedCloudHost && (
+        {!lockedCloudHost && onRemove && (
           <button
             type="button"
             onClick={onRemove}

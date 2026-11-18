@@ -110,6 +110,9 @@ export function ManageBackendsModal({
   // empty-state text, and existing backends can still be edited or picked.
   const featurePolicy = useFeaturePolicy();
   const showAddBackend = featurePolicy.isEnabled("backends.add");
+  // With adding off, removing the only backend would leave nothing to select
+  // and no way to add one back, so the last backend cannot be removed.
+  const canRemoveBackend = showAddBackend || backends.length > 1;
   // On the recovery screen Done is already hidden, so with the add button gone
   // the footer would be a padded empty strip. Drop it instead.
   const showFooterActions =
@@ -223,12 +226,15 @@ export function ManageBackendsModal({
                           )}
                           onSelect={() => handleSelectBackend(backend)}
                           onEdit={() => setEditingBackend(backend)}
-                          onRemove={() =>
-                            setPendingRemoval({
-                              id: backend.id,
-                              name: backend.name,
-                              marsSessionId: backend.marsSessionId,
-                            })
+                          onRemove={
+                            canRemoveBackend
+                              ? () =>
+                                  setPendingRemoval({
+                                    id: backend.id,
+                                    name: backend.name,
+                                    marsSessionId: backend.marsSessionId,
+                                  })
+                              : undefined
                           }
                           onLogin={
                             backend.authMode === "cookie"

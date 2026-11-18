@@ -368,6 +368,55 @@ describe("ManageBackendsModal", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps the last backend when adding is off, so the window never runs out of actions", async () => {
+    // Arrange: only the seeded Local backend exists.
+    renderWithProviders(
+      <FeaturePolicyProvider
+        policy={{ version: 1, disabled: ["backends.add"] }}
+      >
+        <ManageBackendsModal onClose={vi.fn()} recoveryMode />
+      </FeaturePolicyProvider>,
+    );
+
+    // Assert
+    expect(
+      await screen.findByTestId("manage-backends-row-Local"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("manage-backends-remove-Local"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lets a backend be removed when adding is off but another remains", async () => {
+    // Arrange
+    renderWithProviders(
+      <FeaturePolicyProvider
+        policy={{ version: 1, disabled: ["backends.add"] }}
+      >
+        <TestSeed
+          onMount={(ctx) => {
+            ctx.addBackend({
+              name: "Second",
+              host: "http://localhost:9000",
+              apiKey: "second-key",
+              kind: "local",
+            });
+          }}
+        >
+          <ManageBackendsModal onClose={vi.fn()} />
+        </TestSeed>
+      </FeaturePolicyProvider>,
+    );
+
+    // Assert
+    expect(
+      await screen.findByTestId("manage-backends-remove-Second"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("manage-backends-remove-Local"),
+    ).toBeInTheDocument();
+  });
+
   it("still offers adding when no policy is set", async () => {
     renderWithProviders(<ManageBackendsModal onClose={vi.fn()} recoveryMode />);
 
