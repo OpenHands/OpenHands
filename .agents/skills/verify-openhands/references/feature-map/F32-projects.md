@@ -18,7 +18,7 @@ Source: `src/routes/projects.tsx`, `src/routes/project.tsx`, `src/components/fea
 - `F32.create`: New project takes a name, goal, optional worker agent profile and the coordinator's workspace; Create sends one `POST /api/projects` with `coordinator`, and the server's new coordinator conversation exists, idle, tagged `project=<id hex>`.
 - `F32.list`: `/projects` lists the backend's projects newest first with name and goal, and an empty backend says so.
 - `F32.coordinator`: the project page's **Talk to the coordinator** opens the coordinator in the normal chat view; a message sent there reaches it like any conversation.
-- `F32.board`: the conversations the coordinator starts appear on the board without a reload, grouped Needs you (needs_you + needs_input), Working, Done (finished + idle), Resolved; a card that stopped on a question shows that question.
+- `F32.board`: the conversations the coordinator starts appear on the board without a reload, grouped Needs you (attention needs_you + asking), Working, Idle, Resolved; a card that stopped on a question shows that question.
 - `F32.resolve`: Resolve sets `resolved=user` and keeps the other tags; Reopen removes `resolved`; the card moves groups both ways.
 - `F32.membership`: only the coordinator adds conversations (the project page has no New conversation button or Add a conversation picker); **Remove** drops a member's `project` tag; the coordinator cannot be removed.
 - `F32.files`: Upload adds a file marked "Added by you"; a file a conversation saved names that conversation; clicking a text file shows its contents, an image or PDF shows inline, other files say there is no preview; Download saves the file; Delete asks first, then removes it.
@@ -76,7 +76,7 @@ Preconditions:
   `Start one conversation that writes wordcount.py and one that writes slugify.py, then tell me when both are finished.`
   Return to the project page without reloading. Within the poll interval the
   two workers appear in `testid=project-group-working`; when they finish, they
-  move to Done, or to `testid=project-group-needs_you` with the question shown
+  move to Idle (`testid=project-group-idle`), or to `testid=project-group-needs_you` with the question shown
   if they asked one. Compare with
   `control-openhands api GET /api/projects/<id>/conversations`.
 
