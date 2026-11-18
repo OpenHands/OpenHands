@@ -18,8 +18,7 @@ import { isCopyableSkillSource } from "./is-copyable-skill-source";
 import { SkillCardPillRow } from "./skill-card-pill-row";
 import { getSkillChatLaunchMessage } from "./get-skill-chat-launch-message";
 import { useLaunchSkillInChat } from "#/hooks/use-launch-skill-in-chat";
-import { copyToClipboard } from "#/utils/copy-to-clipboard";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { useCopyToClipboard } from "#/hooks/use-copy-to-clipboard";
 
 interface SkillDetailModalProps {
   skill: SkillInfo;
@@ -64,6 +63,7 @@ export function SkillDetailModal({
 }: SkillDetailModalProps) {
   const { t } = useTranslation("openhands");
   const launchSkillInChat = useLaunchSkillInChat();
+  const copyToClipboard = useCopyToClipboard();
   const [sourceCopied, setSourceCopied] = React.useState(false);
   const chatLaunchMessage = React.useMemo(
     () => getSkillChatLaunchMessage(skill),
@@ -88,8 +88,6 @@ export function SkillDetailModal({
 
     if (await copyToClipboard(skill.source)) {
       setSourceCopied(true);
-    } else {
-      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
     }
   };
 

@@ -7,14 +7,11 @@ import { useUnifiedPauseConversation } from "./mutation/use-unified-stop-convers
 import { useUpdateConversationPublicFlag } from "./mutation/use-update-conversation-public-flag";
 import { useActiveConversation } from "./query/use-active-conversation";
 import { useEventStore } from "#/stores/use-event-store";
-import {
-  displayErrorToast,
-  displaySuccessToast,
-} from "#/utils/custom-toast-handlers";
+import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import { buildAgentCanvasUrl } from "#/utils/base-path";
-import { copyToClipboard } from "#/utils/copy-to-clipboard";
+import { useCopyToClipboard } from "./use-copy-to-clipboard";
 
 import { useDownloadConversation } from "./use-download-conversation";
 import {
@@ -52,6 +49,7 @@ export function useConversationNameContextMenu({
   const [hooksModalVisible, setHooksModalVisible] = React.useState(false);
   const [confirmDeleteModalVisible, setConfirmDeleteModalVisible] =
     React.useState(false);
+  const copyToClipboard = useCopyToClipboard();
   const [confirmStopModalVisible, setConfirmStopModalVisible] =
     React.useState(false);
   const { mutateAsync: downloadConversation } = useDownloadConversation();
@@ -190,8 +188,6 @@ export function useConversationNameContextMenu({
     void copyToClipboard(shareUrl).then((ok) => {
       if (ok) {
         displaySuccessToast(t(I18nKey.CONVERSATION$LINK_COPIED));
-      } else {
-        displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
       }
     });
   };

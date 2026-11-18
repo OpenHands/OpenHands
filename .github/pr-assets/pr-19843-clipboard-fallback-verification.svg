@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="520" viewBox="0 0 980 520" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="15">
+<rect width="980" height="520" rx="8" fill="#0d1117"/>
+<circle cx="28" cy="24" r="6" fill="#ff5f56"/>
+<circle cx="48" cy="24" r="6" fill="#ffbd2e"/>
+<circle cx="68" cy="24" r="6" fill="#27c93f"/>
+<text x="26" y="65" fill="#7d8590" xml:space="preserve"># Verification for PR #19843: Clipboard copy focus-independent fallback and toast consolidation</text>
+<text x="26" y="95" fill="#58a6ff" xml:space="preserve">$ npx vitest run __tests__/utils/copy-to-clipboard.test.ts __tests__/hooks/use-copy-to-clipboard.test.ts</text>
+<text x="26" y="125" fill="#7d8590" xml:space="preserve"> ✓ |jsdom| __tests__/utils/copy-to-clipboard.test.ts (9 tests)</text>
+<text x="26" y="155" fill="#7d8590" xml:space="preserve"> ✓ |jsdom| __tests__/hooks/use-copy-to-clipboard.test.ts (2 tests)</text>
+<text x="26" y="185" fill="#3fb950" font-weight="600" xml:space="preserve"> Test Files  2 passed (2) | Tests  11 passed (11)</text>
+<text x="26" y="225" fill="#58a6ff" xml:space="preserve">$ npm run make-i18n &amp;&amp; npm run check-translation-completeness</text>
+<text x="26" y="255" fill="#3fb950" font-weight="600" xml:space="preserve">✔ All translation keys have complete language coverage!</text>
+<text x="26" y="295" fill="#58a6ff" xml:space="preserve">$ npm run typecheck &amp;&amp; npm run build</text>
+<text x="26" y="325" fill="#7d8590" xml:space="preserve">> react-router typegen &amp;&amp; tsc &amp;&amp; react-router build</text>
+<text x="26" y="355" fill="#3fb950" font-weight="600" xml:space="preserve">✔ Typecheck passed: 0 errors</text>
+<text x="26" y="385" fill="#3fb950" font-weight="600" xml:space="preserve">✔ Built client &amp; server production bundles (SPA Mode generated)</text>
+<text x="26" y="425" fill="#58a6ff" xml:space="preserve">Focus-independent clipboard fallback &amp; iOS Safari range:</text>
+<text x="26" y="455" fill="#3fb950" xml:space="preserve">✔ Dispatches via one-time copy listener without dialog focus trap dependency</text>
+<text x="26" y="485" fill="#3fb950" xml:space="preserve">✔ Consolidated CLIPBOARD$COPY_FAILED across 11 migrated call sites</text>
+</svg>
