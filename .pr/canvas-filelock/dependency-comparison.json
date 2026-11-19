@@ -1,0 +1,526 @@
+{
+  "before": {
+    "artifact": "ghcr.io/openhands/agent-canvas:1.42.0",
+    "createdAt": null,
+    "source": "../security-policy-remediation/evidence/canvas-1.42-fixable.json",
+    "filelock_records": [
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112940",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "HIGH"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112908",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112909",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112910",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112911",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112915",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112935",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112936",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.0.9",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112938",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112939",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112907",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "LOW"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112912",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "LOW"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112913",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "LOW"
+      }
+    ],
+    "counts": {
+      "MEDIUM": 19,
+      "LOW": 4,
+      "HIGH": 4,
+      "UNKNOWN": 4
+    },
+    "raw_reported_records": 31,
+    "fixable_records": [
+      {
+        "target": "Node.js",
+        "VulnerabilityID": "CVE-2026-126345",
+        "PkgName": "basic-ftp",
+        "InstalledVersion": "6.2.3",
+        "FixedVersion": "6.2.4",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Node.js",
+        "VulnerabilityID": "CVE-2026-118773",
+        "PkgName": "glob",
+        "InstalledVersion": "13.0.6",
+        "FixedVersion": "14.0.2",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Node.js",
+        "VulnerabilityID": "CVE-2026-118773",
+        "PkgName": "glob",
+        "InstalledVersion": "13.0.6",
+        "FixedVersion": "14.0.2",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Node.js",
+        "VulnerabilityID": "CVE-2026-103923",
+        "PkgName": "katex",
+        "InstalledVersion": "0.16.47",
+        "FixedVersion": "0.18.2",
+        "Severity": "LOW"
+      },
+      {
+        "target": "Node.js",
+        "VulnerabilityID": "CVE-2026-118764",
+        "PkgName": "minimatch",
+        "InstalledVersion": "10.2.5",
+        "FixedVersion": "11.0.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Node.js",
+        "VulnerabilityID": "CVE-2026-118764",
+        "PkgName": "minimatch",
+        "InstalledVersion": "10.2.5",
+        "FixedVersion": "11.0.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112940",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "HIGH"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112908",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112909",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112910",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112911",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112915",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112935",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112936",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.0.9",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112938",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112939",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112907",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "LOW"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112912",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "LOW"
+      },
+      {
+        "target": "Python",
+        "VulnerabilityID": "CVE-2026-112913",
+        "PkgName": "filelock",
+        "InstalledVersion": "3.32.7",
+        "FixedVersion": "4.2.1",
+        "Severity": "LOW"
+      },
+      {
+        "target": "usr/bin/dockerd",
+        "VulnerabilityID": "GO-2026-5932",
+        "PkgName": "golang.org/x/crypto",
+        "InstalledVersion": "v0.58.0",
+        "FixedVersion": "0.58.1-0.20261009181718-2f1f834330b2",
+        "Severity": "UNKNOWN"
+      },
+      {
+        "target": "usr/bin/rootlesskit",
+        "VulnerabilityID": "GO-2026-5932",
+        "PkgName": "golang.org/x/crypto",
+        "InstalledVersion": "v0.57.0",
+        "FixedVersion": "0.58.1-0.20261009181718-2f1f834330b2",
+        "Severity": "UNKNOWN"
+      },
+      {
+        "target": "usr/bin/rootlesskit",
+        "VulnerabilityID": "CVE-2026-78661",
+        "PkgName": "golang.org/x/net",
+        "InstalledVersion": "v0.60.0",
+        "FixedVersion": "0.62.0",
+        "Severity": "HIGH"
+      },
+      {
+        "target": "usr/bin/rootlesskit",
+        "VulnerabilityID": "CVE-2026-97045",
+        "PkgName": "golang.org/x/net",
+        "InstalledVersion": "v0.60.0",
+        "FixedVersion": "0.62.0",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "usr/libexec/docker/cli-plugins/docker-buildx",
+        "VulnerabilityID": "CVE-2026-33997",
+        "PkgName": "github.com/docker/docker",
+        "InstalledVersion": "v28.5.2+incompatible",
+        "FixedVersion": "29.3.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "usr/libexec/docker/cli-plugins/docker-buildx",
+        "VulnerabilityID": "CVE-2026-17106",
+        "PkgName": "github.com/moby/go-archive",
+        "InstalledVersion": "v0.2.0",
+        "FixedVersion": "0.3.0",
+        "Severity": "HIGH"
+      },
+      {
+        "target": "usr/libexec/docker/cli-plugins/docker-buildx",
+        "VulnerabilityID": "GO-2026-5932",
+        "PkgName": "golang.org/x/crypto",
+        "InstalledVersion": "v0.58.0",
+        "FixedVersion": "0.58.1-0.20261009181718-2f1f834330b2",
+        "Severity": "UNKNOWN"
+      },
+      {
+        "target": "usr/libexec/docker/cli-plugins/docker-compose",
+        "VulnerabilityID": "CVE-2026-128085",
+        "PkgName": "go.opentelemetry.io/otel/sdk",
+        "InstalledVersion": "v1.46.0",
+        "FixedVersion": "1.47.0",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "usr/libexec/docker/cli-plugins/docker-compose",
+        "VulnerabilityID": "CVE-2026-128085",
+        "PkgName": "go.opentelemetry.io/otel/trace",
+        "InstalledVersion": "v1.46.0",
+        "FixedVersion": "1.47.0",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "usr/libexec/docker/cli-plugins/docker-compose",
+        "VulnerabilityID": "GO-2026-5932",
+        "PkgName": "golang.org/x/crypto",
+        "InstalledVersion": "v0.57.0",
+        "FixedVersion": "0.58.1-0.20261009181718-2f1f834330b2",
+        "Severity": "UNKNOWN"
+      },
+      {
+        "target": "usr/libexec/docker/cli-plugins/docker-compose",
+        "VulnerabilityID": "CVE-2026-78661",
+        "PkgName": "golang.org/x/net",
+        "InstalledVersion": "v0.60.0",
+        "FixedVersion": "0.62.0",
+        "Severity": "HIGH"
+      },
+      {
+        "target": "usr/libexec/docker/cli-plugins/docker-compose",
+        "VulnerabilityID": "CVE-2026-97045",
+        "PkgName": "golang.org/x/net",
+        "InstalledVersion": "v0.60.0",
+        "FixedVersion": "0.62.0",
+        "Severity": "MEDIUM"
+      }
+    ],
+    "fixable_counts": {
+      "MEDIUM": 19,
+      "LOW": 4,
+      "HIGH": 4,
+      "UNKNOWN": 4
+    }
+  },
+  "after": {
+    "artifact": "ghcr.io/openhands/agent-canvas@sha256:78e0ede1af36a85e195c0e5f7a18e4f799acf92d6fa08986eb249008c57b78f9",
+    "createdAt": "2026-11-19T23:24:50.464296937Z",
+    "source": "../evidence/exclusion-rescan/canvas.json",
+    "filelock_records": [],
+    "counts": {
+      "LOW": 1243,
+      "HIGH": 663,
+      "MEDIUM": 957,
+      "UNKNOWN": 63,
+      "CRITICAL": 1
+    },
+    "raw_reported_records": 2927,
+    "fixable_records": [
+      {
+        "target": "Node.js",
+        "VulnerabilityID": "CVE-2026-126345",
+        "PkgName": "basic-ftp",
+        "InstalledVersion": "6.2.3",
+        "FixedVersion": "6.2.4",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Node.js",
+        "VulnerabilityID": "CVE-2026-118773",
+        "PkgName": "glob",
+        "InstalledVersion": "13.0.6",
+        "FixedVersion": "14.0.2",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Node.js",
+        "VulnerabilityID": "CVE-2026-118773",
+        "PkgName": "glob",
+        "InstalledVersion": "13.0.6",
+        "FixedVersion": "14.0.2",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Node.js",
+        "VulnerabilityID": "CVE-2026-103923",
+        "PkgName": "katex",
+        "InstalledVersion": "0.16.47",
+        "FixedVersion": "0.18.2",
+        "Severity": "LOW"
+      },
+      {
+        "target": "Node.js",
+        "VulnerabilityID": "CVE-2026-118764",
+        "PkgName": "minimatch",
+        "InstalledVersion": "10.2.5",
+        "FixedVersion": "11.0.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "Node.js",
+        "VulnerabilityID": "CVE-2026-118764",
+        "PkgName": "minimatch",
+        "InstalledVersion": "10.2.5",
+        "FixedVersion": "11.0.1",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "usr/bin/dockerd",
+        "VulnerabilityID": "GO-2026-5932",
+        "PkgName": "golang.org/x/crypto",
+        "InstalledVersion": "v0.58.0",
+        "FixedVersion": "0.58.1-0.20261009181718-2f1f834330b2",
+        "Severity": "UNKNOWN"
+      },
+      {
+        "target": "usr/bin/rootlesskit",
+        "VulnerabilityID": "GO-2026-5932",
+        "PkgName": "golang.org/x/crypto",
+        "InstalledVersion": "v0.57.0",
+        "FixedVersion": "0.58.1-0.20261009181718-2f1f834330b2",
+        "Severity": "UNKNOWN"
+      },
+      {
+        "target": "usr/bin/rootlesskit",
+        "VulnerabilityID": "CVE-2026-78661",
+        "PkgName": "golang.org/x/net",
+        "InstalledVersion": "v0.60.0",
+        "FixedVersion": "0.62.0",
+        "Severity": "HIGH"
+      },
+      {
+        "target": "usr/bin/rootlesskit",
+        "VulnerabilityID": "CVE-2026-97045",
+        "PkgName": "golang.org/x/net",
+        "InstalledVersion": "v0.60.0",
+        "FixedVersion": "0.62.0",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "usr/libexec/docker/cli-plugins/docker-buildx",
+        "VulnerabilityID": "GO-2026-5932",
+        "PkgName": "golang.org/x/crypto",
+        "InstalledVersion": "v0.58.0",
+        "FixedVersion": "0.58.1-0.20261009181718-2f1f834330b2",
+        "Severity": "UNKNOWN"
+      },
+      {
+        "target": "usr/libexec/docker/cli-plugins/docker-compose",
+        "VulnerabilityID": "CVE-2026-128085",
+        "PkgName": "go.opentelemetry.io/otel/sdk",
+        "InstalledVersion": "v1.46.0",
+        "FixedVersion": "1.47.0",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "usr/libexec/docker/cli-plugins/docker-compose",
+        "VulnerabilityID": "CVE-2026-128085",
+        "PkgName": "go.opentelemetry.io/otel/trace",
+        "InstalledVersion": "v1.46.0",
+        "FixedVersion": "1.47.0",
+        "Severity": "MEDIUM"
+      },
+      {
+        "target": "usr/libexec/docker/cli-plugins/docker-compose",
+        "VulnerabilityID": "GO-2026-5932",
+        "PkgName": "golang.org/x/crypto",
+        "InstalledVersion": "v0.57.0",
+        "FixedVersion": "0.58.1-0.20261009181718-2f1f834330b2",
+        "Severity": "UNKNOWN"
+      },
+      {
+        "target": "usr/libexec/docker/cli-plugins/docker-compose",
+        "VulnerabilityID": "CVE-2026-78661",
+        "PkgName": "golang.org/x/net",
+        "InstalledVersion": "v0.60.0",
+        "FixedVersion": "0.62.0",
+        "Severity": "HIGH"
+      },
+      {
+        "target": "usr/libexec/docker/cli-plugins/docker-compose",
+        "VulnerabilityID": "CVE-2026-97045",
+        "PkgName": "golang.org/x/net",
+        "InstalledVersion": "v0.60.0",
+        "FixedVersion": "0.62.0",
+        "Severity": "MEDIUM"
+      }
+    ],
+    "fixable_counts": {
+      "MEDIUM": 9,
+      "LOW": 1,
+      "UNKNOWN": 4,
+      "HIGH": 2
+    }
+  }
+}

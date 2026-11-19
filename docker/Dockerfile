@@ -128,9 +128,10 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
 # Match openhands-tools to the SDK already provided by the agent-server image,
 # just as the local Canvas launcher does. Pin openhands-agent-server too: it
 # arrives via openhands-workspace, and left unpinned the resolver downgraded it
-# to dodge an openai conflict (#17531).
-RUN uv pip install --system "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}" 2>/dev/null \
-    || pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}"
+# to dodge an openai conflict (#17531). filelock 4.2.9 is the SDK release's
+# patched version (published November 4); avoid resolving a younger 4.x here.
+RUN uv pip install --system --no-cache "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}" "filelock==4.2.9" \
+    || pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${AGENT_SERVER_VERSION}" "openhands-agent-server==${AGENT_SERVER_VERSION}" "filelock==4.2.9"
 
 RUN if [ -n "${AGENT_SERVER_SDK_GIT_REF}" ]; then \
       BASE_GIT_URL="git+https://github.com/OpenHands/software-agent-sdk@${AGENT_SERVER_SDK_GIT_REF}" && \
@@ -139,6 +140,12 @@ RUN if [ -n "${AGENT_SERVER_SDK_GIT_REF}" ]; then \
         "${BASE_GIT_URL}#subdirectory=openhands-tools" \
         "${BASE_GIT_URL}#subdirectory=openhands-workspace"; \
     fi
+
+# Drop inherited resolver artifacts as well as new downloads: scanners inspect
+# cached wheels and unpacked distributions even when Python no longer uses them.
+RUN rm -rf /root/.cache/uv /root/.cache/pip \
+           /home/openhands/.cache/uv /home/openhands/.cache/pip && \
+    python -c 'from importlib.metadata import version; from packaging.version import Version; assert Version(version("filelock")) >= Version("4.2.1"), version("filelock")'
 
 # Copy the frontend build output.
 # react-router.config.ts unpacks build/client/ into build/ for non-Vercel builds.

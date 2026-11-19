@@ -62,12 +62,39 @@ describe("Docker runtime package metadata", () => {
     );
   });
 
+  it("requires patched filelock in both installers and checks the final environment", () => {
+    const dockerfile = readDockerfile();
+    const install = dockerfile.match(
+      /RUN uv pip install --system[^\n]*\n[^\n]*/,
+    )?.[0];
+    expect(install).toBeTruthy();
+    for (const command of install!.split("\n")) {
+      expect(command).toContain('"filelock==4.2.9"');
+      expect(command).toMatch(/--no-cache(?:-dir)?/);
+    }
+
+    const cleanup = dockerfile.indexOf("RUN rm -rf /root/.cache/uv");
+    expect(cleanup).toBeGreaterThan(dockerfile.indexOf("--force-reinstall"));
+    for (const cache of [
+      "/root/.cache/pip",
+      "/home/openhands/.cache/uv",
+      "/home/openhands/.cache/pip",
+    ]) {
+      expect(dockerfile.slice(cleanup)).toContain(cache);
+    }
+    expect(dockerfile.slice(cleanup)).toContain(
+      'Version(version("filelock")) >= Version("4.2.1")',
+    );
+  });
+
   it("does not retain PostgreSQL development packages at runtime", () => {
     const dockerfile = readDockerfile();
 
     expect(dockerfile).not.toMatch(/apt-get install[^;]*libpq(?:-dev|5)/s);
     expect(dockerfile.indexOf("apt-get upgrade")).toBeLessThan(
-      dockerfile.indexOf('uv pip install --system "openhands-automation'),
+      dockerfile.indexOf(
+        'uv pip install --system --no-cache "openhands-automation',
+      ),
     );
   });
 });
