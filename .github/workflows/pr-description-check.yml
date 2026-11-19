@@ -24,9 +24,16 @@ jobs:
         runs-on: ubuntu-24.04
         steps:
             - name: Checkout trusted workflow scripts
+              # Check out the base BRANCH tip, not the PR's frozen base SHA. Both
+              # are trusted base-repo code under pull_request_target, but the
+              # workflow body always runs from the base-branch tip, so the script
+              # must too — otherwise a PR based on an older commit runs a stale
+              # check_pr_description.py that predates the flags this job passes it
+              # (e.g. --files-file), and the job crashes on argparse instead of
+              # validating the description.
               uses: actions/checkout@v7
               with:
-                  ref: ${{ github.event.pull_request.base.sha }}
+                  ref: ${{ github.event.pull_request.base.ref }}
 
             - name: Fetch changed file paths
               id: pr_files
