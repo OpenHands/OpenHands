@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Factory delete demo</title>
+<style>body{margin:0;background:#111;color:#ddd;font:15px system-ui,sans-serif}main{max-width:1100px;margin:24px auto;padding:0 16px}video{width:100%;border-radius:8px;background:#000}</style>
+</head>
+<body>
+<main>
+<h1>Factories: delete a factory and its worklogs</h1>
+<p>Recorded in Agent Canvas (this branch) against the Enterprise stack from <code>docker-compose.yml</code>, with the server from OpenHands/enterprise#1392 at <code>efbbf15</code> and the automation service from OpenHands/automation#752 at <code>e5da824</code>. The video shows the Delete button next to Rename on a factory with worklogs and 1 live automation, the worklogs-aware confirmation dialog, cancelling the dialog, the 409 Conflict error toast while a live automation remains, moving the automation to No factory via Change factory, and deleting the empty factory so Enterprise purges its worklogs and Canvas returns to the factories list.</p>
+<video controls preload="metadata" src="https://raw.githubusercontent.com/OpenHands/OpenHands/feb4e0adc3775ee754a8bf4956cbcadeb2409743/.pr/factory-delete-demo.webm"></video>
+</main>
+</body>
+</html>
