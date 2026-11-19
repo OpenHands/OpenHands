@@ -66,7 +66,10 @@ export const isGroupableEvent = (
     if (isMarkdownFileEditorEvent(event, correspondingAction)) {
       return false;
     }
-    if (event.observation.kind === "TaskTrackerObservation") {
+    if (
+      event.observation.kind === "TaskTrackerObservation" ||
+      event.observation.kind === "AskUserObservation"
+    ) {
       return false;
     }
     return true;
@@ -383,6 +386,12 @@ export const groupEvents = (
       if (!run) run = { events: [], startIndex: index };
       run.events.push(event);
     } else {
+      if (
+        isObservationEvent(event) &&
+        event.observation.kind === "AskUserObservation"
+      ) {
+        keepNarration();
+      }
       flushRun();
       items.push({ kind: "single", event, index });
     }
