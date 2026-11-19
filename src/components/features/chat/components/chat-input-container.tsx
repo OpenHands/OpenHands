@@ -25,11 +25,13 @@ interface ChatInputContainerProps {
   onDragOver: (e: React.DragEvent, isDisabled: boolean) => void;
   onDragLeave: (e: React.DragEvent, isDisabled: boolean) => void;
   onDrop: (e: React.DragEvent, isDisabled: boolean) => void;
-  onInput: () => void;
+  onInput: (e?: React.FormEvent<HTMLDivElement>) => void;
   onPaste: (e: React.ClipboardEvent) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  onCompositionStart?: () => void;
+  onCompositionEnd?: () => void;
   isSlashMenuOpen?: boolean;
   slashItems?: SlashCommandItem[];
   slashSelectedIndex?: number;
@@ -57,6 +59,8 @@ export function ChatInputContainer({
   onKeyDown,
   onFocus,
   onBlur,
+  onCompositionStart,
+  onCompositionEnd,
   isSlashMenuOpen = false,
   slashItems = [],
   slashSelectedIndex = 0,
@@ -102,6 +106,8 @@ export function ChatInputContainer({
           onKeyDown={onKeyDown}
           onFocus={onFocus}
           onBlur={onBlur}
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={onCompositionEnd}
         />
       </div>
 
