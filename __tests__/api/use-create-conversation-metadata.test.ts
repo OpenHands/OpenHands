@@ -3,12 +3,25 @@ import {
   SettingsClient,
 } from "@openhands/typescript-client/clients";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
-import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
+import {
+  getStoredConversationMetadata,
+  mergeStoredConversationMetadata,
+} from "#/api/conversation-metadata-store";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import type { InstalledPluginInfo } from "#/api/plugins-management-service";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import { PLUGINS_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 const {
   mockHttpPost,
@@ -152,6 +165,7 @@ describe("useCreateConversation persists selected repository metadata", () => {
 
   afterEach(() => {
     window.localStorage.clear();
+    __resetActiveStoreForTests();
     vi.restoreAllMocks();
   });
 
@@ -312,5 +326,206 @@ describe("useCreateConversation persists selected repository metadata", () => {
     expect(getStoredConversationMetadata("conv-new")?.plugins).toEqual([
       { source: "github:acme/city-weather", ref: "main", repo_path: null },
     ]);
+  });
+
+  function arrangeReadyLaunch() {
+    const profile = {
+      id: "agent-default",
+      name: "default",
+      agent_kind: "openhands" as const,
+      revision: 1,
+      llm_profile_ref: null,
+      mcp_server_refs: null,
+    };
+    vi.spyOn(AgentProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [profile],
+      active_agent_profile_id: profile.id,
+    });
+    vi.spyOn(AgentProfilesService, "getProfile").mockResolvedValue({
+      name: profile.name,
+      profile,
+    } as never);
+    return vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-new",
+        app_conversation_id: "conv-new",
+        agent_server_url: "http://localhost:54928",
+      } as never);
+  }
+
+  function installedPlugin(name: string): InstalledPluginInfo {
+    return {
+      name,
+      version: "1.0.0",
+      description: null,
+      enabled: true,
+      source: `github:acme/${name}`,
+      resolved_ref: null,
+      repo_path: null,
+      installed_at: "2026-05-05T00:00:00Z",
+      install_path: `/plugins/${name}`,
+    };
+  }
+
+  it("returns the created conversation before the installed-plugin lookup settles, then merges its coordinates", async () => {
+    arrangeReadyLaunch();
+    mergeStoredConversationMetadata("conv-new", {
+      selected_workspace: "/home/me/project",
+      active_profile: "default",
+    });
+    let resolveInstalled!: (plugins: InstalledPluginInfo[]) => void;
+    mockListInstalledPlugins.mockReturnValue(
+      new Promise<InstalledPluginInfo[]>((resolve) => {
+        resolveInstalled = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useCreateConversation(), { wrapper });
+
+    result.current.mutate({
+      query: "start immediately",
+      workingDir: "/home/me/project",
+      plugins: [
+        { source: "github:acme/explicit", parameters: { token: "secret" } },
+      ],
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.conversation_id).toBe("conv-new");
+    expect(getStoredConversationMetadata("conv-new")?.plugins).toEqual([
+      { source: "github:acme/explicit", ref: null, repo_path: null },
+    ]);
+
+    await act(async () => {
+      const installed = {
+        ...installedPlugin("city-weather"),
+        resolved_ref: "abc123",
+        parameters: { token: "installed-secret" },
+      };
+      resolveInstalled([installed]);
+    });
+    await waitFor(() =>
+      expect(getStoredConversationMetadata("conv-new")).toMatchObject({
+        selected_workspace: "/home/me/project",
+        active_profile: "default",
+        plugins: [
+          { source: "github:acme/explicit", ref: null, repo_path: null },
+          {
+            source: "github:acme/city-weather",
+            ref: "abc123",
+            repo_path: null,
+            name: "city-weather",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("keeps a successful launch and its explicit plugins when the background lookup rejects", async () => {
+    arrangeReadyLaunch();
+    let rejectInstalled!: (error: Error) => void;
+    mockListInstalledPlugins.mockReturnValue(
+      new Promise<InstalledPluginInfo[]>((_resolve, reject) => {
+        rejectInstalled = reject;
+      }),
+    );
+    const onError = vi.fn();
+    const { result } = renderHook(() => useCreateConversation(), { wrapper });
+    result.current.mutate(
+      { plugins: [{ source: "github:acme/explicit" }] },
+      { onError },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await act(async () => rejectInstalled(new Error("offline")));
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(result.current.isError).toBe(false);
+    expect(getStoredConversationMetadata("conv-new")?.plugins).toEqual([
+      { source: "github:acme/explicit", ref: null, repo_path: null },
+    ]);
+  });
+
+  it("keeps delayed plugin snapshots scoped to their launch backend and conversation", async () => {
+    const createConversation = arrangeReadyLaunch();
+    const backendA = {
+      id: "server-a",
+      name: "A",
+      kind: "local" as const,
+      host: "http://server-a",
+      apiKey: "key-a",
+    };
+    const backendB = {
+      ...backendA,
+      id: "server-b",
+      name: "B",
+      host: "http://server-b",
+      apiKey: "key-b",
+    };
+    setRegisteredBackends([backendA, backendB]);
+    setActiveSelection({ backendId: backendA.id });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    let resolveA!: (plugins: InstalledPluginInfo[]) => void;
+    const pluginsA = [installedPlugin("a")];
+    const pluginsB = [installedPlugin("b")];
+    mockListInstalledPlugins
+      .mockReturnValueOnce(
+        new Promise<InstalledPluginInfo[]>((resolve) => {
+          resolveA = resolve;
+        }),
+      )
+      .mockResolvedValueOnce(pluginsB);
+    createConversation
+      .mockResolvedValueOnce({
+        id: "task-a",
+        app_conversation_id: "conv-a",
+      } as never)
+      .mockResolvedValueOnce({
+        id: "task-b",
+        app_conversation_id: "conv-b",
+      } as never);
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) =>
+        React.createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          React.createElement(ActiveBackendProvider, null, children),
+        ),
+    });
+
+    result.current.mutate({ query: "on A" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    act(() => setActiveSelection({ backendId: backendB.id }));
+    await act(async () => {
+      await result.current.mutateAsync({ query: "on B" });
+    });
+    await act(async () => resolveA(pluginsA));
+
+    await waitFor(() => {
+      expect(getStoredConversationMetadata("conv-a")?.plugins).toEqual([
+        { source: "github:acme/a", ref: null, repo_path: null, name: "a" },
+      ]);
+      expect(getStoredConversationMetadata("conv-b")?.plugins).toEqual([
+        { source: "github:acme/b", ref: null, repo_path: null, name: "b" },
+      ]);
+    });
+    expect(mockListInstalledPlugins).toHaveBeenNthCalledWith(1, backendA);
+    expect(mockListInstalledPlugins).toHaveBeenNthCalledWith(2, backendB);
+    expect(
+      queryClient.getQueryData([
+        ...PLUGINS_QUERY_KEYS.installed,
+        backendA.id,
+        null,
+      ]),
+    ).toEqual(pluginsA);
+    expect(
+      queryClient.getQueryData([
+        ...PLUGINS_QUERY_KEYS.installed,
+        backendB.id,
+        null,
+      ]),
+    ).toEqual(pluginsB);
   });
 });
