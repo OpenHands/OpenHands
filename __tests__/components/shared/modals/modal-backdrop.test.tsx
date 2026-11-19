@@ -9,6 +9,22 @@ import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 
 describe("ModalBackdrop", () => {
+  it("locks body scrolling while open and restores the previous overflow after unmount", () => {
+    document.body.style.overflow = "auto";
+
+    const { unmount } = render(
+      <ModalBackdrop>
+        <div />
+      </ModalBackdrop>,
+    );
+
+    expect(document.body.style.overflow).toBe("hidden");
+
+    unmount();
+
+    expect(document.body.style.overflow).toBe("auto");
+  });
+
   it("portals out of a transformed ancestor so position: fixed resolves against the viewport", () => {
     // Arrange: a transformed ancestor would otherwise become the
     // containing block for `position: fixed` descendants and trap the
