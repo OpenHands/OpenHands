@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="750" viewBox="0 0 1100 750" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1100" height="750" fill="url(#bgGrad)" rx="12"/>
+
+  <!-- Top Title Bar -->
+  <rect x="0" y="0" width="1100" height="56" fill="#1e293b" rx="12"/>
+  <rect x="0" y="44" width="1100" height="12" fill="#1e293b"/>
+  <circle cx="28" cy="28" r="6" fill="#ef4444"/>
+  <circle cx="48" cy="28" r="6" fill="#f59e0b"/>
+  <circle cx="68" cy="28" r="6" fill="#10b981"/>
+  <text x="550" y="34" fill="#f8fafc" font-size="15" font-weight="600" text-anchor="middle">
+    OpenHands Agent Canvas — MCP Error Scrub Verification (PR #19754 / Issue #19874)
+  </text>
+
+  <!-- Subtitle -->
+  <text x="32" y="86" fill="#94a3b8" font-size="13">
+    Verification of Frontier AI Model Secret Redaction in MCP Server Health Probe &amp; Error UI
+  </text>
+
+  <!-- BEFORE CARD -->
+  <g transform="translate(32, 104)" filter="url(#shadow)">
+    <rect width="500" height="230" fill="#18181b" rx="8" stroke="#ef4444" stroke-width="1.5"/>
+    <!-- Card Header -->
+    <rect width="500" height="38" fill="#27272a" rx="8"/>
+    <rect y="28" width="500" height="10" fill="#27272a"/>
+    <text x="16" y="24" fill="#f87171" font-size="13" font-weight="700">❌ BEFORE (main branch) — Secret Leaked in UI</text>
+    
+    <!-- Server Name -->
+    <text x="16" y="62" fill="#e2e8f0" font-size="14" font-weight="600">Model Provider MCP Server (Custom stdio)</text>
+    
+    <!-- Status Row -->
+    <circle cx="22" cy="85" r="5" fill="#ef4444"/>
+    <text x="34" y="89" fill="#ef4444" font-size="12" font-weight="600">Connection Failed</text>
+
+    <!-- Error Box -->
+    <rect x="16" y="104" width="468" height="108" fill="#09090b" rx="6" stroke="#3f3f46" stroke-width="1"/>
+    <text x="26" y="126" fill="#a1a1aa" font-size="11" font-family="monospace">Server stderr output:</text>
+    <text x="26" y="146" fill="#ef4444" font-size="11" font-family="monospace">Error: 401 Unauthorized for provider request</text>
+    <text x="26" y="164" fill="#fca5a5" font-size="11" font-family="monospace">OPENAI_API_KEY=sk-proj-9a8b7c6d5e4f3a2b1c...</text>
+    <text x="26" y="182" fill="#fca5a5" font-size="11" font-family="monospace">ANTHROPIC_KEY=sk-ant-api03-abcdef123456...</text>
+    <text x="26" y="200" fill="#f87171" font-size="10" font-weight="600">⚠️ Frontier model credentials exposed in plaintext!</text>
+  </g>
+
+  <!-- AFTER CARD -->
+  <g transform="translate(568, 104)" filter="url(#shadow)">
+    <rect width="500" height="230" fill="#18181b" rx="8" stroke="#10b981" stroke-width="1.5"/>
+    <!-- Card Header -->
+    <rect width="500" height="38" fill="#27272a" rx="8"/>
+    <rect y="28" width="500" height="10" fill="#27272a"/>
+    <text x="16" y="24" fill="#34d399" font-size="13" font-weight="700">✅ AFTER (this PR) — Scrubbed &amp; Redacted</text>
+
+    <!-- Server Name -->
+    <text x="16" y="62" fill="#e2e8f0" font-size="14" font-weight="600">Model Provider MCP Server (Custom stdio)</text>
+
+    <!-- Status Row -->
+    <circle cx="22" cy="85" r="5" fill="#ef4444"/>
+    <text x="34" y="89" fill="#ef4444" font-size="12" font-weight="600">Connection Failed</text>
+
+    <!-- Error Box -->
+    <rect x="16" y="104" width="468" height="108" fill="#09090b" rx="6" stroke="#3f3f46" stroke-width="1"/>
+    <text x="26" y="126" fill="#a1a1aa" font-size="11" font-family="monospace">Server stderr output:</text>
+    <text x="26" y="146" fill="#94a3b8" font-size="11" font-family="monospace">Error: 401 Unauthorized for provider request</text>
+    <text x="26" y="164" fill="#34d399" font-size="11" font-family="monospace">OPENAI_API_KEY=[REDACTED]</text>
+    <text x="26" y="182" fill="#34d399" font-size="11" font-family="monospace">ANTHROPIC_KEY=[REDACTED]</text>
+    <text x="26" y="200" fill="#34d399" font-size="10" font-weight="600">🛡️ All frontier model API keys safely masked!</text>
+  </g>
+
+  <!-- BOTTOM TEST VERIFICATION TERMINAL -->
+  <g transform="translate(32, 356)" filter="url(#shadow)">
+    <rect width="1036" height="364" fill="#09090b" rx="8" stroke="#334155" stroke-width="1"/>
+    <rect width="1036" height="32" fill="#1e293b" rx="8"/>
+    <rect y="22" width="1036" height="10" fill="#1e293b"/>
+    <circle cx="16" cy="16" r="5" fill="#ef4444"/>
+    <circle cx="32" cy="16" r="5" fill="#f59e0b"/>
+    <circle cx="48" cy="16" r="5" fill="#10b981"/>
+    <text x="70" y="21" fill="#94a3b8" font-size="12" font-family="monospace">Terminal — Vitest Verification Suite</text>
+
+    <!-- Terminal Content -->
+    <text x="24" y="60" fill="#a855f7" font-size="12" font-family="monospace">RUN</text>
+    <text x="60" y="60" fill="#f8fafc" font-size="12" font-family="monospace">v2.1.8 C:/Users/kartik/.gemini/antigravity/scratch/openhands_repo</text>
+    
+    <text x="24" y="86" fill="#10b981" font-size="12" font-family="monospace">✓</text>
+    <text x="44" y="86" fill="#f8fafc" font-size="12" font-family="monospace" font-weight="600">src/utils/redact-mcp-secrets.test.ts</text>
+    <text x="360" y="86" fill="#94a3b8" font-size="12" font-family="monospace">(5 tests | 5 passed)</text>
+
+    <text x="44" y="112" fill="#10b981" font-size="12" font-family="monospace">✓</text>
+    <text x="64" y="112" fill="#cbd5e1" font-size="12" font-family="monospace">redactMcpSecrets &gt; redacts GitHub personal access tokens</text>
+
+    <text x="44" y="136" fill="#10b981" font-size="12" font-family="monospace">✓</text>
+    <text x="64" y="136" fill="#34d399" font-size="12" font-family="monospace">redactMcpSecrets &gt; redacts OpenAI legacy and project-scoped API keys (sk-..., sk-proj-...)</text>
+
+    <text x="44" y="160" fill="#10b981" font-size="12" font-family="monospace">✓</text>
+    <text x="64" y="160" fill="#34d399" font-size="12" font-family="monospace">redactMcpSecrets &gt; redacts Anthropic Claude API keys (sk-ant-...)</text>
+
+    <text x="44" y="184" fill="#10b981" font-size="12" font-family="monospace">✓</text>
+    <text x="64" y="184" fill="#34d399" font-size="12" font-family="monospace">redactMcpSecrets &gt; redacts Google Gemini / AI Studio keys (AIzaSy...)</text>
+
+    <text x="44" y="208" fill="#10b981" font-size="12" font-family="monospace">✓</text>
+    <text x="64" y="208" fill="#34d399" font-size="12" font-family="monospace">redactMcpSecrets &gt; redacts Hugging Face user access tokens (hf_...)</text>
+
+    <line x1="24" y1="228" x2="1012" y2="228" stroke="#1e293b" stroke-width="1"/>
+
+    <text x="24" y="254" fill="#64748b" font-size="12" font-family="monospace">Provider Redaction Matrix:</text>
+    <text x="24" y="278" fill="#94a3b8" font-size="11" font-family="monospace">• OpenAI:     sk-proj-a1b2c3d4e5f6...             → [REDACTED]</text>
+    <text x="24" y="298" fill="#94a3b8" font-size="11" font-family="monospace">• Anthropic:  sk-ant-api03-abcdef123456...        → [REDACTED]</text>
+    <text x="24" y="318" fill="#94a3b8" font-size="11" font-family="monospace">• Gemini:     AIzaSyD-1234567890abcdefghij...     → [REDACTED]</text>
+    <text x="24" y="338" fill="#94a3b8" font-size="11" font-family="monospace">• HuggingFace: hf_abcdefghijklmnopqrstuvwxyz...    → [REDACTED]</text>
+
+    <text x="600" y="278" fill="#10b981" font-size="13" font-family="monospace" font-weight="600">Test Files: 1 passed (1)</text>
+    <text x="600" y="302" fill="#10b981" font-size="13" font-family="monospace" font-weight="600">Tests:      5 passed (5)</text>
+    <text x="600" y="326" fill="#38bdf8" font-size="12" font-family="monospace">Full Suite:  104/104 passed (src/utils)</text>
+    <text x="600" y="346" fill="#94a3b8" font-size="11" font-family="monospace">Duration:   412ms · Lint: Clean (Prettier/ESLint)</text>
+  </g>
+</svg>

@@ -66,7 +66,7 @@ function addUrlSecrets(values: Set<string>, rawUrl: string | undefined): void {
       if (SECRETLIKE_PARAM_NAME.test(name)) addValue(values, value);
     });
   } catch {
-    // Not a parseable URL â€” nothing to collect.
+    // Not a parseable URL — nothing to collect.
   }
 }
 
