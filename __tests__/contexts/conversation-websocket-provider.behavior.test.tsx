@@ -828,6 +828,95 @@ describe("Conversation websocket behavior", () => {
     });
   });
 
+  describe("run failure banner after reload (#17887)", () => {
+    const historyError = {
+      ...baseEvent("31"),
+      kind: "ConversationErrorEvent",
+      code: "LLMServiceUnavailableError",
+      detail: "litellm.InternalServerError: Connection error.",
+    } as OpenHandsEvent;
+
+    const rerenderConversation = (
+      view: ReturnType<typeof renderProvider>,
+      conversationId: string,
+    ) =>
+      view.rerender(
+        <QueryClientProvider client={view.queryClient}>
+          <ConversationWebSocketProvider
+            conversationId={conversationId}
+            conversationUrl={`http://localhost:8000/api/conversations/${conversationId}`}
+          >
+            <ContextProbe />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+
+    it("re-shows the persisted failure that ended the run", () => {
+      historyCapture.result.data = {
+        events: [makeMessageEvent("30", "user", ["say hi"]), historyError],
+      };
+
+      renderProvider();
+
+      expect(useErrorMessageStore.getState()).toMatchObject({
+        errorMessage: "litellm.InternalServerError: Connection error.",
+        errorType: "conversation",
+        errorCode: "LLMServiceUnavailableError",
+      });
+      // Already reported when it happened live.
+      expect(socketCapture.trackError).not.toHaveBeenCalled();
+    });
+
+    it("stays quiet when the agent replied after the failure", () => {
+      historyCapture.result.data = {
+        events: [
+          makeMessageEvent("30", "user", ["say hi"]),
+          historyError,
+          makeMessageEvent("32", "assistant", ["hi"]),
+        ],
+      };
+
+      renderProvider();
+
+      expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    });
+
+    it("does not resurrect a dismissed banner on a history refetch", () => {
+      historyCapture.result.data = { events: [historyError] };
+      const view = renderProvider();
+      act(() => useErrorMessageStore.getState().removeErrorMessage());
+
+      historyCapture.result = {
+        ...historyCapture.result,
+        data: { events: [historyError] },
+      };
+      rerenderConversation(view, "conv-main");
+
+      expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    });
+
+    it("drops the previous conversation's failure and restores it on return", () => {
+      historyCapture.result.data = { events: [historyError] };
+      const view = renderProvider();
+
+      historyCapture.result = {
+        ...historyCapture.result,
+        data: { events: [makeMessageEvent("40", "assistant", ["ok"])] },
+      };
+      rerenderConversation(view, "conv-other");
+      expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+
+      historyCapture.result = {
+        ...historyCapture.result,
+        data: { events: [historyError] },
+      };
+      rerenderConversation(view, "conv-main");
+      expect(useErrorMessageStore.getState().errorCode).toBe(
+        "LLMServiceUnavailableError",
+      );
+    });
+  });
+
   it("leaves other history load failures to socket recovery", () => {
     Object.assign(historyCapture.result, {
       isError: true,
