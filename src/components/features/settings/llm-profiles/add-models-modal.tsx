@@ -390,7 +390,7 @@ export function AddModelsModal({
           {t(I18nKey.SETTINGS$ADD_MODELS_PROVIDER_LABEL)}
           <select
             data-testid="add-models-provider"
-            className="rounded-md border border-border-input bg-[var(--oh-background)] px-3 py-2 text-sm text-contrast"
+            className="rounded-md border border-border-input bg-canvas-background px-3 py-2 text-sm text-contrast"
             value={selectedProvider ?? ""}
             onChange={(e) => handleProviderChange(e.target.value)}
             disabled={submitting}
@@ -418,7 +418,7 @@ export function AddModelsModal({
             {t(I18nKey.SETTINGS$ADD_MODELS_CONNECTION_LABEL)}
             <select
               data-testid="add-models-connection"
-              className="rounded-md border border-border-input bg-[var(--oh-background)] px-3 py-2 text-sm text-contrast"
+              className="rounded-md border border-border-input bg-canvas-background px-3 py-2 text-sm text-contrast"
               value={selectedConnectionId ?? KEYLESS_CONNECTION_VALUE}
               onChange={(e) => setSelectedConnectionId(e.target.value || null)}
               disabled={submitting}

@@ -71,8 +71,7 @@ export function historyEventText(event: OpenHandsEvent): string {
     const content =
       "content" in event.observation && Array.isArray(event.observation.content)
         ? event.observation.content
-            .filter((part) => part.type === "text")
-            .map((part) => part.text)
+            .flatMap((part) => (part.type === "text" ? [part.text] : []))
             .join("\n")
         : "";
     if (!content) return getObservationContent(event);

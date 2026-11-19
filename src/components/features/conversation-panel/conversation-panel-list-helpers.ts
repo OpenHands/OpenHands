@@ -396,7 +396,7 @@ function buildGroupLaunch(
     const name = id.slice(5);
     const sample = conversations[0];
     const gitProvider = (sample?.git_provider ?? "github") as Provider;
-    const branch = sample?.selected_branch ?? "main";
+    const branch = sample?.selected_branch ?? undefined;
     return {
       repository: {
         name,

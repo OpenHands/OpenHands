@@ -2,6 +2,7 @@ import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
+  afterAll,
   afterEach,
   beforeAll,
   beforeEach,
@@ -127,14 +128,11 @@ const renderConversationNameWithRouter = () => {
 
 describe("ConversationName", () => {
   beforeAll(() => {
-    vi.stubGlobal("window", {
-      open: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      location: {
-        origin: "http://localhost:3000",
-      },
-    });
+    vi.spyOn(window, "open").mockImplementation(() => null);
+  });
+
+  afterAll(() => {
+    vi.mocked(window.open).mockRestore();
   });
 
   beforeEach(() => {

@@ -52,7 +52,7 @@ export function MessageTimestamp({
       }}
       className={cn(
         // Padding bridges the pointer path from the bubble to its timestamp.
-        "absolute top-full z-10 w-max pt-1 text-xs leading-4 text-muted",
+        "absolute top-full z-10 w-max pt-0.5 text-xs leading-4 text-muted",
         align === "right" ? "right-0 text-right" : "left-0 text-left",
         visible ? "opacity-100" : "pointer-events-none opacity-0",
       )}

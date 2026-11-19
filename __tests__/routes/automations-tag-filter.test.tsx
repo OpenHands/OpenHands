@@ -13,6 +13,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import AutomationsList from "#/routes/automations-list";
+import { I18nKey } from "#/i18n/declaration";
 import type { Backend } from "#/api/backend-registry/types";
 import type { Automation } from "#/types/automation";
 
@@ -83,6 +84,11 @@ const factoryAutomation = createAutomation({
   tags: ["software-factory"],
 });
 const otherAutomation = createAutomation({ id: "a-other", name: "Digest" });
+const reviewAutomation = createAutomation({
+  id: "a-review",
+  name: "Code reviewer",
+  tags: ["software-factory", "code-review"],
+});
 
 function renderList() {
   const client = new QueryClient({
@@ -137,6 +143,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.clearAllMocks();
   __resetActiveStoreForTests();
+  window.localStorage.clear();
 });
 
 describe("AutomationsList — tag filter", () => {
@@ -171,5 +178,141 @@ describe("AutomationsList — tag filter", () => {
       undefined,
       "software-factory",
     );
+  });
+});
+
+describe("AutomationsList — group by tag", () => {
+  const sectionTitles = () =>
+    screen
+      .getAllByRole("heading", { level: 2 })
+      .map((heading) => heading.textContent);
+
+  const sectionOf = (title: string) =>
+    within(
+      screen
+        .getByRole("heading", { level: 2, name: title })
+        .closest("section") as HTMLElement,
+    );
+
+  const groupByTag = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(
+      within(screen.getByTestId("automations-group-by")).getByTestId(
+        "dropdown-trigger",
+      ),
+    );
+    await user.click(screen.getByTestId("automations-group-by-tag"));
+  };
+
+  beforeEach(() => {
+    // The service lists the most-used tag first, which is not alphabetical.
+    vi.mocked(AutomationService.listAutomationTags).mockResolvedValue([
+      { tag: "software-factory", count: 2 },
+      { tag: "code-review", count: 1 },
+    ]);
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [factoryAutomation, reviewAutomation, otherAutomation],
+      total: 3,
+    });
+  });
+
+  it("lists a section per tag in alphabetical order, then the untagged automations", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByTestId("automation-card-a-other");
+
+    // Act
+    await groupByTag(user);
+
+    // Assert
+    expect(sectionTitles()).toEqual([
+      "code-review",
+      "software-factory",
+      I18nKey.AUTOMATIONS$NO_TAGS,
+    ]);
+    expect(
+      sectionOf(I18nKey.AUTOMATIONS$NO_TAGS).getByTestId(
+        "automation-card-a-other",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("lists an automation under each of its tags", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByTestId("automation-card-a-other");
+
+    // Act
+    await groupByTag(user);
+
+    // Assert
+    expect(
+      sectionOf("code-review").getByTestId("automation-card-a-review"),
+    ).toBeInTheDocument();
+    expect(
+      sectionOf("software-factory").getByTestId("automation-card-a-review"),
+    ).toBeInTheDocument();
+  });
+
+  it("groups only the automations that match the search", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByTestId("automation-card-a-other");
+    await groupByTag(user);
+
+    // Act
+    await user.type(
+      screen.getByLabelText(I18nKey.AUTOMATIONS$SEARCH_PLACEHOLDER),
+      reviewAutomation.name,
+    );
+
+    // Assert
+    expect(sectionTitles()).toEqual(["code-review", "software-factory"]);
+    expect(
+      screen.queryByTestId("automation-card-a-factory"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the grouping for the next visit", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const { unmount } = renderList();
+    await screen.findByTestId("automation-card-a-other");
+    await groupByTag(user);
+    unmount();
+
+    // Act
+    renderList();
+
+    // Assert
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "code-review" }),
+    ).toBeInTheDocument();
+  });
+
+  it("returns to the status sections when the org has no tags left", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const { unmount } = renderList();
+    await screen.findByTestId("automation-card-a-other");
+    await groupByTag(user);
+    unmount();
+    vi.mocked(AutomationService.listAutomationTags).mockResolvedValue([]);
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [otherAutomation],
+      total: 1,
+    });
+
+    // Act
+    renderList();
+    await screen.findByTestId("automation-card-a-other");
+
+    // Assert
+    expect(sectionTitles()).toEqual([I18nKey.AUTOMATIONS$ACTIVE]);
+    expect(
+      screen.queryByTestId("automations-group-by"),
+    ).not.toBeInTheDocument();
   });
 });
