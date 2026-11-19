@@ -8,6 +8,7 @@ import { CostSection } from "../metrics-modal/cost-section";
 import { UsageSection } from "../metrics-modal/usage-section";
 import { CompactContextButton } from "./compact-context-button";
 import { ContextMeter } from "./context-meter";
+import { ModelBreakdown } from "./model-breakdown";
 import { ProviderBalanceCard } from "./provider-balance-card";
 import { getContextWindowUsagePercentage } from "#/utils/format-token-count";
 
@@ -27,7 +28,7 @@ export function UsagePanel() {
   // plan; the dollar figure is an API-equivalent estimate, not a bill.
   const isAcp = conversation?.agent_kind === "acp";
 
-  const { usage } = metrics;
+  const { usage, usage_breakdown: usageBreakdown } = metrics;
   const hasMetrics = metrics.cost !== null || usage !== null;
 
   if (!hasMetrics) {
@@ -74,7 +75,17 @@ export function UsagePanel() {
             </span>
           )}
           {usage !== null && <UsageSection usage={usage} />}
-          <CostSection cost={metrics.cost} maxBudget={metrics.maxBudget} />
+          <CostSection
+            cost={metrics.cost}
+            maxBudget={metrics.maxBudget}
+            usageTokens={
+              usage !== null
+                ? usage.prompt_tokens + usage.completion_tokens
+                : null
+            }
+            showEstimateNote={!isAcp}
+          />
+          <ModelBreakdown entries={usageBreakdown ?? []} />
         </div>
       </div>
 

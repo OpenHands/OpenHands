@@ -3,7 +3,54 @@ import type {
   RuntimeConversationInfo,
   RuntimeConversationStats,
   TokenUsage,
+  UsageBreakdownEntry,
 } from "#/api/conversation-service/agent-server-conversation-service.types";
+
+interface UsageMetricsLike {
+  model_name: string;
+  accumulated_cost: number;
+  accumulated_token_usage: UsageBreakdownEntry["usage"] | null;
+}
+
+/**
+ * Per-model cost and tokens, costliest first, so the combined total can be
+ * attributed. Usage ids sharing a model (e.g. agent + condenser) are summed and
+ * unused ones dropped. Shared by the REST snapshot and the live stats event.
+ */
+export function buildUsageBreakdown(
+  usageToMetrics: Record<string, UsageMetricsLike>,
+): UsageBreakdownEntry[] {
+  const byModel = new Map<string, UsageBreakdownEntry>();
+  for (const [usageId, metrics] of Object.entries(usageToMetrics)) {
+    const modelName = metrics.model_name || usageId;
+    const entry = byModel.get(modelName) ?? {
+      modelName,
+      accumulatedCost: 0,
+      usage: {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+      },
+    };
+    entry.accumulatedCost += metrics.accumulated_cost;
+    const tokens = metrics.accumulated_token_usage;
+    if (tokens) {
+      entry.usage.prompt_tokens += tokens.prompt_tokens;
+      entry.usage.completion_tokens += tokens.completion_tokens;
+      entry.usage.cache_read_tokens += tokens.cache_read_tokens;
+      entry.usage.cache_write_tokens += tokens.cache_write_tokens;
+    }
+    byModel.set(modelName, entry);
+  }
+  return [...byModel.values()]
+    .filter(
+      (entry) =>
+        entry.accumulatedCost > 0 ||
+        entry.usage.prompt_tokens + entry.usage.completion_tokens > 0,
+    )
+    .sort((a, b) => b.accumulatedCost - a.accumulatedCost);
+}
 
 /**
  * TypeScript equivalent of the get_combined_metrics method from the Python SDK
@@ -69,6 +116,7 @@ export function combineUsageMetrics(
     accumulated_cost: totalCost,
     max_budget_per_task: maxBudgetPerTask,
     accumulated_token_usage: combinedTokenUsage,
+    usage_breakdown: buildUsageBreakdown(stats.usage_to_metrics),
   };
 }
 
