@@ -1,4 +1,4 @@
-import i18n, { OPENHANDS_I18N_NAMESPACE } from "#/i18n";
+﻿import i18n, { OPENHANDS_I18N_NAMESPACE } from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 import { hasPluginParameters } from "#/utils/plugin-parameters";
 import {
@@ -624,18 +624,12 @@ export function buildGitIdentitySessionStartHook(
   const email = gitUserEmail?.trim();
   if (!name || !email) return undefined;
 
-  // Skip injecting a git-identity hook when the configured values match the
-  // Canvas defaults — the sandbox / SDK already ships those same defaults,
-  // so a redundant `git config --global` at conversation start would be a
-  // no-op and would also break callers that rely on hook_config staying
-  // undefined when the user has not explicitly overridden the identity
-  // (see the Ubuntu test-and-build failure in PR #19752).
-  if (
-    name === DEFAULT_SETTINGS.git_user_name &&
-    email === DEFAULT_SETTINGS.git_user_email
-  ) {
+  // Skip injecting the hook when the user hasn't customized git identity
+  // (still at the OpenHands defaults). Without this guard, every
+  // conversation payload grows an extra session_start hook that the
+  // agent-server doesn't need when identity isn't configured (#19007).
+  if (name === "openhands" && email === "openhands@all-hands.dev")
     return undefined;
-  }
 
   const command = [
     "git config --global user.name",
