@@ -386,13 +386,17 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
             />
           )}
 
-        {showMobileAutomationForm && automationSetupDraft ? (
+        {isMobile && automationSetupDraft ? (
           <div
             data-testid="automation-setup-mobile-form"
-            className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
+            className={cn(
+              "relative flex min-h-0 flex-1 flex-col overflow-hidden",
+              !showMobileAutomationForm && "hidden",
+            )}
           >
             <Suspense fallback={<LoadingSpinner size="small" />}>
               <AutomationSetupPanel
+                key={conversationId}
                 draft={automationSetupDraft}
                 conversationId={conversationId}
                 conversationTags={conversation?.tags}
@@ -401,7 +405,9 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
                 reserveComposerSpace
               />
             </Suspense>
-            <AutomationSetupDockedComposer onTarget={setComposerDockTarget} />
+            {showMobileAutomationForm ? (
+              <AutomationSetupDockedComposer onTarget={setComposerDockTarget} />
+            ) : null}
           </div>
         ) : null}
 

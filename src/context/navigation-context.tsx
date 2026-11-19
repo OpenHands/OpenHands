@@ -9,9 +9,36 @@ export interface NavigationContextValue {
   conversationId: string | null;
   isNavigating: boolean;
   navigate: (to: string, options?: NavigationOptions) => void;
+  /**
+   * Live read of the active route, for callbacks that outlive the component
+   * that scheduled them (e.g. a mutation settling after its row unmounted).
+   * A `currentPath` captured in that closure is stale by then, and
+   * `window.location` is wrong when the navigation owner drives routing without
+   * updating the document URL (an embedding host). Returns an app-relative path.
+   */
+  getCurrentPath?: () => string;
 }
 
 const noop = () => {};
+
+/**
+ * A stable getter that always reads the latest route, for the navigation owner
+ * to expose as {@link NavigationContextValue.getCurrentPath}. The getter's
+ * identity never changes, so a callback holding it keeps seeing the live path
+ * even after the component that captured it unmounted.
+ */
+export function useCurrentPathGetter(pathname: string): () => string {
+  const pathRef = React.useRef(pathname);
+  // Layout effect, not a passive one: a fork that settles during the commit
+  // between a navigation and this effect would read the previous route. React
+  // flushes layout effects bottom-up before any passive effect, so a consumer
+  // reading the getter from its own effect (or a mutation callback that runs
+  // then) sees the committed route rather than the one before it.
+  React.useLayoutEffect(() => {
+    pathRef.current = pathname;
+  }, [pathname]);
+  return React.useCallback(() => pathRef.current, []);
+}
 
 const NavigationContext = React.createContext<NavigationContextValue>({
   currentPath: "/",

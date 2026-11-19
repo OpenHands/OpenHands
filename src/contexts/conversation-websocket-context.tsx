@@ -83,7 +83,7 @@ import {
   usePersistedConversationHistory,
   getConversationHistoryScope,
 } from "#/hooks/query/use-conversation-history";
-import { setConversationState } from "#/utils/conversation-local-storage";
+import { clearConfirmedConversationDraft } from "#/utils/conversation-local-storage";
 import {
   recordModelSwitchMessage,
   seedModelSwitchesFromHistory,
@@ -577,11 +577,12 @@ export function ConversationWebSocketProvider({
 
       for (const event of visibleHistory.events) {
         if (isUserMessageEvent(event)) {
-          consumeMatchingPendingMessage(
+          const confirmed = consumeMatchingPendingMessage(
             conversationId,
             extractMessageEventText(event),
             event,
           );
+          clearConfirmedConversationDraft(conversationId, confirmed);
         }
       }
     }
@@ -882,13 +883,12 @@ export function ConversationWebSocketProvider({
           // History and live delivery share the same timestamp/identity checks.
           if (isUserMessageEvent(event)) {
             if (conversationId) {
-              consumeMatchingPendingMessage(
+              const confirmed = consumeMatchingPendingMessage(
                 conversationId,
                 extractMessageEventText(event),
                 event,
               );
-              // Clear draft from localStorage - message was successfully delivered
-              setConversationState(conversationId, { draftMessage: null });
+              clearConfirmedConversationDraft(conversationId, confirmed);
             }
           }
 
@@ -1180,12 +1180,12 @@ export function ConversationWebSocketProvider({
           // events can never consume a main-conversation pending entry.
           if (isUserMessageEvent(event)) {
             if (conversationId) {
-              consumeMatchingPendingMessage(
+              const confirmed = consumeMatchingPendingMessage(
                 conversationId,
                 extractMessageEventText(event),
                 event,
               );
-              setConversationState(conversationId, { draftMessage: null });
+              clearConfirmedConversationDraft(conversationId, confirmed);
             }
           }
 

@@ -1,7 +1,18 @@
-import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render as renderWithoutClient, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { OpenRepositoryModal } from "#/components/features/chat/open-repository-modal";
+import {
+  gitProviderOptionKey,
+  gitProviderOptionsMatch,
+  type GitProviderOption,
+} from "#/utils/git-provider-option";
+
+const render = (ui: React.ReactElement) =>
+  renderWithoutClient(
+    <QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>,
+  );
 
 // Mock react-i18next
 vi.mock("react-i18next", () => ({
@@ -27,20 +38,23 @@ vi.mock(
   "#/components/features/home/git-provider-dropdown/git-provider-dropdown",
   () => ({
     GitProviderDropdown: ({
-      providers,
+      options,
+      value,
       onChange,
     }: {
-      providers: string[];
-      onChange: (provider: string | null) => void;
+      options: GitProviderOption[];
+      value: GitProviderOption | null;
+      onChange: (option: GitProviderOption | null) => void;
     }) => (
       <div data-testid="git-provider-dropdown">
-        {providers.map((p: string) => (
+        {options.map((option) => (
           <button
-            key={p}
-            data-testid={`provider-${p}`}
-            onClick={() => onChange(p)}
+            key={gitProviderOptionKey(option)}
+            data-testid={`provider-${gitProviderOptionKey(option)}`}
+            data-selected={gitProviderOptionsMatch(option, value)}
+            onClick={() => onChange(option)}
           >
-            {p}
+            {option.label}
           </button>
         ))}
       </div>

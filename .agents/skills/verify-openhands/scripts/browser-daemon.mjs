@@ -97,7 +97,17 @@ function spkiPins(files) {
 const trustPins = process.env.CONTROL_OPENHANDS_TRUST_CA
   ? spkiPins(process.env.CONTROL_OPENHANDS_TRUST_CA)
   : [];
+// The run's non-loopback origin (launch help, lanUrl): resolve its reserved
+// name to loopback here, in the browser, and keep it off any proxy. Chromium
+// sends ws:// through the HTTPS proxy of the environment, where the name does
+// not exist (the socket then fails with 502), so it goes on the no-proxy list
+// the browser inherits.
+const lanHost = process.env.OH_VERIFY_LAN_HOST;
+if (lanHost)
+  for (const name of ["NO_PROXY", "no_proxy"])
+    process.env[name] = [process.env[name], lanHost].filter(Boolean).join(",");
 const extraArgs = [
+  ...(lanHost ? [`--host-resolver-rules=MAP ${lanHost} 127.0.0.1`] : []),
   "--disable-background-networking",
   "--disable-component-update",
   "--no-first-run",
@@ -212,6 +222,8 @@ function redactQuery(search) {
 }
 let markIndex = 0;
 let activePage = context.pages()[0] ?? (await context.newPage());
+// One CDP session per tab keeps a `browser timezone` override alive.
+const timezoneSessions = new WeakMap();
 // Keys held with `browser key down` until `key up` or `key release-all`.
 const heldKeys = new HeldKeys();
 
@@ -1007,6 +1019,42 @@ const handlers = {
       time: new Date(time).toISOString(),
     };
   },
+  async timezone({ zone, reset }) {
+    // The browser's time zone, for states that depend on it differing from
+    // the server's (a timestamp written without an offset, a "3 hours ago"
+    // on a message sent now). It holds for the active tab, across reloads
+    // and navigations, until --reset; a tab opened later starts in the
+    // machine's zone. The server's zone is untouched.
+    if (!reset) {
+      // Chromium accepts an unknown name without changing anything, so the
+      // name is checked here first.
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: String(zone) });
+      } catch {
+        throw new Error(
+          `Not a time zone: ${zone}. Use an IANA name such as America/Sao_Paulo or Asia/Tokyo.`,
+        );
+      }
+    }
+    let session = timezoneSessions.get(activePage);
+    if (!session) {
+      session = await context.newCDPSession(activePage);
+      timezoneSessions.set(activePage, session);
+    }
+    await session.send("Emulation.setTimezoneOverride", {
+      timezoneId: reset ? "" : String(zone),
+    });
+    const seen = await activePage.evaluate(() => ({
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      utcOffsetMinutes: -new Date().getTimezoneOffset(),
+      localTime: new Date().toString(),
+    }));
+    return {
+      timezone: reset ? "reset" : "set",
+      ...seen,
+      url: activePage.url(),
+    };
+  },
   async viewport({ size }) {
     const preset = VIEWPORTS[size];
     let next = preset;
@@ -1706,6 +1754,8 @@ server.listen(0, "127.0.0.1", () => {
       pid: process.pid,
       port,
       token,
+      // Tells the CLI this daemon resolves the run's non-loopback name.
+      lanHost,
       startedAt: new Date().toISOString(),
     }),
     { mode: 0o600 },

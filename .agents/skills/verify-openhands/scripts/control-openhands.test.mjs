@@ -44,7 +44,12 @@ import {
   networkTiming,
   orderNetworkEntries,
 } from "./lib/network-timing.mjs";
-import { resolveTestids } from "./lib/testids.mjs";
+import {
+  mapWords,
+  resolveTestids,
+  sourceControls,
+  unnamedControls,
+} from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
 import { HeldKeys, keyDownArguments } from "./lib/held-keys.mjs";
@@ -897,6 +902,7 @@ test("changed paths map to the families whose Source: lines own them", () => {
     "src/mocks/conversation-handlers.ts",
     ".agents/skills/verify-openhands/SKILL.md",
     "src/icons/close.svg",
+    "hero.ts",
     "eslint.config.js",
     "vitest.setup.ts",
     "playwright.live.config.ts",
@@ -916,6 +922,7 @@ test("changed paths map to the families whose Source: lines own them", () => {
     "src/hooks/query/use-get-secrets.ts",
     "src/i18n/translation.json",
     "src/icons/close.svg",
+    "hero.ts",
   ]);
   // A src/ path no family owns is a map gap.
   assert.deepEqual(result.unmapped, [
@@ -1048,6 +1055,89 @@ test("map check rejects a Source: path that is gone, and the shipped map is clea
   );
   assert.equal(head.sources[0].path, "src/does-not-exist.tsx");
   assert.ok(existsSync(dir));
+});
+
+test("map controls lists interactive elements whose test id the map never names", () => {
+  const root = mkdtempSync(join(tmpdir(), "oh-controls-"));
+  const dir = join(root, "src", "components", "features", "demo");
+  mkdirSync(dir, { recursive: true });
+  mkdirSync(join(root, "src", "mocks"), { recursive: true });
+  writeFileSync(
+    join(dir, "panel.tsx"),
+    [
+      "export function Panel({ items }) {",
+      "  return (",
+      '    <section data-testid="demo-panel">',
+      "      <button",
+      '        type="button"',
+      "        onClick={() => items.filter((i) => i > 1)}",
+      '        data-testid="demo-ask-agent"',
+      "      >",
+      "        Ask Agent",
+      "      </button>",
+      '      <BrandButton testId="demo-save">Save</BrandButton>',
+      "      <MenuItem",
+      "        icon={<EditIcon width={16} height={16} />}",
+      "        onClick={() => items.length > 1 && open()}",
+      '        testId="demo-edit"',
+      "      />",
+      '      <div role="menuitem" data-testid={"demo-menu-item"} />',
+      '      <span data-testid="demo-save-hint">Saved</span>',
+      "    </section>",
+      "  );",
+      "}",
+    ].join("\n"),
+  );
+  writeFileSync(
+    join(dir, "panel.test.tsx"),
+    '<button data-testid="only-in-a-test" />',
+  );
+  writeFileSync(
+    join(root, "src", "mocks", "page.tsx"),
+    '<button data-testid="only-in-mocks" />',
+  );
+  const controls = sourceControls(join(root, "src"), root);
+  assert.deepEqual(
+    controls.map((c) => [c.id, c.tag, c.interactive]),
+    [
+      ["demo-ask-agent", "button", true],
+      // The id follows an element passed as a prop: the row is the menu
+      // item, not the icon.
+      ["demo-edit", "MenuItem", true],
+      ["demo-menu-item", "div", true],
+      ["demo-panel", "section", false],
+      ["demo-save", "BrandButton", true],
+      ["demo-save-hint", "span", false],
+    ],
+  );
+  assert.equal(controls[0].file, "src/components/features/demo/panel.tsx");
+  // The map names a control by its whole id: `demo-save-hint` in a recipe
+  // does not account for `demo-save`, and prose about "Ask Agent" does not
+  // account for the button's id.
+  const words = mapWords(
+    "The form has **Ask Agent**. Run `browser text 'testid=demo-save-hint'` and `browser click 'testid=demo-menu-item >> nth=0'`.",
+  );
+  const result = unnamedControls(controls, words);
+  assert.equal(result.considered, 4);
+  assert.deepEqual(
+    result.unnamed.map((c) => c.id),
+    ["demo-ask-agent", "demo-edit", "demo-save"],
+  );
+  assert.deepEqual(
+    unnamedControls(controls, words, { all: true }).unnamed.map((c) => c.id),
+    ["demo-ask-agent", "demo-edit", "demo-panel", "demo-save"],
+  );
+  // On the live tree the command answers with counts and owning families.
+  const live = spawnSync(
+    process.execPath,
+    [cli, "map", "controls", "--family", "F28"],
+    { encoding: "utf8" },
+  );
+  assert.equal(live.status, 0, live.stderr);
+  const report = JSON.parse(live.stdout);
+  assert.ok(report.controls > 0);
+  assert.ok(report.list.every((c) => c.families.includes("F28")));
+  assert.equal(report.unnamed, report.list.length);
 });
 
 test("cited test ids resolve through literals and dynamic prefixes", () => {
@@ -1243,6 +1333,11 @@ test("help names every fixture kind and the new map verbs", () => {
   });
   assert.match(map.stdout, /map affected \[--base REF\]/);
   assert.match(map.stdout, /map testids \[--strict\]/);
+  assert.match(map.stdout, /map controls \[--family Fnn\]/);
+  const browserHelp = spawnSync(process.execPath, [cli, "help", "browser"], {
+    encoding: "utf8",
+  });
+  assert.match(browserHelp.stdout, /timezone <IANA name> \| --reset/);
   const evidence = spawnSync(process.execPath, [cli, "help", "evidence"], {
     encoding: "utf8",
   });
@@ -3167,4 +3262,48 @@ test("bug run puts back the viewport a block changed", () => {
     encoding: "utf8",
   });
   assert.match(help.stdout, /viewportRestored/);
+});
+
+test("every run names a non-loopback plain-HTTP origin on its ingress port", () => {
+  // A run saved before lanUrl existed still gets one, from its baseUrl.
+  const dir = mkdtempSync(join(tmpdir(), "lan-run-"));
+  mkdirSync(join(dir, "private"));
+  writeFileSync(
+    join(dir, "run.json"),
+    JSON.stringify({
+      baseUrl: "http://127.0.0.1:18800",
+      ports: { ingress: 18800 },
+      launcherPgid: 0,
+    }),
+  );
+  const res = spawnSync(process.execPath, [cli, "env"], {
+    encoding: "utf8",
+    env: { ...process.env, OH_VERIFY_RUN: dir },
+  });
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(
+    res.stdout,
+    /^export OH_VERIFY_LAN_URL=http:\/\/lan\.openhands\.test:18800$/m,
+  );
+  const env = { OH_VERIFY_RUN: dir };
+  assert.equal(
+    run(["status"], env).json.lanUrl,
+    "http://lan.openhands.test:18800",
+  );
+  // No daemon that resolves the name: goto says how to get one.
+  const goto = run(
+    ["browser", "goto", "http://lan.openhands.test:18800/"],
+    env,
+  );
+  assert.equal(goto.status, 3, JSON.stringify(goto.json));
+  assert.match(goto.json.hint, /browser stop/);
+  const launch = spawnSync(process.execPath, [cli, "help", "launch"], {
+    encoding: "utf8",
+  });
+  assert.match(launch.stdout, /lanUrl/);
+  assert.match(launch.stdout, /isSecureContext/);
+  const onboard = spawnSync(process.execPath, [cli, "help", "onboard"], {
+    encoding: "utf8",
+  });
+  assert.match(onboard.stdout, /--stay/);
 });

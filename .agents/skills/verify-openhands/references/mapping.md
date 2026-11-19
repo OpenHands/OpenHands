@@ -60,6 +60,12 @@ candidate. Sources, roughly in order of yield:
 directories no entry references yet. Drive it to zero, or list each exclusion
 with its reason in the index's "Not mapped" section.
 
+Coverage counts a page as mapped once any part of it is. `control-openhands
+map controls [--family Fnn]` looks one level down: the buttons, inputs, menus
+and links in `src/` whose test id no map file mentions. Each is a control to
+operate in a bullet, or one a recipe already reaches by role or label. A
+control that only appears in a family's description has not been operated.
+
 ## 2. Group into families
 
 One file per user-facing job (for example "Secrets", "LLM profiles",
@@ -153,6 +159,12 @@ Then exactly four H2 sections, in this order:
    that matter, and a `browser screenshot --feature <ID> --name <label>` where the
    proof is visual. Include phone-viewport checks (`browser viewport phone`) for
    layouts that change on small screens.
+
+   The happy path is the first bullet of a sub-feature, not the last. Walk
+   [scenarios.md](scenarios.md) for each one: the user who edits the item
+   later, acts while it is still saving, has long or many or oddly named
+   data, or runs under a base path or in another time zone. Those are the
+   situations bug reports come from on pages that were already mapped.
 4. `## Gotchas`: traps that waste or invalidate a run: debounces, focus traps,
    items that only appear after the agent runs, features hidden behind a
    prerequisite, and known open issues (link them; they are repro candidates, not
@@ -274,6 +286,7 @@ cheaper routes that earlier mappers missed:
 control-openhands map check --file Fnn-name.md   # one entry while others are being written
 control-openhands map check      # whole map: structure, unique IDs, index links, valid commands
 control-openhands map coverage   # unmapped routes and feature component dirs
+control-openhands map controls --family Fnn   # controls on those pages that no bullet names
 control-openhands map ids        # every ID with its file, for the index tables
 ```
 

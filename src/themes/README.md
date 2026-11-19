@@ -57,9 +57,6 @@ Both app and library builds include the full SIL OFL 1.1 license as
   `.heading`). Its default is `inherit`, preserving existing palettes. Paper
   selects the locally bundled Newsreader face with Georgia and serif fallbacks.
   Embedding hosts can override the family through `styleOverrides`.
-- `--oh-modal-description-foreground` owns the legacy `modal-muted` text role.
-  Its default stays `#a3a3a3`; Paper supplies darker supporting ink for its light
-  dialog surface. Other palettes retain their previous description colors.
 - Use surface/foreground tokens for ordinary content. `contrast` is the
   high-emphasis ink (white in dark palettes, dark in light palettes); its
   paired `contrast-foreground` is for inverse pills and tooltips. Opacity and
@@ -69,6 +66,9 @@ Both app and library builds include the full SIL OFL 1.1 license as
   the built-in modal surface and leave the general danger/success/warning control
   colors unchanged. Embedded hosts can override `--oh-feedback-error`,
   `--oh-feedback-success`, and `--oh-feedback-warning` for their surfaces.
+- Modal headings and descriptions use `modal-title` and `modal-description`
+  (`--oh-modal-title-foreground` / `--oh-modal-description-foreground`). Each
+  palette sets a description shade that meets 4.5:1 on the modal surface.
 - GitHub Markdown alerts own five `--oh-markdown-alert-*` roles: note, tip,
   important, warning, and caution. Each supplies title/icon ink, the left border,
   and a 5% panel tint. Built-in values keep text readable over Markdown host
