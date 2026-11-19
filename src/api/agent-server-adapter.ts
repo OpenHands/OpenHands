@@ -1,4 +1,4 @@
-import i18n, { OPENHANDS_I18N_NAMESPACE } from "#/i18n";
+﻿import i18n, { OPENHANDS_I18N_NAMESPACE } from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 import { hasPluginParameters } from "#/utils/plugin-parameters";
 import {
@@ -623,6 +623,12 @@ export function buildGitIdentitySessionStartHook(
   const name = gitUserName?.trim();
   const email = gitUserEmail?.trim();
   if (!name || !email) return undefined;
+
+  // Skip injecting the hook when the user hasn't customized git identity
+  // (still at the OpenHands defaults). Without this guard, every
+  // conversation payload grows an extra session_start hook that the
+  // agent-server doesn't need when identity isn't configured (#19007).
+  if (name === "openhands" && email === "openhands@all-hands.dev") return undefined;
 
   const command = [
     "git config --global user.name",
