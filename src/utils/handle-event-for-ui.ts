@@ -272,86 +272,107 @@ export const clearStreamingSlots = (
  * updates from running to its result, exactly like an observation superseding
  * its action below.
  */
+interface EventPositions {
+  slot: (id: string | number) => number;
+  event: (id: string | number) => number;
+  toolCall: (id: string) => number;
+}
+
+/** The replacement rules shared by incremental and batch projection. */
+const eventPosition = (
+  event: UIEvent,
+  uiEvents: UIEvent[],
+  positions: EventPositions,
+): number | undefined => {
+  // A durable item's id retires its provisional slot in place.
+  const eventId = "id" in event ? event.id : undefined;
+  if (eventId !== undefined) {
+    const slotIndex = positions.slot(eventId);
+    if (slotIndex !== -1) return slotIndex;
+  }
+
+  if (isACPToolCallEvent(event)) {
+    const index = positions.toolCall(event.tool_call_id);
+    return index === -1 ? uiEvents.length : index;
+  }
+
+  if (
+    isObservationEvent(event) &&
+    (event.observation.kind === "ThinkObservation" ||
+      event.observation.kind === "FinishObservation")
+  ) {
+    return undefined;
+  }
+
+  if (isObservationEvent(event) || isUserRejectObservation(event)) {
+    const index = positions.event(event.action_id);
+    const action = uiEvents[index];
+    // Rejections also retain Think/Finish actions, which carry the content.
+    if (
+      isUserRejectObservation(event) &&
+      action &&
+      isActionEvent(action) &&
+      (action.action.kind === "ThinkAction" ||
+        action.action.kind === "FinishAction")
+    ) {
+      return undefined;
+    }
+    return index === -1 ? uiEvents.length : index;
+  }
+
+  return uiEvents.length;
+};
+
 export const handleEventForUI = (
   event: UIEvent,
   uiEvents: UIEvent[],
 ): UIEvent[] => {
-  const newUiEvents = [...uiEvents];
+  const next = [...uiEvents];
+  const index = eventPosition(event, next, {
+    slot: (id) =>
+      next.findIndex((item) => isStreamingDeltaEvent(item) && item.id === id),
+    event: (id) => next.findIndex((item) => item.id === id),
+    toolCall: (id) =>
+      next.findIndex(
+        (item) => isACPToolCallEvent(item) && item.tool_call_id === id,
+      ),
+  });
+  if (index !== undefined) next[index] = event;
+  return next;
+};
 
-  // The durable event *is* the item: the SDK mints its id when the stream
-  // opens, so one equality test retires the slot — and replacing in place
-  // keeps the finished message where the streamed text already was.
-  const eventId = "id" in event ? event.id : undefined;
-  if (eventId !== undefined) {
-    const slotIndex = findSlotIndex(newUiEvents, eventId);
-    if (slotIndex !== -1) {
-      newUiEvents[slotIndex] = event;
-      return newUiEvents;
+/** Project a deduplicated history without copying/scanning the prefix per row. */
+export const handleEventsForUI = (
+  events: UIEvent[],
+  initialUIEvents: UIEvent[] = [],
+): UIEvent[] => {
+  const next = [...initialUIEvents];
+  const ids = new Map<string | number, number>();
+  const slots = new Map<string | number, number>();
+  const tools = new Map<string, number>();
+  const indexEvent = (event: UIEvent, index: number) => {
+    if ("id" in event && event.id !== undefined) ids.set(event.id, index);
+    if (isStreamingDeltaEvent(event)) slots.set(event.id, index);
+    if (isACPToolCallEvent(event)) tools.set(event.tool_call_id, index);
+  };
+  next.forEach(indexEvent);
+  const positions: EventPositions = {
+    slot: (id) => slots.get(id) ?? -1,
+    event: (id) => ids.get(id) ?? -1,
+    toolCall: (id) => tools.get(id) ?? -1,
+  };
+  for (const event of events) {
+    const index = eventPosition(event, next, positions);
+    if (index === undefined) continue;
+    const previous = next[index];
+    if (previous) {
+      if ("id" in previous && previous.id !== undefined)
+        ids.delete(previous.id);
+      if (isStreamingDeltaEvent(previous)) slots.delete(previous.id);
+      if (isACPToolCallEvent(previous)) tools.delete(previous.tool_call_id);
     }
+    next[index] = event;
+    indexEvent(event, index);
   }
-
-  if (isACPToolCallEvent(event)) {
-    const existingIndex = newUiEvents.findIndex(
-      (uiEvent) =>
-        isACPToolCallEvent(uiEvent) &&
-        uiEvent.tool_call_id === event.tool_call_id,
-    );
-    if (existingIndex !== -1) {
-      newUiEvents[existingIndex] = event;
-    } else {
-      newUiEvents.push(event);
-    }
-    return newUiEvents;
-  }
-
-  if (isObservationEvent(event)) {
-    // Don't add ThinkObservation at all - we keep the ThinkAction instead
-    // The thought content is in the action, not the observation
-    if (event.observation.kind === "ThinkObservation") {
-      return newUiEvents;
-    }
-
-    // Don't add FinishObservation at all - we keep the FinishAction instead
-    // Both contain the same message content, so we only need to display one
-    // This also prevents duplicate messages when events arrive out of order due to React batching
-    if (event.observation.kind === "FinishObservation") {
-      return newUiEvents;
-    }
-  }
-
-  if (isUserRejectObservation(event)) {
-    // Like their observations above, a rejection never replaces a ThinkAction
-    // or FinishAction: the content to display is in the action itself
-    const rejectedAction = newUiEvents.find(
-      (uiEvent) => uiEvent.id === event.action_id,
-    );
-    if (
-      rejectedAction &&
-      isActionEvent(rejectedAction) &&
-      (rejectedAction.action.kind === "ThinkAction" ||
-        rejectedAction.action.kind === "FinishAction")
-    ) {
-      return newUiEvents;
-    }
-  }
-
-  // A UserRejectObservation resolves its action just like an observation
-  // does; left unreplaced, the rejected action would keep reading as in flight.
-  if (isObservationEvent(event) || isUserRejectObservation(event)) {
-    // Find and replace the corresponding action from uiEvents
-    const actionIndex = newUiEvents.findIndex(
-      (uiEvent) => uiEvent.id === event.action_id,
-    );
-    if (actionIndex !== -1) {
-      newUiEvents[actionIndex] = event;
-    } else {
-      // Action not found in uiEvents, just add the observation
-      newUiEvents.push(event);
-    }
-  } else {
-    // For non-observation events, just add them to uiEvents
-    newUiEvents.push(event);
-  }
-
-  return newUiEvents;
+  return next;
 };

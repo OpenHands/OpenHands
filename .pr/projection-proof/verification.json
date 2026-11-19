@@ -1,0 +1,160 @@
+{
+  "date": "2026-11-13",
+  "issues": [
+    16947,
+    17559
+  ],
+  "pullRequest": 19620,
+  "result": "Before:49 calls render50 rows and duplicate command025 in all4 attempts. After:49 calls render49 rows and command025 once in all4 attempts. Tied100-message control passes all8 before/after attempts.",
+  "identity": {
+    "before": {
+      "runId": "projection-before-20261113",
+      "revision": "754abee4f0869dfc85dbd0acb6457f2e0ad17d4c",
+      "buildId": "662bc5aa706cb61b",
+      "startedAt": "2026-11-13T09:13:56.909Z",
+      "readyAt": "2026-11-13T09:14:24.019Z",
+      "pins": {
+        "agentServer": "1.62.0",
+        "agentCanvas": "1.40.0",
+        "automation": "1.32.1"
+      },
+      "versions": {
+        "agentServer": "1.62.0",
+        "sdk": "1.62.0"
+      },
+      "doctor": {
+        "ok": true,
+        "warnings": [],
+        "failed": []
+      },
+      "cleanup": {
+        "ingress": "closed",
+        "agentServer": "closed",
+        "automation": "closed",
+        "frontend": "closed",
+        "vscode": "closed"
+      },
+      "errors": {
+        "pageErrors": 0,
+        "setupAppErrors": 22,
+        "window": "2026-11-13T09:16:14.176Z..2026-11-13T09:16:19.669Z",
+        "note": "Intentional server stop/restart while arranging fixture; no later events in retained log."
+      }
+    },
+    "after": {
+      "runId": "projection-after-final-20261113",
+      "revision": "2b8fd1fe95b571ead2ac6a9f3cc45ee7eb3c1d73",
+      "buildId": "29a8de89b49f9e19",
+      "startedAt": "2026-11-13T09:21:46.588Z",
+      "readyAt": "2026-11-13T09:21:54.146Z",
+      "pins": {
+        "agentServer": "1.62.0",
+        "agentCanvas": "1.40.0",
+        "automation": "1.32.1"
+      },
+      "versions": {
+        "agentServer": "1.62.0",
+        "sdk": "1.62.0"
+      },
+      "doctor": {
+        "ok": true,
+        "warnings": [],
+        "failed": []
+      },
+      "errors": {
+        "pageErrors": 0,
+        "appErrors": 0,
+        "note": "Error log cleared after fixture restart and clean doctor, before observation recipe."
+      },
+      "cleanup": {
+        "ingress": "closed",
+        "agentServer": "closed",
+        "automation": "closed",
+        "frontend": "closed",
+        "vscode": "closed"
+      }
+    }
+  },
+  "coverage": {
+    "viewports": {
+      "desktop": "1440x1000",
+      "phone": "390x844 browser emulation"
+    },
+    "attemptsPerViewportPerCase": 2,
+    "projectionBeforeFailures": 4,
+    "projectionAfterPasses": 4,
+    "tiedControlPasses": 8,
+    "draftTypingAndBoundaryOutputPasses": 8,
+    "features": [
+      "F06.load-older-history",
+      "F06.event-groups",
+      "F06.tool-visualizers",
+      "F05.composer"
+    ],
+    "sharedScope": "Event store affects Local/Cloud, OpenHands/ACP, standard/delegated/planning and embedded consumers. This live check covers Local OpenHands standard conversations only; parent records focused automated coverage separately."
+  },
+  "arrangement": {
+    "eventsPerConversation": 100,
+    "projectionToolPairs": 49,
+    "projectionBoundary": {
+      "olderActionSequence": 49,
+      "newerObservationSequence": 50,
+      "call": "025"
+    },
+    "tiedBoundary": "Messages050/051 both2026-11-13T08:00:00.051000",
+    "protocol": "Real Agent Server history REST + session WebSocket; canonical SDK ConversationState.append_event persisted data",
+    "modelCalls": 0,
+    "commandsExecuted": 0,
+    "networkInterception": false,
+    "browserStoreInjection": false
+  },
+  "observableBehavior": {
+    "desktop": "Collapsed transcript automatically backfills second page; group then incorrectly50 before/correctly49 after. Expanding shows duplicate025 only before.",
+    "phone": "Initial newest page reports25 calls. Scrolling up requests older cursor page and reports50 before/49 after.",
+    "cursor": "Both cases issue two real200 events/search requests: initial limit50 and older opaque page_id, without timestamp__lt.",
+    "tied": "Initial50rows; explicit scroll yields100unique markers exactly001..100 in order.",
+    "disclosureAndDraft": "Boundary output recorded-025 remains available; exact unsent draft accepted at both sizes; no submission.",
+    "horizontalOverflow": false
+  },
+  "artifacts": [
+    "before-desktop.png",
+    "before-phone.png",
+    "before.mp4",
+    "after-desktop.png",
+    "after-phone.png",
+    "after.mp4",
+    "before-observations.json",
+    "after-observations.json",
+    "seed-receipts.json",
+    "ledger.jsonl",
+    "recipe.md",
+    "seed-projection-history.py",
+    "observe-projection-history.py"
+  ],
+  "limitations": [
+    "Seeded real-backend render/history proof, not live-model-generated history or performance benchmark.",
+    "No live Cloud/ACP/delegated/planning/embedded-host claim.",
+    "Phone is browser viewport emulation, not physical mobile or browser-chrome behavior.",
+    "Existing map records16947/17559 without executable known-bug block. Verification scripts/maps remained read-only; ordinary Control ledger records known baseline failures and after passes; no bug-proof runner verdict claimed.",
+    "Preliminary uncaptured fixed launch was stopped before final source commit; excluded from all proof.",
+    "Public ledger is sanitized from recorded observation inputs, preserving each attempt viewport; raw Control ledgers were appended after observations and retained privately."
+  ],
+  "privacy": "All four published screenshots reviewed and start/middle/end frames of both short videos reviewed: disposable fixture text only. No credentials, raw headers, local URLs, private settings or machine paths published.",
+  "attribution": "Generated by an AI agent on behalf of the requester.",
+  "independentChromeCheck": {
+    "entry": "Existing Google Chrome via extension, separate own tab/profile from Control",
+    "observed": "Initial tail Ran25commands. Clicking Expand actions scrolled and loaded older page; final DOM Ran49commands with each Recorded command001..049 exactly once and49expanded rows.",
+    "scope": "Real Local persisted fixture; no native-app or physical-phone claim. Native inventory was locked but Chrome extension worked. Control media is the published visual evidence."
+  },
+  "cleanup": "Both captured Control runs stopped; all owned ports closed. Preliminary uncaptured run also stopped. Reports and media retained; no user run or checkout touched.",
+  "additionalChecksReportedByParent": {
+    "focusedConsumerTests": 114,
+    "integrationTests": 232,
+    "renderStabilityTests": 52,
+    "totalUniqueTests": 398,
+    "lint": "pass;0errors140existingwarnings",
+    "buildLib": "pass",
+    "configuredPaginationE2E": "1 passed (15.3s), existing mock-LLM regression with intercepted pagination fixture; separate from real Control proof. Isolated service ports; first attempt failed safely on occupied defaults.",
+    "buildApp": "pass; committed product revision2b8fd1fe95, clean doctor"
+  }
+}
