@@ -580,6 +580,53 @@ describe("handleLaunchChildConversationAction", () => {
       );
     });
 
+    describe("git provider connection", () => {
+      const startedTask = {
+        id: "start-task-id",
+        app_conversation_id: "cloud-child-id",
+        status: "READY",
+      };
+
+      beforeEach(() => {
+        mockCreateCloudAppConversation.mockResolvedValue(startedTask);
+        setStoredConversationMetadata(PARENT_ID, {
+          selected_repository: "team/app",
+          selected_branch: "main",
+          git_provider: "gitlab",
+          git_provider_id: 9,
+        });
+      });
+
+      it("inherits the parent's connection along with its repository", async () => {
+        await handleLaunchChildConversationAction(
+          action({ target: "cloud" }),
+          PARENT_ID,
+          nextToolCallId(),
+        );
+
+        expect(mockCreateCloudAppConversation).toHaveBeenCalledWith(
+          expect.objectContaining({
+            selected_repository: "team/app",
+            git_provider: "gitlab",
+            git_provider_id: 9,
+          }),
+          cloudBackend,
+        );
+      });
+
+      it("does not apply the parent's connection to a repository the agent named", async () => {
+        await handleLaunchChildConversationAction(
+          action({ target: "cloud", repository: "other/repo" }),
+          PARENT_ID,
+          nextToolCallId(),
+        );
+
+        const [request] = mockCreateCloudAppConversation.mock.calls[0];
+        expect(request.selected_repository).toBe("other/repo");
+        expect(request).not.toHaveProperty("git_provider_id");
+      });
+    });
+
     it("skips the meta-profiles fetch and launch additions when the router toggle is off", async () => {
       mockCreateCloudAppConversation.mockResolvedValue({
         id: "start-task-id",

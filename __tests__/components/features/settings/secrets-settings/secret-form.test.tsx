@@ -1,5 +1,6 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SecretsService } from "#/api/secrets-service";
 import { SecretForm } from "#/components/features/settings/secrets-settings/secret-form";
@@ -109,5 +110,50 @@ describe("SecretForm in edit mode", () => {
         "sk-new-value",
       ),
     );
+  });
+});
+
+describe("SecretForm save lifecycle", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // The chat unmounts the secret-request form when its virtual row scrolls out
+  // of the overscan while a save is in flight. TanStack Query drops per-call
+  // `mutate` callbacks with the unmounted observer, so the cache invalidation
+  // must ride the mutation itself; otherwise Settings keeps the stale secrets
+  // list for the five-minute `staleTime`.
+  it("invalidates the secrets cache even when the form unmounts before the save resolves", async () => {
+    const invalidate = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+    let resolveSave: () => void = () => {};
+    vi.spyOn(SecretsService, "createSecret").mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+
+    const user = userEvent.setup();
+    const { unmount } = renderWithProviders(
+      <SecretForm mode="add" selectedSecret={null} onCancel={vi.fn()} />,
+    );
+
+    await user.type(screen.getByTestId("name-input"), "NEW_SECRET");
+    await user.type(screen.getByTestId("value-input"), "value");
+    await user.click(screen.getByTestId("submit-button"));
+
+    expect(invalidate).not.toHaveBeenCalled();
+    unmount();
+
+    await act(async () => {
+      resolveSave();
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ["secrets-search"],
+      }),
+    );
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["secrets"] });
   });
 });
