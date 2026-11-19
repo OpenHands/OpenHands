@@ -179,7 +179,7 @@
     "msw": "3.0.4",
     "png2icons": "2.0.1",
     "postcss-prefix-selector": "2.2.1",
-    "prettier": "3.9.10",
+    "prettier": "3.10.0",
     "tailwindcss": "4.3.3",
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "vite-plugin-svgr": "5.2.0",
