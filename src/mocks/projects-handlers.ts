@@ -1,3 +1,4 @@
+import { randomUUID } from "#/utils/random-uuid";
 import { http, HttpResponse } from "msw";
 import type {
   Project,
@@ -187,8 +188,8 @@ export const PROJECTS_HANDLERS = [
     const body = (await request.json()) as Partial<Project> & {
       coordinator?: { title?: string };
     };
-    const id = crypto.randomUUID();
-    const coordinatorId = body.coordinator ? crypto.randomUUID() : null;
+    const id = randomUUID();
+    const coordinatorId = body.coordinator ? randomUUID() : null;
     const project: Project = {
       id,
       name: body.name ?? "",

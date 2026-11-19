@@ -1,5 +1,5 @@
 import React from "react";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "#/utils/random-uuid";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
@@ -52,7 +52,7 @@ export function NewProjectModal({ onClose, onCreated }: NewProjectModalProps) {
       // the workers it starts inherit that from it.
       const [{ workingDir }, settings] = await Promise.all([
         resolveNewConversationWorkspace({
-          conversationId: uuidv4(),
+          conversationId: randomUUID(),
           workingDir: workspace || undefined,
         }),
         SettingsService.getSettings(),

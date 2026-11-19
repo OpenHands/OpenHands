@@ -68,7 +68,9 @@ describe("NewProjectModal", () => {
       </QueryClientProvider>,
     );
     const options = Array.from(
-      screen.getByTestId("new-project-worker-profile").querySelectorAll("option"),
+      screen
+        .getByTestId("new-project-worker-profile")
+        .querySelectorAll("option"),
     ).map((option) => option.textContent);
     expect(options).toContain("Builder");
     expect(options).not.toContain("Claude Code");
