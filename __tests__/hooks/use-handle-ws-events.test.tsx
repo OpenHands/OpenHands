@@ -3,19 +3,25 @@ import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHandleWSEvents } from "#/hooks/use-handle-ws-events";
 
-const { eventStoreState, sendMock, displayErrorToastMock } = vi.hoisted(() => ({
-  eventStoreState: { events: [] as object[] },
-  sendMock: vi.fn(),
-  displayErrorToastMock: vi.fn(),
-}));
+const { eventStoreState, pauseMutateMock, displayErrorToastMock } = vi.hoisted(
+  () => ({
+    eventStoreState: { events: [] as object[] },
+    pauseMutateMock: vi.fn(),
+    displayErrorToastMock: vi.fn(),
+  }),
+);
 
 vi.mock("#/stores/use-event-store", () => ({
   useEventStore: (selector: (state: { events: object[] }) => unknown) =>
     selector(eventStoreState),
 }));
 
-vi.mock("#/hooks/use-send-message", () => ({
-  useSendMessage: () => ({ send: sendMock }),
+vi.mock("#/hooks/mutation/use-pause-conversation", () => ({
+  usePauseConversation: () => ({ mutate: pauseMutateMock }),
+}));
+
+vi.mock("#/hooks/use-conversation-id", () => ({
+  useOptionalConversationId: () => ({ conversationId: "conversation-1" }),
 }));
 
 vi.mock("#/utils/custom-toast-handlers", () => ({
@@ -37,7 +43,7 @@ describe("WebSocket error event handling", () => {
     handle();
 
     expect(displayErrorToastMock).not.toHaveBeenCalled();
-    expect(sendMock).not.toHaveBeenCalled();
+    expect(pauseMutateMock).not.toHaveBeenCalled();
   });
 
   it("keeps V1 agent errors inline without showing a duplicate toast", () => {
@@ -51,7 +57,7 @@ describe("WebSocket error event handling", () => {
     });
 
     expect(displayErrorToastMock).not.toHaveBeenCalled();
-    expect(sendMock).not.toHaveBeenCalled();
+    expect(pauseMutateMock).not.toHaveBeenCalled();
   });
 
   it("keeps hook execution events inline without showing a toast", () => {
@@ -79,7 +85,7 @@ describe("WebSocket error event handling", () => {
     });
 
     expect(displayErrorToastMock).not.toHaveBeenCalled();
-    expect(sendMock).not.toHaveBeenCalled();
+    expect(pauseMutateMock).not.toHaveBeenCalled();
   });
 
   it("shows the session-expired message for 401 server errors", () => {
@@ -119,40 +125,103 @@ describe("WebSocket error event handling", () => {
     expect(displayErrorToastMock).toHaveBeenCalledWith("Late runtime failure");
   });
 
-  it("pauses the agent after a maximum-iteration typed error", () => {
+  const priorEvent = {
+    id: "message-1",
+    timestamp: "2026-07-12T00:00:00.000Z",
+    source: "user",
+    kind: "MessageEvent",
+  };
+
+  it("pauses the conversation when a max-iterations error arrives live", () => {
+    const { rerender } = handle(priorEvent);
+    expect(pauseMutateMock).not.toHaveBeenCalled();
+
+    eventStoreState.events = [
+      priorEvent,
+      {
+        id: "conversation-error-1",
+        timestamp: "2026-07-12T00:00:00.000Z",
+        source: "environment",
+        kind: "ConversationErrorEvent",
+        code: "MaxIterationsReached",
+        detail: "Agent reached maximum iterations limit (500).",
+      },
+    ];
+    rerender();
+
+    expect(pauseMutateMock).toHaveBeenCalledWith({
+      conversationId: "conversation-1",
+    });
+    expect(pauseMutateMock).toHaveBeenCalledOnce();
+  });
+
+  it("does not pause for a max-iterations error already in the store on mount", () => {
+    // A cap hit from a previous session is replayed from history when the
+    // conversation is reopened; it is not a live arrival to react to.
     handle({
-      id: "typed-error-1",
+      id: "conversation-error-1",
       timestamp: "2026-07-12T00:00:00.000Z",
-      source: "agent",
-      type: "error",
-      message: "Agent reached maximum iteration limit",
+      source: "environment",
+      kind: "ConversationErrorEvent",
+      code: "MaxIterationsReached",
+      detail: "Agent reached maximum iterations limit (500).",
     });
 
-    expect(sendMock).toHaveBeenCalledWith({
-      action: "change_agent_state",
-      args: { agent_state: "paused" },
-    });
-    expect(displayErrorToastMock).not.toHaveBeenCalled();
+    expect(pauseMutateMock).not.toHaveBeenCalled();
   });
 
-  it("does not pause for another typed error", () => {
-    handle({ type: "error", message: "Connection interrupted" });
+  it("does not pause for a conversation error with another code", () => {
+    const { rerender } = handle(priorEvent);
 
-    expect(sendMock).not.toHaveBeenCalled();
-    expect(displayErrorToastMock).not.toHaveBeenCalled();
+    eventStoreState.events = [
+      priorEvent,
+      {
+        id: "conversation-error-2",
+        timestamp: "2026-07-12T00:00:00.000Z",
+        source: "environment",
+        kind: "ConversationErrorEvent",
+        code: "LLMAuthenticationError",
+        detail: "Your LLM API key appears to be invalid or has expired.",
+      },
+    ];
+    rerender();
+
+    expect(pauseMutateMock).not.toHaveBeenCalled();
   });
 
-  it("handles a typed error without a message", () => {
-    handle({ type: "error" });
+  it("does not pause for a planning agent's max-iterations error", () => {
+    const { rerender } = handle(priorEvent);
 
-    expect(sendMock).not.toHaveBeenCalled();
-    expect(displayErrorToastMock).not.toHaveBeenCalled();
+    eventStoreState.events = [
+      priorEvent,
+      {
+        id: "conversation-error-3",
+        timestamp: "2026-07-12T00:00:00.000Z",
+        source: "environment",
+        kind: "ConversationErrorEvent",
+        code: "MaxIterationsReached",
+        detail: "Agent reached maximum iterations limit (500).",
+        isFromPlanningAgent: true,
+      },
+    ];
+    rerender();
+
+    expect(pauseMutateMock).not.toHaveBeenCalled();
   });
 
-  it("ignores non-error typed events", () => {
-    handle({ type: "message", message: "Agent reached maximum" });
+  it("ignores the legacy V0 typed error shape", () => {
+    const { rerender } = handle(priorEvent);
 
-    expect(sendMock).not.toHaveBeenCalled();
+    eventStoreState.events = [
+      priorEvent,
+      {
+        type: "error",
+        message: "Agent reached maximum iteration limit",
+      },
+    ];
+    rerender();
+
+    expect(pauseMutateMock).not.toHaveBeenCalled();
     expect(displayErrorToastMock).not.toHaveBeenCalled();
   });
 
@@ -164,11 +233,11 @@ describe("WebSocket error event handling", () => {
       llm_message: { role: "user", content: [{ type: "text", text: "hi" }] },
     });
 
-    expect(sendMock).not.toHaveBeenCalled();
+    expect(pauseMutateMock).not.toHaveBeenCalled();
     expect(displayErrorToastMock).not.toHaveBeenCalled();
   });
 
-  it("initializes fresh server and typed error classifiers", async () => {
+  it("initializes fresh server and conversation error classifiers", async () => {
     vi.doMock("react", () => ReactModule);
     vi.resetModules();
 
@@ -186,16 +255,22 @@ describe("WebSocket error event handling", () => {
       serverRender.unmount();
 
       vi.clearAllMocks();
+      eventStoreState.events = [priorEvent];
+      const typedRender = renderHook(() => freshHook());
       eventStoreState.events = [
+        priorEvent,
         {
-          type: "error",
-          message: "Agent reached maximum iteration limit",
+          id: "conversation-error-fresh",
+          timestamp: "2026-07-12T00:00:00.000Z",
+          source: "environment",
+          kind: "ConversationErrorEvent",
+          code: "MaxIterationsReached",
+          detail: "Agent reached maximum iterations limit (500).",
         },
       ];
-      const typedRender = renderHook(() => freshHook());
-      expect(sendMock).toHaveBeenCalledWith({
-        action: "change_agent_state",
-        args: { agent_state: "paused" },
+      typedRender.rerender();
+      expect(pauseMutateMock).toHaveBeenCalledWith({
+        conversationId: "conversation-1",
       });
       typedRender.unmount();
     } finally {

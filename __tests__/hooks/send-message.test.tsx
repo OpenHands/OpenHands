@@ -71,6 +71,27 @@ describe("sending chat messages", () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
+  it("warns instead of silently dropping an undeliverable action", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const sendMessage = vi.fn();
+    const { result } = renderSendMessageHook({ sendMessage });
+
+    try {
+      await expect(
+        result.current.send({
+          action: "change_agent_state",
+          args: { agent_state: "paused" },
+        }),
+      ).resolves.toEqual({ queued: false });
+      expect(sendMessage).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("change_agent_state"),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it.each([
     ["missing arguments", { action: "message" }],
     ["missing content", { action: "message", args: {} }],
