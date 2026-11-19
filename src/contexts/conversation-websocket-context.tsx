@@ -204,7 +204,8 @@ const trackReplayStatus = (
  * the streaming slot here and produce no event. Durable and transient frames
  * are unwrapped and returned for the caller's normal event handling; a durable
  * frame also advances the resume cursor and stamps its `seq` on the event, so
- * the UI can place a slot relative to it.
+ * the UI can place a slot relative to it, and a transient frame's event is
+ * marked `isTransient`.
  */
 const routeSessionFrame = (
   raw: unknown,
@@ -247,7 +248,16 @@ const routeSessionFrame = (
         isTransient: false,
       };
     case "transient":
-      return { event: frame.event, isReplay: false, isTransient: true };
+      // Mark the event itself (not just the routed tuple) so the flag travels
+      // with the event into the store: `getNewestEventId` reads it off the
+      // stored event to skip never-persisted transient frames (e.g. the
+      // connect-time `full_state` snapshot) when anchoring a `/model` stamp.
+      // The tuple-level flag is still consumed for replay-status ownership.
+      return {
+        event: { ...frame.event, isTransient: true },
+        isReplay: false,
+        isTransient: true,
+      };
     case "error":
       // The server answers a rejected inbound message with an ErrorFrame and
       // keeps the socket open ("not worth dropping over"), so there is no
@@ -570,10 +580,8 @@ export function ConversationWebSocketProvider({
       // Read the post-`addEvents` `uiEvents` (actions replaced by observations,
       // Think/Finish observations dropped) — not the raw history — so anchors
       // match the ids the renderer actually mounts.
-      seedModelSwitchesFromHistory(
-        conversationId,
-        useEventStore.getState().uiEvents,
-      );
+      const { uiEvents, events } = useEventStore.getState();
+      seedModelSwitchesFromHistory(conversationId, uiEvents, events);
 
       for (const event of visibleHistory.events) {
         if (isUserMessageEvent(event)) {
@@ -959,13 +967,13 @@ export function ConversationWebSocketProvider({
 
             // Mirror the user-driven `/model` path: persist the profile so the
             // chat-header switcher shows the right name after a reload, even
-            // when several profiles share a model (#1082). Stamp with the
-            // observation's own timestamp so a later history seed of this same
-            // event can't roll it back (or needlessly rewrite it).
+            // when several profiles share a model (#1082). Anchor on the
+            // observation itself so a later history seed of this same event
+            // can't roll it back (or needlessly rewrite it).
             stampActiveLlmProfile(
               conversationId,
               switchLLMObservation.observation.profile_name,
-              switchLLMObservation.timestamp,
+              switchLLMObservation.id,
             );
 
             if (switchLLMObservation.observation.active_model) {
@@ -1005,7 +1013,7 @@ export function ConversationWebSocketProvider({
             stampActiveLlmProfile(
               conversationId,
               profileName,
-              classifyAndSwitchLLMObservation.timestamp,
+              classifyAndSwitchLLMObservation.id,
             );
 
             if (classifyAndSwitchLLMObservation.observation.active_model) {

@@ -7,6 +7,7 @@ import {
 import {
   getStoredConversationMetadata,
   mergeStoredConversationMetadata,
+  type ConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import { OpenHandsEvent } from "#/types/agent-server/core";
 import {
@@ -14,6 +15,7 @@ import {
   isSwitchLLMObservationEvent,
 } from "#/types/agent-server/type-guards";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
+import { useEventStore } from "#/stores/use-event-store";
 
 export function recordModelSwitchMessage(
   conversationId: string,
@@ -35,15 +37,16 @@ export function recordModelSwitchMessage(
  * WebSocket handler, and the history seed below — must write through this one
  * function so the live and reload paths can't drift.
  *
- * `stampedAt` is persisted alongside the profile so the history seed can tell
- * a stale observation apart from a newer manual switch (see below). The live
- * WebSocket handler passes the observation's own (server) timestamp; the user
- * `/model` mutation has no event and defaults to the client clock.
+ * `stampedAfterEventId` is persisted alongside the profile so the history seed
+ * can tell a stale observation apart from a newer manual switch (see below).
+ * The live WebSocket handler passes the observation's own id; the user
+ * `/model` mutation has no event and defaults to the newest event this
+ * conversation has loaded.
  */
 export function stampActiveLlmProfile(
   conversationId: string,
   profileName: string,
-  stampedAt: string = new Date().toISOString(),
+  stampedAfterEventId: string | null = getNewestEventId(conversationId),
 ) {
   useModelStore.getState().setActiveProfile(conversationId, profileName);
 
@@ -54,8 +57,55 @@ export function stampActiveLlmProfile(
   // new field had to remember to opt in.
   mergeStoredConversationMetadata(conversationId, {
     active_profile: profileName,
-    stamped_at: stampedAt,
+    stamped_after_event_id: stampedAfterEventId,
   });
+}
+
+/**
+ * The newest persisted main-conversation event loaded for `conversationId`,
+ * if any. Transient events are skipped: they are never in REST history, so a
+ * reload could not find them.
+ */
+function getNewestEventId(conversationId: string): string | null {
+  const { events, loadedConversationId } = useEventStore.getState();
+  if (loadedConversationId !== conversationId) return null;
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (!event.isFromPlanningAgent && !event.isTransient && event.id) {
+      return String(event.id);
+    }
+  }
+  return null;
+}
+
+/**
+ * Whether the latest switch in history is newer than the stored stamp.
+ *
+ * Compared by position in the event log rather than by time: the agent-server
+ * writes offset-less timestamps in its own local time zone, so comparing them
+ * against the client clock is off by the server's UTC offset (hours in either
+ * direction, depending on where the agent-server runs). Loaded history is
+ * always the newest stretch of the log, so a stamp anchored on an event that
+ * is not loaded predates every loaded switch.
+ */
+function isNewerThanStamp(
+  switchEventId: string,
+  switchTimestamp: string,
+  stored: ConversationMetadata | null,
+  events: OpenHandsEvent[],
+): boolean {
+  if (!stored?.active_profile) return true;
+
+  const anchorId = stored.stamped_after_event_id;
+  if (anchorId !== undefined) {
+    const ids = events.map((event) => String(event.id));
+    const anchorIndex = anchorId === null ? -1 : ids.indexOf(anchorId);
+    return anchorIndex < ids.indexOf(switchEventId);
+  }
+
+  // Stamps written before `stamped_after_event_id` existed only carry a time.
+  const stampedAt = stored.stamped_at;
+  return !stampedAt || Date.parse(switchTimestamp) > Date.parse(stampedAt);
 }
 
 /**
@@ -86,23 +136,26 @@ export function stampActiveLlmProfile(
  * while the socket was down would never be stamped — after a reload the pill
  * showed the stale profile while the panel showed the server's true model.
  *
- * The re-stamp is gated on the stored `stamped_at`: manual `/model` switches
- * go through REST and leave NO observation in history, so an unconditional
+ * The re-stamp is gated on the stored stamp: manual `/model` switches go
+ * through REST and leave NO observation in history, so an unconditional
  * re-stamp would roll a newer manual switch back to an older tool switch.
- * The seed therefore only stamps when there is no existing stamp, the stamp
- * predates this field (legacy — treated as older than any observation so it
- * still gets repaired), or the latest observation is strictly newer.
- * Observation timestamps are server-generated while `stamped_at` from the
- * mutation path is client-generated, so the cross-clock comparison is a
- * heuristic — acceptable here since the alternative is a silent rollback.
+ * The seed therefore only stamps when there is no existing stamp or the
+ * latest observation comes after the stamp's anchor event in `events` (see
+ * `isNewerThanStamp`). `events` is the store's raw, unprojected list: the
+ * anchor can be an event `uiEvents` replaces or drops.
  */
 export function seedModelSwitchesFromHistory(
   conversationId: string,
   uiEvents: OpenHandsEvent[],
+  events: OpenHandsEvent[] = uiEvents,
 ) {
   const switches: SeededSwitch[] = [];
   let lastRenderableId: string | null = null;
-  let latestSwitch: { profileName: string; timestamp: string } | null = null;
+  let latestSwitch: {
+    eventId: string;
+    profileName: string;
+    timestamp: string;
+  } | null = null;
 
   for (const event of uiEvents) {
     if (isSwitchLLMObservationEvent(event) && !event.observation.is_error) {
@@ -114,6 +167,7 @@ export function seedModelSwitchesFromHistory(
         reason: event.observation.reason,
       });
       latestSwitch = {
+        eventId: String(event.id),
         profileName: event.observation.profile_name,
         timestamp: event.timestamp,
       };
@@ -136,6 +190,7 @@ export function seedModelSwitchesFromHistory(
         reason: event.observation.chosen_class,
       });
       latestSwitch = {
+        eventId: String(event.id),
         profileName,
         timestamp: event.timestamp,
       };
@@ -150,13 +205,12 @@ export function seedModelSwitchesFromHistory(
   }
 
   if (latestSwitch) {
-    const { profileName, timestamp } = latestSwitch;
+    const { eventId, profileName, timestamp } = latestSwitch;
     const stored = getStoredConversationMetadata(conversationId);
-    const stampedAt = stored?.active_profile ? stored.stamped_at : null;
-    if (!stampedAt || Date.parse(timestamp) > Date.parse(stampedAt)) {
-      // Stamp with the observation's own timestamp so re-seeding the same
-      // history on the next reload is a no-op (strictly-newer never matches).
-      stampActiveLlmProfile(conversationId, profileName, timestamp);
+    if (isNewerThanStamp(eventId, timestamp, stored, events)) {
+      // Anchor on the observation itself so re-seeding the same history on
+      // the next reload is a no-op (strictly-newer never matches).
+      stampActiveLlmProfile(conversationId, profileName, eventId);
     }
   }
 }
