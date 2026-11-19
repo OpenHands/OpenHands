@@ -1,0 +1,8 @@
+Started ghcr.io/openhands/agent-canvas:sha-23e4ab3; waiting up to 300s for http://127.0.0.1:18879/health
+Healthy after 35s; checking it stays up for 10s
+Agent Server: expected 1.63.0, served 1.63.0, installed 1.63.0
+No broken requirements found.
+/canvas -> /canvas/: ok
+/canvas/ -> /canvas/: ok
+/canvas?login_method=smoke -> /canvas/: ok
+Smoke test passed for ghcr.io/openhands/agent-canvas:sha-23e4ab3

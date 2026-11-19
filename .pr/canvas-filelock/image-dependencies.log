@@ -1,0 +1,5 @@
+{'filelock': '4.2.9', 'openhands-sdk': '1.63.0', 'openhands-agent-server': '1.63.0', 'openhands-tools': '1.63.0', 'openhands-workspace': '1.63.0', 'openhands-automation': '1.34.0'}
+Using Python 3.13.15 environment at: /usr/local
+Checked 210 packages in 402ms
+All installed packages are compatible
+FileLock acquire/release: PASS
