@@ -118,6 +118,7 @@ describe("useLlmConfigured", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(result.current.isConfigured).toBe(true);
+    expect(result.current.profileMissingKey).toBeNull();
     expect(mockGetProfile).toHaveBeenCalledWith("gpt-5.5-sub");
   });
 
@@ -172,6 +173,47 @@ describe("useLlmConfigured", () => {
     expect(result.current.isConfigured).toBe(false);
     // Detail is fetched because the profile is local + active + key-less.
     expect(mockGetProfile).toHaveBeenCalledWith("gpt-5.5");
+  });
+
+  it("names the profile in profileMissingKey when it exists but lost its API key", async () => {
+    // The #15609 case: a profile exists and appears selected, but its key is
+    // gone (`api_key_set: false`) — distinct from having no profile at all.
+    mockListProfiles.mockResolvedValue({
+      active_profile: "gpt-5.5",
+      profiles: [
+        {
+          name: "gpt-5.5",
+          model: "gpt-5.5",
+          base_url: "https://api.openai.com/v1",
+          api_key_set: false,
+        },
+      ],
+    });
+    mockGetProfile.mockResolvedValue({
+      name: "gpt-5.5",
+      api_key_set: false,
+      config: { model: "openai/gpt-5.5" },
+    });
+
+    const { result } = renderLlmConfiguredHook();
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isConfigured).toBe(false);
+    expect(result.current.profileMissingKey).toBe("gpt-5.5");
+  });
+
+  it("reports no profileMissingKey when there is no profile at all", async () => {
+    // The genuinely unconfigured state (e.g. onboarding "Skip for now") must
+    // keep the generic "set up an LLM" treatment.
+    mockListProfiles.mockResolvedValue({ active_profile: null, profiles: [] });
+
+    const { result } = renderLlmConfiguredHook();
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isConfigured).toBe(false);
+    expect(result.current.profileMissingKey).toBeNull();
   });
 
   it("treats a keyed active cloud LLM profile as configured without settings key", async () => {
