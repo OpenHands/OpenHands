@@ -203,6 +203,13 @@ export function findInstalledMatch(
   );
 }
 
+export function isGitLabMcpServer(server: MCPServerConfig): boolean {
+  if (server.type !== "shttp" || !server.url || server.enabled === false)
+    return false;
+  const url = tryUrl(server.url);
+  return url?.pathname.replace(/\/+$/, "").endsWith("/api/v4/mcp") ?? false;
+}
+
 export function findInstalledEntryMatch(
   entry: MarketplaceEntry,
   servers: MCPServerConfig[],
@@ -211,6 +218,8 @@ export function findInstalledEntryMatch(
     const match = findInstalledMatch(option.transport, servers);
     if (match) return match;
   }
+  // GitLab Self-Managed serves the same MCP endpoint on its own host.
+  if (entry.id === "gitlab") return servers.find(isGitLabMcpServer) ?? null;
   return null;
 }
 

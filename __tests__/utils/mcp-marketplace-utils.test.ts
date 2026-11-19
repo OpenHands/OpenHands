@@ -743,6 +743,24 @@ describe("URL and entry matching", () => {
     expect(findInstalledEntryMatch(entry, [])).toBeNull();
   });
 
+  it("recognizes a GitLab MCP server on a self-managed host, but not an unrelated server", () => {
+    const gitlab = mcpMarketplace.find((entry) => entry.id === "gitlab")!;
+    expect(
+      findInstalledEntryMatch(gitlab, [
+        {
+          id: "self-managed-gitlab",
+          type: "shttp",
+          url: "https://gitlab.example.com/api/v4/mcp/",
+        },
+      ]),
+    ).toMatchObject({ id: "self-managed-gitlab" });
+    expect(
+      findInstalledEntryMatch(gitlab, [
+        { id: "other", type: "shttp", url: "https://gitlab.example.com/mcp" },
+      ]),
+    ).toBeNull();
+  });
+
   it("checks later connection options after an earlier option misses", () => {
     const entry = {
       ...linearEntry,

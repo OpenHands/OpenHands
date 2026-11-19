@@ -43,11 +43,14 @@ function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>
-      <ActiveBackendProvider>{children}</ActiveBackendProvider>
-    </QueryClientProvider>
-  );
+  function Wrapper({ children }: { children: React.ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <ActiveBackendProvider>{children}</ActiveBackendProvider>
+      </QueryClientProvider>
+    );
+  }
+  return Wrapper;
 }
 
 function withIntegrations(
@@ -71,6 +74,11 @@ describe("useSetupPrerequisites", () => {
     setActiveSelection({ backendId: localBackend.id });
     // Nothing connected, unless a test says otherwise.
     vi.mocked(SettingsService.getSettings).mockResolvedValue({} as never);
+    server.use(
+      http.get("*/api/v1/secrets/search", () =>
+        HttpResponse.json({ items: [], next_page_id: null }),
+      ),
+    );
   });
 
   it("blocks setup while a required integration is not connected", async () => {
@@ -124,6 +132,111 @@ describe("useSetupPrerequisites", () => {
       isBlocked: result.current.isBlocked,
       blocking: result.current.blockingIntegrations,
     }).toEqual({ isBlocked: false, blocking: [] });
+  });
+
+  it("recognizes GitLab MCP from flattened cloud settings", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    vi.mocked(SettingsService.getSettings).mockResolvedValue({
+      mcp_config: {
+        gitlab: { transport: "http", url: "https://gitlab.com/api/v4/mcp" },
+      },
+    } as never);
+    const entry = withIntegrations({ gitlab: { message: "Reads issues." } });
+
+    const { result } = renderPrerequisites(entry);
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.blockingIntegrations).toEqual([]);
+  });
+
+  it("recognizes a self-managed GitLab MCP server", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    vi.mocked(SettingsService.getSettings).mockResolvedValue({
+      agent_settings: {
+        mcp_config: {
+          mcpServers: {
+            gitlab: { url: "https://gitlab.example.com/api/v4/mcp" },
+          },
+        },
+      },
+    } as never);
+    const entry = withIntegrations({ gitlab: { message: "Reads issues." } });
+
+    const { result } = renderPrerequisites(entry);
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.blockingIntegrations).toEqual([]);
+  });
+
+  it("recognizes an existing GitLab token secret without MCP", async () => {
+    server.use(
+      http.get("*/api/settings/secrets", () =>
+        HttpResponse.json({ secrets: [{ name: "GITLAB_TOKEN" }] }),
+      ),
+    );
+    const entry = withIntegrations({ gitlab: { message: "Reads issues." } });
+
+    const { result } = renderPrerequisites(entry);
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.blockingIntegrations).toEqual([]);
+  });
+
+  it("recognizes the cloud GitLab sign-in token alias", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    server.use(
+      http.get("*/api/v1/secrets/search", () =>
+        HttpResponse.json({
+          items: [{ name: "gitlab_token" }],
+          next_page_id: null,
+        }),
+      ),
+    );
+    const entry = withIntegrations({ gitlab: { message: "Reads issues." } });
+
+    const { result } = renderPrerequisites(entry);
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.blockingIntegrations).toEqual([]);
+  });
+
+  it("recognizes an existing GitLab sign-in in cloud settings", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    vi.mocked(SettingsService.getSettings).mockResolvedValue({
+      provider_tokens_set: { gitlab: null },
+    } as never);
+    const entry = withIntegrations({ gitlab: { message: "Reads issues." } });
+
+    const { result } = renderPrerequisites(entry);
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.blockingIntegrations).toEqual([]);
+  });
+
+  it("does not count a disabled GitLab MCP server as connected", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    vi.mocked(SettingsService.getSettings).mockResolvedValue({
+      mcp_config: {
+        gitlab: {
+          transport: "http",
+          url: "https://gitlab.com/api/v4/mcp",
+          enabled: false,
+        },
+      },
+    } as never);
+    const entry = withIntegrations({ gitlab: { message: "Reads issues." } });
+
+    const { result } = renderPrerequisites(entry);
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.blockingIntegrations.map(({ id }) => id)).toEqual([
+      "gitlab",
+    ]);
   });
 
   it("has nothing to block on when the integration is connected natively on cloud", async () => {
