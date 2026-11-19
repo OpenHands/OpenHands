@@ -14,8 +14,11 @@ vi.mock("#/api/conversation-workspace", () => ({
     workingDir: "/work/new",
   })),
 }));
+const { agentProfiles } = vi.hoisted(() => ({
+  agentProfiles: { profiles: [] as object[] },
+}));
 vi.mock("#/hooks/query/use-agent-profiles", () => ({
-  useAgentProfiles: () => ({ data: [] }),
+  useAgentProfiles: () => ({ data: agentProfiles }),
 }));
 vi.mock("#/hooks/query/use-local-workspaces", () => ({
   useLocalWorkspaces: () => ({ data: [] }),
@@ -51,6 +54,24 @@ async function createProject() {
 describe("NewProjectModal", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    agentProfiles.profiles = [];
+  });
+
+  it("offers no ACP profile for the workers, since the server refuses one", () => {
+    agentProfiles.profiles = [
+      { id: "p1", name: "Builder", agent_kind: "openhands" },
+      { id: "p2", name: "Claude Code", agent_kind: "acp" },
+    ];
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <NewProjectModal onClose={vi.fn()} onCreated={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    const options = Array.from(
+      screen.getByTestId("new-project-worker-profile").querySelectorAll("option"),
+    ).map((option) => option.textContent);
+    expect(options).toContain("Builder");
+    expect(options).not.toContain("Claude Code");
   });
 
   it("starts the coordinator with the user's approval settings", async () => {

@@ -137,7 +137,9 @@ export function NewProjectModal({ onClose, onCreated }: NewProjectModalProps) {
                 {t(I18nKey.PROJECTS$WORKER_PROFILE_DEFAULT)}
               </option>
               {(profiles?.profiles ?? []).flatMap((profile) =>
-                profile.id
+                // An ACP agent builds its own prompt and takes no server
+                // tools, so the server refuses it for a project.
+                profile.id && profile.agent_kind !== "acp"
                   ? [
                       <option key={profile.id} value={profile.id}>
                         {profile.name}
