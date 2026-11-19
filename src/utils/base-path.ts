@@ -60,10 +60,33 @@ function resolveOrigin(origin?: string): string {
 /**
  * Drop a trailing base path so an origin that already names the Canvas mount
  * point (`https://host/canvas`) is not prefixed with it a second time.
+ *
+ * The match is limited to the URL path: an origin whose hostname merely
+ * matches the mount segment (`https://canvas` with base path `/canvas`) has
+ * no path at all, so nothing is stripped and the base path is applied once
+ * to the hostname instead of being spliced into it.
  */
 function stripBasePath(origin: string): string {
   const basePath = getAgentCanvasBasePath();
-  if (!basePath || !origin.endsWith(basePath)) return origin;
+  if (!basePath) return origin;
+
+  // Locate the start of the path, i.e. the first slash after the authority
+  // (`scheme://host[:port]` or `//host[:port]`). An origin with no such slash
+  // has no path, so a hostname that looks like the base path is not a match.
+  const schemeIndex = origin.indexOf("://");
+  const authorityEnd =
+    schemeIndex === -1 ? (origin.startsWith("//") ? 2 : 0) : schemeIndex + 3;
+  const pathStart = origin.indexOf("/", authorityEnd);
+  if (pathStart === -1) return origin;
+
+  const path = origin.slice(pathStart);
+  // `basePath` begins with `/`, so an endsWith match is segment-aligned on
+  // its own: `/foo/canvas` ends with `/canvas` but `/mycanvas` does not. The
+  // previous adjacency check could never hold for a multi-segment path —
+  // the character before the match is the last character of the preceding
+  // segment, not `/` — so origins already carrying the mount under a deeper
+  // path were double-prefixed instead of stripped once.
+  if (!path.endsWith(basePath)) return origin;
   return origin.slice(0, -basePath.length);
 }
 
