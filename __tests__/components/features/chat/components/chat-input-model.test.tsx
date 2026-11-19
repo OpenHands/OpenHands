@@ -611,6 +611,44 @@ describe("ChatInputModel", () => {
     ).toBeNull();
   });
 
+  it("still shows the model pill for an ACP conversation when llm_model is null but session models are available", () => {
+    // Regression for #19429: showAcpPicker is true, but displayModel is null
+    // because conversation.llm_model is unset and non-gemini ACP has no preferred default.
+    sessionModelsMock.mockReturnValue(CLAUDE_MODELS);
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: null,
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    const model = screen.getByTestId("chat-input-llm-model");
+    expect(model).toBeInTheDocument();
+    expect(model).toHaveAttribute(
+      "title",
+      "SETTINGS$AGENT_MODEL_AGENT_DEFAULT",
+    );
+    expect(model).toHaveTextContent("SETTINGS$AGENT_MODEL_A…");
+
+    fireEvent.click(model);
+    expect(
+      screen.getByTestId("chat-input-acp-model-option-sonnet"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("chat-input-acp-model-option-opus[1m]"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("chat-input-acp-model-option-sonnet"));
+    expect(switchAcpModelMutate).toHaveBeenCalledWith({
+      conversationId: "test-conversation-id",
+      model: "sonnet",
+    });
+  });
+
   it("offers selectable rows on a cloud backend for ACP conversations (mid-conversation model switching is supported)", () => {
     useActiveBackendMock.mockReturnValue({ backend: { kind: "cloud" } });
     sessionModelsMock.mockReturnValue(CLAUDE_MODELS);
