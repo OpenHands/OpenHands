@@ -724,6 +724,18 @@ function registerShutdownHook(hook) {
   return shutdownHooks.add(hook);
 }
 
+// Signatures emitted by the automation service when its SQLite database sits at
+// a revision that the currently installed `openhands-automation` no longer
+// ships. The launcher recovers by deleting the stale database and retrying once.
+const AUTOMATION_MIGRATION_ERROR_PATTERNS = [
+  "Failed to apply SQLite migrations",
+  "Can't locate revision identified by",
+];
+
+// State directories whose automation database was already reset once in this
+// process, so a genuinely broken database cannot trigger a restart loop.
+const AUTOMATION_MIGRATION_RECOVERY_ATTEMPTED = new Set();
+
 function spawnService(name, command, args, options = {}) {
   const proc = spawn(
     resolveWindowsCommand(command),
@@ -752,6 +764,7 @@ function spawnService(name, command, args, options = {}) {
           parsed ? parsed.color : color,
         );
         emitServiceLog(name, trimmed, "stdout");
+        options.onLogLine?.(trimmed, "stdout");
       });
   });
 
@@ -769,6 +782,7 @@ function spawnService(name, command, args, options = {}) {
           parsed ? parsed.color : c.yellow,
         );
         emitServiceLog(name, trimmed, "stderr");
+        options.onLogLine?.(trimmed, "stderr");
       });
   });
 
@@ -1265,6 +1279,12 @@ function startAutomationBackend(config) {
     automation: true,
   });
 
+  const automationDbPath = join(
+    dirname(config.stateDir),
+    SHARED_DEFAULTS.paths.automationDb,
+  );
+  let sawMigrationError = false;
+
   return spawnService(
     "automation",
     automationCmd.command,
@@ -1344,6 +1364,42 @@ function startAutomationBackend(config) {
         OPENHANDS_SUPPRESS_BANNER: "1",
       },
       color: c.green,
+      onLogLine: (line) => {
+        if (
+          AUTOMATION_MIGRATION_ERROR_PATTERNS.some((pattern) =>
+            line.includes(pattern),
+          )
+        ) {
+          sawMigrationError = true;
+        }
+      },
+      onUnexpectedExit: (reason) => {
+        if (!sawMigrationError) {
+          logService("automation", `Exited unexpectedly (${reason})`, c.red);
+          return;
+        }
+        if (AUTOMATION_MIGRATION_RECOVERY_ATTEMPTED.has(automationDbPath)) {
+          logError(
+            `Automation service still failing after resetting ${automationDbPath}; not retrying again`,
+          );
+          return;
+        }
+        AUTOMATION_MIGRATION_RECOVERY_ATTEMPTED.add(automationDbPath);
+        logService(
+          "automation",
+          `Stale SQLite migration state detected; removed ${automationDbPath} and restarting once`,
+          c.yellow,
+        );
+        try {
+          rmSync(automationDbPath, { force: true });
+        } catch (err) {
+          logError(
+            `Failed to remove the stale automation database: ${err.message}`,
+          );
+          return;
+        }
+        startAutomationBackend(config);
+      },
     },
   );
 }
