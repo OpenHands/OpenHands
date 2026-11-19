@@ -15,7 +15,7 @@ interface ConversationGroup {
   id: string;
   label: string;
   conversations: AppConversation[];
-  launch: ConversationGroupLaunch;
+  launch: ConversationGroupLaunch | null;
 }
 
 interface ConversationGroupFolderRowProps {
@@ -184,35 +184,37 @@ export function ConversationGroupFolderRow({
             />
             <span className="truncate">{group.label}</span>
           </button>
-          <button
-            type="button"
-            className={cn(
-              "inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md",
-              "text-inherit transition-colors",
-              "hover:bg-contrast/10 hover:text-contrast",
-              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-            )}
-            disabled={isCreatingConversationFlow}
-            aria-label={t(
-              I18nKey.CONVERSATION_PANEL$ADD_CONVERSATION_TO_GROUP,
-              {
-                label: group.label,
-              },
-            )}
-            data-testid={`add-conversation-to-group-${groupTestIdSuffix}`}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onLaunchFromGroup();
-            }}
-          >
-            <Plus
-              className="h-3.5 w-3.5 shrink-0"
-              aria-hidden
-              strokeWidth={2}
-            />
-          </button>
+          {group.launch ? (
+            <button
+              type="button"
+              className={cn(
+                "inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md",
+                "text-inherit transition-colors",
+                "hover:bg-contrast/10 hover:text-contrast",
+                "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+              )}
+              disabled={isCreatingConversationFlow}
+              aria-label={t(
+                I18nKey.CONVERSATION_PANEL$ADD_CONVERSATION_TO_GROUP,
+                {
+                  label: group.label,
+                },
+              )}
+              data-testid={`add-conversation-to-group-${groupTestIdSuffix}`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onLaunchFromGroup();
+              }}
+            >
+              <Plus
+                className="h-3.5 w-3.5 shrink-0"
+                aria-hidden
+                strokeWidth={2}
+              />
+            </button>
+          ) : null}
         </div>
         {expanded ? (
           <div

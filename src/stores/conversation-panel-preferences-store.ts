@@ -4,6 +4,7 @@ import {
   DEFAULT_OLDER_CONVERSATION_CUTOFF,
   isOlderConversationCutoff,
   type AutomationFilterMode,
+  type ConversationGroupBy,
   type ConversationSortField,
   type OlderConversationCutoff,
   type OrganizeMode,
@@ -41,6 +42,7 @@ interface ConversationPanelPreferencesState {
   showTagsMetadata: boolean;
   showHoverMetadata: boolean;
   organizeMode: OrganizeMode;
+  groupBy: ConversationGroupBy;
   conversationSort: ConversationSortField;
   threadScope: ThreadScope;
   automationFilterMode: AutomationFilterMode;
@@ -53,6 +55,7 @@ interface ConversationPanelPreferencesState {
 export type LayoutSettingsSlice = Pick<
   ConversationPanelPreferencesState,
   | "organizeMode"
+  | "groupBy"
   | "conversationSort"
   | "threadScope"
   | "showOlderConversations"
@@ -64,6 +67,7 @@ export type LayoutSettingsSlice = Pick<
 
 export const DEFAULT_LAYOUT_SETTINGS: LayoutSettingsSlice = {
   organizeMode: "chronological",
+  groupBy: "location",
   conversationSort: "updated",
   threadScope: "all",
   showOlderConversations: true,
@@ -85,6 +89,7 @@ interface ConversationPanelPreferencesActions {
   toggleShowTagsMetadata: () => void;
   toggleShowHoverMetadata: () => void;
   setOrganizeMode: (value: OrganizeMode) => void;
+  setGroupBy: (value: ConversationGroupBy) => void;
   setConversationSort: (value: ConversationSortField) => void;
   setThreadScope: (value: ThreadScope) => void;
   setAutomationFilterMode: (value: AutomationFilterMode) => void;
@@ -165,6 +170,7 @@ export const useConversationPanelPreferencesStore =
           })),
 
         setOrganizeMode: (value) => set(() => ({ organizeMode: value })),
+        setGroupBy: (value) => set(() => ({ groupBy: value })),
         setConversationSort: (value) =>
           set(() => ({ conversationSort: value })),
         setThreadScope: (value) => set(() => ({ threadScope: value })),
@@ -220,6 +226,7 @@ export const useConversationPanelPreferencesStore =
           showTagsMetadata: state.showTagsMetadata,
           showHoverMetadata: state.showHoverMetadata,
           organizeMode: state.organizeMode,
+          groupBy: state.groupBy,
           conversationSort: state.conversationSort,
           threadScope: state.threadScope,
           automationFilterMode: state.automationFilterMode,

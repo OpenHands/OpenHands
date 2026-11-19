@@ -155,9 +155,32 @@ export function AdvancedConversationOptionsModal({
             <MenuRow
               icon={Folder}
               label={groupedLabel}
-              selected={preferences.organizeMode === "grouped"}
+              selected={
+                preferences.organizeMode === "grouped" &&
+                preferences.groupBy === "location"
+              }
               testId="organize-grouped"
-              onClick={() => preferences.setOrganizeMode("grouped")}
+              onClick={() =>
+                preferences.applyLayoutSettings({
+                  organizeMode: "grouped",
+                  groupBy: "location",
+                })
+              }
+            />
+            <MenuRow
+              icon={Tag}
+              label={t(I18nKey.CONVERSATION_PANEL$BY_TAG)}
+              selected={
+                preferences.organizeMode === "grouped" &&
+                preferences.groupBy === "tag"
+              }
+              testId="organize-by-tag"
+              onClick={() =>
+                preferences.applyLayoutSettings({
+                  organizeMode: "grouped",
+                  groupBy: "tag",
+                })
+              }
             />
             <MenuRow
               icon={Clock3}
