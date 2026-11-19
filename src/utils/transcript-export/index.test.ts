@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
+  AskUserAction,
+  AskUserAnswerEvent,
+  AskUserObservation,
+} from "@openhands/typescript-client";
+import type {
   ActionEvent,
   AgentErrorEvent,
   MessageEvent,
@@ -135,6 +140,138 @@ const defaultOptions = {
 };
 
 describe("conversation transcript export", () => {
+  it.each([
+    { option_index: 1, option_label: "PostgreSQL", text: "Use the EU region" },
+    { option_index: null, option_label: null, text: "Neither, use JSON" },
+  ])("exports a complete decision exchange in both formats: %j", (answer) => {
+    const question: ActionEvent<AskUserAction> = {
+      ...terminalAction,
+      id: "question-1",
+      summary: undefined,
+      tool_name: "ask_user",
+      action: {
+        kind: "AskUserAction",
+        question: "Choose storage?",
+        options: [
+          { label: "SQLite", consequence: "Stay on this device." },
+          { label: "PostgreSQL", consequence: "Share across servers." },
+        ],
+        recommended: 1,
+      },
+    };
+    const result: ObservationEvent<AskUserObservation> = {
+      ...terminalObservation(""),
+      action_id: question.id,
+      tool_name: "ask_user",
+      observation: {
+        kind: "AskUserObservation",
+        content: [],
+        is_error: false,
+      },
+    };
+    const event: AskUserAnswerEvent = {
+      id: "answer-1",
+      kind: "AskUserAnswerEvent",
+      source: "user",
+      timestamp,
+      ask_id: "question-1",
+      ...answer,
+    };
+    const machine: MessageEvent = {
+      ...userMessage,
+      llm_message: {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: '[Answer to your question: "Choose storage?"]\nMachine copy',
+          },
+        ],
+      },
+    };
+    for (const includeToolDetails of [false, true]) {
+      for (const exportTranscript of [eventsToMarkdown, eventsToHtml]) {
+        const output = exportTranscript([question, result, event, machine], {
+          ...defaultOptions,
+          includeToolDetails,
+        });
+        expect(output).toContain("Choose storage?");
+        expect(output).toContain("SQLite");
+        expect(output).toContain("Stay on this device.");
+        expect(output).toContain("PostgreSQL (ASK_USER$RECOMMENDED)");
+        expect(output).toContain("Share across servers.");
+        expect(output.split(answer.text)).toHaveLength(2);
+        expect(output.indexOf("Choose storage?")).toBeLessThan(
+          output.indexOf(answer.text),
+        );
+        expect(output).not.toContain("Machine copy");
+        expect(output).not.toContain("Answer to your question");
+      }
+    }
+  });
+
+  it("exports only the answer that reached the agent after a crash and retry", () => {
+    const question: ActionEvent<AskUserAction> = {
+      ...terminalAction,
+      id: "question-1",
+      summary: undefined,
+      tool_name: "ask_user",
+      action: {
+        kind: "AskUserAction",
+        question: "Choose storage?",
+        options: [
+          { label: "SQLite", consequence: "" },
+          { label: "PostgreSQL", consequence: "" },
+        ],
+        recommended: null,
+      },
+    };
+    const result: ObservationEvent<AskUserObservation> = {
+      ...terminalObservation(""),
+      action_id: question.id,
+      tool_name: "ask_user",
+      observation: { kind: "AskUserObservation", content: [], is_error: false },
+    };
+    const answer = (
+      id: string,
+      option_label: string,
+      text: string,
+    ): AskUserAnswerEvent => ({
+      id,
+      kind: "AskUserAnswerEvent",
+      source: "user",
+      timestamp,
+      ask_id: question.id,
+      option_index: option_label === "SQLite" ? 0 : 1,
+      option_label,
+      text,
+    });
+    const machine: MessageEvent = {
+      ...userMessage,
+      llm_message: {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: '[Answer to your question: "Choose storage?"]\nPostgreSQL',
+          },
+        ],
+      },
+    };
+    const events = [
+      question,
+      result,
+      answer("orphan", "SQLite", "Lost before delivery"),
+      answer("delivered", "PostgreSQL", "Now delivered"),
+      machine,
+    ];
+    for (const exportTranscript of [eventsToMarkdown, eventsToHtml]) {
+      const output = exportTranscript(events, defaultOptions);
+      expect(output).toContain("Now delivered");
+      expect(output).not.toContain("Lost before delivery");
+    }
+  });
+
   it("exports messages and collapsed tool details as GitHub-ready Markdown", () => {
     const markdown = eventsToMarkdown(
       [
