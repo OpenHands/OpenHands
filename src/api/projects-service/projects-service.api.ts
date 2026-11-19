@@ -100,9 +100,8 @@ export interface NewProjectCoordinator {
 export interface CreateProjectInput {
   name: string;
   description?: string;
-  /** Start a new coordinator; mutually exclusive with an existing one. */
+  /** The new coordinator the server starts with the project. */
   coordinator?: NewProjectCoordinator;
-  coordinator_conversation_id?: string | null;
   worker_agent_profile_id?: string | null;
 }
 
