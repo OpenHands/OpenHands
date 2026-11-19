@@ -12,6 +12,7 @@ export function useRepositoryData(
   inputValue: string,
   value?: string | null,
   repositoryName?: string | null,
+  gitProviderId?: number | null,
 ) {
   // Fetch user repositories with pagination
   const {
@@ -23,6 +24,7 @@ export function useRepositoryData(
     isError,
   } = useGitRepositories({
     provider,
+    gitProviderId,
     enabled: !disabled,
   });
 
@@ -34,7 +36,13 @@ export function useRepositoryData(
 
   // Search repositories when user types
   const { data: searchData, isLoading: isSearchLoading } =
-    useSearchRepositories(processedSearchInput, provider, shouldSkipSearch);
+    useSearchRepositories(
+      processedSearchInput,
+      provider,
+      shouldSkipSearch,
+      undefined,
+      gitProviderId,
+    );
 
   // Combine all repositories from paginated data
   const allRepositories = useMemo(

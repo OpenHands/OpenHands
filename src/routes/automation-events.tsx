@@ -13,6 +13,7 @@ import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
 import { I18nKey } from "#/i18n/declaration";
 import { getEventsPageSpec } from "#/manifests/automation-interface";
 import { getApiErrorMessage } from "#/utils/api-error-message";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 
 const PAGE_SIZE = 50;
 
@@ -71,10 +72,9 @@ function EventsContent({
     ![403, 404].includes(getErrorStatus(list.error) ?? 0);
 
   async function copy(value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
+    if (await copyToClipboard(value)) {
       setCopyMessage(t(I18nKey.AUTOMATIONS$EVENTS$COPIED));
-    } catch {
+    } else {
       setCopyMessage(t(I18nKey.AUTOMATIONS$EVENTS$COPY_FAILED));
     }
   }
@@ -238,7 +238,7 @@ function EventsContent({
                   id="webhook-source-id"
                   name="source"
                   required
-                  pattern="[a-z0-9]([a-z0-9-]{0,48}[a-z0-9])?"
+                  pattern="[a-z0-9]([a-z0-9\-]{0,48}[a-z0-9])?"
                   maxLength={50}
                   placeholder={t(I18nKey.AUTOMATIONS$EVENTS$SOURCE_PLACEHOLDER)}
                   aria-describedby="webhook-source-help"

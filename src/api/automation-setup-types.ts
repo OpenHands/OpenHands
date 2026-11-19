@@ -61,6 +61,8 @@ export interface AutomationSetupDraft {
   plugins?: string[];
   editingAutomationId?: string;
   serverDraftId?: string;
+  /** Request last saved to `serverDraftId`, to tell unsaved edits apart. */
+  savedDraftRequestKey?: string;
   materializedAutomationId?: string | null;
   existingCustomTarballPath?: string;
   existingPluginSpec?: AutomationPluginSpec;
