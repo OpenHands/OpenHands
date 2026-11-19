@@ -129,6 +129,7 @@ export function LlmSettingsScreen({
   suppressSuccessToast,
   onSaveControlChange,
   showProviderConnection,
+  apiKeyIsSet: apiKeyIsSetProp,
 }: {
   scope?: SettingsScope;
   /** Optional hook fired after a successful save (e.g. advance an onboarding step). */
@@ -151,6 +152,12 @@ export function LlmSettingsScreen({
    * one connection exists, so the form is unchanged until the user creates one.
    */
   showProviderConnection?: boolean;
+  /**
+   * Embedded forms only: the profile already has a stored API key even
+   * though the field itself stays blank, so keep the "<hidden>"
+   * placeholder and the key-set indicator visible.
+   */
+  apiKeyIsSet?: boolean;
 }) {
   const { t } = useTranslation("openhands");
 
@@ -255,8 +262,10 @@ export function LlmSettingsScreen({
       // `llm_api_key_set` flag is misleading: a brand-new profile would show a
       // "key set" indicator just because some other profile has a key. Reflect
       // the form's own key state instead so create mode starts visibly unset.
+      // An embedded form that keeps a stored key out of the field passes
+      // `apiKeyIsSet` so the cue still shows.
       const apiKeyIsSet = embedded
-        ? apiKeyValue.length > 0
+        ? Boolean(apiKeyIsSetProp) || apiKeyValue.length > 0
         : Boolean(settings?.llm_api_key_set);
 
       // A profile linked to a provider connection reads its api_key / base_url
@@ -543,6 +552,7 @@ export function LlmSettingsScreen({
       );
     },
     [
+      apiKeyIsSetProp,
       connectionOptions,
       showProviderConnection,
       defaultModel,
