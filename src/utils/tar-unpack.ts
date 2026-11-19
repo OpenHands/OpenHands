@@ -7,6 +7,10 @@
  * ustar headers directly rather than pulling in a tar library. Gunzip is the
  * platform's own `DecompressionStream`.
  *
+ * Paths are decoded as UTF-8, matching `packTar` and the bundles this app
+ * consumes; bytes that are not valid UTF-8 keep the legacy single-byte
+ * reading so older Latin-1 names still display as they did.
+ *
  * Only regular files are returned. Directories, links, and the pax / GNU
  * extension headers that carry long names are skipped without being applied,
  * so a member whose path exceeds ustar's 155 + 100 bytes surfaces under its
@@ -53,6 +57,13 @@ export class TarTooLargeError extends Error {
 
 const asciiDecoder = new TextDecoder("ascii");
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+// Header names are bytes written as UTF-8 by `packTar` and by GNU/BSD tar.
+// `ignoreBOM` keeps a leading U+FEFF as part of the name instead of treating
+// it as an encoding marker.
+const nameDecoder = new TextDecoder("utf-8", {
+  fatal: true,
+  ignoreBOM: true,
+});
 
 function isGzip(bytes: Uint8Array): boolean {
   return bytes[0] === GZIP_MAGIC[0] && bytes[1] === GZIP_MAGIC[1];
@@ -75,22 +86,45 @@ async function gunzip(
   return new Uint8Array(await inflated.arrayBuffer());
 }
 
-/** A NUL-terminated header string field. */
+/** The bytes of a header field, up to its first NUL terminator. */
+function fieldBytes(
+  header: Uint8Array,
+  field: { offset: number; size: number },
+): Uint8Array {
+  const raw = header.subarray(field.offset, field.offset + field.size);
+  const end = raw.indexOf(0);
+  return end === -1 ? raw : raw.subarray(0, end);
+}
+
+/** A legacy single-byte header string field (numbers and format markers). */
 function stringField(
   header: Uint8Array,
   field: { offset: number; size: number },
 ): string {
-  const raw = asciiDecoder.decode(
-    header.subarray(field.offset, field.offset + field.size),
-  );
-  const end = raw.indexOf("\0");
-  return end === -1 ? raw : raw.slice(0, end);
+  return asciiDecoder.decode(fieldBytes(header, field));
+}
+
+/**
+ * A path field. `name` and `prefix` carry the path as UTF-8 bytes; fall back
+ * to the legacy single-byte reading only when the bytes are not valid UTF-8,
+ * so a Latin-1 name keeps the spelling older builds showed.
+ */
+function nameField(
+  header: Uint8Array,
+  field: { offset: number; size: number },
+): string {
+  const bytes = fieldBytes(header, field);
+  try {
+    return nameDecoder.decode(bytes);
+  } catch {
+    return asciiDecoder.decode(bytes);
+  }
 }
 
 /** The member's path as ustar spells it: `prefix/name` when a prefix is set. */
 function entryPath(header: Uint8Array): string {
-  const name = stringField(header, NAME);
-  const prefix = stringField(header, PREFIX);
+  const name = nameField(header, NAME);
+  const prefix = nameField(header, PREFIX);
   const joined = prefix ? `${prefix}/${name}` : name;
   return joined.replace(/^\.\//, "");
 }
