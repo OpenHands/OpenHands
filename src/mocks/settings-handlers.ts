@@ -365,6 +365,22 @@ const MOCK_CONVERSATION_SETTINGS_SCHEMA: NonNullable<
           secret: false,
           required: true,
         },
+        {
+          key: "max_budget_per_run",
+          label: "Default budget per conversation (USD)",
+          section: "general",
+          description:
+            "Default maximum LLM cost, in USD, for new conversations. Leave empty for no limit.",
+
+          section_label: "General",
+          value_type: "number",
+          default: null,
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: false,
+        },
       ],
     },
     {

@@ -3,6 +3,7 @@ import {
   Bot,
   Brain,
   Container,
+  Gauge,
   Home,
   Keyboard,
   KeyRound,
@@ -41,6 +42,7 @@ export const COMMAND_MENU_ROUTE = {
   condenserSettings: "/settings/condenser",
   agentContextSettings: "/settings/agent-context",
   verificationSettings: "/settings/verification",
+  conversationLimitsSettings: "/settings/conversation-limits",
   runtimeSettings: "/settings/runtime",
   appSettings: "/settings/app",
   secretsSettings: "/settings/secrets",
@@ -59,6 +61,7 @@ export type CommandMenuItemId =
   | "condenser-settings"
   | "agent-context-settings"
   | "verification-settings"
+  | "conversation-limits-settings"
   | "runtime-settings"
   | "app-settings"
   | "secrets-settings"
@@ -225,6 +228,15 @@ export const createCommandMenuItems = ({
       keywordsKey: I18nKey.COMMAND_MENU$VERIFICATION_SETTINGS_KEYWORDS,
       icon: <ShieldCheck size={ICON_SIZE} />,
       to: COMMAND_MENU_ROUTE.verificationSettings,
+    },
+    {
+      id: "conversation-limits-settings",
+      group: "settings",
+      titleKey: I18nKey.SETTINGS$NAV_CONVERSATION_LIMITS,
+      descriptionKey: I18nKey.SETTINGS$PAGE_CONVERSATION_LIMITS_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$CONVERSATION_LIMITS_SETTINGS_KEYWORDS,
+      icon: <Gauge size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.conversationLimitsSettings,
     },
     {
       id: "runtime-settings",
