@@ -48,6 +48,7 @@ import {
   initializeAutomationFormSession,
   isPendingAutomationSetupId,
   patchAutomationFormSession,
+  setAutomationFormSessionSavedDraftRequestKey,
   setAutomationFormSessionRepositories,
   subscribeAutomationFormSession,
 } from "#/api/automation-form-session";
@@ -821,6 +822,14 @@ export function AutomationSetupPanel({
   const [fieldMetadata, setFieldMetadata] = useState(
     () => initialDraft.fieldMetadata ?? {},
   );
+  // A conversation reopened in this page keeps its form session, which can
+  // hold edits made after its draft was last saved.
+  const restoredSessionRef = useRef(
+    conversationId && !isPendingAutomationSetupId(conversationId)
+      ? getAutomationFormSession(conversationId)
+      : null,
+  );
+  const keptRestoredFormRef = useRef(false);
   const [statusMessage, setStatusMessage] = useState<StatusMessage>(null);
   const toastedStatusRef = useRef<StatusMessage>(null);
   useEffect(() => {
@@ -1063,6 +1072,15 @@ export function AutomationSetupPanel({
     AutomationService.getServerDraft(taggedServerDraftId)
       .then((saved) => {
         if (cancelled) return;
+        const restoredSession = restoredSessionRef.current;
+        restoredSessionRef.current = null;
+        if (restoredSession?.serverDraftId === saved.id) {
+          keptRestoredFormRef.current = true;
+          setServerDraft(saved);
+          setDraftRuns([]);
+          setSavedDraftRequestKey(restoredSession.savedDraftRequestKey ?? null);
+          return;
+        }
         const nextForm = formFromServerDraft(saved, buildInitialForm(draft));
         setServerDraft(saved);
         setDraftRuns([]);
@@ -1253,12 +1271,31 @@ export function AutomationSetupPanel({
 
   useEffect(() => {
     if (!conversationId) return undefined;
-    initializeAutomationFormSession(conversationId, {
-      ...draft,
-      form,
-      fieldMetadata,
-    });
-    return () => clearAutomationFormSession(conversationId);
+    const restoredSession = restoredSessionRef.current;
+    const currentSession = getAutomationFormSession(conversationId);
+    if (
+      restoredSession &&
+      currentSession &&
+      currentSession !== restoredSession
+    ) {
+      // An agent update landed after the first render, before the panel
+      // subscribed; take it rather than overwrite it.
+      setForm(buildInitialForm(currentSession));
+      setFieldMetadata(currentSession.fieldMetadata ?? {});
+    } else {
+      initializeAutomationFormSession(conversationId, {
+        ...draft,
+        form,
+        fieldMetadata,
+      });
+    }
+    // Keep a conversation's form for when the user comes back to it; only the
+    // page for a new automation starts clean each time.
+    return () => {
+      if (isPendingAutomationSetupId(conversationId)) {
+        clearAutomationFormSession(conversationId);
+      }
+    };
   }, [conversationId]);
 
   useEffect(() => {
@@ -1426,13 +1463,15 @@ export function AutomationSetupPanel({
   // Only a new automation picks who it runs as; an existing one uses Change Runs As.
   const showRunAsPicker = serviceAccountRunAsEnabled && !isEditingExisting;
   const newAutomationRunAsId = showRunAsPicker ? runAsUserId : "";
-  const buildPresetBody = (): SetupRequestBody => {
+  // Only the final create runs enabled: drafts and preflight validation must
+  // stay inert, so the flag travels with the caller's intent.
+  const buildPresetBody = (enabled: boolean): SetupRequestBody => {
     const trimmedPrompt = prompt.trim();
     const body: SetupRequestBody = {
       name: normalizedName(),
       ...(trimmedPrompt ? { prompt: trimmedPrompt } : {}),
       trigger: buildTrigger(),
-      enabled: false,
+      enabled,
     } as SetupRequestBody;
     const repositories = parseAutomationSetupRepositories(repository);
     if (repositories.length > 0) {
@@ -1454,10 +1493,14 @@ export function AutomationSetupPanel({
     if (newAutomationRunAsId) body.run_as_user_id = newAutomationRunAsId;
     return body;
   };
-  const buildCustomBody = (tarballPath: string): SetupRequestBody =>
+  const buildCustomBody = (
+    tarballPath: string,
+    enabled: boolean,
+  ): SetupRequestBody =>
     ({
       name: normalizedName(),
       trigger: buildTrigger(),
+      enabled,
       tarball_path: tarballPath,
       entrypoint: entrypoint.trim(),
       setup_script_path: setupScriptPath.trim(),
@@ -1481,7 +1524,9 @@ export function AutomationSetupPanel({
   const draftRequestBody = (
     tarballPath: string = PREFLIGHT_TARBALL_PATH,
   ): SetupRequestBody =>
-    kind === "custom" ? buildCustomBody(tarballPath) : buildPresetBody();
+    kind === "custom"
+      ? buildCustomBody(tarballPath, false)
+      : buildPresetBody(false);
   const draftValidationByField = useMemo(() => {
     const byField = new Map<string, string>();
     for (const error of serverDraft?.validationErrors ?? []) {
@@ -1568,8 +1613,24 @@ export function AutomationSetupPanel({
     }
     if (!wasHydratingServerDraftRef.current || !serverDraft) return;
     wasHydratingServerDraftRef.current = false;
+    // A restored form is compared with the server draft instead.
+    if (keptRestoredFormRef.current) {
+      keptRestoredFormRef.current = false;
+      return;
+    }
     setSavedDraftRequestKey(currentDraftRequestKey);
-  }, [currentDraftRequestKey, isHydratingServerDraft, serverDraft]);
+    if (conversationId) {
+      setAutomationFormSessionSavedDraftRequestKey(
+        conversationId,
+        currentDraftRequestKey,
+      );
+    }
+  }, [
+    conversationId,
+    currentDraftRequestKey,
+    isHydratingServerDraft,
+    serverDraft,
+  ]);
 
   const ensureCustomWebhookSource = async (): Promise<boolean> => {
     if (triggerKind !== "event" || !customWebhook.enabled) return true;
@@ -1644,9 +1705,18 @@ export function AutomationSetupPanel({
       : await AutomationService.createServerDraft(request);
     setServerDraft(saved);
     saveDraftInFormSession(saved, form);
-    setSavedDraftRequestKey(
-      draftRequestKey(request.endpoint, request.name ?? "", request.draft),
+    const savedRequestKey = draftRequestKey(
+      request.endpoint,
+      request.name ?? "",
+      request.draft,
     );
+    setSavedDraftRequestKey(savedRequestKey);
+    if (conversationId) {
+      setAutomationFormSessionSavedDraftRequestKey(
+        conversationId,
+        savedRequestKey,
+      );
+    }
     setIsTaggedDraftMissing(false);
     if (isPendingAutomationSetupId(conversationId) && !serverDraftId) {
       navigate(`/automations/setup?draftId=${encodeURIComponent(saved.id)}`, {
@@ -1661,8 +1731,8 @@ export function AutomationSetupPanel({
       endpoint: draftValidationEndpoint(kind, pluginEndpointSource),
       draft:
         kind === "custom"
-          ? buildCustomBody(PREFLIGHT_TARBALL_PATH)
-          : buildPresetBody(),
+          ? buildCustomBody(PREFLIGHT_TARBALL_PATH, false)
+          : buildPresetBody(false),
     });
     setStatusMessage({
       kind: result.valid ? "success" : "error",
@@ -1858,12 +1928,12 @@ export function AutomationSetupPanel({
       if (kind === "custom") {
         const tarballPath = await uploadCustomArchive();
         created = await AutomationService.createAutomationDraft(
-          buildCustomBody(tarballPath),
+          buildCustomBody(tarballPath, true),
           kind,
         );
       } else {
         created = await AutomationService.createAutomationDraft(
-          buildPresetBody(),
+          buildPresetBody(true),
           presetKindForEndpoint(kind, pluginEndpointSource),
         );
       }
