@@ -6,7 +6,6 @@ import type {
   ProjectConversation,
   ProjectMemoryFile,
 } from "#/api/projects-service/projects-service.api";
-import { randomUUID } from "#/utils/random-uuid";
 
 /**
  * MSW handlers for the agent-server's Projects API (`/api/projects`) and the
