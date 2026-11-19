@@ -17,7 +17,10 @@ vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
 describe("the command menu without an admitted interface manifest", () => {
   it("omits the automations entry and keeps the rest", () => {
     // Act
-    const items = createCommandMenuItems({ toggleSidebar: vi.fn() });
+    const items = createCommandMenuItems({
+      toggleSidebar: vi.fn(),
+      backendKind: "local",
+    });
 
     // Assert
     expect(items.some((item) => item.id === "automations")).toBe(false);
@@ -40,7 +43,10 @@ describe("the command menu settings group", () => {
 
   it("lists every settings page when not locked to a Cloud host", () => {
     // Act
-    const items = createCommandMenuItems({ toggleSidebar: vi.fn() });
+    const items = createCommandMenuItems({
+      toggleSidebar: vi.fn(),
+      backendKind: "local",
+    });
 
     // Assert
     expect(settingsItemIds(items)).toEqual([
@@ -52,15 +58,17 @@ describe("the command menu settings group", () => {
       "verification-settings",
       "runtime-settings",
       "app-settings",
+      "experimental-settings",
       "secrets-settings",
     ]);
   });
 
   it("offers an entry for every page the settings nav lists", () => {
     // Act
-    const routes = createCommandMenuItems({ toggleSidebar: vi.fn() }).map(
-      (item) => item.to,
-    );
+    const routes = createCommandMenuItems({
+      toggleSidebar: vi.fn(),
+      backendKind: "local",
+    }).map((item) => item.to);
 
     // Assert — Condenser is per agent profile on the default local backend.
     expect(routes).toEqual(
@@ -77,7 +85,10 @@ describe("the command menu settings group", () => {
     vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
 
     // Act
-    const items = createCommandMenuItems({ toggleSidebar: vi.fn() });
+    const items = createCommandMenuItems({
+      toggleSidebar: vi.fn(),
+      backendKind: "local",
+    });
 
     // Assert
     expect(settingsItemIds(items)).toEqual(["settings", "app-settings"]);

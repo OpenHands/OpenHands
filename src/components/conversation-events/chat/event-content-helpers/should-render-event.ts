@@ -86,6 +86,18 @@ const isClientToolResult = (event: MessageEvent): boolean => {
   );
 };
 
+/**
+ * A react / unreact call that succeeded. The reaction shows as a chip on its
+ * message (MessageReactions), so groupEvents drops the tool card but keeps the
+ * agent's narration on the call (its thought and reasoning). While pending,
+ * the call itself shows, so the user sees what they are asked to confirm;
+ * a failed reaction shows like any failed tool.
+ */
+export const isReactionResult = (event: OpenHandsEvent): boolean =>
+  isObservationEvent(event) &&
+  (event.observation.kind as string) === "ReactionObservation" &&
+  !(event.observation as { is_error?: boolean }).is_error;
+
 export const shouldRenderEvent = (event: OpenHandsEvent) => {
   if (isConversationStateUpdateEvent(event)) {
     // A finished `/goal` loop renders inline so it settles into the
@@ -114,6 +126,10 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
       return false;
     }
 
+    // A react / unreact call stays visible while it has no observation (the
+    // UI list swaps an action for its observation), so the user sees the
+    // emoji and message they are asked to confirm (see isReactionResult).
+
     // The model switch tool reuses the same inline model message UI as
     // `/model <profile>` once the observation arrives.
     if (actionType === "SwitchLLMAction") {
@@ -125,6 +141,9 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
 
   // Render observation events
   if (isObservationEvent(event)) {
+    // A successful reaction passes so the agent's narration on the call
+    // still shows; groupEvents drops its tool card (see isReactionResult).
+
     // Successful model switches are rendered through ModelMessages so they
     // look identical to `/model <profile>` confirmations. Failed switches
     // still render as observations so the error remains visible in chat.
@@ -196,3 +215,10 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
 
 export const hasUserEvent = (events: OpenHandsEvent[]) =>
   events.some((event) => event.source === "user");
+
+/**
+ * Whether a rendered event can anchor something placed after it (a /model
+ * message). A reaction result renders no item of its own, so it cannot.
+ */
+export const canAnchorAfterEvent = (event: OpenHandsEvent): boolean =>
+  shouldRenderEvent(event) && !isReactionResult(event);

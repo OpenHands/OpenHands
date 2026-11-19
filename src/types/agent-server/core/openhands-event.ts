@@ -1,3 +1,5 @@
+import type { ReactionEvent } from "@openhands/typescript-client";
+
 // Import all event types
 import {
   ACPToolCallEvent,
@@ -26,6 +28,7 @@ export type OpenHandsEvent =
   // Core action and observation events
   | ActionEvent
   | MessageEvent
+  | ReactionEvent
   | ObservationEvent
   | UserRejectObservation
   | AgentErrorEvent
