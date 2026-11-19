@@ -650,6 +650,9 @@ describe("vite library build", () => {
     expect(declarations(recipe("context-menu-icon-stroke"))).toMatchObject({
       "stroke-width": "1.75px",
     });
+    expect(declarations(recipe("catalog-remove-icon-stroke"))).toMatchObject({
+      "stroke-width": "2.5px",
+    });
 
     // Preserve exact menu units and text metrics in the shipped scoped CSS.
     const menuGeometryContracts = {

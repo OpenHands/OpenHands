@@ -21,6 +21,7 @@ export interface CanvasExtensionManifest {
   version: string;
   description?: string | null;
   entrypoint: string;
+  backend?: { secret_refs?: string[] } | null;
   contributes?: CanvasExtensionContributions | null;
   /** Package-relative SVG path; served by the Agent Server at `/installed/{name}/icon`. */
   icon?: string | null;

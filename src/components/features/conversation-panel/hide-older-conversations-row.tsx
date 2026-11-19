@@ -72,7 +72,11 @@ export function HideOlderConversationsRow() {
       <div
         className="shrink-0"
         onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          // Keep Enter/Space from toggling the row; let Escape reach the
+          // surrounding dialog once the cutoff menu is closed.
+          if (event.key !== "Escape") event.stopPropagation();
+        }}
       >
         <EnumFilterDropdown
           testId="older-conversation-cutoff"
