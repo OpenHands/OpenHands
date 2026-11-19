@@ -296,7 +296,10 @@ describe("AddBackendModal – connection chooser", () => {
       expect(getComputedStyle(grid).transitionProperty).toBe(
         "grid-template-rows",
       );
-      expect(getComputedStyle(grid).transitionDuration).toBe("200ms");
+      // jsdom 31 serializes 200ms as 0.2s; compare the resolved duration.
+      expect(parseFloat(getComputedStyle(grid).transitionDuration)).toBeCloseTo(
+        0.2,
+      );
       expect(body).toHaveAttribute("inert");
 
       await user.click(screen.getByTestId(toggleId));

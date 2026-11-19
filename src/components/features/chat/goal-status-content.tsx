@@ -12,7 +12,7 @@ import {
 } from "#/types/agent-server/type-guards";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import {
-  pauseConversation,
+  interruptConversation,
   resumeGoal,
   stopGoal,
 } from "#/hooks/mutation/conversation-mutation-utils";
@@ -124,7 +124,7 @@ export function GoalStatusContent({
   const handleStop = () =>
     runAction(async (id) => {
       await stopGoal(id);
-      await pauseConversation(id);
+      await interruptConversation(id);
     }, I18nKey.GOAL$STOP_FAILED);
 
   const handleResume = () => runAction(resumeGoal, I18nKey.GOAL$RESUME_FAILED);

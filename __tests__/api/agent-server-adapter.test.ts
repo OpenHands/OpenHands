@@ -33,7 +33,6 @@ import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import type { HookConfig } from "@openhands/typescript-client";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import type { SettingsValue } from "#/types/settings";
-import { useModelStore } from "#/stores/model-store";
 
 const {
   mockGetAgentServerWorkingDir,
@@ -133,7 +132,6 @@ beforeEach(() => {
     apiKey: "session-key",
     kind: "local",
   });
-  useModelStore.getState().setHomeManualModelPick(false);
 });
 
 const PROFILE = {
@@ -1025,6 +1023,21 @@ describe("toAppConversation", () => {
     });
     expect(result.agent_kind).toBe("acp");
     expect(result.llm_model).toBe("claude-sonnet-4-6");
+  });
+
+  it("carries the ACP session's effort and the levels it offers", () => {
+    const result = toAppConversation({
+      ...baseInfo,
+      agent: { kind: "ACPAgent" },
+      current_effort: "high",
+      available_efforts: [{ value: "high", name: "High" }, { value: "max" }],
+    });
+
+    expect(result.acp_current_effort).toBe("high");
+    expect(result.acp_available_efforts).toEqual([
+      { value: "high", label: "High" },
+      { value: "max", label: "Max" },
+    ]);
   });
 
   it("prefers ACP runtime model fields over configured acp_model", () => {

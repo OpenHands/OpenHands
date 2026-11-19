@@ -26,6 +26,7 @@ import {
   setTelemetryCloudContext,
   setTelemetryIdentity,
 } from "#/services/telemetry";
+import { randomUUID } from "#/utils/random-uuid";
 
 type BackendInput = Omit<Backend, "id" | "connectionRevision">;
 
@@ -40,16 +41,6 @@ interface ActiveBackendContextValue {
 
 const ActiveBackendContext =
   React.createContext<ActiveBackendContextValue | null>(null);
-
-function generateId(): string {
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
-  ) {
-    return crypto.randomUUID();
-  }
-  return `backend-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
 
 function applyTelemetrySelectionBoundary(
   previous: ResolvedActiveBackend,
@@ -125,7 +116,7 @@ export function ActiveBackendProvider({
   const addBackend = React.useCallback(
     (backend: BackendInput): Backend => {
       const previousActive = getSnapshot().active;
-      const next: Backend = { ...backend, id: generateId() };
+      const next: Backend = { ...backend, id: randomUUID() };
       const list = [...getRegisteredBackends(), next];
       applyTelemetrySelectionBoundary(previousActive, {
         backend: next,

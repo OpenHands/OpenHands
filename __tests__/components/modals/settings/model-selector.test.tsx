@@ -14,7 +14,9 @@ const mockProviders: LLMProvider[] = [
   { name: "vertex_ai", verified: false },
 ];
 
-const model = (partial: Partial<LLMModel> & Pick<LLMModel, "name">): LLMModel => ({
+const model = (
+  partial: Partial<LLMModel> & Pick<LLMModel, "name">,
+): LLMModel => ({
   provider: null,
   verified: false,
   free: false,
@@ -154,4 +156,90 @@ describe("ModelSelector", () => {
     expect(modelInput.getAttribute("placeholder") ?? "").toBe("");
   });
 
+  it("selects provider and model with the keyboard", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderWithQuery(<ModelSelector onChange={onChange} />);
+
+    // Act: filter to and commit the Azure provider with Enter.
+    const providerSelector = screen.getByLabelText("LLM Provider");
+    await user.click(providerSelector);
+    await user.clear(providerSelector);
+    await user.keyboard("azur{ArrowDown}{Enter}");
+
+    // Assert
+    expect(onChange).toHaveBeenNthCalledWith(1, "azure", null);
+    expect(providerSelector).toHaveValue("Azure");
+
+    // Act: commit the first Azure model with the keyboard.
+    const modelSelector = screen.getByLabelText("LLM Model");
+    await user.click(modelSelector);
+    await user.keyboard("{ArrowDown}{Enter}");
+
+    // Assert
+    expect(onChange).toHaveBeenNthCalledWith(2, "azure", "ada");
+    expect(modelSelector).toHaveValue("ada");
+  });
+
+  it("reverts a typed provider name that is not committed on blur", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderWithQuery(
+      <div>
+        <ModelSelector currentModel="azure/ada" onChange={onChange} />
+        <button type="button">Outside</button>
+      </div>,
+    );
+    const providerSelector = screen.getByLabelText("LLM Provider");
+    await waitFor(() => expect(providerSelector).toHaveValue("Azure"));
+
+    // Act: type a partial provider name and blur without committing it.
+    await user.click(providerSelector);
+    await user.keyboard("open");
+    await user.click(screen.getByText("Outside"));
+
+    // Assert: neither the provider nor the model selection changes.
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("LLM Model")).toHaveValue("ada");
+  });
+
+  it("clears provider and model when the provider input is emptied", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderWithQuery(
+      <ModelSelector currentModel="azure/ada" onChange={onChange} />,
+    );
+    const providerSelector = screen.getByLabelText("LLM Provider");
+    await waitFor(() => expect(providerSelector).toHaveValue("Azure"));
+    onChange.mockClear();
+
+    // Act
+    await user.click(providerSelector);
+    await user.clear(providerSelector);
+
+    // Assert: the model input is disabled and emptied with the provider.
+    const modelSelector = screen.getByLabelText("LLM Model");
+    expect(modelSelector).toBeDisabled();
+    expect(modelSelector).toHaveValue("");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("renders a single field border on provider and model comboboxes", () => {
+    // Arrange / Act
+    renderWithQuery(<ModelSelector />);
+
+    // Assert
+    for (const testId of ["llm-provider-input", "llm-model-input"]) {
+      const input = screen.getByTestId(testId);
+      expect(input.className).toContain("border-0");
+      expect(input.className).toContain("bg-transparent");
+      expect(input.className).toContain("focus:ring-0");
+      const group = input.closest('[data-slot="combo-box-input-group"]');
+      expect(group?.className).toContain("border-control");
+      expect(group?.className).toContain("focus-within:ring-1");
+    }
+  });
 });

@@ -56,6 +56,13 @@ const needsSorting = (events: OHEvent[], newEvent: OHEvent): boolean => {
   return newTimestamp < lastTimestamp;
 };
 
+interface HistoryPage {
+  nextPageId: string | null;
+  hasMore: boolean;
+  /** Older pages precede the loaded tail, including equal-timestamp events. */
+  prepend?: boolean;
+}
+
 export interface EventState {
   events: OHEvent[];
   eventIds: Set<string | number>;
@@ -69,6 +76,12 @@ export interface EventState {
    */
   loadedConversationId: string | null;
   loadedConversationScope: string | null;
+  /** Main conversation REST continuation; live/planning events never change it. */
+  historyPagination: {
+    nextPageId: string | null;
+    hasMore: boolean;
+    hasLoadedOlder: boolean;
+  } | null;
   addEvent: (event: OHEvent) => void;
   /**
    * Bulk-insert events. Used for the initial REST history load and for
@@ -76,7 +89,7 @@ export interface EventState {
    * against the existing store and the combined list is re-sorted by
    * timestamp so older pages drop into the correct position.
    */
-  addEvents: (events: OHEvent[]) => void;
+  addEvents: (events: OHEvent[], history?: HistoryPage) => void;
   /**
    * Clear all events. Also resets `loadedConversationId` to `null` so the
    * store never claims to hold a conversation whose events have been wiped —
@@ -135,10 +148,13 @@ const appendEvent = (state: EventState, event: OHEvent): EventState => {
   };
 };
 
-const sortEventState = (state: EventState): EventState => ({
+const sortEventState = (
+  state: EventState,
+  compare = compareEventsByTimestamp,
+): EventState => ({
   ...state,
-  events: [...state.events].sort(compareEventsByTimestamp),
-  uiEvents: [...state.uiEvents].sort(compareEventsByTimestamp),
+  events: [...state.events].sort(compare),
+  uiEvents: [...state.uiEvents].sort(compare),
 });
 
 const applyAddEvent = (state: EventState, event: OHEvent): EventState => {
@@ -163,22 +179,38 @@ export const useEventStore = create<EventState>()((set) => ({
   uiEvents: [],
   loadedConversationId: null,
   loadedConversationScope: null,
+  historyPagination: null,
   addEvent: (event: OHEvent) => set((state) => applyAddEvent(state, event)),
-  addEvents: (incoming: OHEvent[]) =>
+  addEvents: (incoming: OHEvent[], history?: HistoryPage) =>
     set((state) => {
-      if (incoming.length === 0) return state;
+      // A refreshed tail can update the initial frontier (including Cloud's
+      // early persisted page). Once backfilling starts, keep its continuation
+      // across tail refetches and remounts until this conversation is cleared.
+      const historyPagination =
+        history && (history.prepend || !state.historyPagination?.hasLoadedOlder)
+          ? {
+              nextPageId: history.nextPageId,
+              hasMore: history.hasMore,
+              hasLoadedOlder: !!history.prepend,
+            }
+          : state.historyPagination;
+      if (incoming.length === 0) {
+        return historyPagination === state.historyPagination
+          ? state
+          : { ...state, historyPagination };
+      }
 
       const eventIds = new Set(state.eventIds);
       const events = [...state.events];
       let uiEvents = [...state.uiEvents];
-      let added = false;
+      const incomingOrder = new Map<OHEvent, number>();
 
       for (const event of incoming) {
         const eventId = getEventId(event);
         const isDuplicate = eventId !== undefined && eventIds.has(eventId);
 
         if (!isDuplicate) {
-          added = true;
+          incomingOrder.set(event, incomingOrder.size);
           if (eventId !== undefined) {
             eventIds.add(eventId);
           }
@@ -187,16 +219,25 @@ export const useEventStore = create<EventState>()((set) => ({
         }
       }
 
-      if (!added) {
-        return state;
+      if (incomingOrder.size === 0) {
+        return historyPagination === state.historyPagination
+          ? state
+          : { ...state, historyPagination };
       }
 
-      return sortEventState({
-        ...state,
-        events,
-        eventIds,
-        uiEvents,
-      });
+      // Stable timestamp sorting alone appends older boundary ties after the
+      // loaded tail. Rank only newly inserted page rows ahead of existing ties;
+      // existing rows and provisional slots retain their relative positions.
+      const compare = history?.prepend
+        ? (a: OHEvent, b: OHEvent) =>
+            compareEventsByTimestamp(a, b) ||
+            (incomingOrder.get(a) ?? incomingOrder.size) -
+              (incomingOrder.get(b) ?? incomingOrder.size)
+        : compareEventsByTimestamp;
+      return sortEventState(
+        { ...state, events, eventIds, uiEvents, historyPagination },
+        compare,
+      );
     }),
   clearEvents: () =>
     set(() => ({
@@ -205,6 +246,7 @@ export const useEventStore = create<EventState>()((set) => ({
       uiEvents: [],
       loadedConversationId: null,
       loadedConversationScope: null,
+      historyPagination: null,
     })),
   clearEventsForConversation: (conversationId: string | null, scope = null) =>
     set(() => ({
@@ -213,6 +255,7 @@ export const useEventStore = create<EventState>()((set) => ({
       uiEvents: [],
       loadedConversationId: conversationId,
       loadedConversationScope: scope,
+      historyPagination: null,
     })),
   openStreamingSlot: (frame: ItemStartedFrame, meta: StreamingSlotMeta = {}) =>
     set((state) => {

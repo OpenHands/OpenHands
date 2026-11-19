@@ -17,7 +17,7 @@ export function CostSection({ cost, maxBudget }: CostSectionProps) {
   return (
     <>
       <BudgetDisplay cost={cost} maxBudget={maxBudget} />
-      <div className="flex justify-between items-center border-t border-border-subtle pt-2">
+      <div className="flex justify-between items-center border-t border-divider pt-2">
         <span className="font-semibold">
           {t(I18nKey.CONVERSATION$TOTAL_COST)}
         </span>

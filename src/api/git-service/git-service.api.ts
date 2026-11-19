@@ -6,6 +6,7 @@ import { getActiveBackend } from "../backend-registry/active-store";
 import {
   getCloudInstallations,
   getCloudRepositoryBranches,
+  getCloudRepositoryDetails,
   searchCloudRepositories,
 } from "../cloud/git-service.api";
 
@@ -60,6 +61,7 @@ class GitService {
     limit = 100,
     pageId?: string,
     installationId?: string,
+    gitProviderId?: number | null,
   ): Promise<RepositoryPage> {
     if (isInvalidProvider(provider)) {
       return EMPTY_REPOSITORY_PAGE;
@@ -78,6 +80,7 @@ class GitService {
       limit,
       pageId,
       installationId,
+      gitProviderId,
     });
   }
 
@@ -86,6 +89,7 @@ class GitService {
     pageId?: string,
     limit = 30,
     installationId?: string,
+    gitProviderId?: number | null,
   ): Promise<RepositoryPage> {
     if (isInvalidProvider(provider)) {
       return EMPTY_REPOSITORY_PAGE;
@@ -102,6 +106,7 @@ class GitService {
       limit,
       pageId,
       installationId,
+      gitProviderId,
     });
   }
 
@@ -111,6 +116,7 @@ class GitService {
     installations: string[],
     pageId?: string,
     limit = 30,
+    gitProviderId?: number | null,
   ): Promise<RepositoryPage> {
     if (isInvalidProvider(provider) || !isCloudActive()) {
       return EMPTY_REPOSITORY_PAGE;
@@ -122,7 +128,28 @@ class GitService {
       installationId,
       limit,
       pageId,
+      gitProviderId,
     });
+  }
+
+  /**
+   * The repository's default branch, for repositories whose list entry has
+   * no `main_branch`. Null when it is unknown.
+   */
+  static async getRepositoryDefaultBranch(
+    repository: string,
+    provider: string,
+    gitProviderId?: number | null,
+  ): Promise<string | null> {
+    if (isInvalidProvider(provider) || !isCloudActive()) {
+      return null;
+    }
+    const details = await getCloudRepositoryDetails({
+      provider: safeProvider(provider),
+      repository,
+      gitProviderId,
+    });
+    return details?.main_branch ?? null;
   }
 
   static async getRepositoryBranches(
@@ -131,6 +158,7 @@ class GitService {
     query: string = "",
     pageId?: string,
     limit = 30,
+    gitProviderId?: number | null,
   ): Promise<BranchPage> {
     if (isInvalidProvider(provider) || !isCloudActive()) {
       return EMPTY_BRANCH_PAGE;
@@ -141,6 +169,7 @@ class GitService {
       query: query || undefined,
       pageId,
       limit,
+      gitProviderId,
     });
   }
 
@@ -150,6 +179,7 @@ class GitService {
     query: string,
     pageId?: string,
     limit = 30,
+    gitProviderId?: number | null,
   ): Promise<BranchPage> {
     if (isInvalidProvider(provider) || !isCloudActive()) {
       return EMPTY_BRANCH_PAGE;
@@ -160,6 +190,7 @@ class GitService {
       query,
       pageId,
       limit,
+      gitProviderId,
     });
   }
 
@@ -167,6 +198,7 @@ class GitService {
     provider: string,
     pageId?: string,
     limit = 100,
+    gitProviderId?: number | null,
   ): Promise<InstallationPage> {
     if (isInvalidProvider(provider) || !isCloudActive()) {
       return EMPTY_INSTALLATION_PAGE;
@@ -175,6 +207,7 @@ class GitService {
       provider: safeProvider(provider),
       pageId,
       limit,
+      gitProviderId,
     });
   }
 }

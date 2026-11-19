@@ -1,4 +1,4 @@
-import { Tooltip } from "@heroui/react";
+import { Tooltip } from "#/components/shared/tooltip";
 import { ExternalLink } from "lucide-react";
 import { useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -156,12 +156,8 @@ export function PinnedAutomationCard({
         extensionModuleCardSurfaceClassName,
         extensionModuleCardInteractiveClassName,
         isDragging && "opacity-50",
-        isDropTarget &&
-          dropPosition === "before" &&
-          "shadow-[inset_0_2px_0_0_var(--oh-focus)]",
-        isDropTarget &&
-          dropPosition === "after" &&
-          "shadow-[inset_0_-2px_0_0_var(--oh-focus)]",
+        isDropTarget && dropPosition === "before" && "shadow-reorder-before",
+        isDropTarget && dropPosition === "after" && "shadow-reorder-after",
       )}
     >
       {/*

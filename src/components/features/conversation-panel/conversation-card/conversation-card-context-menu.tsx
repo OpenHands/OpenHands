@@ -67,7 +67,7 @@ export function ConversationCardContextMenu({
   );
   const stopLabelKey =
     backend.kind === "cloud"
-      ? I18nKey.COMMON$CLOSE_CONVERSATION_STOP_RUNTIME
+      ? I18nKey.COMMON$STOP_SANDBOX
       : I18nKey.COMMON$STOP_CONVERSATION;
 
   const generateSection = useCallback(

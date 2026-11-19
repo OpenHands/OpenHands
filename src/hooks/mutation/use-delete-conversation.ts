@@ -1,25 +1,35 @@
-import { getActiveBackend } from "#/api/backend-registry/active-store";
 import {
   sessionActivityKey,
   useSessionActivityStore,
 } from "#/stores/session-activity-store";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import type { ConversationDeletionScope } from "#/api/conversation-service/agent-server-conversation-service.api";
 import { clearConversationLocalStorage } from "#/utils/conversation-local-storage";
 
 export const useDeleteConversation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (variables: { conversationId: string }) => {
-      const { backend, orgId } = getActiveBackend();
+    mutationFn: async (variables: {
+      conversationId: string;
+      deletionScope?: ConversationDeletionScope;
+    }) => {
+      const scope =
+        variables.deletionScope ??
+        AgentServerConversationService.createConversationDeletionScope();
       const result = await AgentServerConversationService.deleteConversation(
         variables.conversationId,
+        scope,
       );
       useSessionActivityStore
         .getState()
         .remove(
-          sessionActivityKey(backend.id, orgId, variables.conversationId),
+          sessionActivityKey(
+            scope.backend.id,
+            scope.orgId,
+            variables.conversationId,
+          ),
         );
       return result;
     },

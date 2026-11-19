@@ -441,6 +441,20 @@ describe("named radius composition", () => {
   );
 });
 
+describe("named inset-shadow composition", () => {
+  it.each(["badge-inset", "reorder-before", "reorder-after"])(
+    "keeps shadow geometry and caller color precedence independent for %s",
+    (name) => {
+      expect(cn("shadow-lg shadow-focus", `shadow-${name}`)).toBe(
+        `shadow-focus shadow-${name}`,
+      );
+      expect(cn(`shadow-${name}`, "shadow-none shadow-contrast")).toBe(
+        "shadow-none shadow-contrast",
+      );
+    },
+  );
+});
+
 describe("cn motion recipes", () => {
   it.each([
     "transition-control-shell",
@@ -477,6 +491,25 @@ describe("cn motion recipes", () => {
   });
 });
 
+describe("named letter-spacing composition", () => {
+  it.each([
+    "metadata",
+    "label",
+    "title",
+    "heading",
+    "auth-code",
+    "device-code",
+  ])(
+    "preserves caller tracking precedence independently of font metrics for %s",
+    (name) => {
+      expect(
+        cn("text-sm leading-6 font-medium tracking-wide", `tracking-${name}`),
+      ).toBe(`text-sm leading-6 font-medium tracking-${name}`);
+      expect(cn(`tracking-${name}`, "tracking-normal")).toBe("tracking-normal");
+    },
+  );
+});
+
 describe("extended type-scale composition", () => {
   it.each(["4xs", "xs-plus", "sm-plus", "title"])(
     "lets callers override the %s size while preserving color and later leading",
@@ -502,5 +535,21 @@ describe("Markdown code spacing composition", () => {
     expect(cn("px-code-inline-x py-code-inline-y", "p-4")).toBe("p-4");
     expect(cn("p-4", "p-code-block")).toBe("p-code-block");
     expect(cn("p-code-block", "px-4")).toBe("p-code-block px-4");
+  });
+});
+
+describe("Canvas public color role composition", () => {
+  it("keeps color roles independent from typography and respects later caller colors", () => {
+    expect(cn("text-sm leading-4", "text-on-accent")).toBe(
+      "text-sm leading-4 text-on-accent",
+    );
+    expect(cn("text-sm text-on-accent", "text-feedback-error")).toBe(
+      "text-sm text-feedback-error",
+    );
+    expect(cn("text-feedback-error", "text-on-accent")).toBe("text-on-accent");
+    expect(cn("bg-surface", "bg-canvas-background")).toBe(
+      "bg-canvas-background",
+    );
+    expect(cn("bg-canvas-background", "bg-surface")).toBe("bg-surface");
   });
 });

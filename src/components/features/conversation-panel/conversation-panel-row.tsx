@@ -1,5 +1,5 @@
 import React from "react";
-import { Tooltip } from "@heroui/react";
+import { Tooltip } from "#/components/shared/tooltip";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { Provider } from "#/types/settings";
 import { NavigationLink } from "#/components/shared/navigation-link";

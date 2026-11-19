@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import ReactDOM from "react-dom";
 import { Grid2x2, Rows3 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
@@ -8,6 +7,7 @@ import { ContextMenu } from "#/ui/context-menu";
 import { cn } from "#/utils/utils";
 import type { AutomationViewMode } from "./automation-view-mode";
 import { ViewMenuItemContent } from "./view-menu-item-content";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 interface AutomationViewToggleProps {
   view: AutomationViewMode;
@@ -150,12 +150,11 @@ export function AutomationViewToggle({
         <ActiveIcon className="size-4" aria-hidden />
       </button>
 
-      {open && portalStyle && typeof document !== "undefined"
-        ? ReactDOM.createPortal(
-            <div style={portalStyle}>{menu}</div>,
-            document.body,
-          )
-        : null}
+      {open && portalStyle && typeof document !== "undefined" ? (
+        <AppearancePortal>
+          <div style={portalStyle}>{menu}</div>
+        </AppearancePortal>
+      ) : null}
     </>
   );
 }

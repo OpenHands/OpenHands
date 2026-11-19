@@ -376,6 +376,7 @@ export function ConversationCard({
                       onDownloadViaVSCode={handleDownloadViaVSCode}
                       onDownloadConversation={handleDownloadConversation}
                       executionStatus={executionStatus}
+                      sandboxStatus={sandboxStatus}
                       conversationId={conversationId}
                       showOptions={showOptions}
                     />
@@ -410,6 +411,7 @@ export function ConversationCard({
                   onDownloadViaVSCode={handleDownloadViaVSCode}
                   onDownloadConversation={handleDownloadConversation}
                   executionStatus={executionStatus}
+                  sandboxStatus={sandboxStatus}
                   conversationId={conversationId}
                   showOptions={showOptions}
                 />

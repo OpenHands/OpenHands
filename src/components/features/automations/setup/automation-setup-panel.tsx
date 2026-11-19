@@ -1,4 +1,13 @@
-import type { AutomationUpdate } from "#/types/automation";
+import { useAgentProfileAvailability } from "#/hooks/use-agent-profile-availability";
+import type {
+  AutomationUpdate,
+  Automation,
+  AutomationRun,
+} from "#/types/automation";
+import {
+  statusToneBadgeClassName,
+  statusToneBannerClassName,
+} from "#/utils/status-tone-classes";
 import {
   useCallback,
   useEffect,
@@ -8,7 +17,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -39,6 +48,7 @@ import {
   initializeAutomationFormSession,
   isPendingAutomationSetupId,
   patchAutomationFormSession,
+  setAutomationFormSessionSavedDraftRequestKey,
   setAutomationFormSessionRepositories,
   subscribeAutomationFormSession,
 } from "#/api/automation-form-session";
@@ -109,7 +119,6 @@ import type {
   DeploymentCapabilities,
   SetupRequestBody,
 } from "#/manifests/types";
-import type { Automation, AutomationRun } from "#/types/automation";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { ActivityLogItem } from "../detail/activity-log-item";
 import { requestAutomationSetupAgent } from "./automation-setup-agent-request";
@@ -149,6 +158,7 @@ const DEFAULT_EVENT_SOURCE = "github";
 const REPO_UPDATE_FEATURE = "repoUpdate";
 const PLUGIN_CONFIG_UPDATE_FEATURE = "pluginConfigUpdate";
 const AGENT_PROFILES_FEATURE = "agentProfiles";
+const PRESET_AGENT_PROFILES_FEATURE = "presetAgentProfiles";
 /**
  * Used when the deployment has not advertised its event sources yet. These are
  * the automation service's built-in providers, which it reserves as source
@@ -541,7 +551,10 @@ function DraftStatusBar({
     "max-w-full min-w-0 whitespace-normal rounded-full px-2.5 py-0.5 text-left text-xs leading-4",
     validationMessage
       ? "w-fit bg-feedback-error/5 text-feedback-error"
-      : "bg-semantic-success/10 text-semantic-success",
+      : cn(
+          statusToneBadgeClassName.success,
+          "dark:bg-semantic-success/10 dark:text-semantic-success",
+        ),
   );
 
   return (
@@ -809,6 +822,14 @@ export function AutomationSetupPanel({
   const [fieldMetadata, setFieldMetadata] = useState(
     () => initialDraft.fieldMetadata ?? {},
   );
+  // A conversation reopened in this page keeps its form session, which can
+  // hold edits made after its draft was last saved.
+  const restoredSessionRef = useRef(
+    conversationId && !isPendingAutomationSetupId(conversationId)
+      ? getAutomationFormSession(conversationId)
+      : null,
+  );
+  const keptRestoredFormRef = useRef(false);
   const [statusMessage, setStatusMessage] = useState<StatusMessage>(null);
   const toastedStatusRef = useRef<StatusMessage>(null);
   useEffect(() => {
@@ -1051,6 +1072,15 @@ export function AutomationSetupPanel({
     AutomationService.getServerDraft(taggedServerDraftId)
       .then((saved) => {
         if (cancelled) return;
+        const restoredSession = restoredSessionRef.current;
+        restoredSessionRef.current = null;
+        if (restoredSession?.serverDraftId === saved.id) {
+          keptRestoredFormRef.current = true;
+          setServerDraft(saved);
+          setDraftRuns([]);
+          setSavedDraftRequestKey(restoredSession.savedDraftRequestKey ?? null);
+          return;
+        }
         const nextForm = formFromServerDraft(saved, buildInitialForm(draft));
         setServerDraft(saved);
         setDraftRuns([]);
@@ -1116,12 +1146,15 @@ export function AutomationSetupPanel({
   const hasExistingCustomBundle = Boolean(
     isEditingExisting && kind === "custom" && existingCustomTarballPath.trim(),
   );
-  // Only uploaded-script automations run from an agent profile; the prompt
-  // and plugin presets reject the field (OpenHands/automation#615 tracks it).
+  // Services that run scripts from an agent profile may still refuse one on
+  // a prompt or plugin preset; those advertise a feature of their own.
+  const agentProfilesAvailable = useAgentProfileAvailability();
   const canSelectAgentProfile =
-    kind === "custom" &&
+    agentProfilesAvailable &&
     (deploymentCapabilities.data?.features ?? []).includes(
-      AGENT_PROFILES_FEATURE,
+      kind === "custom"
+        ? AGENT_PROFILES_FEATURE
+        : PRESET_AGENT_PROFILES_FEATURE,
     );
   const selectedAgentProfileId =
     (canSelectAgentProfile && agentProfileId.trim()) || null;
@@ -1238,12 +1271,31 @@ export function AutomationSetupPanel({
 
   useEffect(() => {
     if (!conversationId) return undefined;
-    initializeAutomationFormSession(conversationId, {
-      ...draft,
-      form,
-      fieldMetadata,
-    });
-    return () => clearAutomationFormSession(conversationId);
+    const restoredSession = restoredSessionRef.current;
+    const currentSession = getAutomationFormSession(conversationId);
+    if (
+      restoredSession &&
+      currentSession &&
+      currentSession !== restoredSession
+    ) {
+      // An agent update landed after the first render, before the panel
+      // subscribed; take it rather than overwrite it.
+      setForm(buildInitialForm(currentSession));
+      setFieldMetadata(currentSession.fieldMetadata ?? {});
+    } else {
+      initializeAutomationFormSession(conversationId, {
+        ...draft,
+        form,
+        fieldMetadata,
+      });
+    }
+    // Keep a conversation's form for when the user comes back to it; only the
+    // page for a new automation starts clean each time.
+    return () => {
+      if (isPendingAutomationSetupId(conversationId)) {
+        clearAutomationFormSession(conversationId);
+      }
+    };
   }, [conversationId]);
 
   useEffect(() => {
@@ -1411,13 +1463,15 @@ export function AutomationSetupPanel({
   // Only a new automation picks who it runs as; an existing one uses Change Runs As.
   const showRunAsPicker = serviceAccountRunAsEnabled && !isEditingExisting;
   const newAutomationRunAsId = showRunAsPicker ? runAsUserId : "";
-  const buildPresetBody = (): SetupRequestBody => {
+  // Only the final create runs enabled: drafts and preflight validation must
+  // stay inert, so the flag travels with the caller's intent.
+  const buildPresetBody = (enabled: boolean): SetupRequestBody => {
     const trimmedPrompt = prompt.trim();
     const body: SetupRequestBody = {
       name: normalizedName(),
       ...(trimmedPrompt ? { prompt: trimmedPrompt } : {}),
       trigger: buildTrigger(),
-      enabled: false,
+      enabled,
     } as SetupRequestBody;
     const repositories = parseAutomationSetupRepositories(repository);
     if (repositories.length > 0) {
@@ -1433,14 +1487,20 @@ export function AutomationSetupPanel({
     if (configuredPlugins.length > 0) {
       body.plugins = configuredPlugins;
     }
-    if (model.trim()) body.model = model.trim();
+    // An agent profile brings its own LLM profile; the service refuses both.
+    if (selectedAgentProfileId) body.agent_profile_id = selectedAgentProfileId;
+    else if (model.trim()) body.model = model.trim();
     if (newAutomationRunAsId) body.run_as_user_id = newAutomationRunAsId;
     return body;
   };
-  const buildCustomBody = (tarballPath: string): SetupRequestBody =>
+  const buildCustomBody = (
+    tarballPath: string,
+    enabled: boolean,
+  ): SetupRequestBody =>
     ({
       name: normalizedName(),
       trigger: buildTrigger(),
+      enabled,
       tarball_path: tarballPath,
       entrypoint: entrypoint.trim(),
       setup_script_path: setupScriptPath.trim(),
@@ -1464,7 +1524,9 @@ export function AutomationSetupPanel({
   const draftRequestBody = (
     tarballPath: string = PREFLIGHT_TARBALL_PATH,
   ): SetupRequestBody =>
-    kind === "custom" ? buildCustomBody(tarballPath) : buildPresetBody();
+    kind === "custom"
+      ? buildCustomBody(tarballPath, false)
+      : buildPresetBody(false);
   const draftValidationByField = useMemo(() => {
     const byField = new Map<string, string>();
     for (const error of serverDraft?.validationErrors ?? []) {
@@ -1551,8 +1613,24 @@ export function AutomationSetupPanel({
     }
     if (!wasHydratingServerDraftRef.current || !serverDraft) return;
     wasHydratingServerDraftRef.current = false;
+    // A restored form is compared with the server draft instead.
+    if (keptRestoredFormRef.current) {
+      keptRestoredFormRef.current = false;
+      return;
+    }
     setSavedDraftRequestKey(currentDraftRequestKey);
-  }, [currentDraftRequestKey, isHydratingServerDraft, serverDraft]);
+    if (conversationId) {
+      setAutomationFormSessionSavedDraftRequestKey(
+        conversationId,
+        currentDraftRequestKey,
+      );
+    }
+  }, [
+    conversationId,
+    currentDraftRequestKey,
+    isHydratingServerDraft,
+    serverDraft,
+  ]);
 
   const ensureCustomWebhookSource = async (): Promise<boolean> => {
     if (triggerKind !== "event" || !customWebhook.enabled) return true;
@@ -1627,9 +1705,18 @@ export function AutomationSetupPanel({
       : await AutomationService.createServerDraft(request);
     setServerDraft(saved);
     saveDraftInFormSession(saved, form);
-    setSavedDraftRequestKey(
-      draftRequestKey(request.endpoint, request.name ?? "", request.draft),
+    const savedRequestKey = draftRequestKey(
+      request.endpoint,
+      request.name ?? "",
+      request.draft,
     );
+    setSavedDraftRequestKey(savedRequestKey);
+    if (conversationId) {
+      setAutomationFormSessionSavedDraftRequestKey(
+        conversationId,
+        savedRequestKey,
+      );
+    }
     setIsTaggedDraftMissing(false);
     if (isPendingAutomationSetupId(conversationId) && !serverDraftId) {
       navigate(`/automations/setup?draftId=${encodeURIComponent(saved.id)}`, {
@@ -1644,8 +1731,8 @@ export function AutomationSetupPanel({
       endpoint: draftValidationEndpoint(kind, pluginEndpointSource),
       draft:
         kind === "custom"
-          ? buildCustomBody(PREFLIGHT_TARBALL_PATH)
-          : buildPresetBody(),
+          ? buildCustomBody(PREFLIGHT_TARBALL_PATH, false)
+          : buildPresetBody(false),
     });
     setStatusMessage({
       kind: result.valid ? "success" : "error",
@@ -1841,12 +1928,12 @@ export function AutomationSetupPanel({
       if (kind === "custom") {
         const tarballPath = await uploadCustomArchive();
         created = await AutomationService.createAutomationDraft(
-          buildCustomBody(tarballPath),
+          buildCustomBody(tarballPath, true),
           kind,
         );
       } else {
         created = await AutomationService.createAutomationDraft(
-          buildPresetBody(),
+          buildPresetBody(true),
           presetKindForEndpoint(kind, pluginEndpointSource),
         );
       }
@@ -1932,14 +2019,15 @@ export function AutomationSetupPanel({
       body.config = parsePluginConfig(form.pluginConfig);
       return body as AutomationUpdate;
     }
-    if (kind === "custom") {
+    if (kind === "custom" || canSelectAgentProfile) {
       // Without the capability the picker is hidden; keep the stored profile.
       body.agent_profile_id = canSelectAgentProfile
         ? selectedAgentProfileId
         : agentProfileId.trim() || null;
       // Clear a saved model when a profile replaces it.
       if (selectedAgentProfileId) body.model = null;
-    } else body.prompt = prompt.trim();
+    }
+    if (kind !== "custom") body.prompt = prompt.trim();
     const repositories = parseAutomationSetupRepositories(repository);
     if (
       repositoriesEditable &&
@@ -2131,9 +2219,11 @@ export function AutomationSetupPanel({
 
   return (
     <>
-      {toolbarPortal
-        ? createPortal(renderToolbarActions(), toolbarPortal)
-        : null}
+      {toolbarPortal ? (
+        <AppearancePortal container={toolbarPortal}>
+          {renderToolbarActions()}
+        </AppearancePortal>
+      ) : null}
       <div
         data-testid="automation-setup-panel"
         className="flex h-full min-h-0 flex-col bg-canvas-base"
@@ -2205,7 +2295,11 @@ export function AutomationSetupPanel({
               {isTaggedDraftMissing ? (
                 <p
                   data-testid="automation-setup-draft-missing"
-                  className="rounded-2xl border border-warning/40 bg-warning/10 px-5 py-4 text-sm text-warning"
+                  className={cn(
+                    "rounded-2xl px-5 py-4 text-sm",
+                    statusToneBannerClassName.warning,
+                    "dark:border-warning/40 dark:bg-warning/10 dark:text-warning",
+                  )}
                 >
                   {t(I18nKey.AUTOMATION_SETUP$DRAFT_MISSING)}
                 </p>
@@ -2476,6 +2570,13 @@ export function AutomationSetupPanel({
                               model={model}
                               onModelChange={(value) =>
                                 updateField("model", value)
+                              }
+                              agentProfileId={agentProfileId}
+                              onAgentProfileChange={
+                                canSelectAgentProfile
+                                  ? (value) =>
+                                      updateField("agentProfileId", value)
+                                  : undefined
                               }
                             />
                           ) : hasExistingCustomBundle ? (
@@ -3542,6 +3643,77 @@ function EventSourceControl({
   );
 }
 
+function EventKeyControl({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+}) {
+  const { t } = useTranslation("openhands");
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useClickOutsideElement<HTMLDivElement>(
+    () => setIsMenuOpen(false),
+    triggerRef,
+  );
+  useCloseOnEscape(isMenuOpen, () => setIsMenuOpen(false), triggerRef);
+
+  return (
+    <div className="relative flex min-w-0 flex-1">
+      <input
+        id="automation-setup-event-key"
+        data-testid="automation-setup-event-key"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={cn(
+          "min-w-0 w-full border-0 bg-transparent px-3 text-sm text-contrast outline-none",
+          options.length > 0 && "pr-9",
+        )}
+      />
+      {options.length > 0 && (
+        <button
+          ref={triggerRef}
+          type="button"
+          data-testid="automation-setup-event-key-toggle"
+          aria-label={t(I18nKey.AUTOMATION_SETUP$EVENT_KEY)}
+          aria-haspopup="menu"
+          aria-expanded={isMenuOpen}
+          className="absolute top-1/2 right-2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted hover:bg-interactive-hover hover:text-contrast"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => setIsMenuOpen((open) => !open)}
+        >
+          <ChevronDown className="size-4 shrink-0" aria-hidden />
+        </button>
+      )}
+      {isMenuOpen && options.length > 0 && (
+        <div
+          ref={menuRef}
+          role="menu"
+          data-testid="automation-setup-event-key-menu"
+          className="absolute top-full left-0 z-60 mt-1 flex max-h-72 w-full flex-col overflow-y-auto rounded-md border border-border-subtle bg-tertiary p-1 shadow-lg"
+        >
+          {options.map((option) => (
+            <ContextMenuListItem
+              key={option}
+              onClick={() => {
+                onChange(option);
+                setIsMenuOpen(false);
+                triggerRef.current?.focus();
+              }}
+              className="flex w-full min-w-0 items-center"
+            >
+              <span className="truncate">{option}</span>
+            </ContextMenuListItem>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EventFields({
   eventSource,
   eventKey,
@@ -3655,7 +3827,7 @@ function EventFields({
             </label>
             <div
               className={cn(
-                "flex w-full min-w-0 overflow-hidden",
+                "flex w-full min-w-0",
                 formControlHeightClassName,
                 formControlRadiusClassName,
                 formControlBorderClassName,
@@ -3665,19 +3837,11 @@ function EventFields({
                 streamingHighlightClassName(streamingField === "eventFilter"),
               )}
             >
-              <input
-                id="automation-setup-event-key"
-                data-testid="automation-setup-event-key"
+              <EventKeyControl
                 value={eventKey}
-                list="automation-setup-event-key-options"
-                onChange={(event) => setEventKey(event.target.value)}
-                className="min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-contrast outline-none"
+                options={eventTypeOptions}
+                onChange={setEventKey}
               />
-              <datalist id="automation-setup-event-key-options">
-                {eventTypeOptions.map((eventType) => (
-                  <option key={eventType} value={eventType} />
-                ))}
-              </datalist>
               {showEventFilter ? null : (
                 <button
                   type="button"

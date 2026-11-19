@@ -24,7 +24,7 @@ import {
   AutomationSetupPanel,
 } from "#/components/features/automations/setup/automation-setup-panel";
 import AutomationService from "#/api/automation-service/automation-service.api";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import {
   PENDING_AUTOMATION_SETUP_ID,
   clearAutomationFormSession,
@@ -54,6 +54,11 @@ import { http, HttpResponse } from "msw";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
 import type { Automation } from "#/types/automation";
 import type { Provider } from "#/types/settings";
+
+const mockInstanceConfig = vi.hoisted(() => vi.fn());
+vi.mock("#/hooks/query/use-cloud-integrations-config", () => ({
+  useCloudIntegrationsConfig: () => mockInstanceConfig(),
+}));
 
 const mockNavigate = vi.fn();
 const mockToastSuccess = vi.fn();
@@ -216,6 +221,14 @@ vi.mock("#/hooks/query/use-agent-profiles", () => ({
           llm_profile_ref: "fast",
           mcp_server_refs: null,
         },
+        {
+          id: "agent-claude",
+          name: "claude",
+          agent_kind: "acp",
+          revision: 1,
+          llm_profile_ref: null,
+          mcp_server_refs: null,
+        },
       ],
       active_agent_profile_id: "agent-default",
     },
@@ -360,6 +373,7 @@ function renderSessionBoundPanel(conversationId: string) {
 
 describe("AutomationSetupPanel", () => {
   beforeEach(() => {
+    mockInstanceConfig.mockReturnValue({ data: undefined });
     serviceAccountMocks.enabled = false;
     window.sessionStorage.clear();
     vi.clearAllMocks();
@@ -431,15 +445,14 @@ describe("AutomationSetupPanel", () => {
       expect(trayStyle.paddingTop).toBe("23px");
     };
     const scheduleWidth = (element: HTMLElement) => {
-      // jsdom keeps var() in computed widths. Resolve it from the actual row
-      // to verify both the field's winning width and the variable's owner.
-      const rowStyle = getComputedStyle(
-        screen.getByTestId("automation-setup-at-row"),
+      // jsdom 31 resolves var()-based widths to pixels instead of retaining
+      // `var(...)`; convert back to the declared rem value via the root font
+      // size so the assertion still checks the schedule row's variable owner.
+      const rootFontSize = parseFloat(
+        getComputedStyle(document.documentElement).fontSize,
       );
-      return getComputedStyle(element).width.replace(
-        /var\((--[\w-]+)\)/g,
-        (_, property: string) => rowStyle.getPropertyValue(property).trim(),
-      );
+      const widthPx = parseFloat(getComputedStyle(element).width);
+      return `${widthPx / rootFontSize}rem`;
     };
 
     try {
@@ -842,6 +855,72 @@ describe("AutomationSetupPanel", () => {
       screen.queryByTestId("automation-setup-repository-menu"),
     ).not.toBeInTheDocument();
     expect(repositoryTrigger).toHaveFocus();
+  });
+
+  it("opens the full event catalog for a nonmatching key and keeps custom entry editable", async () => {
+    vi.mocked(useDeploymentCapabilities).mockReturnValue({
+      data: {
+        ready: true,
+        features: [],
+        triggerKinds: ["cron", "event"],
+        eventSources: ["github"],
+        eventTypes: ["issues.*", "push"],
+        triggers: {},
+      },
+      isLoading: false,
+    } as never);
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+    const input = screen.getByTestId("automation-setup-event-key");
+    await user.clear(input);
+    await user.type(input, "issues.opened");
+    const toggle = screen.getByTestId("automation-setup-event-key-toggle");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const menu = screen.getByTestId("automation-setup-event-key-menu");
+    expect(
+      within(menu).getByRole("button", { name: "issues.*" }),
+    ).toBeVisible();
+    expect(within(menu).getByRole("button", { name: "push" })).toBeVisible();
+    expect(input).toHaveValue("issues.opened");
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByTestId("automation-setup-event-key-menu"),
+    ).not.toBeInTheDocument();
+    expect(toggle).toHaveFocus();
+    await user.click(toggle);
+    await user.click(
+      within(screen.getByTestId("automation-setup-event-key-menu")).getByRole(
+        "button",
+        { name: "push" },
+      ),
+    );
+    expect(input).toHaveValue("push");
+    expect(
+      screen.queryByTestId("automation-setup-event-key-menu"),
+    ).not.toBeInTheDocument();
+    await user.clear(input);
+    await user.type(input, "custom.event, issues.opened");
+    expect(input).toHaveValue("custom.event, issues.opened");
+    await user.click(toggle);
+    await user.click(screen.getByTestId("automation-setup-settings-group"));
+    expect(
+      screen.queryByTestId("automation-setup-event-key-menu"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the event key editable without a dropdown when no catalog is reported", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+    expect(
+      screen.queryByTestId("automation-setup-event-key-toggle"),
+    ).not.toBeInTheDocument();
+    const input = screen.getByTestId("automation-setup-event-key");
+    await user.clear(input);
+    await user.type(input, "custom.*");
+    expect(input).toHaveValue("custom.*");
   });
 
   it("closes the event source menu on Escape and returns focus to its toggle", async () => {
@@ -1573,6 +1652,125 @@ describe("AutomationSetupPanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps agent-filled fields after leaving the conversation and returning", async () => {
+    const conversationId = "conv-return-after-agent-fill";
+    const draft: AutomationSetupDraft = { prompt: "", kind: "prompt" };
+    initializeAutomationFormSession(conversationId, draft);
+    const first = renderPanel(draft, conversationId);
+
+    await act(async () => {
+      handleAutomationFormUpdateAction(
+        {
+          kind: AUTOMATION_FORM_UPDATE_ACTION_KIND,
+          fields: {
+            name: "Nightly Triage",
+            prompt: "Triage new issues every night",
+            frequency: "weekly",
+          },
+        },
+        conversationId,
+        "agent-event-return-1",
+        "2026-01-01T00:00:00.000Z",
+      );
+    });
+    await waitFor(
+      () =>
+        expect(
+          screen.getByTestId("automation-setup-frequency-weekly"),
+        ).toHaveAttribute("aria-checked", "true"),
+      { timeout: 3000 },
+    );
+    await userEvent
+      .setup()
+      .type(screen.getByTestId("automation-setup-name"), " v2");
+
+    // Opening another conversation unmounts the panel; returning builds it
+    // from the conversation's form session, as ConversationMain does.
+    first.unmount();
+    renderPanel(
+      getAutomationFormSession(conversationId) ?? draft,
+      conversationId,
+    );
+
+    expect(screen.getByTestId("automation-setup-prompt")).toHaveValue(
+      "Triage new issues every night",
+    );
+    expect(screen.getByTestId("automation-setup-name")).toHaveValue(
+      "Nightly Triage v2",
+    );
+    expect(
+      screen.getByTestId("automation-setup-frequency-weekly"),
+    ).toHaveAttribute("aria-checked", "true");
+    clearAutomationFormSession(conversationId);
+  });
+
+  it("keeps an agent update that lands while a returning panel mounts", () => {
+    const conversationId = "conv-update-during-mount";
+    initializeAutomationFormSession(conversationId, {
+      prompt: "Old prompt",
+      kind: "prompt",
+    });
+    const draft = getAutomationFormSession(conversationId)!;
+    // Layout effects run before the panel's own effects, as a socket message
+    // handled during the same commit would.
+    function AgentUpdateDuringMount() {
+      useLayoutEffect(() => {
+        handleAutomationFormUpdateAction(
+          {
+            kind: AUTOMATION_FORM_UPDATE_ACTION_KIND,
+            fields: { name: "Added while mounting" },
+          },
+          conversationId,
+          "agent-event-during-mount",
+          new Date().toISOString(),
+        );
+      }, []);
+      return null;
+    }
+    const queryClient = new QueryClient();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NavigationProvider
+          value={{
+            currentPath: `/conversations/${conversationId}`,
+            conversationId,
+            isNavigating: false,
+            navigate: mockNavigate,
+          }}
+        >
+          <AutomationSetupPanel
+            draft={draft}
+            conversationId={conversationId}
+            conversationTags={null}
+          />
+          <AgentUpdateDuringMount />
+        </NavigationProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(getAutomationFormSession(conversationId)?.form?.name).toBe(
+      "Added while mounting",
+    );
+    expect(screen.getByTestId("automation-setup-name")).toHaveValue(
+      "Added while mounting",
+    );
+  });
+
+  it("starts a new automation clean after leaving its setup page", () => {
+    initializeAutomationFormSession(PENDING_AUTOMATION_SETUP_ID, {
+      prompt: "Unsent idea",
+      kind: "prompt",
+    });
+    const first = renderPanel(
+      { prompt: "Unsent idea", kind: "prompt" },
+      PENDING_AUTOMATION_SETUP_ID,
+    );
+
+    first.unmount();
+
+    expect(getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID)).toBeNull();
+  });
+
   it("shows a weekday dropdown for a weekly schedule", async () => {
     vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
       response: { status: 404 },
@@ -1656,7 +1854,9 @@ describe("AutomationSetupPanel", () => {
     await waitFor(() =>
       expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
         expect.objectContaining({
-          enabled: false,
+          // A completed setup creates the automation enabled (#19718); the
+          // user should not need a second manual step to start it.
+          enabled: true,
           prompt: "Summarize Slack blockers",
           plugins: [{ source: "github:org/blockers-plugin" }],
         }),
@@ -1741,7 +1941,8 @@ describe("AutomationSetupPanel", () => {
       screen.queryByTestId("automation-setup-event-filter"),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByTestId("automation-setup-event-key").parentElement,
+      screen.getByTestId("automation-setup-event-key").parentElement
+        ?.parentElement,
     ).toContainElement(screen.getByTestId("automation-setup-add-event-filter"));
     expect(
       screen.getByTestId("automation-setup-add-event-filter"),
@@ -2011,6 +2212,18 @@ describe("AutomationSetupPanel", () => {
       });
     });
 
+    it("hides profile selection when the backend disables it despite automation support", () => {
+      withCapabilities(["agentProfiles", "presetAgentProfiles"]);
+      mockInstanceConfig.mockReturnValue({
+        data: { deploymentMode: "self_hosted", isAgentProfilesEnabled: false },
+      });
+      renderPanel({ prompt: "Run a custom security check", kind: "custom" });
+      expect(
+        screen.queryByTestId("automation-setup-agent-profile"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("automation-setup-model")).toBeInTheDocument();
+    });
+
     it("locks the LLM profile to the agent profile's and sends only the agent profile", async () => {
       withCapabilities(["agentProfiles"]);
       const user = userEvent.setup();
@@ -2104,6 +2317,100 @@ describe("AutomationSetupPanel", () => {
           }),
         ),
       );
+    });
+
+    it("runs a prompt preset from the chosen agent profile", async () => {
+      withCapabilities(["agentProfiles", "presetAgentProfiles"]);
+      const user = userEvent.setup();
+      renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      await user.click(
+        screen.getByTestId(
+          "automation-setup-agent-profile-option-agent-reviewer",
+        ),
+      );
+      const modelPill = screen.getByTestId("automation-setup-model");
+      expect(modelPill).toHaveTextContent("fast");
+      expect(modelPill).toHaveAttribute("aria-disabled", "true");
+
+      await user.click(screen.getByTestId("automation-setup-create"));
+      await waitFor(() =>
+        expect(AutomationService.createAutomationDraft).toHaveBeenCalled(),
+      );
+      const [body] = vi.mocked(AutomationService.createAutomationDraft).mock
+        .calls[0];
+      expect(body).toMatchObject({
+        prompt: "Review every pull request",
+        agent_profile_id: "agent-reviewer",
+      });
+      expect(body).not.toHaveProperty("model");
+    });
+
+    it("shows that an ACP agent profile runs its own model, not an LLM profile", async () => {
+      withCapabilities(["presetAgentProfiles"]);
+      const user = userEvent.setup();
+      renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      const option = screen.getByTestId(
+        "automation-setup-agent-profile-option-agent-claude",
+      );
+      expect(option).toHaveTextContent("CONVERSATION$ACP_AGENT_GENERIC");
+      await user.click(option);
+
+      const modelPill = screen.getByTestId("automation-setup-model");
+      expect(modelPill).toHaveAccessibleName("CONVERSATION$ACP_AGENT_GENERIC");
+      expect(modelPill).toHaveAttribute("aria-disabled", "true");
+    });
+
+    it("moves an edited preset onto an agent profile", async () => {
+      withCapabilities(["presetAgentProfiles"]);
+      vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+        id: "auto-1",
+      } as never);
+      const user = userEvent.setup();
+      renderPanel({
+        prompt: "Review every pull request",
+        kind: "prompt",
+        editingAutomationId: "auto-1",
+        form: {
+          kind: "prompt",
+          name: "Daily digest",
+          prompt: "Review every pull request",
+          model: "fast",
+        },
+      });
+
+      await user.click(screen.getByTestId("automation-setup-agent-profile"));
+      await user.click(
+        screen.getByTestId(
+          "automation-setup-agent-profile-option-agent-reviewer",
+        ),
+      );
+      await user.click(screen.getByTestId("automation-setup-save"));
+
+      await waitFor(() =>
+        expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+          "auto-1",
+          expect.objectContaining({
+            prompt: "Review every pull request",
+            model: null,
+            agent_profile_id: "agent-reviewer",
+          }),
+        ),
+      );
+    });
+
+    it("offers a preset only the LLM profile when the service runs only scripts from an agent profile", () => {
+      withCapabilities(["agentProfiles"]);
+
+      renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+
+      expect(
+        screen.queryByTestId("automation-setup-agent-profile"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("automation-setup-model")).toBeInTheDocument();
     });
 
     it("offers only the LLM profile when the service cannot run scripts from an agent profile", () => {
@@ -2571,6 +2878,105 @@ describe("AutomationSetupPanel", () => {
       expect(
         AgentServerConversationService.replaceConversationTags,
       ).not.toHaveBeenCalled();
+    });
+
+    it("shows a saved draft as saved after returning to the conversation", async () => {
+      // The service may normalize the saved body, so the panel must not
+      // compare the returned form with the server's copy.
+      vi.mocked(AutomationService.createServerDraft).mockImplementation(
+        async (request) =>
+          echoSavedDraft(request, {
+            validationErrors: null,
+            draft: { ...request.draft, normalized: true } as never,
+          }),
+      );
+      const conversationId = "conv-saved-draft-clean-return";
+      const user = userEvent.setup();
+      const first = renderPanel(undefined, conversationId, null);
+      await saveDraftAndWaitForTest(user);
+      const savedRequest = vi.mocked(AutomationService.createServerDraft).mock
+        .calls[0][0];
+
+      first.unmount();
+      vi.mocked(AutomationService.getServerDraft).mockResolvedValue(
+        echoSavedDraft(savedRequest, {
+          validationErrors: null,
+          draft: { ...savedRequest.draft, normalized: true } as never,
+        }),
+      );
+      renderPanel(
+        getAutomationFormSession(conversationId) ?? undefined,
+        conversationId,
+        { automationdraftid: "draft-1" },
+      );
+
+      await waitFor(() =>
+        expect(AutomationService.getServerDraft).toHaveBeenCalledWith(
+          "draft-1",
+        ),
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId("automation-setup-test")).toBeEnabled(),
+      );
+      expect(
+        screen.getByTestId("automation-setup-save-state"),
+      ).not.toHaveTextContent("AUTOMATION_SETUP$UNSAVED_CHANGES");
+      clearAutomationFormSession(conversationId);
+    });
+
+    it("keeps unsaved agent edits over the saved draft after returning to the conversation", async () => {
+      mockSavedDraftEcho({ validationErrors: null });
+      const conversationId = "conv-saved-draft-return";
+      const user = userEvent.setup();
+      const first = renderPanel(undefined, conversationId, null);
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+      await waitFor(() =>
+        expect(
+          screen.getByTestId("automation-setup-save-state"),
+        ).toHaveTextContent("AUTOMATION_SETUP$SAVED_JUST_NOW"),
+      );
+      const savedRequest = vi.mocked(AutomationService.createServerDraft).mock
+        .calls[0][0];
+
+      await act(async () => {
+        handleAutomationFormUpdateAction(
+          {
+            kind: AUTOMATION_FORM_UPDATE_ACTION_KIND,
+            fields: { prompt: "Review and label every pull request" },
+          },
+          conversationId,
+          "agent-event-saved-return",
+          new Date().toISOString(),
+        );
+      });
+      await waitFor(
+        () =>
+          expect(screen.getByTestId("automation-setup-prompt")).toHaveValue(
+            "Review and label every pull request",
+          ),
+        { timeout: 3000 },
+      );
+
+      first.unmount();
+      vi.mocked(AutomationService.getServerDraft).mockResolvedValue(
+        echoSavedDraft(savedRequest),
+      );
+      renderPanel(
+        getAutomationFormSession(conversationId) ?? undefined,
+        conversationId,
+        { automationdraftid: "draft-1" },
+      );
+
+      await waitFor(() =>
+        expect(
+          screen.getByTestId("automation-setup-save-state"),
+        ).toHaveTextContent("AUTOMATION_SETUP$UNSAVED_CHANGES"),
+      );
+      expect(AutomationService.getServerDraft).toHaveBeenCalledWith("draft-1");
+      expect(screen.getByTestId("automation-setup-prompt")).toHaveValue(
+        "Review and label every pull request",
+      );
+      clearAutomationFormSession(conversationId);
     });
 
     describe("service account run-as", () => {
@@ -3107,12 +3513,20 @@ describe("AutomationSetupPanel", () => {
           .getByTestId("automation-setup-event-source-option-github")
           .compareDocumentPosition(custom) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
+      await user.click(screen.getByTestId("automation-setup-event-key-toggle"));
       expect(
-        document.querySelector(
-          '#automation-setup-event-key-options option[value="issues.*"]',
+        within(screen.getByTestId("automation-setup-event-key-menu")).getByRole(
+          "button",
+          { name: "issues.*" },
         ),
-      ).not.toBeNull();
-      await user.click(custom);
+      ).toBeVisible();
+      await user.keyboard("{Escape}");
+      await user.click(
+        screen.getByTestId("automation-setup-event-source-toggle"),
+      );
+      await user.click(
+        screen.getByTestId("automation-setup-event-source-custom"),
+      );
       const sourceInput = screen.getByTestId("automation-setup-event-source");
       expect(sourceInput).toHaveValue("");
       expect(sourceInput).toHaveAttribute(
@@ -3189,12 +3603,20 @@ describe("AutomationSetupPanel", () => {
         isLoading: false,
       } as never);
       mockSavedDraftEcho();
-      const eventTypeOptions = () =>
-        Array.from(
-          document.querySelectorAll(
-            "#automation-setup-event-key-options option",
-          ),
-        ).map((option) => option.getAttribute("value"));
+      const eventTypeOptions = async (
+        user: ReturnType<typeof userEvent.setup>,
+      ) => {
+        await user.click(
+          screen.getByTestId("automation-setup-event-key-toggle"),
+        );
+        const options = within(
+          screen.getByTestId("automation-setup-event-key-menu"),
+        )
+          .getAllByRole("button")
+          .map((option) => option.textContent);
+        await user.keyboard("{Escape}");
+        return options;
+      };
       const pickSource = async (
         user: ReturnType<typeof userEvent.setup>,
         source: string,
@@ -3210,14 +3632,17 @@ describe("AutomationSetupPanel", () => {
       const user = userEvent.setup();
       renderPanel();
       await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
-      expect(eventTypeOptions()).toEqual(["issues.*", "issue_comment.*"]);
+      expect(await eventTypeOptions(user)).toEqual([
+        "issues.*",
+        "issue_comment.*",
+      ]);
       // GitHub's default key still matches a GitHub pattern.
       expect(screen.getByTestId("automation-setup-event-key")).toHaveValue(
         "issue_comment.created",
       );
 
       await pickSource(user, "jira_dc");
-      expect(eventTypeOptions()).toEqual([
+      expect(await eventTypeOptions(user)).toEqual([
         "comment_created",
         "jira:issue_created",
       ]);
@@ -3238,10 +3663,17 @@ describe("AutomationSetupPanel", () => {
       ).toMatchObject({ webhookEvent: "comment_created" });
 
       await pickSource(user, "bitbucket_data_center");
-      expect(eventTypeOptions()).toEqual(["pr:comment:added", "pr:opened"]);
-      fireEvent.change(screen.getByTestId("automation-setup-event-key"), {
-        target: { value: "pr:opened" },
-      });
+      expect(await eventTypeOptions(user)).toEqual([
+        "pr:comment:added",
+        "pr:opened",
+      ]);
+      await user.click(screen.getByTestId("automation-setup-event-key-toggle"));
+      await user.click(
+        within(screen.getByTestId("automation-setup-event-key-menu")).getByRole(
+          "button",
+          { name: "pr:opened" },
+        ),
+      );
       expect(
         JSON.parse(
           (

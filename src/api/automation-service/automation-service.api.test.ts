@@ -433,6 +433,86 @@ const gitSyncStatus: GitSyncStatus = {
   dirty_count: 0,
 };
 
+describe("AutomationService.createPluginSpecAutomation", () => {
+  const pluginSpecAutomation: Automation = {
+    ...createdAutomation,
+    id: "plugin-spec-automation",
+    name: "recipe (org)",
+  };
+
+  const pluginSpecRequest = {
+    name: "recipe (org)",
+    plugin: {
+      source: "github:org/recipe",
+      ref: "main",
+      repo_path: "plugins/recipe",
+    },
+    config: { repository: "org/repo" },
+    enabled: true,
+  };
+
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    localAxios.post.mockResolvedValue({
+      data: pluginSpecAutomation,
+      status: 201,
+    });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("creates an automation from the plugin spec on the local backend", async () => {
+    const { automation, created } =
+      await AutomationService.createPluginSpecAutomation(pluginSpecRequest);
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/plugin-spec",
+      pluginSpecRequest,
+    );
+    expect(automation.id).toBe("plugin-spec-automation");
+    expect(created).toBe(true);
+  });
+
+  it("reports created=false when the service returns an existing automation (HTTP 200)", async () => {
+    localAxios.post.mockResolvedValueOnce({
+      data: pluginSpecAutomation,
+      status: 200,
+    });
+
+    const { automation, created } =
+      await AutomationService.createPluginSpecAutomation(pluginSpecRequest);
+
+    expect(automation.id).toBe("plugin-spec-automation");
+    expect(created).toBe(false);
+  });
+
+  it("routes cloud creates through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    callCloudProxy.mockResolvedValueOnce(pluginSpecAutomation);
+
+    const { automation, created } =
+      await AutomationService.createPluginSpecAutomation(pluginSpecRequest);
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "POST",
+        path: "/api/automation/v1/plugin-spec",
+        body: pluginSpecRequest,
+      }),
+    );
+    expect(localAxios.post).not.toHaveBeenCalled();
+    expect(automation.id).toBe("plugin-spec-automation");
+    expect(created).toBe(true);
+  });
+});
+
 describe("AutomationService git sync", () => {
   beforeEach(() => {
     setRegisteredBackends([localBackend]);
@@ -544,5 +624,77 @@ describe("AutomationService git sync", () => {
     expect(localAxios.post).toHaveBeenCalledWith(
       "/api/automation/v1/git-sync/sync",
     );
+  });
+});
+
+describe("AutomationService.pluginSpecPreflight", () => {
+  const preflightResponse = {
+    manifest: {
+      name: "recipe",
+      description: "A recipe automation",
+      config_schema: {
+        type: "object",
+        properties: { repo: { type: "string" } },
+      },
+      runtime: { agent_profile: { required: true } },
+    },
+    resolved_ref: "main",
+    suggested_trigger: { type: "cron", schedule: "0 9 * * *", timezone: "UTC" },
+  };
+
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    localAxios.get.mockResolvedValue({ data: preflightResponse });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("preflights the plugin spec on the local backend", async () => {
+    const result = await AutomationService.pluginSpecPreflight({
+      source: "github:org/recipe",
+      ref: "main",
+      repo_path: "plugins/recipe",
+    });
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1/plugin-spec/preflight?source=github%3Aorg%2Frecipe&ref=main&repo_path=plugins%2Frecipe",
+    );
+    expect(result.manifest.name).toBe("recipe");
+    expect(result.suggested_trigger?.schedule).toBe("0 9 * * *");
+  });
+
+  it("omits absent query params", async () => {
+    await AutomationService.pluginSpecPreflight({
+      source: "github:org/recipe",
+    });
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1/plugin-spec/preflight?source=github%3Aorg%2Frecipe",
+    );
+  });
+
+  it("routes cloud preflights through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    callCloudProxy.mockResolvedValueOnce(preflightResponse);
+
+    const result = await AutomationService.pluginSpecPreflight({
+      source: "github:org/recipe",
+    });
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/automation/v1/plugin-spec/preflight?source=github%3Aorg%2Frecipe",
+      }),
+    );
+    expect(localAxios.get).not.toHaveBeenCalled();
+    expect(result.manifest.name).toBe("recipe");
   });
 });

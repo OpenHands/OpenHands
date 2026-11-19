@@ -139,33 +139,80 @@ const beforeMount = (monaco: Monaco) => {
     base: "vs",
     inherit: true,
     rules: [
-      { token: "", foreground: "29241F" },
-      { token: "comment", foreground: "6B6258" },
-      { token: "keyword", foreground: "9B4428" },
-      { token: "string", foreground: "52644B" },
-      { token: "number", foreground: "70456A" },
-      { token: "type", foreground: "346458" },
-      { token: "delimiter", foreground: "29241F" },
+      { token: "", foreground: "241C17" },
+      { token: "comment", foreground: "615448", fontStyle: "italic" },
+      { token: "keyword", foreground: "241C17", fontStyle: "bold" },
+      { token: "string", foreground: "45572F" },
+      { token: "number", foreground: "9A2616" },
+      { token: "type", foreground: "6A3B56" },
+      { token: "delimiter", foreground: "453B33" },
     ],
     colors: {
-      "editor.background": "#FAF7F1",
-      "editor.foreground": "#29241F",
-      "editorLineNumber.foreground": "#6B6258",
-      "editorLineNumber.activeForeground": "#29241F",
-      "editor.selectionBackground": "#9B44282E",
-      "editor.inactiveSelectionBackground": "#9B44281A",
-      "editor.lineHighlightBackground": "#F4EFE6",
-      "editorGutter.background": "#FAF7F1",
-      "diffEditor.insertedTextBackground": "#52644B26",
-      "diffEditor.removedTextBackground": "#9B442826",
-      "diffEditor.insertedLineBackground": "#E8EDDF",
-      "diffEditor.removedLineBackground": "#F3E4DA",
-      "diffEditor.border": "#CFC6B8",
+      "editor.background": "#F8F0E1",
+      "editor.foreground": "#241C17",
+      "editorLineNumber.foreground": "#615448",
+      "editorLineNumber.activeForeground": "#241C17",
+      "editor.selectionBackground": "#9A26162E",
+      "editor.inactiveSelectionBackground": "#9A26161A",
+      "editor.lineHighlightBackground": "#F3E7D3",
+      "editorGutter.background": "#F8F0E1",
+      // Brackets stay in ink rather than Monaco's rainbow pair colours.
+      "editorBracketHighlight.foreground1": "#453B33",
+      "editorBracketHighlight.foreground2": "#453B33",
+      "editorBracketHighlight.foreground3": "#453B33",
+      "diffEditor.insertedTextBackground": "#45572F1F",
+      "diffEditor.removedTextBackground": "#9A26161F",
+      "diffEditor.insertedLineBackground": "#E6E1CF",
+      "diffEditor.removedLineBackground": "#F1E0D1",
+      "diffEditor.border": "#CABCA6",
       "editorUnnecessaryCode.border": "#00000000",
-      "editorUnnecessaryCode.opacity": "rgba(41, 36, 31, 0.45)",
+      "editorUnnecessaryCode.opacity": "rgba(36, 28, 23, 0.45)",
     },
   });
 };
+
+// Own the models for exactly the editor's lifetime, including accordion exits.
+function FileDiffEditor(props: React.ComponentProps<typeof DiffEditor>) {
+  const monacoRef = React.useRef<Monaco>(null);
+  const modelId = encodeURIComponent(React.useId());
+  const originalModelPath = `inmemory://file-diff/${modelId}/original`;
+  const modifiedModelPath = `inmemory://file-diff/${modelId}/modified`;
+
+  React.useEffect(
+    () => () => {
+      const monaco = monacoRef.current;
+      if (!monaco) return;
+
+      // Models exist before onMount runs. Capture this instance's models now,
+      // then release them after the child wrapper has disposed its editor.
+      const original = monaco.editor.getModel(
+        monaco.Uri.parse(originalModelPath),
+      );
+      const modified = monaco.editor.getModel(
+        monaco.Uri.parse(modifiedModelPath),
+      );
+      queueMicrotask(() => {
+        original?.dispose();
+        modified?.dispose();
+      });
+    },
+    [originalModelPath, modifiedModelPath],
+  );
+
+  return (
+    <DiffEditor
+      {...props}
+      originalModelPath={originalModelPath}
+      modifiedModelPath={modifiedModelPath}
+      keepCurrentOriginalModel
+      keepCurrentModifiedModel
+      beforeMount={(monaco) => {
+        monacoRef.current = monaco;
+        props.beforeMount?.(monaco);
+      }}
+    />
+  );
+}
 
 export interface FileDiffViewerProps {
   path: string;
@@ -325,7 +372,7 @@ export function FileDiffViewer({
   const renderContent = () => {
     if (viewMode === "diff") {
       return renderEditorShell(
-        <DiffEditor
+        <FileDiffEditor
           data-testid="file-diff-viewer"
           className="w-full h-full"
           language={language}

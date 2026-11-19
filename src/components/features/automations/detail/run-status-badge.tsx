@@ -9,6 +9,7 @@ import {
   getAutomationRunBadgeLabelKey,
   type AutomationRunBadgeStatus,
 } from "#/utils/automation-run-display";
+import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
 import { cn } from "#/utils/utils";
 
 interface RunStatusBadgeProps {
@@ -26,31 +27,52 @@ interface RunStatusBadgeProps {
 
 const statusConfig: Record<string, { style: string; iconTone: string }> = {
   [AutomationRunStatus.COMPLETED]: {
-    style: "bg-semantic-success/10 text-semantic-success",
+    style: cn(
+      statusToneBadgeClassName.success,
+      "dark:bg-semantic-success/10 dark:text-semantic-success",
+    ),
     iconTone: "text-semantic-success",
   },
   success: {
-    style: "bg-semantic-success/10 text-semantic-success",
+    style: cn(
+      statusToneBadgeClassName.success,
+      "dark:bg-semantic-success/10 dark:text-semantic-success",
+    ),
     iconTone: "text-semantic-success",
   },
   [AutomationRunStatus.FAILED]: {
-    style: "bg-semantic-danger/10 text-danger",
+    style: cn(
+      statusToneBadgeClassName.danger,
+      "dark:bg-semantic-danger/10 dark:text-danger",
+    ),
     iconTone: "text-danger",
   },
   failed: {
-    style: "bg-semantic-danger/10 text-danger",
+    style: cn(
+      statusToneBadgeClassName.danger,
+      "dark:bg-semantic-danger/10 dark:text-danger",
+    ),
     iconTone: "text-danger",
   },
   blocked: {
-    style: "bg-warning/10 text-warning",
+    style: cn(
+      statusToneBadgeClassName.warning,
+      "dark:bg-warning/10 dark:text-warning",
+    ),
     iconTone: "text-warning",
   },
   partial_success: {
-    style: "bg-warning/10 text-warning",
+    style: cn(
+      statusToneBadgeClassName.warning,
+      "dark:bg-warning/10 dark:text-warning",
+    ),
     iconTone: "text-warning",
   },
   unknown: {
-    style: "bg-warning/10 text-warning",
+    style: cn(
+      statusToneBadgeClassName.warning,
+      "dark:bg-warning/10 dark:text-warning",
+    ),
     iconTone: "text-warning",
   },
   [AutomationRunStatus.PENDING]: {
