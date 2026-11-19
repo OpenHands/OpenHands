@@ -419,6 +419,22 @@ export function coerceFieldValue(
     return null;
   }
 
+  // Validate the LLM base URL on save so an invalid value cannot be persisted
+  // (#15778). `buildSdkSettingsPayload` invokes this during Save, so throwing
+  // here surfaces the error to the user and blocks the request.
+  if (field.key === "llm.base_url" && stringValue) {
+    try {
+      const parsed = new URL(stringValue);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error("unsupported protocol");
+      }
+    } catch {
+      throw new Error(
+        `${field.label || "LLM base URL"} must be a valid http(s) URL`,
+      );
+    }
+  }
+
   return stringValue;
 }
 
