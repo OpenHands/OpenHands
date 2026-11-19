@@ -78,7 +78,7 @@ export function ManifestSubpageLayout({
         <div className="mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6">
           <span
             data-testid={`${navTestIdBase}-mobile-heading`}
-            className="lg:hidden truncate px-2 text-sm font-normal text-contrast"
+            className="lg:hidden line-clamp-2 break-words px-2 text-sm font-normal text-contrast"
             title={heading}
           >
             {heading}

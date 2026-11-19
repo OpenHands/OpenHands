@@ -64,7 +64,7 @@ describe("ManifestSubpageLayout", () => {
       "automations-navbar-mobile-heading",
     );
 
-    expect(mobileHeading).toHaveClass("truncate");
+    expect(mobileHeading).toHaveClass("line-clamp-2");
     expect(mobileHeading).toHaveAttribute("title", longName);
   });
 });
