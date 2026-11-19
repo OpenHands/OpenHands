@@ -2,6 +2,7 @@ import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { AxiosError, type AxiosResponse } from "axios";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   MemoryRouter,
@@ -12,6 +13,7 @@ import {
 } from "react-router";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -42,6 +44,11 @@ vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
   };
 });
 
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displayErrorToast: vi.fn(),
+  displaySuccessToast: vi.fn(),
+}));
+
 const permissionMocks = vi.hoisted(() => ({ canManage: true }));
 vi.mock("#/hooks/use-automation-permissions", async (importOriginal) => ({
   ...(await importOriginal<
@@ -68,6 +75,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     getFactory: vi.fn(),
     createFactory: vi.fn(),
     renameFactory: vi.fn(),
+    deleteFactory: vi.fn(),
     checkHealth: vi.fn(),
   },
 }));
@@ -346,6 +354,71 @@ describe("creating a factory", () => {
   });
 });
 
+describe("deleting a factory", () => {
+  it("deletes the factory once confirmed and returns to the list", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    vi.mocked(AutomationService.deleteFactory).mockResolvedValue(undefined);
+    renderAt("/factories/f-core");
+    await screen.findByTestId("automation-card-a-reviewer");
+
+    // Act
+    await user.click(screen.getByTestId("factory-delete"));
+    expect(AutomationService.deleteFactory).not.toHaveBeenCalled();
+    await user.click(screen.getByTestId("factory-delete-confirm"));
+
+    // Assert
+    await waitFor(() =>
+      expect(AutomationService.deleteFactory).toHaveBeenCalledWith("f-core"),
+    );
+    expect(await screen.findByTestId("factories-list")).toBeInTheDocument();
+    expect(screen.queryByTestId("factory-not-found")).not.toBeInTheDocument();
+  });
+
+  it("keeps the factory when the confirmation is cancelled", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderAt("/factories/f-core");
+    await screen.findByTestId("automation-card-a-reviewer");
+
+    // Act
+    await user.click(screen.getByTestId("factory-delete"));
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+
+    // Assert
+    expect(
+      screen.queryByTestId("factory-delete-confirm"),
+    ).not.toBeInTheDocument();
+    expect(AutomationService.deleteFactory).not.toHaveBeenCalled();
+  });
+
+  it("shows the service's reason and stays on the factory when the delete is refused", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const reason = "Factory has 2 live automations; remove them from it first";
+    vi.mocked(AutomationService.deleteFactory).mockRejectedValue(
+      new AxiosError("Conflict", "ERR_BAD_REQUEST", undefined, undefined, {
+        status: 409,
+        data: { detail: reason },
+      } as AxiosResponse),
+    );
+    renderAt("/factories/f-core");
+    await screen.findByTestId("automation-card-a-reviewer");
+
+    // Act
+    await user.click(screen.getByTestId("factory-delete"));
+    await user.click(screen.getByTestId("factory-delete-confirm"));
+
+    // Assert
+    await waitFor(() => expect(displayErrorToast).toHaveBeenCalledWith(reason));
+    expect(
+      screen.queryByTestId("factory-delete-confirm"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("factory-rename")).toBeInTheDocument();
+    expect(screen.queryByTestId("factories-list")).not.toBeInTheDocument();
+  });
+});
+
 describe("renaming a factory", () => {
   it("renames the factory from its page", async () => {
     // Arrange
@@ -379,7 +452,7 @@ describe("renaming a factory", () => {
     );
   });
 
-  it("offers Rename only to those who manage automations", async () => {
+  it("offers Rename and Delete only to those who manage automations", async () => {
     // Arrange
     permissionMocks.canManage = false;
 
@@ -389,6 +462,7 @@ describe("renaming a factory", () => {
 
     // Assert
     expect(screen.queryByTestId("factory-rename")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("factory-delete")).not.toBeInTheDocument();
   });
 
   it("hides Add Automation in a factory from those who cannot put automations in it, but not on Automate", async () => {
