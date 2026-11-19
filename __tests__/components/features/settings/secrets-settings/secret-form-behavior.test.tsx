@@ -7,11 +7,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CustomSecretWithoutValue } from "#/api/secrets-service.types";
 import { SecretForm } from "#/components/features/settings/secrets-settings/secret-form";
 import { I18nKey } from "#/i18n/declaration";
+import type { SecretRequestDraft } from "#/stores/secret-request-store";
 
 const mocks = vi.hoisted(() => ({
   secrets: undefined as CustomSecretWithoutValue[] | undefined,
   create: vi.fn(),
   update: vi.fn(),
+  // The options the form hands the mutation hook, captured so a test can fire
+  // the mutation-level `onSuccess` after the form has unmounted (TanStack runs
+  // it even when the observer — and its per-call callbacks — are gone).
+  createOptions: undefined as
+    { onSuccess?: (secret: { name: string }) => void } | undefined,
+  updateOptions: undefined as
+    { onSuccess?: (secret: { name: string }) => void } | undefined,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -25,12 +33,56 @@ vi.mock("#/hooks/query/use-get-secrets", () => ({
   useSearchSecrets: () => ({ data: mocks.secrets }),
 }));
 
+// The hooks now take the caller's `onSuccess` and fold it into the mutation
+// itself (so it survives the form unmounting mid-save). The fakes mirror that:
+// when the captured `onSuccess` runs, they run the hook-level callback with the
+// saved secret's identity and then the per-call callback, like TanStack does.
 vi.mock("#/hooks/mutation/use-create-secret", () => ({
-  useCreateSecret: () => ({ mutate: mocks.create }),
+  useCreateSecret: (options?: {
+    onSuccess?: (secret: { name: string; description?: string }) => void;
+  }) => {
+    mocks.createOptions = options;
+    return {
+      mutate: (
+        variables: { name: string; description?: string },
+        callbacks?: { onSuccess?: () => void },
+      ) =>
+        mocks.create(variables, {
+          ...callbacks,
+          onSuccess: () => {
+            options?.onSuccess?.({
+              name: variables.name,
+              description: variables.description,
+            });
+            callbacks?.onSuccess?.();
+          },
+        }),
+    };
+  },
 }));
 
 vi.mock("#/hooks/mutation/use-update-secret", () => ({
-  useUpdateSecret: () => ({ mutate: mocks.update }),
+  useUpdateSecret: (options?: {
+    onSuccess?: (secret: { name: string; description?: string }) => void;
+  }) => {
+    mocks.updateOptions = options;
+    return {
+      mutate: (
+        variables: { name: string; description?: string },
+        callbacks?: { onSuccess?: () => void },
+      ) =>
+        mocks.update(variables, {
+          ...callbacks,
+          onSuccess: () => {
+            options?.onSuccess?.({
+              name: variables.name,
+              description: variables.description,
+            });
+            callbacks?.onSuccess?.();
+          },
+        }),
+    };
+  },
 }));
 
 interface RenderFormOptions {
@@ -38,7 +90,11 @@ interface RenderFormOptions {
   selectedSecret?: string | null;
   onCancel?: () => void;
   onSaved?: (secret: { name: string; description?: string }) => void;
+  onDraftChange?: (draft: SecretRequestDraft) => void;
+  initialDraft?: SecretRequestDraft;
+  mutationKey?: string[];
   keepOpenOnError?: boolean;
+  strict?: boolean;
 }
 
 function renderForm({
@@ -46,22 +102,32 @@ function renderForm({
   selectedSecret = null,
   onCancel = vi.fn(),
   onSaved = vi.fn(),
+  onDraftChange,
+  initialDraft,
+  mutationKey,
   keepOpenOnError,
+  strict = false,
 }: RenderFormOptions = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const invalidate = vi.spyOn(queryClient, "invalidateQueries");
-  const view = render(
+  const form = (
     <QueryClientProvider client={queryClient}>
       <SecretForm
         mode={mode}
         selectedSecret={selectedSecret}
         onCancel={onCancel}
         onSaved={onSaved}
+        onDraftChange={onDraftChange}
+        initialDraft={initialDraft}
+        mutationKey={mutationKey}
         keepOpenOnError={keepOpenOnError}
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
+  );
+  const view = render(
+    strict ? <React.StrictMode>{form}</React.StrictMode> : form,
   );
   return { ...view, invalidate, onCancel, onSaved };
 }
@@ -69,6 +135,8 @@ function renderForm({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.secrets = undefined;
+  mocks.createOptions = undefined;
+  mocks.updateOptions = undefined;
 });
 
 describe("Secret form behavior", () => {
@@ -537,5 +605,120 @@ describe("Secret form behavior", () => {
       "type",
       "password",
     );
+  });
+
+  it("reports the toggled visibility exactly once under StrictMode", async () => {
+    // The toggle used to call `onDraftChange` from inside the `setShowValue`
+    // updater. StrictMode double-invokes updaters, so a single click reported
+    // the toggle twice; the side effect now runs once, outside the updater.
+    const onDraftChange = vi.fn();
+    renderForm({ onDraftChange, strict: true });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: I18nKey.SECRETS$SHOW_VALUE }),
+    );
+
+    expect(onDraftChange).toHaveBeenCalledTimes(1);
+    expect(onDraftChange).toHaveBeenLastCalledWith({
+      name: "",
+      description: "",
+      value: "",
+      showValue: true,
+    });
+  });
+
+  it("keeps the toggled visibility when the value changes in the same batch", async () => {
+    // The change handler reads `showValue` from its render closure. When the
+    // toggle and the value change land in one batch (before React re-renders),
+    // a closure read is still `false`, so the draft would revert the visibility
+    // the user just switched on. The ref read keeps it.
+    const onDraftChange = vi.fn();
+    renderForm({ onDraftChange });
+
+    act(() => {
+      fireEvent.click(
+        screen.getByRole("button", { name: I18nKey.SECRETS$SHOW_VALUE }),
+      );
+      fireEvent.change(screen.getByTestId("value-input"), {
+        target: { value: "ghp_live" },
+      });
+    });
+
+    expect(onDraftChange).toHaveBeenLastCalledWith({
+      name: "",
+      description: "",
+      value: "ghp_live",
+      showValue: true,
+    });
+  });
+
+  it("invalidates the secrets cache when the save lands after the form unmounts", async () => {
+    // A virtualized chat can unmount the secret-request card while its save is
+    // in flight. TanStack drops the per-call `onSuccess` with the observer, so
+    // the invalidation has to ride the mutation-level callback or Settings keeps
+    // serving the cached list (it lives for five minutes).
+    const user = userEvent.setup();
+    const { invalidate, unmount } = renderForm();
+
+    await user.type(screen.getByTestId("name-input"), "GITHUB_TOKEN");
+    await user.type(screen.getByTestId("value-input"), "ghp_live");
+    await user.click(screen.getByTestId("submit-button"));
+    expect(mocks.create).toHaveBeenCalled();
+
+    unmount();
+
+    // The mutation settles with the form gone; only the mutation-level callback
+    // remains, and it must still refresh both secret lists.
+    await act(async () => {
+      mocks.createOptions?.onSuccess?.({ name: "GITHUB_TOKEN" });
+    });
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["secrets-search"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["secrets"] });
+  });
+
+  it("invalidates the secrets cache when an edit lands after the form unmounts", async () => {
+    // The same unmount-mid-save path applies to an edit; both hooks must carry
+    // the invalidation or an edit that lands after the form goes would leave
+    // Settings showing the stale list.
+    const user = userEvent.setup();
+    mocks.secrets = [{ name: "EDIT_ME", description: "old" }];
+    const { invalidate, unmount } = renderForm({
+      mode: "edit",
+      selectedSecret: "EDIT_ME",
+    });
+
+    await user.type(screen.getByTestId("description-input"), " updated");
+    await user.click(screen.getByTestId("submit-button"));
+    expect(mocks.update).toHaveBeenCalled();
+
+    unmount();
+
+    await act(async () => {
+      mocks.updateOptions?.onSuccess?.({ name: "EDIT_ME" });
+    });
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["secrets-search"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["secrets"] });
+  });
+
+  it("restores a renamed secret and its description from the draft on remount", () => {
+    // The secret-request card remounts across the virtualization threshold; the
+    // draft it holds must carry the name and description too, or a rename and a
+    // typed description revert to `defaultName` and empty on the remount.
+    renderForm({
+      initialDraft: {
+        name: "GH_TOKEN",
+        description: "for the factory branch",
+        value: "ghp_live",
+        showValue: false,
+      },
+    });
+
+    expect(screen.getByTestId("name-input")).toHaveValue("GH_TOKEN");
+    expect(screen.getByTestId("description-input")).toHaveValue(
+      "for the factory branch",
+    );
+    expect(screen.getByTestId("value-input")).toHaveValue("ghp_live");
   });
 });
