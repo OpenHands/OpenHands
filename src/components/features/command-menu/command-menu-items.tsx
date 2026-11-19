@@ -44,8 +44,8 @@ export const COMMAND_MENU_ROUTE = {
   verificationSettings: "/settings/verification",
   runtimeSettings: "/settings/runtime",
   appSettings: "/settings/app",
-  experimentalSettings: "/settings/experimental",
   secretsSettings: "/settings/secrets",
+  experimentalSettings: "/settings/experimental",
 } as const;
 
 export type CommandMenuGroupId = "navigation" | "settings" | "actions";
@@ -63,8 +63,8 @@ export type CommandMenuItemId =
   | "verification-settings"
   | "runtime-settings"
   | "app-settings"
-  | "experimental-settings"
   | "secrets-settings"
+  | "experimental-settings"
   | "toggle-sidebar";
 
 export interface CommandMenuItemDefinition {
@@ -250,15 +250,6 @@ export const createCommandMenuItems = ({
       to: COMMAND_MENU_ROUTE.appSettings,
     },
     {
-      id: "experimental-settings",
-      group: "settings",
-      titleKey: I18nKey.SETTINGS$NAV_EXPERIMENTAL,
-      descriptionKey: I18nKey.SETTINGS$PAGE_EXPERIMENTAL_SUBLINE,
-      keywordsKey: I18nKey.COMMAND_MENU$EXPERIMENTAL_SETTINGS_KEYWORDS,
-      icon: <FlaskConical size={ICON_SIZE} />,
-      to: COMMAND_MENU_ROUTE.experimentalSettings,
-    },
-    {
       id: "secrets-settings",
       group: "settings",
       titleKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_TITLE,
@@ -266,6 +257,15 @@ export const createCommandMenuItems = ({
       keywordsKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_KEYWORDS,
       icon: <KeyRound size={ICON_SIZE} />,
       to: COMMAND_MENU_ROUTE.secretsSettings,
+    },
+    {
+      id: "experimental-settings",
+      group: "settings",
+      titleKey: I18nKey.SETTINGS$NAV_EXPERIMENTAL,
+      descriptionKey: I18nKey.SETTINGS$PAGE_EXPERIMENTAL_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$EXPERIMENTAL_SETTINGS_KEYWORDS,
+      icon: <FlaskConical size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.experimentalSettings,
     },
     {
       id: "toggle-sidebar",
