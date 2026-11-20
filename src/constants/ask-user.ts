@@ -5,8 +5,7 @@ export const ASK_USER_TOOL_NAME = "ask_user";
  * tool (`ClientAction_<tool-name>`). Keep the SDK naming convention contained
  * here instead of repeating its generated class name.
  */
-export const ASK_USER_ACTION_KIND =
-  `ClientAction_${ASK_USER_TOOL_NAME}` as const;
+export const ASK_USER_ACTION_KIND = "AskUserAction" as const;
 
 /**
  * Prefix of the message the frontend posts back once the user answers the

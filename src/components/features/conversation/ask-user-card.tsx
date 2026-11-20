@@ -30,8 +30,12 @@ interface AskUserCardProps {
  */
 export function AskUserCard({ request }: AskUserCardProps) {
   const { t } = useTranslation("openhands");
+  const initialOption =
+    typeof request.recommended === "number"
+      ? (request.options[request.recommended]?.label ?? null)
+      : (request.recommended ?? request.options[0]?.label ?? null);
   const [selectedOption, setSelectedOption] = React.useState<string | null>(
-    request.recommended ?? request.options[0]?.label ?? null,
+    initialOption,
   );
   const [customAnswer, setCustomAnswer] = React.useState("");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -101,7 +105,9 @@ export function AskUserCard({ request }: AskUserCardProps) {
           {request.options.map((option, index) => {
             const isSelected =
               selectedOption === option.label && !customAnswer.trim();
-            const isRecommended = request.recommended === option.label;
+            const isRecommended =
+              request.recommended === option.label ||
+              request.recommended === index;
 
             return (
               <button

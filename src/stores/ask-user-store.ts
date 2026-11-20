@@ -1,13 +1,13 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { AskUserOption } from "#/types/agent-server/core/base/action";
+import type { AskUserOption } from "@openhands/typescript-client";
 
 export interface AskUserDecisionRequest {
   conversationId: string;
   toolCallId: string;
   question: string;
-  options: AskUserOption[];
-  recommended?: string | null;
+  options: (AskUserOption | { label: string; description?: string | null })[];
+  recommended?: string | number | null;
   /**
    * Settled state: null while pending user decision, string once the user
    * selects an option or submits a response.
