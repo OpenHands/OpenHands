@@ -164,7 +164,17 @@ export function CustomServerEditor({
         .finally(() => setIsOauthTesting(false));
       return;
     }
-    testServer(payload, {
+    const testPayload =
+      payload.type === "shttp" && payload.timeout !== undefined
+        ? {
+            ...payload,
+            timeout:
+              payload.auth?.strategy !== "oauth2"
+                ? Math.min(payload.timeout / 1000, 120)
+                : payload.timeout / 1000,
+          }
+        : payload;
+    testServer(testPayload, {
       onSuccess: (result) => {
         if (!result.ok) {
           // Test failed — modal stays open, error shown via testMessage.
