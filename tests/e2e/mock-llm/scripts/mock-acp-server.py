@@ -21,8 +21,10 @@ import sys
 import acp
 from acp.schema import (
     AgentCapabilities,
+    AgentMessageChunk,
     Implementation,
     PromptCapabilities,
+    TextContentBlock,
 )
 
 REPLY_TOKEN = "MOCK_ACP_E2E_REPLY_OK"
@@ -90,7 +92,7 @@ class MockACPAgent(acp.Agent):
         if self._conn:
             await self._conn.session_update(
                 session_id=session_id,
-                update=acp.update_agent_message_text(self.reply_token),
+                update=AgentMessageChunk(content=TextContentBlock(text=self.reply_token)),
             )
 
         return acp.PromptResponse(stop_reason="end_turn")

@@ -9,10 +9,15 @@ describe("formatCompactTokenCount", () => {
     [500, "500"],
     [1_985, "2.0k"],
     [198_500, "198.5k"],
+    [999_949, "999.9k"],
     [1_000_000, "1.0M"],
     [1_050_000, "1.1M"],
   ])("formats %i as %s", (value, expected) => {
     expect(formatCompactTokenCount(value)).toBe(expected);
+  });
+
+  it("promotes to the next unit when rounding reaches it", () => {
+    expect(formatCompactTokenCount(999_999)).toBe("1.0M");
   });
 });
 

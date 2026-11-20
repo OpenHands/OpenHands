@@ -1,3 +1,4 @@
+import { LOCKED_CLOUD_BACKEND_ID } from "./default-backend";
 import type { Backend, BackendSelection, ResolvedActiveBackend } from "./types";
 
 /**
@@ -74,6 +75,46 @@ export function readBackendSelectionFromUrl(
 
   const orgId = params.get(ORG_QUERY_PARAM);
   return { backendId, orgId: orgId || null };
+}
+
+/**
+ * Read the org the cloud's own web app hands back when it links here. Its
+ * "Back to App" link carries only `?org=<id>` — the parameter Canvas puts on
+ * its links into the cloud's Settings — because Canvas locked to that cloud
+ * host has a single backend. Anything else (no org, a backend named too, or
+ * no locked cloud backend) is left to the other readers.
+ */
+export function readLockedCloudOrgFromUrl(
+  backends: Backend[],
+  search: string,
+): BackendSelection | null {
+  if (!search) return null;
+  let params: URLSearchParams;
+  try {
+    params = new URLSearchParams(search);
+  } catch {
+    return null;
+  }
+  if (params.has(BACKEND_QUERY_PARAM)) return null;
+  const orgId = params.get(ORG_QUERY_PARAM);
+  if (!orgId) return null;
+  if (!backends.some((backend) => backend.id === LOCKED_CLOUD_BACKEND_ID)) {
+    return null;
+  }
+  return { backendId: LOCKED_CLOUD_BACKEND_ID, orgId };
+}
+
+/** Drop `?org=` from the address bar, keeping every other part of the URL. */
+export function removeOrgFromCurrentUrl(): void {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has(ORG_QUERY_PARAM)) return;
+  url.searchParams.delete(ORG_QUERY_PARAM);
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${url.pathname}${url.search}${url.hash}`,
+  );
 }
 
 /** The current tab's query string, or "" outside a browser. */

@@ -4,6 +4,7 @@ import { ChatInputField } from "./chat-input-field";
 interface ChatInputRowProps {
   chatInputRef: React.RefObject<HTMLDivElement | null>;
   isNewConversationPending?: boolean;
+  placeholder?: string;
   onInput: () => void;
   onPaste: (e: React.ClipboardEvent) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
@@ -14,6 +15,7 @@ interface ChatInputRowProps {
 export function ChatInputRow({
   chatInputRef,
   isNewConversationPending = false,
+  placeholder,
   onInput,
   onPaste,
   onKeyDown,
@@ -26,6 +28,7 @@ export function ChatInputRow({
         <ChatInputField
           chatInputRef={chatInputRef}
           disabled={isNewConversationPending}
+          placeholder={placeholder}
           onInput={onInput}
           onPaste={onPaste}
           onKeyDown={onKeyDown}

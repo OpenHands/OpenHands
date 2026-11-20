@@ -1,3 +1,3 @@
 # PR Artifacts
 
-Generated local browser evidence for PR #16319. These PR-only files should be removed after reviewer approval and before the implementation is merged. The recordings are from local Playwright runs, not hosted GitHub CI.
+This directory contains generated PR-only QA artifacts. After the PR merges to main, the next release PR removes this directory from main.

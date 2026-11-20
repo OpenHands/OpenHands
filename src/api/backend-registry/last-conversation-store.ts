@@ -45,13 +45,6 @@ function writeMap(map: StoredMap): void {
   }
 }
 
-export function getLastConversationId(
-  backendId: string,
-  orgId: string | null,
-): string | null {
-  return readMap()[selectionKey(backendId, orgId)] ?? null;
-}
-
 export function setLastConversationId(
   backendId: string,
   orgId: string | null,

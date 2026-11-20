@@ -85,7 +85,7 @@ export function DeleteAgentProfileModal({
       onClose={handleClose}
       initialFocusRef={cancelButtonRef}
     >
-      <p className="text-sm break-all">
+      <p className="text-sm break-words">
         {t(I18nKey.SETTINGS$PROFILE_DELETE_CONFIRMATION, {
           name: profile.name,
         })}

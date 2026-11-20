@@ -6,18 +6,47 @@ import {
   modalWidthClassName,
 } from "#/components/shared/modals/modal-body";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { Typography } from "#/ui/typography";
 import { cn } from "#/utils/utils";
+import { hasPluginParameters } from "#/utils/plugin-parameters";
 import { PluginLaunchPluginSection } from "./plugin-launch-plugin-section";
+import {
+  SchemaFormField,
+  applySchemaDefaults,
+  buildCronTrigger,
+  stripEmptyConfigValues,
+} from "#/utils/plugin-launch-preflight";
 
 interface PluginLaunchModalProps {
   plugins: PluginSpec[];
+  parametersSupported: boolean;
   message?: string;
   isLoading?: boolean;
+  /** Submit target: start a conversation (default) or install an automation. */
+  mode?: "conversation" | "automation";
+  /** Preflight response for the (single) plugin, when the backend serves one. */
+  preflight?: {
+    description?: string | null;
+    resolvedRef?: string | null;
+    fields: SchemaFormField[];
+    suggestedTrigger?: {
+      type: string;
+      schedule?: string;
+      timezone?: string;
+    } | null;
+  } | null;
+  /** True while the preflight is being fetched (automation mode only). */
+  isPreflightLoading?: boolean;
   onStartConversation: (plugins: PluginSpec[], initialMessage?: string) => void;
+  /** Required when mode === "automation". */
+  onInstallAutomation?: (
+    plugins: PluginSpec[],
+    trigger?: { type: "cron"; schedule: string; timezone: string } | null,
+  ) => void;
   onClose: () => void;
 }
 
@@ -27,9 +56,14 @@ interface ExpandedState {
 
 export function PluginLaunchModal({
   plugins,
+  parametersSupported,
   message,
   isLoading = false,
+  mode = "conversation",
+  preflight = null,
+  isPreflightLoading = false,
   onStartConversation,
+  onInstallAutomation,
   onClose,
 }: PluginLaunchModalProps) {
   const { t } = useTranslation("openhands");
@@ -48,6 +82,64 @@ export function PluginLaunchModal({
     },
   );
   const [trustConfirmed, setTrustConfirmed] = React.useState(false);
+  // Tracks sections that auto-expanded from the preflight arrival (vs a user
+  // toggle). The smooth-scroll only fires for auto-expanded sections.
+  const [autoExpandedSections, setAutoExpandedSections] =
+    React.useState<ExpandedState>({});
+
+  // Manifest-aware automation install (OpenHands#18793): when the backend
+  // serves a plugin-spec preflight, seed typed fields from the schema and
+  // offer an editable trigger defaulted from the manifest suggestion.
+  const isAutomationInstall = mode === "automation";
+  const preflightFields = isAutomationInstall ? (preflight?.fields ?? []) : [];
+
+  // Seed defaults once when the preflight arrives; later user edits win.
+  React.useEffect(() => {
+    if (isAutomationInstall && preflight && preflight.fields.length > 0) {
+      setPluginConfigs((prev) =>
+        prev.map((plugin) => ({
+          ...plugin,
+          parameters: applySchemaDefaults(
+            plugin.parameters ?? {},
+            preflight.fields,
+          ),
+        })),
+      );
+      // The preflight arrives after mount, so the initial expand state
+      // (computed from empty parameters) leaves these sections collapsed.
+      // Expand every section that now has schema-seeded parameters.
+      setExpandedSections((prev) => {
+        const next = { ...prev };
+        pluginConfigs.forEach((_, index) => {
+          next[index] = true;
+        });
+        return next;
+      });
+      setAutoExpandedSections(() => {
+        const next: ExpandedState = {};
+        pluginConfigs.forEach((_, index) => {
+          next[index] = true;
+        });
+        return next;
+      });
+    }
+  }, [isAutomationInstall, preflight]);
+
+  const suggestedTrigger = isAutomationInstall
+    ? (preflight?.suggestedTrigger ?? null)
+    : null;
+  const isCronSuggestion = suggestedTrigger?.type === "cron";
+  const [triggerSchedule, setTriggerSchedule] = React.useState("");
+  const [triggerTimezone, setTriggerTimezone] = React.useState("UTC");
+
+  // The preflight arrives asynchronously; sync the editable inputs once when
+  // its cron suggestion lands. Later user edits win over the suggestion.
+  React.useEffect(() => {
+    if (isCronSuggestion && suggestedTrigger) {
+      setTriggerSchedule(suggestedTrigger.schedule ?? "");
+      setTriggerTimezone(suggestedTrigger.timezone ?? "UTC");
+    }
+  }, [preflight]);
 
   const pluginsWithParams = pluginConfigs.filter(
     (p) => p.parameters && Object.keys(p.parameters).length > 0,
@@ -61,6 +153,11 @@ export function PluginLaunchModal({
       ...prev,
       [index]: !prev[index],
     }));
+    // A user toggle clears the auto-expanded flag so the smooth-scroll
+    // doesn't fire again if they re-expand.
+    setAutoExpandedSections((prev) =>
+      prev[index] ? { ...prev, [index]: false } : prev,
+    );
   };
 
   const updateParameter = (
@@ -117,13 +214,42 @@ export function PluginLaunchModal({
     return [...new Set(sources)];
   };
 
+  const unsupportedParameters =
+    !parametersSupported &&
+    // Automation installs map `parameters` to the plugin's `config`, which the
+    // automation service validates itself — no agent-server dependency.
+    mode !== "automation" &&
+    hasPluginParameters(pluginConfigs);
+
   const handleStartConversation = () => {
+    if (unsupportedParameters) return;
+    if (mode === "automation") {
+      // Strip empty values so the create request only carries fields the user
+      // actually set. An empty string would pass a required check (key present)
+      // on the backend while a 0 for an untouched optional numeric field 422s.
+      const cleanedPlugins = pluginConfigs.map((plugin) => ({
+        ...plugin,
+        parameters:
+          plugin.parameters != null
+            ? stripEmptyConfigValues(plugin.parameters)
+            : plugin.parameters,
+      }));
+      const trigger = buildCronTrigger(
+        suggestedTrigger,
+        triggerSchedule,
+        triggerTimezone,
+      );
+      onInstallAutomation?.(cleanedPlugins, trigger);
+      return;
+    }
     onStartConversation(pluginConfigs, message);
   };
 
+  // The generic title already includes the verb ("Launch Plugin"), so only a
+  // single plugin's display name is prefixed with "Launch".
   const modalTitle =
     pluginConfigs.length === 1
-      ? getPluginDisplayName(pluginConfigs[0])
+      ? `${t(I18nKey.LAUNCH$MODAL_TITLE)} ${getPluginDisplayName(pluginConfigs[0])}`
       : t(I18nKey.LAUNCH$MODAL_TITLE_GENERIC);
 
   return (
@@ -131,19 +257,28 @@ export function PluginLaunchModal({
       <div
         data-testid="plugin-launch-modal"
         className={cn(
-          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border max-h-[80vh]",
+          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border dialog-content-height",
           modalWidthClassName("md"),
           MODAL_MAX_WIDTH_VIEWPORT,
         )}
       >
         <ModalCloseButton onClose={onClose} testId="close-button" />
-        <Typography.H2 className="pr-6">
-          {t(I18nKey.LAUNCH$MODAL_TITLE)} {modalTitle}
-        </Typography.H2>
+        <Typography.H2 className="pr-6">{modalTitle}</Typography.H2>
 
         {message && <p className="text-sm text-contrast">{message}</p>}
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
+          {isPreflightLoading && pluginsWithParams.length === 0 && (
+            <div
+              data-testid="plugin-preflight-loading"
+              className="flex flex-col items-center justify-center gap-3 py-8 text-tertiary"
+            >
+              <LoadingSpinner size="small" />
+              <span className="text-sm">
+                {t(I18nKey.LAUNCH$PREFLIGHT_LOADING)}
+              </span>
+            </div>
+          )}
           {pluginsWithParams.length > 0 && (
             <div className="space-y-3">
               {pluginConfigs.map((plugin, index) => (
@@ -154,6 +289,8 @@ export function PluginLaunchModal({
                   isExpanded={!!expandedSections[index]}
                   onToggle={() => toggleSection(index)}
                   getPluginDisplayName={getPluginDisplayName}
+                  schemaFields={preflightFields}
+                  autoExpanded={!!autoExpandedSections[index]}
                   onParameterChange={updateParameter}
                 />
               ))}
@@ -190,7 +327,70 @@ export function PluginLaunchModal({
               </div>
             </div>
           )}
+
+          {isAutomationInstall && preflight?.description && (
+            <p
+              data-testid="plugin-preflight-description"
+              className="text-sm text-contrast mt-4"
+            >
+              {preflight.description}
+            </p>
+          )}
+
+          {isAutomationInstall && isCronSuggestion && (
+            <div
+              data-testid="plugin-trigger-section"
+              className="space-y-2 rounded-md bg-tertiary p-3 mt-3"
+            >
+              <label
+                htmlFor="plugin-trigger-schedule"
+                className="text-sm font-medium text-contrast"
+              >
+                {t(I18nKey.LAUNCH$TRIGGER_SCHEDULE_LABEL)}
+              </label>
+              <input
+                id="plugin-trigger-schedule"
+                data-testid="plugin-trigger-schedule"
+                type="text"
+                value={triggerSchedule}
+                onChange={(e) => setTriggerSchedule(e.target.value)}
+                placeholder={t(I18nKey.LAUNCH$TRIGGER_SCHEDULE_PLACEHOLDER)}
+                className="w-full rounded-md border border-tertiary-light bg-tertiary px-3 py-2 text-sm text-contrast focus:border-primary focus:outline-none"
+              />
+              <label
+                htmlFor="plugin-trigger-timezone"
+                className="text-sm font-medium text-contrast"
+              >
+                {t(I18nKey.LAUNCH$TRIGGER_TIMEZONE_LABEL)}
+              </label>
+              <input
+                id="plugin-trigger-timezone"
+                data-testid="plugin-trigger-timezone"
+                type="text"
+                value={triggerTimezone}
+                onChange={(e) => setTriggerTimezone(e.target.value)}
+                placeholder={t(I18nKey.LAUNCH$TRIGGER_TIMEZONE_PLACEHOLDER)}
+                className="w-full rounded-md border border-tertiary-light bg-tertiary px-3 py-2 text-sm text-contrast focus:border-primary focus:outline-none"
+              />
+              <p className="text-xs text-tertiary leading-relaxed">
+                {t(I18nKey.LAUNCH$TRIGGER_EDIT_HINT, {
+                  schedule: suggestedTrigger?.schedule ?? "",
+                  interpolation: { escapeValue: false },
+                })}
+              </p>
+            </div>
+          )}
         </div>
+
+        {unsupportedParameters && (
+          <p
+            role="alert"
+            data-testid="plugin-parameters-unsupported"
+            className="text-sm text-feedback-error"
+          >
+            {t(I18nKey.LAUNCH$PARAMETERS_UNSUPPORTED_LOCAL)}
+          </p>
+        )}
 
         <div className="pt-4 border-t border-border-subtle">
           <div className="flex items-start gap-3 mb-4">
@@ -203,7 +403,7 @@ export function PluginLaunchModal({
               className="mt-1 h-4 w-4 flex-shrink-0"
             />
             <label htmlFor="trust-checkbox" className="text-sm text-contrast">
-              {t(I18nKey.LAUNCH$TRUST_SKILL_CHECKBOX, {
+              {t(I18nKey.LAUNCH$TRUST_PLUGIN_CHECKBOX, {
                 sources: getUniqueSources().join(", "),
                 interpolation: { escapeValue: false },
               })}
@@ -215,12 +415,19 @@ export function PluginLaunchModal({
               type="button"
               variant="primary"
               onClick={handleStartConversation}
-              isDisabled={isLoading || !trustConfirmed}
+              isDisabled={
+                isLoading ||
+                !trustConfirmed ||
+                unsupportedParameters ||
+                isPreflightLoading
+              }
               className="px-4"
             >
               {isLoading
                 ? t(I18nKey.LAUNCH$STARTING)
-                : t(I18nKey.LAUNCH$START_CONVERSATION)}
+                : mode === "automation"
+                  ? t(I18nKey.LAUNCH$INSTALL_AUTOMATION)
+                  : t(I18nKey.LAUNCH$START_CONVERSATION)}
             </BrandButton>
           </div>
         </div>

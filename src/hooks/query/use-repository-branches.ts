@@ -7,6 +7,7 @@ export const useRepositoryBranchesPaginated = (
   repository: string | null,
   perPage: number = 30,
   selectedProvider?: Provider,
+  gitProviderId?: number | null,
 ) => {
   return useInfiniteQuery<
     BranchPage,
@@ -22,6 +23,7 @@ export const useRepositoryBranchesPaginated = (
       "paginated",
       perPage,
       selectedProvider,
+      gitProviderId ?? null,
     ],
     queryFn: async ({ pageParam }) => {
       if (!repository || !selectedProvider) {
@@ -36,6 +38,7 @@ export const useRepositoryBranchesPaginated = (
         "", // query (empty = list all)
         pageParam ?? undefined,
         perPage,
+        gitProviderId,
       );
     },
     enabled: !!repository && !!selectedProvider,

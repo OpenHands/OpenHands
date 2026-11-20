@@ -37,6 +37,7 @@ export function ToggleButton({
       type="button"
       aria-label={t(I18nKey.COMMON$TOGGLE_MENU)}
     >
+      {/* eslint-disable-next-line shadcn/require-static-classes -- Forward the caller's icon slot class; the analyzer only recognizes props named className. */}
       <ComboboxCaretIcon className={iconClassName} />
     </button>
   );

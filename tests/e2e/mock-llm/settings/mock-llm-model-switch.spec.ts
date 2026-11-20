@@ -114,18 +114,10 @@ test.describe("mock-LLM /model slash command", () => {
       `Profile "${PROFILE_B_NAME}" should appear in the list`,
     ).toBe(true);
 
-    // Register a trajectory with THREE entries:
-    //   Turn 0: padding — the agent-server makes an internal LLM call
-    //           (condenser/skill-analysis) before the agent's main loop.
-    //           This consumes one trajectory response.  If the SDK removes
-    //           that internal call, this padding entry will cause an
-    //           off-by-one; delete it at that point.
-    //           Ref: same pattern in mock-llm-automation.spec.ts;
-    //           upstream SDK code: openhands-sdk CondensationMixin.
-    //   Turn 1: actual reply to the initial user message
-    //   Turn 2: reply to the post-switch follow-up message
+    // Title generation consumes the first response. A blank is retried by
+    // the SDK and would steal INITIAL_REPLY_TOKEN from the conversation.
     await registerTrajectory(request, "model-switch", [
-      { text: "" }, // padding for internal LLM call (see comment above)
+      { text: "Model switch check" },
       { text: INITIAL_REPLY_TOKEN },
       { text: POST_SWITCH_REPLY_TOKEN },
     ]);

@@ -3,7 +3,9 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
-import VerificationSettingsScreen from "#/routes/verification-settings";
+import VerificationSettingsRoute, {
+  VerificationSettingsScreen,
+} from "#/routes/verification-settings";
 import { Settings } from "#/types/settings";
 
 function buildSettings(overrides: Partial<Settings> = {}): Settings {
@@ -27,14 +29,16 @@ function buildSettings(overrides: Partial<Settings> = {}): Settings {
   };
 }
 
-function renderVerificationSettingsScreen() {
+function renderVerificationSettingsScreen(
+  Screen: React.ComponentType = VerificationSettingsScreen,
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
     },
   });
 
-  return render(<VerificationSettingsScreen />, {
+  return render(<Screen />, {
     wrapper: ({ children }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     ),
@@ -226,5 +230,58 @@ describe("VerificationSettingsScreen", () => {
     expect(
       screen.queryByTestId("sdk-settings-verification.security_analyzer"),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("VerificationSettingsRoute on a local backend", () => {
+  it("keeps the critic API key and leaves the critic's behavior to agent profiles", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          verification: {
+            critic_enabled: false,
+            enable_iterative_refinement: false,
+          },
+        },
+      }),
+    );
+
+    renderVerificationSettingsScreen(VerificationSettingsRoute);
+
+    expect(
+      await screen.findByTestId("sdk-settings-verification.critic_api_key"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sdk-settings-verification.critic_enabled"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(
+        "sdk-settings-verification.enable_iterative_refinement",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("verification-critic-per-profile-note"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the confirmation controls", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        conversation_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.conversation_settings,
+          confirmation_mode: true,
+        },
+      }),
+    );
+
+    renderVerificationSettingsScreen(VerificationSettingsRoute);
+
+    expect(
+      await screen.findByTestId("sdk-settings-confirmation_mode"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("sdk-settings-security_analyzer"),
+    ).toBeInTheDocument();
   });
 });

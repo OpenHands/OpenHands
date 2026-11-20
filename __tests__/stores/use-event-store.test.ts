@@ -75,17 +75,15 @@ const mockObservationEvent: ObservationEvent = {
   action_id: "test-action-1",
 };
 
-const makeStreamingDeltaEvent = (
-  id: string,
-  content: string,
-): StreamingDeltaEvent => ({
-  id,
-  timestamp: `2024-03-01T00:00:0${id.at(-1) ?? "0"}Z`,
+const mockAgentMessageEvent: MessageEvent = {
+  ...mockUserMessageEvent,
+  id: "test-agent-message-1",
   source: "agent",
-  kind: "StreamingDeltaEvent",
-  content,
-  reasoning_content: null,
-});
+  llm_message: {
+    role: "assistant",
+    content: [{ type: "text", text: "partial text, finished" }],
+  },
+};
 
 const makeUserMessageEvent = (id: string, timestamp: string): MessageEvent => ({
   ...mockUserMessageEvent,
@@ -145,6 +143,61 @@ describe("useEventStore", () => {
     ]);
   });
 
+  it("prepends tied history in server order without moving existing slots or duplicating rows", () => {
+    const timestamp = "2024-06-01T00:00:00Z";
+    const recent = { ...makeUserMessageEvent("recent", timestamp), seq: 10 };
+    const older = makeUserMessageEvent("older", timestamp);
+    const oldest = makeUserMessageEvent("oldest", timestamp);
+    const store = useEventStore.getState();
+    store.addEvents([recent], { nextPageId: "older-page", hasMore: true });
+    store.openStreamingSlot({
+      type: "item_started",
+      item_id: "stream",
+      anchor_seq: 10,
+    });
+    const slot = useEventStore.getState().uiEvents[1];
+    store.addEvents([oldest, older, { ...recent }], {
+      nextPageId: null,
+      hasMore: false,
+      prepend: true,
+    });
+    expect(useEventStore.getState().events).toEqual([oldest, older, recent]);
+    expect(useEventStore.getState().uiEvents).toEqual([
+      oldest,
+      older,
+      recent,
+      slot,
+    ]);
+    expect(useEventStore.getState().uiEvents[3]).toBe(slot);
+    store.addEvent(makeUserMessageEvent("live", timestamp));
+    expect(useEventStore.getState().uiEvents.map((event) => event.id)).toEqual([
+      "oldest",
+      "older",
+      "recent",
+      "stream",
+      "live",
+    ]);
+  });
+
+  it("refreshes the initial history frontier until backfill starts, independently of live or planner events", () => {
+    const store = useEventStore.getState();
+    const recent = makeUserMessageEvent("recent", "2024-06-01T00:00:00Z");
+    store.addEvents([recent], { nextPageId: null, hasMore: false });
+    store.addEvents([recent], { nextPageId: "refreshed-page", hasMore: true });
+    const pagination = useEventStore.getState().historyPagination;
+    expect(pagination).toMatchObject({
+      nextPageId: "refreshed-page",
+      hasMore: true,
+    });
+    store.addEvent({
+      ...makeUserMessageEvent("planner", recent.timestamp),
+      isFromPlanningAgent: true,
+    });
+    expect(useEventStore.getState().historyPagination).toBe(pagination);
+    store.clearEventsForConversation("another-conversation", "another-scope");
+    expect(useEventStore.getState().historyPagination).toBeNull();
+  });
+
   it("should de-duplicate events on bulk add", () => {
     const { result } = renderHook(() => useEventStore());
 
@@ -156,89 +209,86 @@ describe("useEventStore", () => {
     expect(result.current.events).toHaveLength(2);
   });
 
-  it("should compact consecutive streaming deltas in the raw event store", () => {
-    const { result } = renderHook(() => useEventStore());
-    const first = makeStreamingDeltaEvent("delta-1", "hello ");
-    const second = makeStreamingDeltaEvent("delta-2", "world");
-
-    act(() => {
-      result.current.addEvent(first);
-      result.current.addEvent(second);
-    });
-
-    expect(result.current.events).toEqual([
-      {
-        ...first,
-        content: "hello world",
-      },
-    ]);
-    expect(result.current.uiEvents).toEqual([
-      {
-        ...first,
-        content: "hello world",
-      },
-    ]);
-    // Transient deltas are never tracked in `eventIds` — copying that Set once
-    // per token would otherwise be O(n^2).
-    expect(result.current.eventIds.has("delta-1")).toBe(false);
-    expect(result.current.eventIds.has("delta-2")).toBe(false);
-  });
-
-  it("should compact streaming deltas during bulk add", () => {
-    const { result } = renderHook(() => useEventStore());
-    const first = makeStreamingDeltaEvent("delta-1", "hello ");
-    const second = makeStreamingDeltaEvent("delta-2", "world");
-
-    act(() => {
-      result.current.addEvents([first, second]);
-    });
-
-    expect(result.current.events).toHaveLength(1);
-    expect(result.current.events[0]).toMatchObject({
-      id: "delta-1",
-      content: "hello world",
-    });
-    // Transient deltas are never tracked in `eventIds`.
-    expect(result.current.eventIds.has("delta-1")).toBe(false);
-    expect(result.current.eventIds.has("delta-2")).toBe(false);
-  });
-
-  it("should not grow eventIds with the raw streaming-delta count", () => {
+  it("keeps streaming slots out of the durable event log and eventIds", () => {
     const { result } = renderHook(() => useEventStore());
 
     act(() => {
       result.current.addEvent(mockUserMessageEvent);
+      result.current.openStreamingSlot({
+        type: "item_started",
+        item_id: "item-1",
+      });
       for (let i = 0; i < 1000; i += 1) {
-        result.current.addEvent(makeStreamingDeltaEvent(`delta-${i}`, "x"));
+        result.current.appendStreamingDeltas([
+          {
+            type: "delta",
+            item_id: "item-1",
+            attempt: 1,
+            order: i,
+            content: "x",
+          },
+        ]);
       }
     });
 
-    // 1000 deltas collapse to a single event alongside the user message, and
-    // eventIds tracks only the durable user message — not the deltas. This is
-    // what keeps the per-token Set copy from going quadratic.
-    expect(result.current.events).toHaveLength(2);
+    // The slot renders, but `events` and `eventIds` only ever hold durable
+    // records — the slot's id IS the coming message's id, so tracking it would
+    // dedupe the real message away.
+    expect(result.current.events).toEqual([mockUserMessageEvent]);
     expect(result.current.eventIds.size).toBe(1);
-    expect(result.current.eventIds.has(mockUserMessageEvent.id)).toBe(true);
+    expect(result.current.uiEvents).toHaveLength(2);
     expect(
-      (result.current.events[1] as StreamingDeltaEvent).content,
+      (result.current.uiEvents[1] as StreamingDeltaEvent).content,
     ).toHaveLength(1000);
   });
 
-  it("should not compact streaming deltas from different senders (#1656)", () => {
+  it("retires a slot when the durable event with its id arrives", () => {
     const { result } = renderHook(() => useEventStore());
-    const mainDelta = makeStreamingDeltaEvent("delta-1", "main ");
-    const planningDelta = {
-      ...makeStreamingDeltaEvent("delta-2", "planning"),
-      isFromPlanningAgent: true,
-    };
 
-    // A planning-agent delta after a main-agent delta must not concatenate.
     act(() => {
-      result.current.addEvent(mainDelta);
-      result.current.addEvent(planningDelta);
+      result.current.openStreamingSlot({
+        type: "item_started",
+        item_id: mockAgentMessageEvent.id,
+      });
+      result.current.appendStreamingDeltas([
+        {
+          type: "delta",
+          item_id: mockAgentMessageEvent.id,
+          attempt: 1,
+          order: 0,
+          content: "partial",
+        },
+      ]);
+      result.current.addEvent(mockAgentMessageEvent);
     });
 
-    expect(result.current.events).toEqual([mainDelta, planningDelta]);
+    expect(result.current.uiEvents).toEqual([mockAgentMessageEvent]);
+    expect(result.current.events).toEqual([mockAgentMessageEvent]);
+  });
+
+  it("clears only the addressed socket's slots", () => {
+    const { result } = renderHook(() => useEventStore());
+
+    act(() => {
+      result.current.openStreamingSlot({
+        type: "item_started",
+        item_id: "main-item",
+      });
+      result.current.openStreamingSlot(
+        { type: "item_started", item_id: "plan-item" },
+        { isFromPlanningAgent: true },
+      );
+      result.current.clearStreamingSlots();
+    });
+
+    expect(result.current.uiEvents.map((event) => event.id)).toEqual([
+      "plan-item",
+    ]);
+
+    act(() => {
+      result.current.clearStreamingSlots(true);
+    });
+    expect(result.current.uiEvents).toEqual([]);
   });
 
   it("should apply action-to-observation UI replacement during bulk add", () => {

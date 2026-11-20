@@ -100,8 +100,8 @@ export function buildRuntimeServicesInfo(options) {
     services.ingress = {
       description:
         "Unified entry point. Routes /api/automation/* to the automation " +
-        "backend, /api/* and /sockets to the agent-server, and /* to the " +
-        "frontend.",
+        "backend, /api/* and /sockets to the agent-server" +
+        (frontendPort !== undefined ? ", and /* to the frontend." : "."),
       url_from_agent: `http://${agentHostAlias}:${ingressPort}`,
     };
   }

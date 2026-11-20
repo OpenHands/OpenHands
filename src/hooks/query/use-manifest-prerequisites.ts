@@ -15,6 +15,7 @@ import type {
   SetupIntegrationRequirement,
 } from "#/manifests/types";
 import { useSettings } from "./use-settings";
+import { useNativeGitIntegrations } from "./use-native-git-integrations";
 
 export interface MissingSetupIntegration {
   id: string;
@@ -44,6 +45,8 @@ export function useSetupPrerequisites(
 ): SetupPrerequisitesResult {
   const integrations = entry.requires.integrations;
   const { data: settings, isLoading } = useSettings();
+  const { getNativeIntegration, isLoading: isNativeIntegrationsLoading } =
+    useNativeGitIntegrations();
 
   const installedServers = useMemo(
     () =>
@@ -60,11 +63,12 @@ export function useSetupPrerequisites(
         entry: getMarketplaceEntryById(id, catalog) ?? null,
       }))
       .filter(
-        ({ entry: catalogEntry }) =>
-          !catalogEntry ||
-          !findInstalledEntryMatch(catalogEntry, installedServers),
+        ({ id, entry: catalogEntry }) =>
+          !getNativeIntegration(id)?.isConnected &&
+          (!catalogEntry ||
+            !findInstalledEntryMatch(catalogEntry, installedServers)),
       );
-  }, [integrations, installedServers]);
+  }, [getNativeIntegration, integrations, installedServers]);
 
   const blockingIntegrations = missingIntegrations.filter(
     ({ requirement }) => requirement.required !== false,
@@ -77,6 +81,6 @@ export function useSetupPrerequisites(
     blockingIntegrations,
     warningIntegrations,
     isBlocked: blockingIntegrations.length > 0,
-    isLoading,
+    isLoading: isLoading || isNativeIntegrationsLoading,
   };
 }

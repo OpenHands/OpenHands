@@ -30,6 +30,7 @@ interface ProfilesBodyProps {
   onDuplicate: (profile: ProfileInfo) => void;
   onDelete: (profile: ProfileInfo) => void;
   isActivating: boolean;
+  isModelUnlisted?: (model: string | null | undefined) => boolean;
 }
 
 interface ProfileGroup {
@@ -92,6 +93,7 @@ export function ProfilesBody({
   onDuplicate,
   onDelete,
   isActivating,
+  isModelUnlisted,
 }: ProfilesBodyProps) {
   const { t } = useTranslation("openhands");
 
@@ -107,6 +109,7 @@ export function ProfilesBody({
       onDuplicate={onDuplicate}
       onDelete={onDelete}
       isActivating={isActivating}
+      isModelUnlisted={isModelUnlisted?.(profile.model)}
     />
   );
 
@@ -129,7 +132,7 @@ export function ProfilesBody({
         data-testid="profiles-load-error"
         className={extensionModuleEmptyStateClassName}
       >
-        <p className="text-sm text-red-400">
+        <p className="text-sm text-feedback-error">
           {t(I18nKey.SETTINGS$PROFILES_LOAD_ERROR)}
         </p>
       </div>

@@ -1,51 +1,97 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigation } from "#/context/navigation-context";
 import { MessageEvent } from "#/types/agent-server/core";
 import { ChatMessage } from "../../../features/chat/chat-message";
+import {
+  MessageReactions,
+  useMessageReactions,
+} from "../../../features/chat/message-reactions";
+import {
+  MessageEditedMark,
+  useMessageEdit,
+} from "../../../features/chat/message-edits";
 import { ImageCarousel } from "../../../features/images/image-carousel";
 import { parseMessageFromEvent } from "../event-content-helpers/parse-message-from-event";
 import { CriticResultDisplay } from "./critic-result-display";
 import { CollapsibleThinking } from "./collapsible-thinking";
-import { splitInlineThink } from "../event-thought-helpers";
+import {
+  getReasoningContent,
+  splitInlineThink,
+} from "../event-thought-helpers";
 import RepoForkedIcon from "#/icons/repo-forked.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useForkConversation } from "#/hooks/mutation/use-fork-conversation";
-import { useConversationStore } from "#/stores/conversation-store";
+import {
+  forkConversationMutationKey,
+  useForkConversation,
+} from "#/hooks/mutation/use-fork-conversation";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { useIsMutating } from "@tanstack/react-query";
 
 interface UserAssistantEventMessageProps {
   event: MessageEvent;
+  suppressReasoning?: boolean;
   isLastMessage: boolean;
   isFromPlanningAgent: boolean;
 }
 
 function UserAssistantEventMessageComponent({
   event,
+  suppressReasoning = false,
   isFromPlanningAgent,
 }: UserAssistantEventMessageProps) {
   const { t } = useTranslation("openhands");
-  const { navigate } = useNavigation();
   const { conversationId } = useOptionalConversationId();
   const isCloud = useActiveBackend().backend.kind === "cloud";
-  const { mutate: forkConversation, isPending: isForking } =
-    useForkConversation();
-  const setMessageToSend = useConversationStore(
-    (state) => state.setMessageToSend,
+  const { mutate: forkConversation } = useForkConversation(
+    conversationId ?? "",
   );
+  // `useIsMutating` reads the cache entry, so it still reports a fork started
+  // before this row was virtualized out and back — unlike the row's own
+  // `isPending`, which belongs to a fresh observer and reads `false` on remount.
+  // The key is scoped to this conversation: an unscoped match would let a fork
+  // of another conversation block this one's `Branch` action. Without a
+  // conversation there is no Branch action, and an empty id would make every
+  // id-less view share the key `["fork-conversation", ""]`, so match nothing
+  // instead of reading that shared key.
+  const isForking =
+    useIsMutating(
+      conversationId
+        ? { mutationKey: forkConversationMutationKey(conversationId) }
+        : { predicate: () => false },
+    ) > 0;
   // Blocks a same-tick double-click, before `isForking` flips.
   const forkInFlightRef = React.useRef(false);
 
-  const parsed = parseMessageFromEvent(event);
+  const reactionAuthor = event.source === "user" ? "user" : "agent";
+  const reactions = useMessageReactions(
+    event.source === "user" || event.source === "agent" ? event.id : undefined,
+    reactionAuthor,
+    { isFromPlanningAgent },
+  );
+
+  // The agent may have edited its message since (`edit_message`); the
+  // latest edit's text replaces the text it first wrote.
+  const editedText = useMessageEdit(
+    event.source === "agent" ? event.id : undefined,
+  );
+  const parsed = editedText ?? parseMessageFromEvent(event);
   // Route an inline <think> block (e.g. from a streamed reply) to the thinking
   // section so reloaded conversations match the live rendering.
-  const { reasoning, message } =
+  const { reasoning: inlineThink, message } =
     event.source === "agent"
       ? splitInlineThink(parsed)
       : { reasoning: "", message: parsed };
+  // The finished message replaces its streaming slot outright, so reasoning the
+  // model streamed must render from the message itself or it vanishes on
+  // finalize (and never shows after a reload).
+  const reasoning = [
+    event.source === "agent" ? getReasoningContent(event.llm_message) : "",
+    inlineThink,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   const imageUrls: string[] = [];
   if (Array.isArray(event.llm_message.content)) {
@@ -78,22 +124,14 @@ function UserAssistantEventMessageComponent({
 
     forkConversation(
       {
-        sourceConversationId: conversationId,
         eventId: event.id,
         ...(isEdit ? { editText: message } : {}),
         ...(branchTitle ? { title: branchTitle } : {}),
       },
       {
-        onSuccess: ({ info, excluded }) => {
-          navigate(`/conversations/${info.id}`);
-          // Prefill only when excluded (else the send duplicates it). Deferred
-          // so the new conversation's composer receives it (as useLaunchSkillInChat).
-          if (excluded) {
-            window.setTimeout(() => setMessageToSend(message), 0);
-          }
-        },
-        onError: (error) =>
-          displayErrorToast(error instanceof Error ? error.message : null),
+        // Only clears the same-tick guard; navigation, draft restoration and
+        // the error toast are handled by the mutation itself so they survive
+        // this row being virtualized out mid-flight.
         onSettled: () => {
           forkInFlightRef.current = false;
         },
@@ -112,7 +150,12 @@ function UserAssistantEventMessageComponent({
 
   return (
     <>
-      {reasoning && <CollapsibleThinking content={reasoning} />}
+      {!suppressReasoning && reasoning && (
+        <CollapsibleThinking
+          content={reasoning}
+          expansionId={`reasoning-${event.id}`}
+        />
+      )}
       <ChatMessage
         type={event.source}
         message={message}
@@ -123,6 +166,8 @@ function UserAssistantEventMessageComponent({
         {imageUrls.length > 0 && (
           <ImageCarousel size="small" images={imageUrls} />
         )}
+        {editedText !== undefined && <MessageEditedMark />}
+        {reactions.visible && <MessageReactions state={reactions} />}
       </ChatMessage>
       {event.source === "agent" && event.critic_result != null && (
         <CriticResultDisplay criticResult={event.critic_result} />

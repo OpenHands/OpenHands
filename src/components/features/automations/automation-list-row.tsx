@@ -1,14 +1,11 @@
-import { Tooltip } from "@heroui/react";
+import { Tooltip } from "#/components/shared/tooltip";
 import { useTranslation } from "react-i18next";
 import { Zap } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
 import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { KebabMenu } from "./kebab-menu";
-import {
-  useAutomationPermissions,
-  useIsAutomationOwner,
-} from "#/hooks/use-automation-permissions";
+import { useAutomationAccess } from "#/hooks/use-automation-access";
 import { useNavigation } from "#/context/navigation-context";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import PlayIcon from "#/icons/play.svg?react";
@@ -21,6 +18,7 @@ import { automationIconActionButtonClassName } from "./automation-action-button-
 import { buildAutomationMenuItems } from "./build-automation-menu-items";
 import { automationActivityRowClassName } from "./automation-view-mode";
 import { RunStatusBadge } from "./detail/run-status-badge";
+import { ActiveStatusBadge } from "./detail/active-status-badge";
 import { AutomationRunActivitySparkline } from "#/components/features/home/featured-automations/automation-run-activity-sparkline";
 import { AutomationHealthIndicator } from "#/components/features/home/featured-automations/automation-health-indicator";
 import {
@@ -32,12 +30,14 @@ import {
   formatTriggerSourceLabel,
   getLastRunTimestamp,
   getTriggerEventLabel,
-  getTriggerScheduleLabel,
   getTriggerSource,
 } from "#/components/features/home/featured-automations/automation-run-health";
 import type { AutomationInsightsProps } from "./automation-card";
 import { toLatestRunState } from "./to-latest-run-state";
+import { AutomationTagPill } from "./automation-tag-pill";
 import { resolveAutomationImpactStatement } from "#/utils/automation-catalog";
+import { isDraftAutomation } from "#/utils/automation-state";
+import { describeSchedule } from "#/utils/automation-trigger-description";
 
 interface AutomationListRowProps {
   automation: Automation;
@@ -62,12 +62,8 @@ export function AutomationListRow({
 }: AutomationListRowProps) {
   const { navigate } = useNavigation();
   const { t, i18n } = useTranslation("openhands");
-  const { canManage: hasManagePermission } = useAutomationPermissions();
-  const isOwner = useIsAutomationOwner(automation);
-  // Write actions on a specific automation: manage OR creator (escape hatch).
-  const canManage = hasManagePermission || isOwner;
-  // Non-creators may turn an automation off but not back on.
-  const canToggle = automation.enabled ? canManage : isOwner;
+  const { canManage, canEdit, canToggle } = useAutomationAccess(automation);
+  const isDraft = isDraftAutomation(automation);
 
   const handleView = () => {
     navigate?.(`/automations/${automation.id}`);
@@ -77,6 +73,7 @@ export function AutomationListRow({
     automation,
     t,
     canManage,
+    canEdit,
     canToggle,
     onRunNow,
     isRunPending,
@@ -90,7 +87,11 @@ export function AutomationListRow({
   const isEventTrigger = automation.trigger.type === "event";
   const TriggerIcon = isEventTrigger ? Zap : ClockIcon;
   const triggerEventLabel = getTriggerEventLabel(automation);
-  const triggerScheduleLabel = getTriggerScheduleLabel(automation);
+  const triggerScheduleLabel = describeSchedule(
+    automation.trigger,
+    t,
+    i18n.language,
+  );
   const triggerSource = getTriggerSource(automation);
   const hasTriggerMeta = Boolean(
     triggerEventLabel || triggerScheduleLabel || triggerSource,
@@ -115,6 +116,7 @@ export function AutomationListRow({
   const detailHref = `/automations/${encodeURIComponent(automation.id)}`;
   const statusLabelKey = getRunStatusLabelKey(runState);
   const disableAnimation = import.meta.env.MODE === "test";
+  const showDraftBadge = isDraft;
 
   return (
     <li
@@ -138,15 +140,37 @@ export function AutomationListRow({
           aria-label={`${automation.name} ${t(statusLabelKey)}`}
           className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
         >
-          <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-2">
+          <div className="grid min-w-0 flex-1 automation-summary-columns gap-x-2">
             <span
               data-testid={`automation-health-${automation.id}`}
               className="inline-flex h-5 w-2.5 shrink-0 items-center justify-center"
             >
               <AutomationHealthIndicator health={health} />
             </span>
-            <span className="truncate text-sm font-medium leading-5 text-foreground">
-              {automation.name}
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm font-medium leading-5 text-foreground">
+                {automation.name}
+              </span>
+              {showDraftBadge ? (
+                <ActiveStatusBadge automation={automation} compact />
+              ) : null}
+              {automation.tags?.length ? (
+                // Tags take only the room the name leaves (zero flex basis)
+                // and clip whole pills, so they never squeeze the name or run
+                // under the row's actions.
+                <span
+                  data-testid={`automation-list-row-tags-${automation.id}`}
+                  className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
+                >
+                  {automation.tags.map((tag) => (
+                    <AutomationTagPill
+                      key={tag}
+                      tag={tag}
+                      className="px-1.5 py-0 text-text-secondary"
+                    />
+                  ))}
+                </span>
+              ) : null}
             </span>
             {hasMeta ? (
               <span className="col-start-2 mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-text-secondary">

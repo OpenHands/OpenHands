@@ -2,6 +2,7 @@ import {
   DEFAULT_ENABLED_SKILL_NAMES,
   SKILLS_CATALOG,
 } from "@openhands/extensions/skills";
+import type { SkillInfo } from "#/types/settings";
 
 /** Every skill bundled from `@openhands/extensions`, in catalog order. */
 export const CATALOG_SKILL_NAMES: readonly string[] = SKILLS_CATALOG.map(
@@ -13,6 +14,22 @@ const RECOMMENDED_SKILL_NAME_SET = new Set(DEFAULT_ENABLED_SKILL_NAMES);
 
 export function isCatalogSkill(name: string): boolean {
   return CATALOG_SKILL_NAME_SET.has(name);
+}
+
+/**
+ * Whether a skill belongs to the public catalog, as the server reports it.
+ * Without a server listing, the bundled catalog stands in.
+ */
+export function publicSkillTest(
+  catalog: readonly SkillInfo[] | undefined,
+): (name: string) => boolean {
+  if (!catalog) return isCatalogSkill;
+  const publicNames = new Set(
+    catalog
+      .filter((skill) => skill.origin === "public")
+      .map((skill) => skill.name),
+  );
+  return (name) => publicNames.has(name);
 }
 
 export function isRecommendedSkill(name: string): boolean {
@@ -48,13 +65,64 @@ export function resolveEnabledCatalogSkills(
  */
 export function buildSkillEnablementFilter(
   enablement: SkillEnablement,
+  isPublic: (name: string) => boolean = isCatalogSkill,
 ): (skillName: string) => boolean {
   const enabled = new Set(resolveEnabledCatalogSkills(enablement));
   const disabled = new Set(enablement.disabledSkills ?? []);
 
   return (skillName) => {
     if (disabled.has(skillName)) return false;
-    return !isCatalogSkill(skillName) || enabled.has(skillName);
+    return !isPublic(skillName) || enabled.has(skillName);
+  };
+}
+
+/** Same array reference when the membership already matches, to skip a save. */
+function withMembership(
+  list: string[],
+  name: string,
+  present: boolean,
+): string[] {
+  if (list.includes(name) === present) return list;
+  return present ? [...list, name] : list.filter((entry) => entry !== name);
+}
+
+/**
+ * Switch one skill on or off. A catalog skill moves in the allow-list, any
+ * other skill in the deny-list.
+ */
+export function toggleSkill(
+  enablement: SkillEnablement,
+  skillName: string,
+  enabled: boolean,
+  isPublic: (name: string) => boolean = isCatalogSkill,
+): SkillEnablement {
+  const allowListed = isPublic(skillName);
+  return {
+    enabledSkills: allowListed
+      ? withMembership(
+          resolveEnabledCatalogSkills(enablement),
+          skillName,
+          enabled,
+        )
+      : enablement.enabledSkills,
+    // A catalog skill switched back on also leaves the deny-list, where an
+    // older selection may still hold it.
+    disabledSkills: withMembership(
+      enablement.disabledSkills ?? [],
+      skillName,
+      !enabled && !allowListed,
+    ),
+  };
+}
+
+/** The profile fields that store a selection. */
+export function toProfileSkillFields(enablement: SkillEnablement): {
+  public_skills: string[];
+  disabled_skills: string[];
+} {
+  return {
+    public_skills: resolveEnabledCatalogSkills(enablement),
+    disabled_skills: enablement.disabledSkills ?? [],
   };
 }
 
@@ -87,6 +155,20 @@ export function migrateSkillEnablement(
   };
 }
 
+/** A profile's skill selection; a profile without `public_skills` loads the whole catalog. */
+export function profileSkillEnablement(
+  profile: {
+    public_skills?: string[] | null;
+    disabled_skills?: string[];
+  },
+  publicNames: readonly string[] = CATALOG_SKILL_NAMES,
+): SkillEnablement {
+  return {
+    enabledSkills: profile.public_skills ?? [...publicNames],
+    disabledSkills: profile.disabled_skills ?? [],
+  };
+}
+
 export function toSkillEnablement(settings: {
   enabled_skills?: string[];
   disabled_skills?: string[];
@@ -95,6 +177,34 @@ export function toSkillEnablement(settings: {
     enabledSkills: settings.enabled_skills,
     disabledSkills: settings.disabled_skills,
   };
+}
+
+/** The default list new agent profiles start from, read as a pre-allow-list workspace migrates. */
+export function defaultSkillEnablement(settings: {
+  enabled_skills?: string[];
+  disabled_skills?: string[];
+}): SkillEnablement {
+  const stored = toSkillEnablement(settings);
+  const migrated = migrateSkillEnablement(stored);
+  return migrated
+    ? {
+        enabledSkills: migrated.enabled_skills,
+        disabledSkills: migrated.disabled_skills,
+      }
+    : stored;
+}
+
+/** Whether two selections store the same lists, ignoring order. */
+export function sameSkillSelection(
+  a: SkillEnablement,
+  b: SkillEnablement,
+): boolean {
+  const key = (enablement: SkillEnablement) =>
+    JSON.stringify([
+      [...resolveEnabledCatalogSkills(enablement)].sort(),
+      [...(enablement.disabledSkills ?? [])].sort(),
+    ]);
+  return key(a) === key(b);
 }
 
 // Both forms a user can send: the commands a skill declares in its own

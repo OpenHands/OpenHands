@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
@@ -7,12 +8,12 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
-        "SETTINGS$PROFILE_EDIT": "Edit",
-        "BUTTON$RENAME": "Rename",
-        "BUTTON$DUPLICATE": "Duplicate",
-        "SETTINGS$PROFILE_SET_ACTIVE": "Set as active",
-        "SETTINGS$PROFILE_SET_DEFAULT": "Set as default",
-        "BUTTON$DELETE": "Delete",
+        SETTINGS$PROFILE_EDIT: "Edit",
+        BUTTON$RENAME: "Rename",
+        BUTTON$DUPLICATE: "Duplicate",
+        SETTINGS$PROFILE_SET_ACTIVE: "Set as active",
+        SETTINGS$PROFILE_SET_DEFAULT: "Set as default",
+        BUTTON$DELETE: "Delete",
       };
       return translations[key] || key;
     },
@@ -39,7 +40,9 @@ describe("ProfileActionsMenu", () => {
     expect(screen.getByTestId("profile-duplicate")).toHaveTextContent(
       "Duplicate",
     );
-    expect(screen.getByTestId("profile-set-active")).toHaveTextContent("Set as default");
+    expect(screen.getByTestId("profile-set-active")).toHaveTextContent(
+      "Set as default",
+    );
     expect(screen.getByTestId("profile-delete")).toHaveTextContent("Delete");
   });
 
@@ -322,6 +325,101 @@ describe("ProfileActionsMenu", () => {
 
       await user.keyboard("{Tab}");
       expect(handleClose).toHaveBeenCalled();
+    });
+
+    it("skips the disabled Set as default item in both directions", async () => {
+      const user = userEvent.setup();
+      render(<ProfileActionsMenu {...defaultProps} isActive />);
+
+      await user.keyboard("{ArrowDown}{ArrowDown}"); // Rename, Duplicate
+      expect(screen.getByTestId("profile-duplicate")).toHaveFocus();
+
+      await user.keyboard("{ArrowDown}");
+      expect(screen.getByTestId("profile-delete")).toHaveFocus();
+
+      await user.keyboard("{ArrowUp}");
+      expect(screen.getByTestId("profile-duplicate")).toHaveFocus();
+    });
+  });
+
+  describe("keyboard navigation when anchored to a row trigger", () => {
+    // Mirrors ProfileRow: the trigger toggles the menu, which is portaled to
+    // <body> against the trigger and unmounted on close.
+    function AnchoredMenu({ isActive = false }: { isActive?: boolean }) {
+      const triggerRef = useRef<HTMLButtonElement>(null);
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button
+            ref={triggerRef}
+            type="button"
+            data-testid="profile-menu-trigger"
+            onClick={() => setOpen((value) => !value)}
+          />
+          {open && (
+            <ProfileActionsMenu
+              {...defaultProps}
+              isActive={isActive}
+              anchorRef={triggerRef}
+              onClose={() => setOpen(false)}
+            />
+          )}
+          <button type="button" data-testid="next-page-control" />
+        </>
+      );
+    }
+
+    it("moves focus to Edit when opened with the mouse", async () => {
+      const user = userEvent.setup();
+      render(<AnchoredMenu />);
+
+      await user.click(screen.getByTestId("profile-menu-trigger"));
+
+      expect(screen.getByTestId("profile-edit")).toHaveFocus();
+    });
+
+    it("moves focus to Edit when opened with Enter, then arrows across the disabled item", async () => {
+      const user = userEvent.setup();
+      render(<AnchoredMenu isActive />);
+
+      screen.getByTestId("profile-menu-trigger").focus();
+      await user.keyboard("{Enter}");
+      expect(screen.getByTestId("profile-edit")).toHaveFocus();
+
+      await user.keyboard("{ArrowDown}");
+      expect(screen.getByTestId("profile-rename")).toHaveFocus();
+
+      await user.keyboard("{ArrowDown}{ArrowDown}");
+      expect(screen.getByTestId("profile-delete")).toHaveFocus();
+
+      await user.keyboard("{ArrowUp}");
+      expect(screen.getByTestId("profile-duplicate")).toHaveFocus();
+    });
+
+    it("closes on Tab and moves focus to the control after the trigger", async () => {
+      const user = userEvent.setup();
+      render(<AnchoredMenu />);
+      await user.click(screen.getByTestId("profile-menu-trigger"));
+
+      await user.keyboard("{Tab}");
+
+      expect(
+        screen.queryByTestId("profile-actions-menu"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("next-page-control")).toHaveFocus();
+    });
+
+    it("closes on Escape and returns focus to the trigger", async () => {
+      const user = userEvent.setup();
+      render(<AnchoredMenu />);
+      await user.click(screen.getByTestId("profile-menu-trigger"));
+
+      await user.keyboard("{Escape}");
+
+      expect(
+        screen.queryByTestId("profile-actions-menu"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("profile-menu-trigger")).toHaveFocus();
     });
   });
 });

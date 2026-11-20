@@ -14,7 +14,13 @@ export function activate(host) {
       : `Host API ${host.apiVersion} on backend ${host.backend.id}`;
     detail.style.cssText = "margin-top:0.75rem;opacity:0.75;";
 
-    wrapper.append(title, detail);
+    const bridgeStatus = document.createElement("p");
+    bridgeStatus.dataset.testid = "demo-extension-app-backend-status";
+    bridgeStatus.textContent = host.appBackendView
+      ? "App backend view available"
+      : "App backend view unavailable";
+
+    wrapper.append(title, detail, bridgeStatus);
     container.append(wrapper);
     return () => wrapper.remove();
   });

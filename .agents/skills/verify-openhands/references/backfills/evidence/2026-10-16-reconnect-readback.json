@@ -1,0 +1,18 @@
+[
+  {
+    "trial": 1,
+    "events_before_restart": 7,
+    "initial_after_seq": -1,
+    "reconnected_after_seq": 6,
+    "recovery_message_visible_count": 1,
+    "observed_close_and_new_communicating_connection": true
+  },
+  {
+    "trial": 2,
+    "events_before_restart": 3,
+    "initial_after_seq": -1,
+    "reconnected_after_seq": 2,
+    "recovery_message_visible_count": 1,
+    "observed_close_and_new_communicating_connection": true
+  }
+]

@@ -65,6 +65,7 @@ describe("RecommendedAutomationsRail", () => {
       );
 
     expect(cardIds).toEqual([
+      "cve-remediation-factory",
       "custom-automation",
       "github-issue-to-pr",
       "slack-channel-monitor",
@@ -124,6 +125,7 @@ describe("RecommendedAutomationsRail", () => {
     const { container } = render(
       <RecommendedAutomationsRail
         installedAutomations={[
+          { name: "GitHub CVE Remediation Factory" },
           { name: "GitHub code review" },
           { name: "GitHub issue to PR" },
           { name: "Custom automation" },
@@ -324,6 +326,48 @@ describe("RecommendedAutomationsRail", () => {
       fireEvent.mouseMove(document, { clientX: 100, buttons: 1 });
 
       expect(scroller.scrollLeft).toBe(150);
+    });
+  });
+
+  describe("dismiss behavior", () => {
+    // @spec HL-002 — Rails that do not opt in (empty state, onboarding) get no X.
+    it("does not render dismiss button by default", () => {
+      render(
+        <RecommendedAutomationsRail
+          installedAutomations={[]}
+          onSelect={vi.fn()}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId("recommended-automations-rail-dismiss"),
+      ).not.toBeInTheDocument();
+    });
+
+    // @spec HL-002 — The opted-in rail exposes a named X that dismisses it.
+    it("renders dismiss button when dismissible is true and calls onDismiss when clicked", async () => {
+      const user = userEvent.setup();
+      const onDismiss = vi.fn();
+      render(
+        <RecommendedAutomationsRail
+          installedAutomations={[]}
+          onSelect={vi.fn()}
+          dismissible
+          onDismiss={onDismiss}
+        />,
+      );
+
+      const dismissButton = screen.getByTestId(
+        "recommended-automations-rail-dismiss",
+      );
+      expect(dismissButton).toBeInTheDocument();
+      expect(dismissButton).toHaveAttribute(
+        "aria-label",
+        I18nKey.RECOMMENDED_AUTOMATIONS$DISMISS_LABEL,
+      );
+
+      await user.click(dismissButton);
+      expect(onDismiss).toHaveBeenCalledTimes(1);
     });
   });
 });

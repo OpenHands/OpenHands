@@ -12,9 +12,12 @@ import { Divider } from "#/ui/divider";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
 import { useFreeModels } from "#/hooks/query/use-free-models";
 import { formatModelPillLabel } from "#/utils/format-model-name";
+import { useModelCatalogWarning } from "#/hooks/use-model-catalog-warning";
+import { ModelCatalogWarning } from "#/components/shared/model-catalog-warning";
 
 const PROFILE_LABEL_MAX_CHARS = 18;
 
@@ -45,6 +48,7 @@ export function ChatInputLlmProfileMenuContent({
 }: ChatInputLlmProfileMenuContentProps) {
   const { t } = useTranslation("openhands");
   const freeModels = useFreeModels();
+  const isModelUnlisted = useModelCatalogWarning();
   const {
     profiles,
     currentProfileName,
@@ -52,11 +56,13 @@ export function ChatInputLlmProfileMenuContent({
     canSwitchProfile,
     selectProfile,
   } = useChatInputLlmProfileState();
-  // Read-only surfaces (a cloud member on the home page, or a start-task route)
-  // still name the active profile — the same shape ChatInputModelMenuContent
-  // uses when the ACP picker is gated off.
+  // A read-only surface (a cloud start-task route) still names the active
+  // profile — the same shape ChatInputModelMenuContent uses when the ACP
+  // picker is gated off.
   const showProfileList = canSwitchProfile && profiles.length > 0;
   const readOnlyProfileName = canSwitchProfile ? null : currentProfileName;
+  // Locked-to-Cloud blocks the Canvas LLM page this links to (OHE-3457).
+  const showSettingsLink = getLockedCloudHost() === null;
 
   const handleSelect = (profileName: string) => {
     selectProfile(profileName);
@@ -70,7 +76,7 @@ export function ChatInputLlmProfileMenuContent({
           {/* role="presentation" keeps this a valid <li> child of the
               ContextMenu <ul> without exposing the label as a menu item. */}
           <li role="presentation" className="px-2 pt-1 pb-0.5">
-            <Typography.Text className="text-[11px] font-medium text-text-dim uppercase tracking-wide leading-4">
+            <Typography.Text className="menu-caption-text font-medium text-text-dim uppercase tracking-wide leading-4">
               {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
             </Typography.Text>
           </li>
@@ -119,6 +125,7 @@ export function ChatInputLlmProfileMenuContent({
                     {displayModel}
                   </span>
                 )}
+                {isModelUnlisted(profile.model) && <ModelCatalogWarning />}
               </ContextMenuListItem>
             );
           })}
@@ -135,38 +142,47 @@ export function ChatInputLlmProfileMenuContent({
                 {formatModelPillLabel(currentProfileModel, freeModels)}
               </span>
             )}
+            {isModelUnlisted(currentProfileModel) && <ModelCatalogWarning />}
           </div>
         </li>
       )}
-      {(showProfileList || readOnlyProfileName) && (
+      {showSettingsLink && (showProfileList || readOnlyProfileName) && (
         <Divider inset={dividerInset} />
       )}
-      <li className="text-sm">
-        <NavigationLink
-          to="/settings/llm"
-          onClick={onClose}
-          className={cn(
-            "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
-            settingsLinkClassName,
-          )}
-        >
-          <SettingsGearIcon
-            width={16}
-            height={16}
-            className={cn("shrink-0", settingsIconClassName)}
-            aria-hidden
-          />
-          <span>{t(I18nKey.SETTINGS$LLM_PROFILES)}</span>
-        </NavigationLink>
-      </li>
+      {showSettingsLink && (
+        <li className="text-sm">
+          <NavigationLink
+            to="/settings/llm"
+            onClick={onClose}
+            className={cn(
+              "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
+              settingsLinkClassName,
+            )}
+          >
+            <SettingsGearIcon
+              width={16}
+              height={16}
+              className={cn("shrink-0", settingsIconClassName)}
+              aria-hidden
+            />
+            <span>{t(I18nKey.SETTINGS$LLM_PROFILES)}</span>
+          </NavigationLink>
+        </li>
+      )}
     </>
   );
 }
 
 export function ChatInputLlmProfilePicker() {
   const { t } = useTranslation("openhands");
-  const { profiles, currentProfileName, isLoading, isSwitching } =
-    useChatInputLlmProfileState();
+  const {
+    profiles,
+    currentProfileName,
+    currentProfileModel,
+    isLoading,
+    isSwitching,
+  } = useChatInputLlmProfileState();
+  const isModelUnlisted = useModelCatalogWarning();
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const [popoverMaxHeight, setPopoverMaxHeight] = React.useState<number>();
@@ -228,6 +244,9 @@ export function ChatInputLlmProfilePicker() {
         }}
       >
         <span className="truncate">{truncateLabel(label)}</span>
+        {isModelUnlisted(currentProfileModel) && (
+          <ModelCatalogWarning compact />
+        )}
         <ComboboxCaretInline isOpen={isPopoverOpen} />
       </button>
 
@@ -239,7 +258,7 @@ export function ChatInputLlmProfilePicker() {
           position="top"
           alignment="left"
           spacing="none"
-          className="z-[60] mb-2 min-w-50 max-w-80 max-h-[60vh] overflow-y-auto"
+          className="z-60 mb-2 min-w-50 max-w-80 profile-menu-height overflow-y-auto"
         >
           <ChatInputLlmProfileMenuContent
             onClose={() => setIsPopoverOpen(false)}

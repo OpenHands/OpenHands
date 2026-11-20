@@ -15,6 +15,21 @@ vi.mock("#/api/profiles-service/profiles-service.api", () => ({
   },
 }));
 
+const updateDefaultAgentProfileMock = vi.hoisted(() => vi.fn());
+vi.mock("#/hooks/mutation/sync-agent-profiles", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/hooks/mutation/sync-agent-profiles")
+  >()),
+  updateDefaultAgentProfile: updateDefaultAgentProfileMock,
+}));
+
+/** The `default` fields the sync would change, from a stored LLM ref. */
+const mirroredFrom = (llmProfileRef: string) => {
+  expect(updateDefaultAgentProfileMock).toHaveBeenCalledOnce();
+  const [, change] = updateDefaultAgentProfileMock.mock.calls[0];
+  return change({ agent_kind: "openhands", llm_profile_ref: llmProfileRef });
+};
+
 describe("useActivateLlmProfile", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -58,6 +73,7 @@ describe("useActivateLlmProfile", () => {
 
     // Verify activateProfile was called with the correct name
     expect(mockActivateProfile).toHaveBeenCalledWith("my-profile");
+    expect(mirroredFrom("old")).toEqual({ llm_profile_ref: "my-profile" });
 
     // Verify all cache invalidations occur on success
     expect(invalidateCacheSpy).toHaveBeenCalled();

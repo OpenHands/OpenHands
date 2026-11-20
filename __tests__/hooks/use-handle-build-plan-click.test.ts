@@ -36,9 +36,7 @@ describe("useHandleBuildPlanClick", () => {
     useConversationStore.setState({
       conversationMode: "plan",
     });
-    useOptimisticUserMessageStore.setState({
-      pendingMessages: [],
-    });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
 
     // Setup send message hook mock
     (useSendMessage as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -62,9 +60,7 @@ describe("useHandleBuildPlanClick", () => {
     useConversationStore.setState({
       conversationMode: "code",
     });
-    useOptimisticUserMessageStore.setState({
-      pendingMessages: [],
-    });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
   });
 
   it("should switch conversation mode to code when handleBuildPlanClick is called", () => {
@@ -113,7 +109,7 @@ describe("useHandleBuildPlanClick", () => {
 
   it("should enqueue a pending user message when handleBuildPlanClick is called", () => {
     // Arrange
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     const { result } = renderHook(() => useHandleBuildPlanClick());
     const expectedPrompt =
       "Execute the plan based on the .agents_tmp/PLAN.md file.";
@@ -124,8 +120,7 @@ describe("useHandleBuildPlanClick", () => {
     });
 
     // Assert
-    const pending =
-      useOptimisticUserMessageStore.getState().pendingMessages;
+    const pending = useOptimisticUserMessageStore.getState().pendingMessages;
     expect(pending).toHaveLength(1);
     expect(pending[0].text).toBe(expectedPrompt);
     expect(pending[0].status).toBe("sending");
@@ -152,7 +147,7 @@ describe("useHandleBuildPlanClick", () => {
   it("should handle call without event parameter", () => {
     // Arrange
     useConversationStore.setState({ conversationMode: "plan" });
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     const { result } = renderHook(() => useHandleBuildPlanClick());
 
     // Act & Assert - should not throw
@@ -163,8 +158,7 @@ describe("useHandleBuildPlanClick", () => {
     // Assert all expected behaviors still occur
     expect(useConversationStore.getState().conversationMode).toBe("code");
     expect(mockSend).toHaveBeenCalledTimes(1);
-    const pending =
-      useOptimisticUserMessageStore.getState().pendingMessages;
+    const pending = useOptimisticUserMessageStore.getState().pendingMessages;
     expect(pending).toHaveLength(1);
     expect(pending[0].text).toBe(
       "Execute the plan based on the .agents_tmp/PLAN.md file.",

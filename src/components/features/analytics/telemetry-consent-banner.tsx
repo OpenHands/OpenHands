@@ -85,7 +85,7 @@ function LocalTelemetryConsentBanner({
           <BaseModalDescription>
             {t(I18nKey.TELEMETRY$CONSENT_DESCRIPTION)}
           </BaseModalDescription>
-          <p className="text-xs text-neutral-400">
+          <p className="text-xs text-contrast">
             {t(I18nKey.TELEMETRY$BACKEND_SCOPE, {
               name: backend.name,
               host: backend.host,

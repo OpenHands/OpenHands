@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
 import type { ReactNode } from "react";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -61,6 +64,41 @@ describe("SettingsNavigation", () => {
     expect(
       screen.getAllByText("SETTINGS$NAV_CONDENSER").length,
     ).toBeGreaterThan(0);
+  });
+
+  it("builds a half-transparent backdrop for the exported mobile drawer", async () => {
+    renderSettingsNavigation(
+      <SettingsNavigation
+        isMobileMenuOpen
+        onCloseMobileMenu={vi.fn()}
+        navigationItems={baseItems}
+      />,
+    );
+    const backdrop = screen.getByTestId("settings-navbar")
+      .previousElementSibling as HTMLElement;
+    const candidates = [...backdrop.classList];
+    const selectors = new Set(
+      candidates.map(
+        (candidate) =>
+          `.${candidate.replace(/[^\w-]/g, (character) => `\\${character}`)}`,
+      ),
+    );
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const stylesheet = compiler.build(candidates);
+    const backgrounds = [...stylesheet.matchAll(/(\.[^\s{]+)\s*\{([^}]+)\}/g)]
+      .filter(([, selector]) => selectors.has(selector))
+      .flatMap(([, , declarations]) =>
+        [...declarations.matchAll(/background-color:\s*([^;]+);/g)].map(
+          ([, value]) => value,
+        ),
+      );
+    expect(backgrounds).not.toEqual([]);
+    for (const background of backgrounds) {
+      expect(background).toMatch(/50%|0\.5\b/);
+    }
   });
 
   it("closes the mobile drawer when the close button is clicked", async () => {

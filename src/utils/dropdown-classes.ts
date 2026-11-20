@@ -57,19 +57,9 @@ export const dropdownMenuRowIconWrapperClassName = cn(
 /** Enum/filter dropdown trigger chip. */
 export const dropdownFilterTriggerClassName = cn(
   "inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium",
-  "border-border bg-base-secondary text-contrast",
-  "focus-visible:border-contrast/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-contrast/20",
+  "border-border-input bg-base-secondary text-contrast dark:border-border",
+  "focus-visible:border-contrast/40 dark:focus-visible:border-contrast/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-contrast/20",
   dropdownInstantColorClassName,
-);
-
-/**
- * Scroll cap for the switch-profile menu: four two-line rows
- * (p-2 + leading-5 title + gap-0.5 + leading-4 subtitle) plus list gaps.
- */
-export const switchProfileMenuListScrollClassName = cn(
-  dropdownMenuListClassName,
-  "overflow-y-auto custom-scrollbar-always",
-  "max-h-[13.875rem]",
 );
 
 /**
@@ -78,7 +68,7 @@ export const switchProfileMenuListScrollClassName = cn(
  */
 export const dropdownMenuViewportScrollClassName = cn(
   "overflow-y-auto custom-scrollbar",
-  "max-h-[min(60vh,calc(100dvh-5rem))]",
+  "dropdown-menu-viewport-height",
 );
 
 /** Footer action row inside a dropdown panel. */

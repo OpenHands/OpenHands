@@ -98,7 +98,6 @@ describe('translation.json', () => {
 
   it('keeps the keys from #1218 translated', () => {
     const keys = [
-      'SETTINGS$SAVE_AND_RECONNECT',
       'SETTINGS$MCP_ERROR_URL_DUPLICATE',
       'SETTINGS$MCP_ERROR_ENV_INVALID_FORMAT',
     ];
@@ -113,6 +112,17 @@ describe('translation.json', () => {
         ).not.toBe(translations.en);
       });
     });
+  });
+
+  it('stores line breaks as newlines, not a literal backslash-n', () => {
+    const escapedNewlines = Object.entries(translationJson).flatMap(
+      ([key, translations]) =>
+        Object.entries(translations)
+          .filter(([, value]) => value.includes('\\n'))
+          .map(([lang]) => `${key} (${lang})`),
+    );
+
+    expect(escapedNewlines).toEqual([]);
   });
 
   it('preserves interpolation placeholders in every translation', () => {

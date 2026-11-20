@@ -1,11 +1,15 @@
 import React from "react";
 import {
   Bot,
+  Brain,
+  Container,
   Home,
   Keyboard,
   KeyRound,
   ListTodo,
+  FlaskConical,
   PanelsTopLeft,
+  Route,
   Search,
   Settings,
   ShieldCheck,
@@ -20,7 +24,9 @@ import {
   hasAutomationInterface,
 } from "#/manifests/automation-interface";
 import { getLockedCloudHost } from "#/api/agent-server-config";
+import type { BackendKind } from "#/api/backend-registry/types";
 import { LOCKED_CLOUD_SETTINGS_NAV_PATH } from "#/constants/settings-nav";
+import { isApplePlatform } from "#/utils/utils";
 
 const ICON_SIZE = 18;
 
@@ -32,10 +38,14 @@ export const COMMAND_MENU_ROUTE = {
   settings: "/settings",
   agentSettings: "/settings/agents",
   llmSettings: "/settings/llm",
+  metaLlmSettings: "/settings/meta-llm",
   condenserSettings: "/settings/condenser",
+  agentContextSettings: "/settings/agent-context",
   verificationSettings: "/settings/verification",
+  runtimeSettings: "/settings/runtime",
   appSettings: "/settings/app",
   secretsSettings: "/settings/secrets",
+  experimentalSettings: "/settings/experimental",
 } as const;
 
 export type CommandMenuGroupId = "navigation" | "settings" | "actions";
@@ -47,10 +57,14 @@ export type CommandMenuItemId =
   | "settings"
   | "agent-settings"
   | "llm-settings"
+  | "meta-llm-settings"
   | "condenser-settings"
+  | "agent-context-settings"
   | "verification-settings"
+  | "runtime-settings"
   | "app-settings"
   | "secrets-settings"
+  | "experimental-settings"
   | "toggle-sidebar";
 
 export interface CommandMenuItemDefinition {
@@ -82,6 +96,16 @@ export function commandMenuItemCopy(
   return key === undefined ? "" : translate(key);
 }
 
+/**
+ * The open-menu shortcut as the platform spells it: ⌘K on Apple platforms,
+ * Ctrl+K elsewhere. The key handler accepts either modifier everywhere.
+ */
+export function getCommandMenuShortcutKey(): I18nKey {
+  return isApplePlatform()
+    ? I18nKey.COMMAND_MENU$SHORTCUT
+    : I18nKey.COMMAND_MENU$SHORTCUT_CTRL;
+}
+
 export const COMMAND_MENU_GROUP_LABELS: Record<CommandMenuGroupId, I18nKey> = {
   navigation: I18nKey.COMMAND_MENU$GROUP_NAVIGATION,
   settings: I18nKey.COMMAND_MENU$GROUP_SETTINGS,
@@ -96,8 +120,10 @@ export const COMMAND_MENU_GROUP_ORDER: CommandMenuGroupId[] = [
 
 export const createCommandMenuItems = ({
   toggleSidebar,
+  backendKind,
 }: {
   toggleSidebar: () => void;
+  backendKind: BackendKind;
 }): CommandMenuItemDefinition[] => {
   const items: CommandMenuItemDefinition[] = [
     {
@@ -170,6 +196,15 @@ export const createCommandMenuItems = ({
       to: COMMAND_MENU_ROUTE.llmSettings,
     },
     {
+      id: "meta-llm-settings",
+      group: "settings",
+      titleKey: I18nKey.SETTINGS$NAV_META_LLM,
+      descriptionKey: I18nKey.SETTINGS$PAGE_META_LLM_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$META_LLM_SETTINGS_KEYWORDS,
+      icon: <Route size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.metaLlmSettings,
+    },
+    {
       id: "condenser-settings",
       group: "settings",
       titleKey: I18nKey.COMMAND_MENU$CONDENSER_SETTINGS_TITLE,
@@ -179,6 +214,15 @@ export const createCommandMenuItems = ({
       to: COMMAND_MENU_ROUTE.condenserSettings,
     },
     {
+      id: "agent-context-settings",
+      group: "settings",
+      titleKey: I18nKey.SETTINGS$NAV_AGENT_CONTEXT,
+      descriptionKey: I18nKey.SETTINGS$PAGE_AGENT_CONTEXT_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$AGENT_CONTEXT_SETTINGS_KEYWORDS,
+      icon: <Brain size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.agentContextSettings,
+    },
+    {
       id: "verification-settings",
       group: "settings",
       titleKey: I18nKey.COMMAND_MENU$VERIFICATION_SETTINGS_TITLE,
@@ -186,6 +230,15 @@ export const createCommandMenuItems = ({
       keywordsKey: I18nKey.COMMAND_MENU$VERIFICATION_SETTINGS_KEYWORDS,
       icon: <ShieldCheck size={ICON_SIZE} />,
       to: COMMAND_MENU_ROUTE.verificationSettings,
+    },
+    {
+      id: "runtime-settings",
+      group: "settings",
+      titleKey: I18nKey.SETTINGS$NAV_RUNTIME,
+      descriptionKey: I18nKey.SETTINGS$PAGE_RUNTIME_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$RUNTIME_SETTINGS_KEYWORDS,
+      icon: <Container size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.runtimeSettings,
     },
     {
       id: "app-settings",
@@ -206,6 +259,15 @@ export const createCommandMenuItems = ({
       to: COMMAND_MENU_ROUTE.secretsSettings,
     },
     {
+      id: "experimental-settings",
+      group: "settings",
+      titleKey: I18nKey.SETTINGS$NAV_EXPERIMENTAL,
+      descriptionKey: I18nKey.SETTINGS$PAGE_EXPERIMENTAL_SUBLINE,
+      keywordsKey: I18nKey.COMMAND_MENU$EXPERIMENTAL_SETTINGS_KEYWORDS,
+      icon: <FlaskConical size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.experimentalSettings,
+    },
+    {
       id: "toggle-sidebar",
       group: "actions",
       titleKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_TITLE,
@@ -219,12 +281,17 @@ export const createCommandMenuItems = ({
   // Locked-to-Cloud (SaaS / self-hosted OHE) lists only the Application page;
   // the OHE settings shell owns the rest (OHE-3168).
   const isLockedToCloud = getLockedCloudHost() !== null;
+  // Locally each agent profile has its own condenser.
+  const isCloud = backendKind === "cloud";
 
   return items.filter(
     (item) =>
-      !isLockedToCloud ||
-      item.group !== "settings" ||
-      item.to === COMMAND_MENU_ROUTE.settings ||
-      item.to === LOCKED_CLOUD_SETTINGS_NAV_PATH,
+      (isCloud || item.to !== COMMAND_MENU_ROUTE.condenserSettings) &&
+      // Experimental features live on a local agent server.
+      (!isCloud || item.to !== COMMAND_MENU_ROUTE.experimentalSettings) &&
+      (!isLockedToCloud ||
+        item.group !== "settings" ||
+        item.to === COMMAND_MENU_ROUTE.settings ||
+        item.to === LOCKED_CLOUD_SETTINGS_NAV_PATH),
   );
 };

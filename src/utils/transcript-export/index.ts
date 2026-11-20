@@ -1,3 +1,5 @@
+import { isAskUserAnswerEvent } from "@openhands/typescript-client";
+import { deliveredAnswerIds } from "#/utils/decision-closures";
 import type {
   ActionEvent,
   OpenHandsEvent,
@@ -16,8 +18,11 @@ import {
   isObservationEvent,
   isStreamingDeltaEvent,
   isSwitchLLMObservationEvent,
+  isClassifyAndSwitchLLMObservationEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { handleEventForUI } from "#/utils/handle-event-for-ui";
+import { markdownFence } from "#/utils/markdown-fence";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 import { parseMessageFromEvent } from "#/components/conversation-events/chat/event-content-helpers/parse-message-from-event";
 import { getActionContent } from "#/components/conversation-events/chat/event-content-helpers/get-action-content";
@@ -104,6 +109,7 @@ const SAFE_OBSERVATION_DETAIL_KINDS = new Set([
   "MCPToolObservation",
   "StrReplaceEditorObservation",
   "SwitchLLMObservation",
+  "ClassifyAndSwitchLLMObservation",
   "TaskTrackerObservation",
   "TaskObservation",
   "TerminalObservation",
@@ -277,9 +283,17 @@ const buildTranscriptEntries = (
   );
   const entries: TranscriptEntry[] = [];
   const emittedNarrationActionIds = new Set<string>();
+  // Only answers that reached the agent: one lost in a crash and picked again
+  // would otherwise show twice.
+  const deliveredAnswers = deliveredAnswerIds(events);
   const renderableEvents = uiEvents.filter(
     (event) =>
+      ("kind" in event &&
+        isAskUserAnswerEvent(event) &&
+        deliveredAnswers.has(event.id ?? "")) ||
       (isSwitchLLMObservationEvent(event) && !event.observation.is_error) ||
+      (isClassifyAndSwitchLLMObservationEvent(event) &&
+        !event.observation.is_error) ||
       shouldRenderEvent(event),
   );
   const renderedItems = groupEvents(
@@ -316,9 +330,20 @@ const buildTranscriptEntries = (
 
     const { event } = item;
     try {
+      if ("kind" in event && isAskUserAnswerEvent(event)) {
+        entries.push({
+          kind: "message",
+          author: "user",
+          content: [event.option_label, event.text]
+            .filter(Boolean)
+            .join("\n\n"),
+          timestamp: event.timestamp ?? "",
+        });
+        continue;
+      }
       const narrationAction = isActionEvent(event)
         ? event
-        : isObservationEvent(event)
+        : isObservationEvent(event) || isUserRejectObservation(event)
           ? actionsById.get(event.action_id)
           : undefined;
       if (narrationAction) addActionNarration(narrationAction);
@@ -335,6 +360,33 @@ const buildTranscriptEntries = (
               : "",
             event.observation.reason
               ? `${i18n.t(I18nKey.TRANSCRIPT_EXPORT$REASON)}: ${event.observation.reason}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          timestamp: event.timestamp ?? "",
+        });
+        continue;
+      }
+
+      if (
+        isClassifyAndSwitchLLMObservationEvent(event) &&
+        !event.observation.is_error &&
+        event.observation.model
+      ) {
+        // Router-driven switch: surface the activated profile the same way
+        // as a manual `/model` switch, and tag the chosen classifier
+        // category as the reason so transcript readers can see *why* the
+        // router picked this model.
+        entries.push({
+          kind: "note",
+          summary: translatePlain(I18nKey.MODEL$SWITCHED_TO_PROFILE, {
+            name: event.observation.model,
+          }),
+          content: [
+            `${i18n.t(I18nKey.TRANSCRIPT_EXPORT$MODEL)}: ${event.observation.active_model}`,
+            event.observation.chosen_class
+              ? `${i18n.t(I18nKey.TRANSCRIPT_EXPORT$REASON)}: ${event.observation.chosen_class}`
               : "",
           ]
             .filter(Boolean)
@@ -430,6 +482,34 @@ const buildTranscriptEntries = (
 
       if (isObservationEvent(event)) {
         const correspondingAction = actionsById.get(event.action_id);
+        if (
+          event.observation.kind === "AskUserObservation" &&
+          !event.observation.is_error &&
+          correspondingAction?.action.kind === "AskUserAction"
+        ) {
+          const { question, options, recommended } = correspondingAction.action;
+          entries.push({
+            kind: "message",
+            author: "assistant",
+            content: [
+              question,
+              ...options.map((option, index) =>
+                [
+                  `${index + 1}. ${option.label}${
+                    recommended === index
+                      ? ` (${translatePlain(I18nKey.ASK_USER$RECOMMENDED)})`
+                      : ""
+                  }`,
+                  option.consequence,
+                ]
+                  .filter(Boolean)
+                  .join("\n"),
+              ),
+            ].join("\n\n"),
+            timestamp: event.timestamp ?? "",
+          });
+          continue;
+        }
         entries.push({
           kind: "tool",
           summary: getObservationSummary(event, correspondingAction),
@@ -441,12 +521,27 @@ const buildTranscriptEntries = (
         continue;
       }
 
+      if (isUserRejectObservation(event)) {
+        const rejectedAction = actionsById.get(event.action_id);
+        entries.push({
+          kind: "tool",
+          summary: `${
+            rejectedAction
+              ? getActionSummary(rejectedAction)
+              : cleanInlineText(event.tool_name)
+          } (${i18n.t(I18nKey.EVENT$REJECTED)})`,
+          details: includeToolDetails ? event.rejection_reason : "",
+          timestamp: event.timestamp ?? "",
+        });
+        continue;
+      }
+
       if (isACPToolCallEvent(event)) {
         entries.push({
           kind: "tool",
           summary:
             stripRedundantTitlePrefix(event) ||
-            i18n.t(I18nKey.ACTION_MESSAGE$ACP_TOOL),
+            i18n.t(I18nKey.TRANSCRIPT_EXPORT$TOOL),
           details: includeToolDetails ? getACPToolCallContent(event) : "",
           timestamp: event.timestamp ?? "",
         });
@@ -502,15 +597,6 @@ const markdownTimestamp = (
     ? `<sub>${escapeHtml(formatTimestamp(entry.timestamp))}</sub>\n\n`
     : "";
 
-const markdownFence = (content: string): string => {
-  const longestRun = Math.max(
-    0,
-    ...Array.from(content.matchAll(/`+/g), (match) => match[0].length),
-  );
-  const fence = "`".repeat(Math.max(3, longestRun + 1));
-  return `${fence}text\n${content}\n${fence}`;
-};
-
 export const eventsToMarkdown = (
   events: OpenHandsEvent[],
   options: TranscriptExportOptions,
@@ -563,7 +649,7 @@ export const eventsToMarkdown = (
         "<details>",
         `<summary><strong>${escapeHtml(i18n.t(I18nKey.TRANSCRIPT_EXPORT$TOOL))}:</strong> ${escapeHtml(entry.summary)}</summary>`,
         "",
-        timestamp + markdownFence(entry.details),
+        timestamp + markdownFence(entry.details, "text"),
         "",
         "</details>",
         "",

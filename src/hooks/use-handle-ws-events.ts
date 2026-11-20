@@ -7,6 +7,7 @@ import { useSendMessage } from "#/hooks/use-send-message";
 import {
   isAgentErrorEvent,
   isAgentServerEvent,
+  isHookExecutionEvent,
 } from "#/types/agent-server/type-guards";
 
 interface ServerError {
@@ -33,8 +34,14 @@ export const useHandleWSEvents = () => {
     const event = events[events.length - 1];
 
     // V1 agent errors are surfaced inline in the chat log (and via the error
-    // banner), so don't double-notify with a toast.
-    if (isAgentServerEvent(event) && isAgentErrorEvent(event)) {
+    // banner), so don't double-notify with a toast. Hook executions render
+    // their own inline row too, and a persisted hook event carries
+    // `error: null`, which the legacy server-error check below would
+    // otherwise mistake for a failure with no message.
+    if (
+      isAgentServerEvent(event) &&
+      (isAgentErrorEvent(event) || isHookExecutionEvent(event))
+    ) {
       return;
     }
 

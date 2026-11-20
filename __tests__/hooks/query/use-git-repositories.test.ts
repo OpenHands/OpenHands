@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   installations: undefined as string[] | undefined,
   backend: { id: "local", kind: "local" as "local" | "cloud" },
   orgId: null as string | null,
+  appInstallationsCalls: [] as unknown[][],
   queryConfig: null as CapturedQueryConfig | null,
   repos: {
     data: undefined as unknown,
@@ -47,12 +48,15 @@ vi.mock("#/hooks/use-user-providers", () => ({
 }));
 
 vi.mock("#/hooks/query/use-app-installations", () => ({
-  useAppInstallations: () => ({
-    data:
-      mocks.installations === undefined
-        ? undefined
-        : { items: mocks.installations, next_page_id: null },
-  }),
+  useAppInstallations: (...args: unknown[]) => {
+    mocks.appInstallationsCalls.push(args);
+    return {
+      data:
+        mocks.installations === undefined
+          ? undefined
+          : { items: mocks.installations, next_page_id: null },
+    };
+  },
 }));
 
 vi.mock("#/contexts/active-backend-context", () => ({
@@ -85,6 +89,7 @@ describe("useGitRepositories", () => {
     mocks.installations = undefined;
     mocks.backend = { id: "local", kind: "local" };
     mocks.orgId = null;
+    mocks.appInstallationsCalls = [];
     mocks.queryConfig = null;
     mocks.repos.data = undefined;
     mocks.repos.isLoading = false;
@@ -99,7 +104,7 @@ describe("useGitRepositories", () => {
     const { result } = renderHook(() => useGitRepositories({ provider: null }));
 
     expect(config()).toMatchObject({
-      queryKey: ["repositories", null, false, 30, "local", null],
+      queryKey: ["repositories", null, false, 30, "local", null, null],
       initialPageParam: null,
       enabled: false,
       staleTime: 300000,
@@ -137,6 +142,7 @@ describe("useGitRepositories", () => {
       12,
       "local",
       "org-1",
+      null,
     ]);
     expect(config().enabled).toBe(true);
     expect(config().initialPageParam).toBeNull();
@@ -144,8 +150,22 @@ describe("useGitRepositories", () => {
       emptyPage("next"),
     );
     await config().queryFn({ pageParam: "cursor-2" });
-    expect(retrieve).toHaveBeenNthCalledWith(1, "github", undefined, 12);
-    expect(retrieve).toHaveBeenNthCalledWith(2, "github", "cursor-2", 12);
+    expect(retrieve).toHaveBeenNthCalledWith(
+      1,
+      "github",
+      undefined,
+      12,
+      undefined,
+      undefined,
+    );
+    expect(retrieve).toHaveBeenNthCalledWith(
+      2,
+      "github",
+      "cursor-2",
+      12,
+      undefined,
+      undefined,
+    );
     expect(config().getNextPageParam(emptyPage("next"), [], null)).toBe("next");
     expect(config().getNextPageParam(emptyPage(), [], "next")).toBeNull();
   });
@@ -168,6 +188,7 @@ describe("useGitRepositories", () => {
       30,
       "cloud",
       null,
+      null,
       ["installation-a", "installation-b"],
     ]);
     expect(config().initialPageParam).toEqual({
@@ -187,6 +208,7 @@ describe("useGitRepositories", () => {
       mocks.installations,
       undefined,
       30,
+      undefined,
     );
     expect(retrieve).toHaveBeenNthCalledWith(
       2,
@@ -195,6 +217,7 @@ describe("useGitRepositories", () => {
       mocks.installations,
       "page-2",
       30,
+      undefined,
     );
 
     expect(
@@ -236,7 +259,7 @@ describe("useGitRepositories", () => {
   it.each([
     ["explicitly disabled", false, ["github"], ["installation"], false],
     ["no connected providers", true, [], ["installation"], false],
-    ["empty installations", true, ["github"], [], false],
+    ["empty installations", true, ["github"], [], true],
     ["ready", true, ["github"], ["installation"], true],
   ])(
     "sets enabled=false when %s",
@@ -252,6 +275,22 @@ describe("useGitRepositories", () => {
     },
   );
 
+  it("passes the enabled flag through to app installation fetching", () => {
+    setupMocks();
+    mocks.backend = { id: "cloud", kind: "cloud" };
+    mocks.providers = ["github"];
+
+    renderHook(() =>
+      useGitRepositories({ provider: "github", enabled: false }),
+    );
+
+    expect(mocks.appInstallationsCalls.at(-1)).toEqual([
+      "github",
+      { enabled: false },
+    ]);
+    expect(config().enabled).toBe(false);
+  });
+
   it("stays disabled while connected providers are unresolved", () => {
     setupMocks();
     mocks.providers = undefined;
@@ -259,6 +298,17 @@ describe("useGitRepositories", () => {
     renderHook(() => useGitRepositories({ provider: "github" }));
 
     expect(config().enabled).toBe(false);
+  });
+
+  it("can query local repositories before provider settings report a token", () => {
+    setupMocks();
+    mocks.providers = [];
+
+    renderHook(() =>
+      useGitRepositories({ provider: "github", allowMissingProvider: true }),
+    );
+
+    expect(config().enabled).toBe(true);
   });
 
   it("loads more only when another page exists and no request is active", () => {
