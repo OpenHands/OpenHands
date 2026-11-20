@@ -558,6 +558,9 @@ Full skill body.`,
 
     const modal = await screen.findByTestId("add-skill-modal");
     expect(modal).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("add-skill-modal-tab-repo"));
+
     expect(screen.getByTestId("add-skill-modal-example")).toHaveTextContent(
       "/add-skill https://github.com/OpenHands/extensions/tree/main/skills/code-review",
     );
@@ -581,6 +584,7 @@ Full skill body.`,
     await user.click(await screen.findByTestId("skills-add-skill-button"));
     await screen.findByTestId("add-skill-modal");
 
+    await user.click(screen.getByTestId("add-skill-modal-tab-repo"));
     await user.click(screen.getByTestId("add-skill-modal-example-copy"));
 
     expect(writeText).toHaveBeenCalledWith(ADD_SKILL_EXAMPLE_COMMAND);
@@ -881,5 +885,37 @@ Full skill body.`,
         }),
       ),
     );
+  });
+
+  it("allows editing and deleting custom skills from the card", async () => {
+    const user = userEvent.setup();
+    const customSkill = buildSkill({
+      name: "custom-review",
+      source: "custom",
+      description: "My custom review",
+      content: "# Custom Review",
+    });
+    mockSkillList([customSkill]);
+
+    renderSkillsSettingsScreen();
+    await screen.findByTestId("skill-card-custom-review");
+
+    // Edit custom skill
+    const editButton = screen.getByTestId("skill-card-edit-custom-review");
+    await user.click(editButton);
+    expect(await screen.findByTestId("add-skill-modal")).toBeInTheDocument();
+    expect(screen.getByTestId("custom-skill-name-input")).toHaveValue(
+      "custom-review",
+    );
+    await user.click(screen.getByTestId("add-skill-modal-dismiss"));
+
+    // Delete custom skill
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const deleteSpy = vi.spyOn(SkillsService, "deleteCustomSkill");
+    const deleteButton = screen.getByTestId("skill-card-delete-custom-review");
+    await user.click(deleteButton);
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(deleteSpy).toHaveBeenCalledWith("custom-review");
   });
 });

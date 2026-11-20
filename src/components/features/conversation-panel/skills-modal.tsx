@@ -30,6 +30,7 @@ const SECTION_TITLE_KEY: Record<SkillScope, I18nKey> = {
   project: I18nKey.SKILLS_MODAL$SECTION_PROJECT,
   personal: I18nKey.SKILLS_MODAL$SECTION_USER,
   public: I18nKey.SKILLS_MODAL$SECTION_PUBLIC,
+  custom: I18nKey.SETTINGS$SKILLS_SOURCE_CUSTOM,
 };
 
 export function SkillsModal({ onClose }: SkillsModalProps) {

@@ -1,6 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import {
   ExtensionsNavigation,
@@ -32,6 +33,8 @@ import { useSkillEnablement } from "#/hooks/use-skill-enablement";
 import { I18nKey } from "#/i18n/declaration";
 import type { SkillInfo } from "#/types/settings";
 import { getSkillKey } from "#/utils/skill-key";
+import { displaySuccessToast } from "#/utils/custom-toast-handlers";
+import SkillsService from "#/api/skills-service";
 import {
   extensionModuleCardGridClassName,
   extensionModuleCardGridContainerClassName,
@@ -63,11 +66,32 @@ function SkillsSettingsScreen() {
   // The last `q` this component put in the URL, which is what lets the sync effect below tell a history navigation apart from the lagging echo of its own debounced write.
   const lastWrittenQuery = React.useRef(queryInput);
 
+  const queryClient = useQueryClient();
   const [selectedSkill, setSelectedSkill] = React.useState<SkillInfo | null>(
     null,
   );
   const [showAddSkillModal, setShowAddSkillModal] = React.useState(false);
+  const [editingSkill, setEditingSkill] = React.useState<SkillInfo | null>(
+    null,
+  );
   const [isFiltersModalOpen, setIsFiltersModalOpen] = React.useState(false);
+
+  const handleEditSkill = (skill: SkillInfo) => {
+    setEditingSkill(skill);
+    setSelectedSkill(null);
+    setShowAddSkillModal(true);
+  };
+
+  const handleDeleteSkill = (skill: SkillInfo) => {
+    if (window.confirm(t(I18nKey.SETTINGS$SKILLS_CUSTOM_DELETE_CONFIRM))) {
+      SkillsService.deleteCustomSkill(skill.name);
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      queryClient.invalidateQueries({ queryKey: ["skill-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      setSelectedSkill(null);
+      displaySuccessToast(t(I18nKey.SETTINGS$SKILLS_CUSTOM_DELETE_SUCCESS));
+    }
+  };
 
   const isLoading = settingsLoading || skillsLoading || !settings;
   const allSkills = skills ?? [];
@@ -181,7 +205,10 @@ function SkillsSettingsScreen() {
               variant="secondary"
               testId="skills-add-skill-button"
               className="flex-shrink-0 whitespace-nowrap"
-              onClick={() => setShowAddSkillModal(true)}
+              onClick={() => {
+                setEditingSkill(null);
+                setShowAddSkillModal(true);
+              }}
             >
               {t(I18nKey.SETTINGS$SKILLS_ADD_BUTTON)}
             </BrandButton>
@@ -270,6 +297,8 @@ function SkillsSettingsScreen() {
                               setEnabled(skill.name, enabled)
                             }
                             isToggleDisabled={isUnavailable}
+                            onEdit={handleEditSkill}
+                            onDelete={handleDeleteSkill}
                           />
                         ))}
                       </div>
@@ -298,11 +327,19 @@ function SkillsSettingsScreen() {
             onToggle={(enabled) => setEnabled(selectedSkill.name, enabled)}
             onClose={() => setSelectedSkill(null)}
             isToggleDisabled={isUnavailable}
+            onEdit={handleEditSkill}
+            onDelete={handleDeleteSkill}
           />
         )}
 
         {showAddSkillModal && (
-          <AddSkillModal onClose={() => setShowAddSkillModal(false)} />
+          <AddSkillModal
+            initialSkill={editingSkill}
+            onClose={() => {
+              setShowAddSkillModal(false);
+              setEditingSkill(null);
+            }}
+          />
         )}
       </main>
     </div>

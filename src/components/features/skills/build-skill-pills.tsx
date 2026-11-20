@@ -14,6 +14,7 @@ import {
   SKILL_CATEGORY_LABEL_KEYS,
   UNCATEGORIZED_SKILL_CATEGORY,
 } from "#/utils/skill-category";
+import { getSkillScope } from "#/utils/skill-scope";
 import { isRecommendedSkill } from "#/utils/skill-enablement";
 
 type SkillPillVariant = "card" | "detail";
@@ -47,6 +48,23 @@ export function buildSkillPills(
       node: <SkillTypeBadge type={skill.type} />,
     },
   ];
+
+  if (getSkillScope(skill) === "custom") {
+    pills.push({
+      id: "scope-custom",
+      node: (
+        <span
+          data-testid={
+            pillTestId(testIdPrefix, skill.name, "custom") ??
+            `skill-custom-${skill.name}`
+          }
+          className={SKILL_CARD_PILL_CLASS}
+        >
+          {translate(I18nKey.SETTINGS$SKILLS_SOURCE_CUSTOM)}
+        </span>
+      ),
+    });
+  }
 
   if (isRecommendedSkill(skill.name)) {
     pills.push({
