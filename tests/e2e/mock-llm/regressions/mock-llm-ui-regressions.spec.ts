@@ -672,7 +672,7 @@ test.describe("UI regressions", () => {
             .includes(
               `/api/conversations/${VIRTUALIZED_CONVERSATION_ID}/events/search`,
             ) &&
-          new URL(req.url()).searchParams.has("timestamp__lt"),
+          new URL(req.url()).searchParams.has("page_id"),
       );
 
     await page.goto(`/conversations/${VIRTUALIZED_CONVERSATION_ID}`, {
@@ -769,7 +769,7 @@ test.describe("UI regressions", () => {
             .includes(
               `/api/conversations/${VIRTUALIZED_CONVERSATION_ID}/events/search`,
             ) &&
-          new URL(req.url()).searchParams.has("timestamp__lt"),
+          new URL(req.url()).searchParams.has("page_id"),
       );
 
     await page.goto(`/conversations/${VIRTUALIZED_CONVERSATION_ID}`, {
