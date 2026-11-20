@@ -7,7 +7,6 @@ import {
   type SandboxIssue,
 } from "#/hooks/query/use-bash-command-logs";
 import type { BashOutput } from "@openhands/typescript-client";
-import { buildAgentCanvasPath } from "#/utils/base-path";
 import { modalTitleLgMediumClassName } from "#/utils/modal-classes";
 import {
   AutomationRunStatus,
@@ -117,7 +116,6 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
   const systemError = run.error_detail?.trim() || null;
   const statusDetail = formatStatusDetail(run.status_detail);
   const hasSystemDetails = systemError || statusDetail;
-  const conversationId = run.conversation_id;
 
   return (
     <dl className="mt-4 grid gap-3 rounded-lg border border-border bg-surface-deep dark:bg-black/20 p-3 text-xs">
@@ -163,25 +161,6 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
           ) : null}
         </dd>
       </div>
-      {conversationId ? (
-        <div className="grid gap-1 sm:run-log-detail-columns sm:items-center">
-          <dt className="text-muted">
-            {t(I18nKey.AUTOMATIONS$DETAIL$CONVERSATION_LABEL)}
-          </dt>
-          <dd>
-            {/* The shared route lets any authorized user open the conversation, shared or not. */}
-            <a
-              data-testid="run-logs-conversation-link"
-              href={buildAgentCanvasPath(
-                `/shared/conversations/${conversationId}`,
-              )}
-              className="text-content underline transition-colors hover:text-foreground"
-            >
-              {t(I18nKey.AUTOMATIONS$DETAIL$VIEW_CONVERSATION)}
-            </a>
-          </dd>
-        </div>
-      ) : null}
       <div className="grid gap-1 sm:run-log-detail-columns sm:items-start">
         <dt className="pt-0.5 text-muted">
           {t(I18nKey.AUTOMATIONS$DETAIL$SYSTEM_LABEL)}

@@ -349,44 +349,6 @@ describe("RunLogsModal — run inspection summary", () => {
     ...overrides,
   });
 
-  it("links to the shared conversation page when the run has a conversation", () => {
-    useBashCommandLogsMock.mockReturnValue(makeHookResult());
-
-    render(
-      <RunLogsModal
-        isOpen
-        conversationId="conv-1"
-        bashCommandId="cmd-1"
-        onClose={() => {}}
-        run={makeRun({ conversation_id: "conv-1" })}
-      />,
-    );
-
-    expect(screen.getByTestId("run-logs-conversation-link")).toHaveAttribute(
-      "href",
-      "/shared/conversations/conv-1",
-    );
-  });
-
-  it("omits the conversation link for a run without a conversation", () => {
-    useBashCommandLogsMock.mockReturnValue(makeHookResult());
-
-    render(
-      <RunLogsModal
-        isOpen
-        conversationId={null}
-        sandboxId="sandbox-1"
-        bashCommandId="cmd-1"
-        onClose={() => {}}
-        run={makeRun({ conversation_id: null })}
-      />,
-    );
-
-    expect(
-      screen.queryByTestId("run-logs-conversation-link"),
-    ).not.toBeInTheDocument();
-  });
-
   it("labels run, task, and system details for a completed blocked task", () => {
     useBashCommandLogsMock.mockReturnValue(makeHookResult());
 
