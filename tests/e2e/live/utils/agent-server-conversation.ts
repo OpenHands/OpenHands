@@ -485,7 +485,9 @@ export async function expandVisibleEventDetails(page: Page) {
             };
 
             const buttons = Array.from(
-              document.querySelectorAll('button[aria-label="Expand"]'),
+              document.querySelectorAll(
+                'button[data-testid="event-group-toggle"][aria-expanded="false"], button[aria-label="Expand"]',
+              ),
             ).filter(isVisible);
             buttons.forEach((button) => {
               if (button instanceof HTMLButtonElement) {

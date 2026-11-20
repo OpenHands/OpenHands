@@ -11177,6 +11177,24 @@
     "ca": "Sistema",
     "id": "Sistem"
   },
+  "AUTOMATIONS$DETAIL$CONVERSATION_STARTED": {
+    "en": "Conversation started",
+    "ja": "会話を開始しました",
+    "zh-CN": "已启动对话",
+    "zh-TW": "已啟動對話",
+    "ko-KR": "대화가 시작됨",
+    "no": "Samtale startet",
+    "it": "Conversazione avviata",
+    "pt": "Conversa iniciada",
+    "es": "Conversación iniciada",
+    "ar": "تم بدء المحادثة",
+    "fr": "Conversation démarrée",
+    "tr": "Konuşma başlatıldı",
+    "de": "Konversation gestartet",
+    "uk": "Розмову розпочато",
+    "ca": "Conversa iniciada",
+    "id": "Percakapan dimulai"
+  },
   "AUTOMATIONS$DETAIL$NO_TASK_OUTCOME": {
     "en": "No task outcome reported.",
     "ja": "タスク結果は報告されていません。",
