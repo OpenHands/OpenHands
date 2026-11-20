@@ -6,8 +6,6 @@ import UserIcon from "#/icons/user.svg?react";
 import BellIcon from "#/icons/bell.svg?react";
 import ClockIcon from "#/icons/clock.svg?react";
 import CalendarIcon from "#/icons/calendar.svg?react";
-import ServerIcon from "#/icons/server.svg?react";
-import { BrandButton } from "#/components/features/settings/brand-button";
 import { formatCompactDuration } from "#/manifests/automation-insights";
 import { formatDate } from "#/utils/format-relative-time";
 import { SectionCard } from "./section-card";
@@ -31,8 +29,6 @@ interface SettingsSectionProps {
    * account); omitted/null hides the field.
    */
   createdBy?: string | null;
-  /** Opens the key-value store viewer. Omitted when the deployment has no KV store. */
-  onViewKvStore?: () => void;
 }
 
 /** How the automation runs, rather than what it does or when. */
@@ -41,7 +37,6 @@ export function SettingsSection({
   runsAs,
   runsAsServiceAccount = false,
   createdBy,
-  onViewKvStore,
 }: SettingsSectionProps) {
   const { t, i18n } = useTranslation("openhands");
 
@@ -105,22 +100,6 @@ export function SettingsSection({
         >
           {formatDate(automation.created_at, i18n.language)}
         </ConfigField>
-
-        {onViewKvStore ? (
-          <ConfigField
-            icon={<ServerIcon className="size-3.5" />}
-            label={t(I18nKey.AUTOMATIONS$DETAIL$KV_STORE)}
-          >
-            <BrandButton
-              testId="automation-kv-view-button"
-              type="button"
-              variant="secondary"
-              onClick={onViewKvStore}
-            >
-              {t(I18nKey.AUTOMATIONS$DETAIL$KV_VIEW)}
-            </BrandButton>
-          </ConfigField>
-        ) : null}
       </div>
     </SectionCard>
   );

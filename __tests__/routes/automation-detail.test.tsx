@@ -324,6 +324,17 @@ describe("AutomationDetail — key-value store", () => {
       features,
     });
 
+  async function openKvMenuItem(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+    await user.click(
+      await screen.findByRole("button", {
+        name: I18nKey.AUTOMATIONS$DETAIL$KV_VIEW_STORE,
+      }),
+    );
+  }
+
   async function openKvDialog(
     entries: ReturnType<typeof kvEntry>[],
     total = entries.length,
@@ -341,7 +352,7 @@ describe("AutomationDetail — key-value store", () => {
     );
     const user = userEvent.setup();
     renderDetail();
-    await user.click(await screen.findByTestId("automation-kv-view-button"));
+    await openKvMenuItem(user);
     await screen.findAllByTestId("automation-kv-entry");
     return user;
   }
@@ -349,7 +360,7 @@ describe("AutomationDetail — key-value store", () => {
   const editValue = (key: string, text: string) =>
     fireEvent.change(screen.getByLabelText(key), { target: { value: text } });
 
-  it("shows the stored keys and values in a dialog opened from settings", async () => {
+  it("shows the stored keys and values in a dialog opened from the actions menu", async () => {
     // Arrange
     const user = await openKvDialog([kvEntry("cursor", { page: 7 }, 1)], 3);
 
@@ -370,14 +381,6 @@ describe("AutomationDetail — key-value store", () => {
 
     // Assert
     expect(screen.queryByTestId("automation-kv-modal")).not.toBeInTheDocument();
-  });
-
-  it("loads nothing until the dialog is opened", async () => {
-    withKvStore(["kvStore"]);
-    renderDetail();
-    await screen.findByTestId("automation-kv-view-button");
-
-    expect(AutomationService.listKvKeys).not.toHaveBeenCalled();
   });
 
   it("saves only the values that changed, in one write against the oldest version", async () => {
@@ -556,7 +559,7 @@ describe("AutomationDetail — key-value store", () => {
     renderDetail();
 
     // Act
-    await user.click(await screen.findByTestId("automation-kv-view-button"));
+    await openKvMenuItem(user);
 
     // Assert
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -567,17 +570,22 @@ describe("AutomationDetail — key-value store", () => {
   it("offers no viewer when the deployment has no key-value store", async () => {
     // Arrange
     withKvStore([]);
+    const user = userEvent.setup();
     renderDetail();
-
-    // Act
-    await screen.findByTestId("automation-settings-section");
-
-    // Assert
     await waitFor(() => {
       expect(AutomationService.getCapabilities).toHaveBeenCalled();
     });
+
+    // Act
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+
+    // Assert
     expect(
-      screen.queryByTestId("automation-kv-view-button"),
+      screen.queryByRole("button", {
+        name: I18nKey.AUTOMATIONS$DETAIL$KV_VIEW_STORE,
+      }),
     ).not.toBeInTheDocument();
   });
 });
@@ -974,6 +982,37 @@ describe("AutomationDetail — runs as a service account", () => {
     vi.mocked(AutomationService.getAutomation).mockResolvedValue(
       serviceAutomation,
     );
+  });
+
+  it("lists View key-value store directly below Change Runs As", async () => {
+    // Arrange
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      triggerKinds: [],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+      features: ["serviceAccountRunAs", "kvStore"],
+    });
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Act
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+    const changeRunAs = await screen.findByRole("button", {
+      name: I18nKey.AUTOMATIONS$CHANGE_RUN_AS,
+    });
+    const viewStore = await screen.findByRole("button", {
+      name: I18nKey.AUTOMATIONS$DETAIL$KV_VIEW_STORE,
+    });
+
+    // Assert
+    expect(changeRunAs.closest("li")?.nextElementSibling).toBe(
+      viewStore.closest("li"),
+    );
+    expect(AutomationService.listKvKeys).not.toHaveBeenCalled();
   });
 
   it("shows the service account under Runs As and the person under Created By", async () => {

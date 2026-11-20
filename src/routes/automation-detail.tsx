@@ -366,6 +366,7 @@ export default function AutomationDetail() {
         onChangeRunAs={
           canChangeRunAs ? () => setShowChangeRunAsModal(true) : undefined
         }
+        onViewKvStore={hasKvStore ? () => setShowKvModal(true) : undefined}
         onExport={handleExport}
         onDownloadTarball={() =>
           AutomationService.downloadTarball(automation.id, automation.name)
@@ -415,7 +416,6 @@ export default function AutomationDetail() {
             runsAs={runsAs}
             runsAsServiceAccount={runsAsService}
             createdBy={createdBy}
-            onViewKvStore={hasKvStore ? () => setShowKvModal(true) : undefined}
           />
           <ActivityLogSection
             automation={automation}
