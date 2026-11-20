@@ -1,7 +1,7 @@
 ## Arbitrary-value guard adoption
 
 `shadcn/no-arbitrary-values` warns globally. Thirty-five migrated owners reject new
-arbitrary classes: command-menu, backend-version, settings-nav-header,
+arbitrary classes: command-menu, backend-version, settings-mobile-drawer,
 backend-synced-settings-badge, modal-backdrop, environment-switch-overlay,
 context-window-meter and conversation-panel-wrapper. Completed message/motion
 owners also reject new arbitrary values: custom-toast-handlers,

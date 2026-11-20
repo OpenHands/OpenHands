@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi, describe, it, expect } from "vitest";
-import { ToggleSwitch } from "#/components/features/automations/toggle-switch";
+import { ToggleSwitch } from "#/ui/toggle-switch";
 
 describe("ToggleSwitch", () => {
   it("calls onToggle when clicked", async () => {

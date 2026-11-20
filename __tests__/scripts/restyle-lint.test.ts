@@ -15,7 +15,6 @@ const eslint = new ESLint({
 const probe = `
 import { Divider as Separator } from "#/ui/divider";
 import { ToggleSwitch, ToggleSwitchVisual as Track } from "#/ui/toggle-switch";
-import { ToggleSwitch as AutomationToggle } from "#/components/features/automations/toggle-switch";
 import { Typography } from "#/ui/typography";
 export function Probe() {
   return <>
@@ -23,7 +22,6 @@ export function Probe() {
     <Separator className="bg-danger" />
     <ToggleSwitch className="ml-2 opacity-50" />
     <ToggleSwitch className="bg-danger" />
-    <AutomationToggle className="bg-danger" />
     <Track enabled className="opacity-50" />
     <Typography.Text className="text-danger" />
     <div className="bg-danger" />
@@ -80,7 +78,7 @@ describe("Canvas UI appearance contracts", () => {
     );
     expect(findings.every(({ severity }) => severity === 2)).toBe(true);
   });
-  it("rejects restyling through aliases and re-exports while keeping allowed usage", async () => {
+  it("rejects restyling through aliases while keeping allowed usage", async () => {
     // Layout and caller-owned wrapper opacity remain supported. Other Canvas
     // primitives and HTML are deliberately outside this first rollout.
     const [result] = await eslint.lintText(probe, {
@@ -98,7 +96,6 @@ describe("Canvas UI appearance contracts", () => {
       new Set([
         '<Separator className="bg-danger" />',
         '<ToggleSwitch className="bg-danger" />',
-        '<AutomationToggle className="bg-danger" />',
         '<Track enabled className="opacity-50" />',
       ]),
     );
