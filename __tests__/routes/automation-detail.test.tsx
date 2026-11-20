@@ -45,6 +45,8 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     fetchTarballBytes: vi.fn(),
     checkHealth: vi.fn(),
     getCapabilities: vi.fn(),
+    listKvKeys: vi.fn(),
+    getKvEntry: vi.fn(),
     changeRunAs: vi.fn(),
   },
 }));
@@ -295,6 +297,91 @@ describe("AutomationDetail — Edit in the header", () => {
     expect(detailMocks.navigate).toHaveBeenCalledWith(
       "/automations/setup?automationId=auto-1",
     );
+  });
+});
+
+describe("AutomationDetail — key-value store", () => {
+  const withKvStore = (features: string[]) =>
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      triggerKinds: [],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+      features,
+    });
+
+  it("shows the stored keys and values in a dialog opened from settings", async () => {
+    // Arrange
+    withKvStore(["kvStore"]);
+    vi.mocked(AutomationService.listKvKeys).mockResolvedValue({
+      keys: ["cursor"],
+      count: 1,
+      total: 3,
+      limit: 100,
+      offset: 0,
+    });
+    vi.mocked(AutomationService.getKvEntry).mockResolvedValue({
+      key: "cursor",
+      value: { page: 7 },
+      version: 1,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-02T00:00:00Z",
+    });
+    const user = userEvent.setup();
+    renderDetail();
+    expect(AutomationService.listKvKeys).not.toHaveBeenCalled();
+
+    // Act
+    await user.click(await screen.findByTestId("automation-kv-view-button"));
+
+    // Assert
+    const entry = await screen.findByTestId("automation-kv-entry");
+    expect(entry).toHaveTextContent("cursor");
+    expect(entry).toHaveTextContent('"page": 7');
+    expect(AutomationService.getKvEntry).toHaveBeenCalledWith(
+      "auto-1",
+      "cursor",
+    );
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$KV_TRUNCATED"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText(I18nKey.BUTTON$CLOSE));
+    expect(screen.queryByTestId("automation-kv-modal")).not.toBeInTheDocument();
+  });
+
+  it("reports a store that cannot be read", async () => {
+    // Arrange
+    withKvStore(["kvStore"]);
+    vi.mocked(AutomationService.listKvKeys).mockRejectedValue(new Error("503"));
+    const user = userEvent.setup();
+    renderDetail();
+
+    // Act
+    await user.click(await screen.findByTestId("automation-kv-view-button"));
+
+    // Assert
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "AUTOMATIONS$DETAIL$KV_ERROR",
+    );
+  });
+
+  it("offers no viewer when the deployment has no key-value store", async () => {
+    // Arrange
+    withKvStore([]);
+    renderDetail();
+
+    // Act
+    await screen.findByTestId("automation-settings-section");
+
+    // Assert
+    await waitFor(() => {
+      expect(AutomationService.getCapabilities).toHaveBeenCalled();
+    });
+    expect(
+      screen.queryByTestId("automation-kv-view-button"),
+    ).not.toBeInTheDocument();
   });
 });
 

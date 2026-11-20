@@ -698,3 +698,67 @@ describe("AutomationService.pluginSpecPreflight", () => {
     expect(result.manifest.name).toBe("recipe");
   });
 });
+
+describe("AutomationService key-value store reads", () => {
+  const entry = {
+    key: "state/last run",
+    value: { cursor: 3 },
+    version: 2,
+    created_at: "2026-07-10T00:00:00Z",
+    updated_at: "2026-07-11T00:00:00Z",
+  };
+
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("lists the keys of an automation on a local backend", async () => {
+    const page = { keys: ["a"], count: 1, total: 1, limit: 50, offset: 0 };
+    localAxios.get.mockResolvedValueOnce({ data: page });
+
+    await expect(
+      AutomationService.listKvKeys("auto-1", { limit: 50 }),
+    ).resolves.toEqual(page);
+
+    expect(localAxios.get).toHaveBeenCalledWith("/api/automation/v1/kv", {
+      params: { automation_id: "auto-1", limit: 50, offset: 0 },
+    });
+  });
+
+  it("reads one entry with its metadata, encoding the key", async () => {
+    localAxios.get.mockResolvedValueOnce({ data: entry });
+
+    await expect(
+      AutomationService.getKvEntry("auto-1", entry.key),
+    ).resolves.toEqual(entry);
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1/kv/state%2Flast%20run",
+      { params: { automation_id: "auto-1", meta: true } },
+    );
+  });
+
+  it("reads the store through the cloud proxy on a cloud backend", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    callCloudProxy.mockResolvedValueOnce(entry);
+
+    await AutomationService.getKvEntry("auto-1", "k");
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/automation/v1/kv/k?automation_id=auto-1&meta=true",
+      }),
+    );
+    expect(localAxios.get).not.toHaveBeenCalled();
+  });
+});

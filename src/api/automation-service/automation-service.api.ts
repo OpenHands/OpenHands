@@ -6,6 +6,8 @@ import type {
   AutomationScriptBundle,
   AutomationSpec,
   AutomationTagCount,
+  AutomationKvEntry,
+  AutomationKvKeysResponse,
   AutomationTrigger,
   AutomationsResponse,
   AutomationRunsResponse,
@@ -64,6 +66,7 @@ import { AUTOMATION_DRAFTS_FEATURE } from "#/constants/automation-form";
 import { randomUUID } from "#/utils/random-uuid";
 
 const AUTOMATION_BASE_PATH = "/api/automation";
+const AUTOMATION_KV_PATH = `${AUTOMATION_BASE_PATH}/v1/kv`;
 
 type AutomationDraftCreateTarget = SetupEntry | "prompt" | "plugin" | "custom";
 
@@ -950,6 +953,48 @@ class AutomationService {
       responseType: "arraybuffer",
     });
     return new Uint8Array(data);
+  }
+
+  private static async getKv<T>(
+    path: string,
+    params: Record<string, string | number | boolean>,
+  ): Promise<T> {
+    const active = getActiveBackend().backend;
+
+    if (active.kind === "cloud") {
+      const query = new URLSearchParams(
+        Object.entries(params).map(([name, value]) => [name, String(value)]),
+      );
+      return callCloudProxy<T>({
+        backend: active,
+        method: "GET",
+        path: `${path}?${query}`,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.get<T>(path, { params });
+    return data;
+  }
+
+  static async listKvKeys(
+    automationId: string,
+    { limit, offset = 0 }: { limit: number; offset?: number },
+  ): Promise<AutomationKvKeysResponse> {
+    return AutomationService.getKv<AutomationKvKeysResponse>(
+      AUTOMATION_KV_PATH,
+      { automation_id: automationId, limit, offset },
+    );
+  }
+
+  static async getKvEntry(
+    automationId: string,
+    key: string,
+  ): Promise<AutomationKvEntry> {
+    return AutomationService.getKv<AutomationKvEntry>(
+      `${AUTOMATION_KV_PATH}/${encodeURIComponent(key)}`,
+      { automation_id: automationId, meta: true },
+    );
   }
 
   static async downloadTarball(id: string, name: string): Promise<void> {

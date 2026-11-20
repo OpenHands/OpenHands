@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { SettingsSection } from "#/components/features/automations/detail/settings-section";
 import type { Automation } from "#/types/automation";
 
@@ -60,5 +61,20 @@ describe("SettingsSection", () => {
     expect(
       screen.queryByText("AUTOMATIONS$DETAIL$TIMEOUT"),
     ).not.toBeInTheDocument();
+  });
+
+  it("offers the key-value store only when a viewer is wired", async () => {
+    const onViewKvStore = vi.fn();
+    const { rerender } = render(<SettingsSection automation={automation} />);
+    expect(
+      screen.queryByTestId("automation-kv-view-button"),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <SettingsSection automation={automation} onViewKvStore={onViewKvStore} />,
+    );
+    await userEvent.click(screen.getByTestId("automation-kv-view-button"));
+
+    expect(onViewKvStore).toHaveBeenCalledTimes(1);
   });
 });
