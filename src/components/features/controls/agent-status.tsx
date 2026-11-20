@@ -55,12 +55,18 @@ export function AgentStatus({
   const { setShouldShownAgentLoading } = useConversationStore();
   const { curAgentState, executionStatus } = useAgentState();
 
-  // Trigger browser tab flash and notification sound on state changes
-  useAgentNotification(curAgentState);
   const webSocketStatus = useUnifiedWebSocketStatus();
   const hasConnectedOnce = useHasConnectedOnceWebSocket();
   const { data: conversation } = useActiveConversation();
   const { taskStatus } = useTaskPolling();
+
+  // Trigger browser tab flash, notification sound, and (opt-in, background
+  // tab only) desktop notification on state changes. The conversation
+  // identity lets the desktop notification name and coalesce per thread.
+  useAgentNotification(curAgentState, {
+    conversationId: conversation?.id ?? null,
+    conversationTitle: conversation?.title ?? null,
+  });
 
   const { subConversationTaskId } = useConversationStore();
 

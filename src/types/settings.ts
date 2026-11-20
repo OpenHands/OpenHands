@@ -135,6 +135,12 @@ export type Settings = {
   enable_default_condenser: boolean;
   condenser_max_size: number | null;
   enable_sound_notifications: boolean;
+  /**
+   * Opt-in desktop (Web Notification API) notification alongside the sound on
+   * the same attention-worthy agent states. Permission is requested only when
+   * the user enables the toggle, never on page load.
+   */
+  enable_desktop_notifications: boolean;
   enable_proactive_conversation_starters: boolean;
   enable_solvability_analysis: boolean;
   /**
