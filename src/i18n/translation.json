@@ -33764,7 +33764,8 @@
     "es": "Esta conversación proviene de {{origin}}. Los mensajes que envíes aquí continúan la misma conversación.",
     "ca": "Aquesta conversa prové de {{origin}}. Els missatges que enviïs aquí continuen la mateixa conversa.",
     "tr": "Bu konuşma {{origin}} kaynağından geldi. Buradan gönderdiğiniz mesajlar aynı konuşmayı sürdürür.",
-    "uk": "Ця розмова надійшла з {{origin}}. Повідомлення, які ви надсилаєте тут, продовжують ту саму розмову."
+    "uk": "Ця розмова надійшла з {{origin}}. Повідомлення, які ви надсилаєте тут, продовжують ту саму розмову.",
+    "id": "Percakapan ini berasal dari {{origin}}. Pesan yang Anda kirim di sini melanjutkan percakapan yang sama."
   },
   "CONVERSATION$EDIT_TAGS": {
     "en": "Edit tags",
