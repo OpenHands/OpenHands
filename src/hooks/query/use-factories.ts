@@ -3,6 +3,7 @@ import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { FACTORIES_EXPERIMENTAL_FEATURE } from "#/constants/factories";
 import { hasAutomationInterface } from "#/manifests/automation-interface";
+import { useCloudIntegrationsConfig } from "./use-cloud-integrations-config";
 import { useExperimentalFeatures } from "./use-experimental-features";
 import { useDeploymentCapabilities } from "./use-manifest-capabilities";
 
@@ -10,23 +11,29 @@ export const FACTORIES_QUERY_KEY = ["factories"] as const;
 
 /**
  * Whether Factories is on and the active automation service serves factories.
- * Factories is off until the user turns on the `factories` experimental
- * feature on their agent server. `isLoading` is true until the deployment's
- * capabilities and the switch have answered, and a deployment that does not
- * answer counts as unsupported.
+ * Each deployment has one switch: on a cloud backend it is the instance's
+ * `enable_factories` flag, and on a local backend it is the agent server's
+ * `factories` experimental feature. The other switch is never read.
+ * `isLoading` is true until the deployment's capabilities and the switch have
+ * answered, and a deployment that does not answer counts as unsupported.
  */
 export function useFactoriesSupported() {
+  const { backend } = useActiveBackend();
+  const isCloud = backend.kind === "cloud";
   const capabilities = useDeploymentCapabilities({
     enabled: hasAutomationInterface(),
   });
+  const cloudConfig = useCloudIntegrationsConfig();
   const features = useExperimentalFeatures();
-  const isTurnedOn =
-    features.data?.some(
-      (feature) =>
-        feature.key === FACTORIES_EXPERIMENTAL_FEATURE && feature.enabled,
-    ) ?? false;
+  const isTurnedOn = isCloud
+    ? cloudConfig.data?.isFactoriesEnabled === true
+    : (features.data?.some(
+        (feature) =>
+          feature.key === FACTORIES_EXPERIMENTAL_FEATURE && feature.enabled,
+      ) ?? false);
+  const isSwitchLoading = isCloud ? cloudConfig.isLoading : features.isLoading;
   return {
-    isLoading: capabilities.isLoading || features.isLoading,
+    isLoading: capabilities.isLoading || isSwitchLoading,
     isSupported:
       isTurnedOn && AutomationService.supportsFactories(capabilities.data),
   };

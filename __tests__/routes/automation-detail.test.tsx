@@ -105,7 +105,10 @@ vi.mock("#/api/cloud/settings-service.api", async (importOriginal) => ({
   fetchCloudIntegrationsConfig: vi.fn(),
 }));
 
-function mockServiceAccountsEnabled(isServiceAccountsEnabled: boolean) {
+function mockServiceAccountsEnabled(
+  isServiceAccountsEnabled: boolean,
+  isFactoriesEnabled = false,
+) {
   const config: CloudIntegrationsConfig = {
     providersConfigured: [],
     isJiraEnabled: false,
@@ -117,6 +120,7 @@ function mockServiceAccountsEnabled(isServiceAccountsEnabled: boolean) {
     isAgentProfilesEnabled: false,
     isServiceAccountsEnabled,
     isOauthV2LoginEnabled: false,
+    isFactoriesEnabled,
   };
   vi.mocked(fetchCloudIntegrationsConfig).mockResolvedValue(config);
 }
@@ -890,6 +894,7 @@ describe("AutomationDetail — runs as a service account", () => {
     };
 
     beforeEach(() => {
+      mockServiceAccountsEnabled(true, true);
       vi.mocked(AutomationService.supportsFactories).mockReturnValue(true);
       vi.mocked(AutomationService.listFactories).mockResolvedValue({
         factories: [coreFactory],
@@ -961,6 +966,24 @@ describe("AutomationDetail — runs as a service account", () => {
       // Arrange
       permissionMocks.canManage = false;
       permissionMocks.isOwner = true;
+      const user = userEvent.setup();
+
+      // Act
+      renderDetail();
+      await screen.findByText(automation.name);
+      await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+      // Assert
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$CHANGE_FACTORY,
+        }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("is not offered when the instance has Factories off", async () => {
+      // Arrange
+      mockServiceAccountsEnabled(true, false);
       const user = userEvent.setup();
 
       // Act
