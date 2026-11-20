@@ -84,7 +84,12 @@ cheaper than the next and catches a different kind of rot.
    map review per [maintenance.md](maintenance.md) step 5. A fix in the Agent
    Server or automation service shows up only this way. Query open `bug`
    issues without a supported map or pass-ledger outcome, regardless of creation
-   date, and re-triage reopened or newly bug-labeled reports. Drive actionable
+   date, and re-triage reopened or newly bug-labeled reports. The label is
+   not the gate: also read every issue opened or updated since `BASE` that
+   carries no `bug` label (a user's report often arrives untriaged, or as a
+   question or a feature request), and treat the ones that describe something
+   broken as reports. #19514, new conversations failing over plain HTTP, sat
+   outside this query for its first days. Drive actionable
    reports and add their note or recorded not-reproduced result. Include older
    actionable reports: `ready-for-dev` sets priority, not inventory membership.
    Reconcile outcome labels against their note or recorded run per
@@ -94,7 +99,11 @@ cheaper than the next and catches a different kind of rot.
    sweep, and drive the one bullet that proves the page's main state (a list
    renders, a form opens). One `evidence add` row per family, under the
    sub-feature ID that bullet names. This catches a page that stopped loading
-   without re-proving every row.
+   without re-proving every row. One row every day does not belong to a
+   family's page: `F26.lan-http-origin`, a conversation started at
+   `$OH_VERIFY_LAN_URL`. Every other row of the pass runs at
+   `http://127.0.0.1`, which browsers treat as a secure context, so this is
+   the only row that sees what a user on a LAN or VPN address sees.
 4. **Rotation (depth over the week).** Drive the full recipe of about a
    seventh of the families. Read the family rows from `TARGET`'s
    [index table](feature-map/README.md), sort by numeric family ID, and number

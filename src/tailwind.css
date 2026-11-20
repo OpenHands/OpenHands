@@ -28,6 +28,9 @@
 }
 
 @theme inline {
+  /* Colour emoji first, for reaction chips: theme fonts can carry plain emoji glyphs. */
+  --font-emoji:
+    "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   /* HeroUI utilities its imported component CSS applies, on Canvas tokens.
      Radius scale stays Canvas-owned; only HeroUI's field/shadow slots map. */
   --color-overlay: var(--overlay);
@@ -118,6 +121,7 @@
   --color-text-dim: var(--oh-text-dim);
   --color-text-subtle: var(--oh-text-subtle);
   --color-modal-title: var(--oh-modal-title-foreground);
+  --color-modal-description: var(--oh-modal-description-foreground);
 
   /* Semantic border aliases */
   --color-border: var(--oh-border);
@@ -1181,6 +1185,10 @@ code .token {
 
 @utility context-menu-icon-stroke {
   stroke-width: 1.75;
+}
+
+@utility catalog-remove-icon-stroke {
+  stroke-width: 2.5;
 }
 
 /* Menu geometry keeps its existing pixel, rem and viewport units. */

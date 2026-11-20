@@ -37,7 +37,10 @@ import { ThoughtEventMessage } from "./event-message-components/thought-event-me
 import { CollapsibleThinking } from "./event-message-components/collapsible-thinking";
 import { HookExecutionEventMessage } from "./event-message-components/hook-execution-event-message";
 import { CorrectiveNudgeMessage } from "./event-message-components/corrective-nudge-message";
-import { createSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
+import {
+  createSkillReadyEvent,
+  shouldShowSkillReadyEvent,
+} from "./event-content-helpers/create-skill-ready-event";
 import { parseMessageFromEvent } from "./event-content-helpers/parse-message-from-event";
 import { isCorrectiveNudge } from "./event-content-helpers/should-render-event";
 import { shouldShowPlanPreview } from "./hooks/use-plan-preview-events";
@@ -67,37 +70,6 @@ interface EventMessageProps {
   suppressThought?: boolean;
   suppressReasoning?: boolean;
 }
-
-const getActivatedSkills = (event: MessageEvent): string[] =>
-  event.activated_skills || [];
-
-/**
- * Checks if extended content contains valid text content.
- */
-const hasValidExtendedContent = (
-  extendedContent: MessageEvent["extended_content"],
-): boolean => {
-  if (!extendedContent || extendedContent.length === 0) {
-    return false;
-  }
-
-  return extendedContent.some(
-    (content) => content.type === "text" && content.text.trim().length > 0,
-  );
-};
-
-/**
- * Determines if a Skill Ready event should be displayed for the given message event.
- */
-const shouldShowSkillReadyEvent = (messageEvent: MessageEvent): boolean => {
-  const activatedSkills = getActivatedSkills(messageEvent);
-  const hasActivatedSkills = activatedSkills.length > 0;
-  const hasExtendedContent = hasValidExtendedContent(
-    messageEvent.extended_content,
-  );
-
-  return hasActivatedSkills && hasExtendedContent;
-};
 
 interface CommonProps {
   isLastMessage: boolean;
@@ -258,7 +230,10 @@ function EventMessageComponent({
     return (
       <>
         {!suppressReasoning && reasoningContent && (
-          <CollapsibleThinking content={reasoningContent} />
+          <CollapsibleThinking
+            content={reasoningContent}
+            expansionId={`reasoning-${event.id}`}
+          />
         )}
         {message && (
           <ChatMessage
@@ -292,7 +267,12 @@ function EventMessageComponent({
   // (usually English) differs from the conversation language.
   if (isActionEvent(event) && event.action.kind === "ThinkAction") {
     const thinkAction = event as ActionEvent<ThinkAction>;
-    return <CollapsibleThinking content={thinkAction.action.thought} />;
+    return (
+      <CollapsibleThinking
+        content={thinkAction.action.thought}
+        expansionId={`reasoning-${thinkAction.id}`}
+      />
+    );
   }
 
   // Action events - render thought + action (will be replaced by thought + observation)

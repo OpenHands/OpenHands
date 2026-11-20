@@ -141,7 +141,7 @@ export function buildSkillPills(
             `skill-disable-model-invocation-${skill.name}`
           }
           className={cn(
-            "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-danger/35 px-2 py-0.5 text-2xs font-medium leading-4 dark:border-[rgba(248,113,113,0.35)] dark:bg-[rgba(248,113,113,0.12)] dark:text-[#fca5a5]",
+            "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-danger/35 px-2 py-0.5 text-2xs font-medium leading-4 dark:border-feedback-error/35 dark:bg-feedback-error/4 dark:text-feedback-error",
             statusToneBadgeClassName.danger,
           )}
         >

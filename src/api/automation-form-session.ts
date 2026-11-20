@@ -188,6 +188,10 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
       : null;
   const serverDraftId =
     typeof value.serverDraftId === "string" ? value.serverDraftId.trim() : "";
+  const savedDraftRequestKey =
+    serverDraftId && typeof value.savedDraftRequestKey === "string"
+      ? value.savedDraftRequestKey
+      : "";
   const materializedAutomationId =
     typeof value.materializedAutomationId === "string"
       ? value.materializedAutomationId.trim()
@@ -216,6 +220,7 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
       : {}),
     ...(existingEventTrigger ? { existingEventTrigger } : {}),
     ...(serverDraftId ? { serverDraftId } : {}),
+    ...(savedDraftRequestKey ? { savedDraftRequestKey } : {}),
     ...(materializedAutomationId ? { materializedAutomationId } : {}),
     ...(fieldMetadata ? { fieldMetadata } : {}),
     ...(appliedAgentEventIds && appliedAgentEventIds.length > 0
@@ -267,6 +272,19 @@ export function setAutomationFormSessionRepositories(
   sessions.set(
     conversationId,
     normalizeDraft({ ...existing, existingRepositories: repositories }),
+  );
+}
+
+/** Record the request last saved to the session's server draft. */
+export function setAutomationFormSessionSavedDraftRequestKey(
+  conversationId: string,
+  savedDraftRequestKey: string,
+) {
+  const existing = sessions.get(conversationId);
+  if (!existing) return;
+  sessions.set(
+    conversationId,
+    normalizeDraft({ ...existing, savedDraftRequestKey }),
   );
 }
 
@@ -407,6 +425,10 @@ export function subscribeAutomationFormSession(
   window.addEventListener(AUTOMATION_FORM_SESSION_CHANGED_EVENT, handler);
   return () =>
     window.removeEventListener(AUTOMATION_FORM_SESSION_CHANGED_EVENT, handler);
+}
+
+export function __resetAutomationFormSessionsForTests(): void {
+  sessions.clear();
 }
 
 export function clearAutomationFormSession(conversationId: string) {
