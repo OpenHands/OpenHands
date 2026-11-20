@@ -374,3 +374,9 @@ export interface AutomationKvEntry {
   created_at: string;
   updated_at: string;
 }
+
+/** The result of an atomic batch write to an automation's key-value store. */
+export interface AutomationKvBatchResponse {
+  version: number;
+  results: Array<Record<string, unknown>>;
+}

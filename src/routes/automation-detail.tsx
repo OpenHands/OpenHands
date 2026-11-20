@@ -436,6 +436,7 @@ export default function AutomationDetail() {
           {showKvModal ? (
             <KvStoreModal
               automationId={automation.id}
+              canEdit={canManage}
               onClose={() => setShowKvModal(false)}
             />
           ) : null}

@@ -745,6 +745,54 @@ describe("AutomationService key-value store reads", () => {
     );
   });
 
+  it("overwrites existing keys in one version-checked batch", async () => {
+    localAxios.post.mockResolvedValueOnce({
+      data: { version: 4, results: [] },
+    });
+
+    await AutomationService.setKvEntries(
+      "auto-1",
+      [
+        { key: "a", value: { n: 1 } },
+        { key: "b", value: "x" },
+      ],
+      3,
+    );
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/kv/batch",
+      {
+        if_version: 3,
+        operations: [
+          { op: "set", key: "a", value: { n: 1 }, xx: true },
+          { op: "set", key: "b", value: "x", xx: true },
+        ],
+      },
+      { params: { automation_id: "auto-1" } },
+    );
+  });
+
+  it("writes the batch through the cloud proxy on a cloud backend", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    callCloudProxy.mockResolvedValueOnce({ version: 2, results: [] });
+
+    await AutomationService.setKvEntries("auto-1", [{ key: "a", value: 1 }], 1);
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "POST",
+        path: "/api/automation/v1/kv/batch?automation_id=auto-1",
+        body: {
+          if_version: 1,
+          operations: [{ op: "set", key: "a", value: 1, xx: true }],
+        },
+      }),
+    );
+    expect(localAxios.post).not.toHaveBeenCalled();
+  });
+
   it("reads the store through the cloud proxy on a cloud backend", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });

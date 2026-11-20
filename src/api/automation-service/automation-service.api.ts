@@ -6,6 +6,7 @@ import type {
   AutomationScriptBundle,
   AutomationSpec,
   AutomationTagCount,
+  AutomationKvBatchResponse,
   AutomationKvEntry,
   AutomationKvKeysResponse,
   AutomationTrigger,
@@ -995,6 +996,46 @@ class AutomationService {
       `${AUTOMATION_KV_PATH}/${encodeURIComponent(key)}`,
       { automation_id: automationId, meta: true },
     );
+  }
+
+  /**
+   * Overwrite existing keys in one transaction: every key is written or none
+   * is. The write is rejected with 409 when the store's version is no longer
+   * `ifVersion`, so a value a run stored meanwhile is not overwritten blindly.
+   */
+  static async setKvEntries(
+    automationId: string,
+    entries: Array<{ key: string; value: unknown }>,
+    ifVersion: number,
+  ): Promise<AutomationKvBatchResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_KV_PATH}/batch`;
+    const body = {
+      if_version: ifVersion,
+      operations: entries.map(({ key, value }) => ({
+        op: "set",
+        key,
+        value,
+        xx: true,
+      })),
+    };
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<AutomationKvBatchResponse>({
+        backend: active,
+        method: "POST",
+        path: `${path}?${new URLSearchParams({ automation_id: automationId })}`,
+        body,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<AutomationKvBatchResponse>(
+      path,
+      body,
+      { params: { automation_id: automationId } },
+    );
+    return data;
   }
 
   static async downloadTarball(id: string, name: string): Promise<void> {
