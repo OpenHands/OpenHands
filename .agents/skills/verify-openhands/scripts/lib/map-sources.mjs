@@ -138,9 +138,9 @@ const NON_USER_FACING = [
   // The MSW mock API and dev-only helpers never reach a launched stack.
   /^src\/mocks\//,
   /^src\/dev\//,
-  // Build and i18n tooling under scripts/; the launchers there are F26's.
+  // Build, i18n and pin-bump CI tooling under scripts/; the launchers there are F26's.
   /^scripts\/[^/]+\.cjs$/,
-  /^scripts\/(stryker-diff|generate-icons|brand-dev-electron|check-sdk-version-sync)\.mjs$/,
+  /^scripts\/(stryker-diff|generate-icons|brand-dev-electron|check-sdk-version-sync|bump-pins)\.mjs$/,
   /\.test\.[cm]?[jt]sx?$/,
   // Lint, unit-test and Playwright configuration: CI tooling, not the build.
   /^eslint\.config\.[cm]?js$/,
