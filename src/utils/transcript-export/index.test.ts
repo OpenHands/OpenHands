@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
-  AskUserAction,
   AskUserAnswerEvent,
   AskUserObservation,
 } from "@openhands/typescript-client";
+import type {
+  AskUserAction,
+  ExecuteBashAction,
+  MCPToolAction,
+  TaskAction,
+} from "#/types/agent-server/core/base/action";
 import type {
   ActionEvent,
   AgentErrorEvent,
@@ -12,11 +17,6 @@ import type {
   UserRejectObservation,
 } from "#/types/agent-server/core";
 import type { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
-import type {
-  ExecuteBashAction,
-  MCPToolAction,
-  TaskAction,
-} from "#/types/agent-server/core/base/action";
 import type {
   ExecuteBashObservation,
   TaskObservation,
