@@ -260,8 +260,9 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F28 | [Automation setup page](F28-automation-setup-page.md) | blank form, kind toggle, schedule presets, event fields, timeout, draft save and validation, draft Test, Create | **Add Automation → Create Automation**, `/automations/setup`, draft Resume, kebab Edit | automation service; no LLM | 21 |
 | F29 | [ACP agent sessions](F29-acp-sessions.md) | an ACP (Codex) conversation: narration order, tool cards, edits and Changes, follow-up, model switch, Stop, reload and restart, usage | Home composer with an ACP profile active (F13) | approved Codex login (`CODEX_AUTH_JSON`); fixture repo | 12 |
 | F30 | [Experimental features and reactions](F30-experimental-features.md) | Experimental settings page, flag switches, notice; agent and user emoji reactions, picker placement | `/settings/experimental`, settings navigation, command menu; reactions under messages | LLM; local backend (Cloud hides it) | 6 |
+| F31 | [Factories](F31-factories.md) | Factories list and factory pages, create and rename, the dashboard limited to one factory, moving an automation out of a factory, the experimental switch | sidebar **Factories**, `/factories`, `/factories/<id>`, an automation's actions menu | local backend with Agent Server 1.63.1 or newer and an automation service with factories; Cloud and Enterprise flag and member view: blocked | 11 |
 
-30 families, 877 sub-features. `control-openhands map ids` lists every ID with its file.
+31 families, 888 sub-features. `control-openhands map ids` lists every ID with its file.
 
 ### Neighbouring families
 
@@ -271,6 +272,7 @@ Several pages are shared. Each behavior has one owner; the others reference its 
 - Starting work: Home is F03; the recommended-automation launcher is shared by F01 (onboarding), F03 (rail) and F22 (templates), and owned by F22.
 - LLM settings: profiles are F10, provider connections F11 (same page), routers F12, agent profiles F13.
 - Automations: dashboard F21, creation F22, detail and runs F23, Git Sync F24; the setup page's form, drafts and Test are F28 (F22 keeps the agent-assisted recipes, F23 owns edit mode).
+- Factories: the Factories pages, the experimental switch for them and Change factory are F31; the dashboard a factory page shows is F21's, limited to the factory.
 - Customize: MCP F17, skills F18, plugins F19, apps F20; the hub and its navigation are in F17.
 - Backends: adding and switching backends is F25; launcher flags that create them are F26.
 
