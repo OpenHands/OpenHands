@@ -1,5 +1,8 @@
 export const FACTORIES_PATH = "/factories";
 
+/** The agent server's experimental feature that turns Factories on locally. */
+export const FACTORIES_EXPERIMENTAL_FEATURE = "factories";
+
 export function factoryPath(id: string): string {
   return `${FACTORIES_PATH}/${encodeURIComponent(id)}`;
 }
