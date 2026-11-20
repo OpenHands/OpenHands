@@ -61,6 +61,11 @@ import {
   SecretRequestCard,
   usePendingSecretRequests,
 } from "#/components/features/conversation/secret-request-card";
+import type { AskUserDecisionRequest } from "#/stores/ask-user-store";
+import {
+  AskUserCard,
+  usePendingAskUserRequests,
+} from "#/components/features/conversation/ask-user-card";
 
 interface MessagesProps {
   messages: OpenHandsEvent[]; // UI events (actions replaced by observations)
@@ -309,6 +314,30 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       return <SecretRequestCard request={request} />;
     };
 
+    // Pending ask_user decision cards sit right after their tool call.
+    const pendingAskUserRequests = usePendingAskUserRequests();
+    const askUserRequests = React.useMemo(() => {
+      const unanchored = new Map(
+        pendingAskUserRequests.map((request) => [request.toolCallId, request]),
+      );
+      const byAnchorId = new Map<string, AskUserDecisionRequest>();
+      for (const event of messages) {
+        if (unanchored.size === 0) break;
+        if (!isActionEvent(event) && !isObservationEvent(event)) continue;
+        const request = unanchored.get(event.tool_call_id);
+        if (!request) continue;
+        unanchored.delete(event.tool_call_id);
+        byAnchorId.set(event.id, request);
+      }
+      return { byAnchorId, unanchored: [...unanchored.values()] };
+    }, [pendingAskUserRequests, messages]);
+
+    const maybeRenderAskUserDecision = (eventId: string | undefined) => {
+      const request = eventId && askUserRequests.byAnchorId.get(eventId);
+      if (!request || shouldVirtualize) return null;
+      return <AskUserCard request={request} />;
+    };
+
     // One activity group lasts until visible agent text or an actionable event.
     const { t } = useTranslation("openhands");
     const { curAgentState } = useAgentState();
@@ -518,6 +547,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             {renderEventMessage(item.event, item.index, true)}
             {maybeRenderModelMessages(item.event.id)}
             {maybeRenderSecretRequest(item.event.id)}
+            {maybeRenderAskUserDecision(item.event.id)}
           </React.Fragment>
         );
       }
@@ -602,6 +632,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             <React.Fragment key={`model-${event.id}`}>
               {maybeRenderModelMessages(event.id)}
               {maybeRenderSecretRequest(event.id)}
+              {maybeRenderAskUserDecision(event.id)}
             </React.Fragment>
           ))}
         </React.Fragment>
@@ -1177,6 +1208,12 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           : secretRequests.unanchored
         ).map((request) => (
           <SecretRequestCard key={request.toolCallId} request={request} />
+        ))}
+        {(shouldVirtualize
+          ? pendingAskUserRequests
+          : askUserRequests.unanchored
+        ).map((request) => (
+          <AskUserCard key={request.toolCallId} request={request} />
         ))}
         <ConversationConfirmationButtons />
       </>

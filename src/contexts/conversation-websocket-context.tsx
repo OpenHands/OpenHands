@@ -43,6 +43,7 @@ import {
   isAutomationFormUpdateActionEvent,
   isLaunchChildConversationActionEvent,
   isRequestSecretActionEvent,
+  isAskUserActionEvent,
 } from "#/types/agent-server/type-guards";
 import {
   asSessionFrame,
@@ -56,6 +57,7 @@ import { handleCanvasUIAction } from "#/services/canvas-ui";
 import { handleAutomationFormUpdateAction } from "#/services/automation-form";
 import { handleLaunchChildConversationAction } from "#/services/child-conversation-launch";
 import { handleRequestSecretAction } from "#/services/secret-request";
+import { handleAskUserAction } from "#/services/ask-user";
 import { ConversationStateUpdateEventStats } from "#/types/agent-server/core/events/conversation-state-event";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import type {
@@ -1050,6 +1052,14 @@ export function ConversationWebSocketProvider({
           // outcome is posted back once they save or cancel it.
           if (conversationId && isRequestSecretActionEvent(event)) {
             void handleRequestSecretAction(
+              event.action,
+              conversationId,
+              event.tool_call_id,
+            );
+          }
+
+          if (conversationId && isAskUserActionEvent(event)) {
+            void handleAskUserAction(
               event.action,
               conversationId,
               event.tool_call_id,
