@@ -13,18 +13,23 @@ export function redactCustomSecrets(text: string): string {
   const customSecretsBlock =
     /(<CUSTOM_SECRETS>)([\s\S]*?)(<\/CUSTOM_SECRETS>|$)/gi;
 
-  // `KEY: value` / `KEY=value`, capturing key + separator so only the value changes.
-  const secretLine = /^(\s*[^=:\n]+?\s*[:=]\s*)(.+?)\s*$/gm;
+  // `KEY: value` / `KEY=value`, capturing key + separator so only the value
+  // changes. The key is one token, so the block's own prose bullets
+  // (`* Security: Secret values are...`) are left alone. Spaces are `[ \t]`
+  // so a match stays on one line.
+  const secretLine = /^([ \t]*[^\s=:]+[ \t]*[:=][ \t]*)(.*)$/gm;
 
   return text.replace(
     customSecretsBlock,
     (_match, open: string, body: string, close: string) => {
       const redactedBody = body.replace(
         secretLine,
-        (lineMatch, prefix: string, value: string) =>
-          value === MASKED_PLACEHOLDER
+        (lineMatch, prefix: string, rawValue: string) => {
+          const value = rawValue.trimEnd();
+          return !value || value === MASKED_PLACEHOLDER
             ? lineMatch
-            : `${prefix}${MASKED_PLACEHOLDER}`,
+            : `${prefix}${MASKED_PLACEHOLDER}`;
+        },
       );
       return `${open}${redactedBody}${close}`;
     },
