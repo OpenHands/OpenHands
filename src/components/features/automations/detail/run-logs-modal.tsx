@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import XMarkIcon from "#/icons/x-mark.svg?react";
@@ -33,7 +39,8 @@ const SANDBOX_ISSUE_I18N: Record<SandboxIssue, I18nKey> = {
   unreachable: I18nKey.AUTOMATIONS$DETAIL$LOGS_SANDBOX_UNREACHABLE,
 };
 
-type LogTab = "stdout" | "stderr";
+const LOG_TABS = ["stdout", "stderr"] as const;
+type LogTab = (typeof LOG_TABS)[number];
 
 interface RunLogsModalProps {
   /** Conversation that owns the bash command. */
@@ -207,6 +214,10 @@ export function RunLogsModal({
 }: RunLogsModalProps) {
   const { t } = useTranslation("openhands");
   const [activeTab, setActiveTab] = useState<LogTab>("stdout");
+  const tabRefs = useRef<Record<LogTab, HTMLButtonElement | null>>({
+    stdout: null,
+    stderr: null,
+  });
 
   const {
     data: outputs,
@@ -256,6 +267,36 @@ export function RunLogsModal({
   const tabActiveClass = "border-[var(--oh-primary)] text-contrast";
   const tabInactiveClass = "border-transparent text-muted hover:text-content";
 
+  const handleTabKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    currentTab: LogTab,
+  ) => {
+    const currentIndex = LOG_TABS.indexOf(currentTab);
+    let nextTab: LogTab | undefined;
+
+    switch (event.key) {
+      case "ArrowLeft":
+        nextTab =
+          LOG_TABS[(currentIndex - 1 + LOG_TABS.length) % LOG_TABS.length];
+        break;
+      case "ArrowRight":
+        nextTab = LOG_TABS[(currentIndex + 1) % LOG_TABS.length];
+        break;
+      case "Home":
+        nextTab = LOG_TABS[0];
+        break;
+      case "End":
+        nextTab = LOG_TABS[LOG_TABS.length - 1];
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    setActiveTab(nextTab);
+    tabRefs.current[nextTab]?.focus();
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -298,6 +339,9 @@ export function RunLogsModal({
             className="mt-4 flex gap-1 border-b border-border"
           >
             <button
+              ref={(element) => {
+                tabRefs.current.stdout = element;
+              }}
               type="button"
               role="tab"
               aria-selected={activeTab === "stdout"}
@@ -305,6 +349,7 @@ export function RunLogsModal({
               id="run-logs-tab-stdout"
               tabIndex={activeTab === "stdout" ? 0 : -1}
               onClick={() => setActiveTab("stdout")}
+              onKeyDown={(event) => handleTabKeyDown(event, "stdout")}
               className={`${tabBaseClass} ${
                 activeTab === "stdout" ? tabActiveClass : tabInactiveClass
               }`}
@@ -312,6 +357,9 @@ export function RunLogsModal({
               {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TAB_OUTPUT)}
             </button>
             <button
+              ref={(element) => {
+                tabRefs.current.stderr = element;
+              }}
               type="button"
               role="tab"
               aria-selected={activeTab === "stderr"}
@@ -319,6 +367,7 @@ export function RunLogsModal({
               id="run-logs-tab-stderr"
               tabIndex={activeTab === "stderr" ? 0 : -1}
               onClick={() => setActiveTab("stderr")}
+              onKeyDown={(event) => handleTabKeyDown(event, "stderr")}
               className={`${tabBaseClass} ${
                 activeTab === "stderr" ? tabActiveClass : tabInactiveClass
               }`}
