@@ -10,6 +10,7 @@ import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCloudSandbox } from "#/hooks/query/use-cloud-sandbox";
+import { isExecutionPaused } from "#/utils/status";
 import {
   getOriginVSCodeBasePath,
   isVSCodeUrlServedByOrigin,
@@ -32,6 +33,11 @@ export const useUnifiedVSCodeUrl = () => {
   const sessionApiKey = conversation?.session_api_key ?? null;
   const sandboxId = conversation?.sandbox_id ?? null;
   const isCloud = active.backend.kind === "cloud";
+  // A paused local conversation still sits on a live agent-server, so the
+  // editor question still has an answer. Without the probe, a page that
+  // opens on a paused conversation would show a button with nothing behind it.
+  const canProbeEditor =
+    runtimeIsReady || isExecutionPaused(conversation?.execution_status);
 
   // The origin half of the availability question. The agent-server will
   // happily report an editor this page has no route to — see
@@ -70,7 +76,7 @@ export const useUnifiedVSCodeUrl = () => {
         sessionApiKey,
       ),
     enabled:
-      !isCloud && originServesEditor && runtimeIsReady && !!conversationId,
+      !isCloud && originServesEditor && canProbeEditor && !!conversationId,
     refetchOnMount: true,
   });
 
