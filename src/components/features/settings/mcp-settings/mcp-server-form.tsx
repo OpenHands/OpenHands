@@ -7,6 +7,7 @@ import { SettingsDropdownInput } from "../settings-dropdown-input";
 import { BrandButton } from "../brand-button";
 import { OptionalTag } from "../optional-tag";
 import { cn } from "#/utils/utils";
+import { MCP_TIMEOUT_MS_PER_SECOND } from "#/utils/mcp-config";
 import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
 import {
   isValidMcpServerName,
@@ -18,6 +19,8 @@ import type {
   MCPOAuthClientAuthMethod,
 } from "#/types/mcp-auth";
 import type { MCPServerConfig } from "#/types/mcp-server";
+
+const MIN_TIMEOUT_SECONDS = 1 / MCP_TIMEOUT_MS_PER_SECOND;
 
 type MCPServerType = "sse" | "stdio" | "shttp";
 type RemoteAuthMode = "none" | "bearer" | "header" | "oauth2";
@@ -83,6 +86,11 @@ export function MCPServerForm({
     );
   const [error, setError] = React.useState<string | null>(null);
   const formRef = React.useRef<HTMLFormElement>(null);
+  const savedTimeout = server?.timeout;
+  const savedTimeoutSeconds =
+    savedTimeout === undefined
+      ? ""
+      : (savedTimeout / MCP_TIMEOUT_MS_PER_SECOND).toString();
 
   const serverTypeOptions = [
     { key: "sse", label: t(I18nKey.SETTINGS$MCP_SERVER_TYPE_SSE) },
@@ -212,13 +220,15 @@ export function MCPServerForm({
   };
 
   const validateTimeout = (timeoutStr: string): string | null => {
-    if (!timeoutStr.trim()) return null; // Optional field
+    // Keep existing values (including 0, which disables the deadline) when
+    // the user changes another field.
+    if (!timeoutStr.trim() || timeoutStr === savedTimeoutSeconds) return null;
 
-    const timeout = parseInt(timeoutStr.trim(), 10);
-    if (Number.isNaN(timeout)) {
+    const timeout = Number(timeoutStr);
+    if (!Number.isFinite(timeout)) {
       return t(I18nKey.SETTINGS$MCP_ERROR_TIMEOUT_INVALID_NUMBER);
     }
-    if (timeout <= 0) {
+    if (timeout < MIN_TIMEOUT_SECONDS) {
       return t(I18nKey.SETTINGS$MCP_ERROR_TIMEOUT_POSITIVE);
     }
     if (timeout > 3600) {
@@ -394,10 +404,10 @@ export function MCPServerForm({
 
       // Only add timeout for SHTTP servers
       if (serverType === "shttp" && timeoutStr) {
-        const timeoutValue = parseInt(timeoutStr, 10);
-        if (!Number.isNaN(timeoutValue)) {
-          serverConfig.timeout = timeoutValue;
-        }
+        serverConfig.timeout =
+          timeoutStr === savedTimeoutSeconds
+            ? savedTimeout
+            : Math.round(Number(timeoutStr) * MCP_TIMEOUT_MS_PER_SECOND);
       }
 
       return serverConfig;
@@ -619,10 +629,11 @@ export function MCPServerForm({
               label={t(I18nKey.SETTINGS$MCP_TIMEOUT_LABEL)}
               className="w-full min-w-0"
               showOptionalTag
-              defaultValue={server?.timeout?.toString() || ""}
+              defaultValue={savedTimeoutSeconds}
               placeholder="60"
-              min={1}
+              min={MIN_TIMEOUT_SECONDS}
               max={3600}
+              step={MIN_TIMEOUT_SECONDS}
             />
           )}
         </>

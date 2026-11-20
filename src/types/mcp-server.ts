@@ -16,6 +16,7 @@ export interface MCPServerConfig {
   name?: string;
   url?: string;
   headers?: Record<string, string>;
+  /** Per-request MCP timeout in milliseconds, as stored in MCP settings. */
   timeout?: number;
   command?: string;
   args?: string[];

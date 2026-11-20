@@ -21,12 +21,13 @@ import type {
   MCPOAuthStatusResponse,
   MCPServerConfig,
 } from "#/types/mcp-server";
+import { MCP_TIMEOUT_MS_PER_SECOND } from "#/utils/mcp-config";
 import { redactMcpSecrets } from "#/utils/redact-mcp-secrets";
 import { substituteRedactedMcpCredentials } from "./mcp-redacted-credentials";
 
 const OAUTH_MCP_TEST_TIMEOUT_SECONDS = 120;
-// Upper bound accepted by the app server's `POST /api/v1/mcp/test`.
-const MAX_CLOUD_MCP_TEST_TIMEOUT_SECONDS = 120;
+// Upper bound accepted by both MCP probe endpoints.
+const MAX_MCP_TEST_TIMEOUT_SECONDS = 120;
 
 function toMcpServer(
   server: MCPServerConfig,
@@ -50,8 +51,13 @@ function toMcpServer(
 }
 
 function getMcpTestTimeout(server: MCPServerConfig): number | undefined {
-  if (server.auth?.strategy !== "oauth2") return server.timeout;
-  return OAUTH_MCP_TEST_TIMEOUT_SECONDS;
+  if (server.auth?.strategy === "oauth2") return OAUTH_MCP_TEST_TIMEOUT_SECONDS;
+  // The probe request uses seconds, while the saved server uses milliseconds.
+  if (server.timeout === undefined || server.timeout <= 0) return undefined;
+  return Math.min(
+    server.timeout / MCP_TIMEOUT_MS_PER_SECOND,
+    MAX_MCP_TEST_TIMEOUT_SECONDS,
+  );
 }
 
 async function buildMcpTestRequest(server: MCPServerConfig): Promise<{
@@ -285,9 +291,7 @@ class McpService {
         ...(server.auth && authHeaders === null && { auth: server.auth }),
       },
       ...(name ? { name } : {}),
-      ...(timeout !== undefined && {
-        timeout: Math.min(timeout, MAX_CLOUD_MCP_TEST_TIMEOUT_SECONDS),
-      }),
+      ...(timeout !== undefined && { timeout }),
       ...(validation ? { tool_call: validation.toolCall } : {}),
     };
     const result = await testCloudMcpServer(request);

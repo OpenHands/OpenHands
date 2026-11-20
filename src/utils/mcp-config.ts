@@ -9,6 +9,8 @@ import { isMcpAuthCredential } from "#/types/mcp-auth";
 import type { MCPServerConfig } from "#/types/mcp-server";
 import { toMcpServerName } from "#/utils/mcp-server-name";
 
+export const MCP_TIMEOUT_MS_PER_SECOND = 1_000;
+
 export const REDACTED_MCP_SECRET_VALUE = "**********";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
