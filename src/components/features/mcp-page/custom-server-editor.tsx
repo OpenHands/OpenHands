@@ -57,15 +57,17 @@ export function CustomServerEditor({
     reset: resetTest,
   } = useTestMcpServer();
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = React.useState(false);
+  const [hasUnsavedEdits, setHasUnsavedEdits] = React.useState(false);
   const [oauthTestResult, setOauthTestResult] =
     React.useState<ExtendedMCPTestResponse | null>(null);
   const [isOauthTesting, setIsOauthTesting] = React.useState(false);
 
   // stdio servers cannot be probed from a cloud backend (they spawn inside the
   // sandbox): `McpService.testServer` short-circuits them with a synthetic
-  // success so the save still completes. Hide the manual "Test connection"
-  // button and the resulting message for them so cloud users aren't shown a
-  // misleading "0 tools" result. Remote servers are probed via the app server.
+  // success so the save still completes. Hide the resulting message for them
+  // so cloud users aren't shown a misleading "0 tools" result. Remote servers
+  // are probed via the app server.
   const { backend } = useActiveBackend();
   const isCloudBackend = backend.kind === "cloud";
   const isSyntheticTestResult =
@@ -73,8 +75,17 @@ export function CustomServerEditor({
 
   const isEditing = !!server.id;
   const isPending = isAdding || isUpdating || isDeleting;
+  const isTestPending = isTesting || isOauthTesting;
   const isDismissBlocked =
-    isPending || isTesting || isOauthTesting || showDeleteConfirm;
+    isPending || isTestPending || showDeleteConfirm || showDiscardConfirm;
+
+  // A server that fails the pre-save test (for example one only reachable
+  // from inside the sandbox) can still be saved as tested. OAuth servers are
+  // excluded: without a completed sign-in there is nothing usable to save.
+  const failedTestedServer =
+    testResult && !testResult.ok && !oauthTestResult ? testedServer : undefined;
+  const canSaveAnyway =
+    !!failedTestedServer && failedTestedServer.auth?.strategy !== "oauth2";
 
   const testMessage: TestMessage | null = React.useMemo(() => {
     const result = oauthTestResult ?? testResult;
@@ -99,8 +110,9 @@ export function CustomServerEditor({
     };
   }, [oauthTestResult, testResult, testedServer, t]);
 
-  // A save always follows a fresh successful probe of the exact config being
-  // saved, so publish that result to the card's health entry. For stdio
+  // A save always follows a fresh probe of the exact config being saved
+  // (successful, or failed for "Save anyway"), so publish that result to the
+  // card's health entry. For stdio
   // servers on cloud backends the probe is synthetic — never present it as a
   // health verdict.
   const seedSavedServerHealth = (
@@ -196,17 +208,43 @@ export function CustomServerEditor({
     });
   };
 
-  const handleTestClick = (payload: MCPServerConfig) => {
-    setOauthTestResult(null);
-    if (payload.auth?.strategy === "oauth2") {
-      setIsOauthTesting(true);
-      void McpService.authorizeOAuth(payload)
-        .then(setOauthTestResult)
-        .catch(handleError)
-        .finally(() => setIsOauthTesting(false));
+  const handleSaveAnyway = () => {
+    if (!failedTestedServer || !testResult) return;
+    const onSaved = () => {
+      // Record the failed verdict so the card shows the server needs attention.
+      seedSavedServerHealth(failedTestedServer, testResult);
+      onClose();
+    };
+    if (isEditing) {
+      updateMcpServer(
+        { serverId: server.id, server: failedTestedServer },
+        { onSuccess: onSaved, onError: handleError },
+      );
+    } else {
+      addMcpServer(failedTestedServer, {
+        onSuccess: onSaved,
+        onError: handleError,
+      });
+    }
+  };
+
+  // A test result describes the config it tested; once the user edits the
+  // form, drop it so a stale verdict (and "Save anyway") isn't shown.
+  const handleEdit = () => {
+    setHasUnsavedEdits(true);
+    if (isTestPending) return;
+    if (testResult || oauthTestResult) {
+      resetTest();
+      setOauthTestResult(null);
+    }
+  };
+
+  const requestClose = () => {
+    if (hasUnsavedEdits) {
+      setShowDiscardConfirm(true);
       return;
     }
-    testServer(payload);
+    onClose();
   };
 
   const handleConfirmDelete = () => {
@@ -229,7 +267,7 @@ export function CustomServerEditor({
         // Block backdrop-click / Escape from dismissing the modal while
         // a mutation is in flight — closing mid-request would orphan
         // the request and leave the user with no error feedback.
-        onClose={isDismissBlocked ? undefined : onClose}
+        onClose={isDismissBlocked ? undefined : requestClose}
         closeOnEscape={!isDismissBlocked}
         aria-label={
           isEditing
@@ -242,7 +280,7 @@ export function CustomServerEditor({
           className="relative bg-base-secondary p-6 rounded-xl border border-border w-130 max-w-[90vw] max-h-[90vh] overflow-y-auto custom-scrollbar"
         >
           <ModalCloseButton
-            onClose={onClose}
+            onClose={requestClose}
             testId="mcp-custom-editor-close"
             disabled={isDismissBlocked}
           />
@@ -259,13 +297,25 @@ export function CustomServerEditor({
             onCancel={onClose}
             onDelete={isEditing ? () => setShowDeleteConfirm(true) : undefined}
             isActionDisabled={isPending}
-            onTest={handleTestClick}
-            isTestPending={isTesting || isOauthTesting}
+            isTestPending={isTestPending}
             testMessage={isSyntheticTestResult ? null : testMessage}
-            isStdioTestUnavailable={isCloudBackend}
+            onSaveAnyway={canSaveAnyway ? handleSaveAnyway : undefined}
+            onEdit={handleEdit}
           />
         </div>
       </ModalBackdrop>
+
+      {showDiscardConfirm ? (
+        <ConfirmationModal
+          text={t(I18nKey.MCP$DISCARD_CHANGES_CONFIRM)}
+          confirmText={t(I18nKey.MCP$DISCARD)}
+          onCancel={() => setShowDiscardConfirm(false)}
+          onConfirm={() => {
+            setShowDiscardConfirm(false);
+            onClose();
+          }}
+        />
+      ) : null}
 
       {showDeleteConfirm ? (
         <ConfirmationModal
