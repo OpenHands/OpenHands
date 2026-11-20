@@ -89,7 +89,9 @@ function SlashCommandMenuItem({
   onSelect,
   ref,
 }: SlashCommandMenuItemProps) {
+  const { t } = useTranslation("openhands");
   const description = useMemo(() => {
+    if (item.descriptionKey) return t(item.descriptionKey);
     if ("description" in item.skill && item.skill.description) {
       return stripMarkdown(item.skill.description);
     }
@@ -97,7 +99,7 @@ function SlashCommandMenuItem({
       return getSkillDescription(item.skill.content);
     }
     return null;
-  }, [item.skill]);
+  }, [item.skill, item.descriptionKey, t]);
 
   return (
     <button

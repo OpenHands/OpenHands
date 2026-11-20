@@ -6,6 +6,8 @@ import {
   Plus,
   Server,
   Settings,
+  Cat,
+  FolderKanban,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -44,6 +46,9 @@ import {
 import { useCanvasExtensionsRuntime } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
 import { CanvasExtensionIcon } from "#/components/features/canvas-extensions/canvas-extension-icon";
 import type { Backend } from "#/api/backend-registry/types";
+import { useProjectsEnabled } from "#/hooks/query/use-projects";
+import { NEW_PROJECT_PATH, PROJECTS_PATH } from "#/utils/project-paths";
+import { useNavigation } from "#/context/navigation-context";
 
 const ICON_SIZE = 18;
 const SIDEBAR_LOGO_WIDTH = 34;
@@ -95,6 +100,8 @@ export function SidebarRailBody({
   onOpenManageBackends,
 }: SidebarRailBodyProps) {
   const { t } = useTranslation("openhands");
+  const projectsEnabled = useProjectsEnabled();
+  const { navigate } = useNavigation();
   const { pages: canvasExtensionPages } = useCanvasExtensionsRuntime();
   const backendCloseTimerRef = collapsedBackendCloseTimer;
   const { isPinnedRoute, togglePinnedRoute } = usePinnedHomeRoute();
@@ -265,6 +272,20 @@ export function SidebarRailBody({
             )}
           />
         )}
+        {projectsEnabled && (
+          <SidebarNavLink
+            to={PROJECTS_PATH}
+            label={t(I18nKey.PROJECTS$TITLE)}
+            testId="sidebar-projects-link"
+            collapsed={collapsed}
+            icon={<FolderKanban width={ICON_SIZE} height={ICON_SIZE} />}
+            addAction={{
+              label: t(I18nKey.PROJECTS$NEW),
+              testId: "sidebar-new-project",
+              onClick: () => navigate(NEW_PROJECT_PATH),
+            }}
+          />
+        )}
         {canvasExtensionPages.map((page) => (
           <SidebarNavLink
             key={`${page.extension.name}:${page.contribution.id}`}
@@ -273,10 +294,14 @@ export function SidebarRailBody({
             testId={`sidebar-canvas-extension-${page.extension.name}-${page.contribution.id}`}
             collapsed={collapsed}
             icon={
-              <CanvasExtensionIcon
-                extension={page.extension}
-                size={ICON_SIZE}
-              />
+              page.icon === "cat" && !page.extension.manifest?.icon ? (
+                <Cat width={ICON_SIZE} height={ICON_SIZE} />
+              ) : (
+                <CanvasExtensionIcon
+                  extension={page.extension}
+                  size={ICON_SIZE}
+                />
+              )
             }
           />
         ))}

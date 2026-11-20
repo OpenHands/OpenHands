@@ -458,7 +458,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         isObservationEvent(event) &&
         event.observation.kind === "AskUserObservation" &&
         !event.observation.is_error &&
-        action?.action.kind === "AskUserAction"
+        (action?.action.kind === "AskUserAction" ||
+          action?.action.kind === "AskUserForConversationAction")
       ) {
         return (
           <DecisionCard

@@ -307,7 +307,10 @@ export function collectTagFacets(
 ): string[] {
   const facets = new Set<string>();
   for (const conversation of conversations) {
-    for (const [key, value] of getDisplayConversationTags(conversation.tags)) {
+    for (const [key, value] of getDisplayConversationTags(
+      conversation.tags,
+      conversation.parent_conversation_id,
+    )) {
       facets.add(`${key}=${value}`);
     }
   }
@@ -358,9 +361,10 @@ export function applyTagConversationFilter(
   }
   const narrowing = new Set(effectiveFacets);
   return conversations.filter((conversation) =>
-    getDisplayConversationTags(conversation.tags).some(([key, value]) =>
-      narrowing.has(`${key}=${value}`),
-    ),
+    getDisplayConversationTags(
+      conversation.tags,
+      conversation.parent_conversation_id,
+    ).some(([key, value]) => narrowing.has(`${key}=${value}`)),
   );
 }
 
