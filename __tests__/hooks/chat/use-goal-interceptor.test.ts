@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useGoalInterceptor } from "#/hooks/chat/use-goal-interceptor";
+import { I18nKey } from "#/i18n/declaration";
 
 const mockStartGoal = vi.hoisted(() =>
   vi.fn<
@@ -76,13 +77,19 @@ describe("useGoalInterceptor", () => {
     });
   });
 
-  it("does nothing for a bare /goal with no objective", () => {
-    const onSubmit = vi.fn();
-    const { result } = renderHook(() => useGoalInterceptor(CONV, onSubmit));
-    act(() => result.current("/goal"));
-    expect(onSubmit).not.toHaveBeenCalled();
-    expect(mockStartGoal).not.toHaveBeenCalled();
-  });
+  it.each(["/goal", "/goal --max 5"])(
+    "rejects %s when it has no objective",
+    (message) => {
+      const onSubmit = vi.fn();
+      const { result } = renderHook(() => useGoalInterceptor(CONV, onSubmit));
+
+      act(() => result.current(message));
+
+      expect(mockToast).toHaveBeenCalledWith(I18nKey.GOAL$OBJECTIVE_REQUIRED);
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(mockStartGoal).not.toHaveBeenCalled();
+    },
+  );
 
   it("falls through when conversationId is null", () => {
     const onSubmit = vi.fn();
