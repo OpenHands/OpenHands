@@ -1,6 +1,39 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type CDPSession, type Page } from "@playwright/test";
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+type TouchPoint = [x: number, y: number];
+
+/** Drives a one-finger swipe through Chromium's native touch input. */
+async function swipe(cdp: CDPSession, from: TouchPoint, to: TouchPoint) {
+  const steps = 8;
+  const point = (step: number) => ({
+    x: from[0] + ((to[0] - from[0]) * step) / steps,
+    y: from[1] + ((to[1] - from[1]) * step) / steps,
+  });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [point(0)],
+  });
+  for (let step = 1; step <= steps; step += 1) {
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [point(step)],
+    });
+  }
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+}
+
+const nextFrames = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      }),
+  );
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -64,6 +97,38 @@ test("mobile conversation menu has a comfortable touch target", async ({
   const topBarBounds = await topBarMenu.boundingBox();
   expect(topBarBounds!.width).toBeGreaterThanOrEqual(48);
   expect(topBarBounds!.height).toBeGreaterThanOrEqual(48);
+});
+
+test("swiping right from the chat's left edge opens the navigation drawer", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", "Uses Chromium touch input.");
+  const cdp = await page.context().newCDPSession(page);
+  const menu = page.getByTestId("sidebar-mobile-menu-toggle");
+  const drawer = page.getByTestId("sidebar-mobile-drawer");
+  const chat = (await page
+    .getByTestId("conversation-chat-panel")
+    .boundingBox())!;
+  const y = chat.y + chat.height / 2;
+
+  await swipe(cdp, [chat.x + 6, y], [chat.x + 12, y - 240]);
+  await swipe(cdp, [chat.x + 120, y], [chat.x + 320, y]);
+  await swipe(cdp, [chat.x + 6, y], [chat.x + 40, y]);
+  await nextFrames(page);
+  await expect(menu).toHaveAttribute("aria-expanded", "false");
+  await expect(drawer).toHaveCount(0);
+
+  await swipe(cdp, [chat.x + 6, y], [chat.x + 220, y + 8]);
+  await expect(drawer).toBeVisible();
+  // The swipe opens the drawer rather than navigating the browser back.
+  await expect(page).toHaveURL(/\/conversations\/1$/);
+  await drawer.getByTestId("sidebar-mobile-drawer-close").tap();
+  await expect(drawer).toBeHidden();
+
+  await menu.tap();
+  await expect(drawer).toBeVisible();
+  await cdp.detach();
 });
 
 test("mobile conversation rows are easy to tap without triggering their actions", async ({

@@ -30,6 +30,8 @@ import {
   SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
 } from "#/hooks/use-breakpoint";
 import { SidebarMobileMenuToggle } from "#/components/features/sidebar/sidebar-mobile-menu-toggle";
+import { useSidebarMobileNavOptional } from "#/components/features/sidebar/sidebar-mobile-nav-context";
+import { useLeftEdgeSwipe } from "#/hooks/use-left-edge-swipe";
 import { ConversationOverviewDrawer } from "../conversation-overview-drawer";
 import { useConversationOverviewDrawerOptional } from "../conversation-overview-drawer-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -96,6 +98,13 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
   const { data: conversation } = useActiveConversation();
   const isMobile = useBreakpoint();
   const isSidebarRailHidden = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
+  const mobileNav = useSidebarMobileNavOptional();
+  // Where the rail is hidden, a swipe from the chat's left edge opens the
+  // drawer as a one-handed alternative to the header menu button.
+  const chatEdgeSwipeHandlers = useLeftEdgeSwipe({
+    enabled: isSidebarRailHidden && mobileNav !== null,
+    onSwipe: () => mobileNav?.open(),
+  });
   const { isRightPanelShown, setHasRightPanelToggled, setIsRightPanelShown } =
     useConversationStore();
   const [openedTabConversationId, setOpenedTabConversationId] = useState<
@@ -310,8 +319,13 @@ export function ConversationMain({ children }: { children?: ReactNode } = {}) {
             chat input doesn't slam the floor. */}
         <div
           data-testid="conversation-chat-panel"
+          {...chatEdgeSwipeHandlers}
           className={cn(
             "flex flex-col bg-canvas-base overflow-hidden",
+            // The browser keeps vertical scrolling, zoom and nested horizontal
+            // scrollers; horizontal page pans (Chrome's swipe-back) would
+            // otherwise claim the edge swipe.
+            isSidebarRailHidden && "touch-pan-y touch-pinch-zoom",
             isMobile
               ? cn("flex-1", showMobileAutomationForm && "hidden")
               : cn(

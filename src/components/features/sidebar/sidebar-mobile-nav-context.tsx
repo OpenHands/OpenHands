@@ -38,6 +38,11 @@ export function SidebarMobileNavProvider({
   );
 }
 
+/** For components that may render outside the app shell (e.g. embedders). */
+export function useSidebarMobileNavOptional(): SidebarMobileNavContextValue | null {
+  return React.useContext(SidebarMobileNavContext);
+}
+
 export function useSidebarMobileNav(): SidebarMobileNavContextValue {
   const context = React.useContext(SidebarMobileNavContext);
   if (!context) {
