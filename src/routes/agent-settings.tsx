@@ -51,11 +51,16 @@ import {
   labelForAcpEffort,
   labelForAcpModel,
   type ACPModelOption,
-  type ACPProviderConfig,
 } from "#/constants/acp-providers";
 import { useAcpModelDiscovery } from "#/hooks/query/use-acp-model-discovery";
+import { useDebounce } from "#/hooks/use-debounce";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
+import {
+  acpLaunchFromCommandText,
+  detectAcpPreset,
+  type AcpLaunch,
+} from "#/utils/acp-launch";
 import { enabledMcpServerRefs } from "#/hooks/mutation/sync-agent-profiles";
 import {
   readProfileScope,
@@ -120,6 +125,9 @@ const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
 const ACP_AGENT_DEFAULT_MODEL_KEY = "__agent_default_model__";
 const ACP_AGENT_DEFAULT_EFFORT_KEY = "__agent_default_effort__";
+// Asking for models starts the ACP server, so wait for the command to settle
+// instead of spawning one per keystroke.
+const ACP_DISCOVERY_DEBOUNCE_MS = 500;
 const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
   agentType: "openhands",
   commandText: "",
@@ -132,19 +140,6 @@ function toStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((v): v is string => typeof v === "string")
     : [];
-}
-
-function detectPreset(
-  commandText: string,
-  providers: ACPProviderConfig[],
-): string {
-  const normalized = parseCommand(commandText).join(" ");
-  for (const provider of providers) {
-    if (normalized === provider.default_command.join(" ")) {
-      return provider.key;
-    }
-  }
-  return ACP_CUSTOM_PRESET_KEY;
 }
 
 export type SystemPromptMode = "standard" | "append" | "custom";
@@ -670,10 +665,10 @@ export function AgentSettingsScreen({
   // ACP credentials live alongside the agent spec, so the form owns the
   // credential form and hands it to the editor's Save. Called unconditionally
   // (no-ops to empty fields for a non-ACP / custom command) to keep hook order
-  // stable across the ``isLoading`` early-return below; ``detectPreset`` is a
+  // stable across the ``isLoading`` early-return below; ``detectAcpPreset`` is a
   // cheap pure lookup.
   const acpPresetForCreds =
-    agentType === "acp" ? detectPreset(commandText, acpProviders) : null;
+    agentType === "acp" ? detectAcpPreset(commandText, acpProviders) : null;
   const acpCredentialForm = useAcpCredentialForm(
     acpPresetForCreds && acpPresetForCreds !== ACP_CUSTOM_PRESET_KEY
       ? acpPresetForCreds
@@ -740,7 +735,10 @@ export function AgentSettingsScreen({
         typeof savedModel === "string" ? savedModel.trim() : "";
       const nextAcpModel =
         normalizedSavedModel || getAcpPreferredDefaultModel(acpServer) || "";
-      const nextIsCustomAcpModel = !!normalizedSavedModel && !provider;
+      // A saved model is a real selection even when discovery hasn't listed it
+      // yet: `buildModelSuggestions` appends it, so it stays selectable. Only
+      // the explicit "Custom" row opens manual entry.
+      const nextIsCustomAcpModel = false;
       const nextAcpEffort = acpEffortOf(agentSettingsOverride) ?? "";
       setAcpModel(nextAcpModel);
       setIsCustomAcpModel(nextIsCustomAcpModel);
@@ -1029,20 +1027,37 @@ export function AgentSettingsScreen({
     setSelectedMcpServers(scope.selected);
   }, [sharesGlobalPages, settings, initialMcpRefs]);
   const commandTokens = parseCommand(commandText);
-  const selectedPreset = detectPreset(commandText, acpProviders);
+  const selectedPreset = detectAcpPreset(commandText, acpProviders);
   const selectedProvider = getAcpProvider(selectedPreset);
+  const discoveryAgentName =
+    selectedProvider?.display_name ?? t(I18nKey.SETTINGS$AGENT_PRESET_CUSTOM);
   const isDefaultProviderCommand =
     !!selectedProvider &&
     commandTokens.join(" ") === selectedProvider.default_command.join(" ");
-  const liveModels = useAcpModelDiscovery(
-    isAcp && isDefaultProviderCommand ? selectedPreset : null,
-    {
-      secretRefs:
-        secretRefsSupportedOnProfile && secretsMode === "custom"
-          ? selectedSecrets
-          : null,
-    },
+  // Asking for models starts the ACP server. A built-in provider or a command
+  // already stored on the profile is final, so it is asked immediately; only a
+  // custom command the user is still typing has to settle first. While it does,
+  // no launch is passed down, so the previous command's catalogue and hints are
+  // not shown against the new text.
+  const debouncedCommandText = useDebounce(
+    commandText,
+    ACP_DISCOVERY_DEBOUNCE_MS,
   );
+  const isTypingCustomCommand =
+    isAcp &&
+    selectedPreset === ACP_CUSTOM_PRESET_KEY &&
+    commandText !== loadedSnapshot.commandText &&
+    commandText !== debouncedCommandText;
+  const modelLaunch: AcpLaunch | null =
+    isAcp && !isTypingCustomCommand
+      ? acpLaunchFromCommandText(commandText, acpProviders)
+      : null;
+  const liveModels = useAcpModelDiscovery(modelLaunch, {
+    secretRefs:
+      secretRefsSupportedOnProfile && secretsMode === "custom"
+        ? selectedSecrets
+        : null,
+  });
 
   if (isLoading) return null;
 
@@ -1059,7 +1074,8 @@ export function AgentSettingsScreen({
     !!selectedProvider && !getAcpPreferredDefaultModel(selectedPreset);
   const showModelSelector = offersAgentDefault || modelSuggestions.length > 0;
   const modelListHint = (() => {
-    if (!selectedProvider || liveModels.isDiscovering) return null;
+    if (!isAcp || liveModels.isDiscovering || isTypingCustomCommand)
+      return null;
     if (liveModels.discovery?.error?.code === "ACPAuthRequired") return null;
     if (liveModels.source === "remembered") {
       return {
@@ -1726,8 +1742,11 @@ export function AgentSettingsScreen({
                 // reconciliation. Gated on the *detected preset* actually
                 // changing, so it never clobbers a model the user is editing
                 // within the same provider.
-                const prevPreset = detectPreset(commandText, acpProviders);
-                const nextPreset = detectPreset(nextCommandText, acpProviders);
+                const prevPreset = detectAcpPreset(commandText, acpProviders);
+                const nextPreset = detectAcpPreset(
+                  nextCommandText,
+                  acpProviders,
+                );
                 if (nextPreset !== prevPreset) {
                   setAcpModel(getAcpPreferredDefaultModel(nextPreset) ?? "");
                   setIsCustomAcpModel(false);
@@ -1855,33 +1874,32 @@ export function AgentSettingsScreen({
               }}
             />
           )}
-          {liveModels.isDiscovering && selectedProvider && (
+          {liveModels.isDiscovering && isAcp && (
             <Typography.Text
               testId="agent-model-discovering"
               className="text-xs text-text-dim dark:text-[#717888]"
             >
               {t(I18nKey.SETTINGS$AGENT_MODEL_DISCOVERING, {
-                agent: selectedProvider.display_name,
+                agent: discoveryAgentName,
               })}
             </Typography.Text>
           )}
-          {liveModels.discovery?.error?.code === "ACPAuthRequired" &&
-            selectedProvider && (
-              <Typography.Text
-                testId="agent-model-discovery-needs-auth"
-                className="text-xs text-text-dim dark:text-[#717888]"
-              >
-                {t(I18nKey.SETTINGS$AGENT_MODEL_DISCOVERY_NEEDS_AUTH, {
-                  agent: selectedProvider.display_name,
-                })}
-              </Typography.Text>
-            )}
-          {modelListHint && selectedProvider && (
+          {liveModels.discovery?.error?.code === "ACPAuthRequired" && isAcp && (
+            <Typography.Text
+              testId="agent-model-discovery-needs-auth"
+              className="text-xs text-text-dim dark:text-[#717888]"
+            >
+              {t(I18nKey.SETTINGS$AGENT_MODEL_DISCOVERY_NEEDS_AUTH, {
+                agent: discoveryAgentName,
+              })}
+            </Typography.Text>
+          )}
+          {modelListHint && isAcp && (
             <Typography.Text
               testId={modelListHint.testId}
               className="text-xs text-text-dim dark:text-[#717888]"
             >
-              {t(modelListHint.key, { agent: selectedProvider.display_name })}
+              {t(modelListHint.key, { agent: discoveryAgentName })}
             </Typography.Text>
           )}
           <Typography.Text className="text-xs text-text-dim dark:text-[#717888]">

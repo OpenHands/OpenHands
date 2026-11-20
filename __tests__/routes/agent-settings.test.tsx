@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -198,6 +204,53 @@ describe("AgentSettingsScreen", () => {
     expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
       "my-pinned-fork-model",
     );
+    expect(screen.queryByTestId("agent-model-input")).toBeNull();
+  });
+
+  it("opens a stored custom command on its saved model, not Custom", async () => {
+    acpModelDiscoveryMock.mockReturnValue({
+      ...NO_DISCOVERY,
+      source: "live",
+      models: [
+        { id: "stub-sonnet", label: "Stub Sonnet" },
+        { id: "stub-opus", label: "Stub Opus" },
+      ],
+      defaultModelId: "stub-sonnet",
+    });
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        acp_server: "custom",
+        acp_command: ["my-acp-wrapper"],
+        acp_model: "stub-opus",
+      },
+    });
+
+    await screen.findByTestId("agent-command-input");
+    // The saved model is a selection, not a reason to open manual entry.
+    expect(screen.getByTestId("agent-model-selector")).toHaveValue("Stub Opus");
+    expect(screen.queryByTestId("agent-model-input")).toBeNull();
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      acp_server: "custom",
+      acp_model: "stub-opus",
+    });
+  });
+
+  it("keeps a stored custom model selectable before discovery lists it", async () => {
+    renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        acp_server: "custom",
+        acp_command: ["my-acp-wrapper"],
+        acp_model: "stub-opus",
+      },
+    });
+
+    await screen.findByTestId("agent-command-input");
+    // Nothing discovered yet: the suggestions append the id as its own entry,
+    // so the saved choice still shows as selected rather than falling back to
+    // Custom.
+    expect(screen.getByTestId("agent-model-selector")).toHaveValue("stub-opus");
     expect(screen.queryByTestId("agent-model-input")).toBeNull();
   });
 
@@ -531,9 +584,16 @@ describe("AgentSettingsScreen", () => {
       agentSettingsOverride: CLAUDE_PROFILE,
     });
     await screen.findByTestId("agent-command-input");
-    expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith("claude-code", {
-      secretRefs: null,
-    });
+    await waitFor(
+      () =>
+        expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith(
+          { server: "claude-code", command: [], args: [] },
+          {
+            secretRefs: null,
+          },
+        ),
+      { timeout: 3000 },
+    );
 
     await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
     await user.click(
@@ -617,24 +677,168 @@ describe("AgentSettingsScreen", () => {
     });
 
     await screen.findByTestId("agent-command-input");
-    expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith("claude-code", {
-      secretRefs: ["ANTHROPIC_API_KEY"],
-    });
+    await waitFor(
+      () =>
+        expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith(
+          { server: "claude-code", command: [], args: [] },
+          {
+            secretRefs: ["ANTHROPIC_API_KEY"],
+          },
+        ),
+      { timeout: 3000 },
+    );
   });
 
-  it("does not ask a custom command for its models", async () => {
+  it("asks a custom command for its models with that command", async () => {
     renderAgentSettingsScreen({
       agentSettingsOverride: {
         ...CLAUDE_PROFILE,
         acp_server: "custom",
-        acp_command: ["my-acp-wrapper"],
+        acp_command: ["my-acp-wrapper", "--flag"],
       },
     });
 
     await screen.findByTestId("agent-command-input");
+    await waitFor(
+      () =>
+        expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith(
+          {
+            server: "custom",
+            command: ["my-acp-wrapper", "--flag"],
+            args: [],
+          },
+          {
+            secretRefs: null,
+          },
+        ),
+      { timeout: 3000 },
+    );
+  });
+
+  it("does not ask for models while a custom command is empty", async () => {
+    renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        acp_server: "custom",
+        acp_command: null,
+      },
+    });
+
+    await screen.findByTestId("agent-command-input");
+
     expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith(null, {
       secretRefs: null,
     });
+  });
+
+  it("asks a built-in provider as soon as its profile loads", async () => {
+    renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
+
+    await screen.findByTestId("agent-command-input");
+
+    // No debounce: the command is the saved default, not something being typed.
+    expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith(
+      { server: "claude-code", command: [], args: [] },
+      { secretRefs: null },
+    );
+  });
+
+  it("waits for a typed custom command to settle before asking", async () => {
+    renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        acp_server: "custom",
+        acp_command: null,
+      },
+    });
+    const command = await screen.findByTestId("agent-command-input");
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(command, { target: { value: "my-acp-wrapper" } });
+      expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith(null, {
+        secretRefs: null,
+      });
+
+      act(() => vi.advanceTimersByTime(499));
+      expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith(null, {
+        secretRefs: null,
+      });
+
+      act(() => vi.advanceTimersByTime(1));
+      expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith(
+        { server: "custom", command: ["my-acp-wrapper"], args: [] },
+        { secretRefs: null },
+      );
+      // The intermediate text never reached the agent-server.
+      expect(
+        acpModelDiscoveryMock.mock.calls.some(
+          ([launch]) =>
+            launch?.server === "custom" &&
+            launch.command.join(" ") !== "my-acp-wrapper",
+        ),
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not ask for a custom command that was cleared before it settled", async () => {
+    renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...CLAUDE_PROFILE,
+        acp_server: "custom",
+        acp_command: null,
+      },
+    });
+    const command = await screen.findByTestId("agent-command-input");
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(command, { target: { value: "my-acp-wrapper" } });
+      fireEvent.change(command, { target: { value: "" } });
+      act(() => vi.advanceTimersByTime(600));
+
+      expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith(null, {
+        secretRefs: null,
+      });
+      expect(
+        acpModelDiscoveryMock.mock.calls.some(
+          ([launch]) => launch?.server === "custom",
+        ),
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows the new preset's catalogue immediately after a switch", async () => {
+    acpModelDiscoveryMock.mockImplementation(
+      (launch: { server?: string } | null) => ({
+        ...NO_DISCOVERY,
+        source: "live",
+        models:
+          launch?.server === "codex"
+            ? [{ id: "gpt-5", label: "GPT-5" }]
+            : [{ id: "claude-opus", label: "Claude Opus" }],
+      }),
+    );
+    const user = userEvent.setup();
+    renderAgentSettingsScreen({ agentSettingsOverride: CLAUDE_PROFILE });
+    await screen.findByTestId("agent-command-input");
+
+    await user.click(screen.getByTestId("agent-preset-selector"));
+    await user.click(await screen.findByRole("option", { name: "Codex" }));
+
+    expect(acpModelDiscoveryMock).toHaveBeenLastCalledWith(
+      { server: "codex", command: [], args: [] },
+      { secretRefs: null },
+    );
+    await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
+    expect(
+      await screen.findByRole("option", { name: "GPT-5" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Claude Opus" })).toBeNull();
   });
 
   it("asks for credentials when the agent needs a login to list models", async () => {

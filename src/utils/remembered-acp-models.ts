@@ -33,11 +33,41 @@ function parseLists(raw: string | null): RememberedLists {
   }
 }
 
-/** The scope a list is remembered under: the secrets the agent could use. */
+/**
+ * A stable, non-reversible fingerprint of the launch argv.
+ *
+ * The scope is persisted in ``localStorage``, and a custom command can carry an
+ * inline credential (``--api-key=...``). Hashing keeps the command out of
+ * storage while still separating launches; the 32-bit FNV-1a collision risk is
+ * acceptable for a per-browser cache hint.
+ */
+function argvFingerprint(argv: readonly string[]): string {
+  const serialized = JSON.stringify([...argv]);
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < serialized.length; index += 1) {
+    hash ^= serialized.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+/**
+ * The scope a list is remembered under: the secrets the agent could use, and —
+ * when the launch has an explicit command — a fingerprint of that command.
+ *
+ * A launch without command tokens keeps the secrets-only value it had before
+ * launch-aware scopes existed, so lists remembered by an older Canvas still
+ * apply to a built-in provider's default command. Two custom profiles with
+ * different commands never share a list.
+ */
 export function acpModelScope(
   secretRefs: readonly string[] | null | undefined,
+  argv?: readonly string[] | null,
 ): string {
-  return secretRefs ? JSON.stringify([...new Set(secretRefs)].sort()) : "*";
+  const secrets = secretRefs
+    ? JSON.stringify([...new Set(secretRefs)].sort())
+    : "*";
+  return argv?.length ? `${secrets}|#${argvFingerprint(argv)}` : secrets;
 }
 
 /** The stored JSON for {@link readRememberedAcpModels}, or null. */
@@ -69,7 +99,7 @@ export function parseRememberedAcpModels(
   return [...byId.values()];
 }
 
-/** The models a built-in ACP agent last reported on this backend, in this browser. */
+/** The models an ACP agent last reported on this backend, in this browser. */
 export function readRememberedAcpModels(
   backendId: string,
   providerKey: string | null | undefined,
