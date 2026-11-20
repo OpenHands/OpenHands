@@ -39,8 +39,8 @@ Source: `src/routes/factories-list.tsx`, `src/routes/factory-detail.tsx`, `src/r
 Preconditions:
 
 - Baseline state. No LLM is needed.
-- The Agent Server must list the switch: `control-openhands api GET /api/settings/experimental` has an entry with key `factories`. Agent Server 1.63.0 has none (four entries); 1.63.1 and newer have it. If the entry is missing, relaunch with `control-openhands launch --new --sdk-version 1.63.1`, or record the recipes `blocked`.
-- The automation service must support factories: `control-openhands api GET /api/automation/v1/capabilities --pick body.features` includes `factories` (automation 1.34.0 does).
+- The Agent Server must list the switch: `control-openhands api GET /api/settings/experimental` has an entry with key `factories`. Agent Server 1.63.1 is the first release that has it; 1.63.0 and older do not. If the entry is missing, relaunch with `control-openhands launch --new --sdk-version 1.63.1`, or record the recipes `blocked`.
+- The automation service must support factories: `control-openhands api GET /api/automation/v1/capabilities --pick body.features` includes `factories` (automation 1.34.0 does; the recipes were run on 1.34.0).
 - The switch starts off. Read it with `control-openhands api GET /api/settings/experimental` (the `factories` entry's `enabled` is `false`).
 - Cloud and Enterprise behavior (the `enable_factories` flag, a member without `manage_automations` seeing no New factory, Rename or Change factory) needs a Cloud account or an Enterprise backend and is `blocked` here.
 
