@@ -76,3 +76,19 @@ def test_one_token_conversation_is_not_mistaken_for_validation(url):
 
     assert "tool_calls" in complete(url, messages, max_tokens=1)
     assert recorded(url)[0]["messages"] == messages
+
+
+def test_blank_auxiliary_turn_is_nonempty_and_preserves_next_turn(url):
+    server.MockLLMHandler.test_llm = server.TestLLM.from_messages(
+        [
+            server.Message(role="assistant", content=[server.TextContent(text="")]),
+            server.Message(
+                role="assistant", content=[server.TextContent(text="agent reply")]
+            ),
+        ]
+    )
+    messages = [{"role": "user", "content": "Generate a conversation title."}]
+
+    assert complete(url, messages)["content"] == "Mock auxiliary response"
+    reply = complete(url, [{"role": "user", "content": "Hello"}])
+    assert reply["content"] == "agent reply"
