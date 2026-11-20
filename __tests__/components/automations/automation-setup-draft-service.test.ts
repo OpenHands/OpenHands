@@ -187,4 +187,36 @@ describe("setupDraftFromServerDraft", () => {
     expect(form.eventKey).toBe("push,release.published");
     expect(form.runAsUserId).toBe("sa-2");
   });
+
+  it("reopens a private draft as private", () => {
+    // Arrange
+    const saved = {
+      ...baseSavedDraft,
+      draft: { prompt: "Triage issues", visibility: "private" },
+    } satisfies AutomationDraftApiResponse;
+
+    // Act
+    const draft = setupDraftFromServerDraft(saved);
+
+    // Assert
+    expect(draft.form?.visibility).toBe("private");
+  });
+
+  it("keeps a private automation private when its saved draft does not say", () => {
+    // Arrange: a draft saved without a visibility, restored over the form of
+    // a private automation that is being edited.
+    const saved = {
+      ...baseSavedDraft,
+      draft: { prompt: "Triage issues" },
+    } satisfies AutomationDraftApiResponse;
+
+    // Act
+    const form = formFromServerDraft(saved, {
+      ...baseForm,
+      visibility: "private",
+    });
+
+    // Assert
+    expect(form.visibility).toBe("private");
+  });
 });
