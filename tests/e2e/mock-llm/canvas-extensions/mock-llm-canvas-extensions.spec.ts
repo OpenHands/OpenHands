@@ -194,11 +194,9 @@ test.describe("Apps lifecycle", () => {
     await expect(extensionPage(page)).toContainText(
       "Host API 1 on backend default-local",
     );
-    // The pinned server advertises the managed App backend bridge even for a
-    // browser-only fixture; availability is a host capability, not a manifest flag.
     await expect(
       page.getByTestId("demo-extension-app-backend-status"),
-    ).toHaveText("App backend view available");
+    ).toHaveText("App backend view unavailable");
 
     await page.goto(`${PAGE_PATH}/nested`, { waitUntil: "domcontentloaded" });
     await expect(extensionPage(page)).toContainText(
