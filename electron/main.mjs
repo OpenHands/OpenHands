@@ -357,6 +357,10 @@ function createLoadingWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      // Explicit for defense-in-depth: the sandboxed renderer cannot touch
+      // Node or the filesystem outside its IPC surface. Electron 20+ already
+      // defaults to this; declaring it keeps the hardening bar visible.
+      sandbox: true,
       // Bridges the startup-log console over IPC (see preload.cjs).
       preload: join(__dirname, "preload.cjs"),
     },
@@ -399,6 +403,8 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      // Explicit for defense-in-depth, matching the loading window.
+      sandbox: true,
       // Desktop-shell state and the MARS tunnel bridge (see preload-main.cjs).
       preload: join(__dirname, "preload-main.cjs"),
     },
