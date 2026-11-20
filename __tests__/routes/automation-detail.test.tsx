@@ -10,6 +10,7 @@ import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 import { I18nKey } from "#/i18n/declaration";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
 import {
   getCloudOrganizationMember,
   listCloudServiceAccounts,
@@ -218,6 +219,17 @@ beforeEach(() => {
   });
   vi.mocked(AutomationService.supportsFactories).mockReset();
   vi.mocked(AutomationService.supportsFactories).mockReturnValue(false);
+  vi.spyOn(
+    experimentalFeaturesService,
+    "listExperimentalFeatures",
+  ).mockResolvedValue([
+    {
+      key: "factories",
+      label: "Factories",
+      description: "Shows Factories in the sidebar.",
+      enabled: true,
+    },
+  ]);
   window.localStorage.clear();
   __resetActiveStoreForTests();
   vi.mocked(AutomationService.checkHealth).mockReset();

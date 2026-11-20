@@ -12,6 +12,7 @@ import {
 } from "react-router";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -189,6 +190,17 @@ beforeEach(() => {
     triggers: {},
   });
   vi.mocked(AutomationService.supportsFactories).mockReturnValue(true);
+  vi.spyOn(
+    experimentalFeaturesService,
+    "listExperimentalFeatures",
+  ).mockResolvedValue([
+    {
+      key: "factories",
+      label: "Factories",
+      description: "Shows Factories in the sidebar.",
+      enabled: true,
+    },
+  ]);
   vi.mocked(AutomationService.supportsAutomationDrafts).mockReturnValue(false);
   vi.mocked(AutomationService.listServerDrafts).mockResolvedValue({
     drafts: [],
