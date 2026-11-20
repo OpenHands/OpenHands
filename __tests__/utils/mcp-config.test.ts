@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type {
-  MCPConfig,
-  MCPServer,
-} from "@openhands/typescript-client";
+import type { MCPConfig, MCPServer } from "@openhands/typescript-client";
 
 import {
   allocateMcpSettingsKey,
@@ -105,7 +102,10 @@ describe("hasRedactedMcpSecretLeaf", () => {
 
   it("recurses into arrays", () => {
     expect(
-      hasRedactedMcpSecretLeaf(["plain", { nested: REDACTED_MCP_SECRET_VALUE }]),
+      hasRedactedMcpSecretLeaf([
+        "plain",
+        { nested: REDACTED_MCP_SECRET_VALUE },
+      ]),
     ).toBe(true);
     expect(hasRedactedMcpSecretLeaf(["plain", "other"])).toBe(false);
   });
@@ -120,9 +120,9 @@ describe("hasRedactedMcpSecretLeaf", () => {
 
 describe("getMcpServerEnabled", () => {
   it("returns false only for an explicit disabled flag", () => {
-    expect(getMcpServerEnabled({ enabled: false } as unknown as MCPServer)).toBe(
-      false,
-    );
+    expect(
+      getMcpServerEnabled({ enabled: false } as unknown as MCPServer),
+    ).toBe(false);
   });
 
   it("returns undefined when enabled is true or absent", () => {
@@ -294,10 +294,11 @@ describe("canonical MCP configuration integration", () => {
       filesystem: { command: "npx" },
     });
 
-    expect(flattenMcpConfig(config).map(({ id }) => id).sort()).toEqual([
-      "filesystem",
-      "github",
-    ]);
+    expect(
+      flattenMcpConfig(config)
+        .map(({ id }) => id)
+        .sort(),
+    ).toEqual(["filesystem", "github"]);
   });
 });
 
@@ -1103,7 +1104,12 @@ describe("buildRenameMcpConfigPatch", () => {
       command: "c",
       env: { TOKEN: REDACTED_MCP_SECRET_VALUE },
     } as MCPServer;
-    const edited: MCPServerConfig = { id: "s", type: "stdio", command: "c" };
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "stdio",
+      command: "c",
+      env: { TOKEN: REDACTED_MCP_SECRET_VALUE },
+    };
     expect(() =>
       buildRenameMcpConfigPatch("old", "new", previous, edited),
     ).toThrow(MCP_RENAME_CREDENTIAL_ERROR);
@@ -1119,6 +1125,7 @@ describe("buildRenameMcpConfigPatch", () => {
       id: "s",
       type: "shttp",
       url: "https://u.example",
+      auth: { strategy: "bearer", value: REDACTED_MCP_SECRET_VALUE },
     };
     expect(() =>
       buildRenameMcpConfigPatch("old", "new", previous, edited),
@@ -1128,6 +1135,28 @@ describe("buildRenameMcpConfigPatch", () => {
     expect(() =>
       buildRenameMcpConfigPatch("old", "new", previous, edited),
     ).toThrow(/before renaming this mcp server/i);
+  });
+
+  it("renames a server once its stored credential is replaced", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: REDACTED_MCP_SECRET_VALUE },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: "${SONARQUBE_TOKEN}" },
+    };
+    expect(buildRenameMcpConfigPatch("old", "new", previous, edited)).toEqual({
+      old: null,
+      new: {
+        transport: "http",
+        url: "https://u.example",
+        auth: { strategy: "bearer", value: "${SONARQUBE_TOKEN}" },
+      },
+    });
   });
 
   // @spec MCP-003 — Settings map keys are stable MCP identities

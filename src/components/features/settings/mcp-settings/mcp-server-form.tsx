@@ -133,20 +133,18 @@ export function MCPServerForm({
     return null;
   };
 
+  // All server types share one name space (the mcp_config key), so a name
+  // that matches another server of any type would otherwise be saved with a
+  // silent `_1` suffix.
   const validateNameUniqueness = (name: string): string | null => {
-    if (!existingServers) return null;
-    const shouldCheckUniqueness =
-      mode === "add" || (mode === "edit" && server?.name !== name);
-    if (!shouldCheckUniqueness) return null;
-
-    const existingStdioNames = existingServers
-      .filter((s) => s.type === "stdio")
-      .map((s) => s.name)
-      .filter(Boolean);
-    if (existingStdioNames.includes(name)) {
-      return t(I18nKey.SETTINGS$MCP_ERROR_NAME_DUPLICATE);
-    }
-    return null;
+    if (!existingServers || !name) return null;
+    const lower = name.toLowerCase();
+    const taken = existingServers.some(
+      (s) =>
+        (mode === "add" || s.id !== server?.id) &&
+        s.name?.toLowerCase() === lower,
+    );
+    return taken ? t(I18nKey.SETTINGS$MCP_ERROR_NAME_DUPLICATE) : null;
   };
 
   const validateCommand = (command: string): string | null => {
@@ -263,6 +261,8 @@ export function MCPServerForm({
       if (name && !isValidMcpServerName(name)) {
         return t(I18nKey.SETTINGS$MCP_ERROR_NAME_INVALID);
       }
+      const nameDupError = validateNameUniqueness(name);
+      if (nameDupError) return nameDupError;
 
       // Validate timeout for SHTTP servers only
       if (serverType === "shttp") {
