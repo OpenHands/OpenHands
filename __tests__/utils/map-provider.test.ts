@@ -24,6 +24,7 @@ test("mapProvider", () => {
   expect(mapProvider("replicate")).toBe("Replicate");
   expect(mapProvider("voyage")).toBe("Voyage AI");
   expect(mapProvider("openrouter")).toBe("OpenRouter");
+  expect(mapProvider("orcarouter")).toBe("OrcaRouter");
   expect(mapProvider("clarifai")).toBe("Clarifai");
   expect(mapProvider("moonshot")).toBe("Moonshot");
 });
