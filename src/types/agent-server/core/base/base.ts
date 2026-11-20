@@ -5,6 +5,7 @@ import { REQUEST_SECRET_ACTION_KIND } from "#/constants/secret-request";
 import { ASK_USER_ACTION_KIND } from "#/constants/ask-user";
 
 type EventType =
+  | "AskUser"
   | "MCPTool"
   | "Finish"
   | "Think"

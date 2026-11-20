@@ -1,6 +1,7 @@
 import { CHILD_CONVERSATION_RESULT_PREFIX } from "#/constants/child-conversation";
 import { SECRET_REQUEST_RESULT_PREFIX } from "#/constants/secret-request";
 import { ASK_USER_RESULT_PREFIX } from "#/constants/ask-user";
+import { ASK_USER_ANSWER_PREFIX } from "#/utils/decision-closures";
 import { MessageEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
@@ -68,25 +69,49 @@ const STOP_HOOK_FEEDBACK_PREFIX = "[Stop hook feedback]";
 const isStopHookFeedback = (event: MessageEvent): boolean =>
   environmentMessageStartsWith(event, STOP_HOOK_FEEDBACK_PREFIX);
 
-// The frontend posts the outcome of a `launch_child_conversation` or
-// `request_secret` call back as a `user` message because client tools have no
-// result channel (see `services/child-conversation-launch.ts` and
-// `services/secret-request.ts`). It is a JSON payload addressed to the agent,
-// which relays the outcome in its own reply, so the raw message does not
-// belong in the chat.
-const CLIENT_TOOL_RESULT_PREFIXES = [
+// Tool results that reach the agent as `user` messages. The frontend posts the
+// outcome of a `launch_child_conversation` or `request_secret` call this way
+// because client tools have no result channel (see
+// `services/child-conversation-launch.ts` and `services/secret-request.ts`);
+// the agent relays the outcome in its own reply. The server saves an answer
+// picked on a decision card the same way, and the card shows that answer.
+// None of these raw messages belong in the chat.
+const TOOL_RESULT_PREFIXES = [
   CHILD_CONVERSATION_RESULT_PREFIX,
   SECRET_REQUEST_RESULT_PREFIX,
   ASK_USER_RESULT_PREFIX,
+  ASK_USER_ANSWER_PREFIX,
 ];
 
-const isClientToolResult = (event: MessageEvent): boolean => {
+const isToolResult = (event: MessageEvent): boolean => {
   const text = userMessageText(event);
   return (
     text !== null &&
-    CLIENT_TOOL_RESULT_PREFIXES.some((prefix) => text.startsWith(prefix))
+    TOOL_RESULT_PREFIXES.some((prefix) => text.startsWith(prefix))
   );
 };
+
+/**
+ * A react / unreact call that succeeded. The reaction shows as a chip on its
+ * message (MessageReactions), so groupEvents drops the tool card but keeps the
+ * agent's narration on the call (its thought and reasoning). While pending,
+ * the call itself shows, so the user sees what they are asked to confirm;
+ * a failed reaction shows like any failed tool.
+ */
+export const isReactionResult = (event: OpenHandsEvent): boolean =>
+  isObservationEvent(event) &&
+  (event.observation.kind as string) === "ReactionObservation" &&
+  !(event.observation as { is_error?: boolean }).is_error;
+
+/**
+ * An edit_message call that succeeded. The edit shows in place on its message
+ * (useMessageEdit), so, like a reaction, groupEvents drops the tool card but
+ * keeps the agent's narration; a failed edit shows like any failed tool.
+ */
+export const isMessageEditResult = (event: OpenHandsEvent): boolean =>
+  isObservationEvent(event) &&
+  (event.observation.kind as string) === "EditMessageObservation" &&
+  !(event.observation as { is_error?: boolean }).is_error;
 
 export const shouldRenderEvent = (event: OpenHandsEvent) => {
   if (isConversationStateUpdateEvent(event)) {
@@ -116,6 +141,10 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
       return false;
     }
 
+    // A react / unreact call stays visible while it has no observation (the
+    // UI list swaps an action for its observation), so the user sees the
+    // emoji and message they are asked to confirm (see isReactionResult).
+
     // The model switch tool reuses the same inline model message UI as
     // `/model <profile>` once the observation arrives.
     if (actionType === "SwitchLLMAction") {
@@ -127,6 +156,9 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
 
   // Render observation events
   if (isObservationEvent(event)) {
+    // A successful reaction passes so the agent's narration on the call
+    // still shows; groupEvents drops its tool card (see isReactionResult).
+
     // Successful model switches are rendered through ModelMessages so they
     // look identical to `/model <profile>` confirmations. Failed switches
     // still render as observations so the error remains visible in chat.
@@ -158,7 +190,7 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
   if (isMessageEvent(event)) {
     return (
       !isGoalLoopReprompt(event) &&
-      !isClientToolResult(event) &&
+      !isToolResult(event) &&
       !isStopHookFeedback(event)
     );
   }
@@ -198,3 +230,13 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
 
 export const hasUserEvent = (events: OpenHandsEvent[]) =>
   events.some((event) => event.source === "user");
+
+/**
+ * Whether a rendered event can anchor something placed after it (a /model
+ * message). A reaction or message edit result renders no item of its own,
+ * so it cannot.
+ */
+export const canAnchorAfterEvent = (event: OpenHandsEvent): boolean =>
+  shouldRenderEvent(event) &&
+  !isReactionResult(event) &&
+  !isMessageEditResult(event);
