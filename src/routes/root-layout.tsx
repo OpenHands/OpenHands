@@ -152,7 +152,7 @@ function MainAppContent() {
     }
   }, [settings?.language]);
   useSyncDocumentLanguage();
-  // Ctrl/Cmd+Shift+S toggles the conversation sidebar from anywhere.
+  // Ctrl/Cmd+Shift+E toggles the conversation sidebar from anywhere.
   useToggleSidebarShortcut();
 
   if (config.isLoading) {

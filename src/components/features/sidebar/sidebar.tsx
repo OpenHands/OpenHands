@@ -89,7 +89,10 @@ export function Sidebar() {
   const settingsErrorStatus = getErrorStatus(settingsError);
   const desktopSidebarRef = React.useRef<HTMLElement>(null);
   // The sidebar element that had focus last, so a toggle that unmounts it can
-  // be noticed after the fact and focus can be handed on deliberately.
+  // be noticed after the fact and focus can be handed on deliberately. It only
+  // ever holds a control focus was last seen in *and* never left: the aside's
+  // focusout handler clears it, otherwise a stale entry would let a later
+  // toggle steal focus back from wherever the user went in the meantime.
   const lastSidebarFocusRef = React.useRef<HTMLElement | null>(null);
   const wasCollapsedRef = React.useRef(collapsed);
   const {
@@ -269,6 +272,17 @@ export function Sidebar() {
         onFocus={(event) => {
           if (event.target instanceof HTMLElement) {
             lastSidebarFocusRef.current = event.target;
+          }
+        }}
+        onBlur={(event) => {
+          // Focus leaving the aside by ordinary means (Tab to the composer, a
+          // click in the main content) retires the recorded control: the user
+          // has moved on, so a later toggle must not pull focus back here.
+          // `relatedTarget` is null when focus goes nowhere in particular
+          // (body, a non-focusable click target), which also counts as leaving.
+          const next = event.relatedTarget;
+          if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
+            lastSidebarFocusRef.current = null;
           }
         }}
         onMouseEnter={() => {
