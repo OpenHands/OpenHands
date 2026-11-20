@@ -155,7 +155,12 @@ export function normalizeFieldValue(
     const numValue = Number(resolvedValue);
     if (!Number.isNaN(numValue)) {
       const perMillion = numValue * 1_000_000;
-      return String(Number(perMillion.toPrecision(6)));
+      // Match coerceFieldValue's 12-significant-digit precision, but format in
+      // plain decimal so the input never displays exponent notation (e.g. 1e-7).
+      return Number(perMillion.toPrecision(12)).toLocaleString("en-US", {
+        useGrouping: false,
+        maximumFractionDigits: 20,
+      });
     }
   }
 

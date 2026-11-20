@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
 import { OptionalTag } from "#/components/features/settings/optional-tag";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { SettingsInput } from "#/components/features/settings/settings-input";
@@ -70,7 +71,7 @@ export function SchemaField({
   onChange: (value: string | boolean) => void;
 }) {
   const { t } = useTranslation("openhands");
-  let label = resolveSchemaFieldLabel(t, field.key, field.label);
+  const label = resolveSchemaFieldLabel(t, field.key, field.label);
   const constraints = getSettingsFieldConstraints(field.key);
 
   let costHint: string | null = null;
@@ -78,15 +79,17 @@ export function SchemaField({
     field.key === "llm.input_cost_per_token" ||
     field.key === "llm.output_cost_per_token"
   ) {
-    label =
-      field.key === "llm.input_cost_per_token"
-        ? "Input cost ($ per 1M tokens)"
-        : "Output cost ($ per 1M tokens)";
-
     const numValue = Number(value);
     if (!Number.isNaN(numValue) && value !== "") {
-      const perToken = numValue / 1_000_000;
-      costHint = `= $${Number(perToken.toPrecision(6))} per token`;
+      // Fixed notation with trailing zeros stripped avoids exponent notation
+      // for tiny per-token prices (e.g. 0.0000025, not 2.5e-9).
+      const perToken = (numValue / 1_000_000)
+        .toFixed(12)
+        .replace(/(\.\d*?)0+$/, "$1")
+        .replace(/\.$/, "");
+      costHint = t(I18nKey.SCHEMA$LLM$COST_PER_TOKEN_HINT, {
+        value: perToken,
+      });
     }
   }
 
