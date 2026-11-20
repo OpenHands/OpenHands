@@ -827,3 +827,36 @@ describe("marketplace catalog ordering and lookup", () => {
     expect(marketplaceEntryMatchesQuery(entry, "Stryker was here")).toBe(false);
   });
 });
+
+describe("GitLab MCP default URL (Technogise self-hosted)", () => {
+  const gitlabEntry = MCP_MARKETPLACE.find((e) => e.id === "gitlab")!;
+
+  it("defaults the GitLab OAuth MCP option to the Technogise instance", () => {
+    const option = getInstallableMcpConnectionOptions(gitlabEntry)[0];
+    expect(option.transport).toMatchObject({
+      kind: "shttp",
+      url: "https://gitlab.technogise.com/api/v4/mcp",
+      urlEditable: true,
+    });
+  });
+
+  it("marks a server installed at the Technogise URL as the GitLab entry", () => {
+    const server = {
+      id: "shttp-0",
+      type: "shttp" as const,
+      name: "technogise-gitlab",
+      url: "https://gitlab.technogise.com/api/v4/mcp",
+    };
+    expect(findCatalogEntryForServer(server, MCP_MARKETPLACE)?.id).toBe(
+      "gitlab",
+    );
+  });
+
+  it("leaves other catalog entries untouched", () => {
+    const linear = MCP_MARKETPLACE.find((e) => e.id === "linear")!;
+    const urls = getMcpConnectionOptions(linear)
+      .map((o) => (o.transport as { url?: string }).url ?? "")
+      .join(" ");
+    expect(urls).not.toContain("technogise");
+  });
+});

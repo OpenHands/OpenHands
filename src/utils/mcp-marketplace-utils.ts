@@ -27,13 +27,35 @@ export type McpMarketplaceConnectionOption = Omit<
   auth: McpIntegrationAuthConfig;
 };
 
+/**
+ * Self-hosted overrides for catalog entries, keyed by catalog entry id. The
+ * catalog ships in the `@openhands/extensions` package and points GitLab at
+ * gitlab.com; this fork points the GitLab MCP option at the Technogise
+ * instance so users do not have to retype the URL on every install. The URL
+ * stays editable in the install dialog.
+ */
+const MCP_URL_OVERRIDES: Record<string, string> = {
+  gitlab: "https://gitlab.technogise.com/api/v4/mcp",
+};
+
+function withMcpUrlOverride(
+  entry: MarketplaceEntry,
+  option: McpMarketplaceConnectionOption,
+): McpMarketplaceConnectionOption {
+  const url = MCP_URL_OVERRIDES[entry.id];
+  if (!url || option.transport.kind !== "shttp") return option;
+  return { ...option, transport: { ...option.transport, url } };
+}
+
 export function getMcpConnectionOptions(
   entry: MarketplaceEntry,
 ): McpMarketplaceConnectionOption[] {
-  return entry.connectionOptions.filter(
-    (option): option is McpMarketplaceConnectionOption =>
-      option.provider === "mcp" && !!option.transport,
-  );
+  return entry.connectionOptions
+    .filter(
+      (option): option is McpMarketplaceConnectionOption =>
+        option.provider === "mcp" && !!option.transport,
+    )
+    .map((option) => withMcpUrlOverride(entry, option));
 }
 
 export function getDefaultMcpConnectionOption(
