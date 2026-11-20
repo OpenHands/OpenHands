@@ -54,6 +54,7 @@ export interface SidebarRailBodyProps {
   showCollapseToggle: boolean;
   showMobileCloseButton?: boolean;
   onCloseMobile?: () => void;
+  isDrawer?: boolean;
   collapseToggleLabel: string;
   onCollapse: () => void;
   onExpand: () => void;
@@ -78,6 +79,7 @@ export function SidebarRailBody({
   showCollapseToggle,
   showMobileCloseButton = false,
   onCloseMobile,
+  isDrawer = false,
   collapseToggleLabel,
   onCollapse,
   onExpand,
@@ -282,7 +284,7 @@ export function SidebarRailBody({
         ))}
       </nav>
 
-      <SidebarConversationList collapsed={collapsed} />
+      <SidebarConversationList collapsed={collapsed} isDrawer={isDrawer} />
 
       {collapsed && showCollapseToggle ? (
         <nav

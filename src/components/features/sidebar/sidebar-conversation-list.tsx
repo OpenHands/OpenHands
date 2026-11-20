@@ -11,6 +11,10 @@ interface SidebarConversationListProps {
    * force this list back on.
    */
   collapsed: boolean;
+  /**
+   * Whether the surrounding sidebar rail is rendered inside a mobile drawer.
+   */
+  isDrawer?: boolean;
 }
 
 /**
@@ -25,6 +29,7 @@ interface SidebarConversationListProps {
  */
 export function SidebarConversationList({
   collapsed,
+  isDrawer,
 }: SidebarConversationListProps) {
   const { backend } = useActiveBackend();
 
@@ -47,7 +52,7 @@ export function SidebarConversationList({
         {showMarsSessions ? (
           <MarsSessionPanel backend={backend} />
         ) : (
-          <ConversationPanel />
+          <ConversationPanel isDrawer={isDrawer} />
         )}
       </div>
     </div>

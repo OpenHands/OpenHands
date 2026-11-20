@@ -29,6 +29,7 @@ interface ConversationPanelRowProps {
   showLlmProfiles: boolean;
   showTagsMetadata: boolean;
   agentProfileName: string | null | undefined;
+  isDrawer?: boolean;
   onClose?: () => void;
   prefetchConversation: (id: string) => Promise<void>;
   handleDeleteProject: (id: string, title: string) => void;
@@ -60,6 +61,7 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
   showLlmProfiles,
   showTagsMetadata,
   agentProfileName,
+  isDrawer,
   onClose,
   prefetchConversation,
   handleDeleteProject,
@@ -76,10 +78,10 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
   const sandboxId = conversation.sandbox_id;
   return (
     <Tooltip
-      placement="right-start"
-      // Clear the sidebar's resize handle so the preview never covers it.
-      offset={20}
-      delay={1000}
+      placement={isDrawer ? "bottom-start" : "right-start"}
+      // Clear the sidebar's resize handle so the preview never covers it on desktop.
+      offset={isDrawer ? 4 : 20}
+      delay={import.meta.env.MODE === "test" ? 0 : 1000}
       closeDelay={100}
       isDisabled={!showHoverMetadata || contextMenuOpen}
       disableAnimation={import.meta.env.MODE === "test"}
