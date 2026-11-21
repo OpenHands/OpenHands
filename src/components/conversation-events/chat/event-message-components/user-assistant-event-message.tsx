@@ -34,12 +34,15 @@ interface UserAssistantEventMessageProps {
   suppressReasoning?: boolean;
   isLastMessage: boolean;
   isFromPlanningAgent: boolean;
+  /** Search words to mark inside the message while a jump lands on it. */
+  searchHighlightTerms?: string[];
 }
 
 function UserAssistantEventMessageComponent({
   event,
   suppressReasoning = false,
   isFromPlanningAgent,
+  searchHighlightTerms,
 }: UserAssistantEventMessageProps) {
   const { t } = useTranslation("openhands");
   const { conversationId } = useOptionalConversationId();
@@ -162,6 +165,7 @@ function UserAssistantEventMessageComponent({
         isFromPlanningAgent={isFromPlanningAgent}
         actions={actions}
         timestamp={event.timestamp}
+        searchHighlightTerms={searchHighlightTerms}
       >
         {imageUrls.length > 0 && (
           <ImageCarousel size="small" images={imageUrls} />
