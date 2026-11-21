@@ -38,6 +38,13 @@ interface ModelSelectorProps {
     provider: string | null,
     model: string | null,
   ) => void;
+  /**
+   * Called whenever the selected provider changes, including while the user
+   * is still picking a model. The `currentModel` prop only carries a composed
+   * `provider/model` string, so it cannot report a provider the user has
+   * selected but not yet completed.
+   */
+  onProviderChanged?: (provider: string | null) => void;
   wrapperClassName?: string;
   labelClassName?: string;
 }
@@ -61,6 +68,7 @@ export function ModelSelector({
   currentModel,
   onChange,
   onDefaultValuesChanged,
+  onProviderChanged,
   wrapperClassName,
   labelClassName,
 }: ModelSelectorProps) {
@@ -114,6 +122,7 @@ export function ModelSelector({
       setSelectedProvider(provider || null);
       setSelectedModel(model);
       onDefaultValuesChanged?.(provider || null, model);
+      onProviderChanged?.(provider || null);
     }
   }, [currentModel]);
 
@@ -121,6 +130,7 @@ export function ModelSelector({
     setSelectedProvider(provider);
     setSelectedModel(null);
     setLitellmId(`${provider}/`);
+    onProviderChanged?.(provider);
     onChange?.(provider, null);
   };
 

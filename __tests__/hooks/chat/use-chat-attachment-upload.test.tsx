@@ -30,6 +30,16 @@ vi.mock("#/utils/file-validation", () => ({
   validateFiles: (...args: unknown[]) => validateFilesMock(...args),
 }));
 
+vi.mock("#/hooks/query/use-current-upload-limits", () => ({
+  useCurrentUploadLimits: () => ({
+    imageLimitBytes: 3 * 1024 * 1024,
+    imageLimitMb: 3,
+    attachmentLimitBytes: 3 * 1024 * 1024,
+    attachmentLimitMb: 3,
+    provider: null,
+  }),
+}));
+
 vi.mock("#/utils/file-processing", () => ({
   processFiles: (...args: unknown[]) => processFilesMock(...args),
   processImages: (...args: unknown[]) => processImagesMock(...args),
@@ -74,6 +84,13 @@ describe("chat attachment upload", () => {
     expect(validateFilesMock).toHaveBeenCalledWith(
       [selected],
       [existingImage, existingFile],
+      {
+        imageLimitBytes: 3 * 1024 * 1024,
+        imageLimitMb: 3,
+        attachmentLimitBytes: 3 * 1024 * 1024,
+        attachmentLimitMb: 3,
+        provider: null,
+      },
     );
     expect(displayErrorToastMock).toHaveBeenCalledWith(
       "Error: Total size exceeds 3MB",
@@ -184,6 +201,13 @@ describe("chat attachment upload", () => {
     expect(validateFilesMock).toHaveBeenCalledWith(
       [selected],
       [latestExisting],
+      {
+        imageLimitBytes: 3 * 1024 * 1024,
+        imageLimitMb: 3,
+        attachmentLimitBytes: 3 * 1024 * 1024,
+        attachmentLimitMb: 3,
+        provider: null,
+      },
     );
   });
 });
