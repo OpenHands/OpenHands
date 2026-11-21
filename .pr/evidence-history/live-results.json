@@ -1,0 +1,53 @@
+{
+  "desktop": {
+    "attempts": [
+      {
+        "attempt": 1,
+        "query": "older-tool-needle",
+        "initialTargetAbsent": true,
+        "firstBatch": 5,
+        "scanPages": 7,
+        "contextPages": 2,
+        "liveEventDeliveredWhileDialogOpen": true,
+        "executionBefore": "idle",
+        "executionAfter": "idle"
+      },
+      {
+        "attempt": 2,
+        "query": "old-decision-needle",
+        "initialTargetAbsent": true,
+        "firstBatch": 5,
+        "scanPages": 7,
+        "contextPages": 1,
+        "liveEventDeliveredWhileDialogOpen": true,
+        "executionBefore": "idle",
+        "executionAfter": "idle"
+      }
+    ],
+    "cancellation": "real HTTP delayed by CDP; pending page discarded",
+    "error": "browser offline produces explicit incomplete error",
+    "responseInterception": false
+  },
+  "phone": [
+    {
+      "attempt": 1,
+      "query": "older-tool-needle",
+      "mountedContextEvents": 16,
+      "width": {
+        "viewport": 390,
+        "document": 390
+      },
+      "returnedToLive": true
+    },
+    {
+      "attempt": 2,
+      "query": "old-decision-needle",
+      "mountedContextEvents": 13,
+      "width": {
+        "viewport": 390,
+        "document": 390
+      },
+      "returnedToLive": true
+    }
+  ]
+}

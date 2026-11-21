@@ -1,0 +1,15 @@
+{
+  "code_commit": "2f0bdda74ab0864f1fa4f122eb7e00eee35fc283",
+  "immediateContinue": {
+    "examined": 500,
+    "pageRequestsIncludingDiscarded": 6,
+    "completedReads": 8,
+    "foundOlderDecision": true
+  },
+  "cancelledQueuedContinue": {
+    "pageRequests": 1,
+    "examined": 0
+  },
+  "latencyMs": 1000,
+  "responseInterception": false
+}
