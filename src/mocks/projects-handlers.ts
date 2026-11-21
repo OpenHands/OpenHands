@@ -79,8 +79,15 @@ const seed = (): MockProject[] => [
         execution_status: "running",
         attention: "working",
         turn: null,
+        pull_requests: [{ owner: "acme", repo: "app", number: 412 }],
       }),
-      conversation("04000000-0000-4000-8000-000000000001", "Install docs", {}),
+      conversation("04000000-0000-4000-8000-000000000001", "Install docs", {
+        pull_requests: [
+          { owner: "acme", repo: "app", number: 398 },
+          { owner: "acme", repo: "docs", number: 57 },
+          { owner: "acme", repo: "app", number: 405 },
+        ],
+      }),
       conversation("05000000-0000-4000-8000-000000000001", "Locales", {
         attention: "resolved",
         resolved: "auto",
@@ -96,6 +103,24 @@ const seed = (): MockProject[] => [
         created_at: NOW,
         updated_at: NOW,
         text: "# Release 0.2\n\n- Projects\n- Reactions\n",
+      },
+      {
+        name: "install.md",
+        size: 36,
+        source: "agent",
+        conversation_id: "04000000-0000-4000-8000-000000000001",
+        created_at: NOW,
+        updated_at: NOW,
+        text: "# Install\n\n    npm i -g openhands\n",
+      },
+      {
+        name: "upgrade.md",
+        size: 30,
+        source: "agent",
+        conversation_id: "04000000-0000-4000-8000-000000000001",
+        created_at: NOW,
+        updated_at: NOW,
+        text: "# Upgrade\n\nRead the changelog.\n",
       },
     ],
     memory: [
@@ -116,6 +141,20 @@ const seed = (): MockProject[] => [
     ],
   },
 ];
+
+const MOCK_PULL_REQUEST_STATES: Record<
+  number,
+  { title: string; state: "open" | "merged" | "closed"; checks: string }
+> = {
+  412: { title: "Rewrite the README intro", state: "open", checks: "pending" },
+  398: { title: "Install with npm", state: "merged", checks: "success" },
+  57: { title: "Docs: install page", state: "open", checks: "failure" },
+  405: {
+    title: "Install script (superseded)",
+    state: "closed",
+    checks: "none",
+  },
+};
 
 let projects: MockProject[] = seed();
 // On in mock mode, so the pages show; off under test like a real server's
@@ -178,6 +217,24 @@ export const PROJECTS_HANDLERS = [
     },
   ),
 
+  // The state and checks of the demo project's pull requests.
+  http.get(
+    "*/api/git/repositories/:owner/:repo/pull-requests/:number",
+    ({ params }) => {
+      const number = Number(params.number);
+      const state = MOCK_PULL_REQUEST_STATES[number];
+      if (!state)
+        return HttpResponse.json({ detail: "not found" }, { status: 404 });
+      return HttpResponse.json({
+        repository: `${params.owner}/${params.repo}`,
+        number,
+        title: state.title,
+        url: `https://github.com/${params.owner}/${params.repo}/pull/${number}`,
+        state: state.state,
+        checks: state.checks,
+      });
+    },
+  ),
   http.get("*/api/projects", () =>
     features.projects
       ? HttpResponse.json({ projects: projects.map((p) => p.project) })

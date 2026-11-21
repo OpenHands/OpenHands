@@ -1,11 +1,12 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { GitPullRequest } from "lucide-react";
+import { FileText } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import {
   projectIdKey,
   type ProjectConversation,
+  type ProjectPullRequest,
 } from "#/api/projects-service/projects-service.api";
 import {
   useProjectArtifacts,
@@ -25,7 +26,11 @@ import { formatTimeDelta } from "#/utils/format-time-delta";
 import { conversationStateLabel } from "#/utils/project-conversation-state";
 import { cn } from "#/utils/utils";
 import { ProjectPanelGroup } from "#/components/features/projects/project-panel/project-panel-group";
-import { ChecksIcon } from "#/components/features/projects/project-panel/project-panel-prs";
+import {
+  ChecksIcon,
+  PULL_REQUEST_STATE_COLOR,
+  PULL_REQUEST_STATE_ICON,
+} from "#/components/features/projects/project-panel/project-panel-prs";
 
 type StateMark = (typeof BOARD_GROUPS)[number]["id"];
 
@@ -73,7 +78,7 @@ function StateIcon({ mark }: { mark: StateMark }) {
 
 /**
  * The one muted line under a title: the question it waits on, else why it
- * resolved, else its state and age.
+ * resolved, else its state. The age sits beside the title.
  */
 function StatusLine({ conversation }: { conversation: ProjectConversation }) {
   const { t } = useTranslation("openhands");
@@ -89,15 +94,57 @@ function StatusLine({ conversation }: { conversation: ProjectConversation }) {
       ? parseAutoResolveNote(conversation.resolve_note)
       : null;
   if (autoNote) return <>{t(...autoResolveMessage(autoNote))}</>;
-  return (
-    <>
-      {t(conversationStateLabel(conversation))} ·{" "}
-      {formatTimeDelta(conversation.updated_at)}
-    </>
-  );
+  return <>{t(conversationStateLabel(conversation))}</>;
 }
 
-const CHIP = "rounded-full bg-surface px-2 py-px text-2xs text-foreground";
+/**
+ * A small stamp under a row: a hairline frame in its own ink, no fill, so a
+ * row's marks read like notes printed beside it rather than buttons.
+ */
+const STAMP =
+  "inline-flex h-4.5 items-center gap-1 rounded-facet-control border border-current/35 px-1.5 text-2xs leading-none tabular-nums";
+
+/**
+ * A pull request the conversation opened: its state in the icon and ink
+ * (open, merged; a closed one muted and struck through, an unread one muted),
+ * and its checks after a hairline.
+ */
+function PullRequestStamp({
+  pr,
+  status,
+}: {
+  pr: ProjectPullRequest;
+  status: PullRequestStatus | undefined;
+}) {
+  const ref = pullRequestRef(pr);
+  const Icon = PULL_REQUEST_STATE_ICON[status?.state ?? "open"];
+  const checks = status && status.checks !== "none" ? status.checks : null;
+  return (
+    <span
+      data-testid="project-conversation-pr"
+      data-state={status?.state ?? "unknown"}
+      title={status ? `${ref} · ${status.title}` : ref}
+      className={cn(
+        STAMP,
+        // A closed one recedes: red is kept for what needs the user, such as
+        // failing checks.
+        status && status.state !== "closed"
+          ? PULL_REQUEST_STATE_COLOR[status.state]
+          : "text-muted",
+      )}
+    >
+      <Icon width={11} height={11} aria-hidden className="shrink-0" />
+      <span className={cn(status?.state === "closed" && "line-through")}>
+        #{pr.number}
+      </span>
+      {checks ? (
+        <span className="-mr-0.5 flex h-full items-center border-l border-current/25 pl-1">
+          <ChecksIcon checks={checks} size={10} />
+        </span>
+      ) : null}
+    </span>
+  );
+}
 
 function ConversationRow({
   conversation,
@@ -131,7 +178,17 @@ function ConversationRow({
       >
         <StateIcon mark={mark} />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-sm text-foreground">{title}</span>
+          <span className="flex items-baseline gap-2">
+            <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+              {title}
+            </span>
+            <span
+              data-testid="project-conversation-age"
+              className="shrink-0 text-2xs text-muted"
+            >
+              {formatTimeDelta(conversation.updated_at)}
+            </span>
+          </span>
           <span
             data-testid="project-conversation-status"
             className="line-clamp-2 text-xs text-muted"
@@ -140,26 +197,20 @@ function ConversationRow({
             <StatusLine conversation={conversation} />
           </span>
           {fileCount || conversation.pull_requests.length ? (
-            <span className="mt-0.5 flex flex-wrap gap-1.5">
-              {conversation.pull_requests.map((pr) => {
-                const status = statuses.get(pullRequestRef(pr));
-                return (
-                  <span
-                    key={pullRequestRef(pr)}
-                    data-testid="project-conversation-pr"
-                    title={status?.title ?? pullRequestRef(pr)}
-                    className={cn(CHIP, "inline-flex items-center gap-1")}
-                  >
-                    <GitPullRequest width={11} height={11} aria-hidden />#
-                    {pr.number}
-                    {status ? (
-                      <ChecksIcon checks={status.checks} size={11} />
-                    ) : null}
-                  </span>
-                );
-              })}
+            <span className="mt-1 flex flex-wrap gap-1">
+              {conversation.pull_requests.map((pr) => (
+                <PullRequestStamp
+                  key={pullRequestRef(pr)}
+                  pr={pr}
+                  status={statuses.get(pullRequestRef(pr))}
+                />
+              ))}
               {fileCount ? (
-                <span data-testid="project-conversation-files" className={CHIP}>
+                <span
+                  data-testid="project-conversation-files"
+                  className={cn(STAMP, "border-dashed text-muted")}
+                >
+                  <FileText width={11} height={11} aria-hidden />
                   {t(I18nKey.PROJECTS$FILE_COUNT, { count: fileCount })}
                 </span>
               ) : null}

@@ -157,6 +157,14 @@ describe("Sidebar in a project view", () => {
     await waitFor(() =>
       expect(chips[0].querySelector('[data-checks="success"]')).not.toBeNull(),
     );
+    // Inked by state: #412 is open; #409 could not be read.
+    expect(chips.map((c) => c.getAttribute("data-state"))).toEqual([
+      "open",
+      "unknown",
+    ]);
+    expect(
+      retry.querySelector('[data-testid="project-conversation-age"]'),
+    ).not.toBeNull();
     expect(
       retry.querySelector('[data-testid="project-conversation-files"]'),
     ).toHaveTextContent("PROJECTS$FILE_COUNT");

@@ -63,11 +63,22 @@ export function ChecksIcon({
   );
 }
 
-const STATE_ICON = {
+/** A pull request's icon by state; an unread state shows as open. */
+export const PULL_REQUEST_STATE_ICON = {
   open: GitPullRequest,
   merged: GitMerge,
   closed: GitPullRequestClosed,
 } as const;
+
+/** A pull request's color by state: open green, merged primary, closed red. */
+export const PULL_REQUEST_STATE_COLOR: Record<
+  PullRequestStatus["state"],
+  string
+> = {
+  open: "text-success",
+  merged: "text-primary",
+  closed: "text-danger",
+};
 
 /** A pull request a project conversation opened, and who opened it. */
 interface OpenedPullRequest {
@@ -92,7 +103,7 @@ function PullRequestRow({
   status: PullRequestStatus | undefined;
 }) {
   const ref = pullRequestRef(opened.pr);
-  const Icon = STATE_ICON[status?.state ?? "open"];
+  const Icon = PULL_REQUEST_STATE_ICON[status?.state ?? "open"];
   return (
     <li>
       <a
@@ -112,10 +123,7 @@ function PullRequestRow({
           aria-hidden
           className={cn(
             "mt-0.5 shrink-0",
-            !status && "text-muted",
-            status?.state === "open" && "text-success",
-            status?.state === "merged" && "text-primary",
-            status?.state === "closed" && "text-danger",
+            status ? PULL_REQUEST_STATE_COLOR[status.state] : "text-muted",
           )}
         />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
