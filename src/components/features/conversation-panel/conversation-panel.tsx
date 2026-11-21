@@ -40,6 +40,7 @@ import { StartTaskCard } from "./start-task-card/start-task-card";
 import { ConversationCardSkeleton } from "./conversation-card/conversation-card-skeleton";
 import { CompactConversationRow } from "./compact-conversation-row";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
+import { useConversationReadStateStore } from "#/stores/conversation-read-state-store";
 import { cn } from "#/utils/utils";
 import { ConversationLayoutsMenu } from "./conversation-layouts-menu";
 import { ConversationActiveTagFilters } from "./conversation-active-tag-filters";
@@ -335,6 +336,31 @@ export function ConversationPanel({
     () => allLoadedConversations.map((conversation) => conversation.id),
     [allLoadedConversations],
   );
+
+  const markAllAsRead = useConversationReadStateStore(
+    (state) => state.markAllAsRead,
+  );
+  const isConversationUnread = useConversationReadStateStore(
+    (state) => state.isConversationUnread,
+  );
+
+  const hasUnreadConversations = React.useMemo(
+    () =>
+      allLoadedConversations.some((conversation) =>
+        isConversationUnread({
+          conversationId: conversation.id,
+          lastUpdatedAt: conversation.updated_at,
+          executionStatus: conversation.execution_status,
+          isCurrent: conversation.id === currentConversationId,
+        }),
+      ),
+    [allLoadedConversations, isConversationUnread, currentConversationId],
+  );
+
+  const handleMarkAllAsRead = React.useCallback(() => {
+    markAllAsRead(allLoadedConversations.map((c) => c.id));
+  }, [allLoadedConversations, markAllAsRead]);
+
   // Fetch in-progress start tasks
   const {
     data: startTasks,
@@ -1356,6 +1382,8 @@ export function ConversationPanel({
                 automationNameFacets={automationNameFacets}
                 totalConversationsCount={allLoadedConversations.length}
                 onRequestDeleteAll={handleRequestDeleteAll}
+                onMarkAllAsRead={handleMarkAllAsRead}
+                hasUnreadConversations={hasUnreadConversations}
               />
             </div>
           </div>

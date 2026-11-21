@@ -1,8 +1,10 @@
+import { useTranslation } from "react-i18next";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 import { ConversationCardTitle } from "./conversation-card-title";
 import { ConversationStatusDot } from "../conversation-status-dot";
+import { I18nKey } from "#/i18n/declaration";
 
 interface ConversationCardHeaderProps {
   title: string;
@@ -19,6 +21,7 @@ interface ConversationCardHeaderProps {
    * sandbox status.
    */
   isArchived?: boolean;
+  isUnread?: boolean;
 }
 
 export function ConversationCardHeader({
@@ -30,10 +33,19 @@ export function ConversationCardHeader({
   isStarting,
   sandboxStatus,
   isArchived,
+  isUnread,
 }: ConversationCardHeaderProps) {
+  const { t } = useTranslation("openhands");
   const archived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
   return (
     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
+      {isUnread && (
+        <span
+          data-testid="conversation-unread-dot"
+          className="size-2 rounded-full bg-primary shrink-0"
+          aria-label={t(I18nKey.CONVERSATION$UNREAD_INDICATOR)}
+        />
+      )}
       {(executionStatus !== undefined || isStarting) && (
         <div className="flex w-4.5 shrink-0 items-center justify-center">
           <ConversationStatusDot

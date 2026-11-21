@@ -7,7 +7,15 @@ import { ContextMenuListItem } from "../../context-menu/context-menu-list-item";
 import { I18nKey } from "#/i18n/declaration";
 import { ConversationNameContextMenuIconText } from "../../conversation/conversation-name-context-menu-icon-text";
 
-import { Archive, ArchiveRestore, Gauge, SquarePlus, Tags } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  Gauge,
+  Mail,
+  MailCheck,
+  SquarePlus,
+  Tags,
+} from "lucide-react";
 import EditIcon from "#/icons/u-edit.svg?react";
 import SkillsIcon from "#/icons/skills.svg?react";
 import ToolsIcon from "#/icons/u-tools.svg?react";
@@ -32,6 +40,9 @@ interface ConversationCardContextMenuProps {
   onShowSkills?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  isUnread?: boolean;
+  onMarkAsRead?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onMarkAsUnread?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   position?: "top" | "bottom";
   /**
    * Fixed coordinates for a portaled menu (conversation list overflow
@@ -55,6 +66,9 @@ export function ConversationCardContextMenu({
   onShowSkills,
   onDownloadViaVSCode,
   onDownloadConversation,
+  isUnread,
+  onMarkAsRead,
+  onMarkAsUnread,
   position = "bottom",
   floatingStyle,
   ignoreOutsideClickRef,
@@ -129,6 +143,30 @@ export function ConversationCardContextMenu({
               <ConversationNameContextMenuIconText
                 icon={<Tags className="h-4 w-4" aria-hidden />}
                 text={t(I18nKey.CONVERSATION$EDIT_TAGS)}
+              />
+            </ContextMenuListItem>
+          ),
+          onMarkAsRead && isUnread && (
+            <ContextMenuListItem
+              key="mark-as-read-button"
+              testId="mark-as-read-button"
+              onClick={onMarkAsRead}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<MailCheck size={16} aria-hidden />}
+                text={t(I18nKey.CONVERSATION$MARK_AS_READ)}
+              />
+            </ContextMenuListItem>
+          ),
+          onMarkAsUnread && !isUnread && (
+            <ContextMenuListItem
+              key="mark-as-unread-button"
+              testId="mark-as-unread-button"
+              onClick={onMarkAsUnread}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<Mail size={16} aria-hidden />}
+                text={t(I18nKey.CONVERSATION$MARK_AS_UNREAD)}
               />
             </ContextMenuListItem>
           ),
