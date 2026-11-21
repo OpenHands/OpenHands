@@ -173,6 +173,15 @@ export interface DirectConversationInfo {
    * hint. Absent on older agent-servers and on the cloud wire shape.
    */
   sub_conversation_ids?: string[] | null;
+  /**
+   * Server-owned link to the conversation that spawned this one via
+   * ``launch_child_conversation`` (agent-server >= 1.37.1, SDK #4188) — the
+   * source of truth ``sub_conversation_ids`` above is derived from. Absent on
+   * older agent-servers that never persisted the link and on the cloud wire
+   * shape (Cloud excludes child conversations from the list server-side), so
+   * readers must treat ``null`` as "top-level or unknown", never "no parent".
+   */
+  parent_conversation_id?: string | null;
 }
 
 // Falls back to the same default the code agent uses when the user has not
@@ -514,6 +523,7 @@ export function toAppConversation(
     },
     public: false,
     sub_conversation_ids: info.sub_conversation_ids ?? [],
+    parent_conversation_id: info.parent_conversation_id ?? null,
   };
 }
 

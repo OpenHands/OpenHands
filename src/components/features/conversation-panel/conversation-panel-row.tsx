@@ -40,6 +40,13 @@ interface ConversationPanelRowProps {
   handleConversationTitleChange: (id: string, title: string) => void;
   handleTogglePin: (conversation: AppConversation) => void;
   setOpenContextMenuId: (id: string | null) => void;
+  /**
+   * Server-owned parent link of a delegated subagent conversation; gates the
+   * subagent marking on the row's card.
+   */
+  parentConversationId?: string | null;
+  /** Best-effort display title of the parent conversation, when loaded. */
+  subagentParentTitle?: string | null;
 }
 
 export const ConversationPanelRow = React.memo(function ConversationPanelRow({
@@ -71,6 +78,8 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
   handleConversationTitleChange,
   handleTogglePin,
   setOpenContextMenuId,
+  parentConversationId = null,
+  subagentParentTitle = null,
 }: ConversationPanelRowProps) {
   const runtimeMissing = isMissingSandboxStatus(conversation.sandbox_status);
   const sandboxId = conversation.sandbox_id;
@@ -196,6 +205,8 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
           isPinned={isPinned}
           onTogglePin={() => handleTogglePin(conversation)}
           alwaysShowPinIcon={isPinned && !inPinnedSection}
+          parentConversationId={parentConversationId}
+          subagentParentTitle={subagentParentTitle}
         />
       </NavigationLink>
     </Tooltip>

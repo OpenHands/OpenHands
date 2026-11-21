@@ -22,6 +22,7 @@ import { getDisplayConversationTags } from "#/api/agent-server-adapter";
 import { ConversationRepoLink } from "./conversation-repo-link";
 import { NoRepository } from "./no-repository";
 import { ConversationTagChips } from "./conversation-tag-chips";
+import { ConversationSubagentBadge } from "./conversation-subagent-badge";
 import { CONVERSATION_CARD_META_CHIP_CLASSNAME } from "./conversation-card-meta-chip";
 
 interface ConversationCardFooterProps {
@@ -73,6 +74,17 @@ interface ConversationCardFooterProps {
    * the user why an otherwise ordinary row is visible.
    */
   isArchived?: boolean;
+  /**
+   * Server-owned parent link of a delegated subagent conversation. Renders the
+   * subagent chip row; `null`/undefined renders nothing.
+   */
+  parentConversationId?: string | null;
+  /**
+   * Best-effort display title of the parent conversation, resolved by the
+   * panel from the loaded list. `null` when the parent is not loaded or was
+   * deleted — the chip still renders, without the parent association.
+   */
+  subagentParentTitle?: string | null;
 }
 
 export function ConversationCardFooter({
@@ -91,6 +103,8 @@ export function ConversationCardFooter({
   tags = null,
   showTags = false,
   isArchived = false,
+  parentConversationId = null,
+  subagentParentTitle = null,
 }: ConversationCardFooterProps) {
   const { t } = useTranslation("openhands");
   const freeModels = useFreeModels();
@@ -188,6 +202,11 @@ export function ConversationCardFooter({
             </span>
             <span className="truncate leading-4">{chip.text}</span>
           </span>
+        </div>
+      ) : null}
+      {parentConversationId ? (
+        <div className={metadataIndentClass}>
+          <ConversationSubagentBadge parentTitle={subagentParentTitle} />
         </div>
       ) : null}
       {isArchived ? (
