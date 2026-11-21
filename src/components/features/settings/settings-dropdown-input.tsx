@@ -103,7 +103,7 @@ export function SettingsDropdownInput({
   isLoading,
   defaultSelectedKey,
   selectedKey,
-  isClearable = false,
+  isClearable = true,
   allowsCustomValue,
   required,
   onSelectionChange,

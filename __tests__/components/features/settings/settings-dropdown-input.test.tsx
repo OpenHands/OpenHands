@@ -64,7 +64,8 @@ describe("SettingsDropdownInput", () => {
     expect(screen.queryByText("Spanish")).not.toBeInTheDocument();
   });
 
-  it("clears the selection when the clear button is pressed", async () => {
+  it("shows a clear button by default and clears the selection when pressed", async () => {
+    // Arrange
     const user = userEvent.setup();
     const onSelectionChange = vi.fn();
     const onInputChange = vi.fn();
@@ -72,7 +73,6 @@ describe("SettingsDropdownInput", () => {
     render(
       <SettingsDropdownInput
         defaultSelectedKey="english"
-        isClearable
         items={items}
         label="Language"
         name="language"
@@ -82,19 +82,34 @@ describe("SettingsDropdownInput", () => {
       />,
     );
 
-    const clearButton = screen
-      .getAllByRole("button")
-      .find(
-        (button) => button.getAttribute("aria-label") !== "Show suggestions",
-      );
-    if (!clearButton) {
-      throw new Error("Clear button not found");
-    }
-    await user.click(clearButton);
+    // Act
+    await user.click(
+      screen.getByRole("button", { name: "COMMON$CLEAR_SELECTION" }),
+    );
 
+    // Assert
     expect(screen.getByLabelText("Language")).toHaveValue("");
     expect(onSelectionChange).toHaveBeenCalledWith(null);
     expect(onInputChange).toHaveBeenCalledWith("");
+  });
+
+  it("hides the clear button when isClearable is false", () => {
+    // Arrange / Act
+    render(
+      <SettingsDropdownInput
+        defaultSelectedKey="english"
+        isClearable={false}
+        items={items}
+        label="Language"
+        name="language"
+        testId="language-input"
+      />,
+    );
+
+    // Assert
+    expect(
+      screen.queryByRole("button", { name: "COMMON$CLEAR_SELECTION" }),
+    ).not.toBeInTheDocument();
   });
 
   it("selects an option with the keyboard", async () => {
