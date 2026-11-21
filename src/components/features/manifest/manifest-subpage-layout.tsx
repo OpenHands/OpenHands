@@ -76,6 +76,13 @@ export function ManifestSubpageLayout({
       </aside>
       <main className={cn(settingsLikeMainScrollClassName, "h-full")}>
         <div className="mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6">
+          <span
+            data-testid={`${navTestIdBase}-mobile-heading`}
+            className="lg:hidden line-clamp-2 break-words px-2 text-sm font-normal text-contrast"
+            title={heading}
+          >
+            {heading}
+          </span>
           <nav
             data-testid={`${navTestIdBase}-mobile`}
             className="lg:hidden flex gap-1 overflow-x-auto border-b border-border pb-2"
