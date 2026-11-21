@@ -4,7 +4,10 @@ import { ChevronRight } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import { HighlightedSourceView } from "#/components/features/files-tab/highlighted-source-view";
 import { useAutomationTarballFiles } from "#/hooks/query/use-automation-tarball-files";
-import type { Automation } from "#/types/automation";
+import {
+  PLUGIN_SPEC_RUNTIME_TARBALL_PATH,
+  type Automation,
+} from "#/types/automation";
 import type { TarEntry } from "#/utils/tar-unpack";
 import { cn } from "#/utils/utils";
 
@@ -112,11 +115,15 @@ function ScriptFile({
  */
 export function ScriptBody({ automation }: ScriptBodyProps) {
   const { t } = useTranslation("openhands");
+  // The service builds this bundle at dispatch time; its tarball endpoint
+  // rejects the sentinel rather than returning a downloadable archive.
+  const isRuntimeBundle =
+    automation.tarball_path === PLUGIN_SPEC_RUNTIME_TARBALL_PATH;
   const {
     data: allEntries,
     isPending,
     isError,
-  } = useAutomationTarballFiles(automation);
+  } = useAutomationTarballFiles(automation, { enabled: !isRuntimeBundle });
   const entries = allEntries?.filter((entry) => !isArchiveMetadata(entry.path));
 
   const entrypointPath = findEntrypointPath(
@@ -125,20 +132,26 @@ export function ScriptBody({ automation }: ScriptBodyProps) {
   );
   // A bundle the service can't hand back (external URL, deleted upload) or
   // that isn't an archive gets the same answer: download it instead.
-  const unavailable = isError || entries?.length === 0;
+  const unavailable = !isRuntimeBundle && (isError || entries?.length === 0);
 
   return (
     <div className="flex flex-col gap-3">
       {automation.entrypoint ? (
         <code
           data-testid="automation-script-entrypoint"
-          className="self-start rounded-md bg-surface-raised px-2 py-1 font-mono text-xs text-content"
+          className="self-start rounded-md bg-surface-raised px-2 py-1 font-mono text-xs text-content break-all whitespace-pre-wrap"
         >
           {automation.entrypoint}
         </code>
       ) : null}
 
-      {isPending ? (
+      {isRuntimeBundle ? (
+        <p className="text-sm text-muted">
+          {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_RUNTIME_BUNDLE)}
+        </p>
+      ) : null}
+
+      {!isRuntimeBundle && isPending ? (
         <p className="text-sm italic text-muted">
           {t(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_LOADING)}
         </p>
@@ -153,7 +166,7 @@ export function ScriptBody({ automation }: ScriptBodyProps) {
         </p>
       ) : null}
 
-      {entries && entries.length > 0
+      {!isRuntimeBundle && entries && entries.length > 0
         ? orderEntries(entries, entrypointPath).map((entry) => (
             <ScriptFile
               key={entry.path}

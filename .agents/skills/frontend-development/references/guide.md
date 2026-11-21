@@ -100,6 +100,13 @@ The commit and Uncommitted rows reserve the same `7ch` monospace column through
 `w-commit-sha`. The Monaco wrapper applies its measured pixel height through
 `h-(--editor-height)`. Keep these three components free of arbitrary values.
 
+## Automation bundle availability
+
+Automation details use `PLUGIN_SPEC_RUNTIME_TARBALL_PATH` for bundles generated
+at dispatch time. Skip both the file-list request and the Download Tarball menu
+item for that sentinel. Uploaded bundles retain their listing and download;
+plugin metadata alone does not disable an existing archive.
+
 ## Workspace files
 
 The open-file strip hides the scrollbar through `file-strip-scrollbar-hidden`
