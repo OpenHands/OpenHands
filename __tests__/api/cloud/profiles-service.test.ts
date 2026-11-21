@@ -5,6 +5,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
+import { fetchCloudProfilesForBackend } from "#/api/cloud/profiles-service.api";
 import ProfilesService, {
   type SaveProfileRequest,
 } from "#/api/profiles-service/profiles-service.api";
@@ -20,6 +21,14 @@ const cloudBackend: Backend = {
   host: "https://app.all-hands.dev",
   apiKey: "bearer-token",
   kind: "cloud",
+};
+
+const localBackend: Backend = {
+  id: "local",
+  name: "Local",
+  host: "http://localhost:8000",
+  apiKey: "local-key",
+  kind: "local",
 };
 
 const ORG_ID = "org-1";
@@ -198,6 +207,23 @@ describe("ProfilesService on a cloud backend with no org (fallback)", () => {
     const [url, init] = getFetchCall(fetchMock);
     expect(url).toBe(`${SETTINGS_BASE}/gpt`);
     expect(init).toMatchObject({ method: "POST" });
+  });
+
+  it("lists a connected cloud backend's LLM profiles while a local backend is active", async () => {
+    setRegisteredBackends([localBackend, cloudBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    fetchMock.mockResolvedValueOnce(
+      mockJsonResponse({ profiles: [], active_profile: null }),
+    );
+
+    await fetchCloudProfilesForBackend(cloudBackend);
+
+    const [url, init] = getFetchCall(fetchMock);
+    expect(url).toBe(SETTINGS_BASE);
+    expect(init).toMatchObject({
+      method: "GET",
+      headers: { Authorization: "Bearer bearer-token" },
+    });
   });
 
   it("activates via the per-user settings route and maps `model`", async () => {
