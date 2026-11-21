@@ -220,6 +220,75 @@ describe("AddModelsModal", () => {
     await screen.findByTestId("add-models-row-openai/gpt-4o");
   });
 
+  it("keeps a keyless selection when connections refresh while the modal is open", async () => {
+    const { rerender } = renderModal();
+    await screen.findByTestId("add-models-row-openai/gpt-4o");
+    await userEvent.selectOptions(
+      screen.getByTestId("add-models-connection"),
+      "",
+    );
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <AddModelsModal
+          isOpen
+          connections={[makeConnection({ display_name: "Renamed connection" })]}
+          initialConnectionId={OPENAI_CONNECTION.id}
+          existingNames={[]}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId("add-models-connection")).toHaveValue("");
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+    await waitFor(() =>
+      expect(ProfilesService.saveProfile).toHaveBeenCalledTimes(3),
+    );
+    for (const [, request] of vi.mocked(ProfilesService.saveProfile).mock
+      .calls) {
+      expect(request.llm?.provider_connection_id).toBeNull();
+    }
+  });
+
+  it("keeps the chosen provider and models when connections refresh in chooser mode", async () => {
+    const view = (connections: ProviderConnection[], isOpen = true) => (
+      <QueryClientProvider client={queryClient}>
+        <AddModelsModal
+          isOpen={isOpen}
+          connections={connections}
+          existingNames={[]}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view([OPENAI_CONNECTION]));
+    await chooseOpenAI();
+    const modelCheckbox = await screen.findByTestId(
+      "add-models-check-openai/gpt-4o",
+    );
+    await userEvent.click(modelCheckbox);
+
+    const connections = [makeConnection({ display_name: "Updated OpenAI" })];
+    rerender(view(connections));
+
+    expect(screen.getByTestId("add-models-provider")).toHaveValue("openai");
+    expect(modelCheckbox).toBeChecked();
+    expect(screen.getByTestId("add-models-connection")).toHaveValue(
+      OPENAI_CONNECTION.id,
+    );
+    expect(
+      screen.getByRole("option", { name: "Updated OpenAI" }),
+    ).toBeInTheDocument();
+
+    rerender(view(connections, false));
+    rerender(view(connections));
+    expect(screen.getByTestId("add-models-provider")).toHaveValue("");
+    expect(
+      screen.queryByTestId("add-models-check-openai/gpt-4o"),
+    ).not.toBeInTheDocument();
+  });
+
   it("lists all models for the connection's provider with short (unprefixed) names", async () => {
     renderModal();
     await screen.findByTestId("add-models-row-openai/gpt-4o");
