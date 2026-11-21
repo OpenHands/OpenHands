@@ -1,9 +1,12 @@
+import type { AskUserAction } from "@openhands/typescript-client";
 import { AUTOMATION_FORM_UPDATE_ACTION_KIND } from "#/constants/automation-form";
 import { CANVAS_UI_CLIENT_ACTION_KIND } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_ACTION_KIND } from "#/constants/child-conversation";
 import { REQUEST_SECRET_ACTION_KIND } from "#/constants/secret-request";
 import { ActionBase } from "./base";
 import { TaskItem } from "./common";
+
+export type { AskUserAction };
 
 export interface MCPToolAction extends ActionBase<"MCPToolAction"> {
   /**
@@ -367,6 +370,7 @@ export interface RequestSecretAction extends ActionBase<
 }
 
 export type Action =
+  | AskUserAction
   | MCPToolAction
   | FinishAction
   | ThinkAction

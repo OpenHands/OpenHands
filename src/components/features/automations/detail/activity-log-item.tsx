@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import TerminalIcon from "#/icons/terminal.svg?react";
@@ -26,6 +27,14 @@ function formatRunTimestamp(dateStr: string, locale: string): string {
     year: "numeric",
     month: "long",
     day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/** Rows sit under a day heading, so the row itself shows only the time. */
+function formatRunTime(dateStr: string, locale: string): string {
+  return new Date(dateStr).toLocaleTimeString(locale, {
     hour: "numeric",
     minute: "2-digit",
   });
@@ -65,7 +74,10 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
     run.status === AutomationRunStatus.FAILED ||
     run.status === AutomationRunStatus.CANCELLED ||
     run.status === AutomationRunStatus.SKIPPED;
-  const showNoConversationLabel = !hasConversation && isTerminal;
+  // Script runs never have a conversation; the runs section says so once
+  // instead of on every row.
+  const showNoConversationLabel =
+    !hasConversation && !hasBashCommand && isTerminal;
   const showPhase = shouldShowRunPhase(run.status);
   const [logsOpen, setLogsOpen] = useState(false);
   // The backend leaves started_at unset (epoch/zero) while a run is Pending
@@ -113,16 +125,16 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
     <>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-3">
-          <span className="text-sm text-content">{formattedTimestamp}</span>
+          <time
+            dateTime={effectiveStartedAt}
+            title={formattedTimestamp}
+            className="text-sm tabular-nums text-content"
+          >
+            {formatRunTime(effectiveStartedAt, i18n.language)}
+          </time>
           {showNoConversationLabel && (
             <span className="text-xs text-muted">
-              {t(
-                hasBashCommand
-                  ? // A command ran but no agent did: a script automation.
-                    // Point at the logs button, the only place its output is.
-                    I18nKey.AUTOMATIONS$DETAIL$SCRIPT_RUN_NO_CONVERSATION
-                  : I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION,
-              )}
+              {t(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION)}
             </span>
           )}
         </div>
@@ -138,6 +150,17 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
             className="text-xs tabular-nums text-muted"
           >
             {formattedCost}
+          </span>
+        )}
+        {hasConversation && (
+          <span
+            role="img"
+            data-testid="run-conversation-indicator"
+            className="p-1 text-muted"
+            aria-label={t(I18nKey.AUTOMATIONS$DETAIL$CONVERSATION_STARTED)}
+            title={t(I18nKey.AUTOMATIONS$DETAIL$CONVERSATION_STARTED)}
+          >
+            <MessageSquare className="size-4" aria-hidden />
           </span>
         )}
         {logsButton}

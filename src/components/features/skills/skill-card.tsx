@@ -15,6 +15,8 @@ import {
   extensionModuleCardInteractiveClassName,
   extensionModuleCardSurfaceClassName,
 } from "#/utils/extension-module-card-classes";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 interface SkillCardProps {
   skill: SkillInfo;
@@ -44,8 +46,11 @@ export function SkillCard({
       return;
     }
 
-    await navigator.clipboard.writeText(skill.source);
-    setSourceCopied(true);
+    if (await copyToClipboard(skill.source)) {
+      setSourceCopied(true);
+    } else {
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
+    }
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {

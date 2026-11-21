@@ -7,6 +7,8 @@ import type {
   CloudOrganization,
   CloudOrganizationMember,
   CloudOrganizationsResponse,
+  CloudServiceAccount,
+  CloudServiceAccountPage,
 } from "./types";
 
 interface OrganizationsResult {
@@ -144,4 +146,31 @@ export async function getCloudOrganizationMember(
     method: "GET",
     path: `/api/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`,
   });
+}
+
+/**
+ * Fetch every service account of `orgId` (`GET /api/organizations/{orgId}/
+ * service-accounts`), following `next_page_id`. Needs
+ * `manage_service_accounts` (org owners and admins); others get a 403.
+ */
+export async function listCloudServiceAccounts(
+  orgId: string,
+  backend?: Backend,
+): Promise<CloudServiceAccount[]> {
+  const target = resolveBackend(backend);
+  const accounts: CloudServiceAccount[] = [];
+  let pageId: string | null | undefined;
+  do {
+    const query = new URLSearchParams({ limit: "100" });
+    if (pageId) query.set("page_id", pageId);
+
+    const page = await callCloudProxy<CloudServiceAccountPage>({
+      backend: target,
+      method: "GET",
+      path: `/api/organizations/${encodeURIComponent(orgId)}/service-accounts?${query}`,
+    });
+    accounts.push(...(page?.items ?? []));
+    pageId = page?.next_page_id;
+  } while (pageId);
+  return accounts;
 }

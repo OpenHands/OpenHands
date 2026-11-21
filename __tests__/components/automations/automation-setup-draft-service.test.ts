@@ -113,10 +113,12 @@ describe("getDraftExecutionStatusText", () => {
 
 const baseForm: AutomationSetupFormValues = {
   name: "",
+  runAsUserId: "",
   prompt: "",
   repository: "",
   pluginSource: "",
   pluginRef: "",
+  pluginConfig: "{}",
   pluginList: "",
   customCode: "",
   entrypoint: "",
@@ -140,11 +142,12 @@ const baseForm: AutomationSetupFormValues = {
 };
 
 describe("setupDraftFromServerDraft", () => {
-  it("hydrates all repositories and event keys from saved drafts", () => {
+  it("hydrates repositories, event keys, and run-as from saved drafts", () => {
     const saved = {
       ...baseSavedDraft,
       draft: {
         prompt: "Triage issues",
+        run_as_user_id: "sa-1",
         repos: [{ url: "acme/one" }, { url: "acme/two" }],
         trigger: {
           type: "event",
@@ -158,12 +161,14 @@ describe("setupDraftFromServerDraft", () => {
 
     expect(draft.form?.repository).toBe("acme/one, acme/two");
     expect(draft.form?.eventKey).toBe("pull_request,issues");
+    expect(draft.form?.runAsUserId).toBe("sa-1");
   });
 
-  it("updates an existing form with all repositories and event keys", () => {
+  it("updates an existing form with repositories, event keys, and run-as", () => {
     const saved = {
       ...baseSavedDraft,
       draft: {
+        run_as_user_id: "sa-2",
         repos: [{ url: "acme/one" }, { url: "acme/two" }],
         trigger: {
           type: "event",
@@ -173,9 +178,13 @@ describe("setupDraftFromServerDraft", () => {
       },
     } satisfies AutomationDraftApiResponse;
 
-    const form = formFromServerDraft(saved, baseForm);
+    const form = formFromServerDraft(saved, {
+      ...baseForm,
+      runAsUserId: "stale-selection",
+    });
 
     expect(form.repository).toBe("acme/one, acme/two");
     expect(form.eventKey).toBe("push,release.published");
+    expect(form.runAsUserId).toBe("sa-2");
   });
 });

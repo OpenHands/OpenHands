@@ -106,6 +106,12 @@ control-openhands stop                         # stops only this run; evidence s
   only `scripts/static-server.mjs` takes `--lock-to-cloud`; `browser goto
   <lockedCloud.url>/` opens it as a run page, and `stop` ends it with the run.
   Never hand-start these processes on fixed ports: `stop` cannot see them.
+- **A non-loopback origin** comes with every run: `lanUrl`
+  (`$OH_VERIFY_LAN_URL` from `control-openhands env`) is the run's ingress
+  under a name its browser resolves to loopback, so the page is plain HTTP
+  outside a secure context, as it is for a user on a LAN or VPN address
+  (`F26.lan-http-origin`). It has its own browser storage: `onboard --skip
+  --stay` and `conversation start --stay` act on the page that is open.
 - **Doctor** checks the launcher's process group, ports, served build revision,
   unauthenticated rejection, authenticated settings, Agent Server pin and the
   UI's minimum Agent Server version, automation health and a throwaway-tab UI
@@ -158,11 +164,12 @@ control-openhands stop                         # stops only this run; evidence s
   `service pause automation` and `service resume automation` queue and release
   real requests for in-flight race checks. Resume before stopping the run. `browser
   network` (with `--bodies`, what the page sent, credentials redacted;
-  the display `body` is capped at 2000 characters. `bodyFields.plugins` retains
-  only the request's top-level `plugins` before that cap, using the same
+  the display `body` is capped at 2000 characters. `bodyFields` retains only
+  the request's top-level `plugins`, `conversation_runtime`, `worktree`,
+  `worktree_options` and `container` before that cap, using the same
   recursive credential/env/header and URL redaction. Its complete JSON
   projection is bounded to 16384 UTF-8 bytes; an oversized projection is omitted
-  with `bodyFieldsOmitted.plugins` explaining why. No projection of other
+  with `bodyFieldsOmitted.<field>` explaining why. No projection of other
   top-level fields is made, and neither body fields nor omission metadata appear
   without `--bodies`; every row also times its response: `responseMs`,
   `durationMs`, `completedTs`, `outcome` and `completedSeq`, and `--order
@@ -230,6 +237,13 @@ prerequisite; never substitute a mock and call it a pass.
   `src/` paths no family owns (a map gap) and non-user-facing paths. Drive every entry point those features list at
   desktop and phone viewports, and report with
   [the report contract](references/report.md).
+- **Verify an Agent Server change** (a software-agent-sdk PR or an Agent
+  Server bump): the families whose `Server:` line names the changed server
+  features are where a user could see it ([mapping.md](references/mapping.md)).
+  For a PR, launch the baseline with `--sdk-ref main` and the change with
+  `--sdk-ref <PR branch>` (`launch --new` for each) and drive those families
+  on both. A difference is user-facing; no difference means the change does
+  not reach Canvas users on those paths.
 - **Verify a fix for a known bug** (an open PR or a merged commit that claims
   to fix a bug the map records): launch the baseline and the fix as two runs
   (`launch --new` with each worktree's own `control-openhands`: the CLI
@@ -259,7 +273,11 @@ prerequisite; never substitute a mock and call it a pass.
   yesterday's is at hand.
 - **Create or extend the map**: follow [references/mapping.md](references/mapping.md).
   It teaches how to discover features, write entries against the CLI and prove
-  each one live. `control-openhands map coverage` measures what is still unmapped.
+  each one live. `control-openhands map coverage` measures what is still unmapped,
+  `map controls` lists the controls on mapped pages that no bullet operates, and
+  [references/scenarios.md](references/scenarios.md) lists the situations (the
+  item edited later, two actions at once, real data, another environment) to
+  ask of every sub-feature beyond its happy path.
 - **Maintain the map (periodic or weekly)**: follow
   [references/maintenance.md](references/maintenance.md): index hygiene, a source
   wave, one live pass over every feature, PR-intent reconciliation for the week's

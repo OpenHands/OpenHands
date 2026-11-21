@@ -20,10 +20,12 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { describe, expect, it, afterEach } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { server as mswServer } from "#/mocks/node";
 import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
+  buildAutomationCorsOrigins,
   buildAutomationLogArgs,
   buildAutomationTelemetryEnv,
   buildAutomationRuntimeServicesInfo,
@@ -38,6 +40,7 @@ import {
   resolveAutomationKvSecret,
   setServiceLogListener,
   spawnService,
+  superviseService,
   validateLocalAutomationPath,
   DEFAULT_AUTOMATION_REPO,
   DEFAULT_AUTOMATION_PACKAGE,
@@ -52,6 +55,9 @@ import {
   uvicornLogLevel,
 } from "../../scripts/dev-safe.mjs";
 import { createRouter } from "../../scripts/proxy-utils.mjs";
+
+beforeAll(() => mswServer.close());
+afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -588,6 +594,104 @@ describe("buildConfig", () => {
     ).rejects.toThrow(new RegExp(`ingress.*port ${busyPort}`, "i"));
   });
 
+  it("serves the frontend on a free port when the preferred one is taken", async () => {
+    const server = net.createServer();
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        servers.push(server);
+        resolve((server.address() as net.AddressInfo).port);
+      });
+      server.on("error", reject);
+    });
+
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_VITE_PORT: String(busyPort) }),
+    );
+
+    expect(config.vitePort).not.toBe(busyPort);
+    // Every consumer follows the resolved port.
+    expect(getFrontendBackend(config)).toBe(
+      `http://localhost:${config.vitePort}`,
+    );
+    expect(buildViteFrontendEnv(config).VITE_FRONTEND_PORT).toBe(
+      String(config.vitePort),
+    );
+    const info = buildAutomationRuntimeServicesInfo(
+      config,
+      {},
+    ) as RuntimeServicesInfo;
+    expect(info.services.frontend.url_from_agent).toBe(
+      `http://localhost:${config.vitePort}`,
+    );
+    expect(buildAutomationCorsOrigins(config)).toBe(
+      `http://localhost:19902,http://127.0.0.1:19902,` +
+        `http://localhost:${config.vitePort},http://127.0.0.1:${config.vitePort}`,
+    );
+  });
+
+  // Only the frontend falls back: the other services keep failing hard so a
+  // second agent-canvas instance is still detected (#16904).
+  it.each([
+    ["agent-server", "OH_CANVAS_SAFE_BACKEND_PORT"],
+    ["automation", "OH_CANVAS_SAFE_AUTOMATION_PORT"],
+  ])("still throws when the %s port is busy", async (service, envKey) => {
+    const server = net.createServer();
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        servers.push(server);
+        resolve((server.address() as net.AddressInfo).port);
+      });
+      server.on("error", reject);
+    });
+
+    await expect(
+      buildConfig({}, envWithIsolatedKeyPath({ [envKey]: String(busyPort) })),
+    ).rejects.toThrow(new RegExp(`${service}.*port ${busyPort}`, "i"));
+  });
+
+  it.each([
+    ["ingress", "19902"],
+    ["agent-server", "19900"],
+    ["automation", "19901"],
+    ["vscode", "20900"],
+  ])("keeps the frontend off the %s port", async (_service, servicePort) => {
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_VITE_PORT: servicePort }),
+    );
+
+    expect(config.vitePort).not.toBe(Number(servicePort));
+    expect(
+      new Set([
+        config.ingressPort,
+        config.agentServerPort,
+        config.autoBackendPort,
+        config.vscodePort,
+        config.vitePort,
+      ]).size,
+    ).toBe(5);
+  });
+
+  it("leaves the frontend port alone when no frontend is launched", async () => {
+    const server = net.createServer();
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        servers.push(server);
+        resolve((server.address() as net.AddressInfo).port);
+      });
+      server.on("error", reject);
+    });
+
+    const config = await buildConfig(
+      { backendOnly: true },
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_VITE_PORT: String(busyPort) }),
+    );
+
+    expect(config.launchFrontend).toBe(false);
+    expect(config.vitePort).toBe(busyPort);
+  });
+
   it("allocates valid ports for all services", async () => {
     const config = await buildConfig({}, envWithIsolatedKeyPath());
 
@@ -805,6 +909,26 @@ describe("stack mode routing", () => {
     expect(viteEnv.VITE_BIND_HOST).toBe("0.0.0.0");
     expect(viteEnv).not.toHaveProperty("VITE_SESSION_API_KEY");
     expect(viteEnv.VITE_AUTH_REQUIRED).toBe("true");
+  });
+
+  it("honors the explicit LAN session-key opt-in for Vite", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0", allowLanSessionKey: true },
+      envWithIsolatedKeyPath(),
+    );
+    const env = buildViteFrontendEnv(config);
+    expect(env.VITE_SESSION_API_KEY).toBe(config.sessionApiKey);
+    expect(env.VITE_AUTH_REQUIRED).toBeUndefined();
+  });
+
+  it("keeps public mode key-free even with the LAN opt-in", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0", public: true, allowLanSessionKey: true },
+      envWithIsolatedKeyPath({ LOCAL_BACKEND_API_KEY: "public-test-key" }),
+    );
+    const env = buildViteFrontendEnv(config);
+    expect(env.VITE_SESSION_API_KEY).toBeUndefined();
+    expect(env.VITE_AUTH_REQUIRED).toBe("true");
   });
 
   it("makes the key-free ingress reachable to Docker conversations", async () => {
@@ -1115,6 +1239,70 @@ describe("setServiceLogListener", () => {
     const [code] = await once(proc, "exit");
     expect(code).toBe(0);
   });
+});
+
+describe("superviseService", () => {
+  const exitWith = (code: number) => ["-e", `process.exit(${code})`];
+  const stayUp = ["-e", "setInterval(() => {}, 1_000)"];
+
+  it("restarts a service that exits on its own", async () => {
+    // Arrange: the first run crashes, the replacement stays up.
+    const procs: ReturnType<typeof spawnService>[] = [];
+    const onFailure = vi.fn();
+
+    // Act
+    superviseService(
+      "supervise-restart-test",
+      (hooks: object) => {
+        const args = procs.length === 0 ? exitWith(7) : stayUp;
+        const proc = spawnService(
+          "supervise-restart-test",
+          process.execPath,
+          args,
+          hooks,
+        );
+        procs.push(proc);
+        return proc;
+      },
+      { onFailure, restartDelayMs: 0 },
+    );
+
+    // Assert
+    await vi.waitFor(() => expect(procs).toHaveLength(2));
+    await delay(200);
+    expect(procs).toHaveLength(2);
+    expect(procs[1].exitCode).toBeNull();
+    expect(onFailure).not.toHaveBeenCalled();
+    procs[1].kill();
+  });
+
+  it("stops the stack and reports once the service keeps exiting", async () => {
+    // Arrange
+    let starts = 0;
+    const failure = new Promise<Error>((resolve) => {
+      // Act
+      superviseService(
+        "supervise-give-up-test",
+        (hooks: object) => {
+          starts += 1;
+          return spawnService(
+            "supervise-give-up-test",
+            process.execPath,
+            exitWith(3),
+            hooks,
+          );
+        },
+        { onFailure: resolve, maxRestarts: 2, restartDelayMs: 0 },
+      );
+    });
+
+    // Assert
+    const error = await failure;
+    expect(starts).toBe(3);
+    expect(error.message).toContain(
+      "The supervise-give-up-test exited 3 times (last: 3)",
+    );
+  }, 15_000);
 });
 
 describe("dev-with-automation CLI", () => {

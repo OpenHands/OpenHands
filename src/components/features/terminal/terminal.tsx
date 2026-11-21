@@ -4,18 +4,14 @@ import { RUNTIME_INACTIVE_STATES } from "#/types/agent-state";
 import { cn } from "#/utils/utils";
 import { WaitingForRuntimeMessage } from "../chat/waiting-for-runtime-message";
 import { useAgentState } from "#/hooks/use-agent-state";
-import { useCommandStore } from "#/stores/command-store";
 import { EmptyTerminalMessage } from "./empty-terminal-message";
 
 function Terminal() {
   const { curAgentState } = useAgentState();
-  const commands = useCommandStore((state) => state.commands);
 
   const isRuntimeInactive = RUNTIME_INACTIVE_STATES.includes(curAgentState);
-  const hasOutput = commands.length > 0;
+  const { ref, hasOutput } = useTerminal();
   const hideTerminalSurface = isRuntimeInactive || !hasOutput;
-
-  const ref = useTerminal();
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">

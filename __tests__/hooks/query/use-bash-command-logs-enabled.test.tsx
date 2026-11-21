@@ -15,15 +15,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useBashCommandLogs } from "#/hooks/query/use-bash-command-logs";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-const { batchGetAppConversationsMock, listOutputsMock, useActiveBackendMock } =
-  vi.hoisted(() => ({
-    batchGetAppConversationsMock: vi.fn(),
-    listOutputsMock: vi.fn(),
-    useActiveBackendMock: vi.fn(),
-  }));
+const { batchGetAppConversationsMock, listOutputsMock } = vi.hoisted(() => ({
+  batchGetAppConversationsMock: vi.fn(),
+  listOutputsMock: vi.fn(),
+}));
 
 vi.mock(
   "#/api/conversation-service/agent-server-conversation-service.api",
@@ -39,10 +43,6 @@ vi.mock("#/api/bash-service/bash-service.api", () => ({
   default: { listOutputs: (...args: unknown[]) => listOutputsMock(...args) },
 }));
 
-vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackend: () => useActiveBackendMock(),
-}));
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 // Build a wrapper whose QueryClient is created once and stays stable for the
@@ -55,7 +55,9 @@ function makeWrapper() {
   });
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        <ActiveBackendProvider>{children}</ActiveBackendProvider>
+      </QueryClientProvider>
     );
   };
 }
@@ -63,12 +65,18 @@ function makeWrapper() {
 beforeEach(() => {
   batchGetAppConversationsMock.mockReset();
   listOutputsMock.mockReset();
-  useActiveBackendMock.mockReset();
-
-  useActiveBackendMock.mockReturnValue({
-    backend: { id: "bk-1", kind: "local" },
-    orgId: null,
-  });
+  window.localStorage.clear();
+  __resetActiveStoreForTests();
+  setRegisteredBackends([
+    {
+      id: "bk-1",
+      name: "Local",
+      kind: "local",
+      host: "http://localhost:8000",
+      apiKey: "session-key",
+    },
+  ]);
+  setActiveSelection({ backendId: "bk-1", orgId: null });
   listOutputsMock.mockResolvedValue([]);
   batchGetAppConversationsMock.mockResolvedValue([
     { conversation_url: null, session_api_key: null, sandbox_status: null },
@@ -77,6 +85,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
+  __resetActiveStoreForTests();
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

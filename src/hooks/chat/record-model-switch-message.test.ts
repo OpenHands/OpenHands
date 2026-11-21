@@ -5,7 +5,10 @@ import {
   setStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import { OpenHandsEvent } from "#/types/agent-server/core";
-import { seedModelSwitchesFromHistory } from "./record-model-switch-message";
+import {
+  recordModelSwitchMessage,
+  seedModelSwitchesFromHistory,
+} from "./record-model-switch-message";
 
 const userMessage = (id: string): OpenHandsEvent =>
   ({
@@ -86,6 +89,36 @@ describe("seedModelSwitchesFromHistory", () => {
   beforeEach(() => {
     useModelStore.getState().clearAll();
     window.localStorage.clear();
+  });
+
+  it("preserves attribution and reason when live events are replayed", () => {
+    const observation = switchObservation("o1", "astra");
+    if ("observation" in observation) {
+      Object.assign(observation.observation, {
+        reason: "Careful evidence tracking",
+      });
+    }
+    recordModelSwitchMessage("c1", "astra", "u1", {
+      id: "history-switch:o1",
+      initiator: "agent",
+      reason: "Careful evidence tracking",
+    });
+    seedModelSwitchesFromHistory("c1", [userMessage("u1"), observation]);
+    expect(entriesFor("c1")).toHaveLength(1);
+    expect(entriesFor("c1")[0]).toMatchObject({
+      initiator: "agent",
+      reason: "Careful evidence tracking",
+    });
+    useModelStore.getState().clearAll();
+    seedModelSwitchesFromHistory("c1", [userMessage("u1"), observation]);
+    expect(entriesFor("c1")[0]).toMatchObject({
+      initiator: "agent",
+      reason: "Careful evidence tracking",
+    });
+    seedModelSwitchesFromHistory("c1", [
+      classifySwitchObservation("o2", "fast"),
+    ]);
+    expect(entriesFor("c1")[1]).toMatchObject({ initiator: "router" });
   });
 
   it("seeds a successful switch anchored to the prior renderable event", () => {
@@ -369,6 +402,9 @@ describe("seedModelSwitchesFromHistory", () => {
       expect(entries[0]).toMatchObject({
         switchedTo: "kimi-k2.6",
         anchorEventId: "u1",
+        initiator: "router",
+        // The classifier's `chosen_class` is surfaced as the switch reason.
+        reason: "model: kimi-k2.6",
       });
       expect(activeProfileFor("c1")).toBe("kimi-k2.6");
       expect(stampedProfileFor("c1")).toBe("kimi-k2.6");

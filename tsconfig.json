@@ -26,8 +26,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
-    "baseUrl": ".",
     "paths": {
+      "*": ["./*"],
       "#/*": ["./src/*"]
     },
     // Vite takes care of building everything, not tsc.

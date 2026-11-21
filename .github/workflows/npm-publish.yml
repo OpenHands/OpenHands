@@ -23,7 +23,10 @@ jobs:
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # `npm test` alone takes 9-15 min on ubuntu runners (see CI's
+    # test-and-build job, which allows 25). Keep headroom for install,
+    # build and publish so a slow runner does not cancel a release.
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -36,7 +39,7 @@ jobs:
       - name: Set up Node.js for npm trusted publishing
         uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: "24.22.1"
           cache: npm
           registry-url: https://registry.npmjs.org
 

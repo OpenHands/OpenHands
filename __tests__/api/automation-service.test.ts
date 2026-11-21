@@ -215,13 +215,13 @@ describe("AutomationService", () => {
       });
     });
 
-    it("sends the creator filter as created_by", async () => {
+    it("sends the owner filter as run_as", async () => {
       mockGet.mockResolvedValue({ data: { automations: [], total: 0 } });
 
-      await AutomationService.listAutomations({ createdBy: "others" });
+      await AutomationService.listAutomations({ runAs: "others" });
 
       expect(mockGet).toHaveBeenCalledWith("/api/automation/v1", {
-        params: { limit: 50, offset: 0, created_by: "others" },
+        params: { limit: 50, offset: 0, run_as: "others" },
       });
     });
   });
@@ -369,6 +369,29 @@ describe("AutomationService", () => {
     });
   });
 
+  describe("changeRunAs", () => {
+    it("posts the target identity to the run-as endpoint for cloud backends", async () => {
+      mockGetActive.mockReturnValue({ backend: cloudBackend, orgId: "org-1" });
+      mockCallCloudProxy.mockResolvedValue({
+        ...mockAutomation,
+        enabled: false,
+      });
+
+      await AutomationService.changeRunAs("1", {
+        to: "service",
+        service_account_id: "sa-1",
+      });
+
+      expect(mockCallCloudProxy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "POST",
+          path: "/api/automation/v1/1/run-as",
+          body: { to: "service", service_account_id: "sa-1" },
+        }),
+      );
+    });
+  });
+
   describe("deleteAutomation", () => {
     it("deletes an automation by id", async () => {
       mockDelete.mockResolvedValue({});
@@ -491,14 +514,14 @@ describe("AutomationService", () => {
       expect(result).toEqual(response);
     });
 
-    it("listAutomations adds the creator filter to the path", async () => {
+    it("listAutomations adds the owner filter to the path", async () => {
       mockCallCloudProxy.mockResolvedValue({ automations: [], total: 0 });
 
-      await AutomationService.listAutomations({ createdBy: "me" });
+      await AutomationService.listAutomations({ runAs: "service" });
 
       expect(mockCallCloudProxy).toHaveBeenCalledWith(
         expect.objectContaining({
-          path: "/api/automation/v1?limit=50&offset=0&created_by=me",
+          path: "/api/automation/v1?limit=50&offset=0&run_as=service",
         }),
       );
     });
@@ -568,7 +591,6 @@ describe("AutomationService", () => {
 
       expect(result.repositories).toEqual([{ url: "acme/repo", ref: "main" }]);
     });
-
 
     it("checkHealth calls the cloud host with a fail-fast timeout and returns the upstream status", async () => {
       mockCallCloudProxy.mockResolvedValue({ status: "ok" });
@@ -874,6 +896,36 @@ describe("AutomationService", () => {
         }),
       );
       expect(result).toEqual({ drafts: [], total: 0 });
+    });
+  });
+
+  describe("listCustomWebhooks", () => {
+    it("fetches paginated webhook sources through the local automation service", async () => {
+      const response = { webhooks: [], total: 0 };
+      mockGet.mockResolvedValue({ data: response });
+
+      expect(
+        await AutomationService.listCustomWebhooks({ limit: 50, offset: 25 }),
+      ).toEqual(response);
+      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1/webhooks", {
+        params: { limit: 50, offset: 25 },
+      });
+    });
+
+    it("fetches cloud webhook sources with authenticated proxy headers", async () => {
+      mockGetActive.mockReturnValue({ backend: cloudBackend, orgId: "org-1" });
+      mockCallCloudProxy.mockResolvedValue({ webhooks: [], total: 0 });
+
+      await AutomationService.listCustomWebhooks({ limit: 50, offset: 0 });
+
+      expect(mockCallCloudProxy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          backend: cloudBackend,
+          method: "GET",
+          path: "/api/automation/v1/webhooks?limit=50&offset=0",
+          headers: expectedAutomationTelemetryHeaders,
+        }),
+      );
     });
   });
 

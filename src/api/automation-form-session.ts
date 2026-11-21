@@ -45,11 +45,13 @@ const AUTOMATION_SETUP_FREQUENCIES: AutomationSetupFrequency[] = [
 ];
 const STRING_FIELDS = [
   "name",
+  "runAsUserId",
   "prompt",
   "repository",
   "pluginSource",
   "pluginRef",
   "pluginList",
+  "pluginConfig",
   "customCode",
   "entrypoint",
   "setupScriptPath",
@@ -178,8 +180,18 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
   const existingRepositories = readAutomationRepositories(
     value.existingRepositories,
   );
+  const existingEventTrigger =
+    value.existingEventTrigger &&
+    typeof value.existingEventTrigger === "object" &&
+    !Array.isArray(value.existingEventTrigger)
+      ? value.existingEventTrigger
+      : null;
   const serverDraftId =
     typeof value.serverDraftId === "string" ? value.serverDraftId.trim() : "";
+  const savedDraftRequestKey =
+    serverDraftId && typeof value.savedDraftRequestKey === "string"
+      ? value.savedDraftRequestKey
+      : "";
   const materializedAutomationId =
     typeof value.materializedAutomationId === "string"
       ? value.materializedAutomationId.trim()
@@ -198,12 +210,17 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
     ...(normalizedPlugins.length > 0 ? { plugins: normalizedPlugins } : {}),
     form: normalizedForm,
     ...(editingAutomationId ? { editingAutomationId } : {}),
+    ...(value.existingPluginSpec
+      ? { existingPluginSpec: value.existingPluginSpec }
+      : {}),
     ...(existingCustomTarballPath ? { existingCustomTarballPath } : {}),
     ...(existingRepositories.length > 0 ? { existingRepositories } : {}),
     ...(value.canUpdateRepositories === true
       ? { canUpdateRepositories: true }
       : {}),
+    ...(existingEventTrigger ? { existingEventTrigger } : {}),
     ...(serverDraftId ? { serverDraftId } : {}),
+    ...(savedDraftRequestKey ? { savedDraftRequestKey } : {}),
     ...(materializedAutomationId ? { materializedAutomationId } : {}),
     ...(fieldMetadata ? { fieldMetadata } : {}),
     ...(appliedAgentEventIds && appliedAgentEventIds.length > 0
@@ -258,6 +275,19 @@ export function setAutomationFormSessionRepositories(
   );
 }
 
+/** Record the request last saved to the session's server draft. */
+export function setAutomationFormSessionSavedDraftRequestKey(
+  conversationId: string,
+  savedDraftRequestKey: string,
+) {
+  const existing = sessions.get(conversationId);
+  if (!existing) return;
+  sessions.set(
+    conversationId,
+    normalizeDraft({ ...existing, savedDraftRequestKey }),
+  );
+}
+
 export function getAutomationFormSession(
   conversationId: string | null | undefined,
 ): AutomationSetupDraft | null {
@@ -300,6 +330,26 @@ export function patchAutomationFormSession(
 
   for (const [fieldName, value] of Object.entries(normalizedPatch)) {
     const field = fieldName as AutomationSetupField;
+    if (
+      existing.existingPluginSpec &&
+      [
+        "kind",
+        "prompt",
+        "repository",
+        "pluginSource",
+        "pluginRef",
+        "pluginList",
+        "customCode",
+        "entrypoint",
+        "setupScriptPath",
+        "setupScript",
+        "model",
+        "agentProfileId",
+      ].includes(field)
+    ) {
+      result.skipped.push(field);
+      continue;
+    }
     const currentValue = nextForm[field];
     const metadata = nextMetadata[field];
     const userDirty = metadata?.userDirty === true;
@@ -375,6 +425,10 @@ export function subscribeAutomationFormSession(
   window.addEventListener(AUTOMATION_FORM_SESSION_CHANGED_EVENT, handler);
   return () =>
     window.removeEventListener(AUTOMATION_FORM_SESSION_CHANGED_EVENT, handler);
+}
+
+export function __resetAutomationFormSessionsForTests(): void {
+  sessions.clear();
 }
 
 export function clearAutomationFormSession(conversationId: string) {

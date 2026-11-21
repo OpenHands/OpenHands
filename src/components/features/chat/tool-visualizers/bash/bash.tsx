@@ -39,6 +39,7 @@ export const bashVisualizer = defineVisualizer({
           <OutputPane
             output={textFromContent(observation.observation.content)}
             exitCode={observation.observation.exit_code}
+            expansionKey="bash-output"
           />
         )}
       </div>

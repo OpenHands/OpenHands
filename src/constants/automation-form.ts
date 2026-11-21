@@ -14,3 +14,10 @@ export const AUTOMATION_FORM_UPDATE_ACTION_KIND =
  * deployment that predates the endpoints falls back to client-only state.
  */
 export const AUTOMATION_DRAFTS_FEATURE = "automationDrafts";
+
+/**
+ * The capabilities feature flag the automation service advertises when an
+ * automation can run as a service account (`run_as_kind: "service"`,
+ * `run_as_user_id` on create, `POST /v1/{id}/run-as`).
+ */
+export const SERVICE_ACCOUNT_RUN_AS_FEATURE = "serviceAccountRunAs";

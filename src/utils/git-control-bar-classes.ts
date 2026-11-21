@@ -1,7 +1,7 @@
 import { cn } from "#/utils/utils";
 
 export const gitControlBarActionButtonBaseClassName =
-  "flex flex-row gap-1 items-center justify-center rounded-[100px]";
+  "flex flex-row gap-1 items-center justify-center rounded-pill";
 
 export function gitControlBarActionButtonClassName(isEnabled: boolean) {
   return cn(

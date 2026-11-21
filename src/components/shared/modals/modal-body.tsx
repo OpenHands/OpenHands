@@ -11,7 +11,7 @@ export const MODAL_WIDTH_CLASS: Record<ModalWidth, string> = {
   xl: "w-180",
 };
 
-export const MODAL_MAX_WIDTH_VIEWPORT = "max-w-[90vw]";
+export const MODAL_MAX_WIDTH_VIEWPORT = "dialog-viewport-width";
 
 export function modalWidthClassName(width: ModalWidth): string {
   return MODAL_WIDTH_CLASS[width];

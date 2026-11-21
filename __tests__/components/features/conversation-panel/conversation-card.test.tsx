@@ -25,6 +25,7 @@ import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { useFreeModelsStore } from "#/stores/free-models-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import ConversationService from "#/api/conversation-service/conversation-service.api";
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -38,7 +39,6 @@ vi.mock("react-i18next", async () => {
         const translations: Record<string, string> = {
           CONVERSATION$CREATED: "Created",
           CONVERSATION$AGO: "ago",
-          CONVERSATION$UPDATED: "Updated",
           COMMON$NO_REPOSITORY: "No repository",
           CONVERSATION$ACP_AGENT_GENERIC: "ACP",
           CONVERSATION_PANEL$PIN_CONVERSATION: "Pin conversation",
@@ -73,12 +73,7 @@ describe("ConversationCard", () => {
   const onChangeTitle = vi.fn();
 
   beforeAll(() => {
-    vi.stubGlobal("window", {
-      open: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      location: { origin: "http://localhost:3000" },
-    });
+    vi.spyOn(window, "open").mockImplementation(() => null);
   });
 
   afterEach(() => {
@@ -86,7 +81,7 @@ describe("ConversationCard", () => {
   });
 
   afterAll(() => {
-    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("should render the conversation card", () => {
@@ -475,6 +470,40 @@ describe("ConversationCard", () => {
     );
   });
 
+  it("opens the VS Code URL without an opener reference", async () => {
+    const user = userEvent.setup();
+    const vscodeUrl = "https://vscode.example.dev/?tkn=abc&folder=workspace";
+    vi.spyOn(ConversationService, "getVSCodeUrl").mockResolvedValue({
+      vscode_url: vscodeUrl,
+    });
+    renderWithProviders(
+      <ConversationCard
+        conversationId="conv-1"
+        onDelete={onDelete}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        showOptions
+        contextMenuOpen
+        onContextMenuToggle={vi.fn()}
+      />,
+    );
+
+    await user.click(
+      within(screen.getByTestId("context-menu")).getByTestId(
+        "download-vscode-button",
+      ),
+    );
+
+    await vi.waitFor(() =>
+      expect(window.open).toHaveBeenCalledWith(
+        vscodeUrl,
+        "_blank",
+        "noopener,noreferrer",
+      ),
+    );
+  });
+
   test("clicking the selectedRepository should not trigger the onClick handler", async () => {
     const user = userEvent.setup();
     renderWithProviders(
@@ -762,6 +791,20 @@ describe("ConversationCard", () => {
     },
   );
 
+  it("keeps Stop for a running cloud sandbox after the agent is interrupted", () => {
+    renderWithProviders(
+      <ConversationCardActions
+        contextMenuOpen={true}
+        onContextMenuToggle={vi.fn()}
+        onStop={vi.fn()}
+        executionStatus={ExecutionStatus.PAUSED}
+        sandboxStatus="RUNNING"
+      />,
+    );
+
+    expect(screen.getByTestId("stop-button")).toBeInTheDocument();
+  });
+
   describe("stop button label by active backend", () => {
     const cloudBackend: Backend = {
       id: "prod",
@@ -792,7 +835,7 @@ describe("ConversationCard", () => {
       );
     });
 
-    it("uses COMMON$CLOSE_CONVERSATION_STOP_RUNTIME on a cloud backend", () => {
+    it("uses COMMON$STOP_SANDBOX on a cloud backend", () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
 
@@ -808,7 +851,7 @@ describe("ConversationCard", () => {
       );
 
       expect(screen.getByTestId("stop-button")).toHaveTextContent(
-        "COMMON$CLOSE_CONVERSATION_STOP_RUNTIME",
+        "COMMON$STOP_SANDBOX",
       );
     });
   });

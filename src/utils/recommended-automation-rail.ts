@@ -3,6 +3,7 @@ import {
   type RecommendedAutomation,
 } from "@openhands/extensions/automations";
 import { getFeaturedAutomationIds } from "#/manifests/automation-interface";
+import { splitBySuggestion } from "#/utils/automation-catalog";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import type { Automation } from "#/types/automation";
 
@@ -65,19 +66,23 @@ export function isConversationLaunchAutomation(
 }
 
 export interface RecommendedRailGroups {
-  proven: RecommendedAutomation[];
+  suggested: RecommendedAutomation[];
   conversation: RecommendedAutomation[];
 }
 
 /**
- * Home / dashboard rail: remaining proven workflows, then other useful
- * automations that open in a new conversation. Already-created automations
- * are dropped from both groups, as are the entries the active backend's
- * deployment hides (`hiddenAutomationIds`).
+ * Home / dashboard rail: the suggested automations (the ones using an
+ * integration the instance reports, then the remaining proven workflows), then
+ * other useful automations that open in a new conversation. Already-created
+ * automations are dropped from both groups, as are the entries the active
+ * backend's deployment hides (`hiddenAutomationIds`). Entries the instance does
+ * not appear to support (`unlikelyAutomations`) come last.
  */
 export function getRecommendedRailGroups(
   installed: readonly Pick<Automation, "name">[],
   hiddenAutomationIds?: ReadonlySet<string>,
+  unlikelyAutomations?: ReadonlyMap<string, readonly string[]>,
+  suggestedAutomations?: ReadonlyMap<string, readonly string[]>,
 ): RecommendedRailGroups {
   // Every catalog entry is offerable: one that declares no integration needs
   // nothing connected, and one that names an integration this host cannot
@@ -87,12 +92,16 @@ export function getRecommendedRailGroups(
       !hiddenAutomationIds?.has(entry.id) &&
       !isCatalogAutomationAdded(entry, installed),
   );
+  const { suggested, more } = splitBySuggestion(available, isProvenAutomation, {
+    suggested: suggestedAutomations,
+    unlikely: unlikelyAutomations,
+  });
 
   return {
-    proven: available.filter(isProvenAutomation),
-    conversation: available.filter(
+    suggested,
+    conversation: more.filter(
       (entry) =>
-        !isProvenAutomation(entry) && isConversationLaunchAutomation(entry),
+        isProvenAutomation(entry) || isConversationLaunchAutomation(entry),
     ),
   };
 }
@@ -100,5 +109,5 @@ export function getRecommendedRailGroups(
 export function flattenRecommendedRailGroups(
   groups: RecommendedRailGroups,
 ): RecommendedAutomation[] {
-  return [...groups.proven, ...groups.conversation];
+  return [...groups.suggested, ...groups.conversation];
 }

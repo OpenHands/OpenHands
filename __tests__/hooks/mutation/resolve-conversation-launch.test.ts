@@ -1,3 +1,4 @@
+import * as activeStore from "#/api/backend-registry/active-store";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -5,7 +6,7 @@ import {
   resolveConversationLaunch,
 } from "#/hooks/mutation/resolve-conversation-launch";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
-import * as ActiveBackendStore from "#/api/backend-registry/active-store";
+import AutomationService from "#/api/automation-service/automation-service.api";
 import { SUBSCRIPTION_LOGIN_REQUIRED_ERROR } from "#/api/agent-server-adapter";
 
 const {
@@ -318,7 +319,7 @@ describe("launchConversation", () => {
         apiKey: "test",
       };
       const selection = vi
-        .spyOn(ActiveBackendStore, "getActiveBackend")
+        .spyOn(activeStore, "getActiveBackend")
         .mockReturnValue({ backend, orgId: "org-a" });
       const create = vi.spyOn(
         AgentServerConversationService,
@@ -347,6 +348,41 @@ describe("launchConversation", () => {
 
   afterEach(() => vi.restoreAllMocks());
 
+  it("does not create in a different environment after awaiting profiles", async () => {
+    const original = activeStore.getActiveBackend();
+    const active = vi
+      .spyOn(activeStore, "getActiveBackend")
+      .mockReturnValue(original);
+    let finish!: (value: {
+      profiles: [];
+      active_agent_profile_id: null;
+    }) => void;
+    listAgentProfiles.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const create = vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    );
+    const result = launchConversation(
+      {
+        queryClient: new QueryClient(),
+        backendId: original.backend.id,
+        orgId: original.orgId,
+        isCloud: true,
+      },
+      {},
+    );
+    active.mockReturnValue({ ...original, orgId: "different-org" });
+    finish({ profiles: [], active_agent_profile_id: null });
+    await expect(result).rejects.toThrow(
+      "CONVERSATION$START_ENVIRONMENT_CHANGED",
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("refuses to launch on a subscription LLM that isn't connected", async () => {
     arrange({ activeId: "profile-1", activeLlm: "slow" });
     getLlmProfile.mockResolvedValue({
@@ -372,5 +408,77 @@ describe("launchConversation", () => {
     ).rejects.toThrow(SUBSCRIPTION_LOGIN_REQUIRED_ERROR);
     expect(getLlmProfile).toHaveBeenCalledWith("slow");
     expect(create).not.toHaveBeenCalled();
+  });
+
+  describe("automation setup conversations", () => {
+    const DATA_CENTER_CAPABILITIES = {
+      ready: true,
+      triggerKinds: ["cron", "event"],
+      eventSources: ["bitbucket_data_center", "jira_dc"],
+      eventTypes: [],
+      eventTypesBySource: {
+        bitbucket_data_center: ["pr:opened"],
+        jira_dc: ["jira:issue_updated"],
+      },
+      triggers: {},
+      features: [],
+    };
+
+    function arrangeCloudDefaultLaunch() {
+      arrange({ activeId: null });
+      const active = activeStore.getActiveBackend();
+      const create = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue({ id: "task-1" } as never);
+      const getCapabilities = vi.spyOn(AutomationService, "getCapabilities");
+      const context = {
+        queryClient: new QueryClient(),
+        backendId: active.backend.id,
+        orgId: active.orgId,
+        isCloud: true,
+      };
+      return { create, getCapabilities, context };
+    }
+
+    it("tells the setup assistant what the automation service supports", async () => {
+      const { create, getCapabilities, context } = arrangeCloudDefaultLaunch();
+      getCapabilities.mockResolvedValue(DATA_CENTER_CAPABILITIES);
+
+      await launchConversation(context, {
+        initialUserMsg: "Review every pull request in ENG/payments",
+        automationSetup: true,
+      });
+
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          automationSetup: true,
+          automationSetupCapabilities: DATA_CENTER_CAPABILITIES,
+        }),
+      );
+    });
+
+    it("still starts the setup conversation when the service cannot be asked", async () => {
+      const { create, getCapabilities, context } = arrangeCloudDefaultLaunch();
+      getCapabilities.mockRejectedValue(new Error("404"));
+
+      await launchConversation(context, { automationSetup: true });
+
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ automationSetupCapabilities: null }),
+      );
+    });
+
+    it("does not ask the automation service for an ordinary conversation", async () => {
+      const { create, getCapabilities, context } = arrangeCloudDefaultLaunch();
+
+      await launchConversation(context, { initialUserMsg: "Hello" });
+
+      expect(getCapabilities).not.toHaveBeenCalled();
+      expect(create).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          automationSetupCapabilities: expect.anything(),
+        }),
+      );
+    });
   });
 });

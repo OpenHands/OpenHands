@@ -1,3 +1,4 @@
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
 import {
   act,
   render,
@@ -25,7 +26,14 @@ import { useSandboxTemplates } from "#/hooks/query/use-sandbox-templates";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import GitService from "#/api/git-service/git-service.api";
+import { useHomeStore } from "#/stores/home-store";
 import { useModelStore } from "#/stores/model-store";
+import {
+  clearPendingHomeModelPick,
+  hasPendingHomeModelPick,
+  markHomeModelPick,
+} from "#/hooks/use-chat-input-llm-profile-state";
 import { AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES } from "#/styles/agent-server-ui-style-scope";
 import { COLOR_THEMES } from "#/themes/color-themes";
 import {
@@ -65,13 +73,23 @@ vi.mock("#/api/automation-setup-handoff-store", () => ({
 }));
 
 vi.mock("#/stores/conversation-store", () => ({
-  useConversationStore: () => ({
-    images: mockImages,
-    files: mockFiles,
-    imagesMarkedUploadAsFile: [],
-    clearAllFiles: mockClearAllFiles,
-    restoreMessageToInputIfEmpty: mockRestoreMessageToInputIfEmpty,
-  }),
+  useConversationStore: Object.assign(
+    () => ({
+      images: mockImages,
+      files: mockFiles,
+      imagesMarkedUploadAsFile: [],
+      clearAllFiles: mockClearAllFiles,
+      restoreMessageToInputIfEmpty: mockRestoreMessageToInputIfEmpty,
+    }),
+    {
+      getState: () => ({
+        imagesMarkedUploadAsFile: [] as string[],
+        addImages: vi.fn(),
+        addFiles: vi.fn(),
+        toggleImageUploadAsFile: vi.fn(),
+      }),
+    },
+  ),
 }));
 
 vi.mock("#/utils/custom-toast-handlers", async (importOriginal) => {
@@ -221,14 +239,28 @@ vi.mock("#/components/features/home/home-git-control-bar-preview", () => ({
     workspaceMode,
     workspaceModes,
     backendKind,
+    repository,
+    onClear,
     onWorkspaceModeChange,
   }: {
     workspaceMode: WorkspaceMode;
     workspaceModes: WorkspaceMode[];
     backendKind: "local" | "cloud";
+    repository?: { full_name: string } | null;
+    onClear: () => void;
     onWorkspaceModeChange: (mode: WorkspaceMode) => void;
   }) => (
     <div data-testid="stub-git-control-bar-preview">
+      <span data-testid="stub-preview-repository">
+        {repository?.full_name ?? "none"}
+      </span>
+      <button
+        type="button"
+        data-testid="stub-clear-selection"
+        onClick={onClear}
+      >
+        Clear
+      </button>
       <span data-testid="stub-workspace-mode">
         {backendKind}:{workspaceMode}
       </span>
@@ -330,6 +362,21 @@ const renderLauncher = () =>
     ),
   });
 
+function makeBranch(name: string) {
+  return { name, commit_sha: "abc", protected: false };
+}
+
+function mockConnectedGitHub() {
+  vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+    ...MOCK_DEFAULT_USER_SETTINGS,
+    provider_tokens_set: { github: null },
+  });
+  vi.spyOn(GitService, "searchRepositoryBranches").mockResolvedValue({
+    items: [makeBranch("main")],
+    next_page_id: null,
+  });
+}
+
 function makeConversationResponse(
   overrides: Record<string, unknown> = {},
 ): never {
@@ -371,6 +418,7 @@ const cloudBackend = {
 
 describe("HomeChatLauncher", () => {
   beforeEach(() => {
+    useConversationLaunchStore.setState({ launches: {} });
     vi.restoreAllMocks();
     vi.clearAllMocks();
     mockImages = [];
@@ -421,6 +469,10 @@ describe("HomeChatLauncher", () => {
     toast.remove();
     window.localStorage.removeItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY);
     useModelStore.setState({ homeLlmProfile: null });
+    clearPendingHomeModelPick("local-id", null);
+    clearPendingHomeModelPick("cloud-id", null);
+    clearPendingHomeModelPick("cloud-id", "org-a");
+    clearPendingHomeModelPick("cloud-id", "org-b");
   });
 
   it("compiles the rendered launcher colors for every theme, including the mocked isolated-workspace notice", async () => {
@@ -1046,6 +1098,7 @@ describe("HomeChatLauncher", () => {
 
   it("passes the picked repository + branch payload on a cloud backend", async () => {
     mockUseActiveBackend.mockReturnValue(cloudBackend);
+    mockConnectedGitHub();
     const createSpy = vi
       .spyOn(AgentServerConversationService, "createConversation")
       .mockResolvedValue(
@@ -1071,8 +1124,141 @@ describe("HomeChatLauncher", () => {
       }),
     );
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-repo"),
+      expect(
+        Object.values(useConversationLaunchStore.getState().launches),
+      ).toEqual([expect.objectContaining({ targetId: "conv-repo" })]),
     );
+  });
+
+  it("remembers the picked repository when the home page is revisited", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    mockConnectedGitHub();
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+    const user = userEvent.setup();
+    const firstVisit = renderLauncher();
+    await user.click(screen.getByTestId("open-repository-button"));
+    await user.click(await screen.findByTestId("stub-repo-dialog-confirm"));
+    firstVisit.unmount();
+
+    renderLauncher();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("stub-preview-repository")).toHaveTextContent(
+        "org/repo",
+      ),
+    );
+    expect(GitService.searchRepositoryBranches).toHaveBeenCalledWith(
+      "org/repo",
+      "github",
+      "main",
+      undefined,
+      100,
+      null,
+    );
+    await user.click(screen.getByTestId("stub-chat-submit"));
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy.mock.lastCall?.[0]?.metadata).toEqual({
+      selected_repository: "org/repo",
+      selected_branch: "main",
+      git_provider: "github",
+    });
+  });
+
+  it.each([
+    {
+      description: "the repository can no longer be reached",
+      arrange: () => {
+        mockConnectedGitHub();
+        vi.mocked(GitService.searchRepositoryBranches).mockRejectedValue(
+          new Error("Not Found"),
+        );
+      },
+    },
+    {
+      description: "the branch no longer exists",
+      arrange: () => {
+        mockConnectedGitHub();
+        vi.mocked(GitService.searchRepositoryBranches).mockResolvedValue({
+          items: [makeBranch("main-old")],
+          next_page_id: null,
+        });
+      },
+    },
+    {
+      description: "the provider is no longer connected",
+      arrange: () => {
+        vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+          MOCK_DEFAULT_USER_SETTINGS,
+        );
+      },
+    },
+  ])(
+    "forgets a remembered repository when $description",
+    async ({ arrange }) => {
+      mockUseActiveBackend.mockReturnValue(cloudBackend);
+      arrange();
+      useHomeStore.getState().setRepositorySelection("cloud-id", {
+        repository: {
+          id: "1",
+          full_name: "org/gone",
+          git_provider: "github",
+          is_public: false,
+        },
+        branch: makeBranch("main"),
+        provider: "github",
+      });
+      const createSpy = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue(makeConversationResponse());
+
+      renderLauncher();
+
+      expect(
+        await screen.findByTestId("open-repository-button"),
+      ).toBeInTheDocument();
+      expect(useHomeStore.getState().repositorySelections).toEqual({});
+      await userEvent.click(screen.getByTestId("stub-chat-submit"));
+      await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+      expect(
+        createSpy.mock.lastCall?.[0]?.metadata?.selected_repository,
+      ).toBeUndefined();
+    },
+  );
+
+  it("clears the repository selection so later visits start without one", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    mockConnectedGitHub();
+    const user = userEvent.setup();
+    const firstVisit = renderLauncher();
+    await user.click(screen.getByTestId("open-repository-button"));
+    await user.click(await screen.findByTestId("stub-repo-dialog-confirm"));
+
+    await user.click(screen.getByTestId("stub-clear-selection"));
+
+    expect(screen.getByTestId("open-repository-button")).toBeInTheDocument();
+    firstVisit.unmount();
+    renderLauncher();
+    expect(screen.getByTestId("open-repository-button")).toBeInTheDocument();
+  });
+
+  it("keeps remembered repositories separate per cloud backend", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    mockConnectedGitHub();
+    const user = userEvent.setup();
+    const firstVisit = renderLauncher();
+    await user.click(screen.getByTestId("open-repository-button"));
+    await user.click(await screen.findByTestId("stub-repo-dialog-confirm"));
+    firstVisit.unmount();
+
+    mockUseActiveBackend.mockReturnValue({
+      ...cloudBackend,
+      backend: { ...cloudBackend.backend, id: "other-cloud-id" },
+    });
+    renderLauncher();
+
+    expect(screen.getByTestId("open-repository-button")).toBeInTheDocument();
   });
 
   it.each([
@@ -1180,9 +1366,9 @@ describe("HomeChatLauncher", () => {
       }),
     );
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith(
-        "/conversations/task-start-task-1",
-      ),
+      expect(
+        Object.values(useConversationLaunchStore.getState().launches),
+      ).toEqual([expect.objectContaining({ targetId: "task-start-task-1" })]),
     );
   });
 
@@ -1244,9 +1430,9 @@ describe("HomeChatLauncher", () => {
       }),
     );
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith(
-        "/conversations/task-start-task-2",
-      ),
+      expect(
+        Object.values(useConversationLaunchStore.getState().launches),
+      ).toEqual([expect.objectContaining({ targetId: "task-start-task-2" })]),
     );
   });
 
@@ -1358,5 +1544,94 @@ describe("HomeChatLauncher", () => {
     expect(
       screen.queryByTestId("recommended-automations-rail"),
     ).not.toBeInTheDocument();
+  });
+
+  it("suppresses route-at-start on a home send after a home model pick, and clears the pending pick (#19138)", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      run_router_at_conversation_start: true,
+    });
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+
+    markHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId);
+
+    renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy.mock.lastCall?.[0]).toMatchObject({
+      initialUserMsg: "hello world",
+      suppressRouterAtStart: true,
+    });
+    // The pick is cleared once the create resolves, after the spy records
+    // the call, so wait for it rather than reading it on the same tick.
+    await waitFor(() =>
+      expect(
+        hasPendingHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId),
+      ).toBe(false),
+    );
+  });
+
+  it("preserves the pending home model pick when the home launch fails so a retry still suppresses (#19138)", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockRejectedValueOnce(new Error("agent-server 500"))
+      .mockResolvedValueOnce(makeConversationResponse());
+
+    markHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId);
+
+    renderLauncher();
+    const user = userEvent.setup();
+
+    // First home send rejects — pending pick must remain set for the retry.
+    await user.click(screen.getByTestId("stub-chat-submit"));
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(
+      hasPendingHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId),
+    ).toBe(true);
+
+    // Return to the composer from the failed-launch view and retry.
+    await user.click(await screen.findByRole("button", { name: "BUTTON$EDIT" }));
+    await user.click(screen.getByTestId("stub-chat-submit"));
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(2));
+    expect(createSpy.mock.lastCall?.[0]).toMatchObject({
+      initialUserMsg: "hello world",
+      suppressRouterAtStart: true,
+    });
+    // The pick is cleared once the create resolves, after the spy records
+    // the call, so wait for it rather than reading it on the same tick.
+    await waitFor(() =>
+      expect(
+        hasPendingHomeModelPick(cloudBackend.backend.id, cloudBackend.orgId),
+      ).toBe(false),
+    );
+  });
+
+  it("does not carry a home model pick across a backend or org switch (#19138)", async () => {
+    // Pick was made under (local-id, null), then user switches to (cloud-id, org-a).
+    markHomeModelPick(localBackend.backend.id, localBackend.orgId);
+    mockUseActiveBackend.mockReturnValue({
+      ...cloudBackend,
+      orgId: "org-a",
+    });
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+
+    renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy.mock.lastCall?.[0]).not.toHaveProperty(
+      "suppressRouterAtStart",
+    );
   });
 });

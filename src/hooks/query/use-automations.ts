@@ -16,10 +16,11 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTracking } from "#/hooks/use-tracking";
 import { uniqueById } from "#/utils/unique-by-id";
 import type {
-  AutomationCreatedByFilter,
+  AutomationRunAsFilter,
   AutomationSpec,
   AutomationTagCount,
   AutomationsResponse,
+  ChangeRunAsRequest,
 } from "#/types/automation";
 import type { AutomationDraftListResponse } from "#/manifests/types";
 import {
@@ -67,7 +68,7 @@ function joinAutomationPages(
 interface UseAutomationsOptions {
   /** Automations per request; at most 100. A count-only caller passes 1. */
   pageSize?: number;
-  createdBy?: AutomationCreatedByFilter;
+  runAs?: AutomationRunAsFilter;
   tag?: string;
   enabled?: boolean;
 }
@@ -119,7 +120,7 @@ export function useAutomationDrafts(options: UseAutomationDraftsOptions = {}) {
 export function useAutomations(options: UseAutomationsOptions = {}) {
   const {
     pageSize = AUTOMATIONS_PAGE_SIZE,
-    createdBy,
+    runAs,
     tag,
     enabled = true,
   } = options;
@@ -127,12 +128,12 @@ export function useAutomations(options: UseAutomationsOptions = {}) {
   return useInfiniteQuery({
     queryKey: [
       ...AUTOMATIONS_QUERY_KEY,
-      { pageSize, createdBy, tag },
+      { pageSize, runAs, tag },
       active.backend.id,
       active.orgId,
     ],
     queryFn: ({ pageParam }) =>
-      AutomationService.getAutomations(pageSize, pageParam, createdBy, tag),
+      AutomationService.getAutomations(pageSize, pageParam, runAs, tag),
     initialPageParam: 0,
     getNextPageParam: (lastPage, _pages, lastOffset) => {
       const nextOffset = lastOffset + lastPage.automations.length;
@@ -177,7 +178,7 @@ export function useAutomationTags({ enabled = true } = {}) {
   });
 }
 
-/** Replace an automation's tags; the service lets only its creator do so. */
+/** Replace an automation's tags (manage permission or creator only). */
 export function useUpdateAutomationTags() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -187,6 +188,18 @@ export function useUpdateAutomationTags() {
       queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: AUTOMATION_TAGS_QUERY_KEY });
+    },
+  });
+}
+
+export function useUpdateAutomationKeepAlive() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, keepAlive }: { id: string; keepAlive: boolean }) =>
+      AutomationService.updateAutomation(id, { keep_alive: keepAlive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
     },
   });
 }
@@ -216,6 +229,24 @@ export function useToggleAutomation({
       if (!variables.enabled) {
         trackAutomationDisableButton({ backendKind: active.backend.kind });
       }
+    },
+  });
+}
+
+/**
+ * Move an automation to a service account, or back to the caller. The service
+ * turns it off, so every automation view is refetched. Callers toast the
+ * service's `detail` themselves.
+ */
+export function useChangeRunAs() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: ChangeRunAsRequest }) =>
+      AutomationService.changeRunAs(id, body),
+    meta: { disableToast: true },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
     },
   });
 }

@@ -1,3 +1,4 @@
+import { ConversationTitleText } from "#/components/features/conversation/conversation-title-text";
 import { cn } from "#/utils/utils";
 
 export type ConversationCardTitleMode = "view" | "edit";
@@ -5,6 +6,7 @@ export type ConversationCardTitleMode = "view" | "edit";
 export type ConversationCardTitleProps = {
   titleMode: ConversationCardTitleMode;
   title: string;
+  titlePending?: boolean;
   onSave: (title: string) => void;
   isConversationArchived?: boolean;
 };
@@ -12,6 +14,7 @@ export type ConversationCardTitleProps = {
 export function ConversationCardTitle({
   titleMode,
   title,
+  titlePending,
   onSave,
   isConversationArchived,
 }: ConversationCardTitleProps) {
@@ -53,7 +56,7 @@ export function ConversationCardTitle({
         isConversationArchived && "opacity-60",
       )}
     >
-      {title}
+      <ConversationTitleText title={title} pending={titlePending} />
     </p>
   );
 }
