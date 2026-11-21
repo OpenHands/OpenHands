@@ -143,7 +143,7 @@ function isRuntimeDoNotTrackEnabled(): boolean {
 
 /** True when telemetry must stay fully off: the SDK is never initialized. */
 function isTelemetryHardDisabled(): boolean {
-  return telemetryDisabled || isRuntimeDoNotTrackEnabled();
+  return isDoNotTrackEnabled();
 }
 
 interface TelemetryIdentity {
@@ -406,6 +406,8 @@ export function configurePostHogBootstrap(
 export async function initializePostHogClient(
   enableCapturing = false,
 ): Promise<PostHog | null> {
+  if (isTelemetryHardDisabled()) return null;
+
   if (posthogInstance) {
     return posthogInstance;
   }
@@ -421,7 +423,7 @@ export async function initializePostHogClient(
     }
 
     const posthog = await getPostHog();
-    if (!posthog) {
+    if (!posthog || isTelemetryHardDisabled()) {
       return null;
     }
 
@@ -637,7 +639,7 @@ export async function setTelemetryConsent(
     // Reuse an initialized client synchronously so a same-flush identify()
     // cannot run before consent is applied. Only the cold path awaits import.
     const posthog = posthogInstance ?? (await initializePostHogClient());
-    if (!posthog) {
+    if (!posthog || isTelemetryHardDisabled()) {
       return;
     }
 
