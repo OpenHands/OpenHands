@@ -261,7 +261,7 @@ describe("git change loading and ordering", () => {
     expect(getGitChanges).toHaveBeenCalledTimes(2);
   });
 
-  it("ignores a refreshed payload when the backend returns the same array reference", async () => {
+  it("uses refreshed changes even when the backend returns the same array reference", async () => {
     const sharedChanges = [makeChange("src/original.ts")];
     const refresh = makeDeferred<GitChange[]>();
     const { wrapper } = prepareHook();
@@ -285,7 +285,10 @@ describe("git change loading and ordering", () => {
     await waitFor(() => expect(result.current.isFetching).toBe(false));
 
     expect(getGitChanges).toHaveBeenCalledTimes(2);
-    expect(result.current.data).toEqual([makeChange("src/original.ts")]);
+    expect(result.current.data).toEqual([
+      makeChange("src/mutated-in-place.ts", "A"),
+      makeChange("src/original.ts"),
+    ]);
   });
 
   it("normalizes a single change returned by a legacy backend", async () => {
@@ -401,7 +404,7 @@ describe("git change loading and ordering", () => {
     await waitFor(() =>
       expect(secondRender.result.current.isFetching).toBe(true),
     );
-    expect(secondRender.result.current.data).toEqual([]);
+    expect(secondRender.result.current.data).toEqual([makeChange("cached.ts")]);
 
     await act(async () => {
       refresh.resolve([makeChange("refreshed.ts")]);
