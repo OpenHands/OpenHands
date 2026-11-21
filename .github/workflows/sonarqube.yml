@@ -1,0 +1,53 @@
+name: SonarQube
+
+# Community Build has one branch per project, so a PR scan becomes the report card until
+# the next push to main. That is wanted during the POC: it shows the repo's grade without
+# merging first. pull_request_target must never be used -- unlike pull_request, it exposes
+# secrets to fork-triggered runs.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ (github.head_ref && github.ref) || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    # Fork PRs get no secrets, so the scan could only fail on a missing token.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    name: Coverage and SonarQube analysis
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # SonarQube reads git history to attribute issues to authors.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # package.json requires >=22.12.0; there is no .nvmrc to read.
+          node-version: '22'
+          cache: npm
+
+      # Not only for coverage: SonarJS resolves types from node_modules and degrades to a
+      # shallower analysis silently without them.
+      - name: Install dependencies
+        run: npm ci
+
+      # No workflow generates coverage today, so it is produced here -- which also keeps
+      # it consistent with the commit being analysed.
+      - name: Tests with coverage
+        continue-on-error: true
+        run: npm run test:coverage
+
+      - uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
