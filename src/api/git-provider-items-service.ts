@@ -21,19 +21,18 @@ const PROVIDER_TOKEN_SECRET_CANDIDATES: Partial<Record<Provider, string[]>> = {
   forgejo: ["FORGEJO_TOKEN", "forgejo"],
 };
 
+// Base URL of a self-hosted instance (`gitlab.example.com` or
+// `https://gitlab.example.com`). `GITLAB_HOST` is also what the `glab` CLI reads.
+const PROVIDER_HOST_SECRET_CANDIDATES: Partial<Record<Provider, string[]>> = {
+  gitlab: ["GITLAB_HOST"],
+};
+
 const LIST_LIMIT = 30;
 
-async function resolveProviderToken(
-  provider: Provider,
-): Promise<string | null> {
-  // Cloud backends keep provider tokens server-side; browser-side secret
+async function readLocalSecret(candidates: string[]): Promise<string | null> {
+  // Cloud backends keep provider credentials server-side; browser-side secret
   // lookup is only meaningful for the local agent-server secrets store.
-  if (getActiveBackend().backend.kind !== "local") {
-    return null;
-  }
-
-  const candidates = PROVIDER_TOKEN_SECRET_CANDIDATES[provider] ?? [];
-  if (candidates.length === 0) {
+  if (getActiveBackend().backend.kind !== "local" || candidates.length === 0) {
     return null;
   }
 
@@ -53,12 +52,48 @@ async function resolveProviderToken(
   }
 }
 
+function resolveProviderToken(provider: Provider): Promise<string | null> {
+  return readLocalSecret(PROVIDER_TOKEN_SECRET_CANDIDATES[provider] ?? []);
+}
+
+/**
+ * `https://host[/path]` from a configured host value, or `null` when it is
+ * empty or not a valid URL. Keeps an explicit `http://` scheme.
+ */
+export function normalizeProviderBaseUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  try {
+    const url = new URL(
+      trimmed.includes("://") ? trimmed : `https://${trimmed}`,
+    );
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      return null;
+    }
+    return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveConfiguredBaseUrl(
+  provider: Provider,
+): Promise<string | null> {
+  const value = await readLocalSecret(
+    PROVIDER_HOST_SECRET_CANDIDATES[provider] ?? [],
+  );
+  return value ? normalizeProviderBaseUrl(value) : null;
+}
+
 function constructIssueUrl(
   issueNumber: number,
   provider: Provider,
   repositoryName: string,
+  host?: string | null,
 ): string {
-  const baseUrl = getGitProviderBaseUrl(provider);
+  const baseUrl = getGitProviderBaseUrl(provider, host);
   switch (provider) {
     case "gitlab":
       return `${baseUrl}/${repositoryName}/-/issues/${issueNumber}`;
@@ -75,8 +110,9 @@ function constructIssueUrl(
 function constructIssuesListUrl(
   provider: Provider,
   repositoryName: string,
+  host?: string | null,
 ): string {
-  const baseUrl = getGitProviderBaseUrl(provider);
+  const baseUrl = getGitProviderBaseUrl(provider, host);
   switch (provider) {
     case "gitlab":
       return `${baseUrl}/${repositoryName}/-/issues`;
@@ -93,8 +129,9 @@ function constructIssuesListUrl(
 function constructPullRequestsListUrl(
   provider: Provider,
   repositoryName: string,
+  host?: string | null,
 ): string {
-  const baseUrl = getGitProviderBaseUrl(provider);
+  const baseUrl = getGitProviderBaseUrl(provider, host);
   switch (provider) {
     case "gitlab":
       return `${baseUrl}/${repositoryName}/-/merge_requests`;
@@ -158,6 +195,7 @@ async function fetchForgejoJson<T>(
 async function fetchGitlabJson<T>(
   path: string,
   token: string | null,
+  host: string | null,
 ): Promise<T> {
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -166,12 +204,15 @@ async function fetchGitlabJson<T>(
     headers["PRIVATE-TOKEN"] = token;
   }
 
-  // gitlab.com's public REST API — an external host, not the agent-server
-  // `/api` surface the rule guards (its `/api/v4` prefix just trips the
-  // substring heuristic; the companion no-direct-agent-server-calls test
-  // matches only relative `/api/...` URLs and is not affected).
+  // The GitLab instance's REST API (gitlab.com unless self-hosted) — an
+  // external host, not the agent-server `/api` surface the rule guards (its
+  // `/api/v4` prefix just trips the substring heuristic; the companion
+  // no-direct-agent-server-calls test matches only relative `/api/...` URLs).
   // eslint-disable-next-line local/no-direct-agent-server-fetch
-  const response = await fetch(`https://gitlab.com/api/v4${path}`, { headers });
+  const response = await fetch(
+    `${getGitProviderBaseUrl("gitlab", host)}/api/v4${path}`,
+    { headers },
+  );
   if (!response.ok) {
     throw new Error(`GitLab API ${response.status}`);
   }
@@ -218,9 +259,37 @@ export class GitProviderItemsService {
 
   static constructPullRequestsListUrl = constructPullRequestsListUrl;
 
+  /** Self-hosted base URL configured for the provider on a local backend. */
+  static resolveConfiguredBaseUrl = resolveConfiguredBaseUrl;
+
+  /**
+   * The provider whose configured self-hosted instance (e.g. `GITLAB_HOST`)
+   * serves `host`, so remotes on that instance are recognized.
+   */
+  static async detectConfiguredProvider(
+    host: string,
+  ): Promise<Provider | null> {
+    const providers = Object.keys(
+      PROVIDER_HOST_SECRET_CANDIDATES,
+    ) as Provider[];
+    for (const provider of providers) {
+      const baseUrl = await resolveConfiguredBaseUrl(provider);
+      if (baseUrl && new URL(baseUrl).hostname === host.toLowerCase()) {
+        return provider;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * `host` is the instance the repository lives on when the caller knows it
+   * (cloud connection host, workspace remote); otherwise the configured
+   * self-hosted instance is used, then the provider's public host.
+   */
   static async listPullRequests(
     repository: string,
     provider: Provider,
+    host: string | null = null,
   ): Promise<GitProviderItem[]> {
     const token = await resolveProviderToken(provider);
 
@@ -229,6 +298,7 @@ export class GitProviderItemsService {
       const items = await fetchGitlabJson<GitlabMergeRequest[]>(
         `/projects/${encoded}/merge_requests?state=opened&per_page=${LIST_LIMIT}`,
         token,
+        host ?? (await resolveConfiguredBaseUrl(provider)),
       );
       return items.map((item) => ({
         id: item.id,
@@ -290,6 +360,7 @@ export class GitProviderItemsService {
   static async listIssues(
     repository: string,
     provider: Provider,
+    host: string | null = null,
   ): Promise<GitProviderItem[]> {
     const token = await resolveProviderToken(provider);
 
@@ -298,6 +369,7 @@ export class GitProviderItemsService {
       const items = await fetchGitlabJson<GitlabIssue[]>(
         `/projects/${encoded}/issues?state=opened&per_page=${LIST_LIMIT}`,
         token,
+        host ?? (await resolveConfiguredBaseUrl(provider)),
       );
       return items.map((item) => ({
         id: item.id,

@@ -33,6 +33,7 @@ vi.mock("#/hooks/use-conversation-primary-repository", () => ({
 }));
 
 vi.mock("#/hooks/query/use-repository-git-items", () => ({
+  useGitProviderHost: () => ({ host: null, isResolved: true }),
   useRepositoryPullRequests: () => ({
     data: [],
     isLoading: false,

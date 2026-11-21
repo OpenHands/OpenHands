@@ -4,12 +4,14 @@ import { FaCodeBranch } from "react-icons/fa";
 import { useTranslation } from "react-i18next";
 import PrIcon from "#/icons/u-pr.svg?react";
 import { GitProviderIcon } from "#/components/shared/git-provider-icon";
-import { useRepositoryPullRequests } from "#/hooks/query/use-repository-git-items";
+import {
+  useGitProviderHost,
+  useRepositoryPullRequests,
+} from "#/hooks/query/use-repository-git-items";
 import { useUnifiedGitCommits } from "#/hooks/query/use-unified-git-commits";
 import { useConversationPrimaryRepository } from "#/hooks/use-conversation-primary-repository";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
-import { useSettings } from "#/hooks/query/use-settings";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
 import { I18nKey } from "#/i18n/declaration";
 import { cn, constructBranchUrl, constructRepositoryUrl } from "#/utils/utils";
@@ -39,9 +41,12 @@ export function ConversationOverviewGitSection() {
   const { state } = useConversationLocalStorageState(conversationId);
   const { navigateToCommits } = useSelectConversationTab();
   const overviewDrawer = useConversationOverviewDrawerOptional();
-  const { data: settings } = useSettings();
-  const { repository, provider, branch, isConnected } =
+  const { repository, provider, branch, remoteHost, isConnected } =
     useConversationPrimaryRepository();
+  const { host: providerHost, isResolved: isHostResolved } = useGitProviderHost(
+    provider,
+    remoteHost,
+  );
 
   const showRepository = isOverviewGitPartPinned(
     CONVERSATION_OVERVIEW_GIT_PART.repository,
@@ -63,6 +68,8 @@ export function ConversationOverviewGitSection() {
   const pullRequestsQuery = useRepositoryPullRequests(
     showPullRequests ? repository : null,
     showPullRequests ? provider : null,
+    providerHost,
+    isHostResolved,
   );
   // Same page the Files → Commits drawer uses; no separate total from the
   // API, so we surface the fetched count (and a trailing + when capped).
@@ -76,7 +83,6 @@ export function ConversationOverviewGitSection() {
     return null;
   }
 
-  const providerHost = settings?.provider_tokens_set?.[provider] ?? null;
   const repoUrl = constructRepositoryUrl(provider, repository, providerHost);
   const branchUrl = branch
     ? constructBranchUrl(provider, repository, branch, providerHost)
