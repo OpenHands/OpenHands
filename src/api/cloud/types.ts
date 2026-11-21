@@ -36,6 +36,21 @@ export interface CloudOrganizationMember {
 }
 
 /**
+ * Subset of the caller's own budget that the GUI reads. Returned by
+ * `GET /api/organizations/{orgId}/budgets/me`. `enabled` is false when the
+ * organization budget is off, and no other field is set then.
+ */
+export interface CloudMyBudget {
+  enabled: boolean;
+  /** The caller's own monthly limit, in USD. */
+  monthly_limit?: number | null;
+  /** The organization's monthly limit, in USD. */
+  org_monthly_limit?: number | null;
+  /** Admin-written guidance for a member who reaches either limit. */
+  limit_reached_instructions?: string | null;
+}
+
+/**
  * Subset of an enterprise service account that the GUI reads. Returned by
  * `GET /api/organizations/{orgId}/service-accounts` (requires
  * `manage_service_accounts`). `id` is the user id the automation service
