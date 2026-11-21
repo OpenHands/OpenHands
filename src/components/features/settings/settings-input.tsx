@@ -20,7 +20,7 @@ interface SettingsInputProps {
   required?: boolean;
   min?: number;
   max?: number;
-  step?: number;
+  step?: number | string;
   pattern?: string;
   /** Validation message shown when pattern doesn't match */
   title?: string;

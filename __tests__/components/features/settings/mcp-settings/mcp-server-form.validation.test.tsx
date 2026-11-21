@@ -432,4 +432,268 @@ describe("MCPServerForm validation", () => {
 
     r2.unmount();
   });
+
+  describe("SHTTP timeout handling", () => {
+    it("prefills timeout in seconds from stored milliseconds (60000 ms -> 60 s)", () => {
+      render(
+        <MCPServerForm
+          mode="edit"
+          server={{
+            id: "shttp-1",
+            type: "shttp",
+            name: "test-server",
+            url: "https://api.example.com",
+            timeout: 60000,
+          }}
+          existingServers={[]}
+          onSubmit={noop}
+          onCancel={noop}
+        />,
+      );
+
+      const input = screen.getByTestId("timeout-input") as HTMLInputElement;
+      expect(input.value).toBe("60");
+    });
+
+    it("prefills fractional seconds from stored milliseconds (1500 ms -> 1.5 s)", () => {
+      render(
+        <MCPServerForm
+          mode="edit"
+          server={{
+            id: "shttp-1",
+            type: "shttp",
+            name: "test-server",
+            url: "https://api.example.com",
+            timeout: 1500,
+          }}
+          existingServers={[]}
+          onSubmit={noop}
+          onCancel={noop}
+        />,
+      );
+
+      const input = screen.getByTestId("timeout-input") as HTMLInputElement;
+      expect(input.value).toBe("1.5");
+    });
+
+    it("persists entered seconds as milliseconds on submit (60 s -> 60000 ms)", () => {
+      const onSubmit = vi.fn();
+      render(
+        <MCPServerForm
+          mode="add"
+          server={{ id: "tmp", type: "shttp" }}
+          existingServers={[]}
+          onSubmit={onSubmit}
+          onCancel={noop}
+        />,
+      );
+
+      fireEvent.change(screen.getByTestId("url-input"), {
+        target: { value: "https://api.example.com" },
+      });
+      fireEvent.change(screen.getByTestId("timeout-input"), {
+        target: { value: "60" },
+      });
+      fireEvent.click(screen.getByTestId("submit-button"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(onSubmit.mock.calls[0][0].timeout).toBe(60000);
+    });
+
+    it("persists decimal seconds as integer milliseconds on submit (1.5 s -> 1500 ms)", () => {
+      const onSubmit = vi.fn();
+      render(
+        <MCPServerForm
+          mode="add"
+          server={{ id: "tmp", type: "shttp" }}
+          existingServers={[]}
+          onSubmit={onSubmit}
+          onCancel={noop}
+        />,
+      );
+
+      fireEvent.change(screen.getByTestId("url-input"), {
+        target: { value: "https://api.example.com" },
+      });
+      fireEvent.change(screen.getByTestId("timeout-input"), {
+        target: { value: "1.5" },
+      });
+      fireEvent.click(screen.getByTestId("submit-button"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(onSubmit.mock.calls[0][0].timeout).toBe(1500);
+    });
+
+    it("preserves stored timeout on unrelated edit of SHTTP server", () => {
+      const onSubmit = vi.fn();
+      render(
+        <MCPServerForm
+          mode="edit"
+          server={{
+            id: "shttp-1",
+            type: "shttp",
+            name: "old-name",
+            url: "https://api.example.com",
+            timeout: 60000,
+          }}
+          existingServers={[]}
+          onSubmit={onSubmit}
+          onCancel={noop}
+        />,
+      );
+
+      fireEvent.change(screen.getByTestId("server-name-input"), {
+        target: { value: "new-name" },
+      });
+      fireEvent.click(screen.getByTestId("submit-button"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(onSubmit.mock.calls[0][0].timeout).toBe(60000);
+      expect(onSubmit.mock.calls[0][0].name).toBe("new-name");
+    });
+
+    it("omits timeout when cleared so sparse patch sets timeout to null", () => {
+      const onSubmit = vi.fn();
+      render(
+        <MCPServerForm
+          mode="edit"
+          server={{
+            id: "shttp-1",
+            type: "shttp",
+            name: "test-server",
+            url: "https://api.example.com",
+            timeout: 60000,
+          }}
+          existingServers={[]}
+          onSubmit={onSubmit}
+          onCancel={noop}
+        />,
+      );
+
+      fireEvent.change(screen.getByTestId("timeout-input"), {
+        target: { value: "" },
+      });
+      fireEvent.click(screen.getByTestId("submit-button"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(onSubmit.mock.calls[0][0].timeout).toBeUndefined();
+    });
+
+    it("rejects non-positive timeout values (<= 0)", () => {
+      const onSubmit = vi.fn();
+      render(
+        <MCPServerForm
+          mode="add"
+          server={{ id: "tmp", type: "shttp" }}
+          existingServers={[]}
+          onSubmit={onSubmit}
+          onCancel={noop}
+        />,
+      );
+
+      fireEvent.change(screen.getByTestId("url-input"), {
+        target: { value: "https://api.example.com" },
+      });
+      fireEvent.change(screen.getByTestId("timeout-input"), {
+        target: { value: "0" },
+      });
+      fireEvent.click(screen.getByTestId("submit-button"));
+
+      expect(
+        screen.getByText("SETTINGS$MCP_ERROR_TIMEOUT_POSITIVE"),
+      ).toBeInTheDocument();
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it("rejects timeout values exceeding 3600 seconds", () => {
+      const onSubmit = vi.fn();
+      render(
+        <MCPServerForm
+          mode="add"
+          server={{ id: "tmp", type: "shttp" }}
+          existingServers={[]}
+          onSubmit={onSubmit}
+          onCancel={noop}
+        />,
+      );
+
+      fireEvent.change(screen.getByTestId("url-input"), {
+        target: { value: "https://api.example.com" },
+      });
+      fireEvent.change(screen.getByTestId("timeout-input"), {
+        target: { value: "3601" },
+      });
+      fireEvent.click(screen.getByTestId("submit-button"));
+
+      expect(
+        screen.getByText("SETTINGS$MCP_ERROR_TIMEOUT_MAX_EXCEEDED"),
+      ).toBeInTheDocument();
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it("rejects saving when prefilled timeout is out of range without corrupting deadline", () => {
+      const onSubmit = vi.fn();
+      render(
+        <MCPServerForm
+          mode="edit"
+          server={{
+            id: "shttp-1",
+            type: "shttp",
+            name: "test-server",
+            url: "https://api.example.com",
+            timeout: 6000000, // 6000 seconds (out of 1-3600 range)
+          }}
+          existingServers={[]}
+          onSubmit={onSubmit}
+          onCancel={noop}
+        />,
+      );
+
+      const input = screen.getByTestId("timeout-input") as HTMLInputElement;
+      expect(input.value).toBe("6000");
+
+      fireEvent.click(screen.getByTestId("submit-button"));
+
+      expect(
+        screen.getByText("SETTINGS$MCP_ERROR_TIMEOUT_MAX_EXCEEDED"),
+      ).toBeInTheDocument();
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it("sends timeout in seconds capped at 120s on Test Connection", () => {
+      const onTest = vi.fn();
+      render(
+        <MCPServerForm
+          mode="edit"
+          server={{
+            id: "shttp-1",
+            type: "shttp",
+            name: "test-server",
+            url: "https://api.example.com",
+            timeout: 60000,
+          }}
+          existingServers={[]}
+          onSubmit={noop}
+          onCancel={noop}
+          onTest={onTest}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId("mcp-test-connection"));
+
+      expect(onTest).toHaveBeenCalledTimes(1);
+      // Stored 60000 ms sent as 60 seconds
+      expect(onTest.mock.calls[0][0].timeout).toBe(60);
+
+      // Change timeout to 180 seconds (> 120s limit)
+      fireEvent.change(screen.getByTestId("timeout-input"), {
+        target: { value: "180" },
+      });
+      fireEvent.click(screen.getByTestId("mcp-test-connection"));
+
+      expect(onTest).toHaveBeenCalledTimes(2);
+      // 180 seconds capped at 120 seconds for test connection
+      expect(onTest.mock.calls[1][0].timeout).toBe(120);
+    });
+  });
 });
