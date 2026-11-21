@@ -42,4 +42,21 @@ describe("markdownInlineCode", () => {
     expect(markdownInlineCode("`a")).toBe("`` `a ``");
     expect(markdownInlineCode("a`")).toBe("`` a` ``");
   });
+
+  it("pads content that both starts and ends with a space so CommonMark does not strip content spaces (#19857)", () => {
+    expect(markdownInlineCode(" keepep this ")).toBe("`  keepep this  `");
+    expect(markdownInlineCode(" >  ")).toBe("`  >   `");
+    expect(markdownInlineCode("  two  ")).toBe("`   two   `");
+    expect(markdownInlineCode(" `a` ")).toBe("``  `a`  ``");
+  });
+
+  it("does not pad content with space on only one end", () => {
+    expect(markdownInlineCode(" a")).toBe("` a`");
+    expect(markdownInlineCode("a ")).toBe("`a `");
+  });
+
+  it("does not pad all-space content as CommonMark does not strip only-space code spans", () => {
+    expect(markdownInlineCode(" ")).toBe("` `");
+    expect(markdownInlineCode("   ")).toBe("`   `");
+  });
 });
