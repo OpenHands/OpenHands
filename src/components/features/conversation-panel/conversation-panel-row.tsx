@@ -108,7 +108,6 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
           }
           agentProfileName={agentProfileName}
           tags={conversation.tags}
-          parentConversationId={conversation.parent_conversation_id}
           isArchived={isArchived}
         />
       }
@@ -192,7 +191,6 @@ export const ConversationPanelRow = React.memo(function ConversationPanelRow({
           acpServer={conversation.acp_server}
           acpModels={conversation.acp_available_models}
           tags={conversation.tags}
-          parentConversationId={conversation.parent_conversation_id}
           showTags={showTagsMetadata}
           isArchived={isArchived}
           isPinned={isPinned}

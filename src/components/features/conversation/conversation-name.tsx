@@ -16,7 +16,6 @@ import { HooksModal } from "../conversation-panel/hooks-modal";
 import { ConfirmDeleteModal } from "../conversation-panel/confirm-delete-modal";
 import { ConfirmStopModal } from "../conversation-panel/confirm-stop-modal";
 import { TranscriptExportModal } from "./transcript-export-modal";
-import { InsiderCatBadge } from "./insider-cat-badge";
 import { ProjectBadge } from "./project-badge";
 
 export function ConversationName() {
@@ -162,11 +161,6 @@ export function ConversationName() {
         className="flex items-center gap-2 h-5.5 text-base font-normal text-left pl-0 lg:pl-1 min-w-0"
         data-testid="conversation-name"
       >
-        <InsiderCatBadge
-          tags={conversation.tags}
-          parentConversationId={conversation.parent_conversation_id}
-          conversationId={conversation.id}
-        />
         <ProjectBadge tags={conversation.tags} />
         {titleMode === "edit" ? (
           <input

@@ -27,11 +27,8 @@ import {
   useForkConversation,
 } from "#/hooks/mutation/use-fork-conversation";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
-import { isInsiderConversation } from "#/utils/insider-cat";
-import { insiderUserMessageForDisplay } from "#/utils/insider-message";
 import { parseProjectMessageHeader } from "#/utils/project-message-header";
 import { ProjectMessageHeaderLine } from "../../../features/chat/project-message-header-line";
-import { useUserConversation } from "#/hooks/query/use-user-conversation";
 import { useProjectsEnabled } from "#/hooks/query/use-projects";
 import { useIsMutating } from "@tanstack/react-query";
 
@@ -89,11 +86,6 @@ function UserAssistantEventMessageComponent({
     event.source === "agent"
       ? splitInlineThink(parsed)
       : { reasoning: "", message: parsed };
-  // Subscribe to the backend/org-scoped query so late metadata and backend
-  // changes cannot leave the message classified by a stale global snapshot.
-  const { data: currentConversation } = useUserConversation(
-    conversationId ?? null,
-  );
   // A message another project conversation sent opens with the Agent
   // Server's header for the agent; show a compact line in its place.
   const projectsEnabled = useProjectsEnabled();
@@ -104,13 +96,7 @@ function UserAssistantEventMessageComponent({
           (event as { sender?: unknown }).sender,
         )
       : null;
-  const displayMessage = projectHeader
-    ? projectHeader.body
-    : event.source === "user" &&
-        currentConversation?.id === conversationId &&
-        isInsiderConversation(currentConversation)
-      ? insiderUserMessageForDisplay(message)
-      : message;
+  const displayMessage = projectHeader ? projectHeader.body : message;
   // The finished message replaces its streaming slot outright, so reasoning the
   // model streamed must render from the message itself or it vanishes on
   // finalize (and never shows after a reload).

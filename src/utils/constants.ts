@@ -1,5 +1,4 @@
 import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
-import { I18nKey } from "#/i18n/declaration";
 
 export const JSON_VIEW_THEME = {
   base00: "transparent", // background
@@ -52,9 +51,6 @@ export const PLAN_COMMAND = "/plan";
 export const CODE_COMMAND = "/code";
 
 /** Built-in slash commands surfaced in the menu for V1 conversations. */
-export const NEW_CONVERSATION_COMMAND = "/new";
-export const CONDENSE_COMMAND = "/condense";
-
 export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
   {
     skill: {
@@ -62,20 +58,9 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
       type: "agentskills",
       source: null,
       content: "Creates a new conversation using the same runtime",
-      triggers: [NEW_CONVERSATION_COMMAND],
+      triggers: ["/new"],
     },
-    command: NEW_CONVERSATION_COMMAND,
-  },
-  {
-    skill: {
-      name: "condense",
-      type: "agentskills",
-      source: null,
-      content: "",
-      triggers: [CONDENSE_COMMAND],
-    },
-    command: CONDENSE_COMMAND,
-    descriptionKey: I18nKey.CONVERSATION$COMPACT_CONTEXT_DESCRIPTION,
+    command: "/new",
   },
   {
     skill: {

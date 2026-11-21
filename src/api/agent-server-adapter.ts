@@ -15,11 +15,6 @@ import type {
 import { ServerClient } from "@openhands/typescript-client/clients";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import { DEFAULT_SETTINGS } from "#/services/settings";
-import {
-  INSIDER_CAT_TAG,
-  INSIDER_ROLE_TAG,
-  isInsiderConversation,
-} from "#/utils/insider-cat";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import {
   AgentKind,
@@ -165,7 +160,6 @@ export interface DirectConversationInfo {
    * values are opaque strings.
    */
   tags?: Record<string, string> | null;
-  parent_conversation_id?: string | null;
   launched_agent_profile?: {
     agent_profile_id: string;
     revision: number;
@@ -467,7 +461,6 @@ export function toAppConversation(
       ? toAcpEffortChoices(info.available_efforts)
       : null,
     tags: info.tags ?? null,
-    parent_conversation_id: info.parent_conversation_id ?? null,
     launched_agent_profile: info.launched_agent_profile ?? null,
     // Chip path: omit ``providerDefault`` so that when no concrete model
     // resolves, the chip falls back to the provider display name in
@@ -705,9 +698,8 @@ export const SERVER_OWNED_PROJECT_TAG_KEYS: ReadonlySet<string> = new Set([
 /** The tags a user can edit: the displayed ones minus Projects state. */
 export function getEditableConversationTags(
   tags: Record<string, string> | null | undefined,
-  parentConversationId?: string | null,
 ): Array<[string, string]> {
-  return getDisplayConversationTags(tags, parentConversationId).filter(
+  return getDisplayConversationTags(tags).filter(
     ([key]) => !PROJECT_BOARD_TAG_KEYS.has(key.trim().toLowerCase()),
   );
 }
@@ -727,19 +719,13 @@ export const PRIORITY_CONVERSATION_TAG_KEYS: readonly string[] = [
  * {@link RESERVED_CONVERSATION_TAG_KEYS}, as stable ``[key, value]`` entries.
  * Priority keys come first (in {@link PRIORITY_CONVERSATION_TAG_KEYS} order);
  * the rest sort A–Z so chip order doesn't shuffle between refetches.
- * Insider identity tags are represented by the dedicated Cat badge instead.
  */
 export function getDisplayConversationTags(
   tags: Record<string, string> | null | undefined,
-  parentConversationId?: string | null,
 ): Array<[string, string]> {
   if (!tags) {
     return [];
   }
-  const hasInsiderBadge = isInsiderConversation({
-    tags,
-    parent_conversation_id: parentConversationId,
-  });
   // Both the reserved-key check and the priority lookup must see the same
   // normalized key: a cloud backend can stamp ``Origin`` / `` origin``, and
   // ranking those off the raw key would silently drop them out of first place.
@@ -753,10 +739,6 @@ export function getDisplayConversationTags(
   return Object.entries(tags)
     .filter(
       ([key, value]) =>
-        !(
-          hasInsiderBadge &&
-          (key === INSIDER_CAT_TAG || key === INSIDER_ROLE_TAG)
-        ) &&
         !RESERVED_CONVERSATION_TAG_KEYS.has(key.trim().toLowerCase()) &&
         typeof value === "string" &&
         // Bare tags (empty value) are displayable — chips/tooltips render

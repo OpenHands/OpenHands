@@ -3,7 +3,6 @@ import { SandboxStatus } from "#/api/conversation-service/agent-server-conversat
 import { isMissingSandboxStatus } from "#/utils/conversation-archive-status";
 import { ConversationCardTitle } from "./conversation-card-title";
 import { ConversationStatusDot } from "../conversation-status-dot";
-import { InsiderCatBadge } from "../../conversation/insider-cat-badge";
 
 interface ConversationCardHeaderProps {
   title: string;
@@ -13,8 +12,6 @@ interface ConversationCardHeaderProps {
   executionStatus?: ExecutionStatus | null;
   isStarting?: boolean;
   sandboxStatus?: SandboxStatus | null;
-  tags?: Record<string, string> | null;
-  parentConversationId?: string | null;
   /**
    * The row's effective archived state (explicit archive or missing runtime).
    * Dims the title and grays the status dot so both agree with the "Archived"
@@ -32,8 +29,6 @@ export function ConversationCardHeader({
   executionStatus,
   isStarting,
   sandboxStatus,
-  tags,
-  parentConversationId,
   isArchived,
 }: ConversationCardHeaderProps) {
   const archived = isArchived ?? isMissingSandboxStatus(sandboxStatus);
@@ -50,11 +45,6 @@ export function ConversationCardHeader({
           />
         </div>
       )}
-      <InsiderCatBadge
-        tags={tags}
-        parentConversationId={parentConversationId}
-        compact
-      />
       <ConversationCardTitle
         title={title}
         titlePending={titlePending}

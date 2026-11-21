@@ -18,8 +18,6 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { formatCompactTokenCount } from "#/utils/format-token-count";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
-import { useActiveBackend } from "#/contexts/active-backend-context";
-import { notifyConversationContextChangeRequested } from "#/services/conversation-context-events";
 
 /**
  * Shared compact/condense action used by the Usage panel CTA and the
@@ -28,7 +26,6 @@ import { notifyConversationContextChangeRequested } from "#/services/conversatio
 export function useCompactContextAction(perTurnToken: number = 0) {
   const { t } = useTranslation("openhands");
   const queryClient = useQueryClient();
-  const { backend, orgId } = useActiveBackend();
   const { data: conversation } = useActiveConversation();
   const { curAgentState } = useAgentState();
   const { mutate: condense, isPending } = useCondenseConversation();
@@ -37,14 +34,9 @@ export function useCompactContextAction(perTurnToken: number = 0) {
 
   const isAgentBusy =
     curAgentState === AgentState.RUNNING ||
-    curAgentState === AgentState.LOADING ||
-    curAgentState === AgentState.AWAITING_USER_CONFIRMATION;
+    curAgentState === AgentState.LOADING;
   const isCompacting = isPending || beforeToken !== null;
-  const isDisabled =
-    !conversation?.id ||
-    conversation.agent_kind === "acp" ||
-    isAgentBusy ||
-    isCompacting;
+  const isDisabled = !conversation?.id || isAgentBusy || isCompacting;
   const description = t(I18nKey.CONVERSATION$COMPACT_CONTEXT_DESCRIPTION);
 
   const handleCompactionComplete = React.useEffectEvent(
@@ -86,7 +78,7 @@ export function useCompactContextAction(perTurnToken: number = 0) {
   });
 
   const handleCompact = () => {
-    if (!conversation?.id || isDisabled) return;
+    if (!conversation?.id || isCompacting) return;
 
     const snapshot =
       useMetricsStore.getState().usage?.per_turn_token ?? perTurnToken;
@@ -95,16 +87,6 @@ export function useCompactContextAction(perTurnToken: number = 0) {
     // request fires, not when the post-ack effect starts.
     baselineEventIdsRef.current = new Set(useEventStore.getState().eventIds);
 
-    // Let an owning App end its voice context before the server changes the
-    // conversation context. This is a request signal, not a completion ack.
-    notifyConversationContextChangeRequested(
-      {
-        backendId: backend.id,
-        orgId,
-        connectionRevision: backend.connectionRevision ?? 0,
-      },
-      { conversationId: conversation.id, reason: "condense" },
-    );
     condense(
       {
         conversationId: conversation.id,

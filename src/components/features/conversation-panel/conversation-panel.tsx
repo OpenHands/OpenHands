@@ -1176,7 +1176,6 @@ export function ConversationPanel({
             acpServer={conversation.acp_server}
             acpModels={conversation.acp_available_models}
             tags={conversation.tags}
-            parentConversationId={conversation.parent_conversation_id}
             showTags={showTagsMetadata}
             isArchived={isArchived}
           />
@@ -1636,11 +1635,6 @@ export function ConversationPanel({
             allLoadedConversations.find(
               (conversation) => conversation.id === selectedConversationId,
             )?.tags
-          }
-          parentConversationId={
-            allLoadedConversations.find(
-              (conversation) => conversation.id === selectedConversationId,
-            )?.parent_conversation_id
           }
           onConfirm={(mergedTags) => {
             handleConfirmEditTags(mergedTags);
