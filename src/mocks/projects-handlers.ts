@@ -34,7 +34,6 @@ const conversation = (
   resolve_note: null,
   turn: "finished",
   ask: null,
-  last_message: null,
   pull_requests: [],
   automation_id: null,
   parent_conversation_id: COORDINATOR_ID,

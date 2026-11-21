@@ -26,7 +26,6 @@ export const member = (
   resolved: null,
   turn: "finished",
   ask: null,
-  last_message: null,
   pull_requests: [],
   automation_id: null,
   parent_conversation_id: COORDINATOR,
@@ -39,19 +38,16 @@ export const BOARD = {
   project_id: PROJECT_ID,
   coordinator: member(COORDINATOR, "Login hardening", {
     parent_conversation_id: null,
-    last_message: "Started two conversations.",
   }),
   conversations: [
     member(LIMITS, "Rate-limit login", {
       attention: "asking",
       turn: "asking",
       ask: "5 or 10 tries per minute?",
-      last_message: "Here is the comparison.",
     }),
     member(RETRY, "Fix login retry", {
       attention: "working",
       execution_status: "running",
-      last_message: "Opened the pull request.",
       pull_requests: [
         { owner: "acme", repo: "app", number: 412 },
         { owner: "acme", repo: "app", number: 409 },

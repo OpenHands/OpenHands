@@ -137,21 +137,13 @@ describe("Sidebar in a project view", () => {
     );
   });
 
-  it("marks where the user is and shows the question before the latest line", async () => {
+  it("marks where the user is and shows the question it waits on", async () => {
     renderSidebar();
     const coordinator = await rowOf("PROJECTS$COORDINATOR");
     expect(coordinator).toHaveAttribute("aria-current", "page");
-    expect(coordinator).toHaveTextContent(
-      "PROJECTS$YOU_ARE_HERE · Started two conversations.",
-    );
+    expect(coordinator).toHaveTextContent("PROJECTS$YOU_ARE_HERE · ");
     expect(await rowOf("Rate-limit login")).toHaveTextContent(
       "PROJECTS$ASKS 5 or 10 tries per minute?",
-    );
-    expect(await rowOf("Rate-limit login")).not.toHaveTextContent(
-      "Here is the comparison.",
-    );
-    expect(await rowOf("Fix login retry")).toHaveTextContent(
-      "Opened the pull request.",
     );
   });
 

@@ -72,8 +72,8 @@ function StateIcon({ mark }: { mark: StateMark }) {
 }
 
 /**
- * The one muted line under a title: the question it waits on, else the
- * agent's latest line, else why it resolved or its state and age.
+ * The one muted line under a title: the question it waits on, else why it
+ * resolved, else its state and age.
  */
 function StatusLine({ conversation }: { conversation: ProjectConversation }) {
   const { t } = useTranslation("openhands");
@@ -84,7 +84,6 @@ function StatusLine({ conversation }: { conversation: ProjectConversation }) {
       </>
     );
   }
-  if (conversation.last_message) return <>{conversation.last_message}</>;
   const autoNote =
     conversation.attention === "resolved" && conversation.resolved === "auto"
       ? parseAutoResolveNote(conversation.resolve_note)
