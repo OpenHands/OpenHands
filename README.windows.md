@@ -1,8 +1,26 @@
 # Windows quickstart (PowerShell)
 
-This doc contains **Windows-specific** command syntax for running Agent Canvas with the **Docker sandbox**.
+This doc contains **Windows-specific** command syntax for running Agent Canvas on Windows, with or without a **Docker sandbox**.
 
 For the main install options and overall context, see [README.md](./README.md).
+
+## Option 1: Without a Docker Sandbox (Windows, PowerShell)
+
+This runs the agent-server directly on the Windows host — the agent will have full access to your filesystem. It is verified on Windows 11 (x64) with Node.js 24 and `uv`; WSL and Docker are not required.
+
+**Prerequisites**:
+
+- [Node.js](https://nodejs.org/) 24 or later — check with `node --version`
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/): `winget install --id=astral-sh.uv -e`
+
+```powershell
+npm install -g @openhands/agent-canvas
+agent-canvas
+```
+
+Open [http://localhost:8000/canvas](http://localhost:8000/canvas) in your browser, then pick an agent and configure an LLM provider in the setup wizard.
+
+The first launch downloads the agent-server and automation backends through `uvx` (a few hundred packages from PyPI, several minutes); later launches reuse the uv cache. The launcher exits instead of retrying if that download fails, so rerun `agent-canvas` once the network is available. Canvas listens on ports 8000 (ingress), 18000 (agent-server), and 18001 (automation), plus an internal static frontend port (3001 by default) — if startup reports that a port is already in use, stop the process holding it and run `agent-canvas` again.
 
 ## Option 2: With a Docker Sandbox (Windows)
 
