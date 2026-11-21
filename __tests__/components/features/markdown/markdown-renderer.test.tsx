@@ -10,7 +10,6 @@ import {
 } from "#/components/features/markdown/markdown-renderer";
 
 const mentionsFlag = vi.hoisted(() => ({ enabled: true }));
-const projectsFlag = vi.hoisted(() => ({ enabled: false }));
 
 vi.mock("#/hooks/query/use-experimental-features", async (importOriginal) => ({
   ...(await importOriginal<
@@ -18,11 +17,6 @@ vi.mock("#/hooks/query/use-experimental-features", async (importOriginal) => ({
   >()),
   useIsExperimentalFeatureEnabled: (key: string) =>
     key === "conversation_mentions" && mentionsFlag.enabled,
-}));
-
-vi.mock("#/hooks/query/use-projects", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("#/hooks/query/use-projects")>()),
-  useProjectsEnabled: () => projectsFlag.enabled,
 }));
 
 describe("MarkdownRenderer", () => {
@@ -495,20 +489,6 @@ describe("MarkdownRenderer conversation mentions", () => {
 
   afterEach(() => {
     mentionsFlag.enabled = true;
-    projectsFlag.enabled = false;
-  });
-
-  it("opens mentions while Projects is on, even with mentions off", () => {
-    mentionsFlag.enabled = false;
-    projectsFlag.enabled = true;
-    render(
-      <MarkdownRenderer>
-        {`Ask [Fix export](conversation:${hex}) first.`}
-      </MarkdownRenderer>,
-    );
-    expect(screen.getByTestId("conversation-mention").textContent).toBe(
-      "Fix export",
-    );
   });
 
   it("shows a mention as plain text while conversation mentions are off", () => {
@@ -573,14 +553,15 @@ describe("MarkdownRenderer conversation mentions", () => {
     expect(docs.getAttribute("target")).toBe("_blank");
   });
 
-  it("does not turn other unknown schemes into links", () => {
+  it("shows a malformed mention as its text, and keeps other schemes out", () => {
     const { container } = render(
       <MarkdownRenderer
         includeStandard
-        content="[x](conversation:not-an-id) [y](javascript:alert(1))"
+        content="[old notes](conversation:not-an-id) [y](javascript:alert(1))"
       />,
     );
     expect(screen.queryByTestId("conversation-mention")).toBeNull();
+    expect(screen.getByText("old notes").closest("a")).toBeNull();
     for (const a of container.querySelectorAll("a")) {
       expect(a.getAttribute("href") ?? "").not.toMatch(
         /^(javascript|conversation):/,

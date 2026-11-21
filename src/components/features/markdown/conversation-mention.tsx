@@ -14,6 +14,8 @@ export const CONVERSATION_MENTIONS_FEATURE_KEY = "conversation_mentions";
 const CONVERSATION_MENTION =
   /^conversation:([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$/i;
 
+const CONVERSATION_SCHEME = /^conversation:/i;
+
 /** The conversation id a link points at, or null for any other link. */
 export function conversationMentionId(href: string | undefined | null) {
   const match = CONVERSATION_MENTION.exec(href ?? "");
@@ -38,14 +40,14 @@ export function conversationMention(title: string | null, id: string) {
 }
 
 /**
- * Keep conversation mentions as written; react-markdown drops links with
- * schemes it does not know.
+ * Keep `conversation:` links as written; react-markdown would empty them,
+ * since it does not know the scheme. A malformed one then reads as text.
  */
 export function markdownUrlTransform(
   url: string,
   fallback: (url: string) => string,
 ) {
-  return conversationMentionId(url) ? url : fallback(url);
+  return CONVERSATION_SCHEME.test(url) ? url : fallback(url);
 }
 
 export function ConversationMention({
@@ -79,7 +81,8 @@ export function ConversationMention({
 
 /**
  * Wraps a markdown `a` renderer: conversation mentions open the conversation
- * in place, every other link goes to `render` (or a plain anchor).
+ * in place, a malformed `conversation:` link reads as its text, and every
+ * other link goes to `render` (or a plain anchor).
  */
 export function withConversationMentions(render?: React.ElementType) {
   function MarkdownLink({
@@ -91,6 +94,10 @@ export function withConversationMentions(render?: React.ElementType) {
       return (
         <ConversationMention id={id}>{props.children}</ConversationMention>
       );
+    }
+    // A `conversation:` link without a valid id has nowhere to go.
+    if (CONVERSATION_SCHEME.test(props.href ?? "")) {
+      return <span>{props.children}</span>;
     }
     if (render) {
       return React.createElement(render, { node, ...props });
