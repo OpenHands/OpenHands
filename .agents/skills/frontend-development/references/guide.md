@@ -100,6 +100,33 @@ The commit and Uncommitted rows reserve the same `7ch` monospace column through
 `w-commit-sha`. The Monaco wrapper applies its measured pixel height through
 `h-(--editor-height)`. Keep these three components free of arbitrary values.
 
+## Operator feature policy
+
+An operator can turn Canvas features off at startup (`AGENT_CANVAS_FEATURES` /
+`AGENT_CANVAS_FEATURES_FILE`; see `docs/SELF_HOSTING.md`). Gate a feature
+through one API:
+
+```ts
+const featurePolicy = useFeaturePolicy();
+if (!featurePolicy.isEnabled("backends.add")) …
+```
+
+- Write the feature ID as a string literal at the call site, including
+  `feature: "<id>"` fields on nav or menu items. IDs are typed by `FeatureId`
+  (a Rule 3 union below), so `grep -rn '"backends.add"' src` lists every gate.
+- Gate at the place that already decides whether the control renders. How a
+  disabled feature looks is that feature's choice; it must leave no empty menu
+  or broken layout behind.
+- Rules grow one at a time. A new ID, or an existing ID covering one more
+  element, is its own PR or commit: add a test for each element, and update the
+  ID's description in `config/features.json` so it lists exactly what the ID
+  hides.
+- Adding an ID: add it to `config/features.json` (the launcher validates against
+  it) and to `FEATURE_IDS` in `src/feature-policy/feature-policy.ts`; a contract
+  test keeps the two equal.
+- Say "feature policy", not "feature flag": Cloud's server-sent
+  `WebClientFeatureFlags` is a different thing.
+
 ## Workspace files
 
 The open-file strip hides the scrollbar through `file-strip-scrollbar-hidden`

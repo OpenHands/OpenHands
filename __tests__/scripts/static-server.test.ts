@@ -8,13 +8,24 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   parseArgs,
   serializeForInlineScript,
   startStaticServer,
 } from "../../scripts/static-server.mjs";
+
+// parseArgs reads process.env by default; keep an operator's exported policy
+// out of these tests, as vite.config.ts does for the dev-server define.
+beforeEach(() => {
+  vi.stubEnv("AGENT_CANVAS_FEATURES", "");
+  vi.stubEnv("AGENT_CANVAS_FEATURES_FILE", "");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("static-server.mjs", () => {
   const servers: Server[] = [];
@@ -637,6 +648,50 @@ describe("static-server.mjs", () => {
       const body = await (await fetch(`${origin}/`)).text();
 
       expect(body).not.toContain("__AGENT_CANVAS_DO_NOT_TRACK__");
+    });
+  });
+
+  describe("feature policy injection", () => {
+    it("reads the policy from AGENT_CANVAS_FEATURES", () => {
+      const config = parseArgs([], {
+        AGENT_CANVAS_FEATURES: '{"version":1,"disabled":["backends.add"]}',
+      });
+      expect(config.featurePolicy).toEqual({
+        version: 1,
+        disabled: ["backends.add"],
+      });
+    });
+
+    it("exposes the policy on window.__AGENT_CANVAS_FEATURE_POLICY__", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServer(buildDir, {
+        featurePolicy: { version: 1, disabled: ["backends.add"] },
+      });
+      const body = await (await fetch(`${origin}/conversations`)).text();
+
+      expect(body).toContain(
+        'window.__AGENT_CANVAS_FEATURE_POLICY__={"version":1,"disabled":["backends.add"]}',
+      );
+    });
+
+    it("does not inject a policy when none is configured", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServer(buildDir);
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).not.toContain("__AGENT_CANVAS_FEATURE_POLICY__");
     });
   });
 
