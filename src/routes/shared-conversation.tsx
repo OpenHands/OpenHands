@@ -148,11 +148,12 @@ export default function SharedConversation() {
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto custom-scrollbar-always px-4 pt-4 gap-2"
       >
-        <div className="max-w-4xl mx-auto p-4 border border-border-subtle rounded">
+        <div className="max-w-4xl mx-auto p-4 pb-8 border border-border-subtle rounded">
           {renderableEvents.length > 0 ? (
             <Messages
               messages={renderableEvents}
               allEvents={conversationEvents}
+              readOnly
             />
           ) : (
             <div className="flex items-center justify-center h-full">

@@ -71,6 +71,7 @@ describe("CloudNewConversationMenu", () => {
     await waitFor(() =>
       expect(mocks.useGitRepositories).toHaveBeenLastCalledWith({
         provider: "github",
+        gitProviderId: null,
         enabled: false,
       }),
     );
@@ -78,6 +79,8 @@ describe("CloudNewConversationMenu", () => {
       "",
       "github",
       true,
+      undefined,
+      null,
     );
 
     await userEvent.click(screen.getByTestId("new-conversation-button"));
@@ -85,6 +88,7 @@ describe("CloudNewConversationMenu", () => {
     await waitFor(() =>
       expect(mocks.useGitRepositories).toHaveBeenLastCalledWith({
         provider: "github",
+        gitProviderId: null,
         enabled: true,
       }),
     );
@@ -92,6 +96,8 @@ describe("CloudNewConversationMenu", () => {
       "",
       "github",
       false,
+      undefined,
+      null,
     );
   });
 

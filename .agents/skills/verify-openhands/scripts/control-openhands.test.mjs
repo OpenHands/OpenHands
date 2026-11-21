@@ -1004,7 +1004,7 @@ test("map check --server-map checks Server: IDs against the server map", () => {
   );
   mkdirSync(map, { recursive: true });
   // Every family a shipped Server: line names, except F16.
-  for (const n of Array.from({ length: 30 }, (_, i) => i + 1)) {
+  for (const n of Array.from({ length: 37 }, (_, i) => i + 1)) {
     if (n === 16) continue;
     const id = `F${String(n).padStart(2, "0")}`;
     writeFileSync(
@@ -3262,4 +3262,48 @@ test("bug run puts back the viewport a block changed", () => {
     encoding: "utf8",
   });
   assert.match(help.stdout, /viewportRestored/);
+});
+
+test("every run names a non-loopback plain-HTTP origin on its ingress port", () => {
+  // A run saved before lanUrl existed still gets one, from its baseUrl.
+  const dir = mkdtempSync(join(tmpdir(), "lan-run-"));
+  mkdirSync(join(dir, "private"));
+  writeFileSync(
+    join(dir, "run.json"),
+    JSON.stringify({
+      baseUrl: "http://127.0.0.1:18800",
+      ports: { ingress: 18800 },
+      launcherPgid: 0,
+    }),
+  );
+  const res = spawnSync(process.execPath, [cli, "env"], {
+    encoding: "utf8",
+    env: { ...process.env, OH_VERIFY_RUN: dir },
+  });
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(
+    res.stdout,
+    /^export OH_VERIFY_LAN_URL=http:\/\/lan\.openhands\.test:18800$/m,
+  );
+  const env = { OH_VERIFY_RUN: dir };
+  assert.equal(
+    run(["status"], env).json.lanUrl,
+    "http://lan.openhands.test:18800",
+  );
+  // No daemon that resolves the name: goto says how to get one.
+  const goto = run(
+    ["browser", "goto", "http://lan.openhands.test:18800/"],
+    env,
+  );
+  assert.equal(goto.status, 3, JSON.stringify(goto.json));
+  assert.match(goto.json.hint, /browser stop/);
+  const launch = spawnSync(process.execPath, [cli, "help", "launch"], {
+    encoding: "utf8",
+  });
+  assert.match(launch.stdout, /lanUrl/);
+  assert.match(launch.stdout, /isSecureContext/);
+  const onboard = spawnSync(process.execPath, [cli, "help", "onboard"], {
+    encoding: "utf8",
+  });
+  assert.match(onboard.stdout, /--stay/);
 });
