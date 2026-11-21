@@ -11,6 +11,8 @@ import {
 } from "../../../features/chat/message-edits";
 import { getEventContent } from "../event-content-helpers/get-event-content";
 import { CriticResultDisplay } from "./critic-result-display";
+import { CollapsibleThinking } from "./collapsible-thinking";
+import { getReasoningContent } from "../event-thought-helpers";
 
 interface FinishEventMessageProps {
   event: ActionEvent<FinishAction>;
@@ -32,8 +34,11 @@ export function FinishEventMessage({
       ? eventContent.details
       : String(eventContent.details));
 
+  const reasoning = getReasoningContent(event);
+
   return (
     <>
+      {reasoning.trim() && <CollapsibleThinking content={reasoning} />}
       <ChatMessage
         type="agent"
         message={message}
