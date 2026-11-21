@@ -107,9 +107,10 @@ async function createWorkspaceConversation(
 ) {
   await ensureMockLLMProfile(page);
   await resetMockLLM(request);
-  // Turn 0 pads the title-generation call (see mock-llm-conversation.spec.ts).
+  // Answer title generation with non-empty text: the SDK retries blank
+  // completions, which would consume the terminal turn as the title response.
   await registerTrajectory(request, "windows-workspace", [
-    { text: "" },
+    { text: "Create a file and a plan" },
     {
       tool_call: {
         name: "terminal",
