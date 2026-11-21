@@ -397,6 +397,51 @@ describe("ConversationPanel conversation actions", () => {
     });
   });
 
+  it("keeps a legacy pin whose conversation is outside the loaded pages", async () => {
+    // The first page is not authoritative while more pages exist: a pin on
+    // page 2+ must survive the load instead of being pruned (#16399).
+    usePinnedConversationsStore
+      .getState()
+      .pinConversation("default-local", "older-pinned");
+
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: mockConversations,
+      next_page_id: "page-2",
+    });
+
+    renderConversationPanel();
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("conversation-card").length).toBeGreaterThan(
+        0,
+      );
+    });
+
+    const pins =
+      usePinnedConversationsStore.getState().pinsByBackendId["default-local"] ??
+      [];
+    expect(pins).toContain("older-pinned");
+  });
+
+  it("prunes a legacy pin that is missing once pagination is exhausted", async () => {
+    usePinnedConversationsStore
+      .getState()
+      .pinConversation("default-local", "deleted-pin");
+
+    renderConversationPanel();
+
+    await waitFor(() => {
+      const pins =
+        usePinnedConversationsStore.getState().pinsByBackendId[
+          "default-local"
+        ] ?? [];
+      expect(pins).not.toContain("deleted-pin");
+    });
+  });
+
   it("migrates a legacy localStorage archive into a server tag and drains it", async () => {
     useArchivedConversationsStore
       .getState()
