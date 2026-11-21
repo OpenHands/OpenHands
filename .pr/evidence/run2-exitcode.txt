@@ -1,0 +1,4 @@
+launcher pid: 1946
+all services up; killing required vite pid 37456 at iteration 35
+成功: 已终止 PID 37456 (属于 PID 46660 子进程)的进程。
+launcher exit code: 1

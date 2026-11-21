@@ -1,0 +1,1173 @@
+
+[36m[1mAgent Canvas + Automation Development Stack[0m
+
+[36m[1/2][0m Checking prerequisites...
+[32m✓[0m uvx found
+[32m✓[0m npm found
+[32m✓[0m frontend dependencies found
+[36m[ports][0m Checking ports...
+[36m[2/2][0m Starting services...
+[2m06:45:24[0m [34m[agent-server][0m Starting on port 18000...
+[2m06:45:24[0m [2m[agent-server][0m Using PyPI (1.50.1, default)
+[2m06:45:54[0m [33m[agent-server][0m Downloading pygments (1.2MiB)
+[2m06:45:54[0m [33m[agent-server][0m Downloading lxml (3.8MiB)
+[2m06:45:54[0m [33m[agent-server][0m Downloading reportlab (1.9MiB)
+[2m06:45:55[0m [33m[agent-server][0m Downloading hf-xet (3.7MiB)
+[2m06:45:55[0m [33m[agent-server][0m Downloading pywin32
+[2m06:45:55[0m [33m[agent-server][0m (6.6MiB)
+[2m06:45:55[0m [33m[agent-server][0m Downloading pydantic-core (2.2MiB)
+[2m06:45:55[0m [33m[agent-server][0m Downloading pillow
+[2m06:45:55[0m [33m[agent-server][0m (6.9MiB)
+[2m06:45:55[0m [33m[agent-server][0m Downloading
+[2m06:45:55[0m [33m[agent-server][0m beartype (1.5MiB)
+[2m06:45:55[0m [33m[agent-server][0m Downloading tokenizers (2.7MiB)
+[2m06:45:55[0m [33m[agent-server][0m Downloading botocore
+[2m06:45:55[0m [33m[agent-server][0m (15.6MiB)
+[2m06:45:55[0m [33m[agent-server][0m Downloading google-api-python-client
+[2m06:45:55[0m [33m[agent-server][0m (16.4MiB)
+[2m06:45:55[0m [33m[agent-server][0m Downloading openai
+[2m06:45:55[0m [33m[agent-server][0m (1.6MiB)
+[2m06:45:55[0m [33m[agent-server][0m Downloading grpcio (5.3MiB)
+[2m06:45:55[0m [33m[agent-server][0m Downloading lupa (1.8MiB)
+[2m06:45:55[0m [33m[agent-server][0m Downloading
+[2m06:45:55[0m [33m[agent-server][0m lmnr-claude-code-proxy (1.3MiB)
+[2m06:45:55[0m [33m[agent-server][0m Downloading litellm (40.0MiB)
+[2m06:45:55[0m [33m[agent-server][0m Downloading sqlalchemy (2.3MiB)
+[2m06:46:22[0m [33m[agent-server][0m Building func-timeout==4.3.5
+[2m06:46:24[0m [31m[agent-server][0m Timeout waiting for http://127.0.0.1:18000/server_info after 60s
+[2m06:46:24[0m [2m[agent-server][0m Last error: fetch failed
+[2m06:46:24[0m [33m[secrets][0m Skipping secret seeding - agent-server not ready
+[2m06:46:24[0m [32m[automation][0m Starting on port 18001...
+[2m06:46:24[0m [2m[automation][0m Using PyPI (1.17.0, default)
+[2m06:46:24[0m [35m[vite][0m Starting on port 3001...
+[2m06:46:24[0m [33m[agent-server][0m Built func-timeout==4.3.5
+[2m06:46:25[0m [33m[agent-server][0m Downloaded lmnr-claude-code-proxy
+[2m06:46:26[0m [35m[vite][0m > @openhands/agent-canvas@1.24.0 dev:frontend
+[2m06:46:26[0m [35m[vite][0m > npm run make-i18n && cross-env VITE_MOCK_API=false react-router dev
+[2m06:46:26[0m [33m[ingress][0m Starting on port 18100...
+[2m06:46:27[0m [33m[agent-server][0m Downloaded pygments
+[2m06:46:27[0m [33m[ingress][0m ╔═══════════════════════════════════════════════════════════════╗
+[2m06:46:27[0m [33m[ingress][0m ║  Ingress Proxy                                                ║
+[2m06:46:27[0m [33m[ingress][0m ╠═══════════════════════════════════════════════════════════════╣
+[2m06:46:27[0m [33m[ingress][0m ║  Listening on: http://localhost:18100/                          ║
+[2m06:46:27[0m [33m[ingress][0m ╠═══════════════════════════════════════════════════════════════╣
+[2m06:46:27[0m [33m[ingress][0m ║  Routes:                                                      ║
+[2m06:46:27[0m [33m[ingress][0m ║      /api/automation → http://127.0.0.1:18001                 ║
+[2m06:46:27[0m [33m[ingress][0m ║      /openapi.json → http://127.0.0.1:18000                   ║
+[2m06:46:27[0m [33m[ingress][0m ║      /server_info → http://127.0.0.1:18000                    ║
+[2m06:46:27[0m [33m[ingress][0m ║      /sockets → http://127.0.0.1:18000                        ║
+[2m06:46:27[0m [33m[ingress][0m ║      /health → http://127.0.0.1:18000                         ║
+[2m06:46:27[0m [33m[ingress][0m ║      /vscode → http://127.0.0.1:19000                         ║
+[2m06:46:27[0m [33m[ingress][0m ║      /ready → http://127.0.0.1:18000                          ║
+[2m06:46:27[0m [33m[ingress][0m ║      /alive → http://127.0.0.1:18000                          ║
+[2m06:46:27[0m [33m[ingress][0m ║      /redoc → http://127.0.0.1:18000                          ║
+[2m06:46:27[0m [33m[ingress][0m ║      /docs → http://127.0.0.1:18000                           ║
+[2m06:46:27[0m [33m[ingress][0m ║      /api → http://127.0.0.1:18000                            ║
+[2m06:46:27[0m [33m[ingress][0m ║      * (default) → http://localhost:3001                      ║
+[2m06:46:27[0m [33m[ingress][0m ║                                                               ║
+[2m06:46:27[0m [33m[ingress][0m ╚═══════════════════════════════════════════════════════════════╝
+[2m06:46:28[0m [35m[vite][0m > @openhands/agent-canvas@1.24.0 make-i18n
+[2m06:46:28[0m [35m[vite][0m > node scripts/make-i18n-translations.cjs
+[2m06:46:28[0m [33m[agent-server][0m Downloaded lupa
+[2m06:46:28[0m [33m[agent-server][0m 
+[2m06:46:28[0m [33m[agent-server][0m Downloaded beartype
+
+[32m[1m╔══════════════════════════════════════════════════════════════╗[0m
+[32m[1m║[0m  [1mAgent Canvas + Automation Stack[0m                             [32m[1m║[0m
+[32m[1m╠══════════════════════════════════════════════════════════════╣[0m
+[32m[1m║[0m                                                              [32m[1m║[0m
+[32m[1m║[0m  Ingress:      [36mhttp://localhost:18100/[0m                       [32m[1m║[0m
+[32m[1m║[0m  Main UI:      [36mhttp://localhost:18100/[0m                       [32m[1m║[0m
+[32m[1m║[0m  API Docs:     [36mhttp://localhost:18100/api/automation/docs[0m    [32m[1m║[0m
+[32m[1m║[0m                                                              [32m[1m║[0m
+[32m[1m╚══════════════════════════════════════════════════════════════╝[0m
+
+[2mState directory: C:\Users\Kris\.openhands\agent-canvas[0m
+[2mPress Ctrl+C to stop[0m
+
+[2m06:46:28[0m [33m[agent-server][0m Downloaded
+[2m06:46:28[0m [33m[agent-server][0m reportlab
+[2m06:46:28[0m [33m[agent-server][0m Downloaded
+[2m06:46:28[0m [33m[agent-server][0m pydantic-core
+[2m06:46:29[0m [33m[agent-server][0m Downloaded
+[2m06:46:29[0m [33m[agent-server][0m sqlalchemy
+[2m06:46:30[0m [33m[agent-server][0m Downloaded
+[2m06:46:30[0m [33m[agent-server][0m tokenizers
+[2m06:46:32[0m [33m[agent-server][0m Downloaded
+[2m06:46:32[0m [33m[agent-server][0m hf-xet
+[2m06:46:33[0m [33m[agent-server][0m 
+[2m06:46:33[0m [33m[agent-server][0m Downloaded lxml
+[2m06:46:35[0m [33m[agent-server][0m Downloaded grpcio
+[2m06:46:37[0m [33m[agent-server][0m 
+[2m06:46:37[0m [33m[agent-server][0m Downloaded pillow
+[2m06:46:37[0m [33m[agent-server][0m Downloaded openai
+[2m06:46:40[0m [33m[agent-server][0m Downloaded
+[2m06:46:40[0m [33m[agent-server][0m pywin32
+[2m06:46:44[0m [33m[agent-server][0m Downloaded google-api-python-client
+[2m06:46:49[0m [33m[agent-server][0m Downloaded botocore
+[2m06:46:52[0m [35m[vite][0m [33m  ⚠️  Future Flag Warning: Route middleware support is changing in React Router v8.
+[2m06:46:52[0m [35m[vite][0m You can use the `future.v8_middleware` flag to opt in early.
+[2m06:46:52[0m [35m[vite][0m -> https://reactrouter.com/v7/upgrading/future#futurev8_middleware[39m
+[2m06:46:52[0m [35m[vite][0m [33m  ⚠️  Future Flag Warning: Route module splitting behavior is changing in React Router v8.
+[2m06:46:52[0m [35m[vite][0m You can use the `future.v8_splitRouteModules` flag to opt in early.
+[2m06:46:52[0m [35m[vite][0m -> https://reactrouter.com/v7/upgrading/future#futurev8_splitroutemodules[39m
+[2m06:46:52[0m [35m[vite][0m [33m  ⚠️  Future Flag Warning: Vite Environment API usage is changing in React Router v8.
+[2m06:46:52[0m [35m[vite][0m You can use the `future.v8_viteEnvironmentApi` flag to opt in early.
+[2m06:46:52[0m [35m[vite][0m -> https://reactrouter.com/v7/upgrading/future#futurev8_viteenvironmentapi[39m
+[2m06:46:52[0m [35m[vite][0m [33m  ⚠️  Future Flag Warning: Request handling behavior is changing in React Router v8.
+[2m06:46:52[0m [35m[vite][0m You can use the `future.v8_passThroughRequests` flag to opt in early.
+[2m06:46:52[0m [35m[vite][0m -> https://reactrouter.com/v7/upgrading/future#futurev8_passthroughrequests[39m
+[2m06:46:52[0m [35m[vite][0m [33m  ⚠️  Future Flag Warning: Data request URL formats are changing in React Router v8.
+[2m06:46:52[0m [35m[vite][0m You can use the `future.v8_trailingSlashAwareDataRequests` flag to opt in early.
+[2m06:46:52[0m [35m[vite][0m -> https://reactrouter.com/v7/upgrading/future#futurev8_trailingslashawaredatarequests[39m
+[2m06:47:09[0m [33m[vite][0m Failed to resolve dependency: [36msocket.io-client[39m, present in client 'optimizeDeps.include'
+[2m06:47:10[0m [33m[agent-server][0m Downloaded litellm
+[2m06:47:21[0m [33m[automation][0m Downloading openai (2.3MiB)
+[2m06:47:23[0m [33m[automation][0m Downloading
+[2m06:47:23[0m [33m[automation][0m google-cloud-sql (1.2MiB)
+[2m06:47:26[0m [33m[agent-server][0m Installed 196 packages in 15.30s
+[2m06:47:28[0m [33m[automation][0m Downloaded
+[2m06:47:28[0m [33m[automation][0m google-cloud-sql
+[2m06:47:30[0m [33m[vite][0m Cannot optimize dependency: [36m@xterm/xterm/css/xterm.css[39m, present in client 'optimizeDeps.include'
+[2m06:47:36[0m [33m[automation][0m Downloaded
+[2m06:47:36[0m [33m[automation][0m openai
+[2m06:47:39[0m [35m[vite][0m [2m14:47:39[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [optimizer] bundling dependencies...
+[2m06:47:51[0m [33m[automation][0m Installed 174 packages in 14.55s
+[2m06:47:51[0m [35m[vite][0m [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m3001[22m/[39m
+[2m06:47:52[0m [33m[automation][0m warning
+[2m06:47:52[0m [33m[automation][0m : An executable named `uvicorn` is not provided by package `openhands-automation` but is available via the dependency `uvicorn`. Consider using `uvx --from uvicorn uvicorn` instead.
+[2m06:49:17[0m [33m[agent-server][0m +----------------------------------------------------------------------+
+[2m06:49:17[0m [33m[agent-server][0m |  OpenHands SDK v1.50.1                                               |
+[2m06:49:17[0m [33m[agent-server][0m |                                                                      |
+[2m06:49:17[0m [33m[agent-server][0m |  Report a bug: github.com/OpenHands/software-agent-sdk/issues        |
+[2m06:49:17[0m [33m[agent-server][0m |  Get help: openhands.dev/joinslack                                   |
+[2m06:49:17[0m [33m[agent-server][0m |  Scale up: openhands.dev/product/sdk                                 |
+[2m06:49:17[0m [33m[agent-server][0m |                                                                      |
+[2m06:49:17[0m [33m[agent-server][0m |  Set OPENHANDS_SUPPRESS_BANNER=1 to hide this message                |
+[2m06:49:17[0m [33m[agent-server][0m +----------------------------------------------------------------------+
+[2m06:49:17[0m [33m[agent-server][0m 
+[2m06:49:17[0m [34m[agent-server][0m INFO     Added to sys.path: C:\Users\Kris\Documents\ChatGPT\提PR\openhands-pr-17434\tools  __main__.py:103
+[2m06:49:17[0m [34m[agent-server][0m INFO     Extended sys.path with 1 directory for custom tool imports  __main__.py:107
+[2m06:49:17[0m [34m[agent-server][0m INFO     Imported module: canvas_ui_tool  __main__.py:128
+[2m06:49:17[0m [33m[agent-server][0m WARNING  Current configuration will not reload as not all conditions are met, please refer to documentation.  config.py:311
+[2m06:49:17[0m [33m[automation][0m [11/15/26 14:49:17]
+[2m06:49:17[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:17[0m [33m[automation][0m _configure_property(runs,
+[2m06:49:17[0m [33m[automation][0m _RelationshipDeclared)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:17]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(disable_events,
+[2m06:49:18[0m [33m[automation][0m _RelationshipDeclared)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18] INFO
+[2m06:49:18[0m [33m[automation][0m (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(id, Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m 
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m 
+[2m06:49:18[0m [33m[automation][0m _configure_property(user_id,
+[2m06:49:18[0m [33m[automation][0m Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(org_id, Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(name, Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(telemetry_disti
+[2m06:49:18[0m [33m[automation][0m nct_id, Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(prompt, Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(preset_metadata
+[2m06:49:18[0m [33m[automation][0m , Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18] INFO     (Automation|automations
+[2m06:49:18[0m [33m[automation][0m )            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(model, Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(agent_profile_i
+[2m06:49:18[0m [33m[automation][0m d, Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(trigger,
+[2m06:49:18[0m [33m[automation][0m Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(tarball_path,
+[2m06:49:18[0m [33m[automation][0m Column)
+[2m06:49:18[0m [33m[automation][0m 
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(setup_script_pa
+[2m06:49:18[0m [33m[automation][0m th, Column)
+[2m06:49:18[0m [33m[automation][0m 
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(entrypoint,
+[2m06:49:18[0m [33m[automation][0m Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(timeout,
+[2m06:49:18[0m [33m[automation][0m Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(keep_alive,
+[2m06:49:18[0m [33m[automation][0m Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m 
+[2m06:49:18[0m [33m[automation][0m _configure_property(enabled,
+[2m06:49:18[0m [33m[automation][0m Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(state, Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(disabled_reason
+[2m06:49:18[0m [33m[automation][0m , Column)
+[2m06:49:18[0m [33m[automation][0m 
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(disabled_detail
+[2m06:49:18[0m [33m[automation][0m , Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(disabled_at,
+[2m06:49:18[0m [33m[automation][0m Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(deleted_at,
+[2m06:49:18[0m [33m[automation][0m Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations
+[2m06:49:18[0m [33m[automation][0m )            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(
+[2m06:49:18[0m [33m[automation][0m last_triggered_
+[2m06:49:18[0m [33m[automation][0m at, Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(last_polled_at,
+[2m06:49:18[0m [33m[automation][0m Column)
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(created_at,
+[2m06:49:18[0m [33m[automation][0m Column)
+[2m06:49:18[0m [33m[automation][0m 
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m _configure_property(updated_at,
+[2m06:49:18[0m [33m[automation][0m Column)
+[2m06:49:18[0m [33m[automation][0m 
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18]
+[2m06:49:18[0m [33m[automation][0m INFO     (Automation|automations) Identified mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m primary key columns:
+[2m06:49:18[0m [33m[automation][0m OrderedSet([Column('id',
+[2m06:49:18[0m [33m[automation][0m Uuid(),
+[2m06:49:18[0m [33m[automation][0m table=<automations>,
+[2m06:49:18[0m [33m[automation][0m 
+[2m06:49:18[0m [33m[automation][0m primary_key=True, nullable=False,
+[2m06:49:18[0m [33m[automation][0m default=CallableColumnDefault(<func
+[2m06:49:18[0m [33m[automation][0m tion uuid4 at
+[2m06:49:18[0m [33m[automation][0m 0x00000189239A56C0>))])
+[2m06:49:18[0m [33m[automation][0m [11/15/26 14:49:18] INFO     (Automation|automations)            mapper.py:2419
+[2m06:49:18[0m [33m[automation][0m constructed
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(automation,
+[2m06:49:19[0m [33m[automation][0m _RelationshipDeclared)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(automation_id,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(telemetry_disti
+[2m06:49:19[0m [33m[automation][0m nct_id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(status, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(error_detail,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(status_detail,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(current_phase,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(conversation_id
+[2m06:49:19[0m [33m[automation][0m , Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(cost, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(timeout_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(sandbox_id,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (AutomationRun|automation_runs)
+[2m06:49:19[0m [33m[automation][0m mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(subject_key,
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(subject_release
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m d_at, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(sandbox_cleanup
+[2m06:49:19[0m [33m[automation][0m _due_at, Column)
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(bash_command_id
+[2m06:49:19[0m [33m[automation][0m , Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(trigger_source,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (AutomationRun|automation_runs
+[2m06:49:19[0m [33m[automation][0m )     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(event_payload,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(run_metadata,
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(
+[2m06:49:19[0m [33m[automation][0m created_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(started_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(completed_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m Identified primary key columns:
+[2m06:49:19[0m [33m[automation][0m OrderedSet([Column('id', Uuid(),
+[2m06:49:19[0m [33m[automation][0m table=<automation_runs>,
+[2m06:49:19[0m [33m[automation][0m primary_key=True, nullable=False,
+[2m06:49:19[0m [33m[automation][0m default=CallableColumnDefault(<func
+[2m06:49:19[0m [33m[automation][0m tion uuid4 at
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m 0x00000189239A77E0>))])
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationRun|automation_runs)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m constructed
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDraft|automation_drafts) mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDraft|automation_drafts) mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(user_id,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDraft|automation_drafts) mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(org_id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationDraft|automation_drafts) mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(endpoint,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDraft|automation_drafts) mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(name, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDraft|automation_drafts) mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(draft_body,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDraft|automation_drafts) mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(validation_erro
+[2m06:49:19[0m [33m[automation][0m rs, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDraft|automation_drafts) mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(dispatchable,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (AutomationDraft|automation_drafts)
+[2m06:49:19[0m [33m[automation][0m mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(
+[2m06:49:19[0m [33m[automation][0m source_automati
+[2m06:49:19[0m [33m[automation][0m on_id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDraft|automation_drafts) mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(materialized_au
+[2m06:49:19[0m [33m[automation][0m tomation_id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDraft|automation_drafts) mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(last_test_run_i
+[2m06:49:19[0m [33m[automation][0m d, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDraft|automation_drafts) mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(deleted_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationDraft|automation_drafts) mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property
+[2m06:49:19[0m [33m[automation][0m (created_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDraft|automation_drafts) mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(updated_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDraft|automation_drafts) mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m Identified primary key columns:
+[2m06:49:19[0m [33m[automation][0m OrderedSet([Column('id', Uuid()
+[2m06:49:19[0m [33m[automation][0m ,
+[2m06:49:19[0m [33m[automation][0m table=<automation_drafts>,
+[2m06:49:19[0m [33m[automation][0m primary_key=True, nullable=False,
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m default=CallableColumnDefault(<func
+[2m06:49:19[0m [33m[automation][0m tion uuid4 at
+[2m06:49:19[0m [33m[automation][0m 0x0000018924BC3E20>))])
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationDraft|automation_drafts) mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m constructed
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationDisableEvent|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m disable_events)
+[2m06:49:19[0m [33m[automation][0m _configure_property(automation,
+[2m06:49:19[0m [33m[automation][0m _RelationshipDeclared)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDisableEvent|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m disable_events)
+[2m06:49:19[0m [33m[automation][0m _configure_property(run,
+[2m06:49:19[0m [33m[automation][0m _RelationshipDeclared)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDisableEvent|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m disable_events)
+[2m06:49:19[0m [33m[automation][0m _configure_property(id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationDisableEvent|automation_
+[2m06:49:19[0m [33m[automation][0m mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m disable_events)
+[2m06:49:19[0m [33m[automation][0m _configure_property(automation_id,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDisableEvent|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m disable_events)
+[2m06:49:19[0m [33m[automation][0m _configure_property(run_id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDisableEvent|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m disable_events)
+[2m06:49:19[0m [33m[automation][0m _configure_property(reason, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDisableEvent|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m disable_events)
+[2m06:49:19[0m [33m[automation][0m _configure_property(detail, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (AutomationDisableEvent|automation_ mapper.py
+[2m06:49:19[0m [33m[automation][0m :2419
+[2m06:49:19[0m [33m[automation][0m disable_events)
+[2m06:49:19[0m [33m[automation][0m _configure_property(source, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDisableEvent|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m disable_events)
+[2m06:49:19[0m [33m[automation][0m _configure_property(created_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationDisableEvent|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m disable_events) Identified primary
+[2m06:49:19[0m [33m[automation][0m key columns:
+[2m06:49:19[0m [33m[automation][0m OrderedSet([Column('id', Uuid(),
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m table=<automation_disable_events>,
+[2m06:49:19[0m [33m[automation][0m primary_key=True, nullable=False,
+[2m06:49:19[0m [33m[automation][0m default=CallableColumnDefault(<func
+[2m06:49:19[0m [33m[automation][0m tion uuid4 at
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m 0x0000018924BE5EE0>))])
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationDisableEvent|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m disable_events) constructed
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (TarballUpload|tarball_uploads)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (TarballUpload|tarball_uploads)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(user_id,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (TarballUpload|tarball_uploads
+[2m06:49:19[0m [33m[automation][0m )     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(org_id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (TarballUpload|tarball_uploads)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(name, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (
+[2m06:49:19[0m [33m[automation][0m TarballUpload|tarball_uploads)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(description,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (TarballUpload|tarball_uploads)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(status, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (TarballUpload|tarball_uploads)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(error_message,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (TarballUpload|tarball_uploads)
+[2m06:49:19[0m [33m[automation][0m mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(size_bytes,
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (TarballUpload|tarball_uploads)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m _configure_property(storage_path,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (TarballUpload|tarball_uploads)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(created_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (TarballUpload|tarball_uploads)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(updated_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (TarballUpload|tarball_uploads)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(deleted_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (TarballUpload|tarball_uploads)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m Identified primary key columns:
+[2m06:49:19[0m [33m[automation][0m OrderedSet([Column('id', Uuid(),
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m table=<tarball_uploads>,
+[2m06:49:19[0m [33m[automation][0m primary_key=True, nullable
+[2m06:49:19[0m [33m[automation][0m =False,
+[2m06:49:19[0m [33m[automation][0m default=CallableColumnDefault(<func
+[2m06:49:19[0m [33m[automation][0m tion uuid4 at
+[2m06:49:19[0m [33m[automation][0m 0x0000018924BE6DE0>))])
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (TarballUpload|tarball_uploads)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m constructed
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (CustomWebhook|custom_webhooks)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(
+[2m06:49:19[0m [33m[automation][0m id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (CustomWebhook|custom_webhooks)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(org_id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (CustomWebhook|custom_webhooks)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(name, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (CustomWebhook|custom_webhooks)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(source, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (CustomWebhook|custom_webhooks)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(webhook_secret,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (CustomWebhook|custom_webhooks)     mapper.py:
+[2m06:49:19[0m [33m[automation][0m 2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(enabled,
+[2m06:49:19[0m [33m[automation][0m Column
+[2m06:49:19[0m [33m[automation][0m )
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (CustomWebhook|custom_webhooks)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(event_key_expr,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (
+[2m06:49:19[0m [33m[automation][0m CustomWebhook|custom_webhooks)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(signature_heade
+[2m06:49:19[0m [33m[automation][0m r, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (CustomWebhook|custom_webhooks)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(signature_schem
+[2m06:49:19[0m [33m[automation][0m e, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (CustomWebhook|custom_webhooks)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(created_at,
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (CustomWebhook|custom_webhooks)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(updated_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (CustomWebhook|custom_webhooks)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m Identified primary key columns:
+[2m06:49:19[0m [33m[automation][0m OrderedSet([Column('id',
+[2m06:49:19[0m [33m[automation][0m Uuid(),
+[2m06:49:19[0m [33m[automation][0m table=<custom_webhooks>,
+[2m06:49:19[0m [33m[automation][0m primary_key=True, nullable
+[2m06:49:19[0m [33m[automation][0m =False,
+[2m06:49:19[0m [33m[automation][0m default=CallableColumnDefault(<func
+[2m06:49:19[0m [33m[automation][0m tion uuid4 at
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m 0x0000018924BF82C0>)
+[2m06:49:19[0m [33m[automation][0m )])
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (CustomWebhook|custom_webhooks)     mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m constructed
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (IntegrationEvent|integration_event mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m s) _configure_property(id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (IntegrationEvent|integration_event mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m s) _configure_property
+[2m06:49:19[0m [33m[automation][0m (org_id,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (
+[2m06:49:19[0m [33m[automation][0m IntegrationEvent|integration_event mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m s) _configure_property(source,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO
+[2m06:49:19[0m [33m[automation][0m (IntegrationEvent|integration_event mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m s)
+[2m06:49:19[0m [33m[automation][0m _configure_property(provider_event_
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (IntegrationEvent|integration_event mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m s) _configure_property(event_key,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (IntegrationEvent|integration_event mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m s) _configure_property(payload,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (IntegrationEvent|integration_event mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m s)
+[2m06:49:19[0m [33m[automation][0m _configure_property(matched_count,
+[2m06:49:19[0m [33m[automation][0m Column
+[2m06:49:19[0m [33m[automation][0m )
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (IntegrationEvent|integration_event mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m s) _configure_property(received_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (IntegrationEvent|integration_event mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m s) Identified primary key columns:
+[2m06:49:19[0m [33m[automation][0m OrderedSet([Column('id',
+[2m06:49:19[0m [33m[automation][0m Uuid(),
+[2m06:49:19[0m [33m[automation][0m table=<integration_events>,
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m primary_key=True, nullable=False
+[2m06:49:19[0m [33m[automation][0m ,
+[2m06:49:19[0m [33m[automation][0m default=CallableColumnDefault(
+[2m06:49:19[0m [33m[automation][0m <func
+[2m06:49:19[0m [33m[automation][0m tion uuid4 at
+[2m06:49:19[0m [33m[automation][0m 0x0000018924BF9D00>))])
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (IntegrationEvent|integration_event mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m s) constructed
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationServiceMetadata|automati mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m on_service_metadata)
+[2m06:49:19[0m [33m[automation][0m _configure_property(key, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationServiceMetadata|automati mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m on_service_metadata)
+[2m06:49:19[0m [33m[automation][0m _configure_property(value, Column)
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationServiceMetadata|automati mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m on_service_metadata)
+[2m06:49:19[0m [33m[automation][0m _configure_property(created_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationServiceMetadata|automati mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m on_service_metadata)
+[2m06:49:19[0m [33m[automation][0m _configure_property(updated_at,
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (AutomationServiceMetadata|automati
+[2m06:49:19[0m [33m[automation][0m mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m on_service_metadata) Identified
+[2m06:49:19[0m [33m[automation][0m primary key columns:
+[2m06:49:19[0m [33m[automation][0m OrderedSet([Column('key',
+[2m06:49:19[0m [33m[automation][0m String(length=
+[2m06:49:19[0m [33m[automation][0m 255),
+[2m06:49:19[0m [33m[automation][0m table=<automation_service_metadata>
+[2m06:49:19[0m [33m[automation][0m , primary_key=True,
+[2m06:49:19[0m [33m[automation][0m nullable=False)])
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationServiceMetadata|automati mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m on_service_metadata) constructed
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationKV|automation_kv)        mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationKV|automation_kv)        mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(automation_id,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (AutomationKV|automation_kv)
+[2m06:49:19[0m [33m[automation][0m mapper.py:
+[2m06:49:19[0m [33m[automation][0m 2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(state_encrypted
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m , Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationKV|automation_kv)        mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(created_at,
+[2m06:49:19[0m [33m[automation][0m Column
+[2m06:49:19[0m [33m[automation][0m )
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (AutomationKV|automation_kv)
+[2m06:49:19[0m [33m[automation][0m mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m _configure_property(
+[2m06:49:19[0m [33m[automation][0m updated_at,
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (
+[2m06:49:19[0m [33m[automation][0m AutomationKV|automation_kv)        mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m Identified primary key columns:
+[2m06:49:19[0m [33m[automation][0m OrderedSet([Column('id', Uuid(),
+[2m06:49:19[0m [33m[automation][0m table=<automation_kv>,
+[2m06:49:19[0m [33m[automation][0m primary_key=True, nullable=False,
+[2m06:49:19[0m [33m[automation][0m default=
+[2m06:49:19[0m [33m[automation][0m CallableColumnDefault(<func
+[2m06:49:19[0m [33m[automation][0m tion uuid4 at
+[2m06:49:19[0m [33m[automation][0m 0x0000018924BFAE80>))])
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationKV|automation_kv)        mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m constructed
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationGitSyncState|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m git_sync_state)
+[2m06:49:19[0m [33m[automation][0m _configure_property(automation_id,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationGitSyncState|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m git_sync_state)
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m _configure_property(org_id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationGitSyncState|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m git_sync_state)
+[2m06:49:19[0m [33m[automation][0m _configure_property(slug, Column
+[2m06:49:19[0m [33m[automation][0m )
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationGitSyncState|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m git_sync_state)
+[2m06:49:19[0m [33m[automation][0m _configure_property(content_hash,
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationGitSyncState|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m git_sync_state)
+[2m06:49:19[0m [33m[automation][0m _configure_property(last_synced_com
+[2m06:49:19[0m [33m[automation][0m mit, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationGitSyncState|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m git_sync_state)
+[2m06:49:19[0m [33m[automation][0m _configure_property(last_synced_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationGitSyncState|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m git_sync_state)
+[2m06:49:19[0m [33m[automation][0m _configure_property(dirty, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationGitSyncState|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m git_sync_state)
+[2m06:49:19[0m [33m[automation][0m _configure_property(created_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationGitSyncState|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m git_sync_state)
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m _configure_property(updated_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (AutomationGitSyncState|automation_
+[2m06:49:19[0m [33m[automation][0m mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m git_sync_state) Identified primary
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m key columns:
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m OrderedSet([Column('automation_id',
+[2m06:49:19[0m [33m[automation][0m Uuid(
+[2m06:49:19[0m [33m[automation][0m ),
+[2m06:49:19[0m [33m[automation][0m ForeignKey('automations.id'),
+[2m06:49:19[0m [33m[automation][0m table=<automation_git_sync_state
+[2m06:49:19[0m [33m[automation][0m >,
+[2m06:49:19[0m [33m[automation][0m primary_key=True, nullable=False
+[2m06:49:19[0m [33m[automation][0m )])
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationGitSyncState|automation_ mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m git_sync_state) constructed
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (AutomationGitSyncOrgConfig|automat mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m ion_git_sync_org_config)
+[2m06:49:19[0m [33m[automation][0m _configure_property(org_id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationGitSyncOrgConfig|automat mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m ion_git_sync_org_config)
+[2m06:49:19[0m [33m[automation][0m _configure_property(overrides,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (AutomationGitSyncOrgConfig|automat
+[2m06:49:19[0m [33m[automation][0m mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m ion_git_sync_org_config)
+[2m06:49:19[0m [33m[automation][0m _configure_property(configured_by_u
+[2m06:49:19[0m [33m[automation][0m ser_id, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationGitSyncOrgConfig|automat mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m ion_git_sync_org_config)
+[2m06:49:19[0m [33m[automation][0m _configure_property(last_synced_com
+[2m06:49:19[0m [33m[automation][0m mit, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (AutomationGitSyncOrgConfig|automat
+[2m06:49:19[0m [33m[automation][0m mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m ion_git_sync_org_config)
+[2m06:49:19[0m [33m[automation][0m _configure_property(last_synced_pat
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m h, Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO     (AutomationGitSyncOrgConfig|automat mapper.py
+[2m06:49:19[0m [33m[automation][0m :2419
+[2m06:49:19[0m [33m[automation][0m ion_git_sync_org_config)
+[2m06:49:19[0m [33m[automation][0m _configure_property(last_run_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationGitSyncOrgConfig|automat mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m ion_git_sync_org_config)
+[2m06:49:19[0m [33m[automation][0m _configure_property(last_error,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationGitSyncOrgConfig|automat mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m ion_git_sync_org_config)
+[2m06:49:19[0m [33m[automation][0m _configure_property(last_error_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationGitSyncOrgConfig|automat mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m ion_git_sync_org_config)
+[2m06:49:19[0m [33m[automation][0m _configure_property(sync_started_at
+[2m06:49:19[0m [33m[automation][0m , Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationGitSyncOrgConfig|automat mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m ion_git_sync_org_config)
+[2m06:49:19[0m [33m[automation][0m _configure_property(consecutive_aut
+[2m06:49:19[0m [33m[automation][0m h_failures, Column
+[2m06:49:19[0m [33m[automation][0m )
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationGitSyncOrgConfig|automat mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m ion_git_sync_org_config)
+[2m06:49:19[0m [33m[automation][0m _configure_property(created_at,
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationGitSyncOrgConfig|automat mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m ion_git_sync_org_config)
+[2m06:49:19[0m [33m[automation][0m _configure_property(updated_at,
+[2m06:49:19[0m [33m[automation][0m 
+[2m06:49:19[0m [33m[automation][0m Column)
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19] INFO
+[2m06:49:19[0m [33m[automation][0m (AutomationGitSyncOrgConfig|automat mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m ion_git_sync_org_config) Identified
+[2m06:49:19[0m [33m[automation][0m primary key columns:
+[2m06:49:19[0m [33m[automation][0m OrderedSet([Column('org_id',
+[2m06:49:19[0m [33m[automation][0m Uuid()
+[2m06:49:19[0m [33m[automation][0m ,
+[2m06:49:19[0m [33m[automation][0m table=<automation_git_sync_org_conf
+[2m06:49:19[0m [33m[automation][0m ig>, primary_key=True,
+[2m06:49:19[0m [33m[automation][0m nullable=False)])
+[2m06:49:19[0m [33m[automation][0m [11/15/26 14:49:19]
+[2m06:49:19[0m [33m[automation][0m INFO     (AutomationGitSyncOrgConfig|automat mapper.py:2419
+[2m06:49:19[0m [33m[automation][0m ion_git_sync_org_config)
+[2m06:49:19[0m [33m[automation][0m constructed
+[2m06:49:25[0m [34m[agent-server][0m INFO     Registered file-based agent 'bash-runner' from C:/Users/Kris/AppData/Local/uv/cache/archive-v0/qJ_5sEygXOkTOmQFtYlm_/Lib/site-packages/openhands/tools/preset/subagents/bash_runner.md  default.py:167
+[2m06:49:25[0m [34m[agent-server][0m INFO     Registered file-based agent 'code-explorer' from C:/Users/Kris/AppData/Local/uv/cache/archive-v0/qJ_5sEygXOkTOmQFtYlm_/Lib/site-packages/openhands/tools/preset/subagents/code_explorer.md  default.py:167
+[2m06:49:25[0m [34m[agent-server][0m INFO     Registered file-based agent 'general-purpose' from C:/Users/Kris/AppData/Local/uv/cache/archive-v0/qJ_5sEygXOkTOmQFtYlm_/Lib/site-packages/openhands/tools/preset/subagents/default.md  default.py:167
+[2m06:49:25[0m [34m[agent-server][0m INFO     Registered file-based agent 'web-researcher' from C:/Users/Kris/AppData/Local/uv/cache/archive-v0/qJ_5sEygXOkTOmQFtYlm_/Lib/site-packages/openhands/tools/preset/subagents/web_researcher.md  default.py:167
+[2m06:49:27[0m [34m[agent-server][0m INFO     Started server process [43036]  server.py:103
+[2m06:49:27[0m [34m[agent-server][0m INFO     Waiting for application startup.  on.py:48
+[2m06:49:34[0m [32m[automation][0m {"message": "Started server process [34276]", "severity": "INFO", "color_message": "Started server process [\u001b[36m34276\u001b[0m]", "litellm_redacted": "<object object at 0x0000018918238560>"}
+[2m06:49:34[0m [32m[automation][0m {"message": "Waiting for application startup.", "severity": "INFO", "litellm_redacted": "<object object at 0x0000018918238560>"}
+[2m06:49:35[0m [32m[automation][0m {"message": "Starting OpenHands Automations Service", "severity": "INFO", "kv_store_configured": true}
+[2m06:49:35[0m [32m[automation][0m {"message": "Created SQLite engine: sqlite+aiosqlite:///C:\\Users\\Kris\\.openhands\\automation\\automations.db", "severity": "INFO"}
+[2m06:49:38[0m [32m[automation][0m {"message": "setup plugin alembic.autogenerate.schemas", "severity": "INFO"}
+[2m06:49:38[0m [32m[automation][0m {"message": "setup plugin alembic.autogenerate.tables", "severity": "INFO"}
+[2m06:49:38[0m [32m[automation][0m {"message": "setup plugin alembic.autogenerate.types", "severity": "INFO"}
+[2m06:49:38[0m [32m[automation][0m {"message": "setup plugin alembic.autogenerate.constraints", "severity": "INFO"}
+[2m06:49:38[0m [32m[automation][0m {"message": "setup plugin alembic.autogenerate.defaults", "severity": "INFO"}
+[2m06:49:38[0m [32m[automation][0m {"message": "setup plugin alembic.autogenerate.comments", "severity": "INFO"}
+[2m06:49:38[0m [32m[automation][0m {"message": "setup plugin alembic.ext.checkconstraint_byname", "severity": "INFO"}
+[2m06:49:38[0m [32m[automation][0m {"message": "Context impl SQLiteImpl.", "severity": "INFO"}
+[2m06:49:38[0m [32m[automation][0m {"message": "Will assume non-transactional DDL.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade  -> 001, Initial schema: automations and automation_runs tables.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 001 -> 002, Add tarball_uploads table for storing upload metadata.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 002 -> 003, Add event-based trigger support.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 003 -> 004, Add prompt column to automations table.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 004 -> 005, Add bash_command_id column to automation_runs table.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 005 -> 006, Add model column to automations table.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 006 -> 007, Add composite indexes for automation run polling queries.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 007 -> 008, Add key-value store for automation state persistence.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 008 -> 009, Move sandbox cleanup configuration to automations.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 009 -> 010, Add index on automation_runs.automation_id.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 010 -> 011, Add service metadata table.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 011 -> 012, Add telemetry attribution to automations and runs.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 012 -> 013, Add cost column to automation_runs table.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 013 -> 014, Add preset_metadata column to automations table.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 014 -> 015, Add automation_git_sync_state table.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 015 -> 016, Add structured automation run status detail.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 016 -> 017, Add run_metadata column to automation_runs.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 017 -> 018, Add signature_scheme to custom_webhooks.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 018 -> 019, Add integration_events: one row per accepted delivery.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 019 -> 020, Add automation disabled reason metadata.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 020 -> 021, Add live run progress phase.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 021 -> 022, Add the subject a run is about, and when it stopped owning it.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 022 -> 023, Scope git sync to organizations.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 023 -> 024, Add when a run's sandbox is due for deferred deletion.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 024 -> 025, Persist automation profile selection.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 025 -> 026, Add automation state and run trigger_source.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 026 -> 027, Add automation_drafts table.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 027 -> 028, Reconcile ORM index declarations with the deployed schema.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Running upgrade 028 -> 029, Add git sync auth-failure backoff bookkeeping.", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "SQLite database migrations applied successfully", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Background scheduler started", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Background dispatcher started", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Background watchdog started", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Background git sync started", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Scheduler started, polling every 60 seconds (batch_size=50)", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Dispatcher started, polling every 10 seconds (batch_size=10)", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) _post_configure_properties() started", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop runs", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.runs setup primary join automations.id = automation_runs.automation_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.runs setup secondary join None", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.runs synchronize pairs [(automations.id => automation_runs.automation_id)]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.runs secondary synchronize pairs []", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.runs local/remote pairs [(automations.id / automation_runs.automation_id)]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.runs remote columns [automation_runs.automation_id]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.runs local columns [automations.id]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.runs relationship direction RelationshipDirection.ONETOMANY", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.runs lazy loading clause :param_1 = automation_runs.automation_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop disable_events", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.disable_events setup primary join automations.id = automation_disable_events.automation_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.disable_events setup secondary join None", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.disable_events synchronize pairs [(automations.id => automation_disable_events.automation_id)]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.disable_events secondary synchronize pairs []", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.disable_events local/remote pairs [(automations.id / automation_disable_events.automation_id)]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.disable_events remote columns [automation_disable_events.automation_id]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.disable_events local columns [automations.id]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.disable_events relationship direction RelationshipDirection.ONETOMANY", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Automation.disable_events lazy loading clause :param_1 = automation_disable_events.automation_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop user_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop org_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop name", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop telemetry_distinct_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop prompt", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop preset_metadata", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop model", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop agent_profile_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop trigger", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop tarball_path", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop setup_script_path", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop entrypoint", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop timeout", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop keep_alive", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop enabled", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop state", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop disabled_reason", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop disabled_detail", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop disabled_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop deleted_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop last_triggered_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop last_polled_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop created_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) initialize prop updated_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(Automation|automations) _post_configure_properties() complete", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) _post_configure_properties() started", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop automation", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationRun.automation setup primary join automations.id = automation_runs.automation_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationRun.automation setup secondary join None", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationRun.automation synchronize pairs [(automations.id => automation_runs.automation_id)]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationRun.automation secondary synchronize pairs []", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationRun.automation local/remote pairs [(automation_runs.automation_id / automations.id)]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationRun.automation remote columns [automations.id]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationRun.automation local columns [automation_runs.automation_id]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationRun.automation relationship direction RelationshipDirection.MANYTOONE", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationRun.automation lazy loading clause automations.id = :param_1", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationRun.automation will use Session.get() to optimize instance loads", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop automation_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop telemetry_distinct_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop status", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop error_detail", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop status_detail", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop current_phase", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop conversation_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop cost", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop timeout_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop sandbox_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop subject_key", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop subject_released_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop sandbox_cleanup_due_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop bash_command_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop trigger_source", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop event_payload", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop run_metadata", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop created_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop started_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) initialize prop completed_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationRun|automation_runs) _post_configure_properties() complete", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) _post_configure_properties() started", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) initialize prop id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) initialize prop user_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) initialize prop org_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) initialize prop endpoint", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) initialize prop name", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) initialize prop draft_body", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) initialize prop validation_errors", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) initialize prop dispatchable", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) initialize prop source_automation_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) initialize prop materialized_automation_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) initialize prop last_test_run_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) initialize prop deleted_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) initialize prop created_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) initialize prop updated_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDraft|automation_drafts) _post_configure_properties() complete", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDisableEvent|automation_disable_events) _post_configure_properties() started", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDisableEvent|automation_disable_events) initialize prop automation", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.automation setup primary join automations.id = automation_disable_events.automation_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.automation setup secondary join None", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.automation synchronize pairs [(automations.id => automation_disable_events.automation_id)]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.automation secondary synchronize pairs []", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.automation local/remote pairs [(automation_disable_events.automation_id / automations.id)]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.automation remote columns [automations.id]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.automation local columns [automation_disable_events.automation_id]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.automation relationship direction RelationshipDirection.MANYTOONE", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.automation lazy loading clause automations.id = :param_1", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.automation will use Session.get() to optimize instance loads", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDisableEvent|automation_disable_events) initialize prop run", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.run setup primary join automation_runs.id = automation_disable_events.run_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.run setup secondary join None", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.run synchronize pairs [(automation_runs.id => automation_disable_events.run_id)]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.run secondary synchronize pairs []", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.run local/remote pairs [(automation_disable_events.run_id / automation_runs.id)]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.run remote columns [automation_runs.id]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.run local columns [automation_disable_events.run_id]", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.run relationship direction RelationshipDirection.MANYTOONE", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.run lazy loading clause automation_runs.id = :param_1", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "AutomationDisableEvent.run will use Session.get() to optimize instance loads", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDisableEvent|automation_disable_events) initialize prop id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDisableEvent|automation_disable_events) initialize prop automation_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDisableEvent|automation_disable_events) initialize prop run_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDisableEvent|automation_disable_events) initialize prop reason", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDisableEvent|automation_disable_events) initialize prop detail", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDisableEvent|automation_disable_events) initialize prop source", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDisableEvent|automation_disable_events) initialize prop created_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationDisableEvent|automation_disable_events) _post_configure_properties() complete", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(TarballUpload|tarball_uploads) _post_configure_properties() started", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(TarballUpload|tarball_uploads) initialize prop id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(TarballUpload|tarball_uploads) initialize prop user_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(TarballUpload|tarball_uploads) initialize prop org_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(TarballUpload|tarball_uploads) initialize prop name", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(TarballUpload|tarball_uploads) initialize prop description", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(TarballUpload|tarball_uploads) initialize prop status", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(TarballUpload|tarball_uploads) initialize prop error_message", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(TarballUpload|tarball_uploads) initialize prop size_bytes", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(TarballUpload|tarball_uploads) initialize prop storage_path", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(TarballUpload|tarball_uploads) initialize prop created_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(TarballUpload|tarball_uploads) initialize prop updated_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(TarballUpload|tarball_uploads) initialize prop deleted_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(TarballUpload|tarball_uploads) _post_configure_properties() complete", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(CustomWebhook|custom_webhooks) _post_configure_properties() started", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(CustomWebhook|custom_webhooks) initialize prop id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(CustomWebhook|custom_webhooks) initialize prop org_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(CustomWebhook|custom_webhooks) initialize prop name", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(CustomWebhook|custom_webhooks) initialize prop source", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(CustomWebhook|custom_webhooks) initialize prop webhook_secret", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(CustomWebhook|custom_webhooks) initialize prop enabled", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(CustomWebhook|custom_webhooks) initialize prop event_key_expr", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(CustomWebhook|custom_webhooks) initialize prop signature_header", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(CustomWebhook|custom_webhooks) initialize prop signature_scheme", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(CustomWebhook|custom_webhooks) initialize prop created_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(CustomWebhook|custom_webhooks) initialize prop updated_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(CustomWebhook|custom_webhooks) _post_configure_properties() complete", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(IntegrationEvent|integration_events) _post_configure_properties() started", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(IntegrationEvent|integration_events) initialize prop id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(IntegrationEvent|integration_events) initialize prop org_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(IntegrationEvent|integration_events) initialize prop source", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(IntegrationEvent|integration_events) initialize prop provider_event_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(IntegrationEvent|integration_events) initialize prop event_key", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(IntegrationEvent|integration_events) initialize prop payload", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(IntegrationEvent|integration_events) initialize prop matched_count", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(IntegrationEvent|integration_events) initialize prop received_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(IntegrationEvent|integration_events) _post_configure_properties() complete", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationServiceMetadata|automation_service_metadata) _post_configure_properties() started", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationServiceMetadata|automation_service_metadata) initialize prop key", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationServiceMetadata|automation_service_metadata) initialize prop value", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationServiceMetadata|automation_service_metadata) initialize prop created_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationServiceMetadata|automation_service_metadata) initialize prop updated_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationServiceMetadata|automation_service_metadata) _post_configure_properties() complete", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationKV|automation_kv) _post_configure_properties() started", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationKV|automation_kv) initialize prop id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationKV|automation_kv) initialize prop automation_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationKV|automation_kv) initialize prop state_encrypted", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationKV|automation_kv) initialize prop created_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationKV|automation_kv) initialize prop updated_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationKV|automation_kv) _post_configure_properties() complete", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncState|automation_git_sync_state) _post_configure_properties() started", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncState|automation_git_sync_state) initialize prop automation_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncState|automation_git_sync_state) initialize prop org_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncState|automation_git_sync_state) initialize prop slug", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncState|automation_git_sync_state) initialize prop content_hash", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncState|automation_git_sync_state) initialize prop last_synced_commit", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncState|automation_git_sync_state) initialize prop last_synced_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncState|automation_git_sync_state) initialize prop dirty", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncState|automation_git_sync_state) initialize prop created_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncState|automation_git_sync_state) initialize prop updated_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncState|automation_git_sync_state) _post_configure_properties() complete", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncOrgConfig|automation_git_sync_org_config) _post_configure_properties() started", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncOrgConfig|automation_git_sync_org_config) initialize prop org_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncOrgConfig|automation_git_sync_org_config) initialize prop overrides", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncOrgConfig|automation_git_sync_org_config) initialize prop configured_by_user_id", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncOrgConfig|automation_git_sync_org_config) initialize prop last_synced_commit", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncOrgConfig|automation_git_sync_org_config) initialize prop last_synced_path", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncOrgConfig|automation_git_sync_org_config) initialize prop last_run_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncOrgConfig|automation_git_sync_org_config) initialize prop last_error", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncOrgConfig|automation_git_sync_org_config) initialize prop last_error_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncOrgConfig|automation_git_sync_org_config) initialize prop sync_started_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncOrgConfig|automation_git_sync_org_config) initialize prop consecutive_auth_failures", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncOrgConfig|automation_git_sync_org_config) initialize prop created_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncOrgConfig|automation_git_sync_org_config) initialize prop updated_at", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "(AutomationGitSyncOrgConfig|automation_git_sync_org_config) _post_configure_properties() complete", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Watchdog started, scanning every 60s", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Git sync loop started; each org's interval is set from the UI, 0 means manual-only", "severity": "INFO"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Application startup complete.", "severity": "INFO", "litellm_redacted": "<object object at 0x0000018918238560>"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Uvicorn running on http://127.0.0.1:18001 (Press CTRL+C to quit)", "severity": "INFO", "color_message": "Uvicorn running on \u001b[1mhttp://127.0.0.1:18001\u001b[0m (Press CTRL+C to quit)", "litellm_redacted": "<object object at 0x0000018918238560>"}
+[2m06:49:39[0m [32m[automation][0m {"message": "Workspace retention is enabled but the configured root C:\\Users\\Kris\\.openhands\\agent-canvas\\workspaces\\automation-runs does not exist on this host; no workspace will be purged.", "severity": "WARNING"}
+[2m06:49:48[0m [34m[agent-server][0m INFO     Telemetry initialised: exporter=posthog enabled=False (default)  service.py:154
+[2m06:49:48[0m [33m[agent-server][0m WARNING  VSCode server binary not found, VSCode will be disabled  vscode_service.py:49
+[2m06:49:48[0m [33m[agent-server][0m WARNING  VSCode service failed to start, continuing without VSCode  api.py:200
+[2m06:49:48[0m [34m[agent-server][0m INFO     Chromium is available for browser operations at C:\Program Files\Google\Chrome\Application\chrome.exe  impl.py:291
+[2m06:49:48[0m [34m[agent-server][0m INFO     Tool preload service started successfully  api.py:210
+[2m06:49:48[0m [34m[agent-server][0m INFO     Server initialization complete - ready to serve requests  api.py:272
+[2m06:49:48[0m [34m[agent-server][0m INFO     Application startup complete.  on.py:62
+[2m06:49:48[0m [34m[agent-server][0m INFO     Uvicorn running on http://127.0.0.1:18000 (Press CTRL+C to quit)  server.py:234
+[2m06:51:22[0m [31m[vite][0m Exited with code 1
+[31m✗[0m Required service "vite" exited with code 1; stopping the stack.
+
+[33mShutting down...[0m
+[2m06:51:22[0m [2m[agent-server][0m Stopping...
+[2m06:51:23[0m [2m[automation][0m Stopping...
+[2m06:51:24[0m [2m[ingress][0m Stopping...

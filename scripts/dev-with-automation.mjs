@@ -724,6 +724,15 @@ function registerShutdownHook(hook) {
   return shutdownHooks.add(hook);
 }
 
+/**
+ * Spawn a child service and wire its logs into the launcher output.
+ *
+ * `options.required` marks a service the stack cannot work without. When such a
+ * service exits non-zero, `failService` stops the remaining children and the
+ * launcher exits non-zero, so a dead frontend/ingress can never be reported as a
+ * healthy stack. Services left at the default (`required: false`) keep the old
+ * fire-and-forget behaviour, which the log-listener tests rely on.
+ */
 function spawnService(name, command, args, options = {}) {
   const proc = spawn(
     resolveWindowsCommand(command),
@@ -778,13 +787,19 @@ function spawnService(name, command, args, options = {}) {
   });
 
   proc.on("exit", (code, signal) => {
-    if (code !== 0 && code !== null && !shuttingDown) {
-      logService(name, `Exited with code ${code}`, c.red);
-      emitServiceLog(name, `exited with code ${code}`, "error");
-    }
     processes.delete(name);
-    if (code !== 0 && !shuttingDown) {
-      options.onUnexpectedExit?.(code ?? `signal ${signal}`);
+    const failed = (code !== 0 && code !== null) || signal != null;
+    if (failed && !shuttingDown) {
+      const reason = signal ? `signal ${signal}` : `code ${code}`;
+      logService(name, `Exited with ${reason}`, c.red);
+      emitServiceLog(name, `exited with ${reason}`, "error");
+      if (options.required) {
+        failService(name, reason);
+      } else {
+        // Keep upstream's onUnexpectedExit contract: a bare exit code, or
+        // `signal <name>` when the process was killed by a signal.
+        options.onUnexpectedExit?.(code ?? `signal ${signal}`);
+      }
     }
   });
 
@@ -1372,7 +1387,15 @@ async function stopServices() {
   }
 }
 
-function shutdown() {
+/**
+ * Stop the whole stack and exit.
+ *
+ * `exitCode` defaults to 0 for the signal path (Ctrl-C, SIGHUP) so a user
+ * initiated shutdown still looks like a clean stop. `failService` passes 1 so a
+ * required service dying surfaces as a non-zero exit instead of a silent
+ * success.
+ */
+function shutdown({ exitCode = 0 } = {}) {
   if (shuttingDown) return;
   shuttingDown = true;
 
@@ -1382,7 +1405,7 @@ function shutdown() {
 
   stopServices().then(() => {
     shutdownHooks.run();
-    process.exit(0);
+    process.exit(exitCode);
   });
 }
 
@@ -1453,9 +1476,32 @@ export function superviseService(
   launch();
 }
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
-process.on("SIGHUP", shutdown);
+/**
+ * Handle a required service dying mid-flight.
+ *
+ * Before this existed the launcher logged `Exited with code 1` and carried on:
+ * ingress started, the healthy banner printed, and `localhost:8000` served a
+ * blank page because the frontend child was gone (classic `EADDRINUSE` on the
+ * frontend port). A required service dying means the stack is unusable, so stop
+ * the rest and exit non-zero. `shutdown()` sets `shuttingDown` synchronously,
+ * which is what lets `main()` bail out before starting ingress or printing the
+ * banner.
+ */
+function failService(name, reason) {
+  if (shuttingDown) return;
+  logError(
+    `Required service "${name}" exited with ${reason}; stopping the stack.`,
+  );
+  emitServiceLog(name, `required service exited with ${reason}`, "error");
+  shutdown({ exitCode: 1 });
+}
+
+// Note the `() => shutdown()` wrappers: process signal listeners are called with
+// the signal name, which would otherwise be passed as `shutdown`'s options
+// object.
+process.on("SIGINT", () => shutdown());
+process.on("SIGTERM", () => shutdown());
+process.on("SIGHUP", () => shutdown());
 
 /**
  * One MARS web bridge per stack, on the server the browser reaches: the
@@ -1509,6 +1555,10 @@ function startIngress(config, { onUnexpectedExit } = {}) {
     {
       cwd: projectRoot,
       color: c.yellow,
+      // The ingress is the front-door service: superviseService restarts it
+      // on unexpected exit and stops the stack with a non-zero exit once the
+      // restarts are exhausted, so a dead ingress can never be reported as a
+      // healthy stack.
       env: buildMarsWebEnv("ingress", config),
       onUnexpectedExit,
     },
@@ -1612,6 +1662,9 @@ function startVite(config) {
     cwd: config.canvasPath,
     env: viteEnv,
     color: c.magenta,
+    // The dev frontend is the only thing serving the app; without it the
+    // advertised URL is a blank page.
+    required: true,
   });
 }
 
@@ -2029,6 +2082,12 @@ async function main(options = {}) {
   // 5. Wait for services to be ready
   await delay(2000);
 
+  // A required service may already have died during this window (the common
+  // case is the frontend child hitting EADDRINUSE). `failService` has started a
+  // non-zero shutdown; returning here keeps ingress from binding the advertised
+  // port and keeps the healthy banner off the screen.
+  if (shuttingDown) return { config, agentServerReady };
+
   // 6. Start ingress proxy (routes traffic only to running services)
   superviseService("ingress", (hooks) => startIngress(config, hooks), {
     onFailure: onStackFailure,
@@ -2036,6 +2095,10 @@ async function main(options = {}) {
 
   // Wait for ingress to start
   await delay(1000);
+
+  // Re-check before advertising: a required service can also die inside this
+  // second window, and printing the banner then would be the same lie as before.
+  if (shuttingDown) return { config, agentServerReady };
 
   printBanner(config);
 
@@ -2119,6 +2182,8 @@ function startStaticFrontend(config, staticDir, { onUnexpectedExit } = {}) {
         ...buildMarsWebEnv("static", config),
         SESSION_API_KEY: keyPolicy.sessionApiKey || "",
       },
+      // Supervised like the ingress: restarted on unexpected exit, and the
+      // stack stops non-zero once the restarts are exhausted.
       onUnexpectedExit,
     },
   );
