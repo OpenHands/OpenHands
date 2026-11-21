@@ -117,7 +117,7 @@ Preconditions:
 
 Evidence (2026-11-09, Canvas #19495 at 53124e926, Agent Server #6602 at
 73513fdee, DeepSeek, Paper): screenshots in
-[`.pr/projects-default-ui`](https://github.com/OpenHands/OpenHands/tree/53124e9269a94ef62ede5ca9b9c69b23608258e5/.pr/projects-default-ui)
+[`pr-19495/projects-default-ui`](https://github.com/enyst/openhands-evidence/tree/fadf9da2c493442d1a344c98dfcbd1c81c3d00b4/.pr/OpenHands/OpenHands/pr-19495/projects-default-ui)
 on #19495 cover `F32.off`, `F32.entry`, `F32.create`, `F32.coordinator`,
 `F32.board`, `F32.resolve`, `F32.files` (upload), `F32.badge` and
 `F32.headers`. `F32.membership` and agent-saved files were not driven.
