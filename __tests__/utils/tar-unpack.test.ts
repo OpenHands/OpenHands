@@ -11,7 +11,10 @@ const files = [
   { name: "lib/util.py", content: "x = 1\n" },
   { name: "setup.sh", content: "#!/bin/sh\n", mode: 0o755 },
 ];
-const budget = { maxTotalBytes: 1024 * 1024 };
+const budget = {
+  maxContentBytes: 1024 * 1024,
+  maxArchiveBytes: 2 * 1024 * 1024,
+};
 
 /** ustar header field offsets, as `packTar` writes them. */
 const TYPEFLAG_OFFSET = 156;
@@ -42,6 +45,29 @@ describe("unpackTarGzip", () => {
       "main.py",
       "lib/util.py",
       "setup.sh",
+    ]);
+  });
+
+  it("reads a gzip body that spans multiple source chunks", async () => {
+    // Arrange
+    let state = 0x12345678;
+    let content = "";
+    for (let index = 0; index < 32 * 1024; index += 1) {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      content += String.fromCharCode(32 + (state % 95));
+    }
+    const largeFile = [{ name: "large.txt", content }];
+    const archive = new Uint8Array(await packTarGzip(largeFile));
+
+    // Act
+    const entries = await unpackTarGzip(archive, {
+      maxContentBytes: content.length,
+      maxArchiveBytes: packTar(largeFile).byteLength,
+    });
+
+    // Assert
+    expect(entries).toEqual([
+      { path: "large.txt", size: content.length, text: content },
     ]);
   });
 
@@ -116,7 +142,103 @@ describe("unpackTarGzip", () => {
   it("rejects an archive that unpacks past the size budget", async () => {
     // Act + Assert
     await expect(
-      unpackTarGzip(packTar(files), { maxTotalBytes: 20 }),
+      unpackTarGzip(packTar(files), {
+        maxContentBytes: 20,
+        maxArchiveBytes: budget.maxArchiveBytes,
+      }),
     ).rejects.toBeInstanceOf(TarTooLargeError);
+  });
+
+  it.each(["plain", "gzip"])(
+    "accepts a %s archive at the exact content and archive limits",
+    async (format) => {
+      // Arrange
+      const plainArchive = packTar(files);
+      const contentBytes = files.reduce(
+        (total, file) => total + new TextEncoder().encode(file.content).length,
+        0,
+      );
+      const archive =
+        format === "gzip"
+          ? new Uint8Array(await packTarGzip(files))
+          : plainArchive;
+
+      // Act
+      const entries = await unpackTarGzip(archive, {
+        maxContentBytes: contentBytes,
+        maxArchiveBytes: plainArchive.byteLength,
+      });
+
+      // Assert
+      expect(entries).toHaveLength(files.length);
+    },
+  );
+
+  it.each(["plain", "gzip"])(
+    "rejects a %s archive above the archive limit",
+    async (format) => {
+      // Arrange
+      const plainArchive = packTar(files);
+      const archive =
+        format === "gzip"
+          ? new Uint8Array(await packTarGzip(files))
+          : plainArchive;
+
+      // Act + Assert
+      await expect(
+        unpackTarGzip(archive, {
+          maxContentBytes: budget.maxContentBytes,
+          maxArchiveBytes: plainArchive.byteLength - 1,
+        }),
+      ).rejects.toBeInstanceOf(TarTooLargeError);
+    },
+  );
+
+  it("counts tar structure against the archive limit", async () => {
+    // Arrange
+    const archive = packTar([
+      { name: "one", content: "" },
+      { name: "two", content: "" },
+    ]);
+
+    // Act + Assert
+    await expect(
+      unpackTarGzip(archive, {
+        maxContentBytes: 0,
+        maxArchiveBytes: archive.byteLength - 1,
+      }),
+    ).rejects.toBeInstanceOf(TarTooLargeError);
+  });
+
+  it("stops inflating when a gzip stream crosses the size budget", async () => {
+    // Arrange: corrupt the checksum after a highly compressible payload. A
+    // streaming size check reaches the limit before it reaches the bad footer.
+    const archive = new Uint8Array(
+      await packTarGzip([
+        { name: "large.txt", content: "x".repeat(1024 * 1024) },
+      ]),
+    );
+    archive[archive.length - 8] ^= 0xff;
+
+    // Act + Assert
+    await expect(
+      unpackTarGzip(archive, {
+        maxContentBytes: 2 * 1024 * 1024,
+        maxArchiveBytes: 64 * 1024,
+      }),
+    ).rejects.toBeInstanceOf(TarTooLargeError);
+  });
+
+  it("reports a corrupt gzip below the archive limit", async () => {
+    // Arrange
+    const archive = new Uint8Array(await packTarGzip(files));
+    archive[archive.length - 8] ^= 0xff;
+
+    // Act
+    const unpack = unpackTarGzip(archive, budget);
+
+    // Assert
+    await expect(unpack).rejects.toThrow();
+    await expect(unpack).rejects.not.toBeInstanceOf(TarTooLargeError);
   });
 });
