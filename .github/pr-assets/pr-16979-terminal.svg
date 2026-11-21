@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="480" viewBox="0 0 760 480" font-family="Menlo, Consolas, monospace">
+  <defs>
+    <style>
+      .win { fill: #1e1e1e; }
+      .bar { fill: #2b2b2b; }
+      .foo { fill: #cccccc; }
+      .sto{ fill: #ffffff; }
+      .title { fill: #9cdcfe; }
+    </style>
+  </defs>
+  <rect class="win" width="760" height="480" rx="6"/>
+  <rect class="bar" width="760" height="34" rx="6"/>
+  <text x="16" y="23" font-size="14" fill="#cccccc">zsh — git-diff-stats (OpenHands)</text>
+  <rect class="sto" x="0" y="34" width="760" height="446" fill="#ffffff"/>
+  <text x="16" y="64" font-size="13" fill="#000000">$ npx vitest run __tests__/utils/git-diff-stats.test.ts</text>
+  <text x="16" y="88" font-size="13" fill="#6a9955"> RUN  v4.1.10 /workspace/OpenHands</text>
+  <text x="16" y="112" font-size="13" fill="#000000"> Test Files  1 passed (1)      </text>
+  <text x="16" y="136" font-size="13" fill="#000000">      Tests  8 passed (8)</text>
+  <text x="16" y="176" font-size="13" fill="#000000">$ npx tsc --noEmit</text>
+  <text x="16" y="200" font-size="13" fill="#6a9955"> (no output — success)</text>
+  <text x="16" y="240" font-size="13" fill="#000000">$ npx eslint src/utils/git-diff-stats.ts __tests__/utils/git-diff-stats.test.ts</text>
+  <text x="16" y="264" font-size="13" fill="#6a9955"> (no output — success)</text>
+  <text x="16" y="316" font-size="13" fill="#b5cea8">✓ counts hunk lines whose content starts with -- or ++</text>
+  <text x="16" y="340" font-size="13" fill="#b5cea8">✓ does not count file-header ---/+++ lines before the first hunk</text>
+  <text x="16" y="364" font-size="13" fill="#b5cea8">✓ does not count @@ hunk headers</text>
+  <text x="16" y="388" font-size="13" fill="#b5cea8">✓ counts every hunk body line exactly once across multiple hunks</text>
+  <text x="16" y="412" font-size="13" fill="#b5cea8">✓ does not count the second file's own header pair</text>
+  <text x="16" y="436" font-size="13" fill="#b5cea8">✓ agrees with the unified path on --/++-prefixed changes</text>
+  <text x="16" y="460" font-size="13" fill="#b5cea8">✓ sums per-file stats</text>
+</svg>
