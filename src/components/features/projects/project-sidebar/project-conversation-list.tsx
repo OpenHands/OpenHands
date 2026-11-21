@@ -1,6 +1,14 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { FileText } from "lucide-react";
+import {
+  CircleDashed,
+  CircleX,
+  FileText,
+  GitMerge,
+  GitPullRequest,
+  GitPullRequestClosed,
+  GitPullRequestDraft,
+} from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import {
@@ -27,10 +35,11 @@ import { conversationStateLabel } from "#/utils/project-conversation-state";
 import { cn } from "#/utils/utils";
 import { ProjectPanelGroup } from "#/components/features/projects/project-panel/project-panel-group";
 import {
-  ChecksIcon,
-  PULL_REQUEST_STATE_COLOR,
-  PULL_REQUEST_STATE_ICON,
-} from "#/components/features/projects/project-panel/project-panel-prs";
+  ATTENTION_LABEL,
+  ATTENTION_ORDER,
+  pullRequestAttention,
+  type PullRequestAttention,
+} from "#/utils/pull-request-attention";
 
 type StateMark = (typeof BOARD_GROUPS)[number]["id"];
 
@@ -97,52 +106,95 @@ function StatusLine({ conversation }: { conversation: ProjectConversation }) {
   return <>{t(conversationStateLabel(conversation))}</>;
 }
 
-/**
- * A small stamp under a row: a hairline frame in its own ink, no fill, so a
- * row's marks read like notes printed beside it rather than buttons.
- */
-const STAMP =
-  "inline-flex h-4.5 items-center gap-1 rounded-facet-control border border-current/35 px-1.5 text-2xs leading-none tabular-nums";
+interface RowPullRequest {
+  pr: ProjectPullRequest;
+  ref: string;
+  status: PullRequestStatus | undefined;
+  attention: PullRequestAttention;
+}
+
+const pullRequestUrl = ({ pr, status }: RowPullRequest) =>
+  status?.url ?? `https://github.com/${pr.owner}/${pr.repo}/pull/${pr.number}`;
+
+/** A row's pull requests, most pressing first. */
+function rowPullRequests(
+  conversation: ProjectConversation,
+  statuses: Map<string, PullRequestStatus>,
+): RowPullRequest[] {
+  return conversation.pull_requests
+    .map((pr) => {
+      const ref = pullRequestRef(pr);
+      const status = statuses.get(ref);
+      return { pr, ref, status, attention: pullRequestAttention(status) };
+    })
+    .sort(
+      (a, b) =>
+        ATTENTION_ORDER.indexOf(a.attention) -
+        ATTENTION_ORDER.indexOf(b.attention),
+    );
+}
+
+const ATTENTION_ICON: Record<PullRequestAttention, typeof GitPullRequest> = {
+  ready: GitPullRequest,
+  failing: CircleX,
+  checking: CircleDashed,
+  draft: GitPullRequestDraft,
+  merged: GitMerge,
+  closed: GitPullRequestClosed,
+  unknown: GitPullRequest,
+};
 
 /**
- * A pull request the conversation opened: its state in the icon and ink
- * (open, merged; a closed one muted and struck through, an unread one muted),
- * and its checks after a hairline.
+ * How loud a chip is follows what it asks of the user: a solid one is
+ * theirs to review, a red frame is failing, a dashed one is on its way, and
+ * a finished one is plain text that steps back.
  */
-function PullRequestStamp({
-  pr,
-  status,
-}: {
-  pr: ProjectPullRequest;
-  status: PullRequestStatus | undefined;
-}) {
-  const ref = pullRequestRef(pr);
-  const Icon = PULL_REQUEST_STATE_ICON[status?.state ?? "open"];
-  const checks = status && status.checks !== "none" ? status.checks : null;
+const CHIP_LOOK: Record<PullRequestAttention, string> = {
+  ready: "bg-primary text-on-primary font-medium",
+  failing: "border border-danger/60 text-danger",
+  checking: "border border-dashed border-current/40 text-muted",
+  draft: "border border-dashed border-current/40 text-muted",
+  unknown: "text-muted",
+  merged: "text-muted",
+  closed: "text-muted/70",
+};
+
+/** The word a chip says, only where the user may act on it. */
+const CHIP_WORD: Partial<Record<PullRequestAttention, I18nKey>> = {
+  ready: I18nKey.PROJECTS$PR_READY,
+  failing: I18nKey.PROJECTS$PR_FAILING,
+};
+
+function PullRequestChip({ item }: { item: RowPullRequest }) {
+  const { t } = useTranslation("openhands");
+  const Icon = ATTENTION_ICON[item.attention];
+  const word = CHIP_WORD[item.attention];
+  const label = t(ATTENTION_LABEL[item.attention]);
   return (
-    <span
+    <a
+      href={pullRequestUrl(item)}
+      target="_blank"
+      rel="noopener noreferrer"
       data-testid="project-conversation-pr"
-      data-state={status?.state ?? "unknown"}
-      title={status ? `${ref} · ${status.title}` : ref}
+      data-attention={item.attention}
+      aria-label={`${t(I18nKey.PROJECTS$PR_OPEN_ON_GITHUB, { ref: item.ref })}: ${label}`}
+      title={`${label} · ${item.ref}${item.status ? ` · ${item.status.title}` : ""}`}
       className={cn(
-        STAMP,
-        // A closed one recedes: red is kept for what needs the user, such as
-        // failing checks.
-        status && status.state !== "closed"
-          ? PULL_REQUEST_STATE_COLOR[status.state]
-          : "text-muted",
+        "inline-flex h-5 items-center gap-1 rounded-full px-2 text-2xs leading-none tabular-nums",
+        "transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-1",
+        CHIP_LOOK[item.attention],
+        // Plain-text chips line up with the framed ones' text.
+        !CHIP_LOOK[item.attention].includes("border") &&
+          !CHIP_LOOK[item.attention].includes("bg-") &&
+          "px-1",
       )}
     >
-      <Icon width={11} height={11} aria-hidden className="shrink-0" />
-      <span className={cn(status?.state === "closed" && "line-through")}>
-        #{pr.number}
+      <Icon width={12} height={12} aria-hidden className="shrink-0" />
+      <span className={cn(item.attention === "closed" && "line-through")}>
+        #{item.pr.number}
       </span>
-      {checks ? (
-        <span className="-mr-0.5 flex h-full items-center border-l border-current/25 pl-1">
-          <ChecksIcon checks={checks} size={10} />
-        </span>
-      ) : null}
-    </span>
+      {word ? <span>{t(word)}</span> : null}
+    </a>
   );
 }
 
@@ -163,18 +215,24 @@ function ConversationRow({
 }) {
   const { t } = useTranslation("openhands");
   const id = projectIdKey(conversation.conversation_id);
+  const pullRequests = rowPullRequests(conversation, statuses);
+  const hasMarks = fileCount > 0 || pullRequests.length > 0;
   return (
-    <li>
+    // The row links to the conversation; its pull requests link to GitHub,
+    // so they sit beside the link rather than inside it.
+    <li
+      className={cn(
+        "rounded-lg hover:bg-contrast/5",
+        isCurrent && "bg-surface hover:bg-surface",
+      )}
+    >
       <NavigationLink
         to={`/conversations/${id}`}
         data-testid="project-conversation"
         data-attention={conversation.attention}
         aria-current={isCurrent ? "page" : undefined}
         title={id}
-        className={cn(
-          "flex gap-2.5 rounded-lg px-2 py-1.5 hover:bg-contrast/5",
-          isCurrent && "bg-surface",
-        )}
+        className={cn("flex gap-2.5 px-2 pt-1.5", hasMarks ? "pb-1" : "pb-1.5")}
       >
         <StateIcon mark={mark} />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -196,28 +254,27 @@ function ConversationRow({
             {isCurrent ? `${t(I18nKey.PROJECTS$YOU_ARE_HERE)} · ` : null}
             <StatusLine conversation={conversation} />
           </span>
-          {fileCount || conversation.pull_requests.length ? (
-            <span className="mt-1 flex flex-wrap gap-1">
-              {conversation.pull_requests.map((pr) => (
-                <PullRequestStamp
-                  key={pullRequestRef(pr)}
-                  pr={pr}
-                  status={statuses.get(pullRequestRef(pr))}
-                />
-              ))}
-              {fileCount ? (
-                <span
-                  data-testid="project-conversation-files"
-                  className={cn(STAMP, "border-dashed text-muted")}
-                >
-                  <FileText width={11} height={11} aria-hidden />
-                  {t(I18nKey.PROJECTS$FILE_COUNT, { count: fileCount })}
-                </span>
-              ) : null}
-            </span>
-          ) : null}
         </span>
       </NavigationLink>
+      {hasMarks ? (
+        // Lined up under the title: the mark is 16px wide, with a 10px gap.
+        <div className="pr-2 pb-1.5 pl-8.5">
+          <span className="flex flex-wrap items-center gap-1">
+            {pullRequests.map((item) => (
+              <PullRequestChip key={item.ref} item={item} />
+            ))}
+            {fileCount ? (
+              <span
+                data-testid="project-conversation-files"
+                className="inline-flex h-5 items-center gap-1 px-1 text-2xs text-muted"
+              >
+                <FileText width={12} height={12} aria-hidden />
+                {t(I18nKey.PROJECTS$FILE_COUNT, { count: fileCount })}
+              </span>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
     </li>
   );
 }

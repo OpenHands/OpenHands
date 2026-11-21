@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
@@ -147,21 +147,30 @@ describe("Sidebar in a project view", () => {
     );
   });
 
-  it("chips each conversation's pull requests with their checks, and its files", async () => {
+  it("chips each pull request by what it asks of the user, linked to GitHub", async () => {
     renderSidebar();
-    const retry = await rowOf("Fix login retry");
-    const chips = Array.from(
-      retry.querySelectorAll('[data-testid="project-conversation-pr"]'),
-    );
-    expect(chips.map((c) => c.textContent)).toEqual(["#412", "#409"]);
+    const retry = (await rowOf("Fix login retry")).closest("li")!;
+    const chip = (number: number) =>
+      within(retry)
+        .getAllByRole("link")
+        .find((a) => a.getAttribute("href")?.endsWith(`/pull/${number}`))!;
+    // #412 passes its checks, so it is ready for the user and comes first;
+    // #409 could not be read.
     await waitFor(() =>
-      expect(chips[0].querySelector('[data-checks="success"]')).not.toBeNull(),
+      expect(chip(412)).toHaveAttribute("data-attention", "ready"),
     );
-    // Inked by state: #412 is open; #409 could not be read.
-    expect(chips.map((c) => c.getAttribute("data-state"))).toEqual([
-      "open",
-      "unknown",
-    ]);
+    expect(chip(412)).toHaveTextContent("#412PROJECTS$PR_READY");
+    expect(chip(412)).toHaveAttribute(
+      "href",
+      "https://github.com/acme/app/pull/412",
+    );
+    expect(chip(412)).toHaveAttribute("target", "_blank");
+    expect(chip(409)).toHaveAttribute("data-attention", "unknown");
+    expect(
+      Array.from(
+        retry.querySelectorAll('[data-testid="project-conversation-pr"]'),
+      ).map((c) => c.textContent),
+    ).toEqual(["#412PROJECTS$PR_READY", "#409"]);
     expect(
       retry.querySelector('[data-testid="project-conversation-age"]'),
     ).not.toBeNull();

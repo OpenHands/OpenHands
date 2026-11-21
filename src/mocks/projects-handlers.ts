@@ -79,13 +79,18 @@ const seed = (): MockProject[] => [
         execution_status: "running",
         attention: "working",
         turn: null,
-        pull_requests: [{ owner: "acme", repo: "app", number: 412 }],
+        pull_requests: [
+          { owner: "acme", repo: "app", number: 412 },
+          { owner: "acme", repo: "app", number: 61 },
+        ],
       }),
       conversation("04000000-0000-4000-8000-000000000001", "Install docs", {
         pull_requests: [
           { owner: "acme", repo: "app", number: 398 },
           { owner: "acme", repo: "docs", number: 57 },
           { owner: "acme", repo: "app", number: 405 },
+          { owner: "acme", repo: "app", number: 420 },
+          { owner: "acme", repo: "app", number: 999 },
         ],
       }),
       conversation("05000000-0000-4000-8000-000000000001", "Locales", {
@@ -144,11 +149,27 @@ const seed = (): MockProject[] => [
 
 const MOCK_PULL_REQUEST_STATES: Record<
   number,
-  { title: string; state: "open" | "merged" | "closed"; checks: string }
+  {
+    title: string;
+    state: "open" | "merged" | "closed";
+    draft?: boolean;
+    checks: string;
+  }
 > = {
-  412: { title: "Rewrite the README intro", state: "open", checks: "pending" },
-  398: { title: "Install with npm", state: "merged", checks: "success" },
+  420: {
+    title: "Install page: copy-paste commands",
+    state: "open",
+    checks: "success",
+  },
   57: { title: "Docs: install page", state: "open", checks: "failure" },
+  412: { title: "Rewrite the README intro", state: "open", checks: "pending" },
+  61: {
+    title: "README: screenshots",
+    state: "open",
+    draft: true,
+    checks: "none",
+  },
+  398: { title: "Install with npm", state: "merged", checks: "success" },
   405: {
     title: "Install script (superseded)",
     state: "closed",
@@ -231,6 +252,7 @@ export const PROJECTS_HANDLERS = [
         title: state.title,
         url: `https://github.com/${params.owner}/${params.repo}/pull/${number}`,
         state: state.state,
+        draft: state.draft ?? false,
         checks: state.checks,
       });
     },
