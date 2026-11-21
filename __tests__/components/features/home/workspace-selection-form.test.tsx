@@ -641,6 +641,53 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     expect(screen.getByTestId("workspace-launch-button")).toBeDisabled();
   });
 
+  it("Rename Workspace dispatches renameWorkspace and relabels the selection", async () => {
+    // Arrange
+    clearCachedAgentServerInfo();
+    const renameSpy = vi
+      .spyOn(WorkspacesService, "renameWorkspace")
+      .mockResolvedValue({ workspaces: [], workspaceParents: [] });
+    const workspace = {
+      id: "/Users/me/dev/repo1",
+      name: "repo1",
+      path: "/Users/me/dev/repo1",
+    };
+    renderForm({ workspaces: [workspace] });
+    const user = userEvent.setup();
+
+    // Act: select the workspace, then rename it from Manage Workspaces.
+    const selectionMenu = await openWorkspaceDropdown(user);
+    await user.click(await within(selectionMenu).findByText("repo1"));
+    await waitFor(() =>
+      expect(
+        window.sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY),
+      ).toBe(workspace.path),
+    );
+
+    await openWorkspaceDropdown(user);
+    await user.click(await screen.findByTestId("manage-workspaces-button"));
+    await screen.findByTestId("manage-workspaces-modal");
+    await user.click(screen.getByTestId("manage-workspaces-rename-repo1"));
+    const input = screen.getByTestId(
+      "manage-workspaces-rename-workspace-input",
+    );
+    await user.clear(input);
+    await user.type(input, "renamed{Enter}");
+
+    // Assert: the mutation carries the path, and the closed control relabels
+    // while the path-based session-storage selection survives.
+    await waitFor(() =>
+      expect(renameSpy).toHaveBeenCalledWith(workspace.path, "renamed"),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("workspace-dropdown")).toHaveValue("renamed"),
+    );
+    expect(
+      window.sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY),
+    ).toBe(workspace.path);
+    expect(screen.getByTestId("workspace-launch-button")).toBeEnabled();
+  });
+
   it("clears the selected parent-derived workspace when its parent is removed", async () => {
     const removeParentSpy = vi
       .spyOn(WorkspacesService, "removeWorkspaceParent")

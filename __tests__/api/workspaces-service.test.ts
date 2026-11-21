@@ -11,14 +11,18 @@ import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
 const {
   mockListWorkspaces,
   mockAddWorkspaces,
+  mockRenameWorkspace,
   mockDeleteWorkspace,
   mockAddWorkspaceParents,
+  mockRenameWorkspaceParent,
   mockDeleteWorkspaceParent,
 } = vi.hoisted(() => ({
   mockListWorkspaces: vi.fn(),
   mockAddWorkspaces: vi.fn(),
+  mockRenameWorkspace: vi.fn(),
   mockDeleteWorkspace: vi.fn(),
   mockAddWorkspaceParents: vi.fn(),
+  mockRenameWorkspaceParent: vi.fn(),
   mockDeleteWorkspaceParent: vi.fn(),
 }));
 
@@ -27,8 +31,10 @@ vi.mock("@openhands/typescript-client/clients", () => ({
     return {
       listWorkspaces: mockListWorkspaces,
       addWorkspaces: mockAddWorkspaces,
+      renameWorkspace: mockRenameWorkspace,
       deleteWorkspace: mockDeleteWorkspace,
       addWorkspaceParents: mockAddWorkspaceParents,
+      renameWorkspaceParent: mockRenameWorkspaceParent,
       deleteWorkspaceParent: mockDeleteWorkspaceParent,
     };
   }),
@@ -49,8 +55,10 @@ beforeEach(() => {
   setActiveSelection({ backendId: localBackend.id });
   mockListWorkspaces.mockReset();
   mockAddWorkspaces.mockReset();
+  mockRenameWorkspace.mockReset();
   mockDeleteWorkspace.mockReset();
   mockAddWorkspaceParents.mockReset();
+  mockRenameWorkspaceParent.mockReset();
   mockDeleteWorkspaceParent.mockReset();
 });
 
@@ -117,6 +125,37 @@ describe("WorkspacesService", () => {
 
     // Assert
     expect(mockAddWorkspaceParents).toHaveBeenCalledWith(parents);
+  });
+
+  it("renameWorkspace delegates to WorkspacesClient and maps the response", async () => {
+    // Arrange
+    mockRenameWorkspace.mockResolvedValue({
+      workspaces: [{ id: "/a", name: "renamed", path: "/a" }],
+      workspaceParents: [],
+    });
+
+    // Act
+    const result = await WorkspacesService.renameWorkspace("/a", "renamed");
+
+    // Assert
+    expect(mockRenameWorkspace).toHaveBeenCalledWith("/a", "renamed");
+    expect(result.workspaces).toEqual([
+      { id: "/a", name: "renamed", path: "/a" },
+    ]);
+  });
+
+  it("renameWorkspaceParent delegates to WorkspacesClient", async () => {
+    // Arrange
+    mockRenameWorkspaceParent.mockResolvedValue({
+      workspaces: [],
+      workspaceParents: [{ id: "/p", name: "renamed", path: "/p" }],
+    });
+
+    // Act
+    await WorkspacesService.renameWorkspaceParent("/p", "renamed");
+
+    // Assert
+    expect(mockRenameWorkspaceParent).toHaveBeenCalledWith("/p", "renamed");
   });
 
   it("removeWorkspace delegates to WorkspacesClient", async () => {

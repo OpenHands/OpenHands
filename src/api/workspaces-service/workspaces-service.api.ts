@@ -49,6 +49,15 @@ class WorkspacesService {
     return toLocalWorkspacesResponse(await client().addWorkspaces(items));
   }
 
+  static async renameWorkspace(
+    path: string,
+    name: string,
+  ): Promise<WorkspacesListResponse> {
+    return toLocalWorkspacesResponse(
+      await client().renameWorkspace(path, name),
+    );
+  }
+
   static async removeWorkspace(path: string): Promise<void> {
     await client().deleteWorkspace(path);
   }
@@ -57,6 +66,15 @@ class WorkspacesService {
     items: LocalWorkspaceParent[],
   ): Promise<WorkspacesListResponse> {
     return toLocalWorkspacesResponse(await client().addWorkspaceParents(items));
+  }
+
+  static async renameWorkspaceParent(
+    path: string,
+    name: string,
+  ): Promise<WorkspacesListResponse> {
+    return toLocalWorkspacesResponse(
+      await client().renameWorkspaceParent(path, name),
+    );
   }
 
   static async removeWorkspaceParent(path: string): Promise<void> {
