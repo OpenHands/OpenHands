@@ -573,14 +573,15 @@ describe("MarkdownRenderer conversation mentions", () => {
     expect(docs.getAttribute("target")).toBe("_blank");
   });
 
-  it("does not turn other unknown schemes into links", () => {
+  it("shows a malformed mention as its text, and keeps other schemes out", () => {
     const { container } = render(
       <MarkdownRenderer
         includeStandard
-        content="[x](conversation:not-an-id) [y](javascript:alert(1))"
+        content="[old notes](conversation:not-an-id) [y](javascript:alert(1))"
       />,
     );
     expect(screen.queryByTestId("conversation-mention")).toBeNull();
+    expect(screen.getByText("old notes").closest("a")).toBeNull();
     for (const a of container.querySelectorAll("a")) {
       expect(a.getAttribute("href") ?? "").not.toMatch(
         /^(javascript|conversation):/,
