@@ -370,7 +370,12 @@ describe("renaming a factory", () => {
     await screen.findByTestId("automation-card-a-reviewer");
 
     // Act
-    await user.click(screen.getByTestId("factory-rename"));
+    await user.click(
+      within(screen.getByTestId("factory-actions")).getByLabelText(
+        I18nKey.AUTOMATIONS$ACTIONS_MENU,
+      ),
+    );
+    await user.click(screen.getByText(I18nKey.FACTORIES$RENAME));
     const input = screen.getByTestId("factory-name-input");
     expect(input).toHaveValue(coreFactory.name);
     await user.clear(input);
@@ -400,7 +405,7 @@ describe("renaming a factory", () => {
     await screen.findByTestId("automation-card-a-reviewer");
 
     // Assert
-    expect(screen.queryByTestId("factory-rename")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("factory-actions")).not.toBeInTheDocument();
   });
 
   it("hides Add Automation in a factory from those who cannot put automations in it, but not on Automate", async () => {

@@ -11,7 +11,7 @@ import {
   ManifestSubpageLayout,
   type SubPageNavItem,
 } from "#/components/features/manifest/manifest-subpage-layout";
-import { BrandButton } from "#/components/features/settings/brand-button";
+import { KebabMenu } from "#/components/features/automations/kebab-menu";
 import { FactoryNameModal } from "#/components/features/factories/factory-name-modal";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { FACTORIES_PATH, factoryPath } from "#/constants/factories";
@@ -113,15 +113,17 @@ export default function FactoryDetail() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         {backLink}
         {canManage && !isPermissionsLoading && (
-          <BrandButton
-            type="button"
-            variant="secondary"
-            testId="factory-rename"
-            onClick={() => setIsRenameOpen(true)}
-            startContent={<Pencil className="size-4" aria-hidden />}
-          >
-            {t(I18nKey.FACTORIES$RENAME)}
-          </BrandButton>
+          <div data-testid="factory-actions">
+            <KebabMenu
+              items={[
+                {
+                  label: t(I18nKey.FACTORIES$RENAME),
+                  icon: <Pencil className="size-4" aria-hidden />,
+                  onClick: () => setIsRenameOpen(true),
+                },
+              ]}
+            />
+          </div>
         )}
       </div>
       <FactoryNameModal
