@@ -27,6 +27,7 @@ export const MAP_PROVIDER = {
   lemonade: "Lemonade",
   clarifai: "Clarifai",
   moonshot: "Moonshot",
+  wally: "Wally",
 };
 
 export const mapProvider = (provider: string) =>
