@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canAnchorAfterEvent,
+  isMessageEditResult,
   isReactionResult,
   shouldRenderEvent,
 } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
@@ -359,5 +360,42 @@ describe("shouldRenderEvent - reactions", () => {
     } as unknown as OpenHandsEvent;
     expect(shouldRenderEvent(failed)).toBe(true);
     expect(isReactionResult(failed)).toBe(false);
+  });
+});
+
+describe("shouldRenderEvent - message edits", () => {
+  const editResult = (isError: boolean) =>
+    ({
+      ...createPlanningObservationEvent("edit-obs-1"),
+      observation: {
+        kind: "EditMessageObservation",
+        content: [{ type: "text", text: "Edited. The message now reads:" }],
+        is_error: isError,
+        target_event_id: "msg-1",
+        edited_text: "~~Port?~~ [Edit: 8080.]",
+      },
+    }) as unknown as OpenHandsEvent;
+
+  it("keeps only the narration of a successful edit; a failed edit shows", () => {
+    const done = editResult(false);
+    expect(shouldRenderEvent(done)).toBe(true);
+    expect(isMessageEditResult(done)).toBe(true);
+    expect(canAnchorAfterEvent(done)).toBe(false);
+
+    const failed = editResult(true);
+    expect(isMessageEditResult(failed)).toBe(false);
+    expect(canAnchorAfterEvent(failed)).toBe(true);
+  });
+
+  it("never renders the MessageEditEvent itself", () => {
+    const edit = {
+      id: "edit-1",
+      kind: "MessageEditEvent",
+      timestamp: "2026-11-16T00:00:00Z",
+      source: "agent",
+      target_event_id: "msg-1",
+      text: "~~Port?~~ [Edit: 8080.]",
+    } as unknown as OpenHandsEvent;
+    expect(shouldRenderEvent(edit)).toBe(false);
   });
 });

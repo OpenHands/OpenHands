@@ -101,6 +101,16 @@ export const isReactionResult = (event: OpenHandsEvent): boolean =>
   (event.observation.kind as string) === "ReactionObservation" &&
   !(event.observation as { is_error?: boolean }).is_error;
 
+/**
+ * An edit_message call that succeeded. The edit shows in place on its message
+ * (useMessageEdit), so, like a reaction, groupEvents drops the tool card but
+ * keeps the agent's narration; a failed edit shows like any failed tool.
+ */
+export const isMessageEditResult = (event: OpenHandsEvent): boolean =>
+  isObservationEvent(event) &&
+  (event.observation.kind as string) === "EditMessageObservation" &&
+  !(event.observation as { is_error?: boolean }).is_error;
+
 export const shouldRenderEvent = (event: OpenHandsEvent) => {
   if (isConversationStateUpdateEvent(event)) {
     // A finished `/goal` loop renders inline so it settles into the
@@ -221,7 +231,10 @@ export const hasUserEvent = (events: OpenHandsEvent[]) =>
 
 /**
  * Whether a rendered event can anchor something placed after it (a /model
- * message). A reaction result renders no item of its own, so it cannot.
+ * message). A reaction or message edit result renders no item of its own,
+ * so it cannot.
  */
 export const canAnchorAfterEvent = (event: OpenHandsEvent): boolean =>
-  shouldRenderEvent(event) && !isReactionResult(event);
+  shouldRenderEvent(event) &&
+  !isReactionResult(event) &&
+  !isMessageEditResult(event);
