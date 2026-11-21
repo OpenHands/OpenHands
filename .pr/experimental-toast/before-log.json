@@ -1,0 +1,52 @@
+{
+ "toasts": [
+  {
+   "ts": "2026-11-21T11:48:29.262Z",
+   "role": "status",
+   "text": "An error occurred"
+  },
+  {
+   "ts": "2026-11-21T11:48:34.958Z",
+   "role": "status",
+   "text": "Could not change the feature. Please try again."
+  }
+ ],
+ "experimental_requests": [
+  {
+   "ts": "2026-11-21T11:48:21.808Z",
+   "method": "GET",
+   "path": "/api/settings/experimental",
+   "status": 200
+  },
+  {
+   "ts": "2026-11-21T11:48:29.252Z",
+   "method": "PATCH",
+   "path": "/api/settings/experimental/conversation_reactions",
+   "status": 502
+  },
+  {
+   "ts": "2026-11-21T11:48:29.259Z",
+   "method": "GET",
+   "path": "/api/settings/experimental",
+   "status": 502
+  },
+  {
+   "ts": "2026-11-21T11:48:29.848Z",
+   "method": "GET",
+   "path": "/api/settings/experimental",
+   "status": 502
+  },
+  {
+   "ts": "2026-11-21T11:48:31.392Z",
+   "method": "GET",
+   "path": "/api/settings/experimental",
+   "status": 502
+  },
+  {
+   "ts": "2026-11-21T11:48:34.953Z",
+   "method": "GET",
+   "path": "/api/settings/experimental",
+   "status": 502
+  }
+ ]
+}

@@ -1,0 +1,53 @@
+{
+ "toasts": [
+  {
+   "ts": "2026-11-21T11:52:04.413Z",
+   "role": "status",
+   "text": "Could not change the feature. Please try again."
+  }
+ ],
+ "experimental_requests": [
+  {
+   "ts": "2026-11-21T11:51:51.742Z",
+   "method": "GET",
+   "path": "/assets/use-experimental-features-jUj1ElzW.js",
+   "status": 200
+  },
+  {
+   "ts": "2026-11-21T11:51:51.787Z",
+   "method": "GET",
+   "path": "/api/settings/experimental",
+   "status": 200
+  },
+  {
+   "ts": "2026-11-21T11:51:59.235Z",
+   "method": "PATCH",
+   "path": "/api/settings/experimental/conversation_reactions",
+   "status": 502
+  },
+  {
+   "ts": "2026-11-21T11:51:59.245Z",
+   "method": "GET",
+   "path": "/api/settings/experimental",
+   "status": 502
+  },
+  {
+   "ts": "2026-11-21T11:52:00.021Z",
+   "method": "GET",
+   "path": "/api/settings/experimental",
+   "status": 502
+  },
+  {
+   "ts": "2026-11-21T11:52:01.702Z",
+   "method": "GET",
+   "path": "/api/settings/experimental",
+   "status": 502
+  },
+  {
+   "ts": "2026-11-21T11:52:04.405Z",
+   "method": "GET",
+   "path": "/api/settings/experimental",
+   "status": 502
+  }
+ ]
+}
