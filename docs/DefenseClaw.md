@@ -53,13 +53,13 @@ flowchart TD
 
 ## Installation
 
-### 1. Install and initialise DefenseClaw
+### 1. Install and initialize DefenseClaw
 
 ```bash
 # Install from the release script
 curl -LsSf https://raw.githubusercontent.com/cisco-ai-defense/defenseclaw/main/scripts/install.sh | bash
 
-# Initialise config and enable the guardrail proxy
+# Initialize config and enable the guardrail proxy
 defenseclaw init --enable-guardrail
 ```
 
