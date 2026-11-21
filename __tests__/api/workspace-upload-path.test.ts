@@ -219,6 +219,30 @@ describe("workspace-upload-path", () => {
     expect(dir).toBe("/workspace/project/550e8400e29b41d4a716446655440000");
   });
 
+  it("prefers the conversation's own workspace over the workspace recorded at creation", async () => {
+    // A Home composer conversation started with "New worktree" is created from
+    // the selected repo path, while the server places the conversation itself
+    // under /tmp/conversation-worktrees/<id>. Uploading against the recorded
+    // path lands outside the workspace and the server answers 422.
+    const conversationId = "550e8400-e29b-41d4-a716-446655440000";
+    setStoredConversationMetadata(conversationId, {
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      selected_workspace: "/home/user/repos/qa-repo",
+    });
+
+    try {
+      const dir = await resolveConversationUploadWorkingDir(conversationId);
+
+      expect(dir).toBe(
+        "/workspace/project/550e8400e29b41d4a716446655440000",
+      );
+    } finally {
+      removeStoredConversationMetadata(conversationId);
+    }
+  });
+
   it("resolves the workspace for compact UUIDs returned by cloud", async () => {
     const id = "550e8400e29b41d4a716446655440000";
     expect(await resolveConversationUploadWorkingDir(id)).toBe(
