@@ -488,21 +488,23 @@ export function AddModelsModal({
                     data-testid={`add-models-row-${row.model}`}
                     className="flex items-center gap-2"
                   >
-                    <input
-                      data-testid={`add-models-check-${row.model}`}
-                      type="checkbox"
-                      checked={row.selected}
-                      onChange={(e) =>
-                        setRow(row.model, { selected: e.target.checked })
-                      }
-                      disabled={disabled}
-                    />
-                    <span
-                      className="min-w-0 flex-1 truncate text-sm text-contrast"
-                      title={row.model}
-                    >
-                      {shortName}
-                    </span>
+                    <label className="flex min-w-0 flex-1 items-center gap-2">
+                      <input
+                        data-testid={`add-models-check-${row.model}`}
+                        type="checkbox"
+                        checked={row.selected}
+                        onChange={(e) =>
+                          setRow(row.model, { selected: e.target.checked })
+                        }
+                        disabled={disabled}
+                      />
+                      <span
+                        className="min-w-0 flex-1 truncate text-sm text-contrast"
+                        title={row.model}
+                      >
+                        {shortName}
+                      </span>
+                    </label>
                     {row.status === "saving" && <LoadingSpinner size="small" />}
                     {row.status === "saved" && (
                       <span className="text-xs text-feedback-success">

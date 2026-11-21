@@ -306,6 +306,22 @@ describe("AddModelsModal", () => {
     expect(screen.getByTestId("add-models-submit")).toBeDisabled();
   });
 
+  it("names each model checkbox after its model and toggles it from the name", async () => {
+    renderModal(null);
+    await chooseOpenAI();
+    await screen.findByTestId("add-models-row-openai/gpt-4o-mini");
+
+    const checkbox = screen.getByRole("checkbox", { name: "gpt-4o-mini" });
+    expect(checkbox).not.toBeChecked();
+
+    await userEvent.click(screen.getByText("gpt-4o-mini"));
+
+    expect(checkbox).toBeChecked();
+    expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
+      "Add 1 profiles",
+    );
+  });
+
   it("auto-selects the loaded rows in preselect mode (connection row entry point)", async () => {
     // The "..." entry point is an explicit intent to bulk-add from that
     // connection, so its models load already selected.
