@@ -60,6 +60,47 @@ describe("copyToClipboard", () => {
     await expect(copyToClipboard("hello")).resolves.toBe(false);
   });
 
+  it("supplies the text through the copy event, wherever focus went", async () => {
+    // A modal focus trap can move focus (and the selection) off the hidden
+    // textarea before execCommand runs. The copy listener sets the data
+    // directly, so the right text is copied anyway.
+    setClipboard(undefined);
+    const setData = vi.fn();
+    let event: Event | undefined;
+    document.execCommand = vi.fn(() => {
+      event = new Event("copy", { cancelable: true });
+      Object.defineProperty(event, "clipboardData", { value: { setData } });
+      document.dispatchEvent(event);
+      return true;
+    });
+
+    await expect(copyToClipboard("hello")).resolves.toBe(true);
+
+    expect(setData).toHaveBeenCalledWith("text/plain", "hello");
+    expect(event?.defaultPrevented).toBe(true);
+
+    // The listener is gone afterwards, so a later user copy is untouched.
+    setData.mockClear();
+    const later = new Event("copy", { cancelable: true });
+    Object.defineProperty(later, "clipboardData", { value: { setData } });
+    document.dispatchEvent(later);
+    expect(setData).not.toHaveBeenCalled();
+    expect(later.defaultPrevented).toBe(false);
+  });
+
+  it("selects the whole text range for iOS Safari", async () => {
+    setClipboard(undefined);
+    document.execCommand = vi.fn().mockReturnValue(true);
+    const setSelectionRange = vi.spyOn(
+      HTMLTextAreaElement.prototype,
+      "setSelectionRange",
+    );
+
+    await copyToClipboard("hello");
+
+    expect(setSelectionRange).toHaveBeenCalledWith(0, 5);
+  });
+
   it("removes the temporary textarea it appends", async () => {
     setClipboard(undefined);
     document.execCommand = vi.fn().mockReturnValue(true);
@@ -96,7 +137,9 @@ describe("copyToClipboard focus restoration", () => {
 
     // jsdom's select() is a no-op; a real browser moves focus onto the
     // textarea, which is what strands the keyboard user once it is removed.
-    HTMLTextAreaElement.prototype.select = function select(this: HTMLTextAreaElement) {
+    HTMLTextAreaElement.prototype.select = function select(
+      this: HTMLTextAreaElement,
+    ) {
       this.focus();
     };
 
