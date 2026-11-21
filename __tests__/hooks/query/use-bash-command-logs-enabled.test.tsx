@@ -77,7 +77,7 @@ beforeEach(() => {
     },
   ]);
   setActiveSelection({ backendId: "bk-1", orgId: null });
-  listOutputsMock.mockResolvedValue([]);
+  listOutputsMock.mockResolvedValue({ outputs: [], truncated: false });
   batchGetAppConversationsMock.mockResolvedValue([
     { conversation_url: null, session_api_key: null, sandbox_status: null },
   ]);

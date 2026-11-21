@@ -102,11 +102,19 @@ describe("ActivityLogItem — logs button", () => {
     ).toBeInTheDocument();
   });
 
-  it("does not render a logs button when bash_command_id is null", () => {
-    renderItem(makeRun({ bash_command_id: null }));
-    expect(
-      screen.queryByRole("button", { name: LOGS_BUTTON_NAME }),
-    ).not.toBeInTheDocument();
+  it("lets a run with no bash_command_id be inspected", () => {
+    renderItem(
+      makeRun({
+        bash_command_id: null,
+        conversation_id: null,
+        status: AutomationRunStatus.FAILED,
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: LOGS_BUTTON_NAME }));
+
+    const modal = screen.getByTestId("logs-modal");
+    expect(modal.getAttribute("data-bash-command-id")).toBeNull();
   });
 
   it("opens the logs modal when the button is clicked and passes the bash_command_id through", () => {

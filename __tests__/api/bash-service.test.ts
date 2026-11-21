@@ -120,7 +120,10 @@ describe("BashService.listOutputs — local backend", () => {
       page_id: "next",
     });
     expect(callCloudProxy).not.toHaveBeenCalled();
-    expect(outputs).toEqual([OUTPUT_1, OUTPUT_2]);
+    expect(outputs).toEqual({
+      outputs: [OUTPUT_1, OUTPUT_2],
+      truncated: false,
+    });
   });
 
   it("searches the server-level bash events for a run that has a conversation", async () => {
@@ -168,7 +171,7 @@ describe("BashService.listOutputs — local backend", () => {
     expect(urls[0].origin).toBe(localBackend.host);
     expect(urls[0].searchParams.get("command_id__eq")).toBe(BASH_CMD_ID);
     expect(urls[0].searchParams.has("cid")).toBe(false);
-    expect(outputs).toEqual([OUTPUT_1]);
+    expect(outputs).toEqual({ outputs: [OUTPUT_1], truncated: false });
   });
 
   it("works without a conversation URL (falls back to backend host)", async () => {
@@ -178,7 +181,22 @@ describe("BashService.listOutputs — local backend", () => {
 
     expect(BashClient).toHaveBeenCalled();
     expect(callCloudProxy).not.toHaveBeenCalled();
-    expect(outputs).toEqual([OUTPUT_1]);
+    expect(outputs).toEqual({ outputs: [OUTPUT_1], truncated: false });
+  });
+
+  it("reports the output as truncated when it stops at the page cap with pages left", async () => {
+    // Arrange: the server always has another page.
+    searchEventsMock.mockResolvedValue({
+      items: [OUTPUT_1],
+      next_page_id: "more",
+    });
+
+    // Act
+    const listing = await BashService.listOutputs(null, null, BASH_CMD_ID);
+
+    // Assert: reading stopped at the cap and said so.
+    expect(listing.truncated).toBe(true);
+    expect(listing.outputs.length).toBe(searchEventsMock.mock.calls.length);
   });
 });
 
@@ -210,7 +228,10 @@ describe("BashService.listOutputs — cloud backend", () => {
       command_id__eq: BASH_CMD_ID,
       sort_order: "TIMESTAMP",
     });
-    expect(outputs).toEqual([OUTPUT_1, OUTPUT_2]);
+    expect(outputs).toEqual({
+      outputs: [OUTPUT_1, OUTPUT_2],
+      truncated: false,
+    });
   });
 
   it("throws when no conversation URL is provided on cloud backends", async () => {

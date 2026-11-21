@@ -13,7 +13,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AxiosError, AxiosHeaders } from "axios";
 import { HttpError } from "@openhands/typescript-client";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
-import { useBashCommandLogs } from "#/hooks/query/use-bash-command-logs";
+import {
+  RUNNER_OUTPUT_POLL_INTERVAL_MS,
+  RUNNER_OUTPUT_SETTLE_WINDOW_MS,
+  useBashCommandLogs,
+} from "#/hooks/query/use-bash-command-logs";
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -183,9 +187,10 @@ describe("useBashCommandLogs — cloud sandbox state handling", () => {
       conversation_url: "https://runtime.example.com",
       sandbox_status: "RUNNING",
     });
-    listOutputsMock.mockResolvedValueOnce([
-      { kind: "BashOutput", stdout: "hi", stderr: null },
-    ]);
+    listOutputsMock.mockResolvedValueOnce({
+      outputs: [{ kind: "BashOutput", stdout: "hi", stderr: null }],
+      truncated: false,
+    });
 
     const { result } = renderHook(
       () =>
@@ -353,6 +358,7 @@ describe("useBashCommandLogs — cloud sandbox state handling", () => {
 
     await waitFor(() => expect(result.current.error).toBeTruthy());
     expect(result.current.sandboxIssue).toBeNull();
+    expect(result.current.isAuthError).toBe(true);
   });
 
   it.each([
@@ -409,7 +415,7 @@ describe("useBashCommandLogs — local backend", () => {
       conversation_url: null,
       sandbox_status: null,
     });
-    listOutputsMock.mockResolvedValueOnce([]);
+    listOutputsMock.mockResolvedValueOnce({ outputs: [], truncated: false });
 
     const { result } = renderHook(
       () =>
@@ -438,7 +444,7 @@ describe("useBashCommandLogs — cloud runs without a conversation (script autom
   it("resolves the agent-server through the run's sandbox and fetches the logs", async () => {
     // Arrange
     batchGetCloudSandboxesMock.mockResolvedValue([runningSandbox]);
-    listOutputsMock.mockResolvedValue([]);
+    listOutputsMock.mockResolvedValue({ outputs: [], truncated: false });
 
     // Act
     const { result } = renderHook(
@@ -627,7 +633,7 @@ describe("useBashCommandLogs — cloud runs without a conversation (script autom
       session_api_key: "conversation-key",
       sandbox_status: "RUNNING",
     });
-    listOutputsMock.mockResolvedValue([]);
+    listOutputsMock.mockResolvedValue({ outputs: [], truncated: false });
 
     // Act
     renderHook(
@@ -659,7 +665,7 @@ describe("useBashCommandLogs — local runs without a conversation", () => {
 
   it("fetches through the backend host without a sandbox lookup", async () => {
     // Arrange
-    listOutputsMock.mockResolvedValue([]);
+    listOutputsMock.mockResolvedValue({ outputs: [], truncated: false });
 
     // Act
     renderHook(
@@ -676,5 +682,111 @@ describe("useBashCommandLogs — local runs without a conversation", () => {
     await waitFor(() => expect(listOutputsMock).toHaveBeenCalledTimes(1));
     expect(listOutputsMock).toHaveBeenCalledWith(null, null, "cmd-1");
     expect(batchGetCloudSandboxesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("useBashCommandLogs — refreshing runner output", () => {
+  const emptyListing = { outputs: [], truncated: false };
+  const finalListing = {
+    outputs: [
+      {
+        kind: "BashOutput",
+        id: "out-1",
+        command_id: "cmd-1",
+        timestamp: "2026-01-01T10:00:00Z",
+        order: 0,
+        stdout: "done\n",
+        stderr: null,
+        exit_code: 0,
+      },
+    ],
+    truncated: false,
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    setActiveBackend("local");
+    setNoConversation();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function renderLogs(isRunActive: boolean) {
+    return renderHook(
+      (props: { isRunActive: boolean }) =>
+        useBashCommandLogs({
+          conversationId: null,
+          bashCommandId: "cmd-1",
+          isRunActive: props.isRunActive,
+        }),
+      { wrapper, initialProps: { isRunActive } },
+    );
+  }
+
+  it("re-reads the output on an interval while the run is active", async () => {
+    // Arrange
+    listOutputsMock.mockResolvedValue(emptyListing);
+
+    // Act
+    renderLogs(true);
+    await waitFor(() => expect(listOutputsMock).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(RUNNER_OUTPUT_POLL_INTERVAL_MS);
+
+    // Assert
+    expect(listOutputsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-reads at once when the run turns terminal, then stops once the final output is in", async () => {
+    // Arrange: nothing published while running; the final output lands
+    // after the status flips (completion callback before runner exit).
+    listOutputsMock.mockResolvedValue(emptyListing);
+    const { result, rerender } = renderLogs(true);
+    await waitFor(() => expect(listOutputsMock).toHaveBeenCalledTimes(1));
+    listOutputsMock.mockResolvedValue(finalListing);
+
+    // Act
+    rerender({ isRunActive: false });
+
+    // Assert: refetched without waiting for the poll interval…
+    await waitFor(() => expect(result.current.hasFinalOutput).toBe(true));
+    expect(listOutputsMock).toHaveBeenCalledTimes(2);
+    // …and polling stops because the output is final.
+    await vi.advanceTimersByTimeAsync(RUNNER_OUTPUT_POLL_INTERVAL_MS * 3);
+    expect(listOutputsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops re-reading an active run once the runtime refuses access", async () => {
+    // Arrange
+    listOutputsMock.mockRejectedValue(
+      new HttpError(403, "Forbidden", { detail: "no access" }),
+    );
+
+    // Act
+    const { result } = renderLogs(true);
+    await waitFor(() => expect(result.current.isAuthError).toBe(true));
+    await vi.advanceTimersByTimeAsync(RUNNER_OUTPUT_POLL_INTERVAL_MS * 3);
+
+    // Assert
+    expect(listOutputsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps re-reading a terminal run without final output only for the settle window", async () => {
+    // Arrange
+    listOutputsMock.mockResolvedValue(emptyListing);
+
+    // Act
+    renderLogs(false);
+    await waitFor(() => expect(listOutputsMock).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(RUNNER_OUTPUT_POLL_INTERVAL_MS);
+    const callsDuringWindow = listOutputsMock.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(RUNNER_OUTPUT_SETTLE_WINDOW_MS);
+    const callsAtWindowEnd = listOutputsMock.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(RUNNER_OUTPUT_POLL_INTERVAL_MS * 3);
+
+    // Assert
+    expect(callsDuringWindow).toBe(2);
+    expect(listOutputsMock).toHaveBeenCalledTimes(callsAtWindowEnd);
   });
 });

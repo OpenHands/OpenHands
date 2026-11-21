@@ -41,13 +41,11 @@ function baseResult() {
     isPending: false,
     isResolvingConversation: false,
     sandboxIssue: null as
-      | null
-      | "missing"
-      | "paused"
-      | "starting"
-      | "errored"
-      | "unreachable",
+      null | "missing" | "paused" | "starting" | "errored" | "unreachable",
     conversationMissing: false,
+    isTruncated: false,
+    hasFinalOutput: false,
+    isAuthError: false,
   };
 }
 
@@ -513,6 +511,151 @@ describe("RunLogsModal — run inspection summary", () => {
     expect(
       screen.getByText("Created and published the weekly report."),
     ).toBeInTheDocument();
+  });
+});
+
+describe("RunLogsModal — runner output states", () => {
+  const makeRun = (overrides: Partial<AutomationRun> = {}): AutomationRun => ({
+    id: "run-1",
+    status: AutomationRunStatus.RUNNING,
+    conversation_id: "conv-1",
+    bash_command_id: "cmd-1",
+    error_detail: null,
+    started_at: "2026-01-01T10:00:00Z",
+    completed_at: null,
+    ...overrides,
+  });
+
+  function renderModal(run: AutomationRun) {
+    return render(
+      <RunLogsModal
+        isOpen
+        conversationId={run.conversation_id}
+        bashCommandId={run.bash_command_id}
+        onClose={() => {}}
+        run={run}
+      />,
+    );
+  }
+
+  it("labels the output as runner output, not the agent's activity", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult({ data: [] }));
+
+    renderModal(makeRun());
+
+    expect(
+      screen.getByRole("heading", {
+        name: I18nKey.AUTOMATIONS$DETAIL$LOGS_RUNNER_OUTPUT_TITLE,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$LOGS_RUNNER_OUTPUT_HINT),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    [AutomationRunStatus.PENDING, true],
+    [AutomationRunStatus.RUNNING, true],
+    [AutomationRunStatus.COMPLETED, false],
+    [AutomationRunStatus.FAILED, false],
+  ])("asks the hook to keep refreshing for a %s run: %s", (status, active) => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+
+    renderModal(makeRun({ status }));
+
+    expect(useBashCommandLogsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ isRunActive: active }),
+    );
+  });
+
+  it.each([
+    [AutomationRunStatus.PENDING, "run-logs-waiting-for-runner"],
+    [AutomationRunStatus.FAILED, "run-logs-no-command"],
+  ])("explains a %s run that has no runner command yet", (status, testId) => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+
+    renderModal(
+      makeRun({ status, bash_command_id: null, conversation_id: null }),
+    );
+
+    expect(screen.getByTestId(testId)).toBeInTheDocument();
+  });
+
+  it.each([
+    [AutomationRunStatus.RUNNING, "run-logs-waiting-for-output"],
+    [AutomationRunStatus.COMPLETED, "run-logs-empty"],
+  ])(
+    "tells waiting apart from genuinely empty output for a %s run",
+    (status, testId) => {
+      useBashCommandLogsMock.mockReturnValue(makeHookResult({ data: [] }));
+
+      renderModal(makeRun({ status }));
+
+      expect(screen.getByTestId(testId)).toBeInTheDocument();
+    },
+  );
+
+  it("flags output cut off at the page cap as truncated", () => {
+    useBashCommandLogsMock.mockReturnValue(
+      makeHookResult({
+        data: [
+          {
+            id: "o1",
+            kind: "BashOutput",
+            timestamp: "2026-01-01T10:00:00Z",
+            command_id: "cmd-1",
+            order: 0,
+            stdout: "partial",
+            stderr: null,
+          },
+        ],
+        isTruncated: true,
+      }),
+    );
+
+    renderModal(makeRun({ status: AutomationRunStatus.COMPLETED }));
+
+    expect(screen.getByTestId("run-logs-truncated")).toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$LOGS_TRUNCATED,
+    );
+    expect(screen.getByTestId("run-logs-output-stdout")).toHaveTextContent(
+      "partial",
+    );
+  });
+
+  it("shows an explicit access error for a 401/403 instead of an empty stream", () => {
+    useBashCommandLogsMock.mockReturnValue(
+      makeHookResult({
+        error: new Error("HTTP 401"),
+        isAuthError: true,
+      }),
+    );
+
+    renderModal(makeRun({ status: AutomationRunStatus.COMPLETED }));
+
+    expect(screen.getByTestId("run-logs-error")).toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$LOGS_AUTH_ERROR,
+    );
+    expect(screen.queryByTestId("run-logs-empty")).not.toBeInTheDocument();
+  });
+
+  it("shows an access error when a refresh fails after an empty response", () => {
+    useBashCommandLogsMock.mockReturnValue(
+      makeHookResult({
+        data: [],
+        error: new Error("HTTP 403"),
+        isAuthError: true,
+      }),
+    );
+
+    renderModal(makeRun());
+
+    expect(screen.getByTestId("run-logs-error")).toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$LOGS_AUTH_ERROR,
+    );
+    expect(
+      screen.queryByTestId("run-logs-waiting-for-output"),
+    ).not.toBeInTheDocument();
   });
 });
 
