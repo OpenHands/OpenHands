@@ -227,7 +227,8 @@ export function MetaProfileEditor({
           name="classifier_model"
           label={t(I18nKey.SETTINGS$META_PROFILE_CLASSIFIER)}
           items={profileItems}
-          selectedKey={config.classifier_model || undefined}
+          selectedKey={config.classifier_model || null}
+          inputValue={config.classifier_model}
           allowsCustomValue
           isDisabled={isSaving}
           onInputChange={(value) =>
