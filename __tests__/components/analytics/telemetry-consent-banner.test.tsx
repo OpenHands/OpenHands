@@ -9,6 +9,7 @@ const useBackendsHealthMock = vi.fn();
 const saveSettingsMock = vi.fn();
 const getLockedCloudHostMock = vi.fn();
 const setTelemetryConsentMock = vi.fn();
+const getTelemetryConsentMock = vi.fn(() => "pending");
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -48,6 +49,8 @@ vi.mock("#/hooks/mutation/use-save-settings", () => ({
 }));
 
 vi.mock("#/services/telemetry", () => ({
+  getTelemetryConsent: () => getTelemetryConsentMock(),
+  subscribeTelemetryConsent: () => () => {},
   setTelemetryConsent: (...args: unknown[]) => setTelemetryConsentMock(...args),
 }));
 
@@ -194,5 +197,4 @@ describe("TelemetryConsentBanner", () => {
     expect(setTelemetryConsentMock).not.toHaveBeenCalled();
     expect(screen.getByTestId("telemetry-consent-form")).toBeInTheDocument();
   });
-
 });
