@@ -486,6 +486,8 @@ describe("MarkdownRenderer without includeStandard", () => {
 
 describe("MarkdownRenderer conversation mentions", () => {
   const hex = "4f2c9e0a1b2c4d5e8f90a1b2c3d4e5f6";
+  // Conversation routes use the dashed id, as the sidebar links do.
+  const dashed = "4f2c9e0a-1b2c-4d5e-8f90-a1b2c3d4e5f6";
 
   afterEach(() => {
     mentionsFlag.enabled = true;
@@ -515,7 +517,7 @@ describe("MarkdownRenderer conversation mentions", () => {
       const link = screen.getByTestId("conversation-mention");
       expect(link.textContent).toBe("Fix export");
       expect(link.getAttribute("href")).toMatch(
-        new RegExp(`/conversations/${hex}$`),
+        new RegExp(`/conversations/${dashed}$`),
       );
       expect(link.getAttribute("target")).toBeNull();
     },
@@ -548,7 +550,7 @@ describe("MarkdownRenderer conversation mentions", () => {
     );
     expect(
       screen.getByTestId("conversation-mention").getAttribute("href"),
-    ).toMatch(new RegExp(`/conversations/${hex}$`));
+    ).toMatch(new RegExp(`/conversations/${dashed}$`));
     const docs = screen.getByText("docs");
     expect(docs.getAttribute("target")).toBe("_blank");
   });
