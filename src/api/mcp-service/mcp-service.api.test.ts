@@ -115,6 +115,43 @@ describe("McpService.testServer", () => {
     expect(fetchSettings).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["local", 60_000, 60],
+    ["cloud", 60_000, 60],
+    ["local", 300_000, 120],
+    ["cloud", 300_000, 120],
+  ] as const)(
+    "sends the %s probe a bounded seconds timeout for %i ms",
+    async (kind, timeout, expectedSeconds) => {
+      setRegisteredBackends([
+        {
+          id: kind,
+          name: kind,
+          host: "https://backend.example.test",
+          apiKey: "test-key",
+          kind,
+        },
+      ]);
+      setActiveSelection({ backendId: kind, orgId: null });
+      vi.mocked(testCloudMcpServer).mockResolvedValueOnce({
+        ok: true,
+        tools: [],
+      });
+
+      await McpService.testServer({
+        id: "docs",
+        type: "shttp",
+        url: "https://docs.example/mcp",
+        timeout,
+      });
+
+      const probe = kind === "local" ? testServer : testCloudMcpServer;
+      expect(probe).toHaveBeenCalledWith(
+        expect.objectContaining({ timeout: expectedSeconds }),
+      );
+    },
+  );
+
   it.each([false, true])(
     "redacts submitted and restored secrets from probe output, success=%s",
     async (ok) => {
@@ -486,7 +523,7 @@ describe("McpService.testServer", () => {
       command: "node",
       args: [],
       env: {},
-      timeout: 17,
+      timeout: 17_000,
     });
 
     expect(MCPClient).toHaveBeenCalledWith({

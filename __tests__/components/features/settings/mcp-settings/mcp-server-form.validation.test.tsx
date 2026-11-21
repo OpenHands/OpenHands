@@ -228,6 +228,68 @@ describe("MCPServerForm validation", () => {
     });
   });
 
+  it.each([
+    [60_000, 60],
+    [60, 0.06],
+    [0, 0],
+  ])(
+    "preserves a saved %i ms timeout when editing another field",
+    (timeout, seconds) => {
+      const onSubmit = vi.fn();
+      render(
+        <MCPServerForm
+          mode="edit"
+          server={{
+            id: "docs",
+            type: "shttp",
+            name: "docs",
+            url: "https://docs.example/mcp",
+            timeout,
+          }}
+          onSubmit={onSubmit}
+          onCancel={noop}
+        />,
+      );
+
+      expect(screen.getByTestId("timeout-input")).toHaveValue(seconds);
+      fireEvent.change(screen.getByTestId("url-input"), {
+        target: { value: "https://docs.example/v2/mcp" },
+      });
+      fireEvent.click(screen.getByTestId("submit-button"));
+
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "https://docs.example/v2/mcp",
+          timeout,
+        }),
+      );
+    },
+  );
+
+  it("saves a new 60-second timeout as 60000 milliseconds", () => {
+    const onSubmit = vi.fn();
+    render(
+      <MCPServerForm
+        mode="add"
+        server={{ id: "new", type: "shttp" }}
+        onSubmit={onSubmit}
+        onCancel={noop}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("url-input"), {
+      target: { value: "https://docs.example/mcp" },
+    });
+    fireEvent.change(screen.getByTestId("timeout-input"), {
+      target: { value: "60" },
+    });
+    fireEvent.click(screen.getByTestId("submit-button"));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ timeout: 60_000 }),
+    );
+  });
+
   it("keeps raw protocol headers in the pre-save connection-test candidate", () => {
     const onTest = vi.fn();
     render(
