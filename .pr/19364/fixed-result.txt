@@ -1,0 +1,5 @@
+Ingress crash 1/4: signalled owned child 3060
+Ingress crash 2/4: signalled owned child 3086
+Ingress crash 3/4: signalled owned child 3094
+Ingress crash 4/4: signalled owned child 3102
+{"checkout": "/mnt/d/GitHub_project/oss-contributions/worktrees/openhands-19364", "parent_exit_code": 1, "ports_listening": {"18890": false, "18891": false, "18892": false, "18893": false}, "ingress_crashes": 4}
