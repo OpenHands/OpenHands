@@ -347,6 +347,62 @@ describe("AgentServerConversationService", () => {
       expect(result.tags).toEqual(refreshedTags);
     });
 
+    it("syncs a profile switch onto the activeprofile tag without dropping other tags (#16766)", async () => {
+      mockUpdateConversation.mockResolvedValue(undefined);
+      mockHttpGet
+        .mockResolvedValueOnce({
+          data: [
+            makeDirectConversation({
+              tags: { owner: "alice", activeprofile: "fast" },
+            }),
+          ],
+        })
+        .mockResolvedValueOnce({
+          data: [
+            makeDirectConversation({
+              tags: { owner: "alice", activeprofile: "architect" },
+            }),
+          ],
+        });
+      await AgentServerConversationService.syncActiveProfileTag(
+        "conv-1",
+        "architect",
+      );
+      // Local PATCH is replace-all, so the current map is re-read and the
+      // profile merged into it rather than sent alone.
+      expect(mockUpdateConversation).toHaveBeenCalledWith("conv-1", {
+        tags: { owner: "alice", activeprofile: "architect" },
+      });
+    });
+
+    it("skips the tag write when the activeprofile tag is already current", async () => {
+      // The reload-time history seed re-stamps through the same path, so an
+      // unchanged profile must cost a read, never a PATCH.
+      mockHttpGet.mockResolvedValue({
+        data: [makeDirectConversation({ tags: { activeprofile: "fast" } })],
+      });
+      await AgentServerConversationService.syncActiveProfileTag(
+        "conv-1",
+        "fast",
+      );
+      expect(mockUpdateConversation).not.toHaveBeenCalled();
+    });
+
+    it("does not sync the activeprofile tag on a Cloud backend", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+      const requests = captureRequests(
+        ["get", "patch"],
+        makeDirectConversation(),
+      );
+      await AgentServerConversationService.syncActiveProfileTag(
+        "conv-1",
+        "architect",
+      );
+      expect(requests).toEqual([]);
+      expect(mockUpdateConversation).not.toHaveBeenCalled();
+    });
+
     it("applies tag flags on Cloud as a merge patch without touching other keys", async () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
@@ -1025,6 +1081,34 @@ describe("AgentServerConversationService", () => {
       for (const key of Object.keys(payload.tags ?? {})) {
         expect(key).toMatch(/^[a-z0-9]+$/);
       }
+    });
+
+    it("stamps the launch LLM profile as the activeprofile tag (#16766)", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        agentProfileId: "profile-1",
+        agentLlmProfileRef: "architect",
+      });
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      const payload = payloadCall[1] as { tags?: Record<string, string> };
+      expect(payload.tags).toMatchObject({ activeprofile: "architect" });
     });
 
     it("leaves out tag values longer than the agent-server accepts", async () => {

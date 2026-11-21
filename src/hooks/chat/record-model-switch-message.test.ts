@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useModelStore } from "#/stores/model-store";
 import {
   getStoredConversationMetadata,
@@ -8,7 +9,51 @@ import { OpenHandsEvent } from "#/types/agent-server/core";
 import {
   recordModelSwitchMessage,
   seedModelSwitchesFromHistory,
+  stampActiveLlmProfile,
 } from "./record-model-switch-message";
+
+// Every stamp also mirrors the profile onto the server-side conversation tag
+// (#16766). Keep that off the network and assert on it where relevant.
+let syncActiveProfileTagSpy: ReturnType<typeof vi.spyOn>;
+beforeEach(() => {
+  syncActiveProfileTagSpy = vi
+    .spyOn(AgentServerConversationService, "syncActiveProfileTag")
+    .mockResolvedValue(undefined);
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("stampActiveLlmProfile", () => {
+  beforeEach(() => {
+    useModelStore.getState().clearAll();
+    window.localStorage.clear();
+  });
+
+  it("stamps locally and mirrors the profile onto the server-side tag", () => {
+    stampActiveLlmProfile("c1", "architect");
+
+    expect(useModelStore.getState().activeProfileByConversation.c1).toBe(
+      "architect",
+    );
+    expect(getStoredConversationMetadata("c1")?.active_profile).toBe(
+      "architect",
+    );
+    expect(syncActiveProfileTagSpy).toHaveBeenCalledWith("c1", "architect");
+  });
+
+  it("keeps the local stamp when the tag sync fails", async () => {
+    syncActiveProfileTagSpy.mockRejectedValue(new Error("offline"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(() => stampActiveLlmProfile("c1", "fast")).not.toThrow();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(getStoredConversationMetadata("c1")?.active_profile).toBe("fast");
+    expect(warn).toHaveBeenCalled();
+  });
+});
 
 const userMessage = (id: string): OpenHandsEvent =>
   ({

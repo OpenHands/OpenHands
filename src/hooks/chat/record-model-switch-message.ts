@@ -8,6 +8,7 @@ import {
   getStoredConversationMetadata,
   mergeStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isClassifyAndSwitchLLMObservationEvent,
@@ -55,6 +56,20 @@ export function stampActiveLlmProfile(
   mergeStoredConversationMetadata(conversationId, {
     active_profile: profileName,
     stamped_at: stampedAt,
+  });
+
+  // Mirror the stamp onto the conversation's server-side tag so the picker is
+  // right on other devices too (#16766). Best effort and off the critical
+  // path: the local stamp above already serves this client, and the sync
+  // itself skips the write when the tag is already current.
+  void AgentServerConversationService.syncActiveProfileTag(
+    conversationId,
+    profileName,
+  ).catch((error: unknown) => {
+    console.warn(
+      `Failed to sync the active profile tag of conversation ${conversationId}`,
+      error,
+    );
   });
 }
 

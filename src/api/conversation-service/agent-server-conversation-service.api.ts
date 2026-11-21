@@ -50,6 +50,7 @@ import {
   DirectConversationInfo,
   GIT_PROVIDER_TAG_KEY,
   REPOSITORY_TAG_KEY,
+  ACTIVE_PROFILE_TAG_KEY,
   SELECTED_BRANCH_TAG_KEY,
   assertSubscriptionAuthReady,
   buildRouterAtStartSystemSuffix,
@@ -779,6 +780,12 @@ class AgentServerConversationService {
     if (metadata?.git_provider) {
       metadataTags[GIT_PROVIDER_TAG_KEY] = metadata.git_provider;
     }
+    // The LLM profile the conversation starts on (#16766); the chat-header
+    // picker reads it back on devices without the creating client's
+    // localStorage stamp.
+    if (agentLlmProfileRef) {
+      metadataTags[ACTIVE_PROFILE_TAG_KEY] = agentLlmProfileRef;
+    }
     // An over-long value (a deep workspace path, a long branch) stays in
     // localStorage only, so it cannot block the conversation from starting.
     for (const [key, value] of Object.entries(metadataTags)) {
@@ -1323,6 +1330,28 @@ class AgentServerConversationService {
       conversationId,
     ]);
     return requireAppConversation(conversation, conversationId);
+  }
+
+  /**
+   * Mirrors a mid-conversation LLM profile switch onto the `activeprofile`
+   * tag so other devices see the new profile (#16766). Local agent-server
+   * only: Cloud conversations don't run local LLM profiles. Reads the current
+   * map first (the PATCH is replace-all) and skips the write when the tag
+   * already names `profileName`, so the reload-time history seed costs at
+   * most one GET.
+   */
+  static async syncActiveProfileTag(
+    conversationId: string,
+    profileName: string,
+  ): Promise<void> {
+    if (getActiveBackend().backend.kind === "cloud") return;
+    const [current] = await this.batchGetAppConversations([conversationId]);
+    if (!current) return;
+    if (current.tags?.[ACTIVE_PROFILE_TAG_KEY] === profileName) return;
+    await this.replaceConversationTags(conversationId, current.tags, {
+      ...(current.tags ?? {}),
+      [ACTIVE_PROFILE_TAG_KEY]: profileName,
+    });
   }
 
   /**
