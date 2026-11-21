@@ -21,10 +21,17 @@ export async function getSandboxSelectionOptions(
   if (backend?.kind !== "cloud") {
     throw new Error("Sandbox templates require a registered cloud backend.");
   }
-  return callCloudProxy<SandboxSelectionOptions>({
+  const raw = await callCloudProxy<Partial<SandboxSelectionOptions>>({
     backend,
     method: "GET",
     path: SANDBOX_SELECTION_PATH,
     orgId,
   });
+  // The selection endpoint is best-effort metadata for the launcher UI. A
+  // response missing `items`, or shipping a non-array `items`, must degrade
+  // to "no sandbox picker" instead of crashing the launcher downstream.
+  if (!Array.isArray(raw?.items)) {
+    return { enabled: false, items: [] };
+  }
+  return { enabled: raw.enabled === true, items: raw.items };
 }

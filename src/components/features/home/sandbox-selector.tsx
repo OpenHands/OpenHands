@@ -5,6 +5,7 @@ import type { SandboxTemplateOption } from "#/api/cloud/sandbox-template-service
 import { cn } from "#/utils/utils";
 import {
   formControlBorderClassName,
+  formControlFocusWithinClassName,
   formControlSurfaceClassName,
 } from "#/utils/form-control-classes";
 
@@ -25,9 +26,10 @@ export function SandboxSelector({
   return (
     <label
       className={cn(
-        "flex min-w-0 max-w-full items-center gap-2 rounded-full px-2.5 py-1 text-sm text-white focus-within:ring-2 focus-within:ring-white/40",
+        "flex min-w-0 max-w-full items-center gap-2 rounded-full px-2.5 py-1 text-sm text-contrast",
         formControlBorderClassName,
         formControlSurfaceClassName,
+        formControlFocusWithinClassName,
         disabled && "opacity-50",
       )}
     >
