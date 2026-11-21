@@ -260,10 +260,9 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F28 | [Automation setup page](F28-automation-setup-page.md) | blank form, kind toggle, schedule presets, event fields, timeout, draft save and validation, draft Test, Create | **Add Automation → Create Automation**, `/automations/setup`, draft Resume, kebab Edit | automation service; no LLM | 21 |
 | F29 | [ACP agent sessions](F29-acp-sessions.md) | an ACP (Codex) conversation: narration order, tool cards, edits and Changes, follow-up, model switch, Stop, reload and restart, usage | Home composer with an ACP profile active (F13) | approved Codex login (`CODEX_AUTH_JSON`); fixture repo | 12 |
 | F30 | [Experimental features and reactions](F30-experimental-features.md) | Experimental settings page, flag switches, notice; agent and user emoji reactions, picker placement | `/settings/experimental`, settings navigation, command menu; reactions under messages | LLM; local backend (Cloud hides it) | 6 |
-| F31 | [Insider app and Voice](F31-insider-cat.md) | saved Cat identity, profile capabilities, new/resume/condense, companion, voice lifecycle and saved-agent handoff | installed Projects App, Cat badges, normal conversation/panel | reviewed Insider App; compatible SDK; real LLM; Voice provider and microphone for audio branches; recipes pending live proof | 22 |
 | F32 | [Projects (default view)](F32-projects.md) | flag gate, New project with a server-started coordinator, board grouped by what needs you, Resolve/Reopen, membership, files (preview, download, delete), attach to a message, badge and compact headers | rail Projects and its +, `/projects`, `/projects/<id>`, project badge | `projects` experimental flag; Agent Server with #6602 (73513fdee+); real LLM for coordinator branches | 12 |
 
-32 families, 911 sub-features. `control-openhands map ids` lists every ID with its file.
+31 families, 889 sub-features. `control-openhands map ids` lists every ID with its file.
 
 ### Neighbouring families
 
