@@ -1,5 +1,5 @@
 import React from "react";
-import { Pin } from "lucide-react";
+import { Pin, Plus } from "lucide-react";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { useNavigation } from "#/context/navigation-context";
@@ -33,6 +33,13 @@ export interface SidebarNavLinkPinAction {
   testId: string;
 }
 
+/** A "+" beside the row that creates one of what the row lists. */
+export interface SidebarNavLinkAddAction {
+  onClick: () => void;
+  label: string;
+  testId: string;
+}
+
 interface SidebarNavLinkProps {
   to: string;
   label: string;
@@ -52,6 +59,8 @@ interface SidebarNavLinkProps {
   forceActive?: boolean;
   /** Pin-as-home toggle; rendered only when the sidebar is expanded. */
   pinAction?: SidebarNavLinkPinAction;
+  /** Always-visible "+" action; rendered only when the sidebar is expanded. */
+  addAction?: SidebarNavLinkAddAction;
 }
 
 export function SidebarNavLink({
@@ -66,10 +75,11 @@ export function SidebarNavLink({
   hoverContent,
   forceActive = false,
   pinAction,
+  addAction,
 }: SidebarNavLinkProps) {
   const { currentPath } = useNavigation();
   const active = forceActive || isPathActive(currentPath, to, end);
-  const showPinAction = !collapsed && pinAction != null;
+  const showPinAction = !collapsed && (pinAction != null || addAction != null);
 
   const link = (
     <NavigationLink
@@ -115,6 +125,31 @@ export function SidebarNavLink({
   );
 
   if (!collapsed) {
+    if (addAction) {
+      return (
+        <div className="relative">
+          {link}
+          <button
+            type="button"
+            data-testid={addAction.testId}
+            aria-label={addAction.label}
+            title={addAction.label}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              addAction.onClick();
+            }}
+            className={cn(
+              "absolute right-1.5 top-1/2 -translate-y-1/2",
+              "flex shrink-0 cursor-pointer items-center justify-center rounded-md p-1",
+              "text-muted hover:bg-contrast/10 hover:text-contrast",
+            )}
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        </div>
+      );
+    }
     if (!pinAction) return link;
 
     // NavigationLink renders an <a>, so the pin toggle is an absolutely
