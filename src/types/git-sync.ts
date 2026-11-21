@@ -6,6 +6,11 @@ export interface GitSyncStatus {
   encryption_enabled: boolean;
   /** Seconds between automatic syncs; 0 means manual-only. */
   interval_seconds: number;
+  /**
+   * Whether each automation's on/off status stays out of the repository.
+   * Absent on automation backends that predate the option.
+   */
+  keep_activation_local?: boolean;
   last_synced_commit: string | null;
   last_synced_at: string | null;
   last_error: string | null;
@@ -24,6 +29,7 @@ export interface GitSyncStatus {
 export interface GitSyncConfigUpdateRequest {
   enabled?: boolean | null;
   interval_seconds?: number | null;
+  keep_activation_local?: boolean | null;
   repo_url?: string | null;
   branch?: string | null;
   path?: string | null;

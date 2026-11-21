@@ -75,6 +75,17 @@ export function GitSyncConfigForm({
   const enabledHasChanged =
     enabledOverride !== null && enabled !== status.enabled;
 
+  // Same pattern as the enable switch. An automation backend that predates
+  // the option does not report it and would ignore it in a save, so the
+  // switch is only offered when the status carries the field.
+  const [keepActivationLocalOverride, setKeepActivationLocalOverride] =
+    useState<boolean | null>(null);
+  const keepActivationLocal =
+    keepActivationLocalOverride ?? status.keep_activation_local ?? false;
+  const keepActivationLocalHasChanged =
+    keepActivationLocalOverride !== null &&
+    keepActivationLocal !== status.keep_activation_local;
+
   const [tokenText, setTokenText] = useState("");
   const [clearToken, setClearToken] = useState(false);
   const [encryptionKeyText, setEncryptionKeyText] = useState("");
@@ -86,6 +97,7 @@ export function GitSyncConfigForm({
 
   const formIsClean =
     !enabledHasChanged &&
+    !keepActivationLocalHasChanged &&
     !intervalHasChanged &&
     !repoUrlHasChanged &&
     !branchHasChanged &&
@@ -97,6 +109,7 @@ export function GitSyncConfigForm({
 
   const resetChangeFlags = () => {
     setEnabledOverride(null);
+    setKeepActivationLocalOverride(null);
     setIntervalHasChanged(false);
     setRepoUrlHasChanged(false);
     setBranchHasChanged(false);
@@ -193,6 +206,9 @@ export function GitSyncConfigForm({
 
     if (enabledHasChanged) {
       body.enabled = enabled;
+    }
+    if (keepActivationLocalHasChanged) {
+      body.keep_activation_local = keepActivationLocal;
     }
     if (intervalHasChanged) {
       // Blank reads as manual-only rather than clearing the override, so an
@@ -415,6 +431,22 @@ export function GitSyncConfigForm({
             {t(I18nKey.AUTOMATIONS$GIT_SYNC$CLEAR_ENCRYPTION_KEY)}
           </SettingsSwitch>
         </div>
+
+        {status.keep_activation_local !== undefined && (
+          <div className="flex flex-col gap-2">
+            <SettingsSwitch
+              testId="git-sync-keep-activation-local-switch"
+              isToggled={keepActivationLocal}
+              isDisabled={!canManage}
+              onToggle={setKeepActivationLocalOverride}
+            >
+              {t(I18nKey.AUTOMATIONS$GIT_SYNC$FIELD_KEEP_ACTIVATION_LOCAL)}
+            </SettingsSwitch>
+            <p className="text-xs text-muted">
+              {t(I18nKey.AUTOMATIONS$GIT_SYNC$KEEP_ACTIVATION_LOCAL_HELP)}
+            </p>
+          </div>
+        )}
 
         {failedCheck && (
           <div
