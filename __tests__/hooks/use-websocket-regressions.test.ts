@@ -400,4 +400,95 @@ describe("useWebSocket", () => {
       MockWebSocket.instances.length = 0;
     }
   });
+
+  it("discards in-flight messages from a stale socket after reconnect or URL change (#19668)", async () => {
+    class MockWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+      static readonly instances: MockWebSocket[] = [];
+
+      readonly url: string;
+      readyState = MockWebSocket.CONNECTING;
+      onopen: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+
+      constructor(url: string) {
+        this.url = url;
+        MockWebSocket.instances.push(this);
+      }
+
+      send() {}
+
+      close() {
+        this.readyState = MockWebSocket.CLOSED;
+      }
+
+      emitOpen() {
+        this.readyState = MockWebSocket.OPEN;
+        this.onopen?.(new Event("open"));
+      }
+
+      emitMessage(data: string) {
+        this.onmessage?.(new MessageEvent("message", { data }));
+      }
+    }
+
+    const originalWebSocket = globalThis.WebSocket;
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    const onMessageSpy = vi.fn();
+
+    try {
+      const { result, rerender, unmount } = renderHook(
+        ({ url }) =>
+          useWebSocket(url, {
+            onMessage: onMessageSpy,
+          }),
+        { initialProps: { url: "ws://acme.com/ws/conversation-1" } },
+      );
+      const staleSocket = MockWebSocket.instances[0];
+      act(() => staleSocket.emitOpen());
+
+      // 1. Verify message delivery works on the active socket
+      act(() => staleSocket.emitMessage("active-message-1"));
+      expect(onMessageSpy).toHaveBeenCalledTimes(1);
+
+      // 2. Switch URL (simulating conversation change)
+      rerender({ url: "ws://acme.com/ws/conversation-2" });
+      const currentSocket = MockWebSocket.instances[1];
+      act(() => currentSocket.emitOpen());
+
+      // 3. Late in-flight message arrives on the previous stale socket
+      act(() => staleSocket.emitMessage("in-flight-leak-message"));
+
+      // Assert: the stale socket's message is discarded and does not reach onMessage
+      expect(onMessageSpy).toHaveBeenCalledTimes(1);
+
+      // 4. Verify the new socket still receives messages normally
+      act(() => currentSocket.emitMessage("active-message-2"));
+      expect(onMessageSpy).toHaveBeenCalledTimes(2);
+
+      // 5. Also verify reconnect() discards in-flight frames from the replaced socket
+      act(() => {
+        result.current.reconnect();
+      });
+      const reconnectedSocket = MockWebSocket.instances[2];
+      act(() => reconnectedSocket.emitOpen());
+
+      act(() => currentSocket.emitMessage("late-message-after-reconnect"));
+      expect(onMessageSpy).toHaveBeenCalledTimes(2);
+
+      act(() => reconnectedSocket.emitMessage("live-message-3"));
+      expect(onMessageSpy).toHaveBeenCalledTimes(3);
+
+      unmount();
+    } finally {
+      globalThis.WebSocket = originalWebSocket;
+      MockWebSocket.instances.length = 0;
+    }
+  });
 });

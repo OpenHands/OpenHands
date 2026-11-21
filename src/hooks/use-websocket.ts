@@ -84,6 +84,13 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
     };
 
     ws.onmessage = (event) => {
+      // A socket replaced by reconnect(), a URL change, or unmount can still
+      // receive buffered frames from the network before its close finishes;
+      // discard them so they do not leak into the next conversation (#19668).
+      if (wsRef.current !== ws) {
+        return;
+      }
+
       // Deliberately no `lastMessage` state here: nothing reads it, and a
       // React state write per frame re-renders this hook's owner on every
       // streamed token. Consumers subscribe via `onMessage`.
@@ -182,16 +189,18 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
       }
       // Close the WebSocket connection
       if (wsRef.current) {
-        const { readyState } = wsRef.current;
+        const ws = wsRef.current;
+        const { readyState } = ws;
         // Remove this WebSocket from the allowed list BEFORE closing
         // so its onclose handler won't try to reconnect
-        allowedToReconnectRef.current.delete(wsRef.current);
+        allowedToReconnectRef.current.delete(ws);
+        ws.onmessage = null;
         // Only close if not already closed/closing
         if (
           readyState === WebSocket.CONNECTING ||
           readyState === WebSocket.OPEN
         ) {
-          wsRef.current.close();
+          ws.close();
         }
         wsRef.current = null;
       }
@@ -215,9 +224,12 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
       reconnectTimeoutRef.current = null;
     }
     if (wsRef.current) {
+      const ws = wsRef.current;
       // Remove from allowed list before closing
-      allowedToReconnectRef.current.delete(wsRef.current);
-      wsRef.current.close();
+      allowedToReconnectRef.current.delete(ws);
+      ws.onmessage = null;
+      ws.close();
+      wsRef.current = null;
     }
   }, []);
 
@@ -235,6 +247,7 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
     if (wsRef.current) {
       const ws = wsRef.current;
       allowedToReconnectRef.current.delete(ws);
+      ws.onmessage = null;
       wsRef.current = null;
       if (
         ws.readyState === WebSocket.CONNECTING ||
