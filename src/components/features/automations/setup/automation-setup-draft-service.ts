@@ -104,6 +104,8 @@ export function setupDraftFromServerDraft(
   if (savedName !== undefined) form.name = savedName;
   const savedRunAsUserId = getStringField(body, "run_as_user_id");
   if (savedRunAsUserId !== undefined) form.runAsUserId = savedRunAsUserId;
+  // The form sends `visibility` only for a private automation.
+  if (body.visibility === "private") form.visibility = "private";
   const savedPrompt = getStringField(body, "prompt");
   if (savedPrompt !== undefined) form.prompt = savedPrompt;
   const savedRepository = getRepositoryField(body);
@@ -183,6 +185,9 @@ export function formFromServerDraft(
     kind: endpointKind,
     name: saved.name ?? getStringField(body, "name") ?? base.name,
     runAsUserId: getStringField(body, "run_as_user_id") ?? "",
+    // Sent only for a private automation, so a draft without it keeps the
+    // form's value: an edited automation's own visibility, or the default.
+    visibility: body.visibility === "private" ? "private" : base.visibility,
     prompt: getStringField(body, "prompt") ?? base.prompt,
     repository: getRepositoryField(body) ?? base.repository,
     pluginSource: savedPlugins[0]?.source ?? "",

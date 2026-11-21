@@ -50,6 +50,25 @@ describe("SettingsSection", () => {
     expect(screen.getByText("jdoe@acme.com")).toBeInTheDocument();
   });
 
+  it.each([
+    { visibility: "private" as const, shown: true },
+    { visibility: "organization" as const, shown: false },
+  ])(
+    "says an automation is private only when it is ($visibility)",
+    ({ visibility, shown }) => {
+      // Arrange
+      const subject = { ...automation, visibility };
+
+      // Act
+      render(<SettingsSection automation={subject} />);
+
+      // Assert
+      expect(
+        screen.queryByText("AUTOMATION_SETUP$VISIBILITY_PRIVATE") !== null,
+      ).toBe(shown);
+    },
+  );
+
   it("leaves out runs-as and timeout when there is nothing to show", () => {
     // Local backends and in-flight lookups pass no identity.
     render(<SettingsSection automation={{ ...automation, timeout: null }} />);
