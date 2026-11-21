@@ -1,3 +1,4 @@
+import { EnterpriseDocsCallout } from "#/components/shared/enterprise-docs-callout";
 import { useState, type FormEvent } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -351,6 +352,12 @@ function EventsContent({
             <p role="status">{copyMessage}</p>
           )}
         </>
+      )}
+      {permissionsLoading || (canView && list.isPending) ? null : (
+        <EnterpriseDocsCallout
+          ctaId="event_automations"
+          surface="automation_events"
+        />
       )}
     </div>
   );

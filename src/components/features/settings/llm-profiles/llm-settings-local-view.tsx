@@ -1,3 +1,4 @@
+import { EnterpriseDocsCallout } from "#/components/shared/enterprise-docs-callout";
 import React, {
   useState,
   useCallback,
@@ -445,10 +446,13 @@ export function LlmSettingsLocalView() {
   // List view: show profiles manager
   if (viewMode === "list") {
     return (
-      <LlmProfilesManager
-        onAddProfile={handleAddProfile}
-        onEditProfile={handleEditProfile}
-      />
+      <div className="flex flex-col gap-6">
+        <LlmProfilesManager
+          onAddProfile={handleAddProfile}
+          onEditProfile={handleEditProfile}
+        />
+        <EnterpriseDocsCallout ctaId="llm_gateway" surface="llm_settings" />
+      </div>
     );
   }
 

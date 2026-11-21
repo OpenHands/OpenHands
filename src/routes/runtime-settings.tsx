@@ -1,3 +1,4 @@
+import { EnterpriseDocsCallout } from "#/components/shared/enterprise-docs-callout";
 import { useTranslation } from "react-i18next";
 import {
   SdkSectionPage,
@@ -32,22 +33,28 @@ function RuntimeSettingsScreen() {
   }
 
   return (
-    <SdkSectionPage
-      settingsSources={[source]}
-      header={
-        dockerUnavailable && savedDocker
-          ? () => (
-              <p
-                data-testid="runtime-docker-unavailable"
-                className="text-sm text-muted"
-              >
-                {t(I18nKey.SETTINGS$RUNTIME_DOCKER_UNAVAILABLE)}
-              </p>
-            )
-          : undefined
-      }
-      testId="runtime-settings-screen"
-    />
+    <div className="flex flex-col gap-8">
+      <SdkSectionPage
+        settingsSources={[source]}
+        header={
+          dockerUnavailable && savedDocker
+            ? () => (
+                <p
+                  data-testid="runtime-docker-unavailable"
+                  className="text-sm text-muted"
+                >
+                  {t(I18nKey.SETTINGS$RUNTIME_DOCKER_UNAVAILABLE)}
+                </p>
+              )
+            : undefined
+        }
+        testId="runtime-settings-screen"
+      />
+      <EnterpriseDocsCallout
+        ctaId="custom_sandboxes"
+        surface="runtime_settings"
+      />
+    </div>
   );
 }
 

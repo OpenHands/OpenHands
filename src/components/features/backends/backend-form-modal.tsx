@@ -1,4 +1,5 @@
 import React from "react";
+import { EnterpriseDocsCallout } from "#/components/shared/enterprise-docs-callout";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -1687,6 +1688,12 @@ function AddBackendAddModeBody({
               onSelectProvider={() => setProviderOpen(true)}
             />
           </div>
+          <EnterpriseDocsCallout
+            ctaId="compare_options"
+            surface="backend_chooser"
+            variant="footer"
+            className="mt-5"
+          />
         </div>
         <div
           aria-hidden={!providerOpen}

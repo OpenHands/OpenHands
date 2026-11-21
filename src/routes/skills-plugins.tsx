@@ -1,3 +1,4 @@
+import { EnterpriseDocsCallout } from "#/components/shared/enterprise-docs-callout";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -218,6 +219,13 @@ export default function SkillsPluginsScreen() {
                 </section>
               )}
             </>
+          )}
+
+          {!isLoading && (
+            <EnterpriseDocsCallout
+              ctaId="plugin_marketplace"
+              surface="plugins_page"
+            />
           )}
 
           {selectedPlugin && (

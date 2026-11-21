@@ -23,6 +23,7 @@ import {
   INTEGRATION_CATALOG as MCP_MARKETPLACE,
   type IntegrationCatalogEntry as MarketplaceEntry,
 } from "@openhands/extensions/integrations";
+import { EnterpriseDocsCallout } from "#/components/shared/enterprise-docs-callout";
 import { MCPServerConfig } from "#/types/mcp-server";
 import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 import {
@@ -191,6 +192,8 @@ export default function MCPPage() {
               query={searchQuery}
             />
           ) : null}
+
+          <EnterpriseDocsCallout ctaId="integrations" surface="mcp_page" />
         </div>
 
         {installEntry && (

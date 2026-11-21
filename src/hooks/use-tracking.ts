@@ -11,6 +11,10 @@ import {
   getBackendTelemetryProperties,
 } from "#/services/telemetry-context";
 import { setTelemetryBackendContext, trackEvent } from "#/services/telemetry";
+import type {
+  EnterpriseCalloutId,
+  EnterpriseCalloutSurface,
+} from "#/constants/enterprise-docs";
 
 /**
  * Stable semantic identifier for an onboarding link or CTA. Identifies the
@@ -489,7 +493,22 @@ export const useTracking = () => {
     });
   };
 
+  const trackEnterpriseDocsLinkClicked = ({
+    ctaId,
+    surface,
+  }: {
+    ctaId: EnterpriseCalloutId;
+    surface: EnterpriseCalloutSurface;
+  }) => {
+    track("enterprise_docs_link_clicked", {
+      cta_id: ctaId,
+      surface,
+      is_external: true,
+    });
+  };
+
   return {
+    trackEnterpriseDocsLinkClicked,
     trackLoginButtonClick,
     trackConversationCreated,
     trackPushButtonClick,
