@@ -37,17 +37,14 @@ interface TagRow {
 export function mergeConversationTagEdits(
   currentTags: Record<string, string> | null | undefined,
   editedUserTags: readonly (readonly [string, string])[],
-  parentConversationId?: string | null,
 ): Record<string, string> {
   const merged: Record<string, string> = {};
   const editableKeys = new Set(
-    getEditableConversationTags(currentTags, parentConversationId).map(
-      ([key]) => key,
-    ),
+    getEditableConversationTags(currentTags).map(([key]) => key),
   );
   for (const [key, value] of Object.entries(currentTags ?? {})) {
-    // Preserve exactly what the editor does not surface, including identity
-    // represented by a badge. Visible bare tags remain removable.
+    // Preserve exactly what the editor does not surface. Visible bare tags
+    // remain removable.
     if (
       !editableKeys.has(key) &&
       !SERVER_OWNED_PROJECT_TAG_KEYS.has(key.trim().toLowerCase())
@@ -64,7 +61,6 @@ export function mergeConversationTagEdits(
 interface EditConversationTagsModalProps {
   /** The conversation's complete server-side tag map (including internals). */
   tags: Record<string, string> | null | undefined;
-  parentConversationId?: string | null;
   /** Called with the merged complete map (user edits + preserved internals). */
   onConfirm: (mergedTags: Record<string, string>) => void;
   onCancel: () => void;
@@ -72,15 +68,12 @@ interface EditConversationTagsModalProps {
 
 export function EditConversationTagsModal({
   tags,
-  parentConversationId,
   onConfirm,
   onCancel,
 }: EditConversationTagsModalProps) {
   const { t } = useTranslation("openhands");
   const [rows, setRows] = React.useState<TagRow[]>(() =>
-    getEditableConversationTags(tags, parentConversationId).map(
-      ([key, value]) => ({ key, value }),
-    ),
+    getEditableConversationTags(tags).map(([key, value]) => ({ key, value })),
   );
   const [newKey, setNewKey] = React.useState("");
   const [newValue, setNewValue] = React.useState("");
@@ -160,7 +153,6 @@ export function EditConversationTagsModal({
       mergeConversationTagEdits(
         tags,
         committedRows.map((row) => [row.key, row.value] as const),
-        parentConversationId,
       ),
     );
   };

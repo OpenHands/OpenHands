@@ -1,19 +1,11 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
 import { SkillInfo } from "#/types/settings";
-import {
-  BUILT_IN_COMMANDS,
-  CONDENSE_COMMAND,
-  MODEL_COMMAND,
-  NEW_CONVERSATION_COMMAND,
-} from "#/utils/constants";
+import { BUILT_IN_COMMANDS, MODEL_COMMAND } from "#/utils/constants";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useFreeModels } from "#/hooks/query/use-free-models";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
-import { useActiveConversation } from "#/hooks/query/use-active-conversation";
-import { isInsiderConversation } from "#/utils/insider-cat";
-import { I18nKey } from "#/i18n/declaration";
 
 export type SlashCommandSkill = SkillInfo;
 
@@ -21,7 +13,6 @@ export interface SlashCommandItem {
   skill: SlashCommandSkill;
   /** The slash command string, e.g. "/random-number" */
   command: string;
-  descriptionKey?: I18nKey;
 }
 
 type SlashCompletionKind = "command" | "model-profile";
@@ -49,9 +40,6 @@ export const useSlashCommand = (
   // slash menu lists the same project skills that were loaded into it.
   const { data: skills, isLoading: isSkillsLoading } = useConversationSkills();
   const isCloud = useActiveBackend().backend.kind === "cloud";
-  const { data: conversation } = useActiveConversation();
-  const isInsider = isInsiderConversation(conversation);
-  const canCondense = !!conversation?.id && conversation.agent_kind !== "acp";
   const { data: profilesData, isLoading: isProfilesLoading } = useLlmProfiles();
   const freeModels = useFreeModels();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -62,14 +50,13 @@ export const useSlashCommand = (
 
   // Build slash command items from built-in commands + skills:
   // - Built-in commands (like /new) are included for V1 conversations
-  // - Local Insider /new returns to the App's canonical New Cat flow
+  // - /new is cloud-only — local backends don't surface it
   // - /model lists/switches LLM profiles; both local and cloud support them
   // - Skills with explicit "/" triggers use those triggers
   // - AgentSkills without "/" triggers get a derived "/<name>" command
   const slashItems = useMemo(() => {
     const items: SlashCommandItem[] = BUILT_IN_COMMANDS.filter((cmd) => {
-      if (cmd.command === NEW_CONVERSATION_COMMAND) return isCloud || isInsider;
-      if (cmd.command === CONDENSE_COMMAND) return canCondense;
+      if (cmd.command === "/new") return isCloud;
       return true;
     });
 
@@ -92,7 +79,7 @@ export const useSlashCommand = (
       }
     });
     return items;
-  }, [skills, isSkillsLoading, isCloud, isInsider, canCondense]);
+  }, [skills, isSkillsLoading, isCloud]);
 
   const modelProfileItems = useMemo<SlashCommandItem[]>(() => {
     return (profilesData?.profiles ?? []).map((profile) => {

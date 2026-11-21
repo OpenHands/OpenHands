@@ -802,7 +802,7 @@ describe("AgentServerConversationService", () => {
       expect(conversation?.launched_agent_profile?.secret_refs).toBeNull();
     });
 
-    it("carries wire tags and the parent link through to AppConversation", async () => {
+    it("carries well-formed wire tags through to AppConversation.tags", async () => {
       mockHttpGet.mockResolvedValue({
         data: [
           {
@@ -811,7 +811,6 @@ describe("AgentServerConversationService", () => {
             updated_at: "2024-01-01",
             agent: { kind: "ACPAgent", llm: { model: "acp-managed" } },
             tags: { acpserver: "claude-code", origin: "slack", owner: "alice" },
-            parent_conversation_id: "parent-conversation",
           },
         ],
       });
@@ -821,13 +820,10 @@ describe("AgentServerConversationService", () => {
           "conv-wire-tags",
         ]);
 
-      expect(conversation).toMatchObject({
-        tags: {
-          acpserver: "claude-code",
-          origin: "slack",
-          owner: "alice",
-        },
-        parent_conversation_id: "parent-conversation",
+      expect(conversation?.tags).toEqual({
+        acpserver: "claude-code",
+        origin: "slack",
+        owner: "alice",
       });
     });
 

@@ -63,7 +63,6 @@ interface ConversationCardFooterProps {
    * conversations can surface attribution (e.g. ``origin: slack`` → ``slack``).
    */
   tags?: Record<string, string> | null;
-  parentConversationId?: string | null;
   /**
    * Whether to render the tag-chip row. Wired to the conversation panel's
    * "Tags" toggle.
@@ -91,7 +90,6 @@ export function ConversationCardFooter({
   acpServer = null,
   acpModels = null,
   tags = null,
-  parentConversationId,
   showTags = false,
   isArchived = false,
 }: ConversationCardFooterProps) {
@@ -148,7 +146,7 @@ export function ConversationCardFooter({
   // A ``project`` tag holds the project's id; show its name when known, and
   // nothing while the backend has Projects turned off.
   const displayTags: Array<[string, string]> = showTags
-    ? getDisplayConversationTags(tags, parentConversationId).flatMap(
+    ? getDisplayConversationTags(tags).flatMap(
         ([key, value]): Array<[string, string]> => {
           const normalized = key.trim().toLowerCase();
           // A project member's resolution is board state, hidden with

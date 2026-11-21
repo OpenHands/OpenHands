@@ -6,7 +6,6 @@ import {
   Plus,
   Server,
   Settings,
-  Cat,
   FolderKanban,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
@@ -294,14 +293,10 @@ export function SidebarRailBody({
             testId={`sidebar-canvas-extension-${page.extension.name}-${page.contribution.id}`}
             collapsed={collapsed}
             icon={
-              page.icon === "cat" && !page.extension.manifest?.icon ? (
-                <Cat width={ICON_SIZE} height={ICON_SIZE} />
-              ) : (
-                <CanvasExtensionIcon
-                  extension={page.extension}
-                  size={ICON_SIZE}
-                />
-              )
+              <CanvasExtensionIcon
+                extension={page.extension}
+                size={ICON_SIZE}
+              />
             }
           />
         ))}
