@@ -1,0 +1,12 @@
+{
+  "url": "http://127.0.0.1:4174/conversations/canvas-demo",
+  "beforeHidden": true,
+  "copiedTextIncludesHiddenClipContent": true,
+  "copiedTextLength": 503,
+  "ariaAfterCopy": "Copied to clipboard",
+  "ariaAfterReset": "Copy to clipboard",
+  "screenshots": [
+    ".pr/markdown-file-copy/after-hover.png",
+    ".pr/markdown-file-copy/after-copied.png"
+  ]
+}
