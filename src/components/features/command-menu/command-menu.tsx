@@ -356,6 +356,7 @@ export function CommandMenu() {
                               href={buildAgentCanvasPath(to)}
                               role="option"
                               aria-selected={isActive}
+                              aria-keyshortcuts={item.ariaKeyshortcuts}
                               onMouseEnter={() => setActiveIndex(itemIndex)}
                               onClick={(event) => {
                                 if (
@@ -384,6 +385,7 @@ export function CommandMenu() {
                             type="button"
                             role="option"
                             aria-selected={isActive}
+                            aria-keyshortcuts={item.ariaKeyshortcuts}
                             onMouseEnter={() => setActiveIndex(itemIndex)}
                             onClick={() => runItem(item)}
                             className={optionClassName}

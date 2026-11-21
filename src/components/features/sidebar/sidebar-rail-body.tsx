@@ -19,6 +19,7 @@ import {
   CUSTOMIZE_PATH,
   usePinnedHomeRoute,
 } from "#/hooks/use-pinned-home-route";
+import { TOGGLE_SIDEBAR_ARIA_SHORTCUTS } from "#/hooks/use-toggle-sidebar-shortcut";
 import { SidebarCollapsedIconSlot } from "./sidebar-collapsed-icon-slot";
 import { SidebarNavLink } from "./sidebar-nav-link";
 import { I18nKey } from "#/i18n/declaration";
@@ -100,6 +101,16 @@ export function SidebarRailBody({
   const { isPinnedRoute, togglePinnedRoute } = usePinnedHomeRoute();
   const [backendMenuOpen, setBackendMenuOpen] = React.useState(false);
 
+  // Collapsing unmounts the backend selector while its menu can still be open,
+  // so the dropdown never reports `onMenuOpenChange(false)` and the onboarding
+  // card above it would stay hidden after expanding again. Reset the flag with
+  // the layout it belongs to instead of relying on the dropdown's cleanup.
+  React.useEffect(() => {
+    if (collapsed) {
+      setBackendMenuOpen(false);
+    }
+  }, [collapsed]);
+
   const buildPinAction = (path: string, testId: string) => {
     const pinned = isPinnedRoute(path);
     return {
@@ -157,12 +168,15 @@ export function SidebarRailBody({
               data-testid="sidebar-collapse-toggle"
               aria-pressed={collapsed}
               aria-label={collapseToggleLabel}
+              aria-keyshortcuts={TOGGLE_SIDEBAR_ARIA_SHORTCUTS}
               onClick={onExpand}
               className={cn(
                 SIDEBAR_COLLAPSE_TOGGLE_OVERLAY_CLASS,
+                // Focus moves here when collapsing drops it, so the control
+                // has to show itself even while the pointer is elsewhere.
                 showCollapsedExpandButton
                   ? "opacity-100 pointer-events-auto"
-                  : "opacity-0 pointer-events-none",
+                  : "opacity-0 pointer-events-none focus-visible:opacity-100 focus-visible:pointer-events-auto",
               )}
             >
               <ChevronRight width={14} height={14} />
@@ -175,6 +189,7 @@ export function SidebarRailBody({
             data-testid="sidebar-collapse-toggle"
             aria-pressed={collapsed}
             aria-label={collapseToggleLabel}
+            aria-keyshortcuts={TOGGLE_SIDEBAR_ARIA_SHORTCUTS}
             onClick={onCollapse}
             className={cn(
               "hidden md:inline-flex ml-auto",
