@@ -12,8 +12,7 @@ import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import CheckmarkIcon from "#/icons/checkmark.svg?react";
 import CopyIcon from "#/icons/copy.svg?react";
-import { copyToClipboard } from "#/utils/copy-to-clipboard";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { useCopyToClipboard } from "#/hooks/use-copy-to-clipboard";
 
 interface AddSkillModalProps {
   onClose: () => void;
@@ -49,12 +48,11 @@ function InlineCodeChip({ children }: { children?: React.ReactNode }) {
 function AddSkillExampleBlock() {
   const { t } = useTranslation("openhands");
   const [copied, setCopied] = React.useState(false);
+  const copyToClipboard = useCopyToClipboard();
 
   const handleCopy = async () => {
     if (await copyToClipboard(ADD_SKILL_EXAMPLE_COMMAND)) {
       setCopied(true);
-    } else {
-      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
     }
   };
 

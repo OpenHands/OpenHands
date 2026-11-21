@@ -69,6 +69,76 @@ describe("copyToClipboard", () => {
 
     expect(document.body.children.length).toBe(before);
   });
+
+  it("copies text via the copy event listener even if activeElement is not the textarea", async () => {
+    setClipboard(undefined);
+    let capturedText: string | undefined;
+
+    document.execCommand = vi.fn().mockImplementation(() => {
+      const event = new Event("copy", { bubbles: true, cancelable: true });
+      const clipboardData = {
+        setData: vi.fn((format: string, data: string) => {
+          if (format === "text/plain") {
+            capturedText = data;
+          }
+        }),
+      };
+      Object.defineProperty(event, "clipboardData", { value: clipboardData });
+      document.dispatchEvent(event);
+      return true;
+    });
+
+    const otherButton = document.createElement("button");
+    document.body.appendChild(otherButton);
+    otherButton.focus();
+    expect(document.activeElement).toBe(otherButton);
+
+    const result = await copyToClipboard("focus-independent-text");
+    expect(result).toBe(true);
+    expect(capturedText).toBe("focus-independent-text");
+  });
+
+  it("removes the copy event listener after a copy attempt (success or failure)", async () => {
+    setClipboard(undefined);
+    const removeEventListenerSpy = vi.spyOn(document, "removeEventListener");
+    document.execCommand = vi.fn().mockReturnValue(true);
+
+    await copyToClipboard("test");
+    expect(removeEventListenerSpy).toHaveBeenCalledWith(
+      "copy",
+      expect.any(Function),
+    );
+
+    document.execCommand = vi.fn().mockImplementation(() => {
+      throw new Error("execCommand failed");
+    });
+    await copyToClipboard("test-fail");
+    expect(removeEventListenerSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("calls setSelectionRange(0, text.length) on the temporary textarea for iOS Safari", async () => {
+    setClipboard(undefined);
+    document.execCommand = vi.fn().mockReturnValue(true);
+
+    let selectionRangeCalledWith: [number, number] | undefined;
+    const originalSetSelectionRange =
+      HTMLTextAreaElement.prototype.setSelectionRange;
+    HTMLTextAreaElement.prototype.setSelectionRange = vi.fn(function (
+      this: HTMLTextAreaElement,
+      start: number,
+      end: number,
+    ) {
+      selectionRangeCalledWith = [start, end];
+    });
+
+    try {
+      await copyToClipboard("safari-test");
+      expect(selectionRangeCalledWith).toEqual([0, "safari-test".length]);
+    } finally {
+      HTMLTextAreaElement.prototype.setSelectionRange =
+        originalSetSelectionRange;
+    }
+  });
 });
 
 describe("copyToClipboard focus restoration", () => {
@@ -96,7 +166,9 @@ describe("copyToClipboard focus restoration", () => {
 
     // jsdom's select() is a no-op; a real browser moves focus onto the
     // textarea, which is what strands the keyboard user once it is removed.
-    HTMLTextAreaElement.prototype.select = function select(this: HTMLTextAreaElement) {
+    HTMLTextAreaElement.prototype.select = function select(
+      this: HTMLTextAreaElement,
+    ) {
       this.focus();
     };
 

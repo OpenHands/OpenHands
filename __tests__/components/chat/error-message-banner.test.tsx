@@ -179,7 +179,7 @@ describe("ErrorMessageBanner", () => {
 
     expect(writeText).toHaveBeenCalledWith("copy failed");
     expect(toastMocks.displayErrorToast).toHaveBeenCalledWith(
-      "CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED",
+      "CLIPBOARD$COPY_FAILED",
     );
     expect(
       screen.getByTestId("error-message-banner-copy"),

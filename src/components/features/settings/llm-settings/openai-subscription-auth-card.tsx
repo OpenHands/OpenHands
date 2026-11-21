@@ -16,7 +16,7 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
-import { copyToClipboard } from "#/utils/copy-to-clipboard";
+import { useCopyToClipboard } from "#/hooks/use-copy-to-clipboard";
 
 const DEFAULT_DEVICE_POLL_INTERVAL_SECONDS = 5;
 const MIN_DEVICE_POLL_INTERVAL_SECONDS = 1;
@@ -43,6 +43,7 @@ export function OpenAISubscriptionAuthCard({
   const [copied, setCopied] = React.useState(false);
   const [isPendingLogin, setIsPendingLogin] = React.useState(false);
   const pollTimeoutRef = React.useRef<number | null>(null);
+  const copyToClipboard = useCopyToClipboard();
 
   const clearPollTimeout = React.useCallback(() => {
     if (pollTimeoutRef.current !== null) {
@@ -54,7 +55,6 @@ export function OpenAISubscriptionAuthCard({
   const handleCopyCode = async () => {
     if (!challenge) return;
     if (!(await copyToClipboard(challenge.userCode))) {
-      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
       return;
     }
     setCopied(true);
