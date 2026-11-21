@@ -79,7 +79,7 @@ export function SayHelloStep({
   return (
     <div
       data-testid="onboarding-step-say-hello"
-      className="flex max-h-[calc(90vh-7rem)] flex-col"
+      className="flex onboarding-step-height flex-col"
     >
       <header className="flex shrink-0 flex-col gap-2">
         <h2 className="text-2xl font-medium text-contrast">

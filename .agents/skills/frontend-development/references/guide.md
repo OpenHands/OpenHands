@@ -318,3 +318,9 @@ BrandButton/BrandBadge text retain these public roles, including host overrides.
 Do not substitute similarly colored Canvas or HeroUI roles. Caller color and
 font-size precedence stays covered by `cn` composition tests, and the scoped
 library CSS contract verifies the exact variable declarations.
+
+## Onboarding slide height
+
+The LLM setup and Say hello slides share `onboarding-step-height`. Keep the
+existing viewport-relative cap and rem offset so their content can scroll at
+short heights. Both slides reject new arbitrary values.

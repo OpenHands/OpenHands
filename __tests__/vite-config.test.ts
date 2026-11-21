@@ -723,6 +723,9 @@ describe("vite library build", () => {
       "onboarding-viewport-height": {
         "max-height": "90vh",
       },
+      "onboarding-step-height": {
+        "max-height": "calc(90vh - 7rem)",
+      },
       "dialog-content-height": {
         "max-height": "80vh",
       },
