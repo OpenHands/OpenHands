@@ -326,6 +326,215 @@ describe("createCredentialStore with a SecretStore (the Agent Canvas server)", (
     });
   });
 
+  it("keeps a connection another Canvas process added when this one renews a grant", () => {
+    // Two processes on one store, each with the list as it was at its start.
+    const { dir, store: first } = serverStore();
+    const teamOne = first.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "team-1-access",
+      refreshToken: "team-1-refresh",
+      label: "DigitalOcean",
+    });
+    const second = serverStore(dir).store;
+    const teamTwo = first.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "team-2-access",
+      refreshToken: "team-2-refresh",
+      label: "DigitalOcean",
+    });
+
+    second.updateGrant(teamOne.id, {
+      token: "team-1-access-2",
+      refreshToken: "team-1-refresh-2",
+    });
+
+    const restarted = serverStore(dir).store;
+    expect(restarted.list()).toMatchObject([
+      { id: teamOne.id },
+      { id: teamTwo.id },
+    ]);
+    expect(restarted.getActive()?.id).toBe(teamTwo.id);
+    expect(restarted.getGrant(teamOne.id)?.refreshToken).toBe(
+      "team-1-refresh-2",
+    );
+    // The renewing process sees the other's sign-in as signed in, too.
+    expect(second.list()[1]).toMatchObject({
+      id: teamTwo.id,
+      isExpired: false,
+    });
+  });
+
+  it.each([
+    { what: "renews", grant: { token: "late", refreshToken: "late-refresh" } },
+    { what: "forgets", grant: null },
+  ])(
+    "never $what a grant another Canvas process replaced since it was read",
+    ({ grant }) => {
+      const { dir, store: first } = serverStore();
+      const saved = first.save({
+        kind: CREDENTIAL_KIND_OAUTH,
+        token: "access-1",
+        refreshToken: "refresh-1",
+        label: "DigitalOcean",
+      });
+      const second = serverStore(dir).store;
+      // A new sign-in for the team, saved by the other process.
+      second.updateGrant(saved.id, {
+        token: "signed-in-again",
+        refreshToken: "refresh-new",
+      });
+
+      expect(
+        first.updateGrant(saved.id, grant, { replacing: "refresh-1" }),
+      ).toBe(false);
+
+      expect(first.getGrant(saved.id)).toMatchObject({
+        token: "signed-in-again",
+        refreshToken: "refresh-new",
+      });
+      expect(serverStore(dir).store.getGrant(saved.id)?.refreshToken).toBe(
+        "refresh-new",
+      );
+    },
+  );
+
+  it("ends the grant the store holds when a team signs in again, not an older cached one", () => {
+    const { dir, store: first } = serverStore();
+    const older = first.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "access-1",
+      refreshToken: "refresh-1",
+      label: "DigitalOcean",
+    });
+    first.setTeam(older.id, { uuid: "team-1", name: "My Team" });
+    const second = serverStore(dir).store;
+    // The first process renews the grant the second still has cached.
+    first.updateGrant(
+      older.id,
+      { token: "access-2", refreshToken: "refresh-2" },
+      { replacing: "refresh-1" },
+    );
+
+    const replaced: { token: string; refreshToken?: string | null }[] = [];
+    const again = second.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "access-new",
+      refreshToken: "refresh-new",
+      label: "DigitalOcean",
+    });
+    second.setTeam(
+      again.id,
+      { uuid: "team-1", name: "My Team" },
+      { onReplacedGrant: (grant) => replaced.push(grant) },
+    );
+
+    expect(replaced).toMatchObject([
+      { token: "access-2", refreshToken: "refresh-2" },
+    ]);
+  });
+
+  it("serves the grant another Canvas process signed a team in again with", () => {
+    const { dir, store: first } = serverStore();
+    const saved = first.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "access-1",
+      refreshToken: "refresh-1",
+      label: "DigitalOcean",
+    });
+    first.setTeam(saved.id, { uuid: "team-1", name: "My Team" });
+    const second = serverStore(dir).store;
+    expect(second.getGrant(saved.id)?.token).toBe("access-1");
+
+    // The first process signs the team in again (and ends the old grant).
+    const again = first.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "access-new",
+      refreshToken: "refresh-new",
+      label: "DigitalOcean",
+    });
+    first.setTeam(again.id, { uuid: "team-1", name: "My Team" });
+
+    expect(second.getGrant(saved.id)?.token).toBe("access-new");
+    expect(second.getActiveToken()).toBe("access-new");
+  });
+
+  it("stops serving a connection another Canvas process signed out", () => {
+    const { dir, store: first } = serverStore();
+    const saved = first.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "access-1",
+      refreshToken: "refresh-1",
+      label: "DigitalOcean",
+    });
+    const second = serverStore(dir).store;
+    expect(second.getGrant(saved.id)?.token).toBe("access-1");
+
+    first.remove(saved.id);
+
+    expect(second.getGrant(saved.id)).toBeNull();
+    expect(second.list()).toEqual([]);
+  });
+
+  it("renews a grant the store still holds", () => {
+    const { dir, store } = serverStore();
+    const saved = store.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "access-1",
+      refreshToken: "refresh-1",
+      label: "DigitalOcean",
+    });
+
+    expect(
+      store.updateGrant(
+        saved.id,
+        { token: "access-2", refreshToken: "refresh-2" },
+        { replacing: "refresh-1" },
+      ),
+    ).toBe(true);
+    expect(serverStore(dir).store.getGrant(saved.id)?.refreshToken).toBe(
+      "refresh-2",
+    );
+  });
+
+  it("keeps a grant it could not save when it reads the store again", () => {
+    let refuse = false;
+    const memory = createMemoryStore();
+    const flaky = {
+      ...memory,
+      isPersistent: true,
+      write: (account: string, secret: string) => {
+        if (refuse) throw new Error("macOS Keychain refused to save");
+        memory.write(account, secret);
+      },
+    };
+    const store = createCredentialStore({
+      userDataPath: mkdtempSync(join(tmpdir(), "mars-unsaved-")),
+      secrets: flaky,
+      log: () => {},
+    });
+    const saved = store.save({
+      kind: CREDENTIAL_KIND_OAUTH,
+      token: "access-1",
+      refreshToken: "refresh-1",
+      label: "DigitalOcean",
+    });
+    // The renewal is refused: the keychain still has the spent refresh-1.
+    refuse = true;
+    store.updateGrant(saved.id, {
+      token: "access-2",
+      refreshToken: "refresh-2",
+    });
+
+    expect(store.readGrant(saved.id)?.refreshToken).toBe("refresh-2");
+    expect(
+      store.updateGrant(
+        saved.id,
+        { token: "access-3", refreshToken: "refresh-3" },
+        { replacing: "refresh-2" },
+      ),
+    ).toBe(true);
+  });
+
   it("keeps a sign-in for this run when the store refuses it, and says it was not saved", () => {
     const refusing = {
       ...createMemoryStore(),
