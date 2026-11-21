@@ -423,6 +423,19 @@ describe("AgentStatus", () => {
     expect(screen.queryByTestId("play-button")).not.toBeInTheDocument();
   });
 
+  it("allows retrying via the error indicator when in an error state with an open socket", () => {
+    const { handleResumeAgent } = renderAgentStatus({
+      agentState: AgentState.ERROR,
+      executionStatus: ExecutionStatus.ERROR,
+      webSocketStatus: "OPEN",
+    });
+
+    const retryButton = screen.getByTestId("error-retry-button");
+    expect(retryButton).toBeInTheDocument();
+    fireEvent.click(retryButton);
+    expect(handleResumeAgent).toHaveBeenCalledTimes(1);
+  });
+
   it("shows a non-interactive waiting indicator for user confirmation", () => {
     renderAgentStatus();
 

@@ -61,6 +61,15 @@ vi.mock("#/hooks/use-send-message", () => ({
 
 vi.mock("#/hooks/query/use-config");
 vi.mock("#/hooks/mutation/use-unified-upload-files");
+const { mockResumeConversation } = vi.hoisted(() => ({
+  mockResumeConversation: vi.fn(),
+}));
+vi.mock("#/hooks/mutation/use-resume-conversation", () => ({
+  useResumeConversation: () => ({
+    mutate: mockResumeConversation,
+    isPending: false,
+  }),
+}));
 // Treat the LLM as configured by default so the "not configured" gate/banner
 // stays inert for these tests (its own behavior is covered elsewhere).
 vi.mock("#/hooks/use-llm-configured", () => ({
@@ -172,6 +181,7 @@ beforeEach(() => {
     hasMore: false,
     loadOlder: vi.fn().mockResolvedValue(undefined),
   });
+  mockResumeConversation.mockClear();
 });
 
 describe("ChatInterface - Chat Suggestions", () => {
@@ -873,6 +883,30 @@ describe("ChatInterface - Pending message queue", () => {
     expect(
       screen.queryByText(I18nKey.CHAT_INTERFACE$RESUMING_SANDBOX),
     ).not.toBeInTheDocument();
+  });
+
+  it("allows retrying failed agent turn from ErrorMessageBanner when in ERROR state", async () => {
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.ERROR,
+      executionStatus: null,
+    });
+
+    useErrorMessageStore.setState({
+      errorMessage: "LLM provider rate limit exceeded",
+      errorType: "conversation",
+      errorCode: null,
+    });
+
+    renderInterface();
+
+    const retryButton = screen.getByTestId("error-message-banner-retry");
+    expect(retryButton).toBeInTheDocument();
+
+    fireEvent.click(retryButton);
+    expect(mockResumeConversation).toHaveBeenCalledWith({
+      conversationId: "test-conversation-id",
+    });
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
   });
 
   it("shows the message in 'sending' state immediately when submitted", async () => {
