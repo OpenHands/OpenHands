@@ -37,6 +37,8 @@ const INGRESS_PORT = process.env.MOCK_LLM_INGRESS_PORT ?? "18300";
 // the same build/ directory with --auth-required (no baked session key)
 // and proxies to the same backend.
 const PUBLIC_MODE_PORT = process.env.MOCK_LLM_PUBLIC_MODE_PORT ?? "18301";
+const BACKEND_PORT = process.env.OH_CANVAS_SAFE_BACKEND_PORT ?? "18000";
+const AUTOMATION_PORT = process.env.OH_CANVAS_SAFE_AUTOMATION_PORT ?? "18001";
 
 // ── Session API key ────────────────────────────────────────────────────
 const sessionApiKey =
@@ -176,9 +178,8 @@ export default defineConfig({
       gracefulShutdown: { signal: "SIGTERM", timeout: 15_000 },
     },
     // 3. Public-mode static server — same build/, same backend, but with
-    //    --auth-required (no session key injected). The agent-server's
-    //    internal ports are the defaults from config/defaults.json (18000
-    //    for agent-server, 18001 for automation).
+    //    --auth-required (no session key injected), targeting the same
+    //    isolated backend ports as the main stack.
     {
       command: [
         // No DigitalOcean bridge on the e2e public-mode server: nothing here
@@ -190,10 +191,10 @@ export default defineConfig({
         `--port ${PUBLIC_MODE_PORT}`,
         "--host 127.0.0.1",
         "--auth-required",
-        "--route /api/automation=http://localhost:18001",
-        "--route /api=http://localhost:18000",
-        "--route /server_info=http://localhost:18000",
-        "--route /sockets=http://localhost:18000",
+        `--route /api/automation=http://localhost:${AUTOMATION_PORT}`,
+        `--route /api=http://localhost:${BACKEND_PORT}`,
+        `--route /server_info=http://localhost:${BACKEND_PORT}`,
+        `--route /sockets=http://localhost:${BACKEND_PORT}`,
       ].join(" "),
       url: `http://127.0.0.1:${PUBLIC_MODE_PORT}/`,
       timeout: 15_000,

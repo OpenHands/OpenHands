@@ -1,5 +1,6 @@
 import type {
   AskUserAnswerEvent,
+  MessageEditEvent,
   ReactionEvent,
 } from "@openhands/typescript-client";
 
@@ -33,6 +34,7 @@ export type OpenHandsEvent =
   | MessageEvent
   | ReactionEvent
   | AskUserAnswerEvent
+  | MessageEditEvent
   | ObservationEvent
   | UserRejectObservation
   | AgentErrorEvent

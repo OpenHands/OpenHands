@@ -6,6 +6,10 @@ import {
   MessageReactions,
   useMessageReactions,
 } from "../../../features/chat/message-reactions";
+import {
+  MessageEditedMark,
+  useMessageEdit,
+} from "../../../features/chat/message-edits";
 import { ImageCarousel } from "../../../features/images/image-carousel";
 import { parseMessageFromEvent } from "../event-content-helpers/parse-message-from-event";
 import { CriticResultDisplay } from "./critic-result-display";
@@ -67,7 +71,12 @@ function UserAssistantEventMessageComponent({
     { isFromPlanningAgent },
   );
 
-  const parsed = parseMessageFromEvent(event);
+  // The agent may have edited its message since (`edit_message`); the
+  // latest edit's text replaces the text it first wrote.
+  const editedText = useMessageEdit(
+    event.source === "agent" ? event.id : undefined,
+  );
+  const parsed = editedText ?? parseMessageFromEvent(event);
   // Route an inline <think> block (e.g. from a streamed reply) to the thinking
   // section so reloaded conversations match the live rendering.
   const { reasoning: inlineThink, message } =
@@ -157,6 +166,7 @@ function UserAssistantEventMessageComponent({
         {imageUrls.length > 0 && (
           <ImageCarousel size="small" images={imageUrls} />
         )}
+        {editedText !== undefined && <MessageEditedMark />}
         {reactions.visible && <MessageReactions state={reactions} />}
       </ChatMessage>
       {event.source === "agent" && event.critic_result != null && (
