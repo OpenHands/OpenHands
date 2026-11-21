@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Server } from "lucide-react";
+import { ArrowRightLeft, Factory, Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
@@ -25,7 +25,11 @@ interface DetailHeaderProps {
   isKeepAlivePending?: boolean;
   /** When provided (and the user can edit), the header shows an Edit button. */
   onEdit?: () => void;
+  /** Where the back link goes. Defaults to the automations list. */
+  backTo?: string;
   onDelete: () => void;
+  /** When provided, the kebab menu shows a Change factory entry. */
+  onChangeFactory?: () => void;
   /** When provided, the kebab menu shows a Change Runs As entry. */
   onChangeRunAs?: () => void;
   onExport: () => void;
@@ -52,7 +56,9 @@ export function DetailHeader({
   onToggleKeepAlive,
   isKeepAlivePending = false,
   onEdit,
+  backTo,
   onDelete,
+  onChangeFactory,
   onChangeRunAs,
   onExport,
   onDownloadTarball,
@@ -101,6 +107,15 @@ export function DetailHeader({
           },
         ]
       : []),
+    ...(onChangeFactory
+      ? [
+          {
+            label: t(I18nKey.AUTOMATIONS$CHANGE_FACTORY),
+            icon: <Factory className="size-4" aria-hidden />,
+            onClick: onChangeFactory,
+          },
+        ]
+      : []),
     ...(onChangeRunAs
       ? [
           {
@@ -125,7 +140,7 @@ export function DetailHeader({
     <AutomationPageHeader
       testId="automation-detail-header"
       title={automation.name}
-      backTo={automationListPath()}
+      backTo={backTo ?? automationListPath()}
       badge={<ActiveStatusBadge automation={automation} />}
     >
       {canManage && onRunNow && (

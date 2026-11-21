@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   ChevronLeft,
   ChevronRight,
+  Factory,
   Plus,
   Server,
   Settings,
@@ -42,6 +43,9 @@ import {
   sidebarNavRowClassName,
 } from "./sidebar-layout";
 import { useCanvasExtensionsRuntime } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
+import { useFactoriesSupported } from "#/hooks/query/use-factories";
+import { FACTORIES_PATH } from "#/constants/factories";
+import { useFactoryContext } from "#/hooks/use-factory-context";
 import { CanvasExtensionIcon } from "#/components/features/canvas-extensions/canvas-extension-icon";
 import type { Backend } from "#/api/backend-registry/types";
 
@@ -99,6 +103,9 @@ export function SidebarRailBody({
   const backendCloseTimerRef = collapsedBackendCloseTimer;
   const { isPinnedRoute, togglePinnedRoute } = usePinnedHomeRoute();
   const [backendMenuOpen, setBackendMenuOpen] = React.useState(false);
+  const { isSupported: isFactoriesSupported } = useFactoriesSupported();
+  // Setup and detail pages opened from a factory keep Factories selected.
+  const inFactoryFlow = useFactoryContext() !== null && isFactoriesSupported;
 
   const buildPinAction = (path: string, testId: string) => {
     const pinned = isPinnedRoute(path);
@@ -258,11 +265,22 @@ export function SidebarRailBody({
             label={getInterfaceCopy().sidebarLabel}
             testId="sidebar-automations-link"
             collapsed={collapsed}
+            forceInactive={inFactoryFlow}
             icon={<AutomationsIcon width={ICON_SIZE} height={ICON_SIZE} />}
             pinAction={buildPinAction(
               automationListPath(),
               "sidebar-pin-home-toggle-automations",
             )}
+          />
+        )}
+        {hasAutomationInterface() && isFactoriesSupported && (
+          <SidebarNavLink
+            to={FACTORIES_PATH}
+            label={t(I18nKey.FACTORIES$NAV_LABEL)}
+            testId="sidebar-factories-link"
+            collapsed={collapsed}
+            forceActive={inFactoryFlow}
+            icon={<Factory width={ICON_SIZE} height={ICON_SIZE} />}
           />
         )}
         {canvasExtensionPages.map((page) => (

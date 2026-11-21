@@ -4,16 +4,18 @@ import ExclamationCircleIcon from "#/icons/exclamation-circle.svg?react";
 
 interface ErrorStateProps {
   onRetry: () => void;
+  /** Overrides the default "Failed to load automations". */
+  title?: string;
 }
 
-export function ErrorState({ onRetry }: ErrorStateProps) {
+export function ErrorState({ onRetry, title }: ErrorStateProps) {
   const { t } = useTranslation("openhands");
 
   return (
     <div className="flex flex-col items-center justify-center py-20">
       <ExclamationCircleIcon className="size-12 text-danger" />
       <p className="mt-4 text-sm text-muted">
-        {t(I18nKey.AUTOMATIONS$ERROR_TITLE)}
+        {title ?? t(I18nKey.AUTOMATIONS$ERROR_TITLE)}
       </p>
       <button
         type="button"

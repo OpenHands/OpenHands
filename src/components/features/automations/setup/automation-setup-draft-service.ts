@@ -148,6 +148,7 @@ export function setupDraftFromServerDraft(
   }
 
   const prompt = form.prompt ?? "";
+  const savedFactoryId = getStringField(body, "factory_id");
   return {
     prompt,
     kind,
@@ -157,6 +158,7 @@ export function setupDraftFromServerDraft(
     form,
     serverDraftId: saved.id,
     materializedAutomationId: saved.materializedAutomationId,
+    ...(savedFactoryId ? { factoryId: savedFactoryId } : {}),
   };
 }
 

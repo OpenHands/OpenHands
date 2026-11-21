@@ -106,7 +106,10 @@ import {
   useServiceAccounts,
 } from "#/hooks/query/use-service-accounts";
 import { AUTOMATION_DETAIL_QUERY_KEY } from "#/hooks/query/use-automation-detail";
-import { AUTOMATIONS_QUERY_KEY } from "#/hooks/query/use-automations";
+import {
+  AUTOMATIONS_QUERY_KEY,
+  invalidateAutomationLists,
+} from "#/hooks/query/use-automations";
 import {
   invalidateConversationQueries,
   patchConversationInCache,
@@ -114,6 +117,8 @@ import {
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
 import { useNavigation } from "#/context/navigation-context";
+import { factoryPath, withFactoryContext } from "#/constants/factories";
+import { useFactoryContext } from "#/hooks/use-factory-context";
 import type {
   AutomationDraftApiResponse,
   DeploymentCapabilities,
@@ -789,6 +794,7 @@ export function AutomationSetupPanel({
 }: AutomationSetupPanelProps) {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
+  const factoryContext = useFactoryContext();
   const deploymentCapabilities = useDeploymentCapabilities();
   // Connected self-hosted providers name their hosts here; a repository on
   // one of them is sent with its provider so the run can authenticate, as
@@ -1465,6 +1471,10 @@ export function AutomationSetupPanel({
   const newAutomationRunAsId = showRunAsPicker ? runAsUserId : "";
   // Only the final create runs enabled: drafts and preflight validation must
   // stay inert, so the flag travels with the caller's intent.
+  // Only a new automation is placed in a factory; an edit leaves it where it is.
+  const newAutomationFactoryId = isEditingExisting
+    ? ""
+    : (draft.factoryId?.trim() ?? "");
   const buildPresetBody = (enabled: boolean): SetupRequestBody => {
     const trimmedPrompt = prompt.trim();
     const body: SetupRequestBody = {
@@ -1491,6 +1501,7 @@ export function AutomationSetupPanel({
     if (selectedAgentProfileId) body.agent_profile_id = selectedAgentProfileId;
     else if (model.trim()) body.model = model.trim();
     if (newAutomationRunAsId) body.run_as_user_id = newAutomationRunAsId;
+    if (newAutomationFactoryId) body.factory_id = newAutomationFactoryId;
     return body;
   };
   const buildCustomBody = (
@@ -1514,6 +1525,7 @@ export function AutomationSetupPanel({
         ? { timeout: Number(timeoutSeconds) }
         : {}),
       ...(newAutomationRunAsId ? { run_as_user_id: newAutomationRunAsId } : {}),
+      ...(newAutomationFactoryId ? { factory_id: newAutomationFactoryId } : {}),
     }) as SetupRequestBody;
   /**
    * The request body sent to a server-backed draft. Custom drafts reference a
@@ -1719,9 +1731,13 @@ export function AutomationSetupPanel({
     }
     setIsTaggedDraftMissing(false);
     if (isPendingAutomationSetupId(conversationId) && !serverDraftId) {
-      navigate(`/automations/setup?draftId=${encodeURIComponent(saved.id)}`, {
-        replace: true,
-      });
+      navigate(
+        withFactoryContext(
+          `/automations/setup?draftId=${encodeURIComponent(saved.id)}`,
+          factoryContext,
+        ),
+        { replace: true },
+      );
     }
     await updateConversationDraftTags(saved.id);
     return saved;
@@ -1939,6 +1955,7 @@ export function AutomationSetupPanel({
       }
       setSaveState("saved");
       toast.success(t(I18nKey.AUTOMATION_SETUP$CREATED));
+      invalidateAutomationLists(queryClient);
       // The draft has been finalized into a real automation; drop the
       // persisted draft row so it does not linger as an incomplete setup.
       if (serverDraftId) {
@@ -1954,7 +1971,9 @@ export function AutomationSetupPanel({
         }
       }
       if (typeof created.id === "string")
-        navigate(automationDetailPath(created.id));
+        navigate(
+          withFactoryContext(automationDetailPath(created.id), factoryContext),
+        );
     } catch (error) {
       displayErrorToast(
         getApiErrorMessage(error, t(I18nKey.SETUP$SUBMIT_FAILED)),
@@ -2105,8 +2124,13 @@ export function AutomationSetupPanel({
   const closeEditor = () => {
     navigate(
       isEditingExisting
-        ? automationDetailPath(editingAutomationId)
-        : automationListPath(),
+        ? withFactoryContext(
+            automationDetailPath(editingAutomationId),
+            factoryContext,
+          )
+        : factoryContext
+          ? factoryPath(factoryContext)
+          : automationListPath(),
     );
   };
 

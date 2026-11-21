@@ -10,6 +10,7 @@ import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 import { I18nKey } from "#/i18n/declaration";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
 import {
   getCloudOrganizationMember,
   listCloudServiceAccounts,
@@ -46,6 +47,8 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     checkHealth: vi.fn(),
     getCapabilities: vi.fn(),
     changeRunAs: vi.fn(),
+    supportsFactories: vi.fn(),
+    listFactories: vi.fn(),
   },
 }));
 
@@ -102,7 +105,10 @@ vi.mock("#/api/cloud/settings-service.api", async (importOriginal) => ({
   fetchCloudIntegrationsConfig: vi.fn(),
 }));
 
-function mockServiceAccountsEnabled(isServiceAccountsEnabled: boolean) {
+function mockServiceAccountsEnabled(
+  isServiceAccountsEnabled: boolean,
+  isFactoriesEnabled = false,
+) {
   const config: CloudIntegrationsConfig = {
     providersConfigured: [],
     isJiraEnabled: false,
@@ -114,6 +120,7 @@ function mockServiceAccountsEnabled(isServiceAccountsEnabled: boolean) {
     isAgentProfilesEnabled: false,
     isServiceAccountsEnabled,
     isOauthV2LoginEnabled: false,
+    isFactoriesEnabled,
   };
   vi.mocked(fetchCloudIntegrationsConfig).mockResolvedValue(config);
 }
@@ -214,6 +221,19 @@ beforeEach(() => {
     triggers: {},
     features: [],
   });
+  vi.mocked(AutomationService.supportsFactories).mockReset();
+  vi.mocked(AutomationService.supportsFactories).mockReturnValue(false);
+  vi.spyOn(
+    experimentalFeaturesService,
+    "listExperimentalFeatures",
+  ).mockResolvedValue([
+    {
+      key: "factories",
+      label: "Factories",
+      description: "Shows Factories in the sidebar.",
+      enabled: true,
+    },
+  ]);
   window.localStorage.clear();
   __resetActiveStoreForTests();
   vi.mocked(AutomationService.checkHealth).mockReset();
@@ -861,6 +881,140 @@ describe("AutomationDetail — runs as a service account", () => {
     });
     await waitFor(() => {
       expect(AutomationService.getAutomation).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("changing the factory", () => {
+    const coreFactory = {
+      id: "f-core",
+      name: "Core SDLC",
+      automation_count: 2,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    };
+
+    beforeEach(() => {
+      mockServiceAccountsEnabled(true, true);
+      vi.mocked(AutomationService.supportsFactories).mockReturnValue(true);
+      vi.mocked(AutomationService.listFactories).mockResolvedValue({
+        factories: [coreFactory],
+        total: 1,
+      });
+      vi.mocked(AutomationService.updateAutomation).mockResolvedValue(
+        automation,
+      );
+    });
+
+    async function openChangeFactory() {
+      const user = userEvent.setup();
+      renderDetail();
+      await screen.findByText(automation.name);
+      await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+      await user.click(
+        screen.getByRole("button", {
+          name: I18nKey.AUTOMATIONS$CHANGE_FACTORY,
+        }),
+      );
+      return user;
+    }
+
+    it("puts the automation in the chosen factory", async () => {
+      // Arrange + Act
+      const user = await openChangeFactory();
+      await screen.findByRole("option", { name: coreFactory.name });
+      await user.selectOptions(
+        screen.getByTestId("change-factory-target"),
+        coreFactory.name,
+      );
+      await user.click(screen.getByTestId("change-factory-confirm"));
+
+      // Assert
+      await waitFor(() =>
+        expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+          "auto-1",
+          { factory_id: "f-core" },
+        ),
+      );
+    });
+
+    it("takes the automation out of its factory with a null factory_id", async () => {
+      // Arrange
+      vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+        ...automation,
+        factory_id: "f-core",
+      });
+
+      // Act
+      const user = await openChangeFactory();
+      await screen.findByRole("option", { name: coreFactory.name });
+      await user.selectOptions(
+        screen.getByTestId("change-factory-target"),
+        I18nKey.AUTOMATIONS$CHANGE_FACTORY_NONE,
+      );
+      await user.click(screen.getByTestId("change-factory-confirm"));
+
+      // Assert
+      await waitFor(() =>
+        expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+          "auto-1",
+          { factory_id: null },
+        ),
+      );
+    });
+
+    it("is not offered to the owner without manage_automations", async () => {
+      // Arrange
+      permissionMocks.canManage = false;
+      permissionMocks.isOwner = true;
+      const user = userEvent.setup();
+
+      // Act
+      renderDetail();
+      await screen.findByText(automation.name);
+      await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+      // Assert
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$CHANGE_FACTORY,
+        }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("is not offered when the instance has Factories off", async () => {
+      // Arrange
+      mockServiceAccountsEnabled(true, false);
+      const user = userEvent.setup();
+
+      // Act
+      renderDetail();
+      await screen.findByText(automation.name);
+      await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+      // Assert
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$CHANGE_FACTORY,
+        }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("is not offered when the service has no factories", async () => {
+      // Arrange
+      vi.mocked(AutomationService.supportsFactories).mockReturnValue(false);
+      const user = userEvent.setup();
+
+      // Act
+      renderDetail();
+      await screen.findByText(automation.name);
+      await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+
+      // Assert
+      expect(
+        screen.queryByRole("button", {
+          name: I18nKey.AUTOMATIONS$CHANGE_FACTORY,
+        }),
+      ).not.toBeInTheDocument();
     });
   });
 
