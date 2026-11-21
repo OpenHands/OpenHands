@@ -56,7 +56,7 @@ export function AgentStatus({
   const { curAgentState, executionStatus } = useAgentState();
 
   // Trigger browser tab flash and notification sound on state changes
-  useAgentNotification(curAgentState);
+  useAgentNotification(curAgentState, conversationId);
   const webSocketStatus = useUnifiedWebSocketStatus();
   const hasConnectedOnce = useHasConnectedOnceWebSocket();
   const { data: conversation } = useActiveConversation();
