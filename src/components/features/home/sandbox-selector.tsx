@@ -41,11 +41,15 @@ export function SandboxSelector({
         disabled={disabled}
         className="min-w-0 max-w-48 cursor-pointer truncate bg-transparent outline-none disabled:cursor-not-allowed"
       >
-        <option value="" className="bg-neutral-900">
+        <option value="" className="bg-base-secondary text-contrast">
           {t(I18nKey.HOME$SANDBOX_DEFAULT)}
         </option>
         {items.map((item) => (
-          <option key={item.id} value={item.id} className="bg-neutral-900">
+          <option
+            key={item.id}
+            value={item.id}
+            className="bg-base-secondary text-contrast"
+          >
             {item.display_name}
           </option>
         ))}
