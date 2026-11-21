@@ -3147,6 +3147,10 @@ describe("AutomationSetupPanel", () => {
         "Use the persisted draft body",
       );
       expect(
+        screen.getByTestId("automation-setup-frequency-daily"),
+      ).toHaveAttribute("aria-checked", "true");
+      expect(screen.getByTestId("automation-setup-time")).toHaveValue("12:00");
+      expect(
         screen.getByTestId("automation-setup-draft-details"),
       ).toBeInTheDocument();
       expect(getAutomationFormSession("conv-1")).toEqual(
@@ -3154,6 +3158,8 @@ describe("AutomationSetupPanel", () => {
           serverDraftId: "draft-1",
           form: expect.objectContaining({
             prompt: "Use the persisted draft body",
+            frequency: "daily",
+            time: "12:00",
           }),
         }),
       );
