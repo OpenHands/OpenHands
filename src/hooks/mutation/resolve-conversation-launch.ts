@@ -24,6 +24,7 @@ import {
 } from "#/hooks/query/query-keys";
 import type { DeploymentCapabilities } from "#/manifests/types";
 import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
+import { cloudIntegrationsConfigQueryOptions } from "#/hooks/query/use-cloud-integrations-config";
 import i18n from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 
@@ -230,6 +231,22 @@ async function resolveAutomationSetupCapabilities({
     .catch(() => null);
 }
 
+/**
+ * Whether the cloud instance takes client tools such as `request_secret`.
+ * Shares the settings pages' config query. An instance that cannot be asked
+ * starts the conversation without them.
+ */
+async function resolveCloudClientToolsEnabled(
+  queryClient: QueryClient,
+): Promise<boolean> {
+  const config = await queryClient
+    .ensureQueryData(
+      cloudIntegrationsConfigQueryOptions(getActiveBackend().backend),
+    )
+    .catch(() => null);
+  return config?.isClientToolsEnabled === true;
+}
+
 /** Create a conversation from the resolved launch and record the LLM it runs. */
 export async function launchConversation(
   { agentProfileId, llmProfile, ...context }: ResolveConversationLaunchOptions,
@@ -250,10 +267,19 @@ export async function launchConversation(
           await resolveAutomationSetupCapabilities(context),
       }
     : {};
+  const cloudClientTools =
+    context.isCloud && launch.agentProfileKind !== "acp"
+      ? {
+          cloudClientToolsEnabled: await resolveCloudClientToolsEnabled(
+            context.queryClient,
+          ),
+        }
+      : {};
   assertActiveEnvironment(requestedEnvironment);
   const task = await AgentServerConversationService.createConversation({
     ...options,
     ...setupCapabilities,
+    ...cloudClientTools,
     ...launchProfileOptions(launch),
   });
   // The chat LLM picker names this profile even when several share a model

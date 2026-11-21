@@ -90,8 +90,12 @@ import {
   buildAutomationFormUpdateClientTool,
 } from "../automation-form-client-tool";
 import type { DeploymentCapabilities } from "#/manifests/types";
-import { CANVAS_UI_CLIENT_TOOL } from "../canvas-ui-client-tool";
+import {
+  CANVAS_UI_CLIENT_TOOL,
+  type ClientToolSpec,
+} from "../canvas-ui-client-tool";
 import { LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL } from "../launch-child-conversation-client-tool";
+import { REQUEST_SECRET_CLIENT_TOOL } from "../request-secret-client-tool";
 import type {
   GetHooksResponse,
   PluginSpec,
@@ -544,6 +548,36 @@ export interface CreateConversationOptions {
   agentLlmProfileOverride?: string;
   /** Cloud only: run this conversation on the named LLM profile (`llm_profile`). */
   llmProfile?: string;
+  /**
+   * Cloud only: the instance accepts client tools and can attach a saved
+   * secret to a running conversation (`feature_flags.enable_client_tools`),
+   * so `request_secret` can be offered.
+   */
+  cloudClientToolsEnabled?: boolean;
+}
+
+/**
+ * The client tools a cloud start registers. ACP agents reject client tools.
+ * `request_secret` needs the instance to attach the saved secret to the
+ * running conversation, so it is offered only when the instance says it can.
+ */
+function buildCloudClientTools({
+  automationSetup,
+  automationSetupCapabilities,
+  agentProfileKind,
+  cloudClientToolsEnabled,
+}: CreateConversationOptions): ClientToolSpec[] {
+  if (agentProfileKind === "acp") return [];
+  return [
+    ...(automationSetup
+      ? [
+          CANVAS_UI_CLIENT_TOOL,
+          LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
+          buildAutomationFormUpdateClientTool(automationSetupCapabilities),
+        ]
+      : []),
+    ...(cloudClientToolsEnabled ? [REQUEST_SECRET_CLIENT_TOOL] : []),
+  ];
 }
 
 class AgentServerConversationService {
@@ -642,6 +676,7 @@ class AgentServerConversationService {
         options.runRouterAtConversationStart ?? false,
         options.hasActiveMetaProfile ?? false,
       );
+      const clientTools = buildCloudClientTools(options);
       const request: AppConversationStartRequest = {
         generate_title_on_submit: true,
         initial_message: initialUserMsg
@@ -684,15 +719,9 @@ class AgentServerConversationService {
         ...(automationSetup
           ? { tags: buildAutomationSetupModeTags(automationSetupTags) }
           : {}),
+        ...(clientTools.length > 0 ? { client_tools: clientTools } : {}),
         ...(automationSetup && agentProfileKind !== "acp"
           ? {
-              client_tools: [
-                CANVAS_UI_CLIENT_TOOL,
-                LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
-                buildAutomationFormUpdateClientTool(
-                  automationSetupCapabilities,
-                ),
-              ],
               system_message_suffix: [
                 AUTOMATION_SETUP_SYSTEM_SUFFIX,
                 automationSetupContext,
