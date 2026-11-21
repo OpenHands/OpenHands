@@ -33,6 +33,7 @@ import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import type { HookConfig } from "@openhands/typescript-client";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import type { SettingsValue } from "#/types/settings";
+import { saveCustomSkill } from "#/utils/custom-skills-storage";
 
 const {
   mockGetAgentServerWorkingDir,
@@ -123,6 +124,7 @@ const EXPLICIT_HOOK_CONFIG = makeHookConfig({
 });
 
 beforeEach(() => {
+  localStorage.clear();
   mockGetCachedAgentServerInfo.mockReturnValue(null);
   mockGetServerInfo.mockReset();
   mockGetEffectiveLocalBackend.mockReturnValue({
@@ -1451,6 +1453,26 @@ describe("profile launch additions", () => {
     expect(additionsOf(payload)?.skills?.map((skill) => skill.name)).toContain(
       entry.name,
     );
+  });
+
+  it("adds an invoked custom skill to the launch additions", () => {
+    saveCustomSkill({
+      name: "my-custom-flow",
+      description: "A custom workflow",
+      triggers: ["my-custom-flow"],
+      content: "# My Custom Flow\nStep 1...",
+    });
+
+    const payload = buildStartConversationRequest({
+      ...PROFILE,
+      settings: DEFAULT_SETTINGS,
+      query: "/my-custom-flow please",
+    });
+
+    const skills = additionsOf(payload)?.skills ?? [];
+    expect(skills.map((skill) => skill.name)).toContain("my-custom-flow");
+    const skill = skills.find((s) => s.name === "my-custom-flow");
+    expect(skill?.content).toContain("# My Custom Flow\nStep 1...");
   });
 
   it("adds no skills for a message that invokes no catalog skill", () => {

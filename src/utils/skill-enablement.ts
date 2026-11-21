@@ -3,6 +3,7 @@ import {
   SKILLS_CATALOG,
 } from "@openhands/extensions/skills";
 import type { SkillInfo } from "#/types/settings";
+import { loadCustomSkills } from "#/utils/custom-skills-storage";
 
 /** Every skill bundled from `@openhands/extensions`, in catalog order. */
 export const CATALOG_SKILL_NAMES: readonly string[] = SKILLS_CATALOG.map(
@@ -230,5 +231,16 @@ const CATALOG_SKILL_BY_SLASH_COMMAND = new Map(
 export function findInvokedCatalogSkill(query?: string): string | undefined {
   const firstToken = query?.trim().split(/\s+/, 1)[0];
   if (!firstToken?.startsWith("/")) return undefined;
-  return CATALOG_SKILL_BY_SLASH_COMMAND.get(firstToken.toLowerCase());
+  const lowerToken = firstToken.toLowerCase();
+  const catalogMatch = CATALOG_SKILL_BY_SLASH_COMMAND.get(lowerToken);
+  if (catalogMatch) return catalogMatch;
+
+  const customSkills = loadCustomSkills();
+  const matchedCustom = customSkills.find((skill) => {
+    if (`/${skill.name.toLowerCase()}` === lowerToken) return true;
+    return (skill.triggers ?? []).some(
+      (trigger) => trigger.toLowerCase() === lowerToken,
+    );
+  });
+  return matchedCustom?.name;
 }

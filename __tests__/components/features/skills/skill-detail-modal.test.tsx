@@ -238,4 +238,58 @@ describe("SkillDetailModal", () => {
     expect(navigateMock).not.toHaveBeenCalled();
     expect(setMessageToSend).not.toHaveBeenCalled();
   });
+
+  it("renders Edit and Delete buttons for custom skills and calls callbacks", async () => {
+    const user = userEvent.setup();
+    const onEdit = vi.fn();
+    const onDelete = vi.fn();
+    const customSkill = buildSkill({
+      name: "custom-tool",
+      source: "custom",
+    });
+
+    render(
+      <SkillDetailModal
+        skill={customSkill}
+        enabled
+        onToggle={vi.fn()}
+        onClose={vi.fn()}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />,
+    );
+
+    const editBtn = screen.getByTestId("skill-detail-edit");
+    const deleteBtn = screen.getByTestId("skill-detail-delete");
+
+    expect(editBtn).toBeInTheDocument();
+    expect(deleteBtn).toBeInTheDocument();
+
+    await user.click(editBtn);
+    expect(onEdit).toHaveBeenCalledWith(customSkill);
+
+    await user.click(deleteBtn);
+    expect(onDelete).toHaveBeenCalledWith(customSkill);
+  });
+
+  it("does not render Edit and Delete buttons for non-custom skills", () => {
+    const publicSkill = buildSkill({
+      name: "public-tool",
+      source: "public",
+    });
+
+    render(
+      <SkillDetailModal
+        skill={publicSkill}
+        enabled
+        onToggle={vi.fn()}
+        onClose={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId("skill-detail-edit")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("skill-detail-delete")).not.toBeInTheDocument();
+  });
 });

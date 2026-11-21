@@ -79,6 +79,11 @@ describe("parseSkillFilterState", () => {
     expect([...state.recommendations]).toEqual(["recommended"]);
   });
 
+  it("parses source=custom in filter state", () => {
+    const state = parseSkillFilterState(new URLSearchParams("source=custom"));
+    expect([...state.sources]).toEqual(["custom"]);
+  });
+
   it.each([
     ["source", "source=nonsense"],
     ["category", "category=code-hostig"],
@@ -139,6 +144,19 @@ describe("applySkillFilters", () => {
       stateWith({ categories: new Set(["other"]) }),
     );
     expect(result.map((s) => s.name)).toEqual(["house-rules"]);
+  });
+
+  it("filters skills by custom source", () => {
+    const customSkill = buildSkill({
+      name: "my-custom-tool",
+      source: "custom",
+    });
+    const result = applySkillFilters(
+      [...skills, customSkill],
+      isEnabled,
+      stateWith({ sources: new Set(["custom"]) }),
+    );
+    expect(result.map((s) => s.name)).toEqual(["my-custom-tool"]);
   });
 
   it("matches the query against name, description, and triggers", () => {

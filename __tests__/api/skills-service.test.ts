@@ -177,3 +177,65 @@ describe("SkillsService.getSkillCatalog", () => {
     expect(mockGetSkills).not.toHaveBeenCalled();
   });
 });
+
+describe("SkillsService custom skills support", () => {
+  it("saves, lists, and deletes custom skills", () => {
+    expect(SkillsService.getCustomSkills()).toHaveLength(0);
+
+    const saved = SkillsService.saveCustomSkill({
+      name: "my-local-skill",
+      description: "Custom local skill",
+      triggers: ["local"],
+      content: "# Local Skill",
+    });
+
+    expect(saved.name).toBe("my-local-skill");
+    expect(saved.source).toBe("custom");
+    expect(SkillsService.getCustomSkills()).toHaveLength(1);
+
+    SkillsService.deleteCustomSkill("my-local-skill");
+    expect(SkillsService.getCustomSkills()).toHaveLength(0);
+  });
+
+  it("includes custom skills in getSkills() alongside public and server skills", async () => {
+    SkillsService.saveCustomSkill({
+      name: "custom-in-list",
+      description: "Should be in list",
+      content: "# Custom In List",
+    });
+
+    mockGetSkills.mockResolvedValue({
+      skills: [{ name: "server-skill", type: "knowledge", source: "user" }],
+      sources: { sandbox: 0, sdk_base: 0, org: 0, project: 0 },
+    });
+
+    const skills = await SkillsService.getSkills();
+    const names = skills.map((s) => s.name);
+
+    expect(names).toContain("custom-in-list");
+    expect(names).toContain("server-skill");
+    expect(skills.find((s) => s.name === "custom-in-list")?.source).toBe(
+      "custom",
+    );
+  });
+
+  it("includes custom skills in getSkillCatalog()", async () => {
+    SkillsService.saveCustomSkill({
+      name: "custom-in-catalog",
+      description: "Should be in catalog",
+      content: "# Custom Catalog",
+    });
+
+    mockGet.mockResolvedValue({
+      skills: [{ name: "catalog-skill", type: "knowledge", origin: "public" }],
+    });
+
+    const catalog = await SkillsService.getSkillCatalog();
+    const names = catalog.map((s) => s.name);
+
+    expect(names).toContain("custom-in-catalog");
+    const customEntry = catalog.find((s) => s.name === "custom-in-catalog");
+    expect(customEntry?.origin).toBe("user");
+    expect(customEntry?.source).toBe("custom");
+  });
+});

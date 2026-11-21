@@ -14,6 +14,12 @@ import {
   fetchCloudSkills,
 } from "./cloud/skills-service.api";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
+import {
+  loadCustomSkills,
+  saveCustomSkill as persistCustomSkill,
+  deleteCustomSkill as removeCustomSkill,
+  type CustomSkillInput,
+} from "#/utils/custom-skills-storage";
 
 function catalogEntryToSkillInfo(entry: SkillCatalogEntry): SkillInfo {
   return {
@@ -80,8 +86,15 @@ function hasStatus(error: unknown, status: number): boolean {
 
 class SkillsService {
   static async getSkills(projectDir?: string): Promise<SkillInfo[]> {
+    const customSkills = loadCustomSkills();
+    const customNames = new Set(customSkills.map((s) => s.name));
+
     if (getActiveBackend().backend.kind === "cloud") {
-      return fetchCloudSkills();
+      const cloudSkills = await fetchCloudSkills();
+      return [
+        ...customSkills,
+        ...cloudSkills.filter((s) => !customNames.has(s.name)),
+      ];
     }
 
     // Public skills come from the bundled @openhands/extensions npm package —
@@ -105,7 +118,11 @@ class SkillsService {
       // unreachable; fall back to the bundled public catalog alone.
     }
 
-    return [...localSkills, ...PUBLIC_SKILLS];
+    return [
+      ...customSkills,
+      ...localSkills.filter((s) => !customNames.has(s.name)),
+      ...PUBLIC_SKILLS.filter((s) => !customNames.has(s.name)),
+    ];
   }
 
   /**
@@ -113,6 +130,9 @@ class SkillsService {
    * when a conversation opens its workspace, so they are not listed.
    */
   static async getSkillCatalog(): Promise<SkillInfo[]> {
+    const customSkills = loadCustomSkills();
+    const customNames = new Set(customSkills.map((s) => s.name));
+
     const { host, apiKey } = getAgentServerClientOptions();
     try {
       const data = await new AgentServerClient({ host, apiKey }).get<unknown>(
@@ -123,7 +143,12 @@ class SkillsService {
       if (!Array.isArray(skills)) {
         throw new Error("The agent server returned a malformed skill catalog.");
       }
-      return skills.map(toCatalogSkill);
+      return [
+        ...customSkills,
+        ...skills
+          .map(toCatalogSkill)
+          .filter((skill) => !customNames.has(skill.name)),
+      ];
     } catch (error) {
       if (!hasStatus(error, 404)) throw error;
     }
@@ -141,10 +166,11 @@ class SkillsService {
     );
     const userNames = new Set(userSkills.map((skill) => skill.name));
     return [
-      ...PUBLIC_SKILLS.filter((skill) => !userNames.has(skill.name)).map(
-        (skill) => ({ ...skill, origin: "public" as const }),
-      ),
-      ...userSkills,
+      ...customSkills,
+      ...PUBLIC_SKILLS.filter(
+        (skill) => !userNames.has(skill.name) && !customNames.has(skill.name),
+      ).map((skill) => ({ ...skill, origin: "public" as const })),
+      ...userSkills.filter((skill) => !customNames.has(skill.name)),
     ];
   }
 
@@ -154,8 +180,28 @@ class SkillsService {
    * using `getSkills(projectDir)`, whose agent-server call already scopes to
    * the conversation's workspace.
    */
-  static getConversationSkills(conversationId: string): Promise<SkillInfo[]> {
-    return fetchCloudConversationSkills(conversationId);
+  static async getConversationSkills(
+    conversationId: string,
+  ): Promise<SkillInfo[]> {
+    const cloudSkills = await fetchCloudConversationSkills(conversationId);
+    const customSkills = loadCustomSkills();
+    const customNames = new Set(customSkills.map((s) => s.name));
+    return [
+      ...customSkills,
+      ...cloudSkills.filter((s) => !customNames.has(s.name)),
+    ];
+  }
+
+  static saveCustomSkill(skill: CustomSkillInput): SkillInfo {
+    return persistCustomSkill(skill);
+  }
+
+  static deleteCustomSkill(name: string): boolean {
+    return removeCustomSkill(name);
+  }
+
+  static getCustomSkills(): SkillInfo[] {
+    return loadCustomSkills();
   }
 }
 

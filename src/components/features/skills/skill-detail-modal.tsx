@@ -20,6 +20,7 @@ import { getSkillChatLaunchMessage } from "./get-skill-chat-launch-message";
 import { useLaunchSkillInChat } from "#/hooks/use-launch-skill-in-chat";
 import { copyToClipboard } from "#/utils/copy-to-clipboard";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { getSkillScope } from "#/utils/skill-scope";
 
 interface SkillDetailModalProps {
   skill: SkillInfo;
@@ -27,6 +28,8 @@ interface SkillDetailModalProps {
   onToggle: (enabled: boolean) => void;
   onClose: () => void;
   isToggleDisabled?: boolean;
+  onEdit?: (skill: SkillInfo) => void;
+  onDelete?: (skill: SkillInfo) => void;
 }
 
 function ReadonlyTextArea({
@@ -61,10 +64,13 @@ export function SkillDetailModal({
   onToggle,
   onClose,
   isToggleDisabled = false,
+  onEdit,
+  onDelete,
 }: SkillDetailModalProps) {
   const { t } = useTranslation("openhands");
   const launchSkillInChat = useLaunchSkillInChat();
   const [sourceCopied, setSourceCopied] = React.useState(false);
+  const isCustom = getSkillScope(skill) === "custom";
   const chatLaunchMessage = React.useMemo(
     () => getSkillChatLaunchMessage(skill),
     [skill],
@@ -205,6 +211,26 @@ export function SkillDetailModal({
           data-testid="skill-detail-modal-actions"
           className="flex flex-shrink-0 justify-end gap-2 px-6 pb-6 pt-4"
         >
+          {isCustom && onDelete ? (
+            <BrandButton
+              type="button"
+              variant="danger"
+              onClick={() => onDelete(skill)}
+              testId="skill-detail-delete"
+            >
+              {t(I18nKey.BUTTON$DELETE)}
+            </BrandButton>
+          ) : null}
+          {isCustom && onEdit ? (
+            <BrandButton
+              type="button"
+              variant="secondary"
+              onClick={() => onEdit(skill)}
+              testId="skill-detail-edit"
+            >
+              {t(I18nKey.BUTTON$EDIT)}
+            </BrandButton>
+          ) : null}
           <BrandButton
             type="button"
             variant="secondary"
