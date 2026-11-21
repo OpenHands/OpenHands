@@ -162,7 +162,7 @@
     "cross-env": "10.1.0",
     "electron": "45.3.2",
     "electron-builder": "26.18.0",
-    "eslint": "10.14.0",
+    "eslint": "10.15.0",
     "eslint-config-prettier": "10.1.8",
     "eslint-import-resolver-typescript": "4.4.5",
     "eslint-plugin-i18next": "6.1.5",
