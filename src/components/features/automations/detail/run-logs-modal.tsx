@@ -215,11 +215,14 @@ export function RunLogsModal({
     sandboxIssue,
     conversationMissing,
     error,
+    isTruncated,
+    isRunActive,
   } = useBashCommandLogs({
     conversationId,
     sandboxId,
     bashCommandId,
     enabled: isOpen,
+    runStatus: run?.status,
   });
 
   // Reset to the default tab whenever the modal opens for a different run.
@@ -334,9 +337,22 @@ export function RunLogsModal({
             className="mt-3 automation-log-min-height rounded-lg border border-border bg-surface-deep dark:bg-black/40 p-4 font-mono text-xs"
           >
             {noBashCommand && (
-              <p className="text-muted italic">
-                {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_NO_COMMAND)}
-              </p>
+              <div className="space-y-2">
+                <p className="text-muted italic">
+                  {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_NO_COMMAND)}
+                </p>
+                {conversationId && (
+                  <p className="text-xs text-muted">
+                    <a
+                      href={`/conversations/${conversationId}`}
+                      className="text-info hover:underline inline-flex items-center gap-1 font-sans"
+                    >
+                      {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_VIEW_CONVERSATION_CTA)}
+                      <span aria-hidden="true">&rarr;</span>
+                    </a>
+                  </p>
+                )}
+              </div>
             )}
 
             {!noBashCommand && conversationMissing && (
@@ -374,6 +390,15 @@ export function RunLogsModal({
                 </p>
               )}
 
+            {!loading && !sandboxIssue && isTruncated && (
+              <div
+                data-testid="run-logs-truncated-warning"
+                className="mb-3 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-2xs text-warning-soft-foreground dark:bg-warning/10 dark:text-warning font-sans"
+              >
+                {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TRUNCATED_WARNING)}
+              </div>
+            )}
+
             {!loading && !sandboxIssue && outputs && (
               <pre
                 data-testid={`run-logs-output-${activeTab}`}
@@ -383,9 +408,22 @@ export function RunLogsModal({
               >
                 {activeBody.length > 0 ? (
                   activeBody
+                ) : isRunActive ? (
+                  <span
+                    data-testid="run-logs-pending-status"
+                    className="inline-flex items-center gap-2 text-muted italic"
+                  >
+                    <span className="size-2 animate-pulse rounded-full bg-info" />
+                    {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_RUNNING_WAITING_OUTPUT)}
+                  </span>
                 ) : (
-                  <span className="text-muted italic">
-                    {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_EMPTY)}
+                  <span
+                    data-testid="run-logs-empty-status"
+                    className="text-muted italic"
+                  >
+                    {activeTab === "stdout"
+                      ? t(I18nKey.AUTOMATIONS$DETAIL$LOGS_COMPLETED_NO_OUTPUT)
+                      : t(I18nKey.AUTOMATIONS$DETAIL$LOGS_COMPLETED_NO_ERROR)}
                   </span>
                 )}
               </pre>

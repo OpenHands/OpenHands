@@ -3,6 +3,7 @@ import axios from "axios";
 import { isSdkHttpError } from "#/api/agent-server-compatibility";
 import BashService from "#/api/bash-service/bash-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { AutomationRunStatus } from "#/types/automation";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useCloudSandbox } from "./use-cloud-sandbox";
 import { useUserConversation } from "./use-user-conversation";
@@ -40,6 +41,8 @@ interface UseBashCommandLogsOptions {
   sandboxId?: string | null;
   bashCommandId: string | null | undefined;
   enabled?: boolean;
+  /** Status of the run; enables live polling while the run is active. */
+  runStatus?: AutomationRunStatus | null;
 }
 
 /** Name of the agent-server entry in a cloud sandbox's `exposed_urls`. */
@@ -140,9 +143,19 @@ function classifyFetchError(error: unknown): SandboxIssue | null {
  *   as `unreachable`.
  */
 export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
-  const { conversationId, sandboxId, bashCommandId, enabled = true } = options;
+  const {
+    conversationId,
+    sandboxId,
+    bashCommandId,
+    enabled = true,
+    runStatus,
+  } = options;
   const active = useActiveBackend();
   const isCloud = active.backend.kind === "cloud";
+
+  const isRunActive =
+    runStatus === AutomationRunStatus.RUNNING ||
+    runStatus === AutomationRunStatus.PENDING;
 
   // Only resolve the runtime when the modal is open. RunLogsModal mounts
   // (closed) for every activity-log row, so an unconditional lookup would fire
@@ -248,9 +261,11 @@ export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
         bashCommandId as string,
       ),
     enabled: canFire,
+    // When the run is actively executing, poll every 2s for live stdout/stderr.
     // Completed-run logs don't change — cache long enough that reopening
     // the modal is instant but not forever.
-    staleTime: 60 * 1000,
+    refetchInterval: isRunActive ? 2000 : false,
+    staleTime: isRunActive ? 1000 : 60 * 1000,
     gcTime: 5 * 60 * 1000,
     retry: false,
   });
@@ -260,6 +275,7 @@ export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
   // modal can render the matching empty state instead of a raw error.
   const fetchIssue = isCloud ? classifyFetchError(query.error) : null;
   const sandboxIssue: SandboxIssue | null = preflightIssue ?? fetchIssue;
+  const isTruncated = query.data?.isTruncated ?? false;
 
   return {
     data: query.data,
@@ -283,5 +299,9 @@ export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
      * null for healthy cloud sandboxes and for local backends.
      */
     sandboxIssue,
+    /** True when log output exceeded the MAX_OUTPUT_PAGES retrieval limit. */
+    isTruncated,
+    /** True when the run is actively running or starting. */
+    isRunActive,
   };
 }

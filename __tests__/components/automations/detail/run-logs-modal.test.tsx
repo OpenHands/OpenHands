@@ -41,13 +41,10 @@ function baseResult() {
     isPending: false,
     isResolvingConversation: false,
     sandboxIssue: null as
-      | null
-      | "missing"
-      | "paused"
-      | "starting"
-      | "errored"
-      | "unreachable",
+      null | "missing" | "paused" | "starting" | "errored" | "unreachable",
     conversationMissing: false,
+    isTruncated: false,
+    isRunActive: false,
   };
 }
 
@@ -334,6 +331,89 @@ describe("RunLogsModal", () => {
     );
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders active pending status when isRunActive is true and output is empty", () => {
+    useBashCommandLogsMock.mockReturnValue(
+      makeHookResult({
+        data: [],
+        isRunActive: true,
+      }),
+    );
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("run-logs-pending-status")).toBeInTheDocument();
+  });
+
+  it("renders completed empty status when isRunActive is false and output is empty", () => {
+    useBashCommandLogsMock.mockReturnValue(
+      makeHookResult({
+        data: [],
+        isRunActive: false,
+      }),
+    );
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("run-logs-empty-status")).toBeInTheDocument();
+  });
+
+  it("renders truncation warning banner when isTruncated is true", () => {
+    useBashCommandLogsMock.mockReturnValue(
+      makeHookResult({
+        data: [
+          {
+            id: "o1",
+            kind: "BashOutput",
+            timestamp: "2026-01-01T10:00:00Z",
+            command_id: "cmd-1",
+            order: 0,
+            stdout: "line\n",
+            stderr: null,
+          },
+        ],
+        isTruncated: true,
+      }),
+    );
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+      />,
+    );
+    expect(
+      screen.getByTestId("run-logs-truncated-warning"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders conversation events link when noBashCommand is true and conversationId is present", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-123"
+        bashCommandId={null}
+        onClose={() => {}}
+      />,
+    );
+    const link = screen.getByRole("link");
+    expect(link).toHaveAttribute("href", "/conversations/conv-123");
+    expect(link).toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$LOGS_VIEW_CONVERSATION_CTA,
+    );
   });
 });
 
