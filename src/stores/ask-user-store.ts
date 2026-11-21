@@ -1,12 +1,16 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { AskUserOption } from "@openhands/typescript-client";
+export interface AskUserOption {
+  label: string;
+  consequence?: string;
+  description?: string | null;
+}
 
 export interface AskUserDecisionRequest {
   conversationId: string;
   toolCallId: string;
   question: string;
-  options: (AskUserOption | { label: string; description?: string | null })[];
+  options: AskUserOption[];
   recommended?: string | number | null;
   /**
    * Settled state: null while pending user decision, string once the user

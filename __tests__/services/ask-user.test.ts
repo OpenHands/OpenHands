@@ -28,10 +28,10 @@ const action: AskUserAction = {
   kind: ASK_USER_ACTION_KIND,
   question: "Which test runner should we configure?",
   options: [
-    { label: "Vitest", description: "Fast Vite-native test runner" },
-    { label: "Jest", description: "Standard test runner" },
+    { label: "Vitest", consequence: "Fast Vite-native test runner" },
+    { label: "Jest", consequence: "Standard test runner" },
   ],
-  recommended: "Vitest",
+  recommended: 0,
 };
 
 describe("ask-user service", () => {
@@ -51,10 +51,10 @@ describe("ask-user service", () => {
       toolCallId: "tool-call-1",
       question: "Which test runner should we configure?",
       options: [
-        { label: "Vitest", description: "Fast Vite-native test runner" },
-        { label: "Jest", description: "Standard test runner" },
+        { label: "Vitest", consequence: "Fast Vite-native test runner" },
+        { label: "Jest", consequence: "Standard test runner" },
       ],
-      recommended: "Vitest",
+      recommended: 0,
       selectedAnswer: null,
     });
   });
