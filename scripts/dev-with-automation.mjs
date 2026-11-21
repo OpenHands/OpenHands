@@ -85,9 +85,11 @@ import {
   validateLocalAgentServerPath,
 } from "./dev-safe.mjs";
 import {
+  backupStaleDatabase,
   createShutdownHookRegistry,
   getProcessTreeSpawnOptions,
   isProcessRunning,
+  looksLikeStaleMigration,
   resolveWindowsCommand,
   signalProcessTree,
 } from "./dev-process-utils.mjs";
@@ -712,12 +714,40 @@ export function setServiceLogListener(listener) {
 }
 
 function emitServiceLog(name, line, level) {
+  recordAutomationLogLine(name, line);
   if (!serviceLogListener) return;
   try {
     serviceLogListener(name, line, level);
   } catch {
     // Never let a listener bug crash the dev stack.
   }
+}
+
+// Log lines captured from the automation service (its last N lines), used to
+// diagnose why it exited during startup — including the stale-migration
+// recovery check below. Only lines from the automation service are kept.
+const AUTOMATION_LOG_TAIL_SIZE = 200;
+let automationLogTail = [];
+
+function recordAutomationLogLine(name, line) {
+  if (name !== "automation") return;
+  automationLogTail.push(line);
+  if (automationLogTail.length > AUTOMATION_LOG_TAIL_SIZE) {
+    automationLogTail.shift();
+  }
+}
+
+/**
+ * The single-shot latch for the stale-migration recovery (#15623). Recovery
+ * rewrites the DB location, so it must run at most once per launcher
+ * session: if the fresh database also fails to migrate, the second exit
+ * goes straight to the stack-failure path — no restart loop.
+ */
+let staleMigrationRecoveryAttempted = false;
+
+export function resetStaleMigrationRecoveryForTest() {
+  staleMigrationRecoveryAttempted = false;
+  automationLogTail = [];
 }
 
 function registerShutdownHook(hook) {
@@ -1264,7 +1294,6 @@ function startAutomationBackend(config) {
     verbose: config.verbose,
     automation: true,
   });
-
   return spawnService(
     "automation",
     automationCmd.command,
@@ -1407,6 +1436,56 @@ async function watchAutomationStartup(config, proc, timeoutMs, onFailure) {
     proc.exitCode !== null
       ? `code ${proc.exitCode}`
       : `signal ${proc.signalCode}`;
+
+  // Single-shot recovery for the stale SQLite migration crash (#15623): a
+  // package upgrade can restructure the Alembic migration chain, leaving
+  // the existing automations.db referencing a revision that no longer
+  // exists. The backend exits on startup and the Automate tab is dead. If
+  // the captured log shows that failure and recovery has not been tried,
+  // archive the database (preserving the user's data) and start the backend
+  // once more against a fresh database. Any second failure goes to the
+  // normal stack-failure path — no restart loop.
+  if (
+    !staleMigrationRecoveryAttempted &&
+    looksLikeStaleMigration(automationLogTail)
+  ) {
+    staleMigrationRecoveryAttempted = true;
+    const dbPath = join(
+      dirname(config.stateDir),
+      SHARED_DEFAULTS.paths.automationDb,
+    );
+    const backup = backupStaleDatabase(
+      dbPath,
+      join(dirname(config.stateDir), "automation-db-backups"),
+    );
+    if (backup) {
+      // The backend creates a new database when the file is gone.
+      rmSync(dbPath, { force: true });
+      logError(
+        "The automation database references a migration revision that no " +
+          "longer exists (stale migration after an upgrade).",
+      );
+      logService(
+        "automation",
+        `Archived the stale database to ${backup}; starting a fresh one.`,
+        c.yellow,
+      );
+      fileLog("warn", `automation db archived to ${backup}`);
+      const retriedProc = startAutomationBackend(config);
+      void watchAutomationStartup(
+        config,
+        retriedProc,
+        timeoutMs,
+        onFailure,
+      );
+      return;
+    }
+    logError(
+      "Stale automation database detected, but it could not be archived " +
+        `(${dbPath}). Remove it manually and restart.`,
+    );
+  }
+
   const message =
     `The automation backend exited during startup (${exit}). ` +
     "Its [automation] log lines show why.";
