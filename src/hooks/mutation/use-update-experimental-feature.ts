@@ -49,6 +49,8 @@ export const useUpdateExperimentalFeature = () => {
       queryClient.invalidateQueries({
         queryKey: experimentalFeaturesQueryKey(target),
       }),
+    // The Features page reports a failed switch itself.
+    meta: { disableToast: true },
   });
   return {
     ...mutation,

@@ -2,9 +2,17 @@ import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HttpError } from "@openhands/typescript-client";
 import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
 import { experimentalFeaturesQueryKey } from "#/hooks/query/use-experimental-features";
 import { useUpdateExperimentalFeature } from "#/hooks/mutation/use-update-experimental-feature";
+import { createAgentServerQueryClient } from "#/query-client-config";
+import { displayApiErrorToast } from "#/utils/custom-toast-handlers";
+
+const { toastMock } = vi.hoisted(() => ({
+  toastMock: Object.assign(vi.fn(), { success: vi.fn() }),
+}));
+vi.mock("react-hot-toast", () => ({ default: toastMock }));
 
 const backends = vi.hoisted(() => ({
   a: { id: "backend-a", host: "http://a", apiKey: "", kind: "local" },
@@ -33,10 +41,11 @@ const deferred = <T,>() => {
   return { promise, resolve };
 };
 
-const setup = () => {
-  const queryClient = new QueryClient({
+const setup = (
+  queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
-  });
+  }),
+) => {
   for (const backend of [backends.a, backends.b]) {
     queryClient.setQueryData(experimentalFeaturesQueryKey(backend), [
       reactions(false),
@@ -129,5 +138,30 @@ describe("useUpdateExperimentalFeature", () => {
     await waitFor(() =>
       expect(queryClient.getQueryData(key)).toEqual([reactions(true)]),
     );
+  });
+
+  it("shows one error toast when the switch fails", async () => {
+    vi.spyOn(
+      experimentalFeaturesService,
+      "updateExperimentalFeature",
+    ).mockRejectedValue(new HttpError(500, "Internal Server Error"));
+    vi.spyOn(
+      experimentalFeaturesService,
+      "listExperimentalFeatures",
+    ).mockResolvedValue([reactions(false)]);
+    toastMock.mockClear();
+    // The app's query client, so its global mutation error toast is in play.
+    const { result } = setup(createAgentServerQueryClient());
+
+    act(() => {
+      result.current.mutate(
+        { key: "conversation_reactions", enabled: true },
+        // As the Features page reports a failed switch.
+        { onError: (error) => displayApiErrorToast(error, "update failed") },
+      );
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(toastMock).toHaveBeenCalledTimes(1);
   });
 });
