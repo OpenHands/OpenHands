@@ -629,3 +629,31 @@ describe("ActivityLogItem — script runs (a command but no conversation)", () =
     );
   });
 });
+
+describe("ActivityLogItem — narrow layout", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  // jsdom has no layout, so these pin the classes that keep the start time
+  // readable on a phone (#19935): the time never breaks, its column keeps a
+  // minimum width, and the row wraps the cost/phase/badge group below it.
+  it("keeps the start time on one line and lets the row wrap on narrow screens", () => {
+    const { container } = renderItem(
+      makeRun({ current_phase: "Agent is working on the task" }),
+    );
+
+    const time = container.querySelector("time")!;
+    expect(time).toHaveClass("whitespace-nowrap");
+    const leftColumn = time.parentElement!.parentElement!;
+    expect(leftColumn).not.toHaveClass("min-w-0");
+    const row = leftColumn.parentElement!;
+    expect(row).toHaveClass("flex-wrap");
+  });
+});

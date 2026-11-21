@@ -123,12 +123,17 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
 
   const content = (
     <>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-3">
+      {/* No min-w-0: the start time sets the column's minimum width, so the
+          right-hand group (cost, icons, phase, badge) cannot squeeze it to
+          nothing on a narrow screen; that group wraps to its own line
+          instead. The summary still truncates: its inline-size containment
+          keeps it out of the column's minimum. */}
+      <div className="flex-1">
+        <div className="flex flex-wrap items-center gap-x-3">
           <time
             dateTime={effectiveStartedAt}
             title={formattedTimestamp}
-            className="text-sm tabular-nums text-content"
+            className="whitespace-nowrap text-sm tabular-nums text-content"
           >
             {formatRunTime(effectiveStartedAt, i18n.language)}
           </time>
@@ -139,10 +144,12 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
           )}
         </div>
         {display.summary ? (
-          <p className="mt-1 truncate text-xs text-muted">{display.summary}</p>
+          <p className="mt-1 truncate text-xs text-muted contain-inline-size">
+            {display.summary}
+          </p>
         ) : null}
       </div>
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="ml-auto flex min-w-0 max-w-full items-center gap-2">
         {formattedCost && (
           <span
             data-testid="run-cost"
@@ -175,7 +182,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
       {hasConversation && run.conversation_id ? (
         <a
           href={getConversationUrl(run.conversation_id)}
-          className="flex items-center justify-between px-5 py-3 transition-colors cursor-pointer hover:bg-surface-raised focus:bg-surface-raised focus:outline-none"
+          className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-5 py-3 transition-colors cursor-pointer hover:bg-surface-raised focus:bg-surface-raised focus:outline-none"
           aria-label={t(I18nKey.AUTOMATIONS$DETAIL$VIEW_CONVERSATION_FOR_RUN, {
             timestamp: formattedTimestamp,
           })}
@@ -183,7 +190,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
           {content}
         </a>
       ) : (
-        <div className="flex items-center justify-between px-5 py-3 cursor-default">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-5 py-3 cursor-default">
           {content}
         </div>
       )}
