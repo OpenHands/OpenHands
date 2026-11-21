@@ -43,9 +43,32 @@ import {
 
 type StateMark = (typeof BOARD_GROUPS)[number]["id"];
 
-const markOf = (conversation: ProjectConversation): StateMark =>
-  BOARD_GROUPS.find((group) => group.attention.includes(conversation.attention))
-    ?.id ?? "idle";
+/** The first of a conversation's pull requests that is ready for the user. */
+const readyPullRequest = (
+  conversation: ProjectConversation,
+  statuses: Map<string, PullRequestStatus>,
+) =>
+  conversation.pull_requests.find(
+    (pr) => pullRequestAttention(statuses.get(pullRequestRef(pr))) === "ready",
+  );
+
+/**
+ * The board group a conversation sits in. An idle one with a pull request
+ * ready for the user's review needs them, so it moves to Needs you; one
+ * still working or resolved stays where it is.
+ */
+const markOf = (
+  conversation: ProjectConversation,
+  statuses: Map<string, PullRequestStatus>,
+): StateMark => {
+  const mark =
+    BOARD_GROUPS.find((group) =>
+      group.attention.includes(conversation.attention),
+    )?.id ?? "idle";
+  return mark === "idle" && readyPullRequest(conversation, statuses)
+    ? "needs_you"
+    : mark;
+};
 
 /** How much of the circle is filled: none, half, three quarters, or all. */
 const MARK_FILL: Record<StateMark, string | null> = {
@@ -86,15 +109,35 @@ function StateIcon({ mark }: { mark: StateMark }) {
 }
 
 /**
- * The one muted line under a title: the question it waits on, else why it
- * resolved, else its state. The age sits beside the title.
+ * The one muted line under a title: the question it waits on, else the pull
+ * request that moved it to Needs you, else why it resolved, else its state.
+ * The age sits beside the title.
  */
-function StatusLine({ conversation }: { conversation: ProjectConversation }) {
+function StatusLine({
+  conversation,
+  mark,
+  statuses,
+}: {
+  conversation: ProjectConversation;
+  mark: StateMark;
+  statuses: Map<string, PullRequestStatus>;
+}) {
   const { t } = useTranslation("openhands");
   if (conversation.turn === "asking" && conversation.ask) {
     return (
       <>
         {t(I18nKey.PROJECTS$ASKS)} {conversation.ask}
+      </>
+    );
+  }
+  const ready =
+    mark === "needs_you" && conversation.attention === "idle"
+      ? readyPullRequest(conversation, statuses)
+      : undefined;
+  if (ready) {
+    return (
+      <>
+        #{ready.number} · {t(I18nKey.PROJECTS$PR_READY_HINT)}
       </>
     );
   }
@@ -252,7 +295,11 @@ function ConversationRow({
             className="line-clamp-2 text-xs text-muted"
           >
             {isCurrent ? `${t(I18nKey.PROJECTS$YOU_ARE_HERE)} · ` : null}
-            <StatusLine conversation={conversation} />
+            <StatusLine
+              conversation={conversation}
+              mark={mark}
+              statuses={statuses}
+            />
           </span>
         </span>
       </NavigationLink>
@@ -332,7 +379,7 @@ export function ProjectConversationList({
       <ConversationRow
         key={key}
         conversation={conversation}
-        mark={markOf(conversation)}
+        mark={markOf(conversation, statuses)}
         title={title}
         isCurrent={key === current}
         fileCount={fileCounts.get(key) ?? 0}
@@ -347,8 +394,8 @@ export function ProjectConversationList({
         <ul>{row(board.coordinator, t(I18nKey.PROJECTS$COORDINATOR))}</ul>
       ) : null}
       {BOARD_GROUPS.map((group) => {
-        const items = board.conversations.filter((c) =>
-          group.attention.includes(c.attention),
+        const items = board.conversations.filter(
+          (c) => markOf(c, statuses) === group.id,
         );
         return (
           <ProjectPanelGroup

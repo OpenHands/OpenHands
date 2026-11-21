@@ -6,11 +6,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SidebarConversationList } from "#/components/features/sidebar/sidebar-conversation-list";
 import { NavigationProvider } from "#/context/navigation-context";
 import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
+import ProjectsService from "#/api/projects-service/projects-service.api";
 import {
   AUDIT,
+  BOARD,
   COORDINATOR,
   PROJECT_ID,
   RETRY,
+  member,
   mockProjectServices,
 } from "./project-fixtures";
 
@@ -145,6 +148,32 @@ describe("Sidebar in a project view", () => {
     expect(await rowOf("Rate-limit login")).toHaveTextContent(
       "PROJECTS$ASKS 5 or 10 tries per minute?",
     );
+  });
+
+  it("moves an idle conversation with a pull request ready for the user to Needs you", async () => {
+    const docs = "bb000000000040008000000000000004";
+    vi.spyOn(ProjectsService, "listConversations").mockResolvedValue({
+      ...BOARD,
+      conversations: [
+        ...BOARD.conversations,
+        member(docs, "Write login docs", {
+          pull_requests: [{ owner: "acme", repo: "app", number: 412 }],
+        }),
+      ],
+    });
+    renderSidebar();
+    const needsYou = await screen.findByTestId("project-panel-group-needs_you");
+    await waitFor(() =>
+      expect(needsYou).toHaveTextContent("PROJECTS$GROUP_NEEDS_YOU · 2"),
+    );
+    expect(await rowOf("Write login docs")).toHaveTextContent(
+      "#412 · PROJECTS$PR_READY_HINT",
+    );
+    // A working conversation and a resolved one keep their place.
+    expect(screen.getByTestId("project-panel-group-working")).toHaveTextContent(
+      "Fix login retry",
+    );
+    expect(needsYou).not.toHaveTextContent("Audit auth flows");
   });
 
   it("chips each pull request by what it asks of the user, linked to GitHub", async () => {
