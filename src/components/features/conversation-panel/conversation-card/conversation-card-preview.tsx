@@ -51,7 +51,6 @@ interface ConversationCardPreviewProps {
    * Sidebar card chips stay gated by the panel's Tags preference.
    */
   tags?: Record<string, string> | null;
-  parentConversationId?: string | null;
   /**
    * The row's effective archived state. Keeps the preview's status dot in
    * agreement with the "Archived" chip shown on the card being hovered. Leave
@@ -136,7 +135,6 @@ export function ConversationCardPreview({
   agentProfileId = null,
   agentProfileName,
   tags = null,
-  parentConversationId,
   isArchived,
 }: ConversationCardPreviewProps) {
   const { t } = useTranslation("openhands");
@@ -154,7 +152,7 @@ export function ConversationCardPreview({
       })
     : null;
 
-  const previewTags = getDisplayConversationTags(tags, parentConversationId);
+  const previewTags = getDisplayConversationTags(tags);
 
   return (
     <div
