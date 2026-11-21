@@ -473,7 +473,11 @@ export function toAppConversation(
           configured: info.agent?.acp_model,
           sdkLlm: info.agent?.llm?.model,
         })
-      : (info.agent?.llm?.model ?? DEFAULT_SETTINGS.llm_model),
+      : // Unknown stays null rather than the release default: fabricating the
+        // app default here makes an old conversation display whichever profile
+        // currently holds that model, so changing the global default rewrites
+        // what existing conversations appear to run (#16851).
+        (info.agent?.llm?.model ?? null),
     metrics: info.metrics
       ? {
           accumulated_cost: info.metrics.accumulated_cost ?? null,

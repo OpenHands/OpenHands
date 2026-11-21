@@ -300,10 +300,19 @@ describe("useChatInputLlmProfileState", () => {
     expect(result.current.currentProfileName).toBe("Smart");
   });
 
-  it("falls back to the account active_profile when there is no conversation model", () => {
+  it("falls back to the account active_profile on the home page when no model is set", () => {
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: null });
     useActiveConversationMock.mockReturnValue({ data: { llm_model: null } });
     const { result } = renderState();
     expect(result.current.currentProfileName).toBe("Fast");
+  });
+
+  it("does not fall back to the account active_profile inside a conversation with no model", () => {
+    // An existing conversation whose running model is unknown must show the
+    // placeholder, not a global default the conversation never ran (#16851).
+    useActiveConversationMock.mockReturnValue({ data: { llm_model: null } });
+    const { result } = renderState();
+    expect(result.current.currentProfileName).toBeNull();
   });
 
   it("does not let a stale optimistic profile override conflicting confirmed data outside switch window", () => {
@@ -372,9 +381,7 @@ describe("useChatInputLlmProfileState", () => {
     expect(stored?.stamped_at).toBe("2026-11-09T00:00:00.000Z");
     expect(stored?.selected_repository).toBe("owner/repo");
     // The optimistic entry is NOT cleared.
-    expect(
-      modelStoreState.activeProfileByConversation.c1,
-    ).toBe("Smart");
+    expect(modelStoreState.activeProfileByConversation.c1).toBe("Smart");
   });
 
   it("runs the repair once the post-switch refetch lands and the stamp still conflicts", () => {

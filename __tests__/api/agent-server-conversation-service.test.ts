@@ -1506,7 +1506,9 @@ describe("AgentServerConversationService", () => {
           per_turn_token: 0,
         },
       });
-      expect(conversation?.llm_model).toBeTruthy();
+      // A malformed agent carries no model: unknown stays null instead of
+      // the release default (#16851).
+      expect(conversation?.llm_model).toBeNull();
       expect(conversation?.workspace?.working_dir).toBe(
         "/workspace/project/agent-canvas",
       );
