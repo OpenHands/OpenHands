@@ -1,3 +1,6 @@
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
+import ClockIcon from "#/icons/clock.svg?react";
 import {
   formatCompactDuration,
   type RunSummaryState,
@@ -20,6 +23,42 @@ export function averageDurationDisplay(
   state: RunSummaryState | undefined,
 ): string {
   return formatCompactDuration(state?.summary?.averageDurationMs ?? null);
+}
+
+/**
+ * Queued-run count worth surfacing: the summary's lifetime PENDING count, or
+ * null when there is nothing queued — or when the count is unknown (older
+ * service, partial sample) and showing a number would be a guess.
+ */
+export function pendingRunsDisplay(
+  state: RunSummaryState | undefined,
+): number | null {
+  const pending = state?.summary?.pendingTotal;
+  return typeof pending === "number" && pending > 0 ? pending : null;
+}
+
+interface AutomationPendingCountProps {
+  state: RunSummaryState | undefined;
+}
+
+/**
+ * "N Pending" queue indicator for an automation card/row. Renders nothing
+ * unless at least one run is queued: a permanent zero would be noise on
+ * every automation that is not backed up.
+ */
+export function AutomationPendingCount({ state }: AutomationPendingCountProps) {
+  const { t } = useTranslation("openhands");
+  const pending = pendingRunsDisplay(state);
+  if (pending === null) return null;
+  return (
+    <span
+      data-testid="automation-pending-count"
+      className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-muted"
+    >
+      <ClockIcon className="size-3.5" aria-hidden="true" />
+      {pending} {t(I18nKey.AUTOMATIONS$DETAIL$PENDING)}
+    </span>
+  );
 }
 
 interface AutomationRunStatsProps {
