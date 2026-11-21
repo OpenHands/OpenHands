@@ -4,6 +4,11 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalBody } from "#/components/shared/modals/modal-body";
 import { useDeviceFlow, type DeviceFlowStatus } from "#/hooks/use-device-flow";
+import {
+  createTrackingAttemptId,
+  type BackendConnectionFailureReason,
+  useTracking,
+} from "#/hooks/use-tracking";
 import { getLockedCloudHost } from "#/api/agent-server-config";
 import { isOpenHandsCloudHost } from "#/api/device-flow-client";
 import type { CloudConnectionSource } from "#/services/cloud-funnel-analytics";
@@ -18,7 +23,7 @@ interface DeviceFlowAuthProps {
   /** The host URL for the cloud backend */
   host: string;
   /** Callback when authentication succeeds with the API key */
-  onSuccess: (apiKey: string) => void;
+  onSuccess: (apiKey: string, attemptId?: string) => void;
   /** Test ID prefix for the component */
   testIdRoot: string;
   /** Whether the login button should be disabled (e.g., when no host is entered) */
@@ -67,6 +72,17 @@ function isValidVerificationUrl(url: string): boolean {
   }
 }
 
+function getAuthorizationFailureReason(
+  errorStage: ReturnType<typeof useDeviceFlow>["errorStage"],
+  errorCode: string | null,
+): BackendConnectionFailureReason {
+  if (errorStage === "authorization_request")
+    return "authorization_start_failed";
+  if (errorCode === "access_denied") return "authorization_denied";
+  if (errorCode === "expired_token") return "authorization_expired";
+  return "authorization_failed";
+}
+
 function withLocalSignupSource(
   url: string | null,
   host: string,
@@ -96,7 +112,10 @@ export function DeviceFlowAuth({
 }: DeviceFlowAuthProps) {
   const { t } = useTranslation("openhands");
   const deviceFlow = useDeviceFlow();
+  const { trackBackendConnectionAttempted, trackBackendConnectionFailed } =
+    useTracking();
   const popupRef = React.useRef<Window | null>(null);
+  const trackedFailureAttemptRef = React.useRef<string | null>(null);
   const verificationUrl = withLocalSignupSource(
     deviceFlow.verificationUrl,
     host,
@@ -149,13 +168,50 @@ export function DeviceFlowAuth({
   React.useEffect(() => {
     if (deviceFlow.status === "success" && deviceFlow.apiKey) {
       try {
-        onSuccess(deviceFlow.apiKey);
+        onSuccess(deviceFlow.apiKey, deviceFlow.attemptId ?? undefined);
       } finally {
         deviceFlow.reset();
         popupRef.current?.close();
       }
     }
-  }, [deviceFlow.status, deviceFlow.apiKey, deviceFlow.reset, onSuccess]);
+  }, [
+    deviceFlow.status,
+    deviceFlow.apiKey,
+    deviceFlow.attemptId,
+    deviceFlow.reset,
+    onSuccess,
+  ]);
+
+  React.useEffect(() => {
+    if (
+      deviceFlow.status !== "error" ||
+      !deviceFlow.attemptId ||
+      trackedFailureAttemptRef.current === deviceFlow.attemptId
+    ) {
+      return;
+    }
+
+    trackedFailureAttemptRef.current = deviceFlow.attemptId;
+    trackBackendConnectionFailed({
+      attemptId: deviceFlow.attemptId,
+      backendKind: "cloud",
+      connectionMethod: "cloud_login",
+      hasApiKey: false,
+      source: analyticsSource,
+      stage: deviceFlow.errorStage ?? "authorization_poll",
+      reason: getAuthorizationFailureReason(
+        deviceFlow.errorStage,
+        deviceFlow.errorCode,
+      ),
+    });
+  }, [
+    analyticsSource,
+    deviceFlow.attemptId,
+    deviceFlow.errorCode,
+    deviceFlow.errorStage,
+    deviceFlow.status,
+    trackBackendConnectionFailed,
+  ]);
 
   const handleStartAuth = () => {
     // Normalize and validate the host URL
@@ -187,7 +243,16 @@ export function DeviceFlowAuth({
       console.warn("Popup blocked - user will need to use manual link");
     }
 
-    deviceFlow.start(fullHost, analyticsSource);
+    const attemptId = createTrackingAttemptId();
+    trackBackendConnectionAttempted({
+      attemptId,
+      backendKind: "cloud",
+      connectionMethod: "cloud_login",
+      hasApiKey: false,
+      source: analyticsSource,
+      stage: "authorization_request",
+    });
+    deviceFlow.start(fullHost, analyticsSource, attemptId);
   };
 
   const handleCancel = () => {

@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { SuggestedTask } from "#/utils/types";
 import { Provider } from "#/types/settings";
-import { useTracking } from "#/hooks/use-tracking";
+import { createTrackingAttemptId, useTracking } from "#/hooks/use-tracking";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
 import { useSettings } from "#/hooks/query/use-settings";
@@ -67,6 +67,7 @@ interface CreateConversationResponse {
   session_api_key: string | null;
   url: string | null;
   task_id?: string;
+  attempt_id: string;
 }
 
 interface UseCreateConversationOptions {
@@ -81,7 +82,11 @@ export const useCreateConversation = ({
   disableToast = false,
 }: UseCreateConversationOptions = {}) => {
   const queryClient = useQueryClient();
-  const { trackConversationCreated } = useTracking();
+  const {
+    trackConversationStartAttempted,
+    trackConversationStartFailed,
+    trackConversationCreated,
+  } = useTracking();
   // Warm the profile caches — the launch awaits the same queries via
   // ensureQueryData, so a warm cache makes home-launch instant. The hooks'
   // maybe-unresolved data is deliberately NOT read at launch time: activation
@@ -124,59 +129,86 @@ export const useCreateConversation = ({
         suppressRouterAtStart,
       } = variables;
 
-      // The active AgentProfile is the default launch profile for new
-      // conversations (#3727), on both local and cloud.
-      const conversation = await launchConversation(
-        {
-          queryClient,
-          backendId: backend.id,
-          orgId,
-          isCloud: backend.kind === "cloud",
-          agentProfileId,
-        },
-        {
-          initialUserMsg: query,
-          automationSetup,
-          ...(automationSetupTags ? { automationSetupTags } : {}),
-          automationSetupContext,
-          conversationInstructions,
-          plugins,
-          metadata: repository
-            ? {
-                selected_repository: repository.name,
-                selected_branch: repository.branch ?? null,
-                git_provider: repository.gitProvider,
-                ...(repository.gitProviderId != null
-                  ? { git_provider_id: repository.gitProviderId }
-                  : {}),
-              }
-            : null,
-          workingDirOverride: workingDir,
-          workspaceMode,
-          parentConversationId,
-          agentType,
-          ...(llmProfile ? { llmProfile } : {}),
-          ...(sandboxId ? { sandboxId } : {}),
-          // Cloud only; a local launch reads the toggle itself and gates it
-          // on the launched profile's router. Only stamped when on, so the
-          // e2e snapshot tests that assert the exact createConversation
-          // payload stay stable. The active meta-profile gates the suffix:
-          // no router attached means no route-at-start instruction.
-          ...(settings?.run_router_at_conversation_start &&
-          !suppressRouterAtStart
-            ? {
-                runRouterAtConversationStart: true,
-                hasActiveMetaProfile: !!metaProfiles?.active_meta_profile,
-              }
-            : {}),
-          // Local: the builder gates the route-at-start suffix on this rather
-          // than reading the store, so child/`/new` launches (which don't pass
-          // it) are unaffected by a pending home pick. Only threaded when a
-          // pick was made so the payload-snapshot tests stay byte-identical
-          // otherwise.
-          ...(suppressRouterAtStart ? { suppressRouterAtStart } : {}),
-        },
-      );
+      const attemptId = createTrackingAttemptId();
+      const trackingContext = {
+        hasRepository: !!repository,
+        gitProvider: repository?.gitProvider,
+        hasWorkspace: !!workingDir,
+        workspaceMode,
+        hasInitialQuery: !!query,
+        agentType,
+        hasParentConversation: !!parentConversationId,
+        entryPoint: variables.entryPoint,
+      };
+      trackConversationStartAttempted({
+        attemptId,
+        ...trackingContext,
+      });
+
+      let conversation;
+      try {
+        // The active AgentProfile is the default launch profile for new
+        // conversations (#3727), on both local and cloud.
+        conversation = await launchConversation(
+          {
+            queryClient,
+            backendId: backend.id,
+            orgId,
+            isCloud: backend.kind === "cloud",
+            agentProfileId,
+          },
+          {
+            initialUserMsg: query,
+            automationSetup,
+            ...(automationSetupTags ? { automationSetupTags } : {}),
+            automationSetupContext,
+            conversationInstructions,
+            plugins,
+            metadata: repository
+              ? {
+                  selected_repository: repository.name,
+                  selected_branch: repository.branch ?? null,
+                  git_provider: repository.gitProvider,
+                  ...(repository.gitProviderId != null
+                    ? { git_provider_id: repository.gitProviderId }
+                    : {}),
+                }
+              : null,
+            workingDirOverride: workingDir,
+            workspaceMode,
+            parentConversationId,
+            agentType,
+            ...(llmProfile ? { llmProfile } : {}),
+            ...(sandboxId ? { sandboxId } : {}),
+            // Cloud only; a local launch reads the toggle itself and gates it
+            // on the launched profile's router. Only stamped when on, so the
+            // e2e snapshot tests that assert the exact createConversation
+            // payload stay stable. The active meta-profile gates the suffix:
+            // no router attached means no route-at-start instruction.
+            ...(settings?.run_router_at_conversation_start &&
+            !suppressRouterAtStart
+              ? {
+                  runRouterAtConversationStart: true,
+                  hasActiveMetaProfile: !!metaProfiles?.active_meta_profile,
+                }
+              : {}),
+            // Local: the builder gates the route-at-start suffix on this rather
+            // than reading the store, so child/`/new` launches (which don't pass
+            // it) are unaffected by a pending home pick. Only threaded when a
+            // pick was made so the payload-snapshot tests stay byte-identical
+            // otherwise.
+            ...(suppressRouterAtStart ? { suppressRouterAtStart } : {}),
+          },
+        );
+      } catch (error) {
+        trackConversationStartFailed({
+          attemptId,
+          stage: "request",
+          reason: "request_failed",
+          ...trackingContext,
+        });
+        throw error;
+      }
 
       // Cloud conversations have no app_conversation_id until the sandbox is
       // READY.
@@ -244,10 +276,12 @@ export const useCreateConversation = ({
         session_api_key: null,
         url: conversation.agent_server_url,
         task_id: conversation.id,
+        attempt_id: attemptId,
       };
     },
     onSuccess: async (data, variables) => {
       trackConversationCreated({
+        attemptId: data.attempt_id,
         conversationId: data.conversation_id,
         taskId: data.task_id,
         hasRepository: !!variables.repository,

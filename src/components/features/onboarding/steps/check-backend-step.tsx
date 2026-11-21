@@ -174,6 +174,8 @@ export function CheckBackendStep({
     (
       payload: BackendFormSubmitPayload,
       connectionMethod: BackendConnectionMethod,
+      _metadata?: unknown,
+      attemptId?: string,
     ) => {
       if (noBackendSelected) {
         addBackend(payload);
@@ -192,6 +194,7 @@ export function CheckBackendStep({
         }
       }
       trackBackendAdded({
+        attemptId,
         backendKind: payload.kind,
         connectionMethod,
         hasApiKey: Boolean(payload.apiKey),
