@@ -54,6 +54,7 @@ import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-e
 import { ErrorMessageBanner } from "./error-message-banner";
 import { ConnectionRecoveryNotice } from "./connection-recovery-notice";
 import { SkillInstallRestartBanner } from "./skill-install-restart-banner";
+import { SandboxOomNotice } from "./sandbox-oom-notice";
 import { ResolvedConversationBanner } from "./resolved-conversation-banner";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
@@ -909,6 +910,7 @@ export function ChatInterface({
 
           <div className={CHAT_COMPOSER_CLASS_NAME}>
             <SkillInstallRestartBanner conversationId={conversationId} />
+            <SandboxOomNotice sandboxId={activeConversation?.sandbox_id} />
             <BtwMessages conversationId={conversationId} />
             {recoveryAgentState === AgentState.RUNNING &&
               !errorMessage &&

@@ -14,4 +14,9 @@ export interface V1SandboxInfo {
   session_api_key: string | null;
   exposed_urls: V1ExposedUrl[] | null;
   created_at: string;
+  last_termination?: {
+    reason: string;
+    exit_code: number;
+    finished_at: string;
+  } | null;
 }
