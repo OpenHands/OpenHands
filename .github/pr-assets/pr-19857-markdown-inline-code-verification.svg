@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="320" viewBox="0 0 760 320" font-family="monospace">
+  <rect width="760" height="320" fill="#1e1e1e" rx="8"/>
+  <rect x="0" y="0" width="760" height="32" fill="#2d2d2d" rx="8"/>
+  <circle cx="16" cy="16" r="6" fill="#ff5f56"/>
+  <circle cx="36" cy="16" r="6" fill="#ffbd2e"/>
+  <circle cx="56" cy="16" r="6" fill="#27c93f"/>
+  <text x="380" y="21" fill="#888" font-size="12" text-anchor="middle">Terminal — vitest run __tests__/utils/markdown-fence.test.ts</text>
+  <text x="16" y="56" fill="#d4d4d4" font-size="13" xml:space="preserve"> RUN  v5.1.0</text>
+  <text x="16" y="80" fill="#27c93f" font-size="13" xml:space="preserve"> ✓ |jsdom| __tests__/utils/markdown-fence.test.ts (10 tests)</text>
+  <text x="16" y="104" fill="#d4d4d4" font-size="13" xml:space="preserve">   ✓ markdownFence (4)</text>
+  <text x="16" y="128" fill="#d4d4d4" font-size="13" xml:space="preserve">   ✓ markdownInlineCode (6)</text>
+  <text x="16" y="152" fill="#d4d4d4" font-size="13" xml:space="preserve">     ✓ wraps plain content in single backticks</text>
+  <text x="16" y="176" fill="#d4d4d4" font-size="13" xml:space="preserve">     ✓ uses a delimiter longer than the longest backtick run in the content</text>
+  <text x="16" y="200" fill="#d4d4d4" font-size="13" xml:space="preserve">     ✓ pads content that starts or ends with a backtick</text>
+  <text x="16" y="224" fill="#27c93f" font-size="13" xml:space="preserve">     ✓ pads content that starts and ends with a space when not all spaces</text>
+  <text x="16" y="248" fill="#27c93f" font-size="13" xml:space="preserve">     ✓ does not add space padding to single-side space or all-space content</text>
+  <text x="16" y="272" fill="#27c93f" font-size="13" xml:space="preserve">     ✓ renders back to the exact content when parsed as CommonMark</text>
+  <text x="16" y="300" fill="#27c93f" font-size="13" xml:space="preserve"> Test Files  1 passed (1)  |  Tests  10 passed (10)</text>
+</svg>
