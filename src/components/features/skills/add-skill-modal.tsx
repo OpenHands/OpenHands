@@ -318,17 +318,17 @@ export function AddSkillModal({
                 <span className="font-medium">
                   {t(I18nKey.SETTINGS$SKILLS_CUSTOM_DESCRIPTION_LABEL)}
                 </span>
-                <input
-                  type="text"
+                <textarea
                   data-testid="custom-skill-description-input"
                   value={description}
+                  rows={4}
                   placeholder={t(
                     I18nKey.SETTINGS$SKILLS_CUSTOM_DESCRIPTION_PLACEHOLDER,
                   )}
                   onChange={(e) => setDescription(e.target.value)}
                   className={cn(
                     formControlSettingsFieldClassName,
-                    "w-full rounded-md border border-border-subtle bg-surface-raised px-3 py-2 text-sm text-contrast",
+                    "w-full rounded-md border border-border-subtle bg-surface-raised px-3 py-2 text-sm text-contrast resize-y custom-scrollbar",
                   )}
                 />
               </label>

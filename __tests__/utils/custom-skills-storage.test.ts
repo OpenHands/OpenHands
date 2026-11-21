@@ -103,6 +103,18 @@ description: old description
       expect(formatted).not.toContain("name: old-name");
       expect(formatted).toContain("# Original Body");
     });
+
+    it("formats multiline description with yaml block scalar", () => {
+      const formatted = formatSkillMarkdown({
+        name: "multiline-skill",
+        description: "Line 1 of description\nLine 2 of description",
+        content: "# Skill Body",
+      });
+
+      expect(formatted).toContain("description: |");
+      expect(formatted).toContain("  Line 1 of description");
+      expect(formatted).toContain("  Line 2 of description");
+    });
   });
 
   describe("saveCustomSkill and loadCustomSkills", () => {

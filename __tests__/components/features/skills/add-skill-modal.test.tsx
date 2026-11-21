@@ -76,9 +76,10 @@ describe("AddSkillModal custom skill creation & editing", () => {
     expect(
       screen.getByTestId("custom-skill-triggers-input"),
     ).toBeInTheDocument();
-    expect(
-      screen.getByTestId("custom-skill-description-input"),
-    ).toBeInTheDocument();
+    const descInput = screen.getByTestId("custom-skill-description-input");
+    expect(descInput).toBeInTheDocument();
+    expect(descInput.tagName).toBe("TEXTAREA");
+    expect(descInput).toHaveAttribute("rows", "4");
     expect(
       screen.getByTestId("custom-skill-content-input"),
     ).toBeInTheDocument();

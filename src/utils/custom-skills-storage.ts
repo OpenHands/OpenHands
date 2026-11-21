@@ -105,7 +105,14 @@ export function formatSkillMarkdown(params: CustomSkillInput): string {
   const frontmatterLines = ["---", `name: ${trimmedName}`];
 
   if (description) {
-    frontmatterLines.push(`description: ${description}`);
+    if (description.includes("\n")) {
+      frontmatterLines.push("description: |");
+      for (const line of description.split("\n")) {
+        frontmatterLines.push(`  ${line}`);
+      }
+    } else {
+      frontmatterLines.push(`description: ${description}`);
+    }
   }
 
   if (triggers.length > 0) {
