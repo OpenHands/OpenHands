@@ -33,6 +33,7 @@ import {
   getTriggerSource,
 } from "#/components/features/home/featured-automations/automation-run-health";
 import type { AutomationInsightsProps } from "./automation-card";
+import { AutomationPendingRunCount } from "./automation-run-insights";
 import { toLatestRunState } from "./to-latest-run-state";
 import { AutomationTagPill } from "./automation-tag-pill";
 import { resolveAutomationImpactStatement } from "#/utils/automation-catalog";
@@ -216,6 +217,10 @@ export function AutomationListRow({
                     <RunStatusBadge
                       status={display?.badgeStatus ?? latestRun.status}
                       compact
+                    />
+                    <AutomationPendingRunCount
+                      automationId={automation.id}
+                      state={insights?.state}
                     />
                   </>
                 ) : null}
