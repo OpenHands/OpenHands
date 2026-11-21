@@ -55,7 +55,7 @@ describe("terminal themes", () => {
   });
 
   it("keeps every Paper ANSI color readable against its terminal surface", () => {
-    const theme = getTerminalTheme("paper", "#29241f");
+    const theme = getTerminalTheme("paper", "#1d1c19");
     for (const role of ["--oh-color-base", "--oh-surface"] as const) {
       const surface = luminance(COLOR_THEMES.paper.tokens![role]!);
       for (const slot of ansiSlots) {
