@@ -53,7 +53,7 @@ const ManageBackendsModal = React.lazy(() =>
 const SESSIONS_REFETCH_MS = 30_000;
 
 const ICON_BUTTON_CLASS =
-  "inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted hover:bg-contrast/10 hover:text-contrast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border disabled:cursor-not-allowed disabled:opacity-50";
 
 interface SessionContext {
   config: MarsAgentConfig | undefined;
@@ -118,7 +118,7 @@ function SessionConversations({
             to={backendScopedPath(`/conversations/${conversation.id}`)}
             data-testid={`mars-session-conversation-${conversation.id}`}
             className={cn(
-              "flex h-8 min-w-0 items-center gap-2 rounded-md pl-6 pr-2 text-sm text-white hover:bg-surface",
+              "flex h-8 min-w-0 items-center gap-2 rounded-md pl-6 pr-2 text-sm text-contrast hover:bg-surface",
               conversation.id === conversationId && "bg-surface",
             )}
           >
@@ -188,7 +188,7 @@ function MarsSessionRow({
       <div
         className={cn(
           "group flex h-8 w-full min-w-0 items-center gap-0.5 rounded-md pl-2 pr-1 text-sm hover:bg-surface-raised",
-          isCurrent ? "text-white" : "text-muted hover:text-white",
+          isCurrent ? "text-contrast" : "text-muted hover:text-contrast",
         )}
       >
         <button
@@ -293,7 +293,7 @@ export function MarsSessionPanel({ backend }: MarsSessionPanelProps) {
               aria-haspopup="menu"
               aria-label={t(I18nKey.DO_AGENTS$SWITCH_AGENT)}
               data-testid="mars-session-panel-agent"
-              className="flex h-7 max-w-full cursor-pointer items-center gap-2 rounded-md px-1.5 text-sm font-medium text-muted hover:bg-surface-raised hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
+              className="flex h-7 max-w-full cursor-pointer items-center gap-2 rounded-md px-1.5 text-sm font-medium text-muted hover:bg-surface-raised hover:text-contrast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
             >
               <DigitalOceanLogo
                 width={14}
