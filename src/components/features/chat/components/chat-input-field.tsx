@@ -38,6 +38,9 @@ export function ChatInputField({
   );
 
   const isPlanMode = conversationMode === "plan";
+  const inputPlaceholder = isPlanMode
+    ? t(I18nKey.COMMON$LET_S_WORK_ON_A_PLAN)
+    : (placeholder ?? t(I18nKey.SUGGESTIONS$WHAT_TO_BUILD));
 
   React.useEffect(() => {
     if (!disabled) {
@@ -62,13 +65,14 @@ export function ChatInputField({
             "chat-input bg-transparent text-contrast text-[16px] font-normal leading-5 outline-none resize-none custom-scrollbar min-h-5 max-h-100 [text-overflow:inherit] [text-wrap-mode:inherit] [white-space-collapse:inherit] block whitespace-pre-wrap",
             disabled && "cursor-not-allowed opacity-50",
           )}
+          aria-disabled={disabled || undefined}
+          aria-label={inputPlaceholder}
+          aria-multiline="true"
           contentEditable={!disabled}
-          data-placeholder={
-            isPlanMode
-              ? t(I18nKey.COMMON$LET_S_WORK_ON_A_PLAN)
-              : (placeholder ?? t(I18nKey.SUGGESTIONS$WHAT_TO_BUILD))
-          }
+          data-placeholder={inputPlaceholder}
           data-testid="chat-input"
+          role="textbox"
+          tabIndex={disabled ? -1 : 0}
           onInput={onInput}
           onPaste={onPaste}
           onKeyDown={onKeyDown}
