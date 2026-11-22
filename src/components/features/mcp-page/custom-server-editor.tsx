@@ -168,10 +168,7 @@ export function CustomServerEditor({
       payload.type === "shttp" && payload.timeout !== undefined
         ? {
             ...payload,
-            timeout:
-              payload.auth?.strategy !== "oauth2"
-                ? Math.min(payload.timeout / 1000, 120)
-                : payload.timeout / 1000,
+            timeout: Math.min(payload.timeout / 1000, 120),
           }
         : payload;
     testServer(testPayload, {
