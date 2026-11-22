@@ -44171,24 +44171,6 @@
     "ca": "Decisió necessària",
     "id": "Keputusan diperlukan"
   },
-  "ASK_USER$RECOMMENDED": {
-    "en": "Recommended",
-    "ja": "おすすめ",
-    "zh-CN": "推荐",
-    "zh-TW": "推薦",
-    "ko-KR": "추천",
-    "no": "Anbefalt",
-    "it": "Consigliato",
-    "pt": "Recomendado",
-    "es": "Recomendado",
-    "ar": "موصى به",
-    "fr": "Recommandé",
-    "tr": "Önerilen",
-    "de": "Empfohlen",
-    "uk": "Рекомендовано",
-    "ca": "Recomanat",
-    "id": "Direkomendasikan"
-  },
   "ASK_USER$SUBMIT_ANSWER": {
     "en": "Submit response",
     "ja": "回答を送信",
