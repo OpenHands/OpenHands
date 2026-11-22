@@ -118,7 +118,13 @@ function fakeApi() {
  * `realRegistry` keeps the bridge's own tunnel registry, whose listeners bind
  * loopback without dialing anything until a client connects.
  */
-function setup({ realRegistry = false } = {}) {
+function setup({
+  realRegistry = false,
+  isTrustedSender,
+}: {
+  realRegistry?: boolean;
+  isTrustedSender?: (event: unknown) => boolean;
+} = {}) {
   const registry = fakeRegistry();
   const api = fakeApi();
   const credentials = createCredentialStore({
@@ -136,7 +142,8 @@ function setup({ realRegistry = false } = {}) {
     env: { MARS_API_BASE_URL: API_URL },
   });
   const ipcMain = fakeIpcMain();
-  bridge.registerIpc(ipcMain);
+  const log = vi.fn();
+  bridge.registerIpc(ipcMain, { isTrustedSender, log });
   return {
     registry,
     api,
@@ -144,6 +151,7 @@ function setup({ realRegistry = false } = {}) {
     ensureAwake,
     bridge,
     ipcMain,
+    log,
   };
 }
 
@@ -252,6 +260,37 @@ describe("createMarsTunnelBridge", () => {
     expect(() =>
       ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, { sessionId: "sess_a" }),
     ).toThrow(/Sign in to DigitalOcean/);
+    expect(registry.attach).not.toHaveBeenCalled();
+  });
+
+  it("openTunnel runs when the sender is trusted", async () => {
+    const { registry, ipcMain } = setup({ isTrustedSender: () => true });
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+
+    await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, {
+      sessionId: "sess_a",
+      localPort: 51000,
+    });
+
+    expect(registry.attach).toHaveBeenCalledTimes(1);
+  });
+
+  it("openTunnel rejects when the sender is untrusted and the method is never called", async () => {
+    const { registry, ipcMain, log } = setup({ isTrustedSender: () => false });
+
+    let caught: Error | null = null;
+    try {
+      await ipcMain.invoke(MARS_TUNNEL_IPC.openTunnel, {
+        sessionId: "sess_a",
+        localPort: 51000,
+      });
+    } catch (err) {
+      caught = err as Error;
+    }
+    expect(caught?.message).toMatch(/untrusted sender/);
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining(MARS_TUNNEL_IPC.openTunnel),
+    );
     expect(registry.attach).not.toHaveBeenCalled();
   });
 

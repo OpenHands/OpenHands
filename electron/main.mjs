@@ -54,7 +54,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
-import { isExternalBrowsableUrl, isLoopbackAppUrl } from "./lib/window-url-policy.mjs";
+import {
+  isExternalBrowsableUrl,
+  isLoopbackAppUrl,
+} from "./lib/window-url-policy.mjs";
+import { isTrustedWindowSender } from "./lib/window-sender-policy.mjs";
 import { resolveBundledRuntimeDir } from "./lib/bundled-runtime-dir.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -776,7 +780,9 @@ app.whenReady().then(async () => {
     safeStorage,
     openExternal: (url) => shell.openExternal(url),
   });
-  marsTunnelBridge.registerIpc(ipcMain);
+  marsTunnelBridge.registerIpc(ipcMain, {
+    isTrustedSender: (event) => isTrustedWindowSender(event, () => mainWin),
+  });
 
   if (!uvxAvailable()) {
     dialog.showErrorBox(
