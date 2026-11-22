@@ -178,7 +178,7 @@ point Canvas at it). In short:
 #    canvas_ui_tool.
 # Minimum image: 1.63.1-python (Canvas's minimumAgentServer, including the
 # managed Canvas App backend bridge). Override SHA with a newer build.
-docker run -d --name oh-acp -p 8010:8000 -v acp-data:/workspace \
+docker run -d --name oh-acp -p 127.0.0.1:8010:8000 -v acp-data:/workspace \
   -v "$(pwd)/tools:/canvas-tools:ro" -e OH_EXTRA_PYTHON_PATH=/canvas-tools \
   ghcr.io/openhands/agent-server:1.63.1-python
 

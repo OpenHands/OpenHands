@@ -16,7 +16,8 @@ docker compose up
 ```
 
 This starts `ghcr.io/openhands/agent-server:latest-python` on
-`http://localhost:8010` with a persistent `acp-data` volume. The image
+`http://localhost:8010` (loopback-only by default) with a persistent `acp-data`
+volume. The image
 pre-installs the ACP CLI wrappers and the SDK rewrites `npx -y <pkg>` to those
 pinned binaries in-pod, so Canvas can keep sending the default `npx` command
 unchanged.
@@ -56,6 +57,11 @@ VITE_BACKEND_BASE_URL=http://localhost:8010 npm run dev:frontend
 The image's CORS allows `localhost`, so the browser talks to the container
 directly. (You can also add it as a backend in the Canvas backend selector with
 host `http://localhost:8010`.)
+
+> ⚠️ **Loopback-only by default.** The published port is bound to `127.0.0.1`,
+> so the container is reachable only from the host machine. To expose it on
+> another interface, set `SESSION_API_KEY` (require auth) and publish the port
+> on that interface, e.g. `-p "8010:8000"`.
 
 ## 3. Onboard with credentials
 
