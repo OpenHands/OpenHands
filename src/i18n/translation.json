@@ -197,6 +197,24 @@
     "ca": "La resposta s’ha desat, però el servidor està ocupat. Reprèn la conversa quan hi hagi capacitat. No tornis a enviar la resposta.",
     "id": "Jawaban tersimpan, tetapi server sibuk. Lanjutkan percakapan saat kapasitas tersedia; jangan kirim jawaban lagi."
   },
+  "CHAT_INTERFACE$EVENTS_SKIPPED_NOTICE": {
+    "en": "Some earlier events could not be loaded.",
+    "ja": "以前の一部のイベントを読み込めませんでした。",
+    "zh-CN": "部分较早的事件无法加载。",
+    "zh-TW": "部分較早的事件無法載入。",
+    "ko-KR": "이전 일부 이벤트를 불러올 수 없습니다.",
+    "no": "Noen tidligere hendelser kunne ikke lastes inn.",
+    "it": "Alcuni eventi precedenti non sono stati caricati.",
+    "pt": "Alguns eventos anteriores não puderam ser carregados.",
+    "es": "No se pudieron cargar algunos eventos anteriores.",
+    "ar": "تعذّر تحميل بعض الأحداث السابقة.",
+    "fr": "Certains événements antérieurs n'ont pas pu être chargés.",
+    "tr": "Önceki bazı olaylar yüklenemedi.",
+    "de": "Einige früheren Ereignisse konnten nicht geladen werden.",
+    "uk": "Деякі попередні події не вдалося завантажити.",
+    "ca": "No s'han pogut carregar alguns esdeveniments anteriors.",
+    "id": "Beberapa peristiwa sebelumnya tidak dapat dimuat."
+  },
   "CHAT_INTERFACE$TIMESTAMP_JUST_NOW": {
     "en": "Just now",
     "ja": "たった今",

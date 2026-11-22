@@ -62,6 +62,7 @@ import {
   Messages,
   type MessagesHandle,
 } from "#/components/conversation-events/chat/messages";
+import { EventsGapNotice } from "./events-gap-notice";
 import { PendingUserMessages } from "./pending-user-messages";
 import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files";
 import { validateFiles } from "#/utils/file-validation";
@@ -903,6 +904,10 @@ export function ChatInterface({
                 <TaskStartupProgress />
               </>
             )}
+
+            {/* A cursor gap is an explicit hole in the transcript: say so
+              instead of silently skipping it. */}
+            <EventsGapNotice />
 
             {/* Goal-loop status sits at the end of the message flow — above the
               composer and its typing indicator — so progress stays in view. */}

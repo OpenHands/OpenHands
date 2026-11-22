@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { isStreamingDeltaEvent } from "#/types/agent-server/type-guards";
 import {
   abortStreamingSlot,
   appendStreamingDeltas,
@@ -14,6 +15,17 @@ import type {
 } from "#/types/agent-server/session-frames";
 
 export type OHEvent = UIEvent;
+
+/**
+ * Cap on the events a conversation keeps in memory. The store grows with
+ * every live event of a long-running session, so oldest events are evicted
+ * beyond this window. `eventIds` is never trimmed — it is the dedupe set
+ * that keeps socket replays from re-running non-idempotent side effects —
+ * and `historyPagination` (the server-side scroll-up cursor) is untouched,
+ * so "load older" keeps paging the server correctly. Pages the user
+ * explicitly loaded (history prepends) are exempt from eviction.
+ */
+export const MAX_EVENTS_PER_CONVERSATION = 2000;
 
 const getEventId = (event: OHEvent): string | number | undefined =>
   "id" in event ? event.id : undefined;
@@ -63,6 +75,53 @@ interface HistoryPage {
   prepend?: boolean;
 }
 
+/**
+ * A `seq` interval the resume cursor stepped over because the server
+ * skipped those events as unreadable. Recorded instead of silently
+ * dropped: refetching cannot restore them (the server never resends
+ * them), so the conversation carries an explicit record that the UI can
+ * surface.
+ */
+export interface SkippedEventRange {
+  from: number;
+  to: number;
+}
+
+/**
+ * Drop the oldest non-slot UI events so the list holds at most `cap`
+ * entries. Streaming slots always survive eviction: they are transient,
+ * few, and dropping an open one would orphan an in-flight bubble.
+ */
+const trimUiEvents = (uiEvents: OHEvent[], cap: number): OHEvent[] => {
+  if (uiEvents.length <= cap) return uiEvents;
+  let toDrop = uiEvents.length - cap;
+  const kept: OHEvent[] = [];
+  for (const event of uiEvents) {
+    if (toDrop > 0 && !isStreamingDeltaEvent(event)) {
+      toDrop -= 1;
+      continue;
+    }
+    kept.push(event);
+  }
+  return kept;
+};
+
+/**
+ * Evict the oldest events once a live append pushes the store past the
+ * cap. Ordering is preserved (head-trim of chronologically sorted lists),
+ * and `eventIds` deliberately keeps every id.
+ */
+const trimToCap = (state: EventState): EventState => {
+  if (state.events.length <= MAX_EVENTS_PER_CONVERSATION) return state;
+  return {
+    ...state,
+    events: state.events.slice(
+      state.events.length - MAX_EVENTS_PER_CONVERSATION,
+    ),
+    uiEvents: trimUiEvents(state.uiEvents, MAX_EVENTS_PER_CONVERSATION),
+  };
+};
+
 export interface EventState {
   events: OHEvent[];
   eventIds: Set<string | number>;
@@ -82,6 +141,11 @@ export interface EventState {
     hasMore: boolean;
     hasLoadedOlder: boolean;
   } | null;
+  /**
+   * `seq` intervals the resume cursor stepped over because the server
+   * skipped those events as unreadable. Cleared with the conversation.
+   */
+  skippedEventRanges: SkippedEventRange[];
   addEvent: (event: OHEvent) => void;
   /**
    * Bulk-insert events. Used for the initial REST history load and for
@@ -125,6 +189,11 @@ export interface EventState {
   abortStreamingSlot: (itemId: string, attempt?: number) => void;
   /** Discard every open slot for one socket (on connect and disconnect). */
   clearStreamingSlots: (isFromPlanningAgent?: boolean) => void;
+  /**
+   * Record a `seq` interval the resume cursor stepped over. Distinct gaps
+   * are kept once each; a conversation switch clears them.
+   */
+  recordSkippedEventRange: (from: number, to: number) => void;
 }
 
 const appendEvent = (state: EventState, event: OHEvent): EventState => {
@@ -180,7 +249,9 @@ export const useEventStore = create<EventState>()((set) => ({
   loadedConversationId: null,
   loadedConversationScope: null,
   historyPagination: null,
-  addEvent: (event: OHEvent) => set((state) => applyAddEvent(state, event)),
+  skippedEventRanges: [],
+  addEvent: (event: OHEvent) =>
+    set((state) => trimToCap(applyAddEvent(state, event))),
   addEvents: (incoming: OHEvent[], history?: HistoryPage) =>
     set((state) => {
       // A refreshed tail can update the initial frontier (including Cloud's
@@ -234,10 +305,14 @@ export const useEventStore = create<EventState>()((set) => ({
             (incomingOrder.get(a) ?? incomingOrder.size) -
               (incomingOrder.get(b) ?? incomingOrder.size)
         : compareEventsByTimestamp;
-      return sortEventState(
+      const sorted = sortEventState(
         { ...state, events, eventIds, uiEvents, historyPagination },
         compare,
       );
+      // History prepends are the user's explicit "load older" requests —
+      // evicting them instantly would defeat the feature. Live growth is
+      // what the cap bounds.
+      return history?.prepend ? sorted : trimToCap(sorted);
     }),
   clearEvents: () =>
     set(() => ({
@@ -247,6 +322,7 @@ export const useEventStore = create<EventState>()((set) => ({
       loadedConversationId: null,
       loadedConversationScope: null,
       historyPagination: null,
+      skippedEventRanges: [],
     })),
   clearEventsForConversation: (conversationId: string | null, scope = null) =>
     set(() => ({
@@ -256,7 +332,19 @@ export const useEventStore = create<EventState>()((set) => ({
       loadedConversationId: conversationId,
       loadedConversationScope: scope,
       historyPagination: null,
+      skippedEventRanges: [],
     })),
+  recordSkippedEventRange: (from: number, to: number) =>
+    set((state) =>
+      state.skippedEventRanges.some(
+        (range) => range.from === from && range.to === to,
+      )
+        ? state
+        : {
+            ...state,
+            skippedEventRanges: [...state.skippedEventRanges, { from, to }],
+          },
+    ),
   openStreamingSlot: (frame: ItemStartedFrame, meta: StreamingSlotMeta = {}) =>
     set((state) => {
       // Symmetric with `appendStreamingDeltas`: the durable event being in
