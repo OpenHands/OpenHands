@@ -46,6 +46,8 @@ import { ConversationActiveTagFilters } from "./conversation-active-tag-filters"
 import { ConversationPanelNewThreadPicker } from "./conversation-panel-new-thread-picker";
 import { ConversationGroupFolderList } from "./conversation-group-folder-list";
 import { ConversationPanelPinnedSection } from "./conversation-panel-pinned-section";
+import { ConversationSubConversationGroup } from "./conversation-sub-conversation-group";
+import { SubConversationRow } from "./sub-conversation-row";
 import {
   applyAutomationConversationFilter,
   applyGroupFolderOrder,
@@ -58,6 +60,7 @@ import {
   groupConversations,
   isOlderConversationCutoff,
   MAX_PAGES_PER_LOAD_MORE_CLICK,
+  nestSubConversations,
   OLDER_CONVERSATION_CUTOFF_MS,
   partitionByCutoff,
   resolvePinnedConversations,
@@ -75,7 +78,10 @@ import {
 import { uniqueById } from "#/utils/unique-by-id";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { isEffectivelyArchivedConversation } from "#/utils/conversation-archive-status";
-import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
+import type {
+  AppConversation,
+  SandboxStatus,
+} from "#/api/conversation-service/agent-server-conversation-service.types";
 
 interface ConversationPanelProps {
   onClose?: () => void;
@@ -197,6 +203,13 @@ export function ConversationPanel({
   const [expandedGroupPreviewIds, setExpandedGroupPreviewIds] = React.useState<
     ReadonlySet<string>
   >(() => new Set());
+  // Parent IDs whose linked child conversations are expanded. Kept local to
+  // the panel (like `collapsedGroupIds`) so a manual collapse is not persisted
+  // across sessions.
+  const [
+    expandedSubConversationParentIds,
+    setExpandedSubConversationParentIds,
+  ] = React.useState<ReadonlySet<string>>(() => new Set());
   const [expandedPinnedPreview, setExpandedPinnedPreview] =
     React.useState(false);
 
@@ -275,12 +288,32 @@ export function ConversationPanel({
     });
   }, []);
 
+  const toggleSubConversationParentExpanded = React.useCallback(
+    (parentId: string) => {
+      setExpandedSubConversationParentIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(parentId)) {
+          next.delete(parentId);
+        } else {
+          next.add(parentId);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
   React.useEffect(() => {
     if (organizeMode !== "grouped") {
       setCollapsedGroupIds(new Set());
       setExpandedGroupPreviewIds(new Set());
     }
   }, [organizeMode]);
+
+  // Expansion state is scoped to the loaded catalog of one backend.
+  React.useEffect(() => {
+    setExpandedSubConversationParentIds(new Set());
+  }, [activeBackend.id]);
 
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
@@ -376,6 +409,28 @@ export function ConversationPanel({
       (conversation) => !isRowArchived(conversation),
     );
   }, [allLoadedConversations, isRowArchived, showArchivedConversations]);
+
+  // Never hide the thread the user is currently reading: when the active
+  // conversation is a child whose parent is loaded, auto-expand that parent.
+  // Only ever adds — a manual collapse of an inactive parent sticks.
+  React.useEffect(() => {
+    if (!currentConversationId) {
+      return;
+    }
+    const activeConversation = conversations.find(
+      (conversation) => conversation.id === currentConversationId,
+    );
+    const parentId = activeConversation?.parent_conversation_id;
+    if (!parentId) {
+      return;
+    }
+    if (!conversations.some((conversation) => conversation.id === parentId)) {
+      return;
+    }
+    setExpandedSubConversationParentIds((prev) =>
+      prev.has(parentId) ? prev : new Set(prev).add(parentId),
+    );
+  }, [conversations, currentConversationId]);
 
   // Pin/archive ID sets derive from the tags on the loaded conversations
   // (the unfiltered set, so archived-but-pinned rows still resolve and
@@ -613,6 +668,13 @@ export function ConversationPanel({
     return sortConversationsByField(visible, conversationSort);
   }, [recentScoped, olderScoped, showOlderConversations, conversationSort]);
 
+  // Chronological rows: children whose parent is loaded move under that
+  // parent. Orphans stay flat (see `nestSubConversations`).
+  const nestedVisibleConversations = React.useMemo(
+    () => nestSubConversations(sortedVisibleConversations, conversationSort),
+    [sortedVisibleConversations, conversationSort],
+  );
+
   const groupLabels = React.useMemo(
     () => ({
       emptyWorkspace: t(I18nKey.CONVERSATION_PANEL$NO_WORKSPACE),
@@ -683,9 +745,55 @@ export function ConversationPanel({
     return applyGroupFolderOrder(conversationGroups, groupFolderOrder);
   }, [conversationGroups, groupFolderOrder]);
 
+  // Grouped mode nests across folder boundaries: a child isolated in another
+  // worktree/workspace still nests under its parent, and its flat slot is
+  // removed from whichever folder it would otherwise appear in.
+  const groupedSubConversationsByParentId = React.useMemo(() => {
+    const byParentId = new Map<string, AppConversation[]>();
+    if (!groupedSourceConversations) {
+      return byParentId;
+    }
+    for (const row of nestSubConversations(
+      groupedSourceConversations,
+      conversationSort,
+    )) {
+      if (row.children.length > 0) {
+        byParentId.set(row.conversation.id, row.children);
+      }
+    }
+    return byParentId;
+  }, [groupedSourceConversations, conversationSort]);
+
+  const groupedNestedChildIds = React.useMemo(
+    () =>
+      new Set(
+        Array.from(groupedSubConversationsByParentId.values())
+          .flat()
+          .map((conversation) => conversation.id),
+      ),
+    [groupedSubConversationsByParentId],
+  );
+
+  const displayConversationGroups = React.useMemo(() => {
+    if (!orderedConversationGroups) {
+      return null;
+    }
+    if (groupedNestedChildIds.size === 0) {
+      return orderedConversationGroups;
+    }
+    return orderedConversationGroups
+      .map((group) => ({
+        ...group,
+        conversations: group.conversations.filter(
+          (conversation) => !groupedNestedChildIds.has(conversation.id),
+        ),
+      }))
+      .filter((group) => group.conversations.length > 0);
+  }, [orderedConversationGroups, groupedNestedChildIds]);
+
   const conversationGroupIds = React.useMemo(
-    () => conversationGroups?.map((group) => group.id) ?? [],
-    [conversationGroups],
+    () => displayConversationGroups?.map((group) => group.id) ?? [],
+    [displayConversationGroups],
   );
 
   const compactVisibleConversations = React.useMemo(
@@ -701,7 +809,7 @@ export function ConversationPanel({
 
   const visibleFlatCount = sortedVisibleConversations.length;
 
-  const visibleGroupCount = orderedConversationGroups?.length ?? 0;
+  const visibleGroupCount = displayConversationGroups?.length ?? 0;
 
   const listIsEffectivelyEmpty =
     organizeMode === "grouped" && !compact
@@ -1266,8 +1374,8 @@ export function ConversationPanel({
   const hasVisibleGroups =
     organizeMode === "grouped" &&
     !compact &&
-    orderedConversationGroups != null &&
-    orderedConversationGroups.length > 0;
+    displayConversationGroups != null &&
+    displayConversationGroups.length > 0;
   const showEmptyState =
     isFetched &&
     !isLoading &&
@@ -1282,14 +1390,14 @@ export function ConversationPanel({
   // none is. Folders outside the current view keep their own state.
   const allGroupsCollapsed =
     hasVisibleGroups &&
-    (orderedConversationGroups ?? []).every((group) =>
+    (displayConversationGroups ?? []).every((group) =>
       collapsedGroupIds.has(group.id),
     );
 
   const toggleAllGroupsCollapsed = React.useCallback(() => {
     setCollapsedGroupIds((prev) => {
       const groupIds =
-        orderedConversationGroups?.map((group) => group.id) ?? [];
+        displayConversationGroups?.map((group) => group.id) ?? [];
       if (groupIds.length === 0) {
         return prev;
       }
@@ -1301,7 +1409,7 @@ export function ConversationPanel({
       }
       return next;
     });
-  }, [orderedConversationGroups]);
+  }, [displayConversationGroups]);
 
   const showConversationHeader = !compact;
 
@@ -1542,10 +1650,10 @@ export function ConversationPanel({
         {!showInitialSkeleton &&
         !compact &&
         organizeMode === "grouped" &&
-        orderedConversationGroups &&
-        orderedConversationGroups.length > 0 ? (
+        displayConversationGroups &&
+        displayConversationGroups.length > 0 ? (
           <ConversationGroupFolderList
-            groups={orderedConversationGroups}
+            groups={displayConversationGroups}
             groupIds={conversationGroupIds}
             groupFolderOrder={groupFolderOrder}
             setGroupFolderOrder={setGroupFolderOrder}
@@ -1557,9 +1665,32 @@ export function ConversationPanel({
             isCreatingConversationFlow={isCreatingConversationFlow}
             activeConversationId={currentConversationId}
             onLaunchFromGroup={launchFromGroup}
-            renderConversationCard={(conversation) =>
-              renderConversationCard(conversation)
-            }
+            renderConversationCard={(conversation) => (
+              <ConversationSubConversationGroup
+                key={conversation.id}
+                conversation={conversation}
+                subConversations={
+                  groupedSubConversationsByParentId.get(conversation.id) ?? []
+                }
+                expanded={expandedSubConversationParentIds.has(conversation.id)}
+                onToggle={() =>
+                  toggleSubConversationParentExpanded(conversation.id)
+                }
+                renderParent={(parent) => renderConversationCard(parent)}
+                renderChild={(child) => (
+                  <SubConversationRow
+                    key={child.id}
+                    conversationId={child.id}
+                    title={getTitle(child.id, child.title).title}
+                    executionStatus={child.execution_status}
+                    sandboxStatus={child.sandbox_status}
+                    lastUpdatedAt={child.updated_at}
+                    isActive={child.id === currentConversationId}
+                    onClose={onClose}
+                  />
+                )}
+              />
+            )}
           />
         ) : null}
 
@@ -1567,9 +1698,32 @@ export function ConversationPanel({
         !compact &&
         organizeMode === "chronological" ? (
           <div className="space-y-0.5">
-            {sortedVisibleConversations.map((conversation) =>
-              renderConversationCard(conversation),
-            )}
+            {nestedVisibleConversations.map((row) => (
+              <ConversationSubConversationGroup
+                key={row.conversation.id}
+                conversation={row.conversation}
+                subConversations={row.children}
+                expanded={expandedSubConversationParentIds.has(
+                  row.conversation.id,
+                )}
+                onToggle={() =>
+                  toggleSubConversationParentExpanded(row.conversation.id)
+                }
+                renderParent={(parent) => renderConversationCard(parent)}
+                renderChild={(child) => (
+                  <SubConversationRow
+                    key={child.id}
+                    conversationId={child.id}
+                    title={getTitle(child.id, child.title).title}
+                    executionStatus={child.execution_status}
+                    sandboxStatus={child.sandbox_status}
+                    lastUpdatedAt={child.updated_at}
+                    isActive={child.id === currentConversationId}
+                    onClose={onClose}
+                  />
+                )}
+              />
+            ))}
           </div>
         ) : null}
 

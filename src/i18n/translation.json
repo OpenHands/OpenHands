@@ -14669,6 +14669,24 @@
     "uk": "видалити всі",
     "id": "hapus semua"
   },
+  "CONVERSATION_PANEL$SUB_CONVERSATIONS": {
+    "en": "Child conversations ({{count}})",
+    "ja": "子会話 ({{count}})",
+    "zh-CN": "子会话 ({{count}})",
+    "zh-TW": "子對話 ({{count}})",
+    "ko-KR": "하위 대화 ({{count}})",
+    "no": "Undersamtaler ({{count}})",
+    "ar": "المحادثات الفرعية ({{count}})",
+    "de": "Untergeordnete Unterhaltungen ({{count}})",
+    "fr": "Conversations enfants ({{count}})",
+    "it": "Conversazioni figlie ({{count}})",
+    "pt": "Conversas filhas ({{count}})",
+    "es": "Conversaciones hijas ({{count}})",
+    "ca": "Converses filles ({{count}})",
+    "tr": "Alt sohbetler ({{count}})",
+    "uk": "Дочірні розмови ({{count}})",
+    "id": "Percakapan anak ({{count}})"
+  },
   "CONVERSATION_PANEL$FILTER_LABEL": {
     "en": "Filter conversations",
     "ja": "会話をフィルター",

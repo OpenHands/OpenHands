@@ -2555,6 +2555,19 @@ describe("AgentServerConversationService", () => {
       expect(result.next_page_id).toBeNull();
     });
 
+    it("preserves the parent conversation link from conversation search", async () => {
+      mockSearchConversations.mockResolvedValue([
+        makeDirectConversation({
+          id: "child-conv",
+          parent_conversation_id: "parent-conv",
+        }),
+      ]);
+
+      const result = await AgentServerConversationService.searchConversations();
+
+      expect(result.items[0]?.parent_conversation_id).toBe("parent-conv");
+    });
+
     it("preserves a string cursor from a paginated conversation search", async () => {
       mockSearchConversations.mockResolvedValue({
         items: [makeDirectConversation({ id: "page-conv" })],

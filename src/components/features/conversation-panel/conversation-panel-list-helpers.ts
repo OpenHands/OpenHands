@@ -425,6 +425,64 @@ export function sortConversationsByField(
   );
 }
 
+/** A top-level conversation row plus the children nested beneath it. */
+export interface NestedConversationRow {
+  conversation: AppConversation;
+  children: AppConversation[];
+}
+
+/**
+ * Builds the parent → children rows for the conversation panel.
+ *
+ * A conversation is nested only when its server-owned
+ * `parent_conversation_id` points at another conversation that is currently
+ * loaded. Orphans (parent on a page that is not loaded yet) stay at the top
+ * level, so pagination never makes a conversation silently disappear. Cycles
+ * are defensive-only — the agent-server creates parents before children — and
+ * fall back to a flat list rather than dropping rows.
+ */
+export function nestSubConversations(
+  conversations: readonly AppConversation[],
+  field: ConversationSortField,
+): NestedConversationRow[] {
+  const loadedIds = new Set(
+    conversations.map((conversation) => conversation.id),
+  );
+  const childrenByParentId = new Map<string, AppConversation[]>();
+  const topLevel: AppConversation[] = [];
+
+  for (const conversation of conversations) {
+    const parentId = conversation.parent_conversation_id ?? null;
+    if (parentId && parentId !== conversation.id && loadedIds.has(parentId)) {
+      const siblings = childrenByParentId.get(parentId);
+      if (siblings) {
+        siblings.push(conversation);
+      } else {
+        childrenByParentId.set(parentId, [conversation]);
+      }
+    } else {
+      topLevel.push(conversation);
+    }
+  }
+
+  // Every row was treated as a child (a malformed cycle). Keep the list
+  // usable instead of rendering an empty panel.
+  if (topLevel.length === 0 && conversations.length > 0) {
+    return conversations.map((conversation) => ({
+      conversation,
+      children: [],
+    }));
+  }
+
+  return topLevel.map((conversation) => ({
+    conversation,
+    children: sortConversationsByField(
+      childrenByParentId.get(conversation.id) ?? [],
+      field,
+    ),
+  }));
+}
+
 function workspaceGroup(conversation: AppConversation): {
   id: string;
   label: string;
