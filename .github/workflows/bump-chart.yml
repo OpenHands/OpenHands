@@ -55,7 +55,7 @@ jobs:
     # secrets: inherit forwards the org secrets RELEASE_APP_ID /
     # RELEASE_APP_PRIVATE_KEY that the reusable workflow needs.
     secrets: inherit
-    uses: OpenHands/OpenHands-Cloud/.github/workflows/bump-image-tag.yml@main
+    uses: OpenHands/OpenHands-Cloud/.github/workflows/bump-image-tag.yml@6b31ba476e81cefe99a6fda8b9b3af95640d1fa4  # SHA pinned 2026-11-21; bump with: gh api repos/OpenHands/OpenHands-Cloud/commits/main --jq .sha
     with:
       component: agent-canvas
       chart_file: charts/openhands/charts/agent-canvas/values.yaml

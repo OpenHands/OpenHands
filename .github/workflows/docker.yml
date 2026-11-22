@@ -560,7 +560,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Update PR description with docker image details
-        uses: nefrob/pr-description@v1.3.0
+        uses: nefrob/pr-description@30859d560129561327a48ec569ec3b6aa62dd2c9  # SHA pinned 2026-11-21 (v1.3.0); bump with: gh api repos/nefrob/pr-description/git/ref/tags/v1.3.0 --jq .object.sha
         with:
           content: ${{ steps.generate_description.outputs.pr_content }}
           regex: "<!-- AGENT_CANVAS_DOCKER_START -->.*?<!-- AGENT_CANVAS_DOCKER_END -->"
