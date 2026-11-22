@@ -1,0 +1,129 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One shared user-message payload builder — design doc</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a; --crit:#a02020;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:4px 0} nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:34px;margin:6px 0 4px;letter-spacing:-.01em}
+  header.title .sub{color:var(--muted);max-width:740px}
+  h2{font-size:22px;margin:44px 0 10px} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  pre{font-family:var(--mono);font-size:13px;background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;border:1px solid var(--rule)}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6} .callout.note{border-color:var(--muted);background:#f3f1ec}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  details{border:1px solid var(--rule);border-radius:6px;margin:12px 0}
+  details>summary{cursor:pointer;padding:8px 12px;color:var(--muted);font-size:13px;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸ "} details[open]>summary::before{content:"▾ "}
+</style></head><body>
+<div class="wrap">
+  <nav class="toc"><h2>Contents</h2><ol>
+    <li><a href="#sec1">Two send paths, one of them dropping attachments</a></li>
+    <li><a href="#sec2">Before → after: payload construction</a></li>
+    <li><a href="#sec3">Scope: transports deliberately stay separate</a></li>
+    <li><a href="#sec4">Evidence and tests</a></li>
+  </ol></nav>
+  <main>
+    <header class="title"><div class="eyebrow">Design doc · PR #19967 · fix/one-send-path</div>
+      <h1>One shared user-message payload builder</h1>
+      <p class="sub">Both send paths now call the same <code>buildUserMessageContent</code> / <code>buildUserMessagePrompt</code> builders, so a retried message carries exactly the payload the original send carried — including <code>file_urls</code>, which the retry path used to drop.</p></header>
+
+    <section id="sec1"><h2><span class="num">1</span>Two send paths, one of them dropping attachments</h2>
+      <p>On <code>main</code> the WebSocket path built its payload in <code>conversation-websocket-context.tsx</code> <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/src/context/conversation-websocket-context.tsx#L1560-L1580">conversation-websocket-context.tsx (before)</a> while the REST path built its own in <code>agent-server-conversation-service.api.ts</code> <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/src/api/conversation-service/agent-server-conversation-service.api.ts#L560-L575">agent-server-conversation-service.api.ts (before)</a>, and only one of them ran the augmentation in <code>send-message-with-attachments.ts</code> <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/src/utils/send-message-with-attachments.ts#L85-L100">send-message-with-attachments.ts (before)</a>. The pending-retry send went out without <code>file_urls</code>.</p>
+      <div class="callout">★ A retried message must be behaviorally identical to the original send — same text, same attachments, augmentation applied exactly once.</div>
+    </section>
+
+    <section id="sec2"><h2><span class="num">2</span>Before → after: payload construction</h2>
+      <figure class="fig">
+        <svg viewBox="0 0 960 400" role="img" aria-labelledby="f1-t f1-d">
+         <title id="f1-t">send path construction - before vs after</title>
+         <desc id="f1-d">Before, two components each built user-message content and only one ran the attachment augmentation, so the retry path dropped file_urls. After, one shared builder serves both paths and augmentation is applied exactly once.</desc>
+         <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--subtle)"/></marker>
+          <marker id="arr-chg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--warn)"/></marker>
+          <style>
+            .existing{fill:var(--code-bg);stroke:var(--subtle);stroke-width:1.4;stroke-dasharray:5 3}
+            .ex-title{font:700 13px var(--sans);fill:var(--muted)} .ex-detail{font:11.5px var(--mono);fill:var(--subtle)}
+            .new{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2}
+            .new-title{font:800 13px var(--sans);fill:var(--accent)} .detail{font:11.5px var(--mono);fill:var(--fg)}
+            .edge{stroke:var(--subtle);stroke-width:1.5;stroke-dasharray:5 3;fill:none}
+            .edge-chg{stroke:var(--warn);stroke-width:1.8;fill:none;stroke-dasharray:5 3}
+            .lbl{font:600 10.5px var(--mono);fill:var(--accent)} .gap{font:700 11.5px var(--mono);fill:var(--warn)}
+            .bad{font:700 11.5px var(--mono);fill:var(--crit)}
+          </style>
+         </defs>
+         <g><!-- BEFORE -->
+          <text class="ex-title" x="480" y="30" text-anchor="middle">BEFORE — two builders, augmentation once</text>
+          <rect class="existing" x="60" y="52" width="260" height="64" rx="6"/>
+          <text class="ex-title" x="190" y="78" text-anchor="middle">WS path (send + retry)</text>
+          <text class="ex-detail" x="190" y="98" text-anchor="middle">conversation-websocket-context.tsx</text>
+          <rect class="existing" x="640" y="52" width="260" height="64" rx="6"/>
+          <text class="ex-title" x="770" y="78" text-anchor="middle">REST path</text>
+          <text class="ex-detail" x="770" y="98" text-anchor="middle">agent-server-conversation-service.api.ts</text>
+          <rect class="existing" x="350" y="150" width="260" height="56" rx="6"/>
+          <text class="ex-title" x="480" y="172" text-anchor="middle">send-message-with-attachments.ts</text>
+          <text class="ex-detail" x="480" y="192" text-anchor="middle">augmentation — wired to ONE path only</text>
+          <path class="edge" d="M320,116 C370,130 400,140 430,150" marker-end="url(#arr)"/>
+          <path class="edge" d="M640,116 C590,130 560,140 530,150" marker-end="url(#arr)"/>
+          <text class="bad" x="480" y="238" text-anchor="middle">retry send arrives without file_urls</text>
+         </g>
+         <g><!-- AFTER -->
+          <text class="new-title" x="480" y="286" text-anchor="middle">AFTER — one builder, applied exactly once</text>
+          <rect class="new" x="60" y="306" width="260" height="56" rx="6"/>
+          <text class="new-title" x="190" y="328" text-anchor="middle">WS path (send + retry)</text>
+          <text class="detail" x="190" y="347" text-anchor="middle">passes raw text</text>
+          <rect class="new" x="640" y="306" width="260" height="56" rx="6"/>
+          <text class="new-title" x="770" y="328" text-anchor="middle">REST path</text>
+          <text class="detail" x="770" y="347" text-anchor="middle">passes raw text</text>
+          <rect x="360" y="308" width="240" height="52" rx="6" fill="url(#subj)" stroke="var(--accent)"/>
+          <text class="new-title" x="480" y="328" text-anchor="middle">buildUserMessageContent()</text>
+          <text class="detail" x="480" y="347" text-anchor="middle">src/utils/send-message-content.ts</text>
+          <path class="edge-chg" d="M320,334 L360,334" marker-end="url(#arr-chg)"/>
+          <path class="edge-chg" d="M640,334 L600,334" marker-end="url(#arr-chg)"/>
+         </g>
+        </svg>
+        <figcaption>Fig 1 · Payload construction moves from two hand-synced sites to one builder both paths call.</figcaption>
+      </figure>
+    </section>
+
+    <section id="sec3"><h2><span class="num">3</span>Scope: transports deliberately stay separate</h2>
+      <p>Per the finding's scope-out, the two transports (WebSocket vs REST conversation service) are untouched — only payload <em>construction</em> is unified. <code>chat-interface</code> now passes raw text; the shared builder applies the prompt augmentation once, so the double-augmentation hazard of the old arrangement is structurally gone.</p>
+    </section>
+
+    <section id="sec4"><h2><span class="num">4</span>Evidence and tests</h2>
+      <ul>
+        <li>Targeted suites (real run committed under <code>.pr/one-send-path/send-path-tests-output.png</code>): <code>send-message-content.test.ts</code> (81 new lines) + <code>send-message.test.tsx</code> — 18/18 passing: payload parity across both paths, single augmentation application, attachment forwarding on retry.</li>
+        <li>Plain-text sends are byte-for-byte unchanged (pinned by the same suites).</li>
+      </ul>
+      <details><summary>Sources</summary>
+        <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/d2272d211/src/utils/send-message-content.ts">send-message-content.ts</a> ·
+        <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/d2272d211/src/utils/send-message-with-attachments.ts">send-message-with-attachments.ts</a> ·
+        <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/src/utils/send-message-with-attachments.ts">send-message-with-attachments.ts (before)</a>
+      </details>
+    </section>
+  </main>
+</div></body></html>
