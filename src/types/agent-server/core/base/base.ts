@@ -4,6 +4,7 @@ import { LAUNCH_CHILD_CONVERSATION_ACTION_KIND } from "#/constants/child-convers
 import { REQUEST_SECRET_ACTION_KIND } from "#/constants/secret-request";
 
 type EventType =
+  | "AskUser"
   | "MCPTool"
   | "Finish"
   | "Think"

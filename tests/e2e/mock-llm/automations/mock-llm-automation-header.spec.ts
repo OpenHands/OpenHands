@@ -44,7 +44,14 @@ for (const language of ["English", "Arabic"]) {
         },
       });
       expect(settings.ok()).toBe(true);
+      const detailResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === "GET" &&
+          new URL(response.url()).pathname ===
+            `/api/automation/v1/${automation.id}`,
+      );
       await page.goto(`/automations/${automation.id}`);
+      expect((await detailResponse).ok()).toBe(true);
       const heading = page.getByRole("heading", {
         name: "QA_Inert_Event_Detail",
         exact: true,
