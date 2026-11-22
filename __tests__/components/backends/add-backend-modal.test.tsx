@@ -10,6 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import { SESSION_KEYS_STORAGE_KEY } from "#/api/backend-registry/session-key-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   NavigationProvider,
@@ -521,16 +522,24 @@ describe("AddBackendModal – connection chooser", () => {
     await user.click(submit);
     await waitFor(() => expect(onClose).toHaveBeenCalled());
 
+    // A remote host's session key is tab-scoped: the persisted record carries
+    // a blanked key and the key itself lives in the session-key store.
     const stored = JSON.parse(
       window.localStorage.getItem("openhands-backends") ?? "[]",
     );
-    expect(
-      stored.find((backend: { name: string }) => backend.name === "Remote GPU"),
-    ).toMatchObject({
+    const added = stored.find(
+      (backend: { name: string }) => backend.name === "Remote GPU",
+    );
+    expect(added).toMatchObject({
       host: "https://agent.example.com",
-      apiKey: "token",
+      apiKey: "",
       kind: "local",
     });
+    expect(
+      JSON.parse(
+        window.sessionStorage.getItem(SESSION_KEYS_STORAGE_KEY) ?? "{}",
+      ),
+    ).toMatchObject({ [added.id]: "token" });
   });
 
   it("saves the backend, switches to it, and closes", async () => {

@@ -11,6 +11,7 @@ import {
 } from "#/api/backend-registry/health-storage";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
 import { __resetHealthStoreForTests } from "#/api/backend-registry/health-store";
+import { SESSION_KEYS_STORAGE_KEY } from "#/api/backend-registry/session-key-store";
 import {
   ActiveBackendProvider,
   useActiveBackendContext,
@@ -795,11 +796,20 @@ describe("ManageBackendsModal", () => {
         expect.arrayContaining([
           expect.objectContaining({
             name: "OpenHands Cloud",
-            apiKey: "fresh-cloud-token",
+            // The device-flow token is tab-scoped: blanked in the persisted
+            // record and mirrored to the session-key store.
+            apiKey: "",
           }),
         ]),
       );
     });
+    expect(
+      Object.values(
+        JSON.parse(
+          window.sessionStorage.getItem(SESSION_KEYS_STORAGE_KEY) ?? "{}",
+        ) as Record<string, string>,
+      ),
+    ).toContain("fresh-cloud-token");
     expect(
       screen.queryByTestId("manage-backends-reconnect-cloud-auth-modal"),
     ).not.toBeInTheDocument();
