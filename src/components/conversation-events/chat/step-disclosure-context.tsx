@@ -6,6 +6,7 @@ import {
   isObservationEvent,
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
+import { usePersistentExpansion } from "#/stores/message-expansion-store";
 
 /**
  * Open/closed state of one chat row, owned by the message list. A running
@@ -39,13 +40,23 @@ export const getStepKey = (event: OpenHandsEvent): string =>
 /**
  * The row's open state: shared through the list when one is provided,
  * otherwise local to the component.
+ *
+ * `persistedKey` names the fallback in `useMessageExpansionStore` for a control
+ * that is not part of a step (a /model listing, whose disclosure would
+ * otherwise be destroyed when virtualization unmounts its row). It only applies
+ * when no shared step state is in scope; without it the fallback stays
+ * component-local, as it is in the plain, non-virtualized list.
  */
 export function useStepDisclosure(
   initiallyOpen: boolean,
+  persistedKey?: string,
 ): [boolean, () => void] {
   const shared = React.useContext(StepDisclosureContext);
-  const [localOpen, setLocalOpen] = React.useState(initiallyOpen);
-  if (!shared) return [localOpen, () => setLocalOpen((prev) => !prev)];
+  const [persistedOpen, togglePersisted] = usePersistentExpansion(
+    shared ? undefined : persistedKey,
+    initiallyOpen,
+  );
+  if (!shared) return [persistedOpen, togglePersisted];
   const open = shared.open ?? initiallyOpen;
   return [open, () => shared.setOpen(!open)];
 }
