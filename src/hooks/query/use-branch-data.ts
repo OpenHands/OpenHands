@@ -11,6 +11,7 @@ export function useBranchData(
   processedSearchInput: string,
   inputValue: string,
   selectedBranch?: Branch | null,
+  gitProviderId?: number | null,
 ) {
   // Fetch branches with pagination
   const {
@@ -20,7 +21,7 @@ export function useBranchData(
     isLoading,
     isFetchingNextPage,
     isError,
-  } = useRepositoryBranchesPaginated(repository, 30, provider);
+  } = useRepositoryBranchesPaginated(repository, 30, provider, gitProviderId);
 
   // Search branches when user types
   const { data: searchData, isLoading: isSearchLoading } = useSearchBranches(
@@ -28,6 +29,7 @@ export function useBranchData(
     processedSearchInput,
     30,
     provider,
+    gitProviderId,
   );
 
   // Combine all branches from paginated data - use .items for V1 response
@@ -61,6 +63,7 @@ export function useBranchData(
       shouldSearchDefaultBranch ? defaultBranch : "",
       30,
       provider,
+      gitProviderId,
     );
 
   // Get branches to display with default branch prioritized

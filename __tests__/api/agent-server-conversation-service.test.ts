@@ -1974,6 +1974,101 @@ describe("AgentServerConversationService", () => {
       });
     });
 
+    describe("git provider connection", () => {
+      const startedTask = {
+        id: "task-git",
+        status: "WORKING",
+        app_conversation_id: null,
+        agent_server_url: null,
+        request: {},
+        created_at: "2024-01-01",
+        updated_at: "2024-01-01",
+      };
+
+      it("names the connection the repository was picked from in the start request", async () => {
+        const requests = captureRequests(["post"], startedTask);
+
+        await AgentServerConversationService.createConversation({
+          metadata: {
+            selected_repository: "team/app",
+            selected_branch: "main",
+            git_provider: "gitlab",
+            git_provider_id: 9,
+          },
+        });
+
+        expect(requests[0].body).toMatchObject({
+          selected_repository: "team/app",
+          git_provider: "gitlab",
+          git_provider_id: 9,
+        });
+      });
+
+      it("leaves git_provider_id out of the start request when no connection was picked", async () => {
+        const requests = captureRequests(["post"], startedTask);
+
+        await AgentServerConversationService.createConversation({
+          metadata: {
+            selected_repository: "team/app",
+            selected_branch: "main",
+            git_provider: "gitlab",
+            git_provider_id: null,
+          },
+        });
+
+        expect(requests[0].body).not.toHaveProperty("git_provider_id");
+      });
+
+      it("saves the connection with a connected repository", async () => {
+        const requests = captureRequests(
+          ["patch", "get"],
+          [{ id: "conv-cloud-1" }],
+        );
+
+        await AgentServerConversationService.updateConversationRepository(
+          "conv-cloud-1",
+          "team/app",
+          "main",
+          "gitlab",
+          9,
+        );
+
+        expect(
+          requests.find((request) => request.method === "PATCH")?.body,
+        ).toEqual({
+          selected_repository: "team/app",
+          selected_branch: "main",
+          git_provider: "gitlab",
+          git_provider_id: 9,
+        });
+      });
+
+      it("keeps the connection on the stored selection and replaces it with the next repository", async () => {
+        captureRequests(["patch", "get"], [{ id: "conv-cloud-1" }]);
+
+        await AgentServerConversationService.updateConversationRepository(
+          "conv-cloud-1",
+          "team/app",
+          "main",
+          "gitlab",
+          9,
+        );
+        expect(
+          getStoredConversationMetadata("conv-cloud-1")?.git_provider_id,
+        ).toBe(9);
+
+        await AgentServerConversationService.updateConversationRepository(
+          "conv-cloud-1",
+          "OpenHands/agent-canvas",
+          "main",
+          "github",
+        );
+        expect(getStoredConversationMetadata("conv-cloud-1")).not.toHaveProperty(
+          "git_provider_id",
+        );
+      });
+    });
+
     it("leaves an ordinary cloud conversation's system message alone", async () => {
       const requests = captureRequests(["post"], {
         id: "task-chat",
