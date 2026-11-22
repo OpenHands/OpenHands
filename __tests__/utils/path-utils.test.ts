@@ -71,6 +71,15 @@ describe("toFilesTabPath", () => {
     expect(toFilesTabPath("src/a.ts:12-40", "/workspace/project")).toBe(
       "src/a.ts",
     );
+    expect(toFilesTabPath("src/a.ts:25:10", "/workspace/project")).toBe(
+      "src/a.ts",
+    );
+    expect(
+      toFilesTabPath(
+        "/workspace/project/src/a.ts:25:10",
+        "/workspace/project",
+      ),
+    ).toBe("src/a.ts");
   });
 });
 
@@ -79,6 +88,7 @@ describe("looksLikeWorkspaceFilePath", () => {
     expect(looksLikeWorkspaceFilePath("test.md")).toBe(true);
     expect(looksLikeWorkspaceFilePath("src/app.ts")).toBe(true);
     expect(looksLikeWorkspaceFilePath("docs/guide.md:12")).toBe(true);
+    expect(looksLikeWorkspaceFilePath("src/app.ts:25:10")).toBe(true);
   });
 
   it("rejects non-path dotted tokens, versions, MIME types, and URLs", () => {
