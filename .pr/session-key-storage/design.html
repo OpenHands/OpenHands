@@ -1,0 +1,152 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session keys scoped to the tab — design doc</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a; --crit:#a02020;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:4px 0}
+  nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:34px;margin:6px 0 4px;letter-spacing:-.01em}
+  header.title .sub{color:var(--muted);max-width:740px}
+  h2{font-size:22px;margin:44px 0 10px} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  h3{font-size:16px;margin:22px 0 8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  pre{font-family:var(--mono);font-size:13px;background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;border:1px solid var(--rule)}
+  pre code{background:transparent;padding:0}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6} .callout.note{border-color:var(--muted);background:#f3f1ec}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  details{border:1px solid var(--rule);border-radius:6px;margin:12px 0}
+  details>summary{cursor:pointer;padding:8px 12px;color:var(--muted);font-size:13px;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸ "} details[open]>summary::before{content:"▾ "}
+</style></head><body>
+<div class="wrap">
+  <nav class="toc"><h2>Contents</h2><ol>
+    <li><a href="#sec1">Why the durable key copy had to go</a></li>
+    <li><a href="#sec2">Before → after: where the key lives</a></li>
+    <li><a href="#sec3">The policy owner: session-key-store.ts</a></li>
+    <li><a href="#sec4">Compatibility and trade-offs</a></li>
+    <li><a href="#sec5">Evidence and tests</a></li>
+  </ol></nav>
+  <main>
+    <header class="title"><div class="eyebrow">Design doc · PR #19965 · fix/session-key-storage</div>
+      <h1>Session keys scoped to the tab</h1>
+      <p class="sub">Backend records keep their shape, but the <em>durable</em> copy of remote session keys and cloud tokens is gone: the persisted registry record is written blanked, and the real key is mirrored to tab-scoped <code>sessionStorage</code>. A reload re-hydrates; a fresh tab re-prompts.</p></header>
+
+    <section id="sec1"><h2><span class="num">1</span>Why the durable key copy had to go</h2>
+      <p><code>src/api/backend-registry/storage.ts</code> was the single read/write boundary for backend records, and it wrote whatever it was given — including <code>apiKey</code> — straight to <code>localStorage</code> under <code>openhands-backends</code> <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/src/api/backend-registry/storage.ts#L95-L118">storage.ts:95-118 (before)</a>. <code>localStorage</code> is durable, on-disk, and shared across tabs of the same origin, so a remote agent-server session key or a Cloud device-flow token outlived the tab it was entered in.</p>
+      <div class="callout">★ The fix removes the <strong>durable, cross-tab, on-disk plaintext copy</strong> — not the key from the running session. The tab keeps working; a new tab asks again.</div>
+      <div class="callout warn">⚠ This does <strong>not</strong> defend against script running on the canvas origin, which can read any key the page itself uses. That boundary is documented in the module (<a class="src" href="https://github.com/tahabehzad/OpenHands/blob/fa2ee3dd5/src/api/backend-registry/session-key-store.ts#L1-L40">session-key-store.ts threat-model note</a>).</div>
+    </section>
+
+    <section id="sec2"><h2><span class="num">2</span>Before → after: where the key lives</h2>
+      <figure class="fig">
+        <svg viewBox="0 0 960 430" role="img" aria-labelledby="f1-t f1-d">
+         <title id="f1-t">persistence path - before vs after</title>
+         <desc id="f1-d">Before, the whole backend record including the plaintext key was written to localStorage. After, the key is mirrored to sessionStorage and the persisted record is written blanked; reads re-hydrate and migrate legacy records.</desc>
+         <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--subtle)"/></marker>
+          <marker id="arr-chg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--warn)"/></marker>
+          <linearGradient id="subj" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".10"/><stop offset="1" stop-color="var(--accent)" stop-opacity=".02"/></linearGradient>
+          <style>
+            .existing{fill:var(--code-bg);stroke:var(--subtle);stroke-width:1.4;stroke-dasharray:5 3}
+            .ex-title{font:700 13px var(--sans);fill:var(--muted)} .ex-detail{font:11.5px var(--mono);fill:var(--subtle)}
+            .new{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2}
+            .new-title{font:800 13px var(--sans);fill:var(--accent)} .detail{font:11.5px var(--mono);fill:var(--fg)}
+            .edge{stroke:var(--subtle);stroke-width:1.5;stroke-dasharray:5 3;fill:none}
+            .edge-chg{stroke:var(--warn);stroke-width:1.8;fill:none;stroke-dasharray:5 3}
+            .lbl{font:600 10.5px var(--mono);fill:var(--accent)} .gap{font:700 11.5px var(--mono);fill:var(--warn)}
+          </style>
+         </defs>
+         <g><!-- BEFORE column -->
+          <text class="ex-title" x="240" y="34" text-anchor="middle">BEFORE — key rides in the record</text>
+          <rect class="existing" x="90" y="56" width="300" height="66" rx="6"/>
+          <text class="ex-title" x="240" y="84" text-anchor="middle">upsertBackend(record)</text>
+          <text class="ex-detail" x="240" y="104" text-anchor="middle">record { apiKey: "sk-…" } verbatim</text>
+          <path class="edge" d="M240,122 L240,176" marker-end="url(#arr)"/>
+          <rect class="existing" x="90" y="180" width="300" height="80" rx="6"/>
+          <text class="ex-title" x="240" y="210" text-anchor="middle">localStorage["openhands-backends"]</text>
+          <text class="ex-detail" x="240" y="232" text-anchor="middle">apiKey: "sk-…" · durable · cross-tab · on disk</text>
+          <text class="ex-detail" x="240" y="250" text-anchor="middle">survives browser restart — the finding</text>
+         </g>
+         <g><!-- AFTER column -->
+          <text class="new-title" x="700" y="34" text-anchor="middle">AFTER — key mirrored, record blanked</text>
+          <rect x="560" y="52" width="280" height="72" rx="6" fill="url(#subj)" stroke="var(--accent)"/>
+          <text class="new-title" x="700" y="80" text-anchor="middle">writeStoredBackends(record)</text>
+          <text class="detail" x="700" y="100" text-anchor="middle">storage.ts:98 — syncSessionApiKeys then write</text>
+          <path class="edge-chg" d="M640,124 L640,196" marker-end="url(#arr-chg)"/>
+          <rect class="new" x="470" y="200" width="200" height="76" rx="6"/>
+          <text class="new-title" x="570" y="228" text-anchor="middle">sessionStorage</text>
+          <text class="detail" x="570" y="248" text-anchor="middle">openhands-session-keys</text>
+          <text class="detail" x="570" y="265" text-anchor="middle">{"&lt;backendId&gt;": "sk-…"} · tab-scoped</text>
+          <path class="edge-chg" d="M760,124 L760,196" marker-end="url(#arr-chg)"/>
+          <rect class="new" x="660" y="200" width="200" height="76" rx="6"/>
+          <text class="new-title" x="760" y="228" text-anchor="middle">localStorage record</text>
+          <text class="detail" x="760" y="248" text-anchor="middle">apiKey: "" — shape unchanged</text>
+          <text class="detail" x="760" y="265" text-anchor="middle">nothing durable to steal</text>
+          <path class="edge" d="M570,276 C570,320 660,320 742,282" marker-end="url(#arr)"/>
+          <rect x="600" y="318" width="230" height="18" rx="5" fill="var(--elevated)" stroke="var(--rule)"/>
+          <text class="lbl" x="715" y="331" text-anchor="middle">readStoredBackends re-hydrates; legacy records migrate on read</text>
+         </g>
+        </svg>
+        <figcaption>Fig 1 · The secret leaves the durable store; the record keeps its shape so nothing downstream breaks.</figcaption>
+      </figure>
+    </section>
+
+    <section id="sec3"><h2><span class="num">3</span>The policy owner: session-key-store.ts</h2>
+      <p>One new module owns every decision (<a class="src" href="https://github.com/tahabehzad/OpenHands/blob/fa2ee3dd5/src/api/backend-registry/session-key-store.ts">src/api/backend-registry/session-key-store.ts</a>); <code>storage.ts</code> stays the single read/write boundary and calls into it <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/fa2ee3dd5/src/api/backend-registry/storage.ts#L3-L12">storage.ts imports</a>.</p>
+      <table>
+        <tr><th>Symbol</th><th>Decision it owns</th></tr>
+        <tr><td><code>shouldPersistApiKeyInRecord</code></td><td>Which keys may stay plaintext in the record: loopback locals and MARS guest records (the guest key is a public bundled constant). Everything else is governed.</td></tr>
+        <tr><td><code>syncSessionApiKeys</code></td><td>Mirrors real keys into <code>sessionStorage["openhands-session-keys"]</code> keyed by backend id before the record is written blanked.</td></tr>
+        <tr><td><code>readSessionApiKey</code></td><td>Re-hydrates the in-memory key for the tab on read; empty for a fresh tab.</td></tr>
+        <tr><td><code>isLoopbackUrl</code></td><td>Moved here from <code>storage.ts</code> (was <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/src/api/backend-registry/storage.ts#L42-L50">storage.ts:42-50 before</a>) so the policy and its predicate live together.</td></tr>
+      </table>
+      <p>Legacy migration happens in one pass inside <code>readStoredBackends</code> <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/fa2ee3dd5/src/api/backend-registry/storage.ts#L118-L150">storage.ts:118-150</a>: plaintext key → mirror, record rewritten blanked, all fields preserved.</p>
+    </section>
+
+    <section id="sec4"><h2><span class="num">4</span>Compatibility and trade-offs</h2>
+      <ul>
+        <li><strong>Record shape unchanged</strong> — <code>apiKey</code> stays a required string; validation and existing fixtures untouched.</li>
+        <li><strong>Fresh tab re-prompts</strong> — the existing <code>ApiKeyEntryScreen</code> / health "needs attention" flows already handle an empty key; they now get a real reason to fire. Intentional per the issue acceptance.</li>
+        <li><strong>Loopback/MARS-guest unchanged</strong> — local dev and the guest key keep working exactly as before.</li>
+        <li><strong>Cookie-auth cloud records unchanged</strong> — they never carried a secret.</li>
+      </ul>
+    </section>
+
+    <section id="sec5"><h2><span class="num">5</span>Evidence and tests</h2>
+      <ul>
+        <li>Real-app before/after captures (mock dev servers, identical scenario): committed under <code>.pr/session-key-storage/</code> — plaintext record on <code>main</code>, blanked record + mirror on this branch.</li>
+        <li>Policy suite + storage migration/tab-scoping/blank-surfacing: 33/33; backend-registry + active-backend-context + component suites: 221/221.</li>
+      </ul>
+      <details><summary>Sources</summary>
+        <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/fa2ee3dd5/src/api/backend-registry/session-key-store.ts">session-key-store.ts</a> ·
+        <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/fa2ee3dd5/src/api/backend-registry/storage.ts">storage.ts</a> ·
+        <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/src/api/backend-registry/storage.ts">storage.ts (before)</a>
+      </details>
+    </section>
+  </main>
+</div></body></html>
