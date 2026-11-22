@@ -1,4 +1,9 @@
-import { createServer, request, type Server } from "node:http";
+import {
+  createServer,
+  request,
+  type IncomingMessage,
+  type Server,
+} from "node:http";
 import {
   mkdirSync,
   mkdtempSync,
@@ -8,6 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { WebSocket, WebSocketServer } from "ws";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -792,7 +798,9 @@ describe("static-server.mjs", () => {
 
       try {
         const server = await startStaticServer({
-          ...parseArgs(["--host", "0.0.0.0"], { SESSION_API_KEY: "lan-secret" }),
+          ...parseArgs(["--host", "0.0.0.0"], {
+            SESSION_API_KEY: "lan-secret",
+          }),
           port: 0,
           dir: buildDir,
         });
@@ -1085,6 +1093,140 @@ describe("static-server.mjs", () => {
     expect(response.body).toContain("Bad Gateway");
     expect(response.body).toContain("Invalid URL");
     expect(server.listening).toBe(true);
+  });
+
+  describe("editor route origin forwarding", () => {
+    // Mirrors the two checks an upgrade meets upstream: code_server_proxy.cjs
+    // compares Origin to X-Forwarded-Host || Host, then code-server appends
+    // X-Forwarded-Port when that host carries none.
+    function rejectedStatus(req: IncomingMessage): number {
+      const origin = req.headers.origin;
+      if (!origin) return 0;
+      const originUrl = new URL(origin);
+      const forwardedHost = String(
+        req.headers["x-forwarded-host"] ?? req.headers.host ?? "",
+      )
+        .split(",")[0]
+        .trim();
+      if (originUrl.host !== forwardedHost) return 401;
+      const forwardedPort = String(req.headers["x-forwarded-port"] ?? "")
+        .split(",")[0]
+        .trim();
+      const hasPort = new URL(`host://${forwardedHost}`).port !== "";
+      const host =
+        !hasPort && forwardedPort
+          ? `${forwardedHost}:${forwardedPort}`
+          : forwardedHost;
+      const parsed = new URL(`host://${host}`);
+      const defaultPort = originUrl.protocol === "https:" ? "443" : "80";
+      const port = parsed.port === defaultPort ? "" : parsed.port;
+      return parsed.hostname === originUrl.hostname && port === originUrl.port
+        ? 0
+        : 403;
+    }
+
+    async function startEditor() {
+      const seen: IncomingMessage[] = [];
+      const editor = new WebSocketServer({ noServer: true });
+      const upstream = createServer((req, res) => {
+        seen.push(req);
+        const status = rejectedStatus(req);
+        res.writeHead(status || 200, { "content-type": "text/plain" });
+        res.end(status ? "" : "ok");
+      });
+      upstream.on("upgrade", (req, socket, head) => {
+        seen.push(req);
+        const status = rejectedStatus(req);
+        if (status) {
+          socket.end(
+            `HTTP/1.1 ${status} Rejected\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`,
+          );
+          return;
+        }
+        editor.handleUpgrade(req, socket, head, (client) => {
+          client.on("message", (data) => client.send(data));
+        });
+      });
+      return { url: await startHttpServer(upstream), seen };
+    }
+
+    function startCanvas(routes: Record<string, string>) {
+      const dir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(dir);
+      writeFileSync(path.join(dir, "index.html"), "<html></html>");
+      return startServer(dir, { routes });
+    }
+
+    function upgrade(
+      url: string,
+      headers: Record<string, string>,
+    ): Promise<{ opened?: boolean; status?: number; error?: string }> {
+      return new Promise((resolve) => {
+        const client = new WebSocket(url, { headers });
+        client.on("open", () => {
+          client.close();
+          resolve({ opened: true });
+        });
+        client.on("unexpected-response", (_request, response) => {
+          response.resume();
+          resolve({ status: response.statusCode });
+        });
+        client.on("error", (err) => resolve({ error: err.message }));
+        client.on("error", () => {});
+      });
+    }
+
+    it("forwards the browser Origin so the editor accepts the upgrade", async () => {
+      const editor = await startEditor();
+      const origin = await startCanvas({ "/vscode": editor.url });
+      const result = await upgrade(
+        `${origin.replace("http", "ws")}/vscode/?reconnectionToken=t`,
+        { origin },
+      );
+
+      expect(result).toEqual({ opened: true });
+      const request = editor.seen.find((req) => req.headers.upgrade);
+      expect(new URL(origin).host).toBe(request?.headers["x-forwarded-host"]);
+    });
+
+    it("still rejects an upgrade from another origin", async () => {
+      const editor = await startEditor();
+      const origin = await startCanvas({ "/vscode": editor.url });
+      const result = await upgrade(
+        `${origin.replace("http", "ws")}/vscode/?reconnectionToken=t`,
+        { origin: "http://evil.example" },
+      );
+
+      expect(result.status).toBe(401);
+    });
+
+    it("uses the client-facing port behind a TLS reverse proxy", async () => {
+      const editor = await startEditor();
+      const origin = await startCanvas({ "/vscode": editor.url });
+      const result = await upgrade(
+        `${origin.replace("http", "ws")}/vscode/?reconnectionToken=t`,
+        {
+          origin: "https://canvas.example.com",
+          host: "canvas.example.com",
+          "x-forwarded-host": "canvas.example.com",
+          "x-forwarded-proto": "https",
+        },
+      );
+
+      expect(result).toEqual({ opened: true });
+      expect(editor.seen.some((req) => req.headers.upgrade)).toBe(true);
+      expect(editor.seen.at(-1)?.headers["x-forwarded-port"]).toBe("443");
+    });
+
+    it("keeps HTTP requests on the editor route working", async () => {
+      const editor = await startEditor();
+      const origin = await startCanvas({ "/vscode": editor.url });
+      const response = await fetch(`${origin}/vscode/ping`, {
+        headers: { origin },
+      });
+
+      expect(response.status).toBe(200);
+    });
   });
 });
 

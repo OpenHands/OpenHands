@@ -38,6 +38,35 @@ export function isBenignSocketError(err) {
   return Boolean(err && BENIGN_SOCKET_ERRORS.has(err.code));
 }
 
+function firstForwardedValue(value) {
+  return value?.split(",")[0].trim();
+}
+
+// changeOrigin rewrites Host, and httpxy's upgrade path adds no X-Forwarded-Host.
+// The editor proxy and code-server compare Origin against the client-facing
+// host, so forward it with the browser-visible port: code-server appends
+// X-Forwarded-Port when X-Forwarded-Host carries none.
+function forwardClientOrigin(req) {
+  const host =
+    firstForwardedValue(req.headers["x-forwarded-host"]) || req.headers.host;
+  if (!host) return;
+  const proto =
+    firstForwardedValue(req.headers["x-forwarded-proto"]) ||
+    (req.socket.encrypted ? "https" : "http");
+  let hasPort = false;
+  try {
+    hasPort = new URL(`http://${host}`).port !== "";
+  } catch {
+    // Malformed Host: forward it untouched and let the upstream reject it.
+    return;
+  }
+  req.headers["x-forwarded-host"] = host;
+  req.headers["x-forwarded-proto"] = proto;
+  if (!hasPort) {
+    req.headers["x-forwarded-port"] = proto === "https" ? "443" : "80";
+  }
+}
+
 function parseBackendUrl(backendUrl) {
   const url = new URL(backendUrl);
   if (url.protocol !== "http:" && url.protocol !== "https:") {
@@ -337,6 +366,7 @@ export function createProxyHandlers({
    *   rewriteJsonResponse).
    */
   function proxyHttp(req, res, target, { headers, onResponse } = {}) {
+    forwardClientOrigin(req);
     metrics.activeHttpRequests += 1;
     metrics.totalHttpRequests += 1;
     const finish = once(() => {
@@ -375,6 +405,7 @@ export function createProxyHandlers({
   }
 
   function proxyWebSocket(req, socket, head, target) {
+    forwardClientOrigin(req);
     metrics.activeWebSockets += 1;
     metrics.totalWebSockets += 1;
     const finish = once(() => {
