@@ -7,9 +7,13 @@
  * agent-server and automation backend Python packages.
  *
  * Usage:
- *   node scripts/download-uv.mjs          # uses latest GitHub release
+ *   node scripts/download-uv.mjs          # uses the pinned UV_BUNDLE_VERSION
  *   UV_VERSION=0.7.0 node scripts/download-uv.mjs
  *   ELECTRON_ARCH=universal node scripts/download-uv.mjs   # macOS only
+ *
+ * Every download is verified against the release's published .sha256 asset
+ * before extraction (see scripts/download-integrity.mjs) — a mismatch or a
+ * missing checksum entry aborts the build, including UV_VERSION overrides.
  *
  * Output (per platform):
  *   resources/bin/uv    + resources/bin/uvx     (macOS / Linux)
@@ -34,6 +38,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { resolveDownloadArches, resourceDirName } from "./download-arch-utils.mjs";
+import { verifyChecksum } from "./download-integrity.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..");
@@ -77,45 +82,19 @@ export function getPlatformSpec(arch = ARCH, platform = PLATFORM) {
 
 // ── Version resolution ────────────────────────────────────────────────────────
 
-async function resolveVersion() {
-  if (process.env.UV_VERSION) {
-    return process.env.UV_VERSION.replace(/^v/, "");
-  }
+// Keep the bundled uv pinned for reproducible, tamper-evident builds — same
+// convention as NODE_BUNDLE_VERSION in download-node.mjs. The pin follows
+// the repository's dependency release-age policy (0.13.8 was >= 7 days old
+// when pinned, 2026-11-22). Override at build time with UV_VERSION=… to
+// test another release; the override is checksum-verified like the default.
+const UV_BUNDLE_VERSION = "0.13.8";
 
-  console.log("[download-uv] Fetching latest uv version from GitHub API...");
-  const headers = { "User-Agent": "agent-canvas-build" };
-  // Unauthenticated api.github.com calls are rate-limited per IP (60/hour) —
-  // shared CI runner IPs exhaust that fast. CI passes GITHUB_TOKEN.
-  if (process.env.GITHUB_TOKEN) {
-    headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
-  }
-  const data = await fetchJson(
-    "https://api.github.com/repos/astral-sh/uv/releases/latest",
-    headers
-  );
-  const version = data.tag_name?.replace(/^v/, "");
-  if (!version) throw new Error("Could not parse uv version from GitHub API");
-  return version;
+function resolveVersion() {
+  const requested = process.env.UV_VERSION?.replace(/^v/, "");
+  return requested || UV_BUNDLE_VERSION;
 }
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
-
-function fetchJson(url, headers = {}) {
-  return new Promise((resolve, reject) => {
-    get(url, { headers }, (res) => {
-      if (res.statusCode === 301 || res.statusCode === 302) {
-        return resolve(fetchJson(res.headers.location, headers));
-      }
-      if (res.statusCode !== 200) {
-        return reject(new Error(`GET ${url} → HTTP ${res.statusCode}`));
-      }
-      let body = "";
-      res.on("data", (chunk) => (body += chunk));
-      res.on("end", () => resolve(JSON.parse(body)));
-      res.on("error", reject);
-    }).on("error", reject);
-  });
-}
 
 function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
@@ -142,6 +121,27 @@ function downloadFile(url, dest) {
   });
 }
 
+/** GET a small text resource (the release's .sha256 asset), following redirects. */
+function downloadText(url) {
+  return new Promise((resolve, reject) => {
+    function doGet(u) {
+      get(u, { headers: { "User-Agent": "agent-canvas-build" } }, (res) => {
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          return doGet(res.headers.location);
+        }
+        if (res.statusCode !== 200) {
+          return reject(new Error(`GET ${u} → HTTP ${res.statusCode}`));
+        }
+        let body = "";
+        res.on("data", (chunk) => (body += chunk));
+        res.on("end", () => resolve(body));
+        res.on("error", reject);
+      }).on("error", reject);
+    }
+    doGet(url);
+  });
+}
+
 // ── Extraction ────────────────────────────────────────────────────────────────
 
 function extract(archivePath, targetDir, ext) {
@@ -162,9 +162,9 @@ function extract(archivePath, targetDir, ext) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  // Resolve the version once (one GitHub API call / one UV_VERSION read)
-  // so every arch in a universal build downloads the exact same release.
-  const version = await resolveVersion();
+  // Resolve the version once (one UV_BUNDLE_VERSION / UV_VERSION read) so
+  // every arch in a universal build downloads the exact same release.
+  const version = resolveVersion();
   const arches = resolveDownloadArches();
   const multi = arches.length > 1;
   if (multi) {
@@ -193,6 +193,19 @@ async function main() {
 
       console.log(`[download-uv] URL: ${url}`);
       await downloadFile(url, tmpFile);
+
+      // Verify against the release's published .sha256 asset before touching
+      // the archive — a mismatched or missing entry aborts the build.
+      const checksumUrl = `${url}.sha256`;
+      console.log(`[download-uv] Verifying against ${checksumUrl}`);
+      verifyChecksum(
+        tmpFile,
+        filename,
+        await downloadText(checksumUrl),
+        `uv release asset ${checksumUrl}`,
+      );
+      console.log(`[download-uv] ✓ checksum verified`);
+
       console.log(`[download-uv] Extracting to ${outDir}...`);
       extract(tmpFile, extractDir, spec.ext);
 
