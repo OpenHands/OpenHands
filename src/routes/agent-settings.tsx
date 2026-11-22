@@ -1145,6 +1145,7 @@ export function AgentSettingsScreen({
     });
 
   const isSaving = acpCredentialForm.isSaving;
+  const systemPromptLabel = t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT);
 
   return (
     <div
@@ -1192,12 +1193,13 @@ export function AgentSettingsScreen({
       {!isAcp && instructionsSupported ? (
         <div className="flex flex-col gap-2.5">
           <Typography.Text className="text-sm">
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT)}
+            {systemPromptLabel}
           </Typography.Text>
           <SettingsDropdownInput
             testId="agent-settings-system-prompt-mode"
             name="agent-system-prompt-mode"
             label=""
+            ariaLabel={systemPromptLabel}
             items={[
               {
                 key: "standard",
@@ -1221,7 +1223,7 @@ export function AgentSettingsScreen({
           {systemPromptMode !== "standard" ? (
             <textarea
               data-testid="agent-settings-system-prompt"
-              aria-label={t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT)}
+              aria-label={systemPromptLabel}
               className={cn(
                 formControlMultilineFieldClassName,
                 "min-h-48 font-mono placeholder:italic",
