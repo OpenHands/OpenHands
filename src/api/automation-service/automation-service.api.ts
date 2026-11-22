@@ -185,6 +185,16 @@ type AutomationSdkVersionResponse =
       version?: unknown;
     };
 
+type AutomationServerInfoResponse = {
+  package_version?: unknown;
+  sdk_version?: unknown;
+};
+
+export interface AutomationVersionInfo {
+  packageVersion: string | null;
+  sdkVersion: string | null;
+}
+
 // Local automation calls go to the automation sidecar that
 // `scripts/dev-with-automation.mjs` mounts behind the local agent-server.
 // Both backends use the same session API key and the same `X-Session-API-Key`
@@ -237,7 +247,7 @@ localAutomationAxios.interceptors.request.use(async (config) => {
 function normalizeAutomationSdkVersion(version: unknown): string | null {
   if (typeof version !== "string") return null;
   const trimmed = version.trim();
-  return trimmed || null;
+  return trimmed && trimmed.toLowerCase() !== "unknown" ? trimmed : null;
 }
 
 function getAutomationSdkVersionFromResponse(
@@ -510,6 +520,41 @@ class AutomationService {
       }
 
       return getAutomationSdkVersionFromResponse(response);
+    } catch {
+      return null;
+    }
+  }
+
+  static async getVersionInfo(
+    active: ResolvedActiveBackend = getActiveBackend(),
+  ): Promise<AutomationVersionInfo | null> {
+    const path = `${AUTOMATION_BASE_PATH}/server_info`;
+
+    try {
+      let response: AutomationServerInfoResponse;
+      if (active.backend.kind === "cloud") {
+        response = await callCloudProxy<AutomationServerInfoResponse>({
+          backend: active.backend,
+          method: "GET",
+          path,
+          headers: await buildPinnedCloudHeaders(active),
+          timeoutSeconds: 5,
+        });
+      } else {
+        const { data } =
+          await localAutomationAxios.get<AutomationServerInfoResponse>(path, {
+            timeout: 5000,
+          });
+        response = data;
+      }
+
+      const versionInfo = {
+        packageVersion: normalizeAutomationSdkVersion(response.package_version),
+        sdkVersion: normalizeAutomationSdkVersion(response.sdk_version),
+      };
+      return versionInfo.packageVersion || versionInfo.sdkVersion
+        ? versionInfo
+        : null;
     } catch {
       return null;
     }

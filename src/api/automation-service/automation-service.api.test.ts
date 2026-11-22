@@ -140,6 +140,72 @@ describe("AutomationService.getSdkVersion", () => {
   });
 });
 
+describe("AutomationService.getVersionInfo", () => {
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("returns the running automation and SDK package versions locally", async () => {
+    localAxios.get.mockResolvedValueOnce({
+      data: { package_version: "1.32.1", sdk_version: "1.62.0" },
+    });
+
+    await expect(AutomationService.getVersionInfo()).resolves.toEqual({
+      packageVersion: "1.32.1",
+      sdkVersion: "1.62.0",
+    });
+
+    expect(localAxios.get).toHaveBeenCalledWith("/api/automation/server_info", {
+      timeout: 5000,
+    });
+  });
+
+  it("fetches Cloud automation versions through the scoped Cloud API", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    callCloudProxy.mockResolvedValueOnce({
+      package_version: "1.33.0",
+      sdk_version: "1.62.0",
+    });
+
+    await expect(AutomationService.getVersionInfo()).resolves.toEqual({
+      packageVersion: "1.33.0",
+      sdkVersion: "1.62.0",
+    });
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/automation/server_info",
+        headers: expect.objectContaining({ "X-Org-Id": "org-1" }),
+        timeoutSeconds: 5,
+      }),
+    );
+  });
+
+  it("returns null when the server-info endpoint is unavailable", async () => {
+    localAxios.get.mockRejectedValueOnce(new Error("not running"));
+
+    await expect(AutomationService.getVersionInfo()).resolves.toBeNull();
+  });
+
+  it("does not report unknown version sentinels as installed packages", async () => {
+    localAxios.get.mockResolvedValueOnce({
+      data: { package_version: "unknown", sdk_version: "unknown" },
+    });
+
+    await expect(AutomationService.getVersionInfo()).resolves.toBeNull();
+  });
+});
+
 describe("AutomationService.syncTelemetryConsent", () => {
   beforeEach(() => {
     setRegisteredBackends([localBackend]);

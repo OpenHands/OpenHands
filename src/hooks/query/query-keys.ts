@@ -138,6 +138,39 @@ export const APP_UPDATE_QUERY_KEYS = {
   latestVersion: ["agent-canvas-latest-version"] as const,
 } as const;
 
+export const RUNNING_VERSIONS_QUERY_KEYS = {
+  forBackend: (
+    backendId: string,
+    kind: string,
+    host: string,
+    orgId: string | null,
+    connectionRevision: number,
+  ) =>
+    [
+      "running-versions",
+      backendId,
+      kind,
+      host,
+      orgId,
+      connectionRevision,
+    ] as const,
+  forAutomation: (
+    backendId: string,
+    kind: string,
+    host: string,
+    orgId: string | null,
+    connectionRevision: number,
+  ) =>
+    [
+      "running-automation-versions",
+      backendId,
+      kind,
+      host,
+      orgId,
+      connectionRevision,
+    ] as const,
+} as const;
+
 export const DEFAULT_CONVERSATION_PAGE_SIZE = 20;
 
 export const CONVERSATION_QUERY_KEYS = {

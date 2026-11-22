@@ -4,6 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AppSettingsScreen from "#/routes/app-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import AutomationService from "#/api/automation-service/automation-service.api";
+import RunningVersionsService from "#/api/running-versions-service";
+import { AGENT_CANVAS_CLIENT_VERSION } from "#/api/client-source";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { Settings } from "#/types/settings";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
@@ -24,7 +27,13 @@ const activeBackendState = vi.hoisted(() => ({
 
 vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => ({
-    backend: { id: activeBackendState.id, kind: activeBackendState.kind },
+    backend: {
+      id: activeBackendState.id,
+      kind: activeBackendState.kind,
+      host: "http://localhost:8000",
+      apiKey: "session-key",
+      connectionRevision: 0,
+    },
     orgId: null,
   }),
 }));
@@ -178,6 +187,43 @@ describe("AppSettingsScreen", () => {
     ).toHaveValue("SETTINGS$TITLE_GENERATION_AUTOMATIC");
   });
 
+  it("shows and refreshes current service versions in Application settings", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    const getBackendVersions = vi
+      .spyOn(RunningVersionsService, "getBackendVersions")
+      .mockResolvedValue({
+        serviceVersion: "1.94.0",
+        sdkVersion: "1.62.0",
+        toolsVersion: null,
+        workspaceVersion: null,
+      });
+    const getAutomationVersionInfo = vi
+      .spyOn(AutomationService, "getVersionInfo")
+      .mockResolvedValue({ packageVersion: "1.32.1", sdkVersion: "1.62.1" });
+
+    renderAppSettingsScreen();
+
+    await screen.findByText("1.94.0");
+    const versions = screen.getByTestId("running-versions");
+    expect(versions).toHaveTextContent("SETTINGS$RUNNING_VERSIONS_TITLE");
+    expect(versions).toHaveTextContent(AGENT_CANVAS_CLIENT_VERSION);
+    expect(versions).toHaveTextContent("@openhands/typescript-client");
+    expect(versions).toHaveTextContent("@openhands/extensions");
+    expect(versions).toHaveTextContent("1.94.0");
+    expect(versions).toHaveTextContent("1.32.1");
+    expect(versions).toHaveTextContent(
+      "SETTINGS$RUNNING_VERSIONS_NOT_REPORTED",
+    );
+
+    await user.click(screen.getByRole("button", { name: "BUTTON$REFRESH" }));
+
+    await waitFor(() => {
+      expect(getBackendVersions).toHaveBeenCalledTimes(2);
+      expect(getAutomationVersionInfo).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it("renders the analytics toggle as checked and disabled for cloud backends", async () => {
     activeBackendState.kind = "cloud";
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
@@ -191,6 +237,9 @@ describe("AppSettingsScreen", () => {
     );
     const submitButton = screen.getByTestId("submit-button");
 
+    expect(
+      screen.getByText("SETTINGS$RUNNING_VERSIONS_CLOUD_SERVICE"),
+    ).toBeInTheDocument();
     expect(analyticsSwitch).toBeChecked();
     expect(analyticsSwitch).toBeDisabled();
 
