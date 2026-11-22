@@ -595,6 +595,12 @@ class SettingsService {
   /**
    * Get settings for display (secrets are redacted).
    * Uses in-memory cache for performance.
+   *
+   * Rejects when the backend cannot be read: the GUI settings surfaces must
+   * never mistake "could not load" for "user has empty settings" — a silent
+   * default here invites saving empty values over unseen server state.
+   * Flows that genuinely want best-effort defaults on failure (conversation
+   * launch, profile migration) call {@link getSettingsWithDefaults}.
    */
   static async getSettings(): Promise<Settings> {
     // Cloud uses a different settings shape (flat top-level fields
@@ -604,13 +610,8 @@ class SettingsService {
     // so cloud-native fields like provider_tokens_set reach the GUI's
     // useUserProviders → useAppInstallations → useGitRepositories chain.
     if (getActiveBackend().backend.kind === "cloud") {
-      try {
-        const cloud = await withRetry(() => fetchCloudSettings());
-        return syncDerivedSettings(cloud);
-      } catch (error) {
-        console.warn("Failed to fetch cloud settings, using defaults:", error);
-        return syncDerivedSettings({});
-      }
+      const cloud = await withRetry(() => fetchCloudSettings());
+      return syncDerivedSettings(cloud);
     }
 
     const backend = getActiveBackend().backend;
@@ -624,17 +625,24 @@ class SettingsService {
       return syncDerivedSettings(transformApiResponse(cached));
     }
 
+    const response = await this.fetchSettingsFromApi();
+    cacheSettings(backend.id, connectionRevision, "redacted", response);
+    return syncDerivedSettings(transformApiResponse(response));
+  }
+
+  /**
+   * Best-effort variant of {@link getSettings} for flows where a settings
+   * hiccup must not block the user: it falls back to the defaults the same
+   * way `getSettings` did before its failure became observable. Only
+   * non-settings-surface callers (conversation launch, agent-profile
+   * migration, profile edits) may use it — anything the user can edit and
+   * save must go through `getSettings` and render the failure instead.
+   */
+  static async getSettingsWithDefaults(): Promise<Settings> {
     try {
-      const clientOptions = getAgentServerClientOptions();
-      const response = await this.fetchSettingsFromApi(
-        undefined,
-        clientOptions,
-      );
-      cacheSettings(backend.id, connectionRevision, "redacted", response);
-      return syncDerivedSettings(transformApiResponse(response));
+      return await this.getSettings();
     } catch (error) {
-      // If API fails, return defaults
-      console.warn("Failed to fetch settings from API, using defaults:", error);
+      console.warn("Failed to fetch settings, using defaults:", error);
       return syncDerivedSettings({});
     }
   }

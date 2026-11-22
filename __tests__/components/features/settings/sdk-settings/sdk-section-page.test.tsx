@@ -89,7 +89,9 @@ function renderSdkSectionPage(
 ) {
   const queryClient = new QueryClient({
     defaultOptions: {
-      queries: { retry: false },
+      // The hook's own `retry` predicate overrides the client-level count,
+      // but `retryDelay` still applies — keep retries instant in tests.
+      queries: { retry: false, retryDelay: 0 },
     },
   });
 
@@ -1207,5 +1209,64 @@ describe("SdkSectionPage", () => {
     await waitFor(() => {
       expect(screen.getByTestId("save-button")).toBeDisabled();
     });
+  });
+});
+
+describe("SdkSectionPage failed settings load", () => {
+  it("replaces the form with an explicit error and retry state", async () => {
+    // Reject every attempt (the hook retries with a bound); the recovery
+    // mock below answers the retry click.
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockRejectedValue(new Error("backend unreachable"));
+
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
+    });
+
+    // The failure is observable: no form fields, an error state and a retry.
+    expect(
+      await screen.findByTestId("settings-load-failed"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sdk-settings-llm.model"),
+    ).not.toBeInTheDocument();
+
+    getSettingsSpy.mockResolvedValueOnce(
+      buildSettings({
+        agent_settings_schema: {
+          model_name: "AgentSettings",
+          sections: [
+            {
+              key: "llm",
+              label: "LLM",
+              fields: [
+                {
+                  key: "llm.model",
+                  label: "Model",
+                  section: "llm",
+                  section_label: "LLM",
+                  value_type: "string",
+                  default: "openai/gpt-4o",
+                  choices: [],
+                  depends_on: [],
+                  prominence: "critical",
+                  secret: false,
+                  required: true,
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    await userEvent.click(await screen.findByTestId("settings-load-retry"));
+
+    expect(
+      await screen.findByTestId("sdk-settings-llm.model"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-load-failed")).not.toBeInTheDocument();
   });
 });

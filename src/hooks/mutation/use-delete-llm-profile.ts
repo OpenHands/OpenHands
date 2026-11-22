@@ -50,7 +50,8 @@ export function useDeleteLlmProfile() {
     onSuccess: async (_response, name) => {
       try {
         if (getActiveBackend().backend.kind === "local") {
-          const settings = await SettingsService.getSettings();
+          // Best-effort: the mutation acts on profiles, not saved settings.
+          const settings = await SettingsService.getSettingsWithDefaults();
           if (settings?.title_llm_profile === name) {
             await SettingsService.saveSettings({ title_llm_profile: null });
           }

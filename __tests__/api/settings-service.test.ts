@@ -86,13 +86,20 @@ describe("SettingsService", () => {
   });
 
   // @spec BM-003 — Removing the last backend leaves an explicit empty state
-  it("returns display defaults but refuses conversation settings without a backend", async () => {
+  it("rejects the strict load but yields defaults without a backend", async () => {
     setRegisteredBackends([]);
 
-    const settings = await SettingsService.getSettings();
+    // Strict: with no backend there is nothing to load, so the failure is
+    // observable instead of reading as "user has empty settings".
+    await expect(SettingsService.getSettings()).rejects.toBeInstanceOf(
+      NoBackendAvailableError,
+    );
 
+    // Lenient consumers (conversation launch, migrations) still get defaults.
+    const settings = await SettingsService.getSettingsWithDefaults();
     expect(settings.llm_model).toBe(DEFAULT_SETTINGS.llm_model);
     expect(settings.llm_api_key_set).toBe(false);
+
     await expect(
       SettingsService.getSettingsForConversation(),
     ).rejects.toBeInstanceOf(NoBackendAvailableError);
@@ -1528,5 +1535,84 @@ describe("SettingsService cache scoping", () => {
 
     expect(again.llm_model).toBe("model-from-3102");
     expect(asked).toEqual(["3101", "3102"]);
+  });
+});
+
+describe("SettingsService.getSettings failure handling", () => {
+  beforeEach(() => {
+    // The settings cache is module-level; earlier suites in this file may
+    // have populated it for the same backend.
+    SettingsService.invalidateCache();
+  });
+
+  it("rejects when the local settings load fails", async () => {
+    // Arrange: an active local backend whose settings endpoint rejects.
+    setRegisteredBackends([localBackendA]);
+    setActiveSelection({ backendId: localBackendA.id });
+    server.use(
+      http.get("http://local-a.example/api/settings", () =>
+        new HttpResponse(null, { status: 401 }),
+      ),
+    );
+
+    // Act + Assert
+    await expect(SettingsService.getSettings()).rejects.toMatchObject({
+      status: 401,
+    });
+  });
+
+  it("rejects when the cloud settings load fails", async () => {
+    // Arrange: an active cloud backend whose settings fetch rejects with a
+    // non-retryable error.
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    mockFetchCloudSettings.mockRejectedValue(
+      Object.assign(new Error("Unauthorized"), { status: 401 }),
+    );
+
+    // Act + Assert
+    await expect(SettingsService.getSettings()).rejects.toThrow(
+      "Unauthorized",
+    );
+  });
+
+  it("yields defaults for a 200 response without settings", async () => {
+    // Arrange: a genuinely empty backend still answers 200 with no values.
+    setRegisteredBackends([localBackendA]);
+    setActiveSelection({ backendId: localBackendA.id });
+    server.use(
+      http.get("http://local-a.example/api/settings", () =>
+        HttpResponse.json({}),
+      ),
+    );
+
+    // Act
+    const settings = await SettingsService.getSettings();
+
+    // Assert: an empty backend is not a failure — the defaults are truthful.
+    expect(settings.agent).toBe(DEFAULT_SETTINGS.agent);
+    expect(settings.llm_model).toBe(DEFAULT_SETTINGS.llm_model);
+  });
+
+  it("serves cached settings without another request", async () => {
+    // Arrange
+    setRegisteredBackends([localBackendA]);
+    setActiveSelection({ backendId: localBackendA.id });
+    let requestCount = 0;
+    server.use(
+      http.get("http://local-a.example/api/settings", () => {
+        requestCount += 1;
+        return HttpResponse.json(settingsResponse("model-a"));
+      }),
+    );
+
+    // Act
+    const first = await SettingsService.getSettings();
+    const second = await SettingsService.getSettings();
+
+    // Assert
+    expect(first.llm_model).toBe("model-a");
+    expect(second.llm_model).toBe("model-a");
+    expect(requestCount).toBe(1);
   });
 });

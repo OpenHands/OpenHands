@@ -3,6 +3,7 @@ import { AxiosError } from "axios";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-settings/llm-settings-inputs-skeleton";
+import { SettingsLoadError } from "#/components/features/settings/settings-load-error";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import {
   useAgentSettingsSchema,
@@ -258,7 +259,14 @@ export function SdkSectionPage({
 }) {
   const { t } = useTranslation("openhands");
   const { mutate: saveSettings, isPending } = useSaveSettings(scope);
-  const { data: settings, isLoading, isFetching } = useSettings(scope);
+  const {
+    data: settings,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch,
+  } = useSettings(scope);
   const agentSchemaQuery = useAgentSettingsSchema(
     settings?.agent_settings_schema,
   );
@@ -722,6 +730,12 @@ export function SdkSectionPage({
   const isInitialSettingsLoad = (isLoading || isFetching) && !settings;
   if (isInitialSettingsLoad || isSchemaLoading) {
     return <LlmSettingsInputsSkeleton />;
+  }
+
+  // A failed load must not render as an editable form of defaults: the user
+  // could save values over server state they never saw.
+  if (isError) {
+    return <SettingsLoadError error={error} onRetry={() => refetch()} />;
   }
 
   const hasAnyVisibleSection = resolvedSources.some(

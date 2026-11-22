@@ -125,6 +125,8 @@ export const getSettingsQueryFn = async (
     throw new Error(`Unsupported settings scope: ${scope}`);
   }
 
+  // Strict by design: a failed load surfaces below as an error state the
+  // settings surfaces must render, instead of silently reading as defaults.
   const settings = await SettingsService.getSettings();
   return normalizeSettingsResponse(settings);
 };
@@ -142,7 +144,11 @@ export const useSettings = (scope: SettingsScope = "personal") => {
       active.orgId,
     ],
     queryFn: () => getSettingsQueryFn(scope),
-    retry: (_, error) => getErrorStatus(error) !== 404,
+    // Bound the retries (matching withRetry's 3 attempts) — an unbounded
+    // retry would keep a permanent failure from ever surfacing as an error
+    // state. A 404 means the backend has no settings yet; it fails fast.
+    retry: (failureCount, error) =>
+      failureCount < 3 && getErrorStatus(error) !== 404,
     enabled: hasBackend,
     refetchOnWindowFocus: false,
     staleTime: 1000 * 60 * 5,
@@ -167,15 +173,37 @@ export const useSettings = (scope: SettingsScope = "personal") => {
     };
   }
 
+  // A genuinely empty backend (the settings endpoint answered 404) is not a
+  // failure: the defaults are the truthful answer and the form renders.
   if (getErrorStatus(query.error) === 404) {
     return {
-      data: DEFAULT_SETTINGS,
-      error: query.error,
-      isError: query.isError,
+      data: query.data ?? DEFAULT_SETTINGS,
+      error: null,
+      isError: false,
       isLoading: query.isLoading,
       isFetching: query.isFetching,
       isFetched: query.isFetched,
-      isSuccess: query.isSuccess,
+      isSuccess: true,
+      status: "success" as const,
+      fetchStatus: query.fetchStatus,
+      refetch: query.refetch,
+    };
+  }
+
+  // A failed load must never masquerade as "user has empty settings": the
+  // editable settings surfaces replace the form with an explicit error +
+  // retry state, and `useSaveSettings` refuses to save from this state.
+  // Last-good data is kept when a background refetch failed; the defaults
+  // only stand in when nothing was ever loaded.
+  if (query.isError) {
+    return {
+      data: query.data ?? DEFAULT_SETTINGS,
+      error: query.error,
+      isError: true,
+      isLoading: query.isLoading,
+      isFetching: query.isFetching,
+      isFetched: query.isFetched,
+      isSuccess: false,
       status: query.status,
       fetchStatus: query.fetchStatus,
       refetch: query.refetch,
