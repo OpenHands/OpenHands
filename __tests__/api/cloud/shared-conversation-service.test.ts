@@ -7,9 +7,14 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import {
   getCloudSharedConversation,
+  searchCloudSharedConversations,
   searchCloudSharedEvents,
 } from "#/api/cloud/shared-conversation-service.api";
-import { getFetchCall, mockJsonResponse } from "./fetch-test-utils";
+import {
+  getFetchCall,
+  mockBlobResponse,
+  mockJsonResponse,
+} from "./fetch-test-utils";
 
 const cloudBackend: Backend = {
   id: "prod",
@@ -86,6 +91,47 @@ describe("getCloudSharedConversation", () => {
       /cloud backend/,
     );
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("searchCloudSharedConversations", () => {
+  it("GETs /api/shared-conversations/search with the page size and cursor and returns the page", async () => {
+    // Arrange
+    activateCloudBackend();
+    const page = {
+      items: [{ id: "conv-abc", created_by_user_id: "user-1" }],
+      next_page_id: "40",
+    };
+    fetchMock.mockResolvedValue(mockJsonResponse(page));
+
+    // Act
+    const result = await searchCloudSharedConversations({
+      limit: 20,
+      pageId: "20",
+    });
+
+    // Assert
+    const [url, init] = getFetchCall(fetchMock);
+    expect(url).toBe(
+      `${cloudBackend.host}/api/shared-conversations/search?limit=20&page_id=20`,
+    );
+    expect(init).toMatchObject({ method: "GET" });
+    expect(result).toEqual(page);
+  });
+
+  it("returns an empty page when the backend does not serve the listing", async () => {
+    // Arrange — a backend older than the listing answers the unknown API path
+    // with its HTML page instead of JSON.
+    activateCloudBackend();
+    fetchMock.mockResolvedValue(
+      mockBlobResponse("<!doctype html><html></html>", "text/html"),
+    );
+
+    // Act
+    const result = await searchCloudSharedConversations({});
+
+    // Assert
+    expect(result).toEqual({ items: [], next_page_id: null });
   });
 });
 
