@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes } from "react-router";
+import CanvasExtensionPage from "#/routes/canvas-extension-page";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useAppTitle } from "#/hooks/use-app-title";
 import CanvasExtensionsService from "#/api/canvas-extensions-service";
 import {
   setActiveSelection,
@@ -55,8 +57,10 @@ const extension: InstalledCanvasExtensionInfo = {
 
 function RuntimeProbe() {
   const runtime = useCanvasExtensionsRuntime();
+  const title = useAppTitle();
   return (
     <div>
+      <span data-testid="app-title">{title}</span>
       <span data-testid="page-count">{runtime.pages.length}</span>
       <span data-testid="page-href">{runtime.pages[0]?.href}</span>
       <span data-testid="runtime-error">
@@ -70,21 +74,30 @@ function renderRuntime(
   moduleLoader: (source: string) => Promise<{
     activate: (host: CanvasExtensionHost) => void | (() => void);
   }>,
+  path = "/",
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const rendered = render(
     <QueryClientProvider client={queryClient}>
       <ActiveBackendProvider>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={[path]}>
           <CanvasExtensionsRuntimeProvider moduleLoader={moduleLoader}>
             <RuntimeProbe />
+            <Routes>
+              <Route
+                path="/extensions/:extensionName/*"
+                element={<CanvasExtensionPage />}
+              />
+              <Route path="*" element={null} />
+            </Routes>
           </CanvasExtensionsRuntimeProvider>
         </MemoryRouter>
       </ActiveBackendProvider>
     </QueryClientProvider>,
   );
+  return { ...rendered, queryClient };
 }
 
 describe("CanvasExtensionsRuntimeProvider", () => {
@@ -97,6 +110,10 @@ describe("CanvasExtensionsRuntimeProvider", () => {
     vi.spyOn(CanvasExtensionsService, "fetchBundle").mockResolvedValue(
       "fixture source",
     );
+    vi.spyOn(
+      CanvasExtensionsService,
+      "createAppBackendViewClient",
+    ).mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -128,6 +145,55 @@ describe("CanvasExtensionsRuntimeProvider", () => {
     );
 
     rendered.unmount();
+    expect(disposeActivation).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["/extensions/demo-extension/dashboard", "Dashboard | OpenHands"],
+    ["/extensions/demo-extension/dashboard/nested", "Dashboard | OpenHands"],
+    ["/extensions/demo-extension/dashboard-other", "OpenHands"],
+    ["/extensions/demo-extension/DASHBOARD", "OpenHands"],
+    ["/extensions/demo-extension/%64ashboard", "Dashboard | OpenHands"],
+    ["/extensions/other/dashboard", "OpenHands"],
+    ["/", "OpenHands"],
+  ])("sets the browser title for %s", async (path, expectedTitle) => {
+    renderRuntime(
+      async () => ({
+        activate: (host: CanvasExtensionHost) => {
+          host.registerPage("dashboard", ({ container }) => {
+            container.append(document.createTextNode("Dashboard mounted"));
+          });
+        },
+      }),
+      path,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("page-count")).toHaveTextContent("1"),
+    );
+    expect(screen.getByTestId("app-title").textContent).toBe(expectedTitle);
+    if (expectedTitle === "Dashboard | OpenHands") {
+      expect(await screen.findByText("Dashboard mounted")).toBeInTheDocument();
+    } else {
+      expect(screen.queryByText("Dashboard mounted")).not.toBeInTheDocument();
+    }
+  });
+
+  it("re-activates an extension refreshed without a version change", async () => {
+    const disposeActivation = vi.fn();
+    const moduleLoader = vi.fn().mockResolvedValue({
+      activate: () => disposeActivation,
+    });
+
+    const { queryClient } = renderRuntime(moduleLoader);
+    await waitFor(() => expect(moduleLoader).toHaveBeenCalledTimes(1));
+
+    vi.mocked(CanvasExtensionsService.listInstalled).mockResolvedValue([
+      { ...extension, installed_at: "2026-08-02T00:00:00Z" },
+    ]);
+    await queryClient.invalidateQueries();
+
+    await waitFor(() => expect(moduleLoader).toHaveBeenCalledTimes(2));
     expect(disposeActivation).toHaveBeenCalledTimes(1);
   });
 
@@ -166,5 +232,85 @@ describe("CanvasExtensionsRuntimeProvider", () => {
       ),
     );
     expect(screen.getByTestId("page-count")).toHaveTextContent("0");
+  });
+
+  it("revokes mounted app views when the selected backend changes", async () => {
+    const secondBackend: Backend = {
+      ...backend,
+      id: "second-extension-backend",
+      name: "Second extension backend",
+      host: "http://127.0.0.1:8001",
+    };
+    setRegisteredBackends([backend, secondBackend]);
+    const createSession = vi.fn().mockResolvedValue({
+      url: "https://apps.example.test/app-backends/demo-extension/",
+      expiresAt: "2026-09-23T16:00:00Z",
+      iframeSandbox:
+        "allow-forms allow-modals allow-popups allow-same-origin allow-scripts",
+    });
+    const revokeSession = vi.fn().mockResolvedValue(undefined);
+    const disposeClient = vi.fn();
+    vi.mocked(
+      CanvasExtensionsService.createAppBackendViewClient,
+    ).mockResolvedValue({
+      createSession,
+      revokeSession,
+      dispose: disposeClient,
+    });
+    const viewContainer = document.createElement("div");
+    const moduleLoader = vi.fn().mockResolvedValue({
+      activate: (host: CanvasExtensionHost) => {
+        host.appBackendView?.mount({ container: viewContainer });
+        host.registerPage("dashboard", () => undefined);
+      },
+    });
+
+    const rendered = renderRuntime(moduleLoader);
+
+    await waitFor(() => expect(createSession).toHaveBeenCalledTimes(1));
+    expect(viewContainer.querySelector("iframe")).not.toBeNull();
+
+    setActiveSelection({ backendId: secondBackend.id });
+
+    await waitFor(() => expect(revokeSession).toHaveBeenCalledTimes(1));
+    expect(disposeClient).toHaveBeenCalledTimes(1);
+    rendered.unmount();
+  });
+
+  it("disposes registrations from the previous backend before activating the next", async () => {
+    const secondBackend: Backend = {
+      ...backend,
+      id: "second-extension-backend",
+      name: "Second extension backend",
+      host: "http://127.0.0.1:8001",
+    };
+    setRegisteredBackends([backend, secondBackend]);
+    const disposeFirst = vi.fn();
+    const disposeSecond = vi.fn();
+    const moduleLoader = vi.fn().mockResolvedValue({
+      activate: (host: CanvasExtensionHost) => {
+        host.registerPage("dashboard", () => undefined);
+        return host.backend.id === backend.id ? disposeFirst : disposeSecond;
+      },
+    });
+
+    const rendered = renderRuntime(moduleLoader);
+    await waitFor(() =>
+      expect(screen.getByTestId("page-count")).toHaveTextContent("1"),
+    );
+
+    setActiveSelection({ backendId: secondBackend.id });
+
+    await waitFor(() => expect(disposeFirst).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(CanvasExtensionsService.fetchBundle).toHaveBeenLastCalledWith(
+        extension.name,
+        expect.objectContaining({ id: secondBackend.id }),
+      ),
+    );
+    expect(disposeSecond).not.toHaveBeenCalled();
+
+    rendered.unmount();
+    expect(disposeSecond).toHaveBeenCalledTimes(1);
   });
 });

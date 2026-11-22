@@ -1,6 +1,11 @@
-import { AgentServerClient } from "@openhands/typescript-client/clients";
+import {
+  AgentServerClient,
+  CanvasExtensionsClient,
+  type AgentServerCanvasBackendStatusResponse,
+} from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
+import type { CanvasExtensionAppViewSession } from "#/extensions/canvas-extension-app-view";
 import {
   getActiveBackend,
   isNoBackend,
@@ -13,13 +18,34 @@ import type {
 } from "#/types/canvas-extension";
 
 const CANVAS_EXTENSIONS_BASE_PATH = "/api/canvas-extensions";
+const CANVAS_APP_BACKEND_BRIDGE_CAPABILITY = "canvas_app_backend_bridge_v1";
 const REMOTE_EXTENSION_SOURCE_PATTERN =
   /^(?:github:|https?:\/\/|git:\/\/|file:\/\/|[\w.-]+@[\w.-]+:)/i;
 
+interface AppBackendServerInfo {
+  capabilities?: string[];
+  app_backend_ingress_url?: string | null;
+}
+
+export interface CanvasExtensionAppBackendViewClient {
+  createSession: (
+    signal?: AbortSignal,
+  ) => Promise<CanvasExtensionAppViewSession>;
+  revokeSession: () => Promise<void>;
+  dispose: () => void;
+}
+
+function parseHttpUrl(value: string): URL | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 export type CanvasExtensionsUnsupportedReason =
-  | "no-backend"
-  | "cloud-backend"
-  | "missing-api";
+  "no-backend" | "cloud-backend" | "missing-api";
 
 export class CanvasExtensionsUnsupportedError extends Error {
   readonly reason: CanvasExtensionsUnsupportedReason;
@@ -71,11 +97,13 @@ function getClientForBackend(backend: Backend): AgentServerClient {
   if (backend.kind === "cloud") {
     throw new CanvasExtensionsUnsupportedError("cloud-backend");
   }
-  return new AgentServerClient({
-    host: backend.host,
-    ...(backend.apiKey ? { apiKey: backend.apiKey } : {}),
-    timeout: 60000,
-  });
+  return new AgentServerClient(
+    getAgentServerClientOptions({
+      host: backend.host,
+      apiKey: backend.apiKey ?? "",
+      timeout: 60000,
+    }),
+  );
 }
 
 async function mapUnsupported<T>(operation: () => Promise<T>): Promise<T> {
@@ -87,6 +115,78 @@ async function mapUnsupported<T>(operation: () => Promise<T>): Promise<T> {
     }
     throw error;
   }
+}
+
+async function createAppBackendViewClient(
+  name: string,
+  backend: Backend,
+): Promise<CanvasExtensionAppBackendViewClient | null> {
+  const clientOptions = getAgentServerClientOptions({
+    host: backend.host,
+    apiKey: backend.apiKey,
+    timeout: 60000,
+  });
+  const serverClient = new AgentServerClient(clientOptions);
+  let info: AppBackendServerInfo;
+  try {
+    info = (await serverClient.server.getServerInfo()) as AppBackendServerInfo;
+  } finally {
+    serverClient.close();
+  }
+  const ingressUrl = info.app_backend_ingress_url
+    ? parseHttpUrl(info.app_backend_ingress_url)
+    : null;
+  if (
+    !Array.isArray(info.capabilities) ||
+    !info.capabilities.includes(CANVAS_APP_BACKEND_BRIDGE_CAPABILITY) ||
+    !ingressUrl
+  ) {
+    return null;
+  }
+
+  const sessionClient = new CanvasExtensionsClient({
+    ...clientOptions,
+    appBackendIngressUrl: ingressUrl.href,
+  });
+  let disposed = false;
+  let hasSession = false;
+  const revokeSession = async () => {
+    if (!hasSession) return;
+    try {
+      await sessionClient.revokeAppBackendSession(name);
+    } finally {
+      hasSession = false;
+    }
+  };
+  return {
+    createSession: async (signal) => {
+      if (disposed) throw new Error("Canvas App backend view is disposed");
+      const session = await sessionClient.createAppBackendSession(name, signal);
+      hasSession = true;
+      const sessionUrl = parseHttpUrl(session.ingress_url);
+      if (sessionUrl?.origin !== ingressUrl.origin) {
+        await revokeSession();
+        throw new Error("Canvas App backend session URL is invalid");
+      }
+      return {
+        url: sessionUrl.href,
+        expiresAt: session.expires_at,
+        iframeSandbox: session.iframe_sandbox,
+      };
+    },
+    revokeSession,
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      if (!hasSession) {
+        sessionClient.close();
+        return;
+      }
+      void revokeSession()
+        .catch(() => undefined)
+        .finally(() => sessionClient.close());
+    },
+  };
 }
 
 function installedExtensionPath(name: string): string {
@@ -118,7 +218,30 @@ function normalizeInstallRequest(
   };
 }
 
+export type CanvasAppBackendStatus = AgentServerCanvasBackendStatusResponse;
+
 class CanvasExtensionsService {
+  static async backendStatus(
+    name: string,
+    backend: Backend,
+  ): Promise<CanvasAppBackendStatus> {
+    const client = getClientForBackend(backend);
+    const info = await client.server.getServerInfo();
+    if (!info.capabilities?.includes("canvas_app_backend_secret_grants_v1")) {
+      throw new CanvasExtensionsUnsupportedError("missing-api");
+    }
+    return mapUnsupported(() => client.canvasExtensions.getBackendStatus(name));
+  }
+
+  static async revokeBackendSecrets(
+    name: string,
+    backend: Backend,
+  ): Promise<CanvasAppBackendStatus> {
+    return mapUnsupported(() =>
+      getClientForBackend(backend).canvasExtensions.revokeBackendSecrets(name),
+    );
+  }
+
   static async listInstalled(): Promise<InstalledCanvasExtensionInfo[]> {
     const client = getClient();
     const response = await mapUnsupported(() =>
@@ -144,13 +267,20 @@ class CanvasExtensionsService {
   static async setEnabled(
     name: string,
     enabled: boolean,
+    consent?: { revision: string; secret_refs?: string[] },
+    backend?: Backend,
   ): Promise<{ name: string; enabled: boolean }> {
-    const client = getClient();
+    const client = backend ? getClientForBackend(backend) : getClient();
+    if (enabled && consent) {
+      const info = await client.server.getServerInfo();
+      if (
+        !info.capabilities?.includes("canvas_app_backend_enable_lifecycle_v1")
+      ) {
+        throw new Error("Upgrade Agent Server to enable managed Apps safely.");
+      }
+    }
     return mapUnsupported(() =>
-      client.patch<{ name: string; enabled: boolean }>(
-        installedExtensionPath(name),
-        { enabled },
-      ),
+      client.canvasExtensions.setEnabled(name, enabled, consent),
     );
   }
 
@@ -166,6 +296,23 @@ class CanvasExtensionsService {
     return mapUnsupported(() =>
       client.get<string>(`${installedExtensionPath(name)}/bundle`, {
         responseType: "text",
+      }),
+    );
+  }
+
+  static async createAppBackendViewClient(
+    name: string,
+    backend: Backend,
+  ): Promise<CanvasExtensionAppBackendViewClient | null> {
+    if (isNoBackend(backend) || backend.kind === "cloud") return null;
+    return createAppBackendViewClient(name, backend);
+  }
+
+  static async fetchIcon(name: string): Promise<Blob> {
+    const client = getClient();
+    return mapUnsupported(() =>
+      client.get<Blob>(`${installedExtensionPath(name)}/icon`, {
+        responseType: "blob",
       }),
     );
   }

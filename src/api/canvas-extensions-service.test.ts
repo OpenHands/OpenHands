@@ -1,4 +1,7 @@
-import { AgentServerClient } from "@openhands/typescript-client/clients";
+import {
+  AgentServerClient,
+  CanvasExtensionsClient,
+} from "@openhands/typescript-client/clients";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CanvasExtensionsService, {
   CanvasExtensionsUnsupportedError,
@@ -13,13 +16,21 @@ import type { InstalledCanvasExtensionInfo } from "#/types/canvas-extension";
 
 vi.mock("@openhands/typescript-client/clients", () => ({
   AgentServerClient: vi.fn(),
+  CanvasExtensionsClient: vi.fn(),
 }));
 
+const getBackendStatus = vi.fn();
+const revokeBackendSecrets = vi.fn();
+const setEnabled = vi.fn();
 const get = vi.fn();
 const post = vi.fn();
 const patch = vi.fn();
 const remove = vi.fn();
 const request = vi.fn();
+const getServerInfo = vi.fn();
+const createAppBackendSession = vi.fn();
+const revokeAppBackendSession = vi.fn();
+const closeAppBackendClient = vi.fn();
 
 const localBackend: Backend = {
   id: "local",
@@ -63,9 +74,24 @@ beforeEach(() => {
         patch,
         delete: remove,
         request,
+        server: { getServerInfo },
+        canvasExtensions: {
+          getBackendStatus,
+          revokeBackendSecrets,
+          setEnabled,
+        },
         close: vi.fn(),
       } as unknown as AgentServerClient;
     } as unknown as typeof AgentServerClient,
+  );
+  vi.mocked(CanvasExtensionsClient).mockImplementation(
+    function MockCanvasExtensionsClient() {
+      return {
+        createAppBackendSession,
+        revokeAppBackendSession,
+        close: closeAppBackendClient,
+      };
+    } as never,
   );
 });
 
@@ -178,6 +204,7 @@ describe("CanvasExtensionsService", () => {
     expect(AgentServerClient).toHaveBeenCalledWith({
       host: localBackend.host,
       apiKey: localBackend.apiKey,
+      workingDir: expect.any(String),
       timeout: 60000,
     });
     expect(get).toHaveBeenCalledWith(
@@ -186,15 +213,12 @@ describe("CanvasExtensionsService", () => {
     );
   });
 
-  it("encodes extension names in mutation paths", async () => {
+  it("escapes the extension name when enabling an extension", async () => {
     patch.mockResolvedValue({ name: "a/b", enabled: true });
 
     await CanvasExtensionsService.setEnabled("a/b", true);
 
-    expect(patch).toHaveBeenCalledWith(
-      "/api/canvas-extensions/installed/a%2Fb",
-      { enabled: true },
-    );
+    expect(setEnabled).toHaveBeenCalledWith("a/b", true, undefined);
   });
 
   it("does not send the backend session key to an absolute request URL", async () => {
@@ -205,4 +229,209 @@ describe("CanvasExtensionsService", () => {
     ).rejects.toThrow("root-relative path");
     expect(AgentServerClient).not.toHaveBeenCalled();
   });
+
+  it("returns no app view helper when the captured backend lacks bridge capability", async () => {
+    getServerInfo.mockResolvedValue({ capabilities: [] });
+
+    await expect(
+      CanvasExtensionsService.createAppBackendViewClient(
+        extension.name,
+        localBackend,
+      ),
+    ).resolves.toBeNull();
+    expect(createAppBackendSession).not.toHaveBeenCalled();
+  });
+
+  it("creates and revokes app sessions through the discovered bridge ingress", async () => {
+    getServerInfo.mockResolvedValue({
+      capabilities: ["canvas_app_backend_bridge_v1"],
+      app_backend_ingress_url: "https://apps.example.test",
+    });
+    createAppBackendSession.mockResolvedValue({
+      ingress_url: "https://apps.example.test/app-backends/demo-extension/",
+      expires_at: "2026-09-23T16:00:00Z",
+      iframe_sandbox:
+        "allow-forms allow-modals allow-popups allow-same-origin allow-scripts",
+    });
+
+    const viewClient = await CanvasExtensionsService.createAppBackendViewClient(
+      extension.name,
+      localBackend,
+    );
+
+    expect(viewClient).not.toBeNull();
+    await expect(viewClient!.createSession()).resolves.toEqual({
+      url: "https://apps.example.test/app-backends/demo-extension/",
+      expiresAt: "2026-09-23T16:00:00Z",
+      iframeSandbox:
+        "allow-forms allow-modals allow-popups allow-same-origin allow-scripts",
+    });
+    await viewClient!.revokeSession();
+    viewClient!.dispose();
+    expect(CanvasExtensionsClient).toHaveBeenCalledWith({
+      host: localBackend.host,
+      apiKey: localBackend.apiKey,
+      workingDir: expect.any(String),
+      timeout: 60000,
+      appBackendIngressUrl: "https://apps.example.test/",
+    });
+    expect(createAppBackendSession).toHaveBeenCalledWith(
+      extension.name,
+      undefined,
+    );
+    expect(revokeAppBackendSession).toHaveBeenCalledWith(extension.name);
+    expect(closeAppBackendClient).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards cancellation to the app session request", async () => {
+    getServerInfo.mockResolvedValue({
+      capabilities: ["canvas_app_backend_bridge_v1"],
+      app_backend_ingress_url: "https://apps.example.test",
+    });
+    createAppBackendSession.mockResolvedValue({
+      ingress_url: "https://apps.example.test/app-backends/demo-extension/",
+      expires_at: "2026-09-23T16:00:00Z",
+      iframe_sandbox: "allow-scripts",
+    });
+    const viewClient = await CanvasExtensionsService.createAppBackendViewClient(
+      extension.name,
+      localBackend,
+    );
+    const controller = new AbortController();
+
+    await viewClient!.createSession(controller.signal);
+
+    expect(createAppBackendSession).toHaveBeenCalledWith(
+      extension.name,
+      controller.signal,
+    );
+  });
+
+  it("rejects and revokes a session outside the discovered ingress origin", async () => {
+    getServerInfo.mockResolvedValue({
+      capabilities: ["canvas_app_backend_bridge_v1"],
+      app_backend_ingress_url: "https://apps.example.test",
+    });
+    createAppBackendSession.mockResolvedValue({
+      ingress_url: "https://attacker.example/app-backends/demo-extension/",
+      expires_at: "2026-09-23T16:00:00Z",
+      iframe_sandbox: "allow-scripts",
+    });
+    const viewClient = await CanvasExtensionsService.createAppBackendViewClient(
+      extension.name,
+      localBackend,
+    );
+
+    await expect(viewClient!.createSession()).rejects.toThrow(
+      "session URL is invalid",
+    );
+    expect(revokeAppBackendSession).toHaveBeenCalledWith(extension.name);
+  });
 });
+
+it("fails closed when secret grants capability is absent", async () => {
+  getServerInfo.mockResolvedValue({ capabilities: [] });
+  await expect(
+    CanvasExtensionsService.backendStatus("demo", localBackend),
+  ).rejects.toBeInstanceOf(CanvasExtensionsUnsupportedError);
+  expect(getBackendStatus).not.toHaveBeenCalled();
+});
+
+it("binds typed lifecycle calls to the captured backend", async () => {
+  const other = { ...localBackend, id: "other", host: "http://127.0.0.1:9999" };
+  setRegisteredBackends([localBackend, other]);
+  setActiveSelection({ backendId: other.id });
+  getServerInfo.mockResolvedValue({
+    capabilities: ["canvas_app_backend_secret_grants_v1"],
+  });
+  getBackendStatus.mockResolvedValue({
+    revision: "rev",
+    secret_refs: ["DEMO_API_KEY"],
+  });
+  revokeBackendSecrets.mockResolvedValue({
+    revision: "rev",
+    secret_grant_revision: null,
+  });
+  await CanvasExtensionsService.backendStatus("demo", localBackend);
+  await CanvasExtensionsService.revokeBackendSecrets("demo", localBackend);
+  expect(AgentServerClient).toHaveBeenLastCalledWith(
+    expect.objectContaining({ host: localBackend.host }),
+  );
+  expect(getBackendStatus).toHaveBeenCalledWith("demo");
+  expect(revokeBackendSecrets).toHaveBeenCalledWith("demo");
+});
+
+it("checks body-returning lifecycle capability before enabling a managed app", async () => {
+  getServerInfo.mockResolvedValue({
+    capabilities: ["canvas_app_backend_enable_lifecycle_v1"],
+  });
+  setEnabled.mockResolvedValue({ name: "demo", enabled: true });
+  const consent = { revision: "sha256:demo", secret_refs: ["DEMO_API_KEY"] };
+  await CanvasExtensionsService.setEnabled("demo", true, consent, localBackend);
+  expect(setEnabled).toHaveBeenCalledWith("demo", true, consent);
+  setEnabled.mockClear();
+  getServerInfo.mockResolvedValue({ capabilities: [] });
+  await expect(
+    CanvasExtensionsService.setEnabled("demo", true, consent, localBackend),
+  ).rejects.toThrow("Upgrade Agent Server");
+  expect(setEnabled).not.toHaveBeenCalled();
+});
+
+it("does not borrow active-backend credentials for a captured keyless backend", async () => {
+  const captured = { ...localBackend, id: "keyless", apiKey: "" };
+  const active = {
+    ...localBackend,
+    id: "active",
+    host: "http://127.0.0.1:9999",
+  };
+  setRegisteredBackends([captured, active]);
+  setActiveSelection({ backendId: active.id });
+
+  await CanvasExtensionsService.revokeBackendSecrets("demo", captured);
+
+  expect(AgentServerClient).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      host: captured.host,
+      workingDir: expect.any(String),
+      timeout: 60000,
+    }),
+  );
+  expect(
+    vi.mocked(AgentServerClient).mock.calls.at(-1)?.[0],
+  ).not.toHaveProperty("apiKey");
+});
+
+it.each(["status", "revoke", "enable"] as const)(
+  "maps a missing typed %s endpoint to an unsupported-backend error",
+  async (operation) => {
+    const missing = Object.assign(new Error("Not Found"), {
+      name: "HttpError",
+      status: 404,
+    });
+    getServerInfo.mockResolvedValue({
+      capabilities: ["canvas_app_backend_secret_grants_v1"],
+    });
+    const endpoint = {
+      status: getBackendStatus,
+      revoke: revokeBackendSecrets,
+      enable: setEnabled,
+    }[operation];
+    endpoint.mockRejectedValueOnce(missing);
+
+    const result =
+      operation === "status"
+        ? CanvasExtensionsService.backendStatus("demo", localBackend)
+        : operation === "revoke"
+          ? CanvasExtensionsService.revokeBackendSecrets("demo", localBackend)
+          : CanvasExtensionsService.setEnabled(
+              "demo",
+              false,
+              undefined,
+              localBackend,
+            );
+
+    await expect(result).rejects.toEqual(
+      expect.objectContaining({ reason: "missing-api" }),
+    );
+  },
+);

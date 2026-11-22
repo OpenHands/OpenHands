@@ -11,10 +11,10 @@ export function useLaunchSkillInChat() {
   return useCallback(
     (message: string, onClose?: () => void) => {
       onClose?.();
+      // Queued for the Home composer, which applies it once whether it is
+      // already mounted or mounts after the navigation.
+      setMessageToSend(message, "home");
       navigate("/conversations");
-      window.setTimeout(() => {
-        setMessageToSend(message);
-      }, 0);
     },
     [navigate, setMessageToSend],
   );

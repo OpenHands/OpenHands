@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { getCombinedMetrics } from "#/utils/conversation-metrics";
 import type { MetricsSnapshot } from "#/api/conversation-service/agent-server-conversation-service.types";
 
@@ -10,9 +11,14 @@ export const useConversationMetrics = (
   enabled: boolean = true,
 ): {
   data: MetricsSnapshot | undefined;
+  maxBudget: number | null;
   isLoading: boolean;
   error: unknown;
 } => {
+  const { backend } = useActiveBackend();
+  const runtimeEndpointReady =
+    backend.kind !== "cloud" || Boolean(conversationUrl);
+
   const query = useQuery({
     queryKey: [
       "conversation-metrics",
@@ -28,13 +34,18 @@ export const useConversationMetrics = (
           conversationUrl,
           sessionApiKey,
         );
-      return getCombinedMetrics(conversationInfo);
+      return {
+        metrics: getCombinedMetrics(conversationInfo),
+        maxBudget: conversationInfo.max_budget_per_run ?? null,
+      };
     },
     // conversation_url is only set for cloud conversations; local ones are
     // served by the ConversationClient fallback in getRuntimeConversation.
-    // Gating on it left local conversations with no REST snapshot at all
-    // (zeros after a page reload until live WS metrics arrived).
-    enabled: enabled && !!conversationId,
+    // Gating local on it left local conversations with no REST snapshot at all
+    // (zeros after a page reload until live WS metrics arrived). Cloud must
+    // wait for the per-conversation runtime URL; otherwise the typed client has
+    // no local backend to fall back to and throws "No backend is configured".
+    enabled: enabled && !!conversationId && runtimeEndpointReady,
     staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 5,
     refetchInterval: 1000 * 30,
@@ -42,7 +53,8 @@ export const useConversationMetrics = (
   });
 
   return {
-    data: query.data,
+    data: query.data?.metrics,
+    maxBudget: query.data?.maxBudget ?? null,
     isLoading: query.isLoading,
     error: query.error,
   };

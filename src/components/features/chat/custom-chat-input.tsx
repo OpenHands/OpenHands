@@ -5,6 +5,7 @@ import { useGripResize } from "#/hooks/chat/use-grip-resize";
 import { useChatInputEvents } from "#/hooks/chat/use-chat-input-events";
 import { useChatSubmission } from "#/hooks/chat/use-chat-submission";
 import { useSlashCommand } from "#/hooks/chat/use-slash-command";
+import { useConversationMentionPicker } from "#/hooks/chat/use-conversation-mention-picker";
 import { ChatInputGrip } from "./components/chat-input-grip";
 import { ChatInputContainer } from "./components/chat-input-container";
 import { HiddenFileInput } from "./components/hidden-file-input";
@@ -18,6 +19,11 @@ export interface CustomChatInputProps {
   showButton?: boolean;
   /** Overrides the input's default placeholder text. */
   placeholder?: string;
+  /**
+   * Whether this composer saves and restores a draft. Defaults to true; turn
+   * it off for composers that must not share the Home draft.
+   */
+  persistDraft?: boolean;
   onSubmit: (message: string) => void;
   onFocus?: () => void;
   onBlur?: () => void;
@@ -35,6 +41,7 @@ export function CustomChatInput({
   hasStartedConversation,
   showButton = true,
   placeholder,
+  persistDraft = true,
   onSubmit,
   onFocus,
   onBlur,
@@ -81,13 +88,8 @@ export function CustomChatInput({
   }, [submittedMessage, disabled, setSubmittedMessage]);
 
   // Custom hooks
-  const {
-    chatInputRef,
-    messageToSend,
-    checkIsContentEmpty,
-    clearEmptyContentHandler,
-    saveDraft,
-  } = useChatInputLogic();
+  const { chatInputRef, messageToSend, checkIsContentEmpty, saveDraft } =
+    useChatInputLogic({ persistDraft });
 
   const syncCanSubmit = React.useCallback(() => {
     const text = chatInputRef.current?.innerText ?? "";
@@ -107,11 +109,7 @@ export function CustomChatInput({
   } = useFileHandling(onFilesPaste);
 
   const {
-    gripRef,
-    isGripVisible,
-    isGripDragging,
     canResize,
-    handleTopEdgeClick,
     smartResize,
     handleGripMouseDown,
     handleGripTouchStart,
@@ -140,7 +138,6 @@ export function CustomChatInput({
       smartResize,
       increaseHeightForEmptyContent,
       checkIsContentEmpty,
-      clearEmptyContentHandler,
       onFocus,
       onBlur,
     );
@@ -154,6 +151,18 @@ export function CustomChatInput({
     handleSlashKeyDown,
     closeMenu: closeSlashMenu,
   } = useSlashCommand(chatInputRef as React.RefObject<HTMLDivElement | null>);
+
+  const {
+    isMenuOpen: isMentionMenuOpen,
+    items: mentionItems,
+    selectedIndex: mentionSelectedIndex,
+    updateMentionMenu,
+    selectItem: selectMentionItem,
+    handleMentionKeyDown,
+    closeMenu: closeMentionMenu,
+  } = useConversationMentionPicker(
+    chatInputRef as React.RefObject<HTMLDivElement | null>,
+  );
 
   // Cleanup: reset suggestions visibility when component unmounts
   useEffect(
@@ -177,11 +186,7 @@ export function CustomChatInput({
       {/* Container with grip */}
       <div className="relative w-full">
         <ChatInputGrip
-          gripRef={gripRef}
-          isGripVisible={isGripVisible}
-          isGripDragging={isGripDragging}
           canResize={canResize}
-          handleTopEdgeClick={handleTopEdgeClick}
           handleGripMouseDown={handleGripMouseDown}
           handleGripTouchStart={handleGripTouchStart}
         />
@@ -194,9 +199,9 @@ export function CustomChatInput({
           hasStartedConversation={hasStartedConversation}
           isNewConversationPending={isNewConversationPending}
           showButton={showButton}
-          placeholder={placeholder}
           buttonClassName={buttonClassName}
           chatInputRef={chatInputRef}
+          placeholder={placeholder}
           handleFileIconClick={handleFileIconClick}
           handleSubmit={handleSubmitAndSync}
           onDragOver={handleDragOver}
@@ -205,24 +210,31 @@ export function CustomChatInput({
           onInput={() => {
             handleInput();
             updateSlashMenu();
+            updateMentionMenu();
             saveDraft();
             syncCanSubmit();
           }}
           onPaste={handlePaste}
           onKeyDown={(e) => {
             if (handleSlashKeyDown(e)) return;
+            if (handleMentionKeyDown(e)) return;
             handleKeyDown(e, isDisabled, handleSubmitAndSync);
           }}
           onFocus={handleFocus}
           onBlur={() => {
             handleBlur();
             closeSlashMenu();
+            closeMentionMenu();
             syncCanSubmit();
           }}
           isSlashMenuOpen={isSlashMenuOpen}
           slashItems={slashItems}
           slashSelectedIndex={slashSelectedIndex}
           onSlashSelect={selectSlashItem}
+          isMentionMenuOpen={isMentionMenuOpen}
+          mentionItems={mentionItems}
+          mentionSelectedIndex={mentionSelectedIndex}
+          onMentionSelect={selectMentionItem}
         />
       </div>
     </div>

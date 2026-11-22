@@ -6,6 +6,7 @@ import {
   displayErrorToast,
 } from "#/utils/custom-toast-handlers";
 import { useNavigation } from "#/context/navigation-context";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import {
@@ -17,6 +18,8 @@ export const useUnifiedPauseConversation = () => {
   const { t } = useTranslation("openhands");
   const queryClient = useQueryClient();
   const { conversationId: currentConversationId, navigate } = useNavigation();
+  // On cloud this pauses the conversation's sandbox.
+  const isCloud = useActiveBackend().backend.kind === "cloud";
 
   return useMutation({
     mutationKey: ["stop-conversation"],
@@ -24,7 +27,11 @@ export const useUnifiedPauseConversation = () => {
       pauseConversation(variables.conversationId),
     onMutate: async () => {
       const toastId = toast.loading(
-        t(I18nKey.TOAST$STOPPING_CONVERSATION),
+        t(
+          isCloud
+            ? I18nKey.TOAST$STOPPING_SANDBOX
+            : I18nKey.TOAST$STOPPING_CONVERSATION,
+        ),
         TOAST_OPTIONS,
       );
 
@@ -53,16 +60,22 @@ export const useUnifiedPauseConversation = () => {
       if (context?.toastId) {
         toast.dismiss(context.toastId);
       }
-      toast.success(t(I18nKey.TOAST$CONVERSATION_STOPPED), TOAST_OPTIONS);
+      toast.success(
+        t(
+          isCloud
+            ? I18nKey.TOAST$SANDBOX_STOPPED
+            : I18nKey.TOAST$CONVERSATION_STOPPED,
+        ),
+        TOAST_OPTIONS,
+      );
 
-      // Update both execution_status and sandbox_status together so that
-      // WebSocketProviderWrapper's sandbox_status === "PAUSED" gate fires
-      // immediately when the user reopens this conversation — preventing a
-      // WebSocket connection attempt against the now-paused sandbox host
-      // before the next useActiveConversation poll returns.
+      // Drop the runtime URL immediately so this mounted route cannot reconnect
+      // to the sandbox being paused. Leave sandbox_status server-authored: the
+      // conversation route uses PAUSED as the signal to auto-resume when a user
+      // later reopens an already-paused cloud conversation.
       patchConversationInCache(queryClient, variables.conversationId, {
         execution_status: ExecutionStatus.PAUSED,
-        sandbox_status: "PAUSED",
+        conversation_url: null,
       });
 
       if (currentConversationId === variables.conversationId) {

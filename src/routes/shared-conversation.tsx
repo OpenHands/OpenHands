@@ -59,9 +59,10 @@ export default function SharedConversation() {
   const renderableEvents = React.useMemo(
     () =>
       conversationEvents
-        .reduce<
-          OpenHandsEvent[]
-        >((uiEvents, event) => handleEventForUI(event, uiEvents), [])
+        .reduce<OpenHandsEvent[]>(
+          (uiEvents, event) => handleEventForUI(event, uiEvents),
+          [],
+        )
         .filter(shouldRenderEvent),
     [conversationEvents],
   );
@@ -75,7 +76,7 @@ export default function SharedConversation() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-base">
+      <div className="flex h-dvh items-center justify-center bg-canvas-base app-shell-safe-area">
         <LoadingSpinner size="large" />
       </div>
     );
@@ -83,14 +84,14 @@ export default function SharedConversation() {
 
   if (error || !conversation) {
     return (
-      <div className="flex items-center justify-center h-screen bg-base">
+      <div className="flex h-dvh items-center justify-center bg-canvas-base app-shell-safe-area">
         <div className="text-contrast">{t(I18nKey.CONVERSATION$NOT_FOUND)}</div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-base text-contrast flex flex-col">
+    <div className="h-dvh bg-canvas-base text-contrast flex flex-col app-shell-safe-area">
       {/* Header with logo, conversation title and branch info */}
       <div className="border-b border-border-subtle p-4 flex-shrink-0">
         <div className="max-w-4xl mx-auto flex items-start gap-4">
@@ -147,11 +148,12 @@ export default function SharedConversation() {
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto custom-scrollbar-always px-4 pt-4 gap-2"
       >
-        <div className="max-w-4xl mx-auto p-4 border border-border-subtle rounded">
+        <div className="max-w-4xl mx-auto p-4 pb-8 border border-border-subtle rounded">
           {renderableEvents.length > 0 ? (
             <Messages
               messages={renderableEvents}
               allEvents={conversationEvents}
+              readOnly
             />
           ) : (
             <div className="flex items-center justify-center h-full">

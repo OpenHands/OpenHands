@@ -19,8 +19,10 @@ export function writeStoredAutomationViewMode(view: AutomationViewMode): void {
 export const automationActivityListClassName =
   "divide-y divide-border-subtle overflow-hidden rounded-xl border border-border-subtle bg-surface";
 
+// Paper keeps its established raised-row treatment; its low-hover token is
+// intentionally subtle and belongs to its existing settings/profile controls.
 export const automationActivityRowClassName =
-  "group relative flex items-stretch transition-colors hover:bg-surface-raised has-[:focus-visible]:bg-surface-raised";
+  "group relative flex items-stretch transition-colors hover:bg-interactive-hover-low has-[:focus-visible]:bg-interactive-hover-low dark:hover:bg-surface-raised dark:has-[:focus-visible]:bg-surface-raised [[data-agent-server-ui][data-color-theme=paper]_&]:hover:bg-surface-raised [[data-agent-server-ui][data-color-theme=paper]_&]:has-[:focus-visible]:bg-surface-raised";
 
 /** Inset last-run strip used under the trigger/sparkline row. */
 export const automationCardStatusStripClassName =

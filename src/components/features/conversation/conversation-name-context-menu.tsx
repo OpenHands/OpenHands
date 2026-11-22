@@ -1,11 +1,11 @@
 import React from "react";
-import ReactDOM from "react-dom";
 import { ExternalLink, Gauge, Share2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useBreakpoint } from "#/hooks/use-breakpoint";
+import { clampLeftToViewport } from "#/hooks/use-popover-fixed-placement";
 import { cn } from "#/utils/utils";
 import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "../context-menu/context-menu-list-item";
@@ -23,6 +23,7 @@ import CopyIcon from "#/icons/copy.svg?react";
 import { ConversationNameContextMenuIconText } from "./conversation-name-context-menu-icon-text";
 import { ArchivedDisabledTooltip } from "../context-menu/archived-disabled-tooltip";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 interface ConversationNameContextMenuProps {
   onClose: () => void;
@@ -43,7 +44,8 @@ interface ConversationNameContextMenuProps {
    * Element the menu should anchor against. When provided, the menu renders
    * into a portal at the document body using fixed positioning so it cannot be
    * clipped by ancestors with `overflow: hidden` (e.g. the chat panel that
-   * sits next to the right-side tabs panel).
+   * sits next to the right-side tabs panel). Pass the trigger itself: Escape
+   * returns focus to it.
    */
   anchorRef?: React.RefObject<HTMLElement | null>;
 }
@@ -107,13 +109,16 @@ export function ConversationNameContextMenu({
   const isMobile = useBreakpoint();
 
   const { t } = useTranslation("openhands");
-  const { backend } = useActiveBackend();
+  const { backend, orgId } = useActiveBackend();
   const { data: conversation } = useActiveConversation();
   const isArchivedConversation = useIsArchivedConversation();
   const ref = useClickOutsideElement<HTMLUListElement>(onClose, anchorRef);
 
   const anchorElement = anchorRef?.current ?? null;
   const [portalStyle, setPortalStyle] = React.useState<React.CSSProperties>();
+  // The menu's width is only measurable once it is in the portal, so placement
+  // runs again right after the first positioned render, still before paint.
+  const isMenuMounted = portalStyle !== undefined;
   React.useLayoutEffect(() => {
     if (!anchorElement) return undefined;
 
@@ -130,7 +135,10 @@ export function ConversationNameContextMenu({
       } else {
         style.top = rect.bottom + gap;
       }
-      style.left = rect.left;
+      // At phone width the trigger sits near the right edge: keep the whole
+      // menu, and every label, inside the viewport.
+      const menuWidth = ref.current?.getBoundingClientRect().width ?? 0;
+      style.left = clampLeftToViewport(rect.left, menuWidth);
       setPortalStyle(style);
     };
 
@@ -141,17 +149,39 @@ export function ConversationNameContextMenu({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [anchorElement, position]);
+  }, [anchorElement, position, isMenuMounted, ref]);
+
+  React.useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      onClose();
+      anchorElement?.focus();
+    };
+
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [onClose, anchorElement]);
   const hasTools = Boolean(onShowAgentTools || onShowSkills || onShowHooks);
   const hasInfo = Boolean(onDisplayCost);
   const hasControl = Boolean(onStop || onDelete);
   const stopLabelKey =
     backend.kind === "cloud"
-      ? I18nKey.COMMON$CLOSE_CONVERSATION_STOP_RUNTIME
+      ? I18nKey.COMMON$STOP_SANDBOX
       : I18nKey.COMMON$STOP_CONVERSATION;
   const shouldShowPublicSharing =
     backend.kind === "cloud" && Boolean(onTogglePublic);
   const isPublic = conversation?.public || false;
+  // Team org: the backend only serves the share to org members. A personal
+  // workspace's org id is its owner's user id, and only the owner sees this menu.
+  const isOrgShare =
+    Boolean(orgId) &&
+    Boolean(conversation?.created_by_user_id) &&
+    orgId !== conversation?.created_by_user_id;
+  const shareLabel = t(
+    isOrgShare
+      ? I18nKey.CONVERSATION$SHARE_WITH_ORG_USERS
+      : I18nKey.CONVERSATION$SHARE_PUBLICLY,
+  );
 
   const isPortaled = Boolean(anchorElement);
   const portalClassName = isPortaled
@@ -165,7 +195,9 @@ export function ConversationNameContextMenu({
       position={position}
       alignment="left"
       className={cn(
-        isMobile ? "right-0 translate-x-[34%] left-auto" : "",
+        // The mobile offset only applies to the inline, absolutely positioned
+        // menu; the portaled menu gets its coordinates from `portalStyle`.
+        !isPortaled && isMobile ? "right-0 translate-x-[34%] left-auto" : "",
         portalClassName,
       )}
     >
@@ -192,7 +224,7 @@ export function ConversationNameContextMenu({
                 <SkillsIcon
                   width={16}
                   height={16}
-                  className="stroke-[1.75]"
+                  className="context-menu-icon-stroke"
                   aria-hidden
                 />
               }
@@ -277,9 +309,7 @@ export function ConversationNameContextMenu({
           <span className="flex shrink-0 items-center text-muted" aria-hidden>
             <Share2 size={16} />
           </span>
-          <span className="min-w-0 flex-1 truncate text-sm">
-            {t(I18nKey.CONVERSATION$SHARE_PUBLICLY)}
-          </span>
+          <span className="min-w-0 flex-1 truncate text-sm">{shareLabel}</span>
           <div className="flex shrink-0 items-center">
             {isPublic && shareUrl && onCopyShareLink && (
               <div className="mr-2 flex items-center gap-0.5">
@@ -308,7 +338,7 @@ export function ConversationNameContextMenu({
             <PublicShareToggle
               isPublic={isPublic}
               onToggle={onTogglePublic}
-              ariaLabel={t(I18nKey.CONVERSATION$SHARE_PUBLICLY)}
+              ariaLabel={shareLabel}
             />
           </div>
         </li>
@@ -344,9 +374,10 @@ export function ConversationNameContextMenu({
     if (typeof document === "undefined" || !portalStyle) {
       return null;
     }
-    return ReactDOM.createPortal(
-      <div style={portalStyle}>{menu}</div>,
-      document.body,
+    return (
+      <AppearancePortal>
+        <div style={portalStyle}>{menu}</div>
+      </AppearancePortal>
     );
   }
 

@@ -6,6 +6,15 @@ export interface FixedPlacementBox {
   width: number;
 }
 
+/** Clamp a fixed popover's `left` so its `width` stays `gutter` px inside the viewport. */
+export function clampLeftToViewport(
+  left: number,
+  width: number,
+  gutter = 8,
+): number {
+  return Math.max(gutter, Math.min(left, window.innerWidth - gutter - width));
+}
+
 /**
  * Position a popover with `position: fixed`, anchored below the trigger and
  * clamped within the viewport. Used by the conversation-panel "+ New
@@ -30,11 +39,7 @@ export function usePopoverFixedPlacement(
     const r = el.getBoundingClientRect();
     const gutter = 8;
     const width = Math.min(targetWidth, window.innerWidth - gutter * 2);
-    let left = r.right - width;
-    if (left < gutter) left = gutter;
-    if (left + width > window.innerWidth - gutter) {
-      left = Math.max(gutter, window.innerWidth - gutter - width);
-    }
+    const left = clampLeftToViewport(r.right - width, width, gutter);
     setBox({ top: r.bottom + 4, left, width });
   }, [triggerRef, targetWidth]);
 

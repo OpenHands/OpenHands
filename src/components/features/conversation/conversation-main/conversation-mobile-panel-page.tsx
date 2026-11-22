@@ -9,6 +9,7 @@ import {
 import { useConversationStore } from "#/stores/conversation-store";
 import { ConversationTabContent } from "../conversation-tabs/conversation-tab-content/conversation-tab-content";
 import { ConversationTabs } from "../conversation-tabs/conversation-tabs";
+import { ConversationPlannerBuildBar } from "../conversation-tabs/conversation-planner-build-bar";
 
 export function ConversationMobilePanelPage({
   onNavigateBack,
@@ -65,6 +66,8 @@ export function ConversationMobilePanelPage({
           </div>
         </div>
       </div>
+      {/* Below the fixed-height top bar, which already draws the divider. */}
+      <ConversationPlannerBuildBar className="border-t-0 border-b" />
       <div className="flex min-h-0 flex-1 flex-col bg-surface">
         <ConversationTabContent />
       </div>

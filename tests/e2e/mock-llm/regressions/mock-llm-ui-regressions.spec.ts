@@ -15,7 +15,10 @@ import type { ActionEvent, MessageEvent } from "#/types/agent-server/core";
 import { SecurityRisk } from "#/types/agent-server/core";
 import type { FinishAction } from "#/types/agent-server/core/base/action";
 import type { CriticResult } from "#/types/agent-server/core/base/critic";
-import { seedLocalStorage, routeSessionApiKey } from "../utils/mock-llm-helpers";
+import {
+  seedLocalStorage,
+  routeSessionApiKey,
+} from "../utils/mock-llm-helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -48,22 +51,40 @@ interface PaginationEvent {
 
 type CriticEvent = MessageEvent | ActionEvent<FinishAction>;
 
-function createPaginationEvent(index: number, prefix: string): PaginationEvent {
+function createPaginationEvent(
+  index: number,
+  prefix: string,
+  varyHeight = false,
+): PaginationEvent {
   return {
     id: `${prefix.toLowerCase().replaceAll(" ", "-")}-${index}`,
-    timestamp: timestampForEvent(index),
+    timestamp: timestampForEvent(index === 51 ? 50 : index),
     source: "agent",
     kind: "MessageEvent",
     llm_message: {
       role: "assistant",
-      content: [{ type: "text", text: `${prefix} ${index}` }],
+      // When `varyHeight` is set the bubble is padded with a variable number of
+      // lines, so each row measures away from the flat estimate and the
+      // virtualizer has real size corrections to apply.
+      content: [
+        {
+          type: "text",
+          text: varyHeight
+            ? `${prefix} ${index}\n\n${"filler line\n\n".repeat(index % 12)}`
+            : `${prefix} ${index}`,
+        },
+      ],
     },
   };
 }
 
-function createAllPaginationEvents(prefix: string): PaginationEvent[] {
-  return Array.from({ length: PAGINATION_EVENT_COUNT }, (_, i) =>
-    createPaginationEvent(i + 1, prefix),
+function createAllPaginationEvents(
+  prefix: string,
+  count = PAGINATION_EVENT_COUNT,
+  varyHeight = false,
+): PaginationEvent[] {
+  return Array.from({ length: count }, (_, i) =>
+    createPaginationEvent(i + 1, prefix, varyHeight),
   );
 }
 
@@ -78,28 +99,38 @@ function searchPaginationEvents(
     ? events.filter((e) => e.timestamp < timestampLt)
     : events;
   const sorted = [...filtered].sort((a, b) =>
-    sortOrder === "TIMESTAMP_DESC"
-      ? b.timestamp.localeCompare(a.timestamp)
-      : a.timestamp.localeCompare(b.timestamp),
+    a.timestamp.localeCompare(b.timestamp),
   );
+  if (sortOrder === "TIMESTAMP_DESC") sorted.reverse();
+  const pageId = searchParams.get("page_id");
+  const start = pageId
+    ? Math.max(
+        0,
+        sorted.findIndex((event) => event.id === pageId),
+      )
+    : 0;
   return {
-    items: sorted.slice(0, limit),
-    next_page_id: sorted.length > limit ? "next-page" : null,
+    items: sorted.slice(start, start + limit),
+    next_page_id: sorted[start + limit]?.id ?? null,
   };
 }
 
 /** Build the mock conversation with the same fields the real agent-server
  *  returns so `requireDirectConversationInfo` can parse it and the
  *  conversation route doesn't redirect to `/conversations`. */
-function buildMockConversation() {
+function buildMockConversation(
+  id = PAGINATION_CONVERSATION_ID,
+  eventCount = PAGINATION_EVENT_COUNT,
+  title = "Pagination test",
+) {
   return {
-    id: PAGINATION_CONVERSATION_ID,
-    conversation_id: PAGINATION_CONVERSATION_ID,
+    id,
+    conversation_id: id,
     status: "STOPPED",
     execution_status: "stopped",
     created_at: timestampForEvent(1),
-    updated_at: timestampForEvent(PAGINATION_EVENT_COUNT),
-    title: "Pagination test",
+    updated_at: timestampForEvent(eventCount),
+    title,
   };
 }
 
@@ -224,9 +255,32 @@ function searchCriticEvents(
   };
 }
 
-/** Intercept conversation lookup + event search for pagination tests. */
-async function routePaginationConversation(page: Page) {
-  const allEvents = createAllPaginationEvents("Pagination message");
+/**
+ * Intercept conversation lookup + event search for pagination tests.
+ *
+ * `count` controls how many synthetic events back the conversation: the
+ * default 100 spans two 50-event pages, while a count above the virtualization
+ * threshold (150 rendered rows) drives the virtualized list.
+ */
+async function routePaginationConversation(
+  page: Page,
+  {
+    id = PAGINATION_CONVERSATION_ID,
+    count = PAGINATION_EVENT_COUNT,
+    title = "Pagination test",
+    varyHeight = false,
+  }: {
+    id?: string;
+    count?: number;
+    title?: string;
+    varyHeight?: boolean;
+  } = {},
+) {
+  const allEvents = createAllPaginationEvents(
+    "Pagination message",
+    count,
+    varyHeight,
+  );
 
   // The app fetches conversations via the batch endpoint:
   //   GET /api/conversations?ids=<id>
@@ -244,11 +298,11 @@ async function routePaginationConversation(page: Page) {
       ...url.searchParams.getAll("ids"),
       ...url.searchParams.getAll("ids[]"),
     ];
-    if (ids.includes(PAGINATION_CONVERSATION_ID)) {
+    if (ids.includes(id)) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify([buildMockConversation()]),
+        body: JSON.stringify([buildMockConversation(id, count, title)]),
       });
     } else {
       await route.fallback();
@@ -256,20 +310,22 @@ async function routePaginationConversation(page: Page) {
   });
 
   // Stub the event search endpoint with the synthetic paginated events.
-  // Older-events requests (those with timestamp__lt) are delayed slightly so
+  // Older-events requests (those with page_id or timestamp__lt) are delayed slightly so
   // the loading indicator has time to render before the response arrives.
   // Without this, React can batch the isLoading true→false transition into a
   // single commit and the DOM element never materialises — making the
   // "loading-older-events" assertion flaky.
   await page.route(
-    `**/api/conversations/${PAGINATION_CONVERSATION_ID}/events/search**`,
+    `**/api/conversations/${id}/events/search**`,
     async (route, req) => {
       if (req.method() !== "GET") {
         await route.fallback();
         return;
       }
       const url = new URL(req.url());
-      const isOlderPage = url.searchParams.has("timestamp__lt");
+      const isOlderPage =
+        url.searchParams.has("page_id") ||
+        url.searchParams.has("timestamp__lt");
       const result = searchPaginationEvents(allEvents, url.searchParams);
       if (isOlderPage) {
         await new Promise((r) => setTimeout(r, 300));
@@ -348,7 +404,7 @@ async function waitForScrollableConversation(page: Page) {
 async function triggerOlderEventLoad(page: Page) {
   const scroller = await waitForScrollableConversation(page);
   await scroller.evaluate((el) => {
-    el.scrollTop = 0;
+    el.scrollTo({ top: 0 });
     el.dispatchEvent(new Event("scroll", { bubbles: true }));
   });
 }
@@ -389,24 +445,99 @@ test.describe("UI regressions", () => {
       )
       .not.toBe("rgba(0, 0, 0, 0)");
 
-    const insideBackground = await shell.evaluate(
-      (el) => getComputedStyle(el).backgroundColor,
-    );
-
-    const outsideStyles = await page.evaluate(() => {
+    const probeStyles = await shell.evaluate((el) => {
+      const shellBackground = getComputedStyle(el).backgroundColor;
       const probe = document.createElement("div");
-      probe.className = "bg-base text-content-2";
-      probe.textContent = "host";
+      probe.className = "bg-canvas-base";
+      // Keep the token available outside the shell: an undefined variable
+      // would make even a leaked utility transparent and hide a scoping bug.
+      probe.style.setProperty("--oh-color-base", shellBackground);
+      el.appendChild(probe);
+      const insideBackground = getComputedStyle(probe).backgroundColor;
       document.documentElement.appendChild(probe);
-      const styles = getComputedStyle(probe);
+      const outsideBackground = getComputedStyle(probe).backgroundColor;
+      probe.remove();
       return {
-        backgroundColor: styles.backgroundColor,
-        color: styles.color,
+        shellBackground,
+        insideBackground,
+        outsideBackground,
       };
     });
 
-    expect(insideBackground).not.toBe("rgba(0, 0, 0, 0)");
-    expect(outsideStyles.backgroundColor).not.toBe(insideBackground);
+    // First prove the utility exists, then prove it cannot style the host.
+    expect(probeStyles.insideBackground).toBe(probeStyles.shellBackground);
+    expect(probeStyles.outsideBackground).toBe("rgba(0, 0, 0, 0)");
+  });
+
+  // @spec BM-004 — Backend feedback consumes the embedding host's theme roles
+  test("backend connection feedback follows host color overrides", async ({
+    page,
+  }) => {
+    await routeSessionApiKey(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const shell = page.locator("[data-agent-server-ui]").first();
+    await expect(shell).toBeVisible();
+    await shell.evaluate((el) => {
+      const scope = el as HTMLElement;
+      scope.style.setProperty("--oh-feedback-error", "#8b1029");
+      scope.style.setProperty("--oh-feedback-success", "#17642f");
+    });
+
+    await page.getByTestId("backend-selector").click();
+    await page.getByTestId("manage-backends-menu-item").click();
+    await expect(page.getByTestId("manage-backends-status-Local")).toHaveCSS(
+      "color",
+      "rgb(23, 100, 47)",
+    );
+    await page.getByTestId("manage-backends-done").click();
+
+    await page.getByTestId("backend-selector").click();
+    await page.getByTestId("add-backend-menu-item").click();
+    await page.getByTestId("add-backend-option-agent-server").click();
+    await page.getByTestId("add-backend-name").fill("Unavailable server");
+    await page.getByTestId("add-backend-host").fill("http://127.0.0.1:9");
+    await page.getByTestId("add-backend-submit").click();
+    await expect(page.getByTestId("add-backend-error")).toHaveCSS(
+      "color",
+      "rgb(139, 16, 41)",
+    );
+  });
+
+  // @spec TN-001 — Toasts follow the embedding host's contrast ink
+  test("error and success toasts follow the host contrast color", async ({
+    page,
+  }) => {
+    await routeSessionApiKey(page);
+    // A host stylesheet override that survives full-page navigation.
+    await page.addInitScript(() => {
+      document.addEventListener("DOMContentLoaded", () => {
+        const style = document.createElement("style");
+        style.textContent =
+          "[data-agent-server-ui] { --oh-contrast: #8b1029 !important; }";
+        document.head.append(style);
+      });
+    });
+
+    await page.goto("/conversations/0123456789abcdef0123456789abcdef", {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page.getByRole("status").filter({ hasText: "does not exist" }),
+    ).toHaveCSS("color", "rgb(139, 16, 41)");
+
+    await page.goto("/settings/app", { waitUntil: "domcontentloaded" });
+    const soundSwitch = page.getByText("Sound Notifications", { exact: true });
+    const saveButton = page.getByRole("button", { name: "Save Changes" });
+    await soundSwitch.click();
+    await saveButton.click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Settings saved" }),
+    ).toHaveCSS("color", "rgb(139, 16, 41)");
+
+    // Restore the original setting for later serial scenarios.
+    await soundSwitch.click();
+    await saveButton.click();
+    await expect(saveButton).toBeDisabled();
   });
 
   // ── critic result rendering ──────────────────────────────────────
@@ -452,7 +583,7 @@ test.describe("UI regressions", () => {
           )
       )
         return false;
-      return !new URL(req.url()).searchParams.has("timestamp__lt");
+      return !new URL(req.url()).searchParams.has("page_id");
     });
 
     await page.goto(`/conversations/${PAGINATION_CONVERSATION_ID}`, {
@@ -484,7 +615,7 @@ test.describe("UI regressions", () => {
           )
       )
         return false;
-      return new URL(req.url()).searchParams.has("timestamp__lt");
+      return new URL(req.url()).searchParams.has("page_id");
     });
 
     await triggerOlderEventLoad(page);
@@ -497,14 +628,372 @@ test.describe("UI regressions", () => {
     const olderUrl = new URL(olderRequest.url());
     expect(olderUrl.searchParams.get("limit")).toBe(String(PAGE_SIZE));
     expect(olderUrl.searchParams.get("sort_order")).toBe("TIMESTAMP_DESC");
-    expect(olderUrl.searchParams.get("timestamp__lt")).toBe(
-      timestampForEvent(51),
-    );
+    expect(olderUrl.searchParams.get("page_id")).toBe("pagination-message-50");
+    expect(olderUrl.searchParams.has("timestamp__lt")).toBe(false);
 
     await expect(
       page.getByText("Pagination message 50", { exact: true }),
     ).toBeAttached({ timeout: 15_000 });
+    await expect(page.getByText(/^Pagination message (49|50|51)$/)).toHaveText([
+      "Pagination message 49",
+      "Pagination message 50",
+      "Pagination message 51",
+    ]);
     await expect(page.getByTestId("loading-older-events")).toHaveCount(0);
+  });
+
+  // ── virtualized rows render real message components ──────────────
+
+  test("virtualizes long conversations into real message rows", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const VIRTUALIZED_CONVERSATION_ID = "virtualized-e2e";
+    const EVENT_COUNT = 400;
+    await routeSessionApiKey(page);
+    await routePaginationConversation(page, {
+      id: VIRTUALIZED_CONVERSATION_ID,
+      count: EVENT_COUNT,
+      title: "Virtualized test",
+    });
+
+    const shell = page.getByTestId("virtualized-message-list");
+    const mountedRows = page.getByTestId("virtualized-message-row");
+    const agentBubble = (index: number) =>
+      page
+        .getByTestId("agent-message")
+        .filter({ hasText: `Pagination message ${index}` });
+    const olderPageRequest = () =>
+      page.waitForRequest(
+        (req) =>
+          req.method() === "GET" &&
+          req
+            .url()
+            .includes(
+              `/api/conversations/${VIRTUALIZED_CONVERSATION_ID}/events/search`,
+            ) &&
+          new URL(req.url()).searchParams.has("page_id"),
+      );
+
+    await page.goto(`/conversations/${VIRTUALIZED_CONVERSATION_ID}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    // The tail fetch returns the newest 50 events, rendered through the real
+    // `EventMessage` tree as an actual agent chat bubble — not the mocked stub
+    // the unit test substitutes, so row-layout regressions surface here.
+    await expect(agentBubble(EVENT_COUNT)).toBeVisible({ timeout: 15_000 });
+
+    // Below the virtualization threshold the list is the plain one, so the
+    // shell is absent until enough pages accumulate.
+    await expect(shell).toHaveCount(0);
+
+    // Scroll up to backfill older pages through the real load-older path until
+    // the rendered-row count crosses the threshold and the list virtualizes.
+    for (let page_ = 0; page_ < 3; page_ += 1) {
+      const request = olderPageRequest();
+      await triggerOlderEventLoad(page);
+      await request;
+      await expect(page.getByTestId("loading-older-events")).toHaveCount(0);
+    }
+
+    // 200 events are loaded now — past the 150-row threshold — so the list is
+    // virtualized and only a bounded window of the history is mounted.
+    await expect(shell).toBeVisible({ timeout: 15_000 });
+    expect(await mountedRows.count()).toBeLessThan(100);
+    await expect(
+      page.getByText("Pagination message 1", { exact: true }),
+    ).toHaveCount(0);
+
+    // A backfilled page merged into the virtualized list: the shell represents
+    // the extra rows (offsets, not mounted nodes), so its scroll height grows
+    // while the mounted window stays bounded.
+    const scroller = await getChatScroller(page);
+    const heightBefore = await scroller.evaluate((el) => el.scrollHeight);
+    const backfillRequest = olderPageRequest();
+    await triggerOlderEventLoad(page);
+    await expect(page.getByTestId("loading-older-events")).toContainText(
+      "Fetching older messages",
+    );
+    await backfillRequest;
+    await expect(page.getByTestId("loading-older-events")).toHaveCount(0);
+    await expect
+      .poll(() => scroller.evaluate((el) => el.scrollHeight), {
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(heightBefore);
+    expect(await mountedRows.count()).toBeLessThan(100);
+
+    // Scrolling near the top mounts the oldest backfilled row (event 151, from
+    // the fourth page) as a real agent bubble. scrollTop stays above the
+    // load-older threshold so this does not trigger yet another fetch.
+    await scroller.evaluate((el) => {
+      el.scrollTo({ top: 100 });
+      el.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    await expect(agentBubble(151)).toBeAttached({ timeout: 15_000 });
+  });
+
+  // ── scroll-to-bottom lands at the bottom in a virtualized list ───
+
+  /**
+   * The PR's goal for the "jump to latest" control: with hundreds of rows the
+   * list is virtualized and its tail rows mount as the jump lands on them, so
+   * the reader must end at the true bottom with the newest message visible. The
+   * row-size clamp itself is pinned down in
+   * `messages-virtualization.test.tsx` ("re-pins the bottom once the shell
+   * grows"); this is the end-to-end guard that the button still reaches the
+   * bottom over the real browser layout.
+   */
+  test("scroll-to-bottom reaches the newest message in a virtualized list", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const VIRTUALIZED_CONVERSATION_ID = "scroll-bottom-e2e";
+    const EVENT_COUNT = 400;
+    await routeSessionApiKey(page);
+    await routePaginationConversation(page, {
+      id: VIRTUALIZED_CONVERSATION_ID,
+      count: EVENT_COUNT,
+      title: "Scroll bottom test",
+      varyHeight: true,
+    });
+
+    const shell = page.getByTestId("virtualized-message-list");
+    const olderPageRequest = () =>
+      page.waitForRequest(
+        (req) =>
+          req.method() === "GET" &&
+          req
+            .url()
+            .includes(
+              `/api/conversations/${VIRTUALIZED_CONVERSATION_ID}/events/search`,
+            ) &&
+          new URL(req.url()).searchParams.has("page_id"),
+      );
+
+    await page.goto(`/conversations/${VIRTUALIZED_CONVERSATION_ID}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page
+        .getByTestId("agent-message")
+        .filter({ hasText: `Pagination message ${EVENT_COUNT}` }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // Backfill past the virtualization threshold, then leave the reader up in
+    // the history so the newest rows are unmounted and still at the estimate.
+    for (let page_ = 0; page_ < 3; page_ += 1) {
+      const request = olderPageRequest();
+      await triggerOlderEventLoad(page);
+      await request;
+      await expect(page.getByTestId("loading-older-events")).toHaveCount(0);
+    }
+    await expect(shell).toBeVisible({ timeout: 15_000 });
+
+    const scroller = await getChatScroller(page);
+    const bottomDistance = () =>
+      scroller.evaluate(
+        (el) => el.scrollHeight - el.clientHeight - el.scrollTop,
+      );
+
+    // Start well away from the bottom so the jump has real work to do.
+    await scroller.evaluate((el) => {
+      el.scrollTo({ top: 0 });
+      el.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    await page.waitForTimeout(300);
+    expect(await bottomDistance()).toBeGreaterThan(1_000);
+
+    await page.getByTestId("scroll-to-bottom").click();
+
+    // The button's own jump must land at the bottom and stay there as the
+    // newly mounted tail rows report their real sizes.
+    await expect.poll(bottomDistance, { timeout: 15_000 }).toBeLessThan(50);
+    await expect(
+      page
+        .getByTestId("agent-message")
+        .filter({ hasText: `Pagination message ${EVENT_COUNT}` }),
+    ).toBeVisible();
+  });
+
+  // ── Drag-selection stays inside the message feed ─────────────────
+
+  /**
+   * Drags from a message in the feed past the top/bottom edge. Without the
+   * clamp the selection escapes to the pane header (up) or the composer
+   * (down); with it the focus stays inside the feed.
+   */
+  async function dragSelectionPastEdge(page: Page, direction: "up" | "down") {
+    const scroller = await waitForScrollableConversation(page);
+    // Park mid-feed, then let any auto-scroll settle before measuring so the
+    // pointer coordinates still point at a message when the drag starts.
+    await scroller.evaluate((el) => {
+      const feed = el;
+      feed.scrollTop = Math.round((feed.scrollHeight - feed.clientHeight) / 2);
+    });
+    await page.waitForTimeout(300);
+
+    const start = await pickVisibleMessage(
+      page,
+      direction === "down" ? "first" : "last",
+    );
+    // Stay inside the viewport but outside the feed so the selection tries to
+    // escape into the pane header (up) or the composer (down).
+    const targetY = direction === "down" ? page.viewportSize()!.height - 1 : 1;
+
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x, targetY, { steps: 30 });
+    // Wait for the auto-scroll to run and the clamp to engage rather than a
+    // fixed delay, so the assertion does not race the feed's scroll.
+    await expect
+      .poll(
+        () =>
+          scroller.evaluate((el) =>
+            el.contains(window.getSelection()?.focusNode ?? null),
+          ),
+        { timeout: 5_000 },
+      )
+      .toBe(true);
+
+    const result = await scroller.evaluate((el) => {
+      const feed = el;
+      const selection = window.getSelection();
+      return {
+        focusInFeed: feed.contains(selection?.focusNode ?? null),
+        text: selection?.toString() ?? "",
+      };
+    });
+
+    await page.mouse.up();
+    return result;
+  }
+
+  /** A point inside the first or last fully visible message text node, with the
+   *  message number that text belongs to. */
+  async function pickVisibleMessage(page: Page, position: "first" | "last") {
+    const scroller = await waitForScrollableConversation(page);
+    return scroller.evaluate((el, pos) => {
+      const feed = el;
+      const bounds = feed.getBoundingClientRect();
+      const walker = document.createTreeWalker(feed, NodeFilter.SHOW_TEXT);
+      const candidates: { x: number; y: number; number: number }[] = [];
+      let node: Node | null;
+      while ((node = walker.nextNode())) {
+        const match = node.textContent?.match(/Pagination message (\d+)/);
+        if (!match) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const rect = range.getBoundingClientRect();
+        if (rect.top > bounds.top + 30 && rect.bottom < bounds.bottom - 30) {
+          candidates.push({
+            x: Math.round(rect.left + 8),
+            y: Math.round(rect.top + rect.height / 2),
+            number: Number(match[1]),
+          });
+        }
+      }
+      const point = pos === "first" ? candidates[0] : candidates.at(-1);
+      if (!point) throw new Error(`no draggable message found (${pos})`);
+      return point;
+    }, position);
+  }
+
+  for (const direction of ["up", "down"] as const) {
+    test(`keeps drag-selection in the feed when dragging ${direction} past the edge`, async ({
+      page,
+    }) => {
+      test.setTimeout(60_000);
+      await routeSessionApiKey(page);
+      await routePaginationConversation(page);
+
+      await page.goto(`/conversations/${PAGINATION_CONVERSATION_ID}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(
+        page.getByText("Pagination message 100", { exact: true }),
+      ).toBeVisible({ timeout: 15_000 });
+
+      const selection = await dragSelectionPastEdge(page, direction);
+
+      expect(selection.focusInFeed).toBe(true);
+      expect(selection.text.length).toBeGreaterThan(0);
+      expect(selection.text).not.toContain("Disconnected");
+    });
+  }
+
+  /**
+   * Drags from a message, past the top edge, and back into the feed without
+   * releasing. With the clamp rebuilding the range via `collapse()` +
+   * `extend()`, the browser anchor survives, so the selection resumes from the
+   * original message instead of restarting at the first feed child.
+   */
+  test("keeps the original anchor when an upward drag reenters the feed", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    await routeSessionApiKey(page);
+    await routePaginationConversation(page);
+    await page.goto(`/conversations/${PAGINATION_CONVERSATION_ID}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page.getByText("Pagination message 100", { exact: true }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const scroller = await waitForScrollableConversation(page);
+    await scroller.evaluate((el) => {
+      const feed = el;
+      feed.scrollTop = Math.round((feed.scrollHeight - feed.clientHeight) / 2);
+    });
+    await page.waitForTimeout(300);
+
+    const start = await pickVisibleMessage(page, "last");
+
+    // Start on the bottom-most visible message, escape past the top edge, then
+    // come back down into the feed without releasing the button.
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x, 1, { steps: 20 });
+    await page.waitForTimeout(400);
+
+    const reenter = await pickVisibleMessage(page, "last");
+    await page.mouse.move(reenter.x, reenter.y, { steps: 20 });
+    await page.waitForTimeout(400);
+
+    const selection = await scroller.evaluate((el) => {
+      const s = window.getSelection();
+      const text = s?.toString() ?? "";
+      const numbers = [...text.matchAll(/Pagination message (\d+)/g)].map((m) =>
+        Number(m[1]),
+      );
+      // The message the browser anchor sits in. `anchorNode` is a text node, so
+      // resolve the enclosing message element and read its number.
+      const anchorText = s?.anchorNode?.textContent ?? "";
+      const anchorNumber = Number(
+        anchorText.match(/Pagination message (\d+)/)?.[1],
+      );
+      return {
+        anchorInFeed: el.contains(s?.anchorNode ?? null),
+        anchorIsFeedElement: s?.anchorNode === el,
+        anchorNumber: Number.isNaN(anchorNumber) ? null : anchorNumber,
+        focusInFeed: el.contains(s?.focusNode ?? null),
+        minNumber: numbers.length ? Math.min(...numbers) : null,
+      };
+    });
+    await page.mouse.up();
+
+    expect(selection.anchorInFeed).toBe(true);
+    // A regression that resets the anchor to the feed element must fail.
+    expect(selection.anchorIsFeedElement).toBe(false);
+    expect(selection.focusInFeed).toBe(true);
+    // The browser anchor must still be the message the drag started on. With the
+    // anchor reset to the feed element this is null; with it reset to the feed
+    // start the anchor message would be 1.
+    expect(selection.anchorNumber).toBe(start.number);
+    // Re-entering near the bottom must not restart the range at message 1.
+    expect(selection.minNumber).toBeGreaterThan(1);
   });
 
   // ── #1076: workspace selection persistence ───────────────────────
@@ -643,5 +1132,151 @@ test.describe("UI regressions", () => {
     const dropdown = page.getByTestId("workspace-dropdown");
     await expect(dropdown).toBeEnabled({ timeout: 15_000 });
     await expect(dropdown).toHaveValue("");
+  });
+
+  // @spec FF-001 — Validation feedback follows the embedding host's error role
+  test("profile validation feedback follows the host error role", async ({
+    page,
+  }) => {
+    await routeSessionApiKey(page);
+    // Isolate the missing-model state from profiles saved by earlier scenarios.
+    // Mock the underlying read contract, while the real editor and built CSS run.
+    await page.route("**/api/profiles", async (route, request) => {
+      if (request.method() !== "GET") return route.fallback();
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ profiles: [], active_profile: null }),
+      });
+    });
+    await page.goto("/settings/agents", { waitUntil: "domcontentloaded" });
+    await page.getByTestId("add-agent-profile").click();
+    await expect(page.getByTestId("agent-profile-no-llm")).toBeVisible();
+    await page.getByTestId("agent-profile-no-llm").evaluate((el) => {
+      const scope = el.closest("[data-agent-server-ui]");
+      if (!scope) throw new Error("Agent Server UI theme scope not found");
+      (scope as HTMLElement).style.setProperty(
+        "--oh-feedback-error",
+        "#8b1029",
+      );
+    });
+    await expect(page.getByTestId("agent-profile-no-llm")).toHaveCSS(
+      "color",
+      "rgb(139, 16, 41)",
+    );
+  });
+
+  // @spec WN-001 — Home warning icon follows the embedding host warning role
+  test("home warning icon follows the host warning color", async ({ page }) => {
+    await routeSessionApiKey(page);
+    // Earlier scenarios persist usable LLM and ACP profiles on the shared server.
+    await page.route("**/api/profiles", async (route, request) => {
+      if (request.method() !== "GET") return route.fallback();
+      return route.fulfill({
+        json: { profiles: [], active_profile: null },
+      });
+    });
+    await page.route("**/api/agent-profiles", async (route, request) => {
+      if (request.method() !== "GET") return route.fallback();
+      return route.fulfill({
+        json: {
+          active_agent_profile_id: "warning-test-agent",
+          profiles: [
+            {
+              id: "warning-test-agent",
+              name: "default",
+              agent_kind: "openhands",
+              revision: 1,
+              llm_profile_ref: null,
+              mcp_server_refs: [],
+            },
+          ],
+        },
+      });
+    });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByTestId("home-llm-not-configured-banner"),
+    ).toBeVisible();
+    const icon = page
+      .getByTestId("home-llm-not-configured-banner")
+      .locator("svg")
+      .first();
+    await icon.evaluate((element) => {
+      const scope = element.closest("[data-agent-server-ui]");
+      if (!scope) throw new Error("Agent Server UI theme scope not found");
+      (scope as HTMLElement).style.setProperty(
+        "--oh-feedback-warning",
+        "#8b1029",
+      );
+    });
+    await expect(icon).toHaveCSS("color", "rgb(139, 16, 41)");
+  });
+
+  // @spec WN-001 — Canvas Apps trust notice follows the host warning role
+  test("Apps trust notice follows the host warning color", async ({ page }) => {
+    await routeSessionApiKey(page);
+    await page.goto("/apps", { waitUntil: "domcontentloaded" });
+    const notice = page.getByText("This app runs trusted JavaScript", {
+      exact: false,
+    });
+    await expect(notice).toBeVisible();
+    await notice.evaluate((element) => {
+      const scope = element.closest("[data-agent-server-ui]");
+      if (!scope) throw new Error("Agent Server UI theme scope not found");
+      (scope as HTMLElement).style.setProperty(
+        "--oh-feedback-warning",
+        "#8b1029",
+      );
+    });
+    await expect(notice).toHaveCSS("color", "rgb(139, 16, 41)");
+  });
+
+  // @spec HL-001 — Home mode labels follow the embedding host's contrast ink
+  test("home mode toggle labels follow the host contrast color", async ({
+    page,
+  }) => {
+    await routeSessionApiKey(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const toggle = page.getByTestId("home-launcher-mode-toggle");
+    const selected = toggle.getByRole("radio", { checked: true });
+    const unselected = toggle.getByRole("radio", { checked: false });
+    await expect(selected).toBeVisible();
+    await toggle.evaluate((element) => {
+      const scope = element.closest("[data-agent-server-ui]");
+      if (!scope) throw new Error("Agent Server UI theme scope not found");
+      (scope as HTMLElement).style.setProperty("--oh-contrast", "#8b1029");
+    });
+
+    await expect(selected).toHaveCSS("color", "rgb(139, 16, 41)");
+    await unselected.hover();
+    await expect(unselected).toHaveCSS("color", "rgb(139, 16, 41)");
+  });
+
+  test("backend keyboard focus follows the host focus role", async ({
+    page,
+  }) => {
+    await routeSessionApiKey(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const shell = page.locator("[data-agent-server-ui]").first();
+    await expect(shell).toBeVisible();
+    await shell.evaluate((el) => {
+      (el as HTMLElement).style.setProperty("--oh-focus", "#7314b9");
+    });
+    await page.getByTestId("backend-selector").click();
+    await page.getByTestId("add-backend-menu-item").click();
+    await page.getByTestId("add-backend-option-agent-server").click();
+
+    for (const id of [
+      "add-backend-option-agent-server",
+      "add-backend-local-guidance-toggle",
+    ]) {
+      const control = page.getByTestId(id);
+      await control.focus();
+      await page.keyboard.press("Space");
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Shift+Tab");
+      await expect(control).toBeFocused();
+      await expect(control).toHaveCSS("outline-color", "rgb(115, 20, 185)");
+    }
   });
 });

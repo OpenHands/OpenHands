@@ -1,0 +1,22 @@
+{
+  "target": "61a3bd93e642a0ff4def73b29496a73245628209",
+  "sdk": "1.55.1",
+  "automation": "1.20.1",
+  "draft_name": "QA_Stale_Validity_Repeat",
+  "trigger": {
+    "type": "cron",
+    "schedule": "every day",
+    "timezone": "America/New_York"
+  },
+  "dispatchable": false,
+  "validation_errors": [
+    {
+      "field": "trigger.schedule",
+      "code": "value_error",
+      "message": "Value error, Invalid cron expression: every day"
+    }
+  ],
+  "observed_badge": "Latest test passed",
+  "prior_run_status": "COMPLETED",
+  "reproductions": 2
+}

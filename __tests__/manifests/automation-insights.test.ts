@@ -122,7 +122,7 @@ describe("deriveAutomationHealth", () => {
       "failing",
     ],
     [
-      "a completed latest task with custom metadata is unknown",
+      "a completed latest task with custom metadata is healthy",
       createAutomation(),
       settled({
         latestRun: createRun({
@@ -131,7 +131,7 @@ describe("deriveAutomationHealth", () => {
           },
         }),
       }),
-      "unknown",
+      "healthy",
     ],
     [
       // Statuses the backend added after the dashboard's reference design:
@@ -281,6 +281,15 @@ describe("matchesAutomationSearch", () => {
   it("rejects an automation matching no field", () => {
     expect(matchesAutomationSearch(createAutomation(), "gadget")).toBe(false);
   });
+
+  it("matches the repositories the service returns", () => {
+    const automation = createAutomation({
+      repository: undefined,
+      repositories: [{ url: "fabrikam/Fabrikam Fiber/fabrikam-web" }],
+    });
+
+    expect(matchesAutomationSearch(automation, "fabrikam-web")).toBe(true);
+  });
 });
 
 describe("applyDashboardView", () => {
@@ -316,6 +325,9 @@ describe("applyDashboardView", () => {
     search: "",
     status: "all",
     trigger: "all",
+    createdBy: "all",
+    currentUserId: null,
+    tag: null,
     sort: "name",
   } as const;
 
@@ -349,6 +361,100 @@ describe("applyDashboardView", () => {
       scheduled: scheduled.map((a) => a.id),
       events: events.map((a) => a.id),
     }).toEqual({ scheduled: ["healthy", "failing"], events: ["evented"] });
+  });
+
+  it("splits automations by who runs them, counting a missing identity as another person's", () => {
+    // Arrange
+    const mine = createAutomation({
+      id: "mine",
+      name: "A mine",
+      user_id: "me",
+    });
+    const theirs = createAutomation({
+      id: "theirs",
+      name: "B theirs",
+      user_id: "teammate",
+    });
+    const unowned = createAutomation({ id: "unowned", name: "C unowned" });
+    const serviceRun = createAutomation({
+      id: "service-run",
+      name: "D service",
+      user_id: "svc-1",
+      run_as_kind: "service",
+    });
+    const automations = [serviceRun, unowned, theirs, mine];
+
+    // Act
+    const view = (createdBy: "all" | "me" | "others" | "service") =>
+      applyDashboardView(
+        automations,
+        { ...neutral, createdBy, currentUserId: "me" },
+        byId,
+      ).map((a) => a.id);
+
+    // Assert — me and others are people only; service is every
+    // service-account-run automation.
+    expect({
+      all: view("all"),
+      me: view("me"),
+      others: view("others"),
+      service: view("service"),
+    }).toEqual({
+      all: ["mine", "theirs", "unowned", "service-run"],
+      me: ["mine"],
+      others: ["theirs", "unowned"],
+      service: ["service-run"],
+    });
+  });
+
+  it("leaves the creator filter inert while the caller's identity is unknown", () => {
+    // Arrange
+    const mine = createAutomation({
+      id: "mine",
+      name: "A mine",
+      user_id: "me",
+    });
+    const automations = [mine];
+
+    // Act
+    const askingForMe = applyDashboardView(
+      automations,
+      { ...neutral, createdBy: "me", currentUserId: null },
+      byId,
+    );
+    const askingForOthers = applyDashboardView(
+      automations,
+      { ...neutral, createdBy: "others", currentUserId: null },
+      byId,
+    );
+
+    // Assert — no identity means neither bucket can claim anything, so it
+    // behaves exactly like "all".
+    expect({
+      me: askingForMe.map((a) => a.id),
+      others: askingForOthers.map((a) => a.id),
+    }).toEqual({ me: ["mine"], others: ["mine"] });
+  });
+
+  it("keeps only automations carrying the selected tag", () => {
+    // Arrange — one tagged automation, one with other tags, and one from an
+    // automation service that sends no tags at all.
+    const tagged = createAutomation({
+      id: "tagged",
+      tags: ["software-factory", "ci"],
+    });
+    const otherTags = createAutomation({ id: "other", tags: ["ci"] });
+    const untagged = createAutomation({ id: "untagged" });
+
+    // Act
+    const visible = applyDashboardView(
+      [tagged, otherTags, untagged],
+      { ...neutral, tag: "software-factory" },
+      byId,
+    );
+
+    // Assert
+    expect(visible.map((a) => a.id)).toEqual(["tagged"]);
   });
 
   it("orders by lifetime run count under the runs sort", () => {

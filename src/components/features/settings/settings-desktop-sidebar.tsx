@@ -1,3 +1,5 @@
+import { CompactSectionNavigation } from "#/components/shared/compact-section-navigation";
+import { useNavigation } from "#/context/navigation-context";
 import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
 import { Typography } from "#/ui/typography";
@@ -22,36 +24,19 @@ export function SettingsDesktopSidebar({
   navigationItems,
 }: SettingsDesktopSidebarProps) {
   const { t } = useTranslation("openhands");
-  const desktopNavItems = navigationItems.filter(
-    (item): item is Extract<SettingsNavRenderedItem, { type: "item" }> =>
-      item.type === "item",
-  );
 
   return (
     <aside
       data-testid="settings-navbar-desktop"
       className={cn(
-        "hidden md:flex md:w-65 md:shrink-0 md:flex-col md:gap-2",
-        "md:sticky md:top-8 md:self-start md:pl-8",
+        "hidden lg:flex lg:w-65 lg:shrink-0 lg:flex-col lg:gap-2",
+        "lg:sticky lg:top-8 lg:self-start lg:pl-8",
       )}
     >
       <Typography.Text className="px-2 text-sm font-normal text-contrast">
         {t(I18nKey.SETTINGS$TITLE)}
       </Typography.Text>
-      <div className="flex flex-col gap-0.5 pt-0.5">
-        {desktopNavItems.map((renderedItem) => (
-          <SidebarNavLink
-            key={renderedItem.item.to}
-            to={renderedItem.item.to}
-            label={t(renderedItem.item.text as I18nKey)}
-            end
-            testId={`sidebar-settings-${renderedItem.item.to}`}
-            icon={renderedItem.item.icon}
-          />
-        ))}
-        <IntegrationsSettingsLink />
-        <CloudSettingsLink />
-      </div>
+      <SettingsNavigationLinks navigationItems={navigationItems} />
       <div className="flex flex-col gap-2 px-2 pt-3">
         <AgentCanvasUpdateCard />
       </div>
@@ -59,5 +44,57 @@ export function SettingsDesktopSidebar({
         <BackendSyncedSettingsBadge />
       </div>
     </aside>
+  );
+}
+
+function SettingsNavigationLinks({
+  navigationItems,
+}: SettingsDesktopSidebarProps) {
+  const { t } = useTranslation("openhands");
+  const desktopNavItems = navigationItems.filter(
+    (item): item is Extract<SettingsNavRenderedItem, { type: "item" }> =>
+      item.type === "item",
+  );
+  return (
+    <div className="flex flex-col gap-0.5 pt-0.5">
+      {desktopNavItems.map((renderedItem) => (
+        <SidebarNavLink
+          key={renderedItem.item.to}
+          to={renderedItem.item.to}
+          label={t(renderedItem.item.text as I18nKey)}
+          testId={`sidebar-settings-${renderedItem.item.to}`}
+          icon={renderedItem.item.icon}
+        />
+      ))}
+      <IntegrationsSettingsLink />
+      <CloudSettingsLink />
+    </div>
+  );
+}
+
+export function SettingsCompactNavigation({
+  navigationItems,
+}: SettingsDesktopSidebarProps) {
+  const { t } = useTranslation("openhands");
+  const { currentPath } = useNavigation();
+  const currentItem = navigationItems.find(
+    (item) =>
+      item.type === "item" &&
+      (item.item.to === currentPath ||
+        currentPath.startsWith(`${item.item.to}/`)),
+  );
+
+  return (
+    <CompactSectionNavigation
+      label={t(I18nKey.SETTINGS$TITLE)}
+      currentLabel={
+        currentItem?.type === "item"
+          ? t(currentItem.item.text as I18nKey)
+          : undefined
+      }
+      testId="settings-compact-navigation"
+    >
+      <SettingsNavigationLinks navigationItems={navigationItems} />
+    </CompactSectionNavigation>
   );
 }

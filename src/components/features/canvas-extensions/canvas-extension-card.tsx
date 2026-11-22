@@ -1,8 +1,15 @@
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import type { Backend } from "#/api/backend-registry/types";
+import { useEffect, useRef, useState } from "react";
+import CanvasExtensionsService, {
+  type CanvasAppBackendStatus,
+} from "#/api/canvas-extensions-service";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ToggleSwitch } from "#/ui/toggle-switch";
 import { I18nKey } from "#/i18n/declaration";
 import type { InstalledCanvasExtensionInfo } from "#/types/canvas-extension";
+import { CanvasExtensionIcon } from "./canvas-extension-icon";
 import {
   extensionModuleCardPillClassName,
   extensionModuleCardSurfaceClassName,
@@ -12,6 +19,7 @@ interface CanvasExtensionCardProps {
   extension: InstalledCanvasExtensionInfo;
   isBusy: boolean;
   onToggle: () => void;
+  onRefresh: () => void;
   onUninstall: () => void;
 }
 
@@ -19,9 +27,11 @@ export function CanvasExtensionCard({
   extension,
   isBusy,
   onToggle,
+  onRefresh,
   onUninstall,
 }: CanvasExtensionCardProps) {
   const { t } = useTranslation("openhands");
+  const { backend } = useActiveBackend();
   const pages = extension.manifest?.contributes?.pages ?? [];
   const displayName = extension.manifest?.display_name || extension.name;
 
@@ -31,6 +41,11 @@ export function CanvasExtensionCard({
       className={`flex min-w-0 flex-col gap-4 p-4 ${extensionModuleCardSurfaceClassName}`}
     >
       <header className="flex items-start justify-between gap-4">
+        <CanvasExtensionIcon
+          extension={extension}
+          size={20}
+          className="mt-0.5 shrink-0"
+        />
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-semibold text-contrast">
             {displayName}
@@ -45,6 +60,7 @@ export function CanvasExtensionCard({
             extension.enabled ? I18nKey.COMMON$DISABLE : I18nKey.COMMON$ENABLE,
           )}
           onToggle={onToggle}
+          disabled={isBusy}
           className={isBusy ? "pointer-events-none opacity-50" : undefined}
         />
       </header>
@@ -73,7 +89,7 @@ export function CanvasExtensionCard({
         ) : null}
       </div>
 
-      <dl className="grid min-w-0 grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+      <dl className="grid min-w-0 metadata-grid-columns gap-x-3 gap-y-1 text-xs">
         {extension.resolved_ref ? (
           <>
             <dt className="text-tertiary-alt">
@@ -108,7 +124,24 @@ export function CanvasExtensionCard({
         </section>
       ) : null}
 
+      {extension.manifest?.backend && (
+        <CanvasBackendControls
+          key={`${backend.id}:${backend.connectionRevision}:${extension.name}:${extension.version}`}
+          extension={extension}
+          backend={backend}
+        />
+      )}
+
       <footer className="flex justify-end gap-2 border-t border-border pt-3">
+        <BrandButton
+          type="button"
+          variant="secondary"
+          testId={`canvas-extension-refresh-${extension.name}`}
+          isDisabled={isBusy}
+          onClick={onRefresh}
+        >
+          {t(I18nKey.SETTINGS$PLUGINS_REFRESH)}
+        </BrandButton>
         <BrandButton
           type="button"
           variant="ghost-danger"
@@ -120,5 +153,112 @@ export function CanvasExtensionCard({
         </BrandButton>
       </footer>
     </article>
+  );
+}
+
+function CanvasBackendControls({
+  extension,
+  backend,
+}: {
+  extension: InstalledCanvasExtensionInfo;
+  backend: Backend;
+}) {
+  const { t } = useTranslation("openhands");
+  const [status, setStatus] = useState<CanvasAppBackendStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const mounted = useRef(false);
+  const generation = useRef(0);
+  const acting = useRef(false);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    let active = true;
+    mounted.current = true;
+    const refresh = () => {
+      if (acting.current) return;
+      const requestGeneration = ++generation.current;
+      return CanvasExtensionsService.backendStatus(extension.name, backend)
+        .then((value) => {
+          if (active && requestGeneration === generation.current)
+            setStatus(value);
+        })
+        .catch(() => {
+          if (active && requestGeneration === generation.current)
+            setStatus(null);
+        });
+    };
+    void refresh();
+    const timer = setInterval(refresh, 3000);
+    return () => {
+      active = false;
+      mounted.current = false;
+      clearInterval(timer);
+    };
+  }, [extension.name, extension.version, extension.enabled, backend]);
+  const refs = extension.manifest?.backend?.secret_refs ?? [];
+  const approved =
+    status?.secret_grant_revision === status?.revision && !!status?.revision;
+  const revokeSecrets = async () => {
+    if (!status?.revision) return;
+    acting.current = true;
+    generation.current += 1;
+    const requestGeneration = generation.current;
+    setBusy(true);
+    setError(false);
+    try {
+      const result = await CanvasExtensionsService.revokeBackendSecrets(
+        extension.name,
+        backend,
+      );
+      if (mounted.current && requestGeneration === generation.current) {
+        setStatus(result);
+        window.dispatchEvent(new Event("canvas-app-revoked"));
+      }
+    } catch {
+      if (mounted.current && requestGeneration === generation.current)
+        setError(true);
+    } finally {
+      acting.current = false;
+      if (mounted.current && requestGeneration === generation.current)
+        setBusy(false);
+    }
+  };
+  return (
+    <section className="flex flex-col gap-3 border-t border-border pt-3">
+      {refs.length > 0 && (
+        <>
+          <p>
+            {t(I18nKey.SETTINGS$APPS_BACKEND_SECRETS, {
+              names: refs.join(", "),
+            })}
+          </p>
+          <p className="text-xs text-tertiary-light">
+            {t(I18nKey.SETTINGS$APPS_BACKEND_WARNING)}
+          </p>
+        </>
+      )}
+      {!status ? (
+        <p role="status">{t(I18nKey.SETTINGS$APPS_BACKEND_UNSUPPORTED)}</p>
+      ) : (
+        <>
+          <p role="status">
+            {t(I18nKey.SETTINGS$APPS_BACKEND_STATE, { state: status.state })}
+          </p>
+          {approved && <p>{t(I18nKey.SETTINGS$APPS_BACKEND_APPROVED)}</p>}
+          <div className="flex flex-wrap gap-2">
+            {refs.length > 0 && approved && (
+              <BrandButton
+                type="button"
+                variant="secondary"
+                isDisabled={busy}
+                onClick={revokeSecrets}
+              >
+                {t(I18nKey.SETTINGS$APPS_BACKEND_REVOKE)}
+              </BrandButton>
+            )}
+          </div>
+        </>
+      )}
+      {error && <p role="alert">{t(I18nKey.SETTINGS$APPS_BACKEND_ERROR)}</p>}
+    </section>
   );
 }

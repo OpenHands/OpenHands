@@ -1,0 +1,1 @@
+docs(verify-openhands): reconcile weekly map and prove controller corrections

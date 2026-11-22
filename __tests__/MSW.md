@@ -75,8 +75,6 @@ it("should handle server errors", async () => {
 });
 ```
 
-For WebSocket testing, see `__tests__/helpers/msw-websocket-setup.ts` for utilities.
-
 ## Adding New API Mocks
 
 When adding new API endpoints, create mocks in both places to maintain 1:1 similarity with the backend:

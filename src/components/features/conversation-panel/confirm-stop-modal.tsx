@@ -7,6 +7,7 @@ import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalBody } from "#/components/shared/modals/modal-body";
 import { BrandButton } from "../settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 
 interface ConfirmStopModalProps {
   onConfirm: () => void;
@@ -18,16 +19,26 @@ export function ConfirmStopModal({
   onCancel,
 }: ConfirmStopModalProps) {
   const { t } = useTranslation("openhands");
+  // On cloud this stops the conversation's sandbox, not just the agent.
+  const isCloud = useActiveBackend().backend.kind === "cloud";
 
   return (
     <ModalBackdrop onClose={onCancel}>
       <ModalBody className="items-start border border-border">
         <div className="flex flex-col gap-2">
           <BaseModalTitle
-            title={t(I18nKey.CONVERSATION$CONFIRM_CLOSE_CONVERSATION)}
+            title={t(
+              isCloud
+                ? I18nKey.CONVERSATION$CONFIRM_STOP_SANDBOX
+                : I18nKey.CONVERSATION$CONFIRM_CLOSE_CONVERSATION,
+            )}
           />
           <BaseModalDescription
-            description={t(I18nKey.CONVERSATION$CLOSE_CONVERSATION_WARNING)}
+            description={t(
+              isCloud
+                ? I18nKey.CONVERSATION$STOP_SANDBOX_WARNING
+                : I18nKey.CONVERSATION$CLOSE_CONVERSATION_WARNING,
+            )}
           />
         </div>
         <div
@@ -38,7 +49,7 @@ export function ConfirmStopModal({
             type="button"
             variant="secondary"
             onClick={onCancel}
-            data-testid="cancel-button"
+            testId="cancel-button"
           >
             {t(I18nKey.BUTTON$CANCEL)}
           </BrandButton>
@@ -46,9 +57,13 @@ export function ConfirmStopModal({
             type="button"
             variant="primary"
             onClick={onConfirm}
-            data-testid="confirm-button"
+            testId="confirm-button"
           >
-            {t(I18nKey.ACTION$CONFIRM_CLOSE)}
+            {t(
+              isCloud
+                ? I18nKey.COMMON$STOP_SANDBOX
+                : I18nKey.ACTION$CONFIRM_CLOSE,
+            )}
           </BrandButton>
         </div>
       </ModalBody>

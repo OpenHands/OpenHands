@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useContextWindowUsage } from "#/hooks/use-context-window-usage";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useCompactContextAction } from "#/hooks/use-compact-context-action";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
 import { ConversationNameContextMenuIconText } from "#/components/features/conversation/conversation-name-context-menu-icon-text";
@@ -17,21 +18,18 @@ import {
   getContextWindowUsagePercentage,
 } from "#/utils/format-token-count";
 import { getContextFillTone } from "#/components/features/conversation/usage-panel/context-meter";
-import {
-  ContextWindowRing,
-  CONTEXT_WINDOW_TRACK_COLOR,
-} from "./context-window-ring";
+import { ContextWindowRing } from "./context-window-ring";
 
 const TONE_BAR_CLASS = {
   neutral: "bg-foreground",
-  warning: "bg-amber-500",
-  danger: "bg-red-500",
+  warning: "bg-feedback-warning",
+  danger: "bg-status-error",
 } as const;
 
 const TONE_LABEL_CLASS = {
   neutral: "text-muted",
-  warning: "text-amber-500",
-  danger: "text-red-500",
+  warning: "text-feedback-warning",
+  danger: "text-feedback-error",
 } as const;
 
 export function ContextWindowMeter() {
@@ -44,6 +42,7 @@ export function ContextWindowMeter() {
     () => setIsPopoverOpen(false),
     triggerRef,
   );
+  useCloseOnEscape(isPopoverOpen, () => setIsPopoverOpen(false), triggerRef);
   const { handleCompact, isCompacting, isDisabled } = useCompactContextAction(
     usage?.perTurnToken ?? 0,
   );
@@ -72,6 +71,9 @@ export function ContextWindowMeter() {
       <StyledTooltip
         content={t(I18nKey.CHAT_INTERFACE$SHOW_CONTEXT)}
         placement="top"
+        // While the popover is open the hint is redundant, and an open
+        // tooltip would swallow the Escape meant for the popover.
+        isDisabled={isPopoverOpen}
       >
         <button
           ref={triggerRef}
@@ -96,8 +98,8 @@ export function ContextWindowMeter() {
           ref={popoverRef}
           data-testid="context-window-meter-popover"
           className={cn(
-            "absolute bottom-full right-0 z-[60] mb-2 w-70",
-            "flex flex-col gap-0.5 rounded-md border border-border-subtle bg-tertiary px-1 py-1 shadow-lg",
+            "absolute bottom-full right-0 z-60 mb-2 w-70",
+            "flex flex-col gap-0.5 rounded-md border border-border-subtle bg-surface-raised px-1 py-1 shadow-lg",
           )}
         >
           <div className="flex flex-col gap-2 px-2 py-1.5">
@@ -113,8 +115,7 @@ export function ContextWindowMeter() {
             <button
               type="button"
               data-testid="context-window-meter-bar-button"
-              className="relative h-1.5 w-full rounded-full cursor-pointer"
-              style={{ backgroundColor: CONTEXT_WINDOW_TRACK_COLOR }}
+              className="relative h-1.5 w-full cursor-pointer rounded-full border border-context-window-track bg-tertiary"
               aria-label={t(I18nKey.COMMON$USAGE)}
               onClick={(event) => {
                 event.preventDefault();
@@ -124,10 +125,14 @@ export function ContextWindowMeter() {
             >
               <span
                 className={cn(
-                  "absolute inset-y-0 left-0 rounded-full transition-all duration-300",
+                  "absolute inset-y-0 left-0 w-(--context-fill-width) rounded-full transition-all duration-300",
                   TONE_BAR_CLASS[tone],
                 )}
-                style={{ width: `${Math.min(100, usagePercentage)}%` }}
+                style={
+                  {
+                    "--context-fill-width": `${Math.min(100, usagePercentage)}%`,
+                  } as React.CSSProperties
+                }
               />
             </button>
 

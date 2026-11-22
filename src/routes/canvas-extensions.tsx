@@ -1,7 +1,16 @@
+import CanvasExtensionsService, {
+  type CanvasAppBackendStatus,
+} from "#/api/canvas-extensions-service";
+import { ProfileScopeList } from "#/components/features/settings/agent-profiles/profile-scope-list";
+import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 import React from "react";
+import { buildAgentCanvasPath } from "#/utils/base-path";
 import { useTranslation } from "react-i18next";
 import { ExternalLink } from "lucide-react";
-import { ExtensionsNavigation } from "#/components/features/skills/extensions-navigation";
+import {
+  ExtensionsNavigation,
+  ExtensionsCompactNavigation,
+} from "#/components/features/skills/extensions-navigation";
 import { AddCanvasExtensionModal } from "#/components/features/canvas-extensions/add-canvas-extension-modal";
 import { CanvasExtensionCard } from "#/components/features/canvas-extensions/canvas-extension-card";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -14,6 +23,7 @@ import { isNoBackend } from "#/api/backend-registry/active-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCanvasExtensions } from "#/hooks/query/use-canvas-extensions";
 import {
+  useRefreshCanvasExtension,
   useSetCanvasExtensionEnabled,
   useUninstallCanvasExtension,
 } from "#/hooks/mutation/use-manage-canvas-extensions";
@@ -34,6 +44,7 @@ type PendingAction =
 const CANVAS_EXTENSIONS_DOCS_URL =
   "https://docs.openhands.dev/openhands/usage/agent-canvas/canvas-extensions";
 
+// @spec WN-001 — Apps trust notice uses theme-aware warning feedback
 export default function CanvasExtensionsScreen() {
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
@@ -41,22 +52,105 @@ export default function CanvasExtensionsScreen() {
   const [pendingAction, setPendingAction] =
     React.useState<PendingAction | null>(null);
   const query = useCanvasExtensions();
+  const [approval, setApproval] = React.useState<CanvasAppBackendStatus | null>(
+    null,
+  );
+  const [selectedSecrets, setSelectedSecrets] = React.useState<string[]>([]);
+  const [approvalError, setApprovalError] = React.useState(false);
+  const catalog = useSearchSecrets({
+    enabled: pendingAction?.type === "enable",
+  });
+  React.useEffect(() => {
+    setPendingAction(null);
+  }, [backend.id, backend.connectionRevision]);
+  React.useEffect(() => {
+    let active = true;
+    setApproval(null);
+    setSelectedSecrets([]);
+    setApprovalError(false);
+    if (
+      pendingAction?.type === "enable" &&
+      pendingAction.extension.manifest?.backend
+    ) {
+      CanvasExtensionsService.backendStatus(
+        pendingAction.extension.name,
+        backend,
+      )
+        .then((status) => {
+          if (active) {
+            setApproval(status);
+            setSelectedSecrets(
+              status.secret_grant_revision === status.revision
+                ? (status.secret_refs ?? [])
+                : [],
+            );
+          }
+        })
+        .catch(() => {
+          if (active) setApprovalError(true);
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [pendingAction, backend]);
+  const requiredSecrets =
+    pendingAction?.extension.manifest?.backend?.secret_refs ?? [];
+  const needsBackend =
+    pendingAction?.type === "enable" &&
+    !!pendingAction.extension.manifest?.backend;
+  const missingSecrets = requiredSecrets.filter(
+    (name) => !catalog.data.some((secret) => secret.name === name),
+  );
+  const consentReady =
+    !needsBackend ||
+    (!!approval?.revision &&
+      !approvalError &&
+      !catalog.isError &&
+      missingSecrets.length === 0 &&
+      requiredSecrets.every((name) => selectedSecrets.includes(name)));
+
   const setEnabled = useSetCanvasExtensionEnabled();
+  React.useEffect(() => {
+    const refresh = () => {
+      void query.refetch();
+    };
+    window.addEventListener("canvas-app-revoked", refresh);
+    return () => window.removeEventListener("canvas-app-revoked", refresh);
+  }, [query.refetch]);
   const uninstall = useUninstallCanvasExtension();
+  const refresh = useRefreshCanvasExtension();
 
   const backendCanSupportExtensions =
     !isNoBackend(backend) && backend.kind === "local";
   const unsupported =
     !backendCanSupportExtensions ||
     isCanvasExtensionsUnsupportedError(query.error);
-  const isBusy = setEnabled.isPending || uninstall.isPending;
+  const isBusy =
+    setEnabled.isPending || uninstall.isPending || refresh.isPending;
 
+  const currentBackend = React.useRef(backend);
+  currentBackend.current = backend;
   const confirmAction = () => {
-    if (!pendingAction) return;
+    if (!pendingAction || !consentReady) return;
     if (pendingAction.type === "enable") {
       setEnabled.mutate(
-        { name: pendingAction.extension.name, enabled: true },
-        { onSuccess: () => setPendingAction(null) },
+        {
+          name: pendingAction.extension.name,
+          enabled: true,
+          backend,
+          consent: approval?.revision
+            ? {
+                revision: approval.revision,
+                secret_refs: selectedSecrets,
+              }
+            : undefined,
+        },
+        {
+          onSuccess: () => {
+            if (currentBackend.current === backend) setPendingAction(null);
+          },
+        },
       );
     } else {
       uninstall.mutate(pendingAction.extension.name, {
@@ -86,6 +180,7 @@ export default function CanvasExtensionsScreen() {
       <ExtensionsNavigation />
       <main className={cn(settingsLikeMainScrollClassName, "h-full")}>
         <div className="mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6">
+          <ExtensionsCompactNavigation />
           <div className="flex min-w-0 items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <h2 className="text-xl font-semibold leading-6 text-foreground">
@@ -98,7 +193,7 @@ export default function CanvasExtensionsScreen() {
                 href={CANVAS_EXTENSIONS_DOCS_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                className="inline-flex items-center gap-1 text-sm text-link hover:underline"
               >
                 {t(I18nKey.SETTINGS$APPS_BUILD_LINK)}
                 <ExternalLink className="size-3.5" aria-hidden />
@@ -118,7 +213,7 @@ export default function CanvasExtensionsScreen() {
             </BrandButton>
           </div>
 
-          <div className="rounded-xl border border-amber-400/30 bg-amber-400/5 px-4 py-3 text-sm text-amber-100">
+          <div className="rounded-xl border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground dark:border-warning/30 dark:bg-warning/5 dark:text-feedback-warning">
             {t(I18nKey.SETTINGS$APPS_TRUST_NOTICE)}
           </div>
 
@@ -171,7 +266,7 @@ export default function CanvasExtensionsScreen() {
               <div className={extensionModuleCardGridClassName}>
                 {query.data.map((extension) => (
                   <CanvasExtensionCard
-                    key={extension.name}
+                    key={`${backend.id}:${backend.connectionRevision}:${extension.name}`}
                     extension={extension}
                     isBusy={isBusy}
                     onToggle={() => {
@@ -179,11 +274,13 @@ export default function CanvasExtensionsScreen() {
                         setEnabled.mutate({
                           name: extension.name,
                           enabled: false,
+                          backend,
                         });
                       } else {
                         setPendingAction({ type: "enable", extension });
                       }
                     }}
+                    onRefresh={() => refresh.mutate(extension)}
                     onUninstall={() =>
                       setPendingAction({ type: "uninstall", extension })
                     }
@@ -215,7 +312,55 @@ export default function CanvasExtensionsScreen() {
               : undefined
           }
           isConfirming={isBusy}
-        />
+          confirmDisabled={!consentReady}
+        >
+          {needsBackend && (
+            <>
+              <p>{t(I18nKey.SETTINGS$APPS_BACKEND_WARNING)}</p>
+              <ProfileScopeList
+                testId="app-secret"
+                items={requiredSecrets.map((name) => ({
+                  name,
+                  description: catalog.data.find(
+                    (secret) => secret.name === name,
+                  )?.description,
+                }))}
+                selected={selectedSecrets}
+                isDisabled={
+                  isBusy ||
+                  !approval ||
+                  catalog.isLoading ||
+                  missingSecrets.length > 0
+                }
+                onToggle={(name, checked) =>
+                  setSelectedSecrets((previous) =>
+                    checked
+                      ? [...previous, name]
+                      : previous.filter((entry) => entry !== name),
+                  )
+                }
+              />
+              {missingSecrets.length > 0 && (
+                <p role="alert">
+                  {t(I18nKey.SETTINGS$APPS_BACKEND_SECRETS, {
+                    names: missingSecrets.join(", "),
+                  })}{" "}
+                  —{" "}
+                  <a href={buildAgentCanvasPath("/settings/secrets")}>
+                    {t(I18nKey.COMMAND_MENU$SECRETS_SETTINGS_TITLE)}
+                  </a>
+                </p>
+              )}
+              {(approvalError || catalog.isError || setEnabled.isError) && (
+                <p role="alert">
+                  {setEnabled.error instanceof Error
+                    ? setEnabled.error.message
+                    : t(I18nKey.SETTINGS$APPS_BACKEND_ERROR)}
+                </p>
+              )}
+            </>
+          )}
+        </ConfirmationModal>
       ) : null}
     </div>
   );

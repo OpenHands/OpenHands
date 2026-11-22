@@ -1,7 +1,8 @@
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import EditIcon from "#/icons/u-edit.svg?react";
-import DeleteIcon from "#/icons/u-delete.svg?react";
 import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
+import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
+import { ProviderConnectionActionsMenu } from "./provider-connection-actions-menu";
 import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 import { cn } from "#/utils/utils";
 import {
@@ -14,6 +15,7 @@ interface ProviderConnectionRowProps {
   connection: ProviderConnection;
   /** Number of LLM profiles linked to this connection. */
   linkedProfileCount: number;
+  onAddModels: (connection: ProviderConnection) => void;
   onEdit: (connection: ProviderConnection) => void;
   onDelete: (connection: ProviderConnection) => void;
 }
@@ -21,10 +23,13 @@ interface ProviderConnectionRowProps {
 export function ProviderConnectionRow({
   connection,
   linkedProfileCount,
+  onAddModels,
   onEdit,
   onDelete,
 }: ProviderConnectionRowProps) {
   const { t } = useTranslation("openhands");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div
@@ -48,25 +53,23 @@ export function ProviderConnectionRow({
         </span>
         <KeyStatusIcon isSet={connection.api_key_set} />
       </div>
-      <div className="flex shrink-0 items-center gap-1">
-        <button
-          type="button"
-          data-testid="provider-connection-edit"
-          aria-label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_EDIT_TITLE)}
+      <div className="relative shrink-0">
+        <EllipsisButton
+          ref={triggerRef}
+          onClick={() => setMenuOpen((open) => !open)}
+          ariaLabel={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_MENU)}
+          testId="provider-connection-menu-trigger"
           className={settingsListIconActionButtonClassName}
-          onClick={() => onEdit(connection)}
-        >
-          <EditIcon width={16} height={16} />
-        </button>
-        <button
-          type="button"
-          data-testid="provider-connection-delete"
-          aria-label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_DELETE_TITLE)}
-          className={settingsListIconActionButtonClassName}
-          onClick={() => onDelete(connection)}
-        >
-          <DeleteIcon width={16} height={16} />
-        </button>
+        />
+        {menuOpen && (
+          <ProviderConnectionActionsMenu
+            anchorRef={triggerRef}
+            onAddModels={() => onAddModels(connection)}
+            onEdit={() => onEdit(connection)}
+            onDelete={() => onDelete(connection)}
+            onClose={() => setMenuOpen(false)}
+          />
+        )}
       </div>
     </div>
   );

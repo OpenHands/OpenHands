@@ -1,15 +1,19 @@
 import { create } from "zustand";
-import { OpenHandsEvent } from "#/types/agent-server/core";
 import {
+  abortStreamingSlot,
+  appendStreamingDeltas,
+  clearStreamingSlots,
   handleEventForUI,
-  isSameStreamingSender,
-  mergeStreamingDeltaEvent,
+  openStreamingSlot,
+  type StreamingSlotMeta,
+  type UIEvent,
 } from "#/utils/handle-event-for-ui";
-import { isStreamingDeltaEvent } from "#/types/agent-server/type-guards";
+import type {
+  DeltaFrame,
+  ItemStartedFrame,
+} from "#/types/agent-server/session-frames";
 
-export type OHEvent = OpenHandsEvent & {
-  isFromPlanningAgent?: boolean;
-};
+export type OHEvent = UIEvent;
 
 const getEventId = (event: OHEvent): string | number | undefined =>
   "id" in event ? event.id : undefined;
@@ -52,6 +56,13 @@ const needsSorting = (events: OHEvent[], newEvent: OHEvent): boolean => {
   return newTimestamp < lastTimestamp;
 };
 
+interface HistoryPage {
+  nextPageId: string | null;
+  hasMore: boolean;
+  /** Older pages precede the loaded tail, including equal-timestamp events. */
+  prepend?: boolean;
+}
+
 export interface EventState {
   events: OHEvent[];
   eventIds: Set<string | number>;
@@ -64,6 +75,13 @@ export interface EventState {
    * should clear the accumulated events.
    */
   loadedConversationId: string | null;
+  loadedConversationScope: string | null;
+  /** Main conversation REST continuation; live/planning events never change it. */
+  historyPagination: {
+    nextPageId: string | null;
+    hasMore: boolean;
+    hasLoadedOlder: boolean;
+  } | null;
   addEvent: (event: OHEvent) => void;
   /**
    * Bulk-insert events. Used for the initial REST history load and for
@@ -71,7 +89,7 @@ export interface EventState {
    * against the existing store and the combined list is re-sorted by
    * timestamp so older pages drop into the correct position.
    */
-  addEvents: (events: OHEvent[]) => void;
+  addEvents: (events: OHEvent[], history?: HistoryPage) => void;
   /**
    * Clear all events. Also resets `loadedConversationId` to `null` so the
    * store never claims to hold a conversation whose events have been wiped —
@@ -86,52 +104,57 @@ export interface EventState {
    * call-site to invoke a clear and a `loadedConversationId` setter in the
    * right order.
    */
-  clearEventsForConversation: (conversationId: string | null) => void;
+  clearEventsForConversation: (
+    conversationId: string | null,
+    scope?: string | null,
+  ) => void;
+  /**
+   * Streaming slots. They live only in `uiEvents`: nothing reads `events` for
+   * provisional text, and keeping them out means their id — which is the id
+   * the durable event will carry — can never be mistaken for one already seen
+   * and dedupe the real message away.
+   */
+  openStreamingSlot: (
+    frame: ItemStartedFrame,
+    meta?: StreamingSlotMeta,
+  ) => void;
+  appendStreamingDeltas: (
+    frames: DeltaFrame[],
+    meta?: StreamingSlotMeta,
+  ) => void;
+  abortStreamingSlot: (itemId: string, attempt?: number) => void;
+  /** Discard every open slot for one socket (on connect and disconnect). */
+  clearStreamingSlots: (isFromPlanningAgent?: boolean) => void;
 }
 
 const appendEvent = (state: EventState, event: OHEvent): EventState => {
   const eventId = getEventId(event);
-  // Transient deltas merge by position and are never persisted/resent, so skip
-  // id tracking for them — copying the growing `eventIds` Set per token would
-  // otherwise be O(n^2).
-  const isDelta = isStreamingDeltaEvent(event);
 
   // Deduplicate: skip if event with same id already exists (O(1) lookup)
-  if (!isDelta && eventId !== undefined && state.eventIds.has(eventId)) {
+  if (eventId !== undefined && state.eventIds.has(eventId)) {
     return state;
   }
 
   const newEventIds =
-    !isDelta && eventId !== undefined
+    eventId !== undefined
       ? new Set(state.eventIds).add(eventId)
       : state.eventIds;
 
-  const lastEventIndex = state.events.length - 1;
-  const lastEvent = state.events[lastEventIndex];
-  const shouldMergeStreamingDelta =
-    lastEvent &&
-    isDelta &&
-    isStreamingDeltaEvent(lastEvent) &&
-    isSameStreamingSender(event, lastEvent);
-  const events = [...state.events];
-  if (shouldMergeStreamingDelta) {
-    events[lastEventIndex] = mergeStreamingDeltaEvent(event, lastEvent);
-  } else {
-    events.push(event);
-  }
-
   return {
     ...state,
-    events,
+    events: [...state.events, event],
     eventIds: newEventIds,
     uiEvents: handleEventForUI(event, state.uiEvents),
   };
 };
 
-const sortEventState = (state: EventState): EventState => ({
+const sortEventState = (
+  state: EventState,
+  compare = compareEventsByTimestamp,
+): EventState => ({
   ...state,
-  events: [...state.events].sort(compareEventsByTimestamp),
-  uiEvents: [...state.uiEvents].sort(compareEventsByTimestamp),
+  events: [...state.events].sort(compare),
+  uiEvents: [...state.uiEvents].sort(compare),
 });
 
 const applyAddEvent = (state: EventState, event: OHEvent): EventState => {
@@ -155,56 +178,66 @@ export const useEventStore = create<EventState>()((set) => ({
   eventIds: new Set(),
   uiEvents: [],
   loadedConversationId: null,
+  loadedConversationScope: null,
+  historyPagination: null,
   addEvent: (event: OHEvent) => set((state) => applyAddEvent(state, event)),
-  addEvents: (incoming: OHEvent[]) =>
+  addEvents: (incoming: OHEvent[], history?: HistoryPage) =>
     set((state) => {
-      if (incoming.length === 0) return state;
+      // A refreshed tail can update the initial frontier (including Cloud's
+      // early persisted page). Once backfilling starts, keep its continuation
+      // across tail refetches and remounts until this conversation is cleared.
+      const historyPagination =
+        history && (history.prepend || !state.historyPagination?.hasLoadedOlder)
+          ? {
+              nextPageId: history.nextPageId,
+              hasMore: history.hasMore,
+              hasLoadedOlder: !!history.prepend,
+            }
+          : state.historyPagination;
+      if (incoming.length === 0) {
+        return historyPagination === state.historyPagination
+          ? state
+          : { ...state, historyPagination };
+      }
 
       const eventIds = new Set(state.eventIds);
       const events = [...state.events];
       let uiEvents = [...state.uiEvents];
-      let added = false;
+      const incomingOrder = new Map<OHEvent, number>();
 
       for (const event of incoming) {
         const eventId = getEventId(event);
-        // See `appendEvent`: transient deltas are not tracked in `eventIds`.
-        const isDelta = isStreamingDeltaEvent(event);
-        const isDuplicate =
-          !isDelta && eventId !== undefined && eventIds.has(eventId);
+        const isDuplicate = eventId !== undefined && eventIds.has(eventId);
 
         if (!isDuplicate) {
-          added = true;
-          if (!isDelta && eventId !== undefined) {
+          incomingOrder.set(event, incomingOrder.size);
+          if (eventId !== undefined) {
             eventIds.add(eventId);
           }
-
-          const lastEventIndex = events.length - 1;
-          const lastEvent = events[lastEventIndex];
-          if (
-            lastEvent &&
-            isStreamingDeltaEvent(event) &&
-            isStreamingDeltaEvent(lastEvent) &&
-            isSameStreamingSender(event, lastEvent)
-          ) {
-            events[lastEventIndex] = mergeStreamingDeltaEvent(event, lastEvent);
-          } else {
-            events.push(event);
-          }
-
+          events.push(event);
           uiEvents = handleEventForUI(event, uiEvents);
         }
       }
 
-      if (!added) {
-        return state;
+      if (incomingOrder.size === 0) {
+        return historyPagination === state.historyPagination
+          ? state
+          : { ...state, historyPagination };
       }
 
-      return sortEventState({
-        ...state,
-        events,
-        eventIds,
-        uiEvents,
-      });
+      // Stable timestamp sorting alone appends older boundary ties after the
+      // loaded tail. Rank only newly inserted page rows ahead of existing ties;
+      // existing rows and provisional slots retain their relative positions.
+      const compare = history?.prepend
+        ? (a: OHEvent, b: OHEvent) =>
+            compareEventsByTimestamp(a, b) ||
+            (incomingOrder.get(a) ?? incomingOrder.size) -
+              (incomingOrder.get(b) ?? incomingOrder.size)
+        : compareEventsByTimestamp;
+      return sortEventState(
+        { ...state, events, eventIds, uiEvents, historyPagination },
+        compare,
+      );
     }),
   clearEvents: () =>
     set(() => ({
@@ -212,14 +245,50 @@ export const useEventStore = create<EventState>()((set) => ({
       eventIds: new Set(),
       uiEvents: [],
       loadedConversationId: null,
+      loadedConversationScope: null,
+      historyPagination: null,
     })),
-  clearEventsForConversation: (conversationId: string | null) =>
+  clearEventsForConversation: (conversationId: string | null, scope = null) =>
     set(() => ({
       events: [],
       eventIds: new Set(),
       uiEvents: [],
       loadedConversationId: conversationId,
+      loadedConversationScope: scope,
+      historyPagination: null,
     })),
+  openStreamingSlot: (frame: ItemStartedFrame, meta: StreamingSlotMeta = {}) =>
+    set((state) => {
+      // Symmetric with `appendStreamingDeltas`: the durable event being in
+      // the store means the stream is over, and a slot opened now could never
+      // be retired — `appendEvent` dedupes the durable frame before
+      // `handleEventForUI` could replace it.
+      if (state.eventIds.has(frame.item_id)) {
+        return state;
+      }
+      const uiEvents = openStreamingSlot(frame, state.uiEvents, meta);
+      return uiEvents === state.uiEvents ? state : { ...state, uiEvents };
+    }),
+  appendStreamingDeltas: (frames: DeltaFrame[], meta: StreamingSlotMeta = {}) =>
+    set((state) => {
+      const uiEvents = appendStreamingDeltas(frames, state.uiEvents, {
+        ...meta,
+        // The durable event carries the item's id, so seeing it means the
+        // stream is over and a straggling delta must not reopen it.
+        isFinished: (itemId) => state.eventIds.has(itemId),
+      });
+      return uiEvents === state.uiEvents ? state : { ...state, uiEvents };
+    }),
+  abortStreamingSlot: (itemId: string, attempt?: number) =>
+    set((state) => {
+      const uiEvents = abortStreamingSlot(itemId, state.uiEvents, attempt);
+      return uiEvents === state.uiEvents ? state : { ...state, uiEvents };
+    }),
+  clearStreamingSlots: (isFromPlanningAgent = false) =>
+    set((state) => {
+      const uiEvents = clearStreamingSlots(state.uiEvents, isFromPlanningAgent);
+      return uiEvents === state.uiEvents ? state : { ...state, uiEvents };
+    }),
 }));
 
 // In dev builds, expose the store on `window` so that fixture/preview

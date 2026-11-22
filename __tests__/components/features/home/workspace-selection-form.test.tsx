@@ -1,3 +1,10 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { compile } from "@tailwindcss/node";
+import { parse, type AnyNode } from "postcss";
+import { http, HttpResponse } from "msw";
+import { server } from "#/mocks/node";
+import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
 import {
   fireEvent,
   render,
@@ -424,6 +431,65 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     });
   });
 
+  it("ships matching responsive columns for the folder header and entries", async () => {
+    // Arrange
+    mockSearchSubdirectories.mockImplementation(async (path: string) =>
+      path === "/Users/me"
+        ? {
+            items: [{ name: "dev", path: "/Users/me/dev" }],
+            next_page_id: null,
+          }
+        : { items: [], next_page_id: null },
+    );
+    renderForm();
+    const user = userEvent.setup();
+
+    // Act
+    await user.click(await screen.findByTestId("workspace-dropdown"));
+    await user.click(await screen.findByTestId("add-workspaces-button"));
+    const entry = await screen.findByTestId("folder-browser-entry-dev");
+
+    // Assert the actual grid declarations from the rendered consumers, rather
+    // than their class spelling. jsdom does not perform viewport layout.
+    expect(screen.getByTestId("folder-browser-sidebar")).toHaveClass(
+      "w-28",
+      "md:w-45",
+    );
+    const header = screen.getByTestId("folder-browser-column-headers");
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    const stylesheet = parse(
+      compiler.build([...header.classList, ...entry.classList]),
+    );
+    for (const row of [header, entry]) {
+      const columns: Array<{ media: string | null; value: string }> = [];
+      stylesheet.walkDecls("grid-template-columns", (declaration) => {
+        const rule = declaration.parent;
+        if (rule?.type !== "rule" || !row.matches(rule.selector)) return;
+        let media: string | null = null;
+        for (
+          let parent: AnyNode | undefined = rule.parent;
+          parent;
+          parent = parent.parent
+        ) {
+          if (parent.type === "atrule" && parent.name === "media") {
+            media = parent.params;
+          }
+        }
+        columns.push({
+          media,
+          value: declaration.value.replace(/,\s*/g, ","),
+        });
+      });
+      expect(columns).toEqual([
+        { media: null, value: "minmax(0,1fr) 4rem" },
+        { media: "(width >= 48rem)", value: "1fr 120px" },
+      ]);
+    }
+  });
+
   it("handles Windows paths when browsing and adding a workspace", async () => {
     const homePath = String.raw`C:\Users\me`;
     const devPath = String.raw`C:\Users\me\dev`;
@@ -650,5 +716,44 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     expect(addParentsSpy).toHaveBeenCalledWith([
       { id: "/Users/me/dev", name: "dev", path: "/Users/me/dev" },
     ]);
+  });
+});
+
+describe("isolated workspace selection", () => {
+  it("preserves saved selection but disables confirmation of host folders", async () => {
+    clearCachedAgentServerInfo();
+    sessionStorage.setItem(
+      HOME_SELECTED_WORKSPACE_PATH_KEY,
+      "/home/user/project",
+    );
+    server.use(
+      http.get("*/server_info", () =>
+        HttpResponse.json({
+          version: "1.45.0",
+          uptime: 0,
+          idle_time: 0,
+          conversation_runtime: "docker",
+        }),
+      ),
+    );
+    renderForm({
+      workspaces: [
+        {
+          id: "host-project",
+          name: "Host project",
+          path: "/home/user/project",
+        },
+      ],
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("workspace-status-message")).toHaveTextContent(
+        "HOME$ISOLATED_WORKSPACE_NOTICE",
+      ),
+    );
+    expect(screen.getByTestId("workspace-dropdown")).toBeDisabled();
+    expect(screen.getByTestId("workspace-launch-button")).toBeDisabled();
+    expect(sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY)).toBe(
+      "/home/user/project",
+    );
   });
 });

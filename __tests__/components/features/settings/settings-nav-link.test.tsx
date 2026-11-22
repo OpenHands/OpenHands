@@ -8,7 +8,7 @@ import { I18nKey } from "#/i18n/declaration";
 const mockNavItem = {
   to: "/settings/test",
   icon: <span data-testid="test-icon">Icon</span>,
-  text: I18nKey.SETTINGS$NAV_API_KEYS,
+  text: I18nKey.SETTINGS$NAV_SECRETS,
   subtitle: I18nKey.SETTINGS$PAGE_LLM_SUBLINE,
 };
 
@@ -29,7 +29,7 @@ describe("SettingsNavLink", () => {
     // Assert
     expect(screen.getByRole("link")).toBeInTheDocument();
     expect(screen.getByTestId("test-icon")).toBeInTheDocument();
-    expect(screen.getByText("SETTINGS$NAV_API_KEYS")).toBeInTheDocument();
+    expect(screen.getByText("SETTINGS$NAV_SECRETS")).toBeInTheDocument();
   });
 
   it("should navigate to the correct route", () => {

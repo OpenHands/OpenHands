@@ -1,0 +1,922 @@
+[
+  {
+    "theme": "openhands-neutral",
+    "size": "desktop",
+    "control": "new-agent",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "New Agent",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 104.953125,
+      "x": 908.046875,
+      "y": 339.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "openhands-neutral",
+    "size": "desktop",
+    "control": "refresh",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Refresh agents",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 32,
+      "x": 1021,
+      "y": 339.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "openhands-neutral",
+    "size": "desktop",
+    "control": "agent-open",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Open standin-agent",
+    "offset": "-2px",
+    "rect": {
+      "height": 56,
+      "width": 584,
+      "x": 437,
+      "y": 379.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "openhands-neutral",
+    "size": "desktop",
+    "control": "session",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Open standin-ready",
+    "offset": "-2px",
+    "rect": {
+      "height": 28,
+      "width": 587,
+      "x": 470,
+      "y": 435.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "openhands-neutral",
+    "size": "phone",
+    "control": "new-agent",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "New Agent",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 104.953125,
+      "x": 183.546875,
+      "y": 381
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "openhands-neutral",
+    "size": "phone",
+    "control": "refresh",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Refresh agents",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 32,
+      "x": 296.5,
+      "y": 381
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "openhands-neutral",
+    "size": "phone",
+    "control": "agent-open",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Open standin-agent",
+    "offset": "-2px",
+    "rect": {
+      "height": 56,
+      "width": 215,
+      "x": 81.5,
+      "y": 421
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "openhands-neutral",
+    "size": "phone",
+    "control": "session",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Open standin-ready",
+    "offset": "-2px",
+    "rect": {
+      "height": 28,
+      "width": 218,
+      "x": 114.5,
+      "y": 477
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "openhands-deepsea",
+    "size": "desktop",
+    "control": "new-agent",
+    "backgrounds": ["rgb(33, 37, 47)", "rgb(11, 14, 20)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "New Agent",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 104.953125,
+      "x": 908.046875,
+      "y": 339.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 15.32
+  },
+  {
+    "theme": "openhands-deepsea",
+    "size": "desktop",
+    "control": "refresh",
+    "backgrounds": ["rgb(33, 37, 47)", "rgb(11, 14, 20)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Refresh agents",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 32,
+      "x": 1021,
+      "y": 339.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 15.32
+  },
+  {
+    "theme": "openhands-deepsea",
+    "size": "desktop",
+    "control": "agent-open",
+    "backgrounds": ["rgb(33, 37, 47)", "rgb(11, 14, 20)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Open standin-agent",
+    "offset": "-2px",
+    "rect": {
+      "height": 56,
+      "width": 584,
+      "x": 437,
+      "y": 379.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 15.32
+  },
+  {
+    "theme": "openhands-deepsea",
+    "size": "desktop",
+    "control": "session",
+    "backgrounds": ["rgb(33, 37, 47)", "rgb(11, 14, 20)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Open standin-ready",
+    "offset": "-2px",
+    "rect": {
+      "height": 28,
+      "width": 587,
+      "x": 470,
+      "y": 435.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 15.32
+  },
+  {
+    "theme": "openhands-deepsea",
+    "size": "phone",
+    "control": "new-agent",
+    "backgrounds": ["rgb(33, 37, 47)", "rgb(11, 14, 20)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "New Agent",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 104.953125,
+      "x": 183.546875,
+      "y": 381
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 15.32
+  },
+  {
+    "theme": "openhands-deepsea",
+    "size": "phone",
+    "control": "refresh",
+    "backgrounds": ["rgb(33, 37, 47)", "rgb(11, 14, 20)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Refresh agents",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 32,
+      "x": 296.5,
+      "y": 381
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 15.32
+  },
+  {
+    "theme": "openhands-deepsea",
+    "size": "phone",
+    "control": "agent-open",
+    "backgrounds": ["rgb(33, 37, 47)", "rgb(11, 14, 20)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Open standin-agent",
+    "offset": "-2px",
+    "rect": {
+      "height": 56,
+      "width": 215,
+      "x": 81.5,
+      "y": 421
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 15.32
+  },
+  {
+    "theme": "openhands-deepsea",
+    "size": "phone",
+    "control": "session",
+    "backgrounds": ["rgb(33, 37, 47)", "rgb(11, 14, 20)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Open standin-ready",
+    "offset": "-2px",
+    "rect": {
+      "height": 28,
+      "width": 218,
+      "x": 114.5,
+      "y": 477
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 15.32
+  },
+  {
+    "theme": "openhands-neo",
+    "size": "desktop",
+    "control": "new-agent",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "New Agent",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 104.953125,
+      "x": 908.046875,
+      "y": 339.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "openhands-neo",
+    "size": "desktop",
+    "control": "refresh",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Refresh agents",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 32,
+      "x": 1021,
+      "y": 339.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "openhands-neo",
+    "size": "desktop",
+    "control": "agent-open",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Open standin-agent",
+    "offset": "-2px",
+    "rect": {
+      "height": 56,
+      "width": 584,
+      "x": 437,
+      "y": 379.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "openhands-neo",
+    "size": "desktop",
+    "control": "session",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Open standin-ready",
+    "offset": "-2px",
+    "rect": {
+      "height": 28,
+      "width": 587,
+      "x": 470,
+      "y": 435.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "openhands-neo",
+    "size": "phone",
+    "control": "new-agent",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "New Agent",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 104.953125,
+      "x": 183.546875,
+      "y": 381
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "openhands-neo",
+    "size": "phone",
+    "control": "refresh",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Refresh agents",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 32,
+      "x": 296.5,
+      "y": 381
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "openhands-neo",
+    "size": "phone",
+    "control": "agent-open",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Open standin-agent",
+    "offset": "-2px",
+    "rect": {
+      "height": 56,
+      "width": 215,
+      "x": 81.5,
+      "y": 421
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "openhands-neo",
+    "size": "phone",
+    "control": "session",
+    "backgrounds": ["rgb(32, 32, 32)", "rgb(24, 24, 24)"],
+    "color": "rgb(255, 255, 255)",
+    "focusVisible": true,
+    "label": "Open standin-ready",
+    "offset": "-2px",
+    "rect": {
+      "height": 28,
+      "width": 218,
+      "x": 114.5,
+      "y": 477
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 16.29
+  },
+  {
+    "theme": "light-plus",
+    "size": "desktop",
+    "control": "new-agent",
+    "backgrounds": ["rgb(243, 243, 243)", "rgb(255, 255, 255)"],
+    "color": "rgb(0, 122, 204)",
+    "focusVisible": true,
+    "label": "New Agent",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 104.953125,
+      "x": 908.046875,
+      "y": 339.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 4.06
+  },
+  {
+    "theme": "light-plus",
+    "size": "desktop",
+    "control": "refresh",
+    "backgrounds": ["rgb(243, 243, 243)", "rgb(255, 255, 255)"],
+    "color": "rgb(0, 122, 204)",
+    "focusVisible": true,
+    "label": "Refresh agents",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 32,
+      "x": 1021,
+      "y": 339.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 4.06
+  },
+  {
+    "theme": "light-plus",
+    "size": "desktop",
+    "control": "agent-open",
+    "backgrounds": ["rgb(243, 243, 243)", "rgb(255, 255, 255)"],
+    "color": "rgb(0, 122, 204)",
+    "focusVisible": true,
+    "label": "Open standin-agent",
+    "offset": "-2px",
+    "rect": {
+      "height": 56,
+      "width": 584,
+      "x": 437,
+      "y": 379.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 4.06
+  },
+  {
+    "theme": "light-plus",
+    "size": "desktop",
+    "control": "session",
+    "backgrounds": ["rgb(243, 243, 243)", "rgb(255, 255, 255)"],
+    "color": "rgb(0, 122, 204)",
+    "focusVisible": true,
+    "label": "Open standin-ready",
+    "offset": "-2px",
+    "rect": {
+      "height": 28,
+      "width": 587,
+      "x": 470,
+      "y": 435.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 4.06
+  },
+  {
+    "theme": "light-plus",
+    "size": "phone",
+    "control": "new-agent",
+    "backgrounds": ["rgb(243, 243, 243)", "rgb(255, 255, 255)"],
+    "color": "rgb(0, 122, 204)",
+    "focusVisible": true,
+    "label": "New Agent",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 104.953125,
+      "x": 183.546875,
+      "y": 381
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 4.06
+  },
+  {
+    "theme": "light-plus",
+    "size": "phone",
+    "control": "refresh",
+    "backgrounds": ["rgb(243, 243, 243)", "rgb(255, 255, 255)"],
+    "color": "rgb(0, 122, 204)",
+    "focusVisible": true,
+    "label": "Refresh agents",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 32,
+      "x": 296.5,
+      "y": 381
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 4.06
+  },
+  {
+    "theme": "light-plus",
+    "size": "phone",
+    "control": "agent-open",
+    "backgrounds": ["rgb(243, 243, 243)", "rgb(255, 255, 255)"],
+    "color": "rgb(0, 122, 204)",
+    "focusVisible": true,
+    "label": "Open standin-agent",
+    "offset": "-2px",
+    "rect": {
+      "height": 56,
+      "width": 215,
+      "x": 81.5,
+      "y": 421
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 4.06
+  },
+  {
+    "theme": "light-plus",
+    "size": "phone",
+    "control": "session",
+    "backgrounds": ["rgb(243, 243, 243)", "rgb(255, 255, 255)"],
+    "color": "rgb(0, 122, 204)",
+    "focusVisible": true,
+    "label": "Open standin-ready",
+    "offset": "-2px",
+    "rect": {
+      "height": 28,
+      "width": 218,
+      "x": 114.5,
+      "y": 477
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 4.06
+  },
+  {
+    "theme": "solarized-light",
+    "size": "desktop",
+    "control": "new-agent",
+    "backgrounds": ["rgb(238, 232, 213)", "rgb(253, 246, 227)"],
+    "color": "rgb(34, 127, 190)",
+    "focusVisible": true,
+    "label": "New Agent",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 104.953125,
+      "x": 908.046875,
+      "y": 339.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 3.54
+  },
+  {
+    "theme": "solarized-light",
+    "size": "desktop",
+    "control": "refresh",
+    "backgrounds": ["rgb(238, 232, 213)", "rgb(253, 246, 227)"],
+    "color": "rgb(34, 127, 190)",
+    "focusVisible": true,
+    "label": "Refresh agents",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 32,
+      "x": 1021,
+      "y": 339.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 3.54
+  },
+  {
+    "theme": "solarized-light",
+    "size": "desktop",
+    "control": "agent-open",
+    "backgrounds": ["rgb(238, 232, 213)", "rgb(253, 246, 227)"],
+    "color": "rgb(34, 127, 190)",
+    "focusVisible": true,
+    "label": "Open standin-agent",
+    "offset": "-2px",
+    "rect": {
+      "height": 56,
+      "width": 584,
+      "x": 437,
+      "y": 379.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 3.54
+  },
+  {
+    "theme": "solarized-light",
+    "size": "desktop",
+    "control": "session",
+    "backgrounds": ["rgb(238, 232, 213)", "rgb(253, 246, 227)"],
+    "color": "rgb(34, 127, 190)",
+    "focusVisible": true,
+    "label": "Open standin-ready",
+    "offset": "-2px",
+    "rect": {
+      "height": 28,
+      "width": 587,
+      "x": 470,
+      "y": 435.5
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 761,
+      "width": 1470
+    },
+    "width": "2px",
+    "contrast": 3.54
+  },
+  {
+    "theme": "solarized-light",
+    "size": "phone",
+    "control": "new-agent",
+    "backgrounds": ["rgb(238, 232, 213)", "rgb(253, 246, 227)"],
+    "color": "rgb(34, 127, 190)",
+    "focusVisible": true,
+    "label": "New Agent",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 104.953125,
+      "x": 183.546875,
+      "y": 381
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 3.54
+  },
+  {
+    "theme": "solarized-light",
+    "size": "phone",
+    "control": "refresh",
+    "backgrounds": ["rgb(238, 232, 213)", "rgb(253, 246, 227)"],
+    "color": "rgb(34, 127, 190)",
+    "focusVisible": true,
+    "label": "Refresh agents",
+    "offset": "2px",
+    "rect": {
+      "height": 32,
+      "width": 32,
+      "x": 296.5,
+      "y": 381
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 3.54
+  },
+  {
+    "theme": "solarized-light",
+    "size": "phone",
+    "control": "agent-open",
+    "backgrounds": ["rgb(238, 232, 213)", "rgb(253, 246, 227)"],
+    "color": "rgb(34, 127, 190)",
+    "focusVisible": true,
+    "label": "Open standin-agent",
+    "offset": "-2px",
+    "rect": {
+      "height": 56,
+      "width": 215,
+      "x": 81.5,
+      "y": 421
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 3.54
+  },
+  {
+    "theme": "solarized-light",
+    "size": "phone",
+    "control": "session",
+    "backgrounds": ["rgb(238, 232, 213)", "rgb(253, 246, 227)"],
+    "color": "rgb(34, 127, 190)",
+    "focusVisible": true,
+    "label": "Open standin-ready",
+    "offset": "-2px",
+    "rect": {
+      "height": 28,
+      "width": 218,
+      "x": 114.5,
+      "y": 477
+    },
+    "style": "solid",
+    "viewport": {
+      "height": 844,
+      "width": 390
+    },
+    "width": "2px",
+    "contrast": 3.54
+  }
+]

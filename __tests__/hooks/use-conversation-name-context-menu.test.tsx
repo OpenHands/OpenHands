@@ -1,5 +1,5 @@
 import type React from "react";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useConversationNameContextMenu } from "#/hooks/use-conversation-name-context-menu";
 import { I18nKey } from "#/i18n/declaration";
@@ -22,7 +22,11 @@ const harness = vi.hoisted(() => ({
   stopConversation: vi.fn(),
   updatePublicFlag: vi.fn(),
   downloadConversation: vi.fn(),
-  conversation: null as { public: boolean } | null,
+  conversation: null as {
+    id?: string;
+    public: boolean;
+    sandbox_status?: string | null;
+  } | null,
   systemMessage: null as {
     content: string;
     tools: null;
@@ -31,6 +35,7 @@ const harness = vi.hoisted(() => ({
   } | null,
   adaptSystemMessage: vi.fn(),
   displaySuccessToast: vi.fn(),
+  displayErrorToast: vi.fn(),
   navigateToTab: vi.fn(),
 }));
 
@@ -84,6 +89,7 @@ vi.mock("#/utils/system-message-adapter", () => ({
 
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: harness.displaySuccessToast,
+  displayErrorToast: harness.displayErrorToast,
 }));
 
 const clickEvent = () => {
@@ -358,7 +364,7 @@ describe("useConversationNameContextMenu", () => {
     });
 
     const copyClick = clickEvent();
-    act(() => result.current.handleCopyShareLink(copyClick.event));
+    await act(async () => result.current.handleCopyShareLink(copyClick.event));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       `${window.location.origin}/shared/conversations/conv-active`,
     );
@@ -391,6 +397,49 @@ describe("useConversationNameContextMenu", () => {
     };
     act(() => options.onSuccess());
     expect(harness.navigate).toHaveBeenCalledWith("/conversations");
+  });
+
+  it("keeps Stop available for a running cloud sandbox after the agent is interrupted", () => {
+    harness.conversation = {
+      id: "conv-cloud",
+      public: false,
+      sandbox_status: "RUNNING",
+    };
+    const props = {
+      conversationId: "conv-cloud",
+      executionStatus: ExecutionStatus.PAUSED,
+    };
+    const { result, rerender } = renderHook(() =>
+      useConversationNameContextMenu(props),
+    );
+
+    expect(result.current.shouldShowStop).toBe(true);
+
+    harness.conversation = {
+      ...harness.conversation,
+      sandbox_status: "PAUSED",
+    };
+    rerender();
+    expect(result.current.shouldShowStop).toBe(false);
+  });
+
+  it("closes the menu without rethrowing when the download fails", async () => {
+    harness.downloadConversation.mockRejectedValue(
+      new Error("HTTP request failed (502 Bad Gateway)"),
+    );
+    const onContextMenuToggle = vi.fn();
+    const { result } = renderHook(() =>
+      useConversationNameContextMenu({
+        conversationId: "conv-active",
+        onContextMenuToggle,
+      }),
+    );
+
+    await act(async () =>
+      result.current.handleDownloadConversation(clickEvent().event),
+    );
+
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
   });
 
   it("does not navigate after deleting a conversation that is not currently open", () => {
@@ -527,5 +576,44 @@ describe("useConversationNameContextMenu", () => {
     expect(result.current.shouldShowDownloadConversation).toBe(false);
     expect(result.current.shouldShowSkills).toBe(false);
     expect(result.current.shouldShowPlugins).toBe(false);
+  });
+
+  it("shows an error toast and no success toast when copy fails", async () => {
+    const originalExecCommand = document.execCommand;
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockRejectedValue(new Error("Permission denied")),
+      },
+    });
+    document.execCommand = vi.fn().mockReturnValue(false);
+
+    try {
+      const onContextMenuToggle = vi.fn();
+      const { result } = renderHook(() =>
+        useConversationNameContextMenu({
+          conversationId: "conv-active",
+          onContextMenuToggle,
+        }),
+      );
+
+      const copyClick = clickEvent();
+      await act(async () => {
+        result.current.handleCopyShareLink(copyClick.event);
+      });
+
+      await waitFor(() => {
+        expect(harness.displayErrorToast).toHaveBeenCalledWith(
+          I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED,
+        );
+      });
+      expect(harness.displaySuccessToast).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(document, "execCommand", {
+        configurable: true,
+        writable: true,
+        value: originalExecCommand,
+      });
+    }
   });
 });

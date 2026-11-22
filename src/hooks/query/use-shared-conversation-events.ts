@@ -26,4 +26,6 @@ export const useSharedConversationEvents = (conversationId?: string) =>
     getNextPageParam: (lastPage) => lastPage.next_page_id ?? undefined,
     enabled: !!conversationId,
     retry: false, // Don't retry for shared conversations
+    // The shared page renders its own not-found state.
+    meta: { disableToast: true },
   });

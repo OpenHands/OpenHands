@@ -4,9 +4,12 @@ import { UploadedFiles } from "../uploaded-files";
 import { ChatInputRow } from "./chat-input-row";
 import { ChatInputActions } from "./chat-input-actions";
 import { SlashCommandMenu } from "./slash-command-menu";
+import { ConversationMentionMenu } from "./conversation-mention-menu";
 import { useConversationStore } from "#/stores/conversation-store";
 import { cn } from "#/utils/utils";
 import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
+import { ConversationMentionItem } from "#/hooks/chat/use-conversation-mention-picker";
+import { insertTextAtCaret } from "../utils/chat-input.utils";
 
 interface ChatInputContainerProps {
   chatContainerRef: React.RefObject<HTMLDivElement | null>;
@@ -16,9 +19,9 @@ interface ChatInputContainerProps {
   hasStartedConversation?: boolean;
   isNewConversationPending?: boolean;
   showButton: boolean;
-  placeholder?: string;
   buttonClassName: string;
   chatInputRef: React.RefObject<HTMLDivElement | null>;
+  placeholder?: string;
   handleFileIconClick: (isDisabled: boolean) => void;
   handleSubmit: () => void;
   onDragOver: (e: React.DragEvent, isDisabled: boolean) => void;
@@ -33,6 +36,10 @@ interface ChatInputContainerProps {
   slashItems?: SlashCommandItem[];
   slashSelectedIndex?: number;
   onSlashSelect?: (item: SlashCommandItem) => void;
+  isMentionMenuOpen?: boolean;
+  mentionItems?: ConversationMentionItem[];
+  mentionSelectedIndex?: number;
+  onMentionSelect?: (item: ConversationMentionItem) => void;
 }
 
 export function ChatInputContainer({
@@ -43,9 +50,9 @@ export function ChatInputContainer({
   hasStartedConversation,
   isNewConversationPending = false,
   showButton,
-  placeholder,
   buttonClassName,
   chatInputRef,
+  placeholder,
   handleFileIconClick,
   handleSubmit,
   onDragOver,
@@ -60,6 +67,10 @@ export function ChatInputContainer({
   slashItems = [],
   slashSelectedIndex = 0,
   onSlashSelect,
+  isMentionMenuOpen = false,
+  mentionItems = [],
+  mentionSelectedIndex = 0,
+  onMentionSelect,
 }: ChatInputContainerProps) {
   const conversationMode = useConversationStore(
     (state) => state.conversationMode,
@@ -69,7 +80,7 @@ export function ChatInputContainer({
     <div
       ref={chatContainerRef}
       className={cn(
-        "bg-surface box-border content-stretch flex flex-col items-start justify-center p-4 relative rounded-[15px] w-full",
+        "bg-surface box-border content-stretch flex flex-col items-start justify-center p-4 relative rounded-composer w-full",
         conversationMode === "plan" && "border border-[#597FF4]",
       )}
       onDragOver={(e) => onDragOver(e, disabled)}
@@ -89,6 +100,13 @@ export function ChatInputContainer({
             items={slashItems}
             selectedIndex={slashSelectedIndex}
             onSelect={onSlashSelect}
+          />
+        )}
+        {isMentionMenuOpen && onMentionSelect && (
+          <ConversationMentionMenu
+            items={mentionItems}
+            selectedIndex={mentionSelectedIndex}
+            onSelect={onMentionSelect}
           />
         )}
 
@@ -112,6 +130,10 @@ export function ChatInputContainer({
         showButton={showButton}
         buttonClassName={buttonClassName}
         handleSubmit={handleSubmit}
+        onDictationTranscript={(text) =>
+          insertTextAtCaret(chatInputRef.current, text)
+        }
+        isDictationDisabled={isNewConversationPending}
       />
     </div>
   );

@@ -153,6 +153,33 @@ describe("ContextWindowMeter", () => {
     expect(screen.getByText("CONVERSATION$CONTEXT_WINDOW")).toBeInTheDocument();
   });
 
+  it("closes the popover with Escape and returns focus to the meter", () => {
+    useMetricsStore.setState({
+      cost: null,
+      max_budget_per_task: null,
+      usage: {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        context_window: 1_000_000,
+        per_turn_token: 198_500,
+      },
+    });
+    renderWithProviders(<ContextWindowMeter />);
+    const trigger = screen.getByTestId("context-window-meter");
+
+    fireEvent.click(trigger);
+    const compactButton = screen.getByTestId("context-window-compact-button");
+    compactButton.focus();
+    fireEvent.keyDown(compactButton, { key: "Escape" });
+
+    expect(
+      screen.queryByTestId("context-window-meter-popover"),
+    ).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
   it("opens the Usage drawer from the popover meter", () => {
     useMetricsStore.setState({
       cost: 1.25,

@@ -18,12 +18,15 @@ import { isCopyableSkillSource } from "./is-copyable-skill-source";
 import { SkillCardPillRow } from "./skill-card-pill-row";
 import { getSkillChatLaunchMessage } from "./get-skill-chat-launch-message";
 import { useLaunchSkillInChat } from "#/hooks/use-launch-skill-in-chat";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 interface SkillDetailModalProps {
   skill: SkillInfo;
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
   onClose: () => void;
+  isToggleDisabled?: boolean;
 }
 
 function ReadonlyTextArea({
@@ -57,6 +60,7 @@ export function SkillDetailModal({
   enabled,
   onToggle,
   onClose,
+  isToggleDisabled = false,
 }: SkillDetailModalProps) {
   const { t } = useTranslation("openhands");
   const launchSkillInChat = useLaunchSkillInChat();
@@ -82,8 +86,11 @@ export function SkillDetailModal({
       return;
     }
 
-    await navigator.clipboard.writeText(skill.source);
-    setSourceCopied(true);
+    if (await copyToClipboard(skill.source)) {
+      setSourceCopied(true);
+    } else {
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
+    }
   };
 
   React.useEffect(() => {
@@ -100,7 +107,7 @@ export function SkillDetailModal({
       <div
         data-testid="skill-detail-modal"
         data-skill-name={skill.name}
-        className="relative flex w-130 max-w-[90vw] max-h-[85vh] flex-col overflow-hidden rounded-xl border border-border bg-base-secondary"
+        className="relative flex w-130 extension-dialog-viewport flex-col overflow-hidden rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton onClose={onClose} testId="skill-detail-modal-close" />
         <header className="flex flex-shrink-0 items-start gap-3 pb-4 pl-6 pr-12 pt-6">
@@ -158,6 +165,7 @@ export function SkillDetailModal({
               testId={`skill-modal-toggle-${skill.name}`}
               isToggled={enabled}
               onToggle={onToggle}
+              isDisabled={isToggleDisabled}
               togglePosition="right"
             >
               {t(
