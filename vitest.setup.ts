@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { server } from "#/mocks/node";
+import { __resetAutomationFormSessionsForTests } from "#/api/automation-form-session";
 import "@testing-library/jest-dom/vitest";
 
 // Some modules read env at import time before Vitest's per-test hooks run.
@@ -212,6 +213,8 @@ afterEach(async () => {
   window.sessionStorage?.removeItem("openhands-active-backend");
   // Cleanup the document body after each test
   cleanup();
+  // Setup forms outlive their panels for the life of the page.
+  __resetAutomationFormSessionsForTests();
   // Drain any queued microtasks before jsdom is torn down between test files.
   // Without this, async state updates queued during render (for example by
   // HeroUI v2 components wrapped in framer-motion's LazyMotion) can resolve
