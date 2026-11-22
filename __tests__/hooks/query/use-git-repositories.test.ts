@@ -104,7 +104,7 @@ describe("useGitRepositories", () => {
     const { result } = renderHook(() => useGitRepositories({ provider: null }));
 
     expect(config()).toMatchObject({
-      queryKey: ["repositories", null, false, 30, "local", null],
+      queryKey: ["repositories", null, false, 30, "local", null, null],
       initialPageParam: null,
       enabled: false,
       staleTime: 300000,
@@ -142,6 +142,7 @@ describe("useGitRepositories", () => {
       12,
       "local",
       "org-1",
+      null,
     ]);
     expect(config().enabled).toBe(true);
     expect(config().initialPageParam).toBeNull();
@@ -149,8 +150,22 @@ describe("useGitRepositories", () => {
       emptyPage("next"),
     );
     await config().queryFn({ pageParam: "cursor-2" });
-    expect(retrieve).toHaveBeenNthCalledWith(1, "github", undefined, 12);
-    expect(retrieve).toHaveBeenNthCalledWith(2, "github", "cursor-2", 12);
+    expect(retrieve).toHaveBeenNthCalledWith(
+      1,
+      "github",
+      undefined,
+      12,
+      undefined,
+      undefined,
+    );
+    expect(retrieve).toHaveBeenNthCalledWith(
+      2,
+      "github",
+      "cursor-2",
+      12,
+      undefined,
+      undefined,
+    );
     expect(config().getNextPageParam(emptyPage("next"), [], null)).toBe("next");
     expect(config().getNextPageParam(emptyPage(), [], "next")).toBeNull();
   });
@@ -173,6 +188,7 @@ describe("useGitRepositories", () => {
       30,
       "cloud",
       null,
+      null,
       ["installation-a", "installation-b"],
     ]);
     expect(config().initialPageParam).toEqual({
@@ -192,6 +208,7 @@ describe("useGitRepositories", () => {
       mocks.installations,
       undefined,
       30,
+      undefined,
     );
     expect(retrieve).toHaveBeenNthCalledWith(
       2,
@@ -200,6 +217,7 @@ describe("useGitRepositories", () => {
       mocks.installations,
       "page-2",
       30,
+      undefined,
     );
 
     expect(

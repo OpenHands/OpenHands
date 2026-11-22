@@ -16,6 +16,7 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 
 const DEFAULT_DEVICE_POLL_INTERVAL_SECONDS = 5;
 const MIN_DEVICE_POLL_INTERVAL_SECONDS = 1;
@@ -50,9 +51,12 @@ export function OpenAISubscriptionAuthCard({
     }
   }, []);
 
-  const handleCopyCode = () => {
+  const handleCopyCode = async () => {
     if (!challenge) return;
-    navigator.clipboard.writeText(challenge.userCode);
+    if (!(await copyToClipboard(challenge.userCode))) {
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
+      return;
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
