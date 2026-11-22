@@ -771,16 +771,24 @@ SESSION_API_KEY="$EFFECTIVE_SESSION_KEY" node /opt/agent-canvas/static-server.mj
   --dir /opt/agent-canvas/frontend \
   --base-path "$AGENT_CANVAS_BASE_PATH" \
   --runtime-services-info "$RUNTIME_SERVICES_INFO" \
-  --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
-  --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/sockets=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/alive=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/health=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/ready=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+# >>> docker-route-table: extracted by __tests__/scripts/docker-route-table-sync.test.ts — keep the markers.
+# The ten agent-server/automation routes shared by both static-server
+# instances (the normal one and the public-mode one). Public
+# mode keeps its deliberate exclusion of the editor route and --vscode-base-path.
+STATIC_SERVER_ROUTES=(
+  --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}"
+  --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}"
+  --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}"
+  --route "/sockets=http://127.0.0.1:${AGENT_SERVER_PORT}"
+  --route "/alive=http://127.0.0.1:${AGENT_SERVER_PORT}"
+  --route "/health=http://127.0.0.1:${AGENT_SERVER_PORT}"
+  --route "/ready=http://127.0.0.1:${AGENT_SERVER_PORT}"
+  --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}"
+  --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}"
+  --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}"
+)
+# <<< docker-route-table
+  "${STATIC_SERVER_ROUTES[@]}" \
   --route "$VSCODE_ROUTE" \
   --vscode-base-path "$VSCODE_BASE_PATH" \
   --no-referrer-prefix "$VSCODE_BASE_PATH" &
@@ -828,16 +836,7 @@ if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
     --base-path "$AGENT_CANVAS_BASE_PATH" \
     --auth-required \
     --runtime-services-info "$RUNTIME_SERVICES_INFO" \
-    --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
-    --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/sockets=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/alive=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/health=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/ready=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" &
+    "${STATIC_SERVER_ROUTES[@]}" &
   PIDS+=($!)
 fi
 
