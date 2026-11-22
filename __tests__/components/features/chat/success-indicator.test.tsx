@@ -12,14 +12,16 @@ describe("SuccessIndicator", () => {
   it("renders a clock icon for a timed-out result", () => {
     render(<SuccessIndicator status="timeout" />);
 
-    expect(screen.getByTestId("status-icon")).toHaveClass("fill-yellow-500");
+    expect(screen.getByTestId("status-icon")).toHaveClass(
+      "fill-feedback-warning",
+    );
   });
 
   it("renders a failure icon for an errored result", () => {
     render(<SuccessIndicator status="error" />);
 
     expect(screen.getByTestId("status-icon")).toHaveClass(
-      "fill-status-fail-solid",
+      "fill-feedback-error",
     );
   });
 });

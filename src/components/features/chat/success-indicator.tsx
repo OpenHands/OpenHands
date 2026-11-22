@@ -17,7 +17,7 @@ export function SuccessIndicator({ status }: SuccessIndicatorProps) {
       {status === "error" && (
         <FaTimesCircle
           data-testid="status-icon"
-          className="h-4 w-4 ml-2 inline fill-status-fail-solid"
+          className="h-4 w-4 ml-2 inline fill-feedback-error"
         />
       )}
     </span>
