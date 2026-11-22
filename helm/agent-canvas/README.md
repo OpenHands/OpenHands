@@ -133,8 +133,6 @@ ingress:
   enabled: true
   className: nginx
   annotations:
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
     cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
     - host: agent-canvas.example.com
@@ -147,9 +145,40 @@ ingress:
       secretName: agent-canvas-tls
 ```
 
-The agent-server uses WebSockets on `/sockets`, so long
-`proxy-read-timeout` / `proxy-send-timeout` values are recommended when
-using `ingress-nginx`. File uploads honor `proxy-body-size`.
+The agent-server uses WebSockets on `/sockets`, so WebSocket-safe
+ingress-nginx defaults are rendered out of the box: the chart sets
+`proxy-read-timeout: "3600"`, `proxy-send-timeout: "3600"` and
+`proxy-body-size: "50m"` via the `ingress.webSocket` block (on by
+default — set `ingress.webSocket.enabled: false` to render none of
+them). Annotations you supply in `ingress.annotations` override a
+default of the same key.
+
+## NetworkPolicy
+
+Opt-in and off by default:
+
+```yaml
+networkPolicy:
+  enabled: true
+  ingressNamespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: ingress-nginx
+```
+
+When enabled, the pod accepts traffic only from the namespaces matched by
+`networkPolicy.ingressNamespaceSelector` (default: the ingress-nginx
+controller namespace — change it for another controller) and from pods
+inside its own namespace. Egress stays open on purpose: the agent talks
+to LLM providers, package registries, and Cloud APIs on the public
+internet, so an egress allowlist would break the product.
+
+## Probes
+
+Readiness hits `/` — the UI page served by the Canvas static server — so
+the pod stops receiving traffic when the page itself cannot be served
+(`/alive` only proves the agent-server behind the unified entry point is
+up). Liveness and startup stay on `/alive` so a UI-only hiccup does not
+restart the pod.
 
 ## Common overrides
 

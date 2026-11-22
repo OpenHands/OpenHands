@@ -8,7 +8,13 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "agent-canvas.labels" . | nindent 4 }}
-  {{- with .Values.ingress.annotations }}
+  {{- $wsDefaults := dict }}
+  {{- if .Values.ingress.webSocket.enabled }}
+  {{- $wsDefaults = dict "nginx.ingress.kubernetes.io/proxy-read-timeout" (toString .Values.ingress.webSocket.proxyReadTimeout) "nginx.ingress.kubernetes.io/proxy-send-timeout" (toString .Values.ingress.webSocket.proxySendTimeout) "nginx.ingress.kubernetes.io/proxy-body-size" (toString .Values.ingress.webSocket.proxyBodySize) }}
+  {{- end }}
+  {{- /* User annotations merge over the defaults: same-key entries win. */}}
+  {{- $annotations := mergeOverwrite $wsDefaults (default dict .Values.ingress.annotations) }}
+  {{- with $annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}

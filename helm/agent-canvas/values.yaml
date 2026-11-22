@@ -72,11 +72,20 @@ service:
 ingress:
   enabled: false
   className: ""
+  # WebSocket-safe ingress-nginx defaults are rendered for you (see
+  # `webSocket` below); any annotation set here overrides a default of the
+  # same key. Example:
+  #   cert-manager.io/cluster-issuer: letsencrypt-prod
   annotations: {}
-    # nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    # nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    # nginx.ingress.kubernetes.io/proxy-body-size: "50m"
-    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  # The agent-server uses WebSockets on /sockets: with ingress-nginx's stock
+  # 60 s proxy-read-timeout an idle conversation is cut mid-stream, and file/
+  # image uploads need more than its 1 m body-size default. These render the
+  # three nginx annotations by default; user `annotations` win per key.
+  webSocket:
+    enabled: true
+    proxyReadTimeout: "3600"
+    proxySendTimeout: "3600"
+    proxyBodySize: "50m"
   hosts:
     - host: agent-canvas.local
       paths:
@@ -86,6 +95,23 @@ ingress:
   #  - hosts:
   #      - agent-canvas.example.com
   #    secretName: agent-canvas-tls
+
+# ── NetworkPolicy ────────────────────────────────────────────────────────────
+# Opt-in (off by default so a stock install matches the previous behavior).
+# When enabled, the pod accepts traffic only from the ingress controller
+# namespace (see ingressNamespaceSelector) and from other pods in its own
+# namespace. Egress stays open on purpose: the agent legitimately talks to
+# LLM providers, package registries, and Cloud APIs on the public internet,
+# so an egress allowlist would break it.
+networkPolicy:
+  enabled: false
+  # Which namespaces may reach the pod from outside it. Defaults to the
+  # ingress-nginx controller namespace; change the matchLabels for another
+  # controller, or set to null to allow ingress from every namespace (then
+  # only the release-namespace pod rule and Service apply).
+  ingressNamespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: ingress-nginx
 
 # ── Persistence ──────────────────────────────────────────────────────────────
 # The chart provisions ONE PVC and mounts it in the pod at multiple
@@ -196,7 +222,11 @@ tolerations: []
 affinity: {}
 topologySpreadConstraints: []
 
-# Probes hit the unified entry point.
+# Readiness targets "/" — the UI page served by the Canvas static server —
+# so the pod stops receiving traffic when the page itself cannot be served
+# (/alive only proves the agent-server behind the unified entry point is
+# up). Liveness and startup stay on /alive so a UI-only hiccup does not
+# restart the pod.
 probes:
   liveness:
     enabled: true
@@ -207,7 +237,7 @@ probes:
     failureThreshold: 5
   readiness:
     enabled: true
-    path: /alive
+    path: /
     initialDelaySeconds: 10
     periodSeconds: 10
     timeoutSeconds: 5
