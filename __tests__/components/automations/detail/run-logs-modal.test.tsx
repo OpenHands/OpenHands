@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { I18nKey } from "#/i18n/declaration";
 import { RunLogsModal } from "#/components/features/automations/detail/run-logs-modal";
+import { buildAgentCanvasPath } from "#/utils/base-path";
 import { AutomationRunStatus, type AutomationRun } from "#/types/automation";
 
 const { useBashCommandLogsMock } = vi.hoisted(() => ({
@@ -410,10 +411,31 @@ describe("RunLogsModal", () => {
       />,
     );
     const link = screen.getByRole("link");
-    expect(link).toHaveAttribute("href", "/conversations/conv-123");
+    expect(link).toHaveAttribute(
+      "href",
+      buildAgentCanvasPath("/conversations/conv-123"),
+    );
     expect(link).toHaveTextContent(
       I18nKey.AUTOMATIONS$DETAIL$LOGS_VIEW_CONVERSATION_CTA,
     );
+  });
+
+  it("prefixes conversation events link with base path when mounted under a subpath", () => {
+    (window as unknown as Record<string, unknown>).__AGENT_CANVAS_BASE_PATH__ =
+      "/canvas";
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-123"
+        bashCommandId={null}
+        onClose={() => {}}
+      />,
+    );
+    const link = screen.getByRole("link");
+    expect(link).toHaveAttribute("href", "/canvas/conversations/conv-123");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_BASE_PATH__;
   });
 });
 

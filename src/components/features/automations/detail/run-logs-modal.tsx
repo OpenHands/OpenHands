@@ -18,6 +18,7 @@ import {
   getAutomationRunDisplay,
   getAutomationRunTaskSummary,
 } from "#/utils/automation-run-display";
+import { buildAgentCanvasPath } from "#/utils/base-path";
 import { DebugAutomationButton } from "./debug-automation-button";
 import { RunStatusBadge } from "./run-status-badge";
 
@@ -344,7 +345,9 @@ export function RunLogsModal({
                 {conversationId && (
                   <p className="text-xs text-muted">
                     <a
-                      href={`/conversations/${conversationId}`}
+                      href={buildAgentCanvasPath(
+                        `/conversations/${conversationId}`,
+                      )}
                       className="text-info hover:underline inline-flex items-center gap-1 font-sans"
                     >
                       {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_VIEW_CONVERSATION_CTA)}
