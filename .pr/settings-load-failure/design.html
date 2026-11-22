@@ -1,0 +1,116 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Failed settings loads become observable — design doc</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a; --crit:#a02020;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:4px 0} nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:34px;margin:6px 0 4px;letter-spacing:-.01em}
+  header.title .sub{color:var(--muted);max-width:740px}
+  h2{font-size:22px;margin:44px 0 10px} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  h3{font-size:16px;margin:22px 0 8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  pre{font-family:var(--mono);font-size:13px;background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;border:1px solid var(--rule)}
+  pre code{background:transparent;padding:0}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6} .callout.note{border-color:var(--muted);background:#f3f1ec}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  details{border:1px solid var(--rule);border-radius:6px;margin:12px 0}
+  details>summary{cursor:pointer;padding:8px 12px;color:var(--muted);font-size:13px;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸ "} details[open]>summary::before{content:"▾ "}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  @media(max-width:760px){.wrap{grid-template-columns:1fr}.ba{grid-template-columns:1fr}}
+</style></head><body>
+<div class="wrap">
+  <nav class="toc"><h2>Contents</h2><ol>
+    <li><a href="#sec1">The failure the GUI could not see</a></li>
+    <li><a href="#sec2">API before → after: strict vs lenient</a></li>
+    <li><a href="#sec3">What renders when the load fails</a></li>
+    <li><a href="#sec4">Save guard: fabricated defaults cannot be persisted</a></li>
+    <li><a href="#sec5">Evidence and tests</a></li>
+  </ol></nav>
+  <main>
+    <header class="title"><div class="eyebrow">Design doc · PR #19966 · fix/settings-load-failure</div>
+      <h1>A failed settings load is now observable</h1>
+      <p class="sub">The three silent fallback sites in <code>getSettings</code> are replaced by a strict contract: settings surfaces render an explicit load-failure state with a bounded retry, the four legitimately lenient callers move to a new <code>getSettingsWithDefaults</code>, and saving is guarded while the load state is unknown.</p></header>
+
+    <section id="sec1"><h2><span class="num">1</span>The failure the GUI could not see</h2>
+      <p>On <code>main</code>, <code>getSettings</code> caught every load failure and returned <code>syncDerivedSettings({})</code> — fabricated defaults, indistinguishable from real ones <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/src/api/settings-service/settings-service.api.ts#L599-L637">settings-service.api.ts:599-637 (before)</a>. The dangerous consequence: opening settings during a transient backend failure, then saving, writes those fabricated defaults over the user's real persisted settings.</p>
+      <div class="callout">★ The GUI settings surfaces must never mistake "could not load" for "the user has empty settings" — that sentence is now the documented contract of <code>getSettings</code> <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/c4e8141dc/src/api/settings-service/settings-service.api.ts#L596-L604">settings-service.api.ts:596-604</a>.</div>
+    </section>
+
+    <section id="sec2"><h2><span class="num">2</span>API before → after: strict vs lenient</h2>
+      <div class="ba">
+        <figure class="fig"><figcaption style="text-align:left">Before — one lenient entry point</figcaption>
+<pre><code><span class="kw">static async</span> getSettings(): Promise&lt;Settings&gt; {
+  <span class="com">// …cloud branch, cache…</span>
+  <span class="kw">try</span> {
+    <span class="kw">const</span> response = <span class="kw">await</span> <span class="kw">this</span>.fetchSettingsFromApi();
+    <span class="kw">return</span> syncDerivedSettings(transformApiResponse(response));
+  } <span class="kw">catch</span> (error) {
+    <span class="com">// If API fails, return defaults</span>
+    <span class="kw">return</span> syncDerivedSettings({});
+  }
+}</code></pre></figure>
+        <figure class="fig"><figcaption style="text-align:left">After — strict + explicit lenient variant</figcaption>
+<pre><code><span class="kw">static async</span> getSettings(): Promise&lt;Settings&gt; {
+  <span class="com">// rejects when the backend cannot be read</span>
+  <span class="kw">const</span> response = <span class="kw">await</span> <span class="kw">this</span>.fetchSettingsFromApi();
+  <span class="kw">return</span> syncDerivedSettings(transformApiResponse(response));
+}
+
+<span class="kw">static async</span> getSettingsWithDefaults(): Promise&lt;Settings&gt; {
+  <span class="com">// best-effort variant for non-settings-surface
+  // callers (conversation launch, migration, edits)</span>
+}</code></pre></figure>
+      </div>
+      <p>Exactly four callers legitimately wanted best-effort defaults — conversation launch, default-agent-profile migration, LLM-profile rename/delete — and were moved to <code>getSettingsWithDefaults</code> <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/c4e8141dc/src/api/settings-service/settings-service.api.ts#L641-L656">settings-service.api.ts:641-656</a>. The cloud branch keeps best-effort behavior there (documented inline).</p>
+      <div class="callout note">ⓘ A 404 ("server has no stored settings yet") still resolves to success-with-defaults. Only transport/5xx failures became observable.</div>
+    </section>
+
+    <section id="sec3"><h2><span class="num">3</span>What renders when the load fails</h2>
+      <p><code>useSettings</code> now fabricates an explicit error state — 404 maps to success-with-defaults, real failures map to an error flag with retry capped at 3 <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/c4e8141dc/src/hooks/query/use-settings.ts#L100-L150">use-settings.ts</a> (the old unbounded retry predicate was its own landmine). Settings surfaces render the new <code>SettingsLoadError</code> panel <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/c4e8141dc/src/components/features/settings/settings-load-error.tsx">settings-load-error.tsx</a> with <code>SETTINGS$LOAD_FAILED</code> / <code>SETTINGS$RETRY</code> strings across all locales <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/c4e8141dc/src/i18n/translation.json">translation.json</a>.</p>
+    </section>
+
+    <section id="sec4"><h2><span class="num">4</span>Save guard: fabricated defaults cannot be persisted</h2>
+      <p><code>use-save-settings</code> refuses to save while settings are in a failed/unknown load state <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/c4e8141dc/src/hooks/mutation/use-save-settings.ts">use-save-settings.ts</a> — so the failure scenario can no longer destroy the user's real settings.</p>
+      <div class="callout warn">⚠ Conversation launch deliberately still uses defaults (<code>getSettingsWithDefaults</code>): a settings hiccup must not block the user from working; it must only stop them from silently overwriting state.</div>
+    </section>
+
+    <section id="sec5"><h2><span class="num">5</span>Evidence and tests</h2>
+      <ul>
+        <li>Targeted suites (real run committed under <code>.pr/settings-load-failure/tests-output.png</code>): <code>settings-service.test.ts</code> + <code>use-settings.test.tsx</code> + <code>sdk-section-page.test.tsx</code> — 78/78 passing: strict <code>getSettings</code>, lenient variant, error-state fabrication, retry cap, save guard.</li>
+        <li>Real-app run against a stub agent server: settings alive shot + page-state JSON before/after committed under <code>.pr/settings-load-failure/</code>.</li>
+      </ul>
+      <details><summary>Sources</summary>
+        <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/c4e8141dc/src/api/settings-service/settings-service.api.ts">settings-service.api.ts</a> ·
+        <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/c4e8141dc/src/hooks/query/use-settings.ts">use-settings.ts</a> ·
+        <a class="src" href="https://github.com/tahabehzad/OpenHands/blob/c4e8141dc/src/components/features/settings/settings-load-error.tsx">settings-load-error.tsx</a> ·
+        <a class="src" href="https://github.com/OpenHands/OpenHands/blob/7eb410802/src/api/settings-service/settings-service.api.ts">settings-service.api.ts (before)</a>
+      </details>
+    </section>
+  </main>
+</div></body></html>
