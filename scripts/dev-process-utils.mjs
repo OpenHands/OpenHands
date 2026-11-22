@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process";
+import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import process from "node:process";
 
 /**
@@ -148,3 +150,54 @@ export function createShutdownHookRegistry(onError) {
     },
   };
 }
+
+// ═══ Stale SQLite migration recovery (#15623) ═══
+//
+// The automation backend keeps its SQLite database across upgrades. When a
+// package update restructures the Alembic migration chain, `upgrade head`
+// fails because the revision recorded in the DB no longer exists ("Can't
+// locate revision identified by …"), the backend exits during startup, and
+// the Automate tab is dead until the user deletes the DB by hand.
+//
+// These helpers implement a single-shot recovery: detect the failure from
+// the backend's own output (no reliance on a specific exit code — the
+// backend is a pinned package whose codes this repo does not control),
+// back the DB up, and let the caller start the backend exactly once more.
+
+/**
+ * Detect a stale-migration crash from the backend's captured log output.
+ *
+ * Requires both an Alembic/migration context and a revision-lookup failure,
+ * so an ordinary migration error (syntax, dependency) does not trigger the
+ * recovery path.
+ */
+export function looksLikeStaleMigration(lines) {
+  const text = lines.join("\n");
+  const migrationContext = /alembic|migration|automations\.db/i.test(text);
+  const revisionFailure =
+    /can'?t locate revision|unknown revision|no revision/i.test(text);
+  return migrationContext && revisionFailure;
+}
+
+/**
+ * Back up a SQLite database and its Alembic version table state before a
+ * recovery attempt. Returns the backup directory, or null when there is
+ * nothing to back up. The backup never fails the recovery: if the file
+ * cannot be copied, recovery proceeds without one (the DB is already
+ * unusable — the worst case is the same crash the user had).
+ */
+export function backupStaleDatabase(dbPath, backupDir) {
+  try {
+    if (!existsSync(dbPath)) return null;
+    mkdirSync(backupDir, { recursive: true });
+    const target = join(
+      backupDir,
+      `automations-${new Date().toISOString().replace(/[:.]/g, "-")}.db`,
+    );
+    copyFileSync(dbPath, target);
+    return target;
+  } catch {
+    return null;
+  }
+}
+
