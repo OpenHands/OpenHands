@@ -32,7 +32,6 @@ import { ConversationMobilePanelPage } from "#/components/features/conversation/
 import { ConversationOverviewDrawerProvider } from "#/components/features/conversation/conversation-overview-drawer-context";
 
 import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper";
-import { useErrorMessageStore } from "#/stores/error-message-store";
 import { I18nKey } from "#/i18n/declaration";
 import { useCloudSandboxAutoResume } from "#/hooks/mutation/use-cloud-sandbox-auto-resume";
 
@@ -86,9 +85,6 @@ function AppContent() {
   const setCurrentAgentState = useAgentStore(
     (state) => state.setCurrentAgentState,
   );
-  const removeErrorMessage = useErrorMessageStore(
-    (state) => state.removeErrorMessage,
-  );
 
   const recoverableDraft = usePendingTaskAttachmentsStore((state) =>
     Object.values(state.byTaskId).find(
@@ -103,23 +99,22 @@ function AppContent() {
 
   const resetForConversation = React.useRef<string | null>(null);
 
-  // Per-conversation UI/runtime resets. The event store is cleared separately,
-  // inside ConversationWebSocketProvider, so the clear is ordered *before* the
-  // preloaded-history re-seed (see the note there) — clearing it here would run
-  // too late and wipe the freshly seeded history on a conversation switch.
+  // Per-conversation UI/runtime resets. The event and error-banner stores are
+  // cleared separately, inside ConversationWebSocketProvider, so the clear is
+  // ordered *before* the preloaded-history re-seed (see the note there) —
+  // clearing them here would run too late and wipe the freshly seeded history
+  // on a conversation switch.
   React.useEffect(() => {
     if (resetForConversation.current === conversationId) return;
     resetForConversation.current = conversationId;
     resetConversationState();
     resetConversationRuntimeState();
     setCurrentAgentState(AgentState.LOADING);
-    removeErrorMessage();
   }, [
     conversationId,
     resetConversationState,
     resetConversationRuntimeState,
     setCurrentAgentState,
-    removeErrorMessage,
   ]);
 
   React.useEffect(() => {
