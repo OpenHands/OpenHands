@@ -9,7 +9,13 @@ import {
   within,
 } from "@testing-library/react";
 import { flushSync } from "react-dom";
-import { MemoryRouter, Route, Routes } from "react-router";
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  Route,
+  RouterProvider,
+  Routes,
+} from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderWithProviders, useParamsMock } from "test-utils";
 import { SUGGESTIONS } from "#/utils/suggestions";
@@ -34,7 +40,15 @@ import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { AgentState } from "#/types/agent-state";
 import { useConversationStore } from "#/stores/conversation-store";
-import { getActiveBackend } from "#/api/backend-registry/active-store";
+import {
+  getActiveBackend,
+  getSnapshot,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { ReactRouterNavigationProvider } from "#/routes/react-router-navigation-provider";
+import { CONVERSATION_QUERY_KEYS } from "#/hooks/query/query-keys";
 import {
   sessionActivityKey,
   useSessionActivityStore,
@@ -972,6 +986,61 @@ describe("ChatInterface - Pending message queue", () => {
     expect(
       screen.queryByTestId("resolved-conversation-banner"),
     ).not.toBeInTheDocument();
+  });
+
+  it("opens New Chat from a read-only Cloud sandbox error", async ({
+    onTestFinished,
+  }) => {
+    const conversationId = "test-conversation-id";
+    const previous = getSnapshot();
+    onTestFinished(() => {
+      setRegisteredBackends(previous.backends);
+      setActiveSelection(previous.selection);
+    });
+    const backend = {
+      id: "test-cloud",
+      kind: "cloud" as const,
+      name: "Cloud",
+      host: "https://cloud.example.test",
+      apiKey: "test-key",
+    };
+    setRegisteredBackends([backend]);
+    setActiveSelection({ backendId: backend.id, orgId: "org-test" });
+    queryClient.setQueryData(
+      CONVERSATION_QUERY_KEYS.detail(conversationId, backend.id, "org-test"),
+      { id: conversationId, sandbox_status: "ERROR" },
+    );
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/conversations/:conversationId",
+          element: (
+            <ReactRouterNavigationProvider>
+              <ChatInterface />
+            </ReactRouterNavigationProvider>
+          ),
+        },
+        { path: "/conversations", element: null },
+      ],
+      { initialEntries: [`/conversations/${conversationId}`] },
+    );
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ActiveBackendProvider>
+          <RouterProvider router={router} />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+
+    const banner = screen.getByTestId("archived-conversation-banner");
+    expect(screen.queryByTestId("chat-input")).not.toBeInTheDocument();
+    fireEvent.click(
+      within(banner).getByRole("link", { name: I18nKey.SIDEBAR$NEW_CHAT }),
+    );
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe("/conversations"),
+    );
   });
 });
 

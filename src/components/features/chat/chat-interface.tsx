@@ -10,6 +10,8 @@ import {
 import { TaskStartupProgress } from "./task-startup-progress";
 import React from "react";
 import { AppearancePortal } from "#/components/shared/appearance-portal";
+import { NavigationLink } from "#/components/shared/navigation-link";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigate } from "react-router";
 import { useTracking } from "#/hooks/use-tracking";
 import { useTranslation } from "react-i18next";
@@ -189,13 +191,15 @@ export function ChatInterface({
   );
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
 
-  // Cloud conversations whose sandbox is MISSING or ERROR are read-only:
-  // the sandbox is gone and cannot be resumed, so we hide the chat input
-  // and show an explanatory banner. For local backends sandbox_status is
-  // always null, so this is effectively a no-op for non-cloud use.
+  const { backend } = useActiveBackend();
   const { data: activeConversation } = useActiveConversation();
   const sandboxStatus = activeConversation?.sandbox_status ?? null;
   const isArchivedConversation = useIsArchivedConversation();
+  const isCloudSandboxError =
+    backend.kind === "cloud" && sandboxStatus === "ERROR";
+  const sandboxErrorDescription = isCloudSandboxError
+    ? I18nKey.CHAT_INTERFACE$CLOUD_SANDBOX_ERROR_DESCRIPTION
+    : I18nKey.CHAT_INTERFACE$ERROR_SANDBOX_DESCRIPTION;
 
   // Block sending in a resumed conversation that has no usable LLM, and show
   // the same setup banner as the home screen so the dead end is explained.
@@ -960,10 +964,21 @@ export function ChatInterface({
                     : t(I18nKey.CHAT_INTERFACE$ARCHIVED_SANDBOX_TITLE)}
                 </p>
                 <p className="text-xs text-muted mt-0.5">
-                  {sandboxStatus === "ERROR"
-                    ? t(I18nKey.CHAT_INTERFACE$ERROR_SANDBOX_DESCRIPTION)
-                    : t(I18nKey.CHAT_INTERFACE$ARCHIVED_SANDBOX_DESCRIPTION)}
+                  {t(
+                    sandboxStatus === "ERROR"
+                      ? sandboxErrorDescription
+                      : I18nKey.CHAT_INTERFACE$ARCHIVED_SANDBOX_DESCRIPTION,
+                  )}
                 </p>
+                {isCloudSandboxError && (
+                  <NavigationLink
+                    to="/conversations"
+                    end
+                    className="mt-2 inline-block rounded-sm text-sm font-medium text-link underline underline-offset-2 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                  >
+                    {t(I18nKey.SIDEBAR$NEW_CHAT)}
+                  </NavigationLink>
+                )}
               </div>
             ) : (
               <div className="relative">
