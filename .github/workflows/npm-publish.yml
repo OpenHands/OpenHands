@@ -149,3 +149,122 @@ jobs:
 
       - name: Publish to npm with provenance
         run: npm publish --access public --provenance --tag ${{ steps.dist_tag.outputs.dist_tag }}
+
+  publish-smoke:
+    name: Smoke-test the published package
+    # Installs the artifact users actually install — `npm install --global
+    # @openhands/agent-canvas@<version>` from the registry — boots it with a
+    # clean temp HOME, and waits for the agent-server's /server_info, so a
+    # broken files/bin layout fails here instead of the user's first run.
+    # Every run of this workflow is a real publication (no dry-run input),
+    # so `needs: publish` gates the smoke test to published artifacts only.
+    # The job can only be proven on a real release; expect its first real
+    # evidence on the next release tag.
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Resolve the published version from the release tag
+        id: version
+        env:
+          # Pass inputs.tag via env var to prevent script injection from
+          # GitHub Actions expression interpolation inside run blocks.
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            RAW_TAG="$INPUT_TAG"
+          else
+            RAW_TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${RAW_TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install the published package into a clean temp HOME
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          export HOME="$(mktemp -d)"
+          echo "HOME=$HOME" >> "$GITHUB_ENV"
+          # The documented Linux first-run prerequisite (the CLI itself
+          # refuses to start without uvx): install uv as a user would.
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          # Registry propagation can lag the publish step by a few seconds.
+          for attempt in 1 2 3 4 5 6; do
+            if npm install --global "@openhands/agent-canvas@$VERSION"; then
+              break
+            fi
+            if [ "$attempt" = "6" ]; then
+              echo "✗ npm install failed after 6 attempts" >&2
+              exit 1
+            fi
+            echo "npm registry may still be propagating the new version; retrying in 10 s…"
+            sleep 10
+          done
+          INSTALLED="$(agent-canvas --version)"
+          echo "Installed version: $INSTALLED (expected $VERSION)"
+          if [ "$INSTALLED" != "$VERSION" ]; then
+            echo "✗ installed CLI reports a different version than the release tag" >&2
+            exit 1
+          fi
+
+      - name: Boot the installed CLI and poll /server_info
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cd "$(mktemp -d)"
+          LOG="$RUNNER_TEMP/agent-canvas-smoke.log"
+          agent-canvas >"$LOG" 2>&1 &
+          CLI_PID=$!
+          cleanup() {
+            # The CLI spawns the agent-server and automation backends as
+            # children — stop the whole process tree in every case.
+            pkill -TERM -P "$CLI_PID" 2>/dev/null || true
+            kill -TERM "$CLI_PID" 2>/dev/null || true
+            sleep 3
+            pkill -KILL -P "$CLI_PID" 2>/dev/null || true
+            kill -KILL "$CLI_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          # First launch installs Python packages through uv — allow up to
+          # 12 minutes (72 × 10 s) for /server_info to answer.
+          SERVED=0
+          for i in $(seq 1 72); do
+            CODE="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/server_info || true)"
+            if [ "$CODE" = "200" ] || [ "$CODE" = "401" ]; then
+              echo "✓ /server_info answered HTTP $CODE after ~$((i * 10)) s"
+              SERVED=1
+              break
+            fi
+            if ! kill -0 "$CLI_PID" 2>/dev/null; then
+              echo "✗ agent-canvas exited before /server_info answered" >&2
+              tail -80 "$LOG" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          if [ "$SERVED" != "1" ]; then
+            echo "✗ /server_info never answered 200/401 within 12 minutes" >&2
+            tail -80 "$LOG" >&2
+            exit 1
+          fi
+
+          # The generated session API key proves first-run key creation
+          # works for a fresh user (dev-safe.mjs persists it here).
+          KEY_FILE="$HOME/.openhands/agent-canvas/api-key.txt"
+          if [ ! -s "$KEY_FILE" ]; then
+            echo "✗ generated session API key missing at $KEY_FILE" >&2
+            tail -80 "$LOG" >&2
+            exit 1
+          fi
+          echo "✓ generated session API key present at $KEY_FILE"
+
+      - name: Upload smoke logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-smoke-logs
+          path: ${{ runner.temp }}/agent-canvas-smoke.log
+          if-no-files-found: ignore

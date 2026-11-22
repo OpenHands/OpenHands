@@ -23,6 +23,7 @@ This document is split into two sections:
 | Desktop: macOS | PRs touching `electron/**` (path-filtered), manual dispatch, release published | `.github/workflows/desktop-macos.yml` | Builds the macOS desktop package (no test step) |
 | Desktop: Windows | PRs touching `electron/**` (path-filtered), manual dispatch, release published | `.github/workflows/desktop-windows.yml` | Builds the Windows desktop package (no test step) |
 | Windows install E2E | The release-please PR (`.release-please-manifest.json`), or manual dispatch | `.github/workflows/windows-install-e2e.yml` | Packs an npm tarball from the commit, installs it globally on Windows, and runs the first-time-user smoke test |
+| Publish smoke | After a real npm publication (tag push or dispatch) | `.github/workflows/npm-publish.yml` → `publish-smoke` job | Installs the published artifact from the registry on Linux, boots it with a clean temp HOME, polls `/server_info`, and checks the generated session key |
 | Verify skill isolation | PR / push | `.github/workflows/verify-skill-isolation.yml` | Ensures `verify-*` skills are not modified in fix PRs |
 
 ### Coverage claims (corrected)
@@ -35,7 +36,7 @@ This document is split into two sections:
 | Public auth mode | ❌ | Manual QA only — no CI workflow exercises `--public` / `playwright.bind-policy.config.ts` |
 | Real ACP credentials (Claude Code / Codex / Gemini) | ❌ | Manual QA only — requires live credentials |
 | Subscription login paths | ❌ | Manual QA only — requires paid accounts |
-| Post-publication npm install (Linux/macOS) | ❌ | Manual QA only — `npm-publish.yml` publishes but never installs the published artifact; `windows-install-e2e.yml` covers Windows from a tarball, not from the registry |
+| Post-publication npm install (macOS) | ❌ | Manual QA only — `npm-publish.yml` smoke-tests the published artifact on Linux only; macOS install of the published package is untested |
 
 **Previously stale claims corrected:** The old matrix listed macOS and Windows as "not yet covered by CI"; both are now exercised by the desktop workflows and the Windows install E2E listed above.
 
