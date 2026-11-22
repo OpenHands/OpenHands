@@ -115,4 +115,13 @@ describe("assistant chat Markdown path linking", () => {
       screen.queryByTestId("markdown-file-path-link"),
     ).not.toBeInTheDocument();
   });
+  it("links file references with line and column numbers", async () => {
+    const user = userEvent.setup();
+
+    renderAgentMessage("See `src/app.ts:25:10`");
+
+    await user.click(screen.getByTestId("markdown-file-path-link"));
+
+    expect(openWorkspaceFile).toHaveBeenCalledWith("src/app.ts", "conv-1");
+  });
 });
