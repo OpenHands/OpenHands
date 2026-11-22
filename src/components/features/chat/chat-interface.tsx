@@ -48,6 +48,7 @@ import { ScrollToBottomButton } from "#/components/shared/buttons/scroll-to-bott
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { ChatMessagesSkeleton } from "./chat-messages-skeleton";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { buildUserMessagePrompt } from "#/utils/send-message-content";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
@@ -597,9 +598,14 @@ export function ChatInterface({
     }
     skippedFiles.forEach((f) => displayErrorToast(f.reason));
 
-    const filePrompt = `${t(I18nKey.CHAT_INTERFACE$AUGMENTED_PROMPT_FILES_TITLE)}: ${uploadedFiles.join("\n\n")}`;
-    const prompt =
-      uploadedFiles.length > 0 ? `${content}\n\n${filePrompt}` : content;
+    // What the server will receive: the typed text with uploaded-file
+    // references appended by the shared payload builder. The pending entry's
+    // `content` must equal it exactly — the echo is matched against it.
+    const prompt = buildUserMessagePrompt({
+      text: content,
+      fileUrls: uploadedFiles,
+      t,
+    });
 
     // Enqueue the message into the local pending queue with status "sending"
     // so the user immediately sees it in the chat with a faded treatment. The
@@ -626,8 +632,10 @@ export function ChatInterface({
     setMessageToSend("");
 
     try {
+      // The send hook applies the shared augmentation; passing the raw text
+      // keeps it from being appended twice.
       await send(
-        createChatMessage(prompt, imageUrls, uploadedFiles, timestamp),
+        createChatMessage(content, imageUrls, uploadedFiles, timestamp),
       );
       const errors = useErrorMessageStore.getState();
       if (errors.errorCode === STARTUP_UPLOAD_ERROR_CODE)
