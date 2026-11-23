@@ -258,7 +258,19 @@ export function ConversationTabs({
   ]);
 
   const safeInlineTabCount = Math.min(inlineTabCount, visibleTabs.length);
-  const inlineTabs = visibleTabs.slice(0, safeInlineTabCount);
+  const initialInlineTabs = visibleTabs.slice(0, safeInlineTabCount);
+  const selectedVisibleTab = visibleTabs.find(
+    (tab) => tab.tabValue === selectedTab,
+  );
+  const inlineTabs =
+    safeInlineTabCount > 0 &&
+    selectedVisibleTab &&
+    !initialInlineTabs.some((tab) => tab.tabValue === selectedTab)
+      ? [
+          ...initialInlineTabs.slice(0, safeInlineTabCount - 1),
+          selectedVisibleTab,
+        ]
+      : initialInlineTabs;
 
   // Roving tabindex: the strip is a single tab stop. It sits on the selected
   // tab — drawer open or not, since the strip stays in the accessibility tree

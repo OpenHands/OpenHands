@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -109,7 +109,7 @@ function seedActiveBackend(backend: Backend): void {
   __resetActiveStoreForTests();
 }
 
-const setActiveTabState = (tab: "files" | "planner") => {
+const setActiveTabState = (tab: "files" | "planner" | "usage") => {
   seedConversationState(REAL_CONVERSATION_ID, {
     selectedTab: tab,
     rightPanelShown: true,
@@ -788,6 +788,47 @@ describe("ConversationTabs localStorage behavior", () => {
       // Wraps around the start of the strip.
       await user.keyboard("{ArrowLeft}{ArrowLeft}");
       expect(screen.getByTestId("conversation-tab-usage")).toHaveFocus();
+    });
+
+    it("keeps a later selected tab visible when the strip overflows", async () => {
+      setActiveTabState("usage");
+      const originalRect = HTMLElement.prototype.getBoundingClientRect;
+      vi.spyOn(
+        HTMLElement.prototype,
+        "getBoundingClientRect",
+      ).mockImplementation(function getTabRect(this: HTMLElement) {
+        const element = this;
+        if (element.dataset.tabMeasure === "true") {
+          return { width: 40 } as DOMRect;
+        }
+        if (element.className.includes("w-full min-w-0 flex-nowrap")) {
+          return { width: 245 } as DOMRect;
+        }
+        if (element.querySelector('[data-testid="ellipsis-button"]')) {
+          return { width: 40 } as DOMRect;
+        }
+        if (element.querySelector('[data-testid="drawer-vscode-link"]')) {
+          return { width: 0 } as DOMRect;
+        }
+        return originalRect.call(element);
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      await waitFor(() =>
+        expect(screen.getByTestId("conversation-tab-usage")).toHaveAttribute(
+          "aria-selected",
+          "true",
+        ),
+      );
+
+      const tablist = screen.getByRole("tablist");
+      expect(
+        within(tablist).getByRole("tab", { name: "COMMON$USAGE" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("conversation-tab-browser")).toBeNull();
     });
 
     it("activates the focused tab with Enter", async () => {
