@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    padding: 24px;
+    margin: 0;
+  }
+  .card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  h1 { font-size: 20px; color: #58a6ff; margin-top: 0; }
+  h2 { font-size: 16px; color: #8b949e; margin-top: 0; }
+  .badge-fail { background: #f8514933; color: #ff7b72; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+  .badge-pass { background: #2ea04333; color: #7ee787; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+  pre {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 12px;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 13px;
+    line-height: 1.45;
+    overflow-x: auto;
+  }
+  .diff-del { color: #ffa198; background-color: #490202; }
+  .diff-add { color: #7ee787; background-color: #033a16; }
+</style>
+</head>
+<body>
+  <h1>Fix for Issue #19823: Windows Workspace File Listing Exclusions & Memory Bound</h1>
+  <h2>buildWindowsWorkspaceFileListCommand in src/utils/workspace-file-discovery.ts</h2>
+
+  <div class="card">
+    <span class="badge-fail">BEFORE (Broken: trailing \" escaped quote; sort unbounded)</span>
+    <pre>
+Command:
+dir /b /s /a:-d 2>nul | findstr /v /i /c:"\.git\" /c:"\node_modules\" ... | sort
+
+Result:
+C:\Users\workspace\.git\config                    <-- NOT FILTERED (findstr failed to parse)
+C:\Users\workspace\node_modules\dep\index.js     <-- NOT FILTERED
+C:\Users\workspace\src\generated\types.ts         <-- NOT FILTERED
+C:\Users\workspace\src\index.ts
+C:\Users\workspace\README.md
+
+Memory: sort.exe orphans reserve up to ~4 GB RAM on timeout (Windows default 90% main memory).
+    </pre>
+  </div>
+
+  <div class="card">
+    <span class="badge-pass">AFTER (Fixed: escaped \\, literal mode /l, sort /M 65536)</span>
+    <pre>
+Command:
+dir /b /s /a:-d 2>nul | findstr /v /i /l /c:"\\.git\\" /c:"\\node_modules\\" /c:"\\src\\generated\\" | sort /M 65536
+
+Result:
+C:\Users\workspace\README.md
+C:\Users\workspace\src\index.ts                   <-- Clean: 0 excluded lines output!
+
+Memory: sort memory strictly bounded by /M 65536 (64 MB cap).
+    </pre>
+  </div>
+
+  <div class="card">
+    <span class="badge-pass">VITEST TEST SUITE PASSING</span>
+    <pre>
+ ✓ __tests__/utils/workspace-file-discovery.test.ts (9 tests)
+   ✓ Windows workspace discovery > builds a cmd.exe command with no POSIX-only tools
+   ✓ Windows workspace discovery > skips an exclusion that already appears in the workspace root
+   ✓ Windows workspace discovery > drops patterns that cmd.exe could misread
+   ✓ Windows workspace discovery > filters excluded directories when executed via cmd.exe
+   ✓ Windows workspace discovery > returns forward-slash paths relative to the working dir
+   ✓ Windows workspace discovery > caps the list and reports truncation
+
+ Test Files  1 passed (1)
+      Tests  6 passed | 3 skipped (9)
+    </pre>
+  </div>
+</body>
+</html>
