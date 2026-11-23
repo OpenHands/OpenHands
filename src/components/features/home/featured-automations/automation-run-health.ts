@@ -9,12 +9,7 @@ import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { formatEventOn } from "#/utils/automation-schedule";
 
 export type AutomationRunHealth =
-  | "success"
-  | "failed"
-  | "warning"
-  | "in_progress"
-  | "none"
-  | "unknown";
+  "success" | "failed" | "warning" | "in_progress" | "none" | "unknown";
 
 export function deriveRunHealth(
   state: LatestAutomationRunState,

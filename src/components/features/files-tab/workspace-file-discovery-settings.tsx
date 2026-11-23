@@ -60,7 +60,7 @@ function DiscoveryForm({
         testID="file-discovery-settings-modal"
         width="md"
         className={cn(
-          "items-stretch max-h-[90vh] overflow-y-auto",
+          "file-discovery-viewport-height items-stretch overflow-y-auto",
           MODAL_MAX_WIDTH_VIEWPORT,
         )}
       >

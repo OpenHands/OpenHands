@@ -88,7 +88,7 @@ beforeEach(() => {
   captureMock = vi.spyOn(telemetry, "trackEvent").mockResolvedValue(undefined);
   window.localStorage.clear();
   getServerInfoMock.mockReset();
-  getServerInfoMock.mockResolvedValue({ version: "1.58.0" });
+  getServerInfoMock.mockResolvedValue({ version: "1.63.1" });
   deviceFlowMocks.startDeviceFlow.mockReset();
   deviceFlowMocks.startDeviceFlow.mockResolvedValue({
     device_code: "device-code",
@@ -296,7 +296,10 @@ describe("AddBackendModal – connection chooser", () => {
       expect(getComputedStyle(grid).transitionProperty).toBe(
         "grid-template-rows",
       );
-      expect(getComputedStyle(grid).transitionDuration).toBe("200ms");
+      // jsdom 31 serializes 200ms as 0.2s; compare the resolved duration.
+      expect(parseFloat(getComputedStyle(grid).transitionDuration)).toBeCloseTo(
+        0.2,
+      );
       expect(body).toHaveAttribute("inert");
 
       await user.click(screen.getByTestId(toggleId));
@@ -603,7 +606,7 @@ describe("AddBackendModal – connection chooser", () => {
     await user.click(screen.getByTestId("add-backend-submit"));
 
     expect(await screen.findByTestId("add-backend-error")).toHaveTextContent(
-      "Agent Canvas requires agent-server 1.57.0 or newer",
+      "Agent Canvas requires agent-server 1.63.1 or newer",
     );
     expect(onClose).not.toHaveBeenCalled();
   });

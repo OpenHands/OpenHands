@@ -1,0 +1,15 @@
+http://127.0.0.1:18820/
+- main
+- dialog "Welcome to OpenHands":
+  - progressbar
+  - heading "Choose your agent" [level=2]
+  - paragraph: Pick the agent that will drive your conversations. You can change this later.
+  - radiogroup "Choose your agent":
+    - radio "OpenHands The default OpenHands agent. Best for general-purpose coding and exploration." [checked]
+    - radio "Claude Code Anthropic's Claude Code agent."
+    - radio "Codex OpenAI's Codex agent."
+    - radio "Gemini CLI Google's Gemini CLI agent."
+    - radio "Pi The open source Pi coding agent."
+    - radio "OpenCode The open source OpenCode coding agent."
+  - button "Next"
+  - button "Skip for now"

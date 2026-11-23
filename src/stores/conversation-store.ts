@@ -12,7 +12,8 @@ export type ConversationTab =
   | "terminal"
   | "planner"
   | "tasklist"
-  | "usage";
+  | "usage"
+  | "project";
 
 export type ConversationMode = "code" | "plan";
 
@@ -180,7 +181,14 @@ export const useConversationStore = create<ConversationStore>()(
         set({ shouldShownAgentLoading }, false, "setShouldShownAgentLoading"),
 
       setShouldHideSuggestions: (shouldHideSuggestions) =>
-        set({ shouldHideSuggestions }, false, "setShouldHideSuggestions"),
+        set(
+          (state) =>
+            state.shouldHideSuggestions === shouldHideSuggestions
+              ? state
+              : { shouldHideSuggestions },
+          false,
+          "setShouldHideSuggestions",
+        ),
 
       addImages: (images) =>
         set(

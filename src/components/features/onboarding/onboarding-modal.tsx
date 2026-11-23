@@ -317,7 +317,7 @@ export function OnboardingModal({
             "flex flex-col gap-6 overflow-hidden rounded-2xl border border-contrast/10 bg-base-secondary shadow-2xl",
             modalWidthClassName("lg"),
             MODAL_MAX_WIDTH_VIEWPORT,
-            "max-h-[90vh]",
+            "onboarding-viewport-height",
           )}
         >
           <header className="flex flex-col gap-3 px-7 pt-7 shrink-0">

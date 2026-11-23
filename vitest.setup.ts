@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { server } from "#/mocks/node";
+import { __resetAutomationFormSessionsForTests } from "#/api/automation-form-session";
 import "@testing-library/jest-dom/vitest";
 
 // Some modules read env at import time before Vitest's per-test hooks run.
@@ -21,6 +22,9 @@ if (typeof HTMLCanvasElement !== "undefined") {
 
 if (typeof HTMLElement !== "undefined") {
   HTMLElement.prototype.scrollTo = vi.fn();
+  // jsdom doesn't implement scrollIntoView; components that auto-scroll on
+  // expand (e.g. the launch plugin section) call it, so stub it globally.
+  HTMLElement.prototype.scrollIntoView = vi.fn();
 }
 
 const windowStub =
@@ -74,7 +78,7 @@ if (typeof requestAnimationFrame === "undefined") {
 // properties on `globalThis` and removes them during per-file teardown with
 // `keys.forEach((key) => delete global[key])`. If an in-flight intercepted
 // XHR (e.g. PostHog analytics, or any request that escaped to the real
-// network under `onUnhandledRequest: "bypass"` and is still waiting on a
+// network under `onUnhandledFrame: "bypass"` and is still waiting on a
 // socket) settles after teardown, its callback evaluates `ProgressEvent`
 // against a torn-down global and throws
 // `ReferenceError: ProgressEvent is not defined` (or the
@@ -195,7 +199,7 @@ vi.mock("zustand");
 
 // Mock requests during tests
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: "bypass" });
+  server.listen({ onUnhandledFrame: "bypass" });
   vi.stubGlobal("ResizeObserver", MockResizeObserver);
 });
 
@@ -209,6 +213,8 @@ afterEach(async () => {
   window.sessionStorage?.removeItem("openhands-active-backend");
   // Cleanup the document body after each test
   cleanup();
+  // Setup forms outlive their panels for the life of the page.
+  __resetAutomationFormSessionsForTests();
   // Drain any queued microtasks before jsdom is torn down between test files.
   // Without this, async state updates queued during render (for example by
   // HeroUI v2 components wrapped in framer-motion's LazyMotion) can resolve

@@ -72,11 +72,11 @@ export function WorkspaceModeSelector({
         disabled={disabled}
         onClick={() => setOpen((next) => !next)}
         className={cn(
-          "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2 py-1 rounded-[100px] truncate relative",
-          "border border-[rgba(71,74,84,0.50)] bg-transparent text-contrast",
+          "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2 py-1 rounded-pill truncate relative",
+          "border border-border-input bg-transparent dark:border-git-control text-contrast",
           disabled
             ? "cursor-not-allowed opacity-50"
-            : "cursor-pointer hover:border-border-subtle",
+            : "cursor-pointer hover:border-muted dark:hover:border-border-subtle",
         )}
       >
         <span className="flex size-3 shrink-0 items-center justify-center">

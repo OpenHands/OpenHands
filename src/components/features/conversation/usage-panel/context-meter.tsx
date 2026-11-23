@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
@@ -79,15 +80,16 @@ export function ContextMeter({
         <div
           data-testid="context-meter-bar"
           className={cn(
-            "absolute inset-y-0 left-0 rounded-full transition-all duration-300",
+            "absolute inset-y-0 left-0 w-(--context-fill-width) rounded-full transition-all duration-300",
             isDanger
               ? "bg-status-error"
               : isWarning
                 ? "bg-feedback-warning"
                 : "bg-foreground",
           )}
-          // runtime usage-percentage width
-          style={{ width: `${usagePercentage}%` }}
+          style={
+            { "--context-fill-width": `${usagePercentage}%` } as CSSProperties
+          }
         />
       </div>
       <div className="flex justify-end">

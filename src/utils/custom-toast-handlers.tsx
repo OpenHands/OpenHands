@@ -78,7 +78,7 @@ export function ErrorToastContent({ message }: { message: ReactNode }) {
       />
       <span
         ref={contentRef}
-        className="min-w-0 flex-1 text-sm leading-5 [word-break:break-word] [overflow-wrap:anywhere]"
+        className="min-w-0 flex-1 text-sm leading-5 message-word-break wrap-anywhere"
       >
         {message}
       </span>
@@ -127,28 +127,50 @@ export const displayApiErrorToast = (error: unknown, fallback: string) => {
 export const displaySuccessToast = (message: string) => {
   const duration = calculateToastDuration(message, 5000);
   toast.success(
-    <span className="[word-break:break-word] [overflow-wrap:anywhere]">
-      {message}
-    </span>,
+    <span className="message-word-break wrap-anywhere">{message}</span>,
     { ...TOAST_OPTIONS, duration },
   );
 };
 
+/**
+ * Toast a success with an action link.
+ *
+ * When `onOpen` is given the link runs through the caller's navigation owner
+ * (an embedded Canvas routes via its host), so following it stays inside the
+ * app. Without it the link is a plain `<a>` that the browser follows itself —
+ * right for a reader who genuinely left Canvas, wrong for an embedding host.
+ */
 export const displaySuccessToastWithLink = (
   message: string,
   linkLabel: string,
   href: string,
+  onOpen?: () => void,
 ) => {
   const duration = calculateToastDuration(`${message} ${linkLabel}`, 5000);
-  toast.success(
-    <span className="[word-break:break-word] [overflow-wrap:anywhere]">
+  const toastId = toast.success(
+    <span className="message-word-break wrap-anywhere">
       {message}{" "}
-      <a
-        className="underline hover:no-underline"
-        href={buildAgentCanvasPath(href)}
-      >
-        {linkLabel}
-      </a>
+      {onOpen ? (
+        <button
+          type="button"
+          className="underline hover:no-underline"
+          onClick={() => {
+            // Dismiss only this toast; a bare `toast.dismiss()` clears every
+            // active toast, including unrelated ones.
+            toast.dismiss(toastId);
+            onOpen();
+          }}
+        >
+          {linkLabel}
+        </button>
+      ) : (
+        <a
+          className="underline hover:no-underline"
+          href={buildAgentCanvasPath(href)}
+        >
+          {linkLabel}
+        </a>
+      )}
     </span>,
     { ...TOAST_OPTIONS, duration },
   );
@@ -161,10 +183,9 @@ export const displaySuccessToastWithLink = (
  */
 export const displayWarningToast = (message: string) => {
   const duration = calculateToastDuration(message, 6000);
-  toast(
-    <span className="[word-break:break-word] [overflow-wrap:anywhere]">
-      {message}
-    </span>,
-    { ...TOAST_OPTIONS, icon: "⚠️", duration },
-  );
+  toast(<span className="message-word-break wrap-anywhere">{message}</span>, {
+    ...TOAST_OPTIONS,
+    icon: "⚠️",
+    duration,
+  });
 };

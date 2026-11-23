@@ -1,3 +1,4 @@
+import type { Backend } from "#/api/backend-registry/types";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import CanvasExtensionsService from "#/api/canvas-extensions-service";
@@ -74,8 +75,17 @@ export function useRefreshCanvasExtension() {
 export function useSetCanvasExtensionEnabled() {
   const invalidate = useInvalidateCanvasExtensions();
   return useMutation({
-    mutationFn: ({ name, enabled }: { name: string; enabled: boolean }) =>
-      CanvasExtensionsService.setEnabled(name, enabled),
+    mutationFn: ({
+      name,
+      enabled,
+      consent,
+      backend,
+    }: {
+      name: string;
+      enabled: boolean;
+      consent?: { revision: string; secret_refs?: string[] };
+      backend?: Backend;
+    }) => CanvasExtensionsService.setEnabled(name, enabled, consent, backend),
     onSuccess: () => void invalidate(),
   });
 }

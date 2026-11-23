@@ -46,6 +46,11 @@ const mockUseAutomations = vi.fn();
 const mockUseSettings = vi.fn();
 const mockUseLlmConfigured = vi.fn();
 const mockUseLlmProfiles = vi.fn();
+const mockUseSearchSecrets = vi.fn();
+
+vi.mock("#/hooks/query/use-get-secrets", () => ({
+  useSearchSecrets: () => mockUseSearchSecrets(),
+}));
 
 vi.mock("#/hooks/query/use-paginated-conversations", () => ({
   usePaginatedConversations: () => mockUsePaginatedConversations(),
@@ -134,6 +139,7 @@ describe("SidebarOnboardingChecklist", () => {
       data: { active_profile: null, profiles: [] },
       isLoading: false,
     });
+    mockUseSearchSecrets.mockReturnValue({ data: [] });
   });
 
   it("renders setup items including LLM keys, agent profiles, schedule a task, and Slack", () => {
@@ -145,6 +151,11 @@ describe("SidebarOnboardingChecklist", () => {
     expect(
       screen.getByTestId("sidebar-onboarding-checklist-item-configure-llm"),
     ).toHaveAttribute("href", "/settings/llm");
+    expect(
+      screen.getByTestId(
+        "sidebar-onboarding-checklist-item-configure-subscription-agent",
+      ),
+    ).toHaveAttribute("href", "/settings/agents");
     expect(
       screen.getByTestId("sidebar-onboarding-checklist-item-connect-mcp"),
     ).toHaveAttribute("href", "/mcp");
@@ -185,6 +196,47 @@ describe("SidebarOnboardingChecklist", () => {
     expect(
       screen.getByText(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_JOIN_SLACK),
     ).toHaveClass("line-through");
+  });
+
+  it("does not complete subscription setup merely from visiting agent settings", () => {
+    window.localStorage.setItem(
+      SIDEBAR_ONBOARDING_CHECKLIST_CUSTOMIZE_EXPLORED_STORAGE_KEY,
+      "true",
+    );
+    renderChecklist();
+    expect(
+      screen.getByText(
+        I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONFIGURE_SUBSCRIPTION_AGENT,
+      ),
+    ).not.toHaveClass("line-through");
+    expect(
+      screen.getByText(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CUSTOMIZE),
+    ).toHaveClass("line-through");
+  });
+
+  it.each(["CODEX_AUTH_JSON", "CLAUDE_CODE_OAUTH_TOKEN"])(
+    "completes subscription setup when %s is saved",
+    (name) => {
+      mockUseSearchSecrets.mockReturnValue({ data: [{ name }] });
+      renderChecklist();
+      expect(
+        screen.getByText(
+          I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONFIGURE_SUBSCRIPTION_AGENT,
+        ),
+      ).toHaveClass("line-through");
+    },
+  );
+
+  it("does not complete subscription setup for a non-subscription credential", () => {
+    mockUseSearchSecrets.mockReturnValue({
+      data: [{ name: "GOOGLE_APPLICATION_CREDENTIALS_JSON" }],
+    });
+    renderChecklist();
+    expect(
+      screen.getByText(
+        I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONFIGURE_SUBSCRIPTION_AGENT,
+      ),
+    ).not.toHaveClass("line-through");
   });
 
   it("crosses out Add LLM API key when LLM is configured", () => {

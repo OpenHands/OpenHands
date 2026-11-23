@@ -8,6 +8,7 @@ export function useSearchBranches(
   query: string,
   perPage: number = 30,
   selectedProvider?: Provider,
+  gitProviderId?: number | null,
 ) {
   return useQuery<Branch[]>({
     queryKey: [
@@ -18,6 +19,7 @@ export function useSearchBranches(
       query,
       perPage,
       selectedProvider,
+      gitProviderId ?? null,
     ],
     queryFn: async () => {
       if (!repository || !query || !selectedProvider) return [];
@@ -27,6 +29,7 @@ export function useSearchBranches(
         query,
         undefined, // pageId
         perPage,
+        gitProviderId,
       );
       return response.items;
     },

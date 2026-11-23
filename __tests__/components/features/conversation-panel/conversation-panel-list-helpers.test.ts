@@ -461,14 +461,12 @@ describe("conversation-panel-list-helpers", () => {
       repository: {
         name: "org/sdk",
         gitProvider: "github",
-        branch: "main",
       },
     });
     expect(groups[1].launch).toEqual({
       repository: {
         name: "org/agent-canvas",
         gitProvider: "github",
-        branch: "main",
       },
     });
   });

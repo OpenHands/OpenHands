@@ -10,6 +10,7 @@ import { cn } from "#/utils/utils";
 import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
 import { getMarketplaceEntryById } from "#/utils/mcp-marketplace-utils";
 import { automationRepositoryLabel } from "#/utils/automation-repo-sources";
+import { getIntegrationLogoId } from "#/utils/automation-catalog";
 import {
   formatTriggerSourceLabel,
   getTriggerEventLabel,
@@ -63,7 +64,7 @@ export function buildAutomationMetadataPills(
     const source = getTriggerSource(automation);
     if (source) {
       const sourceEntry = getMarketplaceEntryById(
-        source.toLowerCase(),
+        getIntegrationLogoId(source.toLowerCase()),
         MCP_MARKETPLACE,
       );
       pills.push({

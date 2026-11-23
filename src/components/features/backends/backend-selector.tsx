@@ -104,6 +104,9 @@ function buildOptions(
         options.push({
           value: makeOptionValue(b.id, org.id),
           label: showBackendName ? `${b.name} – ${orgLabel}` : orgLabel,
+          // Rows list orgs under one backend heading instead of repeating
+          // the backend name; the full label stays on the trigger.
+          ...(showBackendName ? { group: b.name, groupLabel: orgLabel } : {}),
           // All org rows for the same cloud backend share that backend's
           // single connectivity verdict — there is no per-org probe.
           prefix,
@@ -140,6 +143,8 @@ interface BackendSelectorProps {
    * the expanded rail) can override the persisted desktop value.
    */
   sidebarCollapsed?: boolean;
+  /** Called whenever the options menu opens or closes. */
+  onMenuOpenChange?: (isOpen: boolean) => void;
 }
 
 export function BackendSelector({
@@ -150,6 +155,7 @@ export function BackendSelector({
   onOpenAddBackend,
   onOpenManageBackends,
   sidebarCollapsed = false,
+  onMenuOpenChange,
 }: BackendSelectorProps = {}) {
   const { t } = useTranslation("openhands");
   const { backends, active, setActive } = useActiveBackendContext();
@@ -358,7 +364,8 @@ export function BackendSelector({
 
   return (
     <>
-      <div className="flex items-center gap-2 w-full">
+      {/* The menu spans this whole row, including the settings button. */}
+      <div className="relative flex items-center gap-2 w-full">
         <div className="flex-1 min-w-0">
           <Dropdown
             testId="backend-selector"
@@ -374,6 +381,10 @@ export function BackendSelector({
             }
             footer={addBackendFooter}
             openUpward={openUpward}
+            matchTriggerWidth
+            anchorMenuToParent
+            tallMenu
+            onOpenChange={onMenuOpenChange}
             hideTrigger={hideTrigger}
             defaultOpen={defaultOpen}
             openOnHover={!hideTrigger}

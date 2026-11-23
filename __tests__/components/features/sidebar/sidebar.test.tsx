@@ -42,6 +42,15 @@ vi.mock("react-i18next", async () => {
   };
 });
 
+const factoriesSupport = vi.hoisted(() => ({ isSupported: false }));
+
+vi.mock("#/hooks/query/use-factories", () => ({
+  useFactoriesSupported: () => ({
+    isLoading: false,
+    isSupported: factoriesSupport.isSupported,
+  }),
+}));
+
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => ({ data: { feature_flags: {} } }),
 }));
@@ -214,10 +223,11 @@ function getDesktopSidebar(collapsed?: boolean): HTMLElement {
   return sidebar;
 }
 
-function renderSidebar(currentPath: string) {
+function renderSidebar(currentPath: string, currentSearch = "") {
   const navigate = vi.fn();
   const value: NavigationContextValue = {
     currentPath,
+    currentSearch,
     conversationId: null,
     isNavigating: false,
     navigate,
@@ -243,6 +253,7 @@ describe("Sidebar", () => {
     // Zustand store is a module singleton; reset it so collapsed state from
     // a prior test doesn't bleed into this one.
     useSidebarStore.setState({ collapsed: false });
+    factoriesSupport.isSupported = false;
   });
 
   afterEach(() => {
@@ -270,6 +281,16 @@ describe("Sidebar", () => {
         screen.queryByTestId("sidebar-mobile-drawer"),
       ).not.toBeInTheDocument();
     });
+  });
+
+  it("applies safe-area padding to the fixed mobile drawer", () => {
+    renderSidebar("/conversations");
+
+    fireEvent.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+
+    const drawer = screen.getByTestId("sidebar-mobile-drawer");
+    expect(drawer).toHaveClass("mobile-sidebar-drawer-safe-area");
+    expect(drawer).not.toHaveClass("pb-2", "pl-2.5", "pr-0");
   });
 
   it("keeps the CSS drawer and backdrop timing in step with removal", async () => {
@@ -332,6 +353,45 @@ describe("Sidebar", () => {
     }
   });
 
+  it("renders sidebar text one step above the app's small text sizes", async () => {
+    // Arrange: compile the production stylesheet and open both sidebar variants.
+    const compiler = await compile(
+      await readFile(resolve("src/tailwind.css"), "utf8"),
+      { base: resolve("src"), onDependency: () => {} },
+    );
+    renderSidebar("/conversations");
+    fireEvent.click(screen.getByTestId("sidebar-mobile-menu-toggle"));
+    const sidebars = [
+      getDesktopSidebar(false),
+      await screen.findByTestId("sidebar-mobile-drawer"),
+    ];
+    const rem = (css: string, token: string, selectorTest: RegExp) =>
+      [...css.matchAll(/([^{}]+)\{([^{}]+)\}/g)]
+        .filter(([, selector]) => selectorTest.test(selector.trim()))
+        .map(
+          ([, , body]) =>
+            body.match(new RegExp(`${token}:\\s*([\\d.]+)rem`))?.[1],
+        )
+        .filter(Boolean)
+        .map(Number)[0];
+    const theme = compiler.build(["text-sm", "text-xs"]);
+
+    for (const sidebar of sidebars) {
+      // Act: build only the classes this element actually carries.
+      const css = compiler.build([...sidebar.classList]);
+      const own = new RegExp(
+        `^\\.(${[...sidebar.classList].map((c) => c.replace(/[^\w-]/g, "\\\\$&")).join("|")})$`,
+      );
+
+      // Assert: text-sm / text-xs resolve to larger sizes inside the sidebar.
+      for (const token of ["--text-sm", "--text-xs"]) {
+        const base = rem(theme, token, /^:root/);
+        expect(base).toBeGreaterThan(0);
+        expect(rem(css, token, own)).toBeGreaterThan(base!);
+      }
+    }
+  });
+
   it("leaves the mobile drawer open when a menu inside it already handled Escape", () => {
     renderSidebar("/conversations");
     const toggle = screen.getByTestId("sidebar-mobile-menu-toggle");
@@ -368,6 +428,43 @@ describe("Sidebar", () => {
     unmount();
     renderSidebar("/conversations");
     expect(getDesktopSidebar(true).dataset.collapsed).toBe("true");
+  });
+
+  it("resizes the expanded sidebar by dragging its edge and remembers the width", () => {
+    // Arrange: the sidebar starts at the left edge of the viewport.
+    const { unmount } = renderSidebar("/conversations");
+    const sidebar = getDesktopSidebar(false);
+    vi.spyOn(sidebar, "getBoundingClientRect").mockReturnValue(
+      DOMRect.fromRect({ x: 0, width: 300, height: 800 }),
+    );
+    const handle = screen
+      .getByTestId("sidebar-resize-handle")
+      .querySelector(".cursor-ew-resize")!;
+    expect(sidebar.style.getPropertyValue("--sidebar-width")).toBe("300px");
+
+    // Act + Assert: the width follows the pointer within its bounds.
+    fireEvent.mouseDown(handle);
+    for (const [clientX, expectedWidth] of [
+      [420, "420px"],
+      [100, "240px"],
+      [2000, "560px"],
+      [380, "380px"],
+    ] as const) {
+      fireEvent.mouseMove(document, { clientX });
+      expect(sidebar.style.getPropertyValue("--sidebar-width")).toBe(
+        expectedWidth,
+      );
+    }
+    fireEvent.mouseUp(document);
+
+    // The chosen width survives a remount; the collapsed rail has no handle.
+    unmount();
+    renderSidebar("/conversations");
+    expect(
+      getDesktopSidebar(false).style.getPropertyValue("--sidebar-width"),
+    ).toBe("380px");
+    fireEvent.click(screen.getByTestId("sidebar-collapse-toggle"));
+    expect(screen.queryByTestId("sidebar-resize-handle")).toBeNull();
   });
 
   it("expands the sidebar when the toggle is clicked from the collapsed state", () => {
@@ -559,6 +656,53 @@ describe("Sidebar", () => {
       checklist.compareDocumentPosition(backendBar) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("hides the Factories link when the automation service has no factories", () => {
+    renderSidebar("/conversations");
+
+    expect(
+      screen.queryByTestId("sidebar-factories-link"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("links to the factories list when the automation service has factories", () => {
+    factoriesSupport.isSupported = true;
+
+    renderSidebar("/conversations");
+
+    const link = screen.getByTestId("sidebar-factories-link");
+    expect(link).toHaveTextContent("Factories");
+    expect(link).toHaveAttribute("href", "/factories");
+  });
+
+  it("keeps Factories selected on an automation page opened from a factory", () => {
+    factoriesSupport.isSupported = true;
+
+    renderSidebar("/automations/setup", "?factory=factory-1");
+
+    expect(screen.getByTestId("sidebar-factories-link")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByTestId("sidebar-automations-link")).toHaveAttribute(
+      "aria-current",
+      "false",
+    );
+  });
+
+  it("selects Automate on the same pages when no factory is in play", () => {
+    factoriesSupport.isSupported = true;
+
+    renderSidebar("/automations/setup");
+
+    expect(screen.getByTestId("sidebar-automations-link")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByTestId("sidebar-factories-link")).not.toHaveAttribute(
+      "aria-current",
+    );
   });
 
   it("renders icons for every top-level nav item so they remain meaningful in the collapsed rail", () => {

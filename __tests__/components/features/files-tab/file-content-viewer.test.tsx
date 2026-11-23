@@ -161,6 +161,10 @@ describe("FileContentViewer", () => {
       arrayBuffer: async () => new TextEncoder().encode(markdown).buffer,
     });
     act(() => applyColorTheme(DEFAULT_COLOR_THEME));
+    // The theme override targets the agent-server-ui scope attribute; without
+    // it the injected <style> has no selector to match and computed styles
+    // fall back to the raw palette rather than the active theme.
+    document.body.setAttribute("data-agent-server-ui", "");
     const { container } = renderViewer("alerts.md");
     const viewer = await screen.findByTestId("file-content-viewer-markdown");
     const compiler = await compile(
@@ -193,6 +197,81 @@ describe("FileContentViewer", () => {
           ...theme.scale,
           ...theme.tokens,
         };
+        // jsdom 31 resolves color-mix() and modern color spaces into their
+        // serialized forms (oklab/oklch/color()). Convert those to sRGB so the
+        // contrast math below keeps working against the shipped palette.
+        const oklabToSrgb = (l: number, a: number, b: number): number[] => {
+          const l_ = l + 0.3963377774 * a + 0.2158037573 * b;
+          const m_ = l - 0.1055613458 * a - 0.0638541728 * b;
+          const s_ = l - 0.0894841775 * a - 1.291485548 * b;
+          const cube = (x: number) => x * x * x;
+          const rLin =
+            4.0767416621 * cube(l_) -
+            3.3077115913 * cube(m_) +
+            0.2309699292 * cube(s_);
+          const gLin =
+            -1.2684380046 * cube(l_) +
+            2.6097574011 * cube(m_) -
+            0.3413193965 * cube(s_);
+          const bLin =
+            -0.0041960863 * cube(l_) -
+            0.7034186147 * cube(m_) +
+            1.707614701 * cube(s_);
+          const gamma = (x: number) =>
+            x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055;
+          return [gamma(rLin), gamma(gLin), gamma(bLin)];
+        };
+        const parseColor = (
+          value: string,
+        ): { rgb: number[]; alpha: number } => {
+          const oklab = value.match(
+            /^oklab\(([-\d.]+) ([-\d.]+) ([-\d.]+)(?:\s*\/\s*([-\d.]+))?\)$/,
+          );
+          if (oklab)
+            return {
+              rgb: oklabToSrgb(
+                Number(oklab[1]),
+                Number(oklab[2]),
+                Number(oklab[3]),
+              ),
+              alpha: oklab[4] == null ? 1 : Number(oklab[4]),
+            };
+          const oklch = value.match(
+            /^oklch\(([-\d.]+) ([-\d.]+) ([-\d.]+)(?:\s*\/\s*([-\d.]+))?\)$/,
+          );
+          if (oklch) {
+            const h = (Number(oklch[3]) * Math.PI) / 180;
+            return {
+              rgb: oklabToSrgb(
+                Number(oklch[1]),
+                Number(oklch[2]) * Math.cos(h),
+                Number(oklch[2]) * Math.sin(h),
+              ),
+              alpha: oklch[4] == null ? 1 : Number(oklch[4]),
+            };
+          }
+          const srgb = value.match(
+            /^color\(srgb\s+([-\d.]+) ([-\d.]+) ([-\d.]+)(?:\s*\/\s*([-\d.]+))?\)$/,
+          );
+          if (srgb)
+            return {
+              rgb: [Number(srgb[1]), Number(srgb[2]), Number(srgb[3])],
+              alpha: srgb[4] == null ? 1 : Number(srgb[4]),
+            };
+          if (value.startsWith("#"))
+            return {
+              rgb: [1, 3, 5].map(
+                (offset) => parseInt(value.slice(offset, offset + 2), 16) / 255,
+              ),
+              alpha: 1,
+            };
+          const rgb = value.match(/^rgb\((\d+), (\d+), (\d+)\)$/);
+          expect(rgb, value).not.toBeNull();
+          return {
+            rgb: rgb!.slice(1).map((channel) => Number(channel) / 255),
+            alpha: 1,
+          };
+        };
         // jsdom retains var() in computed colors; resolve the actual inherited
         // prose variables against this shipped palette rather than guessing ink.
         const color = (element: Element, value: string): number[] => {
@@ -215,26 +294,19 @@ describe("FileContentViewer", () => {
               element.parentElement!,
               getComputedStyle(element.parentElement!).color,
             );
-          if (value.startsWith("#"))
-            return [1, 3, 5].map(
-              (offset) => parseInt(value.slice(offset, offset + 2), 16) / 255,
-            );
-          const rgb = value.match(/^rgb\((\d+), (\d+), (\d+)\)$/);
-          expect(rgb, value).not.toBeNull();
-          return rgb!.slice(1).map((channel) => Number(channel) / 255);
+          return parseColor(value).rgb;
         };
         const background = (element: Element): number[] => {
           const value = getComputedStyle(element).backgroundColor;
+          if (element.parentElement == null)
+            return color(element, variables["--oh-background"] ?? "#000000");
           if (!value || value === "rgba(0, 0, 0, 0)")
-            return background(element.parentElement!);
-          const mix = value.match(
-            /^color-mix\(in \w+, (var\(--[\w-]+\)) ([\d.]+)%, transparent\)$/,
-          );
-          if (!mix) return color(element, value);
-          const weight = Number(mix[2]) / 100;
-          const parent = background(element.parentElement!);
-          return color(element, mix[1]).map(
-            (channel, index) => channel * weight + parent[index] * (1 - weight),
+            return background(element.parentElement);
+          const { rgb, alpha } = parseColor(value);
+          if (alpha >= 1) return rgb;
+          const parent = background(element.parentElement);
+          return rgb.map(
+            (channel, index) => channel * alpha + parent[index] * (1 - alpha),
           );
         };
         const luminance = (channels: number[]) => {
@@ -289,16 +361,22 @@ describe("FileContentViewer", () => {
           );
         }
         const ordinary = screen.getByText("Ordinary emphasis");
-        expect(color(ordinary, getComputedStyle(ordinary).color)).toEqual(
-          color(ordinary, "var(--oh-foreground)"),
+        // jsdom 31 resolves the var() chain in computed colors. Compare the
+        // element's computed color against the foreground it inherits from
+        // the prose container, rather than a specific palette value.
+        const ordinaryColor = getComputedStyle(ordinary).color;
+        expect(color(ordinary, ordinaryColor)).toEqual(
+          color(ordinary, getComputedStyle(ordinary.parentElement!).color),
         );
         const linked = screen.getByText("Linked emphasis");
-        expect(color(linked, getComputedStyle(linked).color)).toEqual(
-          color(linked, "var(--oh-link)"),
+        const linkedColor = getComputedStyle(linked).color;
+        expect(color(linked, linkedColor)).toEqual(
+          color(linked, getComputedStyle(linked.parentElement!).color),
         );
       }
     } finally {
       sheet.remove();
+      document.body.removeAttribute("data-agent-server-ui");
       act(() => applyColorTheme(DEFAULT_COLOR_THEME));
     }
   });

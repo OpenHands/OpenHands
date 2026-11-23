@@ -3,6 +3,8 @@ import { CriticResult } from "../base/critic";
 import { BaseEvent, Message } from "../base/event";
 
 export interface MessageEvent extends BaseEvent {
+  sender?: string | null;
+
   /**
    * The exact LLM message for this message event
    */

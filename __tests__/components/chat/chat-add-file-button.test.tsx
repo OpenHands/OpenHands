@@ -1,12 +1,27 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatAddFileButton } from "#/components/features/chat/chat-add-file-button";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { I18nKey } from "#/i18n/declaration";
 
+const state = vi.hoisted(() => ({
+  conversation: undefined as { tags?: Record<string, string> } | undefined,
+  projectsEnabled: false,
+}));
+
 vi.mock("#/hooks/query/use-active-conversation", () => ({
-  useActiveConversation: () => ({ data: undefined }),
+  useActiveConversation: () => ({ data: state.conversation }),
+}));
+
+vi.mock("#/hooks/query/use-projects", () => ({
+  useProjectsEnabled: () => state.projectsEnabled,
+}));
+
+vi.mock("#/components/features/projects/project-file-picker", () => ({
+  ProjectFilePicker: ({ projectId }: { projectId: string }) => (
+    <div data-testid="project-file-picker">{projectId}</div>
+  ),
 }));
 
 vi.mock("#/hooks/use-conversation-id", () => ({
@@ -48,6 +63,11 @@ function LayerOverMenu({
 }
 
 describe("ChatAddFileButton", () => {
+  beforeEach(() => {
+    state.conversation = undefined;
+    state.projectsEnabled = false;
+  });
+
   it("uses the translated aria-label for the plus menu trigger", () => {
     render(<ChatAddFileButton handleFileIconClick={vi.fn()} />);
 
@@ -129,4 +149,29 @@ describe("ChatAddFileButton", () => {
     expect(screen.queryByTestId("tools-context-menu")).not.toBeInTheDocument();
     expect(handleFileIconClick).not.toHaveBeenCalled();
   });
+
+  it.each([
+    [true, { project: "aa01" }, true],
+    [false, { project: "aa01" }, false],
+    [true, {}, false],
+  ])(
+    "with Projects %s and tags %j, offers a project file: %s",
+    async (enabled, tags, offered) => {
+      state.projectsEnabled = enabled;
+      state.conversation = { tags };
+      const user = userEvent.setup();
+      render(<ChatAddFileButton handleFileIconClick={vi.fn()} />);
+
+      await user.click(screen.getByTestId("chat-plus-button"));
+      const item = screen.queryByTestId("add-project-file-button");
+      expect(!!item).toBe(offered);
+      if (!item) return;
+
+      await user.click(item);
+      expect(screen.getByTestId("project-file-picker")).toHaveTextContent(
+        "aa01",
+      );
+      expect(screen.queryByTestId("tools-context-menu")).toBeNull();
+    },
+  );
 });

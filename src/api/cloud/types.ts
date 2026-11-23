@@ -36,6 +36,40 @@ export interface CloudOrganizationMember {
 }
 
 /**
+ * Subset of the caller's own budget that the GUI reads. Returned by
+ * `GET /api/organizations/{orgId}/budgets/me`. `enabled` is false when the
+ * organization budget is off, and no other field is set then.
+ */
+export interface CloudMyBudget {
+  enabled: boolean;
+  /** The caller's own monthly limit, in USD. */
+  monthly_limit?: number | null;
+  /** The organization's monthly limit, in USD. */
+  org_monthly_limit?: number | null;
+  /** Admin-written guidance for a member who reaches either limit. */
+  limit_reached_instructions?: string | null;
+}
+
+/**
+ * Subset of an enterprise service account that the GUI reads. Returned by
+ * `GET /api/organizations/{orgId}/service-accounts` (requires
+ * `manage_service_accounts`). `id` is the user id the automation service
+ * stores as `Automation.user_id` when `run_as_kind` is `service`.
+ */
+export interface CloudServiceAccount {
+  id: string;
+  org_id: string;
+  name: string;
+  is_disabled: boolean;
+}
+
+/** One page of `GET /api/organizations/{orgId}/service-accounts`. */
+export interface CloudServiceAccountPage {
+  items: CloudServiceAccount[];
+  next_page_id?: string | null;
+}
+
+/**
  * Response from `GET /api/keys/current`. Identifies the org the calling
  * API key is scoped to. Legacy keys without an org binding cause the
  * upstream to return HTTP 400 instead of producing this shape — the
@@ -55,6 +89,7 @@ export interface CloudApiKeyMetadata {
  */
 export interface CloudSetupGuideSteps {
   org_llm: boolean;
+  git_provider: boolean;
   mcp_server: boolean;
   automation: boolean;
   invite: boolean;

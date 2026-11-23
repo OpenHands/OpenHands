@@ -1,4 +1,9 @@
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
+import { getApiErrorMessage } from "#/utils/api-error-message";
+import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+import { buildAutomationSetupContext } from "#/utils/automation-setup-context";
 import {
   PENDING_AUTOMATION_SETUP_ID,
   clearAutomationFormSession,
@@ -8,6 +13,7 @@ import {
 import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
+import { withFactoryContext } from "#/constants/factories";
 import { useCreateAutomationSetupConversation } from "#/hooks/use-create-automation-setup-conversation";
 import { useTracking } from "#/hooks/use-tracking";
 import {
@@ -22,7 +28,13 @@ import {
  * The form now opens with the conversation drawer hidden, and a conversation
  * starts only after the user sends a prompt.
  */
-export function useStartAutomationSetup() {
+export function useStartAutomationSetup({
+  factoryId,
+}: {
+  /** Create the new automation in this factory. */
+  factoryId?: string;
+} = {}) {
+  const { t } = useTranslation("openhands");
   const active = useActiveBackend();
   const { navigate } = useNavigation();
   const { startAutomationSetupConversation, isPending } =
@@ -32,20 +44,27 @@ export function useStartAutomationSetup() {
   const startSetup = useCallback(() => {
     trackAutomationCreatedButton({ backendKind: active.backend.kind });
     clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
-    navigate?.("/automations/setup");
-  }, [active.backend.kind, navigate, trackAutomationCreatedButton]);
+    if (factoryId) {
+      initializeAutomationFormSession(PENDING_AUTOMATION_SETUP_ID, {
+        prompt: "",
+        kind: "prompt",
+        factoryId,
+      });
+    }
+    navigate?.(withFactoryContext("/automations/setup", factoryId));
+  }, [active.backend.kind, factoryId, navigate, trackAutomationCreatedButton]);
 
   const startConversationFromPrompt = useCallback(
     (prompt: string) => {
+      if (!prompt.trim()) return;
       const draft = getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID) ?? {
         prompt: "",
         kind: "prompt" as const,
       };
       const editingAutomationId = draft.editingAutomationId?.trim() || null;
       let entryPoint:
-        | "automations_add"
-        | "automation_edit"
-        | "automation_draft_resume" = "automations_add";
+        "automations_add" | "automation_edit" | "automation_draft_resume" =
+        "automations_add";
       let automationSetupTags: Record<string, string> | undefined;
       if (editingAutomationId) {
         entryPoint = "automation_edit";
@@ -61,20 +80,45 @@ export function useStartAutomationSetup() {
           draft.materializedAutomationId,
         );
       }
+      let launchId: string;
       startAutomationSetupConversation({
         query: prompt,
+        automationSetupContext: buildAutomationSetupContext(draft),
         entryPoint,
         automationSetupTags,
+        onStart: () => {
+          launchId = useConversationLaunchStore.getState().begin({
+            backendId: active.backend.id,
+            orgId: active.orgId ?? null,
+            message: prompt.trim(),
+            files: [],
+            automationSetupDraft: draft,
+          });
+          clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
+          navigate?.(`/conversations/${launchId}`);
+        },
         onSuccess: (conversation) => {
           const conversationId = conversation.conversation_id;
           initializeAutomationFormSession(conversationId, draft);
           markAutomationSetupHandoff(conversationId);
-          clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
-          navigate?.(`/conversations/${conversationId}`);
+          useConversationLaunchStore.getState().update(launchId, {
+            targetId: conversationId,
+          });
+        },
+        onError: (error) => {
+          useConversationLaunchStore.getState().update(launchId, {
+            error: getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)),
+          });
         },
       });
     },
-    [navigate, startAutomationSetupConversation],
+    [
+      active.backend.id,
+      active.orgId,
+      navigate,
+      startAutomationSetupConversation,
+      t,
+    ],
   );
 
   return {

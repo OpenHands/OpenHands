@@ -33,6 +33,11 @@ vi.mock("#/hooks/use-task-list", () => ({
   }),
 }));
 
+let mockProjectId: string | undefined;
+vi.mock("#/hooks/query/use-conversation-project", () => ({
+  useConversationProjectId: () => mockProjectId,
+}));
+
 const mockRefetchGitChanges = vi.fn();
 let mockIsFetchingGitChanges = false;
 vi.mock("#/hooks/query/use-unified-get-git-changes", () => ({
@@ -130,6 +135,7 @@ describe("ConversationTabs localStorage behavior", () => {
     mockHandleBuildPlanClick.mockReset();
     mockConversationId = TASK_CONVERSATION_ID;
     mockHasTaskList = false;
+    mockProjectId = undefined;
     mockIsFetchingGitChanges = false;
     mockCurAgentState = AgentState.AWAITING_USER_INPUT;
     useConversationStore.setState({
@@ -137,6 +143,35 @@ describe("ConversationTabs localStorage behavior", () => {
       isRightPanelShown: false,
       hasRightPanelToggled: false,
       planContent: null,
+    });
+  });
+
+  describe("Project tab", () => {
+    it("is absent outside projects", () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+      expect(screen.queryByTestId("conversation-tab-project")).toBeNull();
+    });
+
+    it("leads the strip in a project conversation and opens the panel on it", async () => {
+      mockConversationId = REAL_CONVERSATION_ID;
+      mockProjectId = "aa000000000040008000000000000001";
+      const user = userEvent.setup();
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      const tabs = screen
+        .getAllByRole("tab")
+        .map((tab) => tab.getAttribute("data-testid"));
+      expect(tabs[0]).toBe("conversation-tab-project");
+      expect(tabs[1]).toBe("conversation-tab-files");
+
+      await user.click(screen.getByTestId("conversation-tab-project"));
+      expect(useConversationStore.getState().selectedTab).toBe("project");
+      expect(useConversationStore.getState().isRightPanelShown).toBe(true);
     });
   });
 
