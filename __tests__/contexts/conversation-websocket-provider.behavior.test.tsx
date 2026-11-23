@@ -80,7 +80,6 @@ const socketCapture = vi.hoisted(() => ({
   clientOptions: vi.fn(),
   readConversationFile: vi.fn(),
   trackError: vi.fn(),
-  launchChild: vi.fn(),
 }));
 
 const historyCapture = vi.hoisted(() => ({
@@ -145,11 +144,6 @@ vi.mock("#/hooks/mutation/use-read-conversation-file", () => ({
   useReadConversationFile: () => ({
     mutate: socketCapture.readConversationFile,
   }),
-}));
-
-vi.mock("#/services/child-conversation-launch", () => ({
-  handleLaunchChildConversationAction: (...args: unknown[]) =>
-    socketCapture.launchChild(...args),
 }));
 
 vi.mock("#/utils/error-handler", () => ({
@@ -400,7 +394,6 @@ describe("Conversation websocket behavior", () => {
     socketCapture.clientOptions.mockReset();
     socketCapture.readConversationFile.mockReset();
     socketCapture.trackError.mockReset();
-    socketCapture.launchChild.mockReset().mockResolvedValue(undefined);
     nextSeq = 0;
     historyCapture.scope = "test-scope";
     historyCapture.persistedData = undefined;
@@ -2418,52 +2411,29 @@ describe("Conversation websocket behavior", () => {
     expect(socketCapture.trackError).toHaveBeenCalledTimes(1);
   });
 
-  it("forwards the child-launch action with the parent and tool-call IDs", () => {
+  it("keeps a server-side child launch as an ordinary action event", () => {
     renderProvider();
-    const action = {
-      kind: "ClientAction_launch_child_conversation",
-      target: "local",
-      task: "Inspect tests",
-    };
-    dispatchMain(
-      makeActionEvent("launch", action, "launch_child_conversation"),
-    );
-    expect(socketCapture.launchChild).toHaveBeenCalledWith(
-      action,
-      "conv-main",
-      "call-launch",
-    );
-  });
-
-  it("does not launch a child for unrelated actions or without a parent ID", () => {
-    const view = renderProvider();
+    // The server runs the child launcher itself, so the frontend has nothing
+    // to do beyond showing the event.
     dispatchMain(
       makeActionEvent(
-        "think",
-        { kind: "ThinkAction", thought: "Review" },
-        "think",
-      ),
-    );
-    expect(socketCapture.launchChild).not.toHaveBeenCalled();
-    view.rerender(
-      <QueryClientProvider client={view.queryClient}>
-        <ConversationWebSocketProvider>
-          <ContextProbe />
-        </ConversationWebSocketProvider>
-      </QueryClientProvider>,
-    );
-    dispatchMain(
-      makeActionEvent(
-        "orphan-launch",
+        "child-launch",
         {
-          kind: "ClientAction_launch_child_conversation",
-          target: "local",
+          kind: "StartChildConversationAction",
           task: "Inspect tests",
+          title: "Inspect tests",
+          isolation: "worktree",
         },
-        "launch_child_conversation",
+        "start_child_conversation",
       ),
     );
-    expect(socketCapture.launchChild).not.toHaveBeenCalled();
+    expect(useEventStore.getState().uiEvents).toEqual([
+      expect.objectContaining({
+        id: "child-launch",
+        tool_name: "start_child_conversation",
+      }),
+    ]);
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
   });
 
   it("combines multiple LLM costs and preserves the first non-null budget", () => {

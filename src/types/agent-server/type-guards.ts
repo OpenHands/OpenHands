@@ -3,7 +3,7 @@ import {
   CANVAS_UI_CLIENT_TOOL_NAME,
   LEGACY_CANVAS_UI_TOOL_NAME,
 } from "#/constants/canvas-ui";
-import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
+import { SERVER_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import { REQUEST_SECRET_TOOL_NAME } from "#/constants/secret-request";
 
 import {
@@ -21,7 +21,8 @@ import {
   ClassifyAndSwitchLLMObservation,
   AutomationFormUpdateAction,
   CanvasUIAction,
-  LaunchChildConversationAction,
+  StartChildConversationAction,
+  StartChildConversationObservation,
   RequestSecretAction,
 } from "./core";
 import {
@@ -222,16 +223,22 @@ export const isAutomationFormUpdateActionEvent = (
   isActionEvent(event) && event.tool_name === AUTOMATION_FORM_UPDATE_TOOL_NAME;
 
 /**
- * Type guard for launch-child-conversation tool ActionEvents.
+ * Type guard for the agent-server's child-launch tool events.
  *
- * Discriminates on tool_name, like `isCanvasUIActionEvent`, so the
- * SDK-generated action kind stays contained in the constants module.
+ * Discriminates on tool_name like `isCanvasUIActionEvent`, so a backend that
+ * names its own launcher still routes here while the wire kind stays the SDK's.
  */
-export const isLaunchChildConversationActionEvent = (
+export const isStartChildConversationActionEvent = (
   event: OpenHandsEvent,
-): event is ActionEvent<LaunchChildConversationAction> =>
+): event is ActionEvent<StartChildConversationAction> =>
   isActionEvent(event) &&
-  event.tool_name === LAUNCH_CHILD_CONVERSATION_TOOL_NAME;
+  event.tool_name === SERVER_CHILD_CONVERSATION_TOOL_NAME;
+
+export const isStartChildConversationObservationEvent = (
+  event: OpenHandsEvent,
+): event is ObservationEvent<StartChildConversationObservation> =>
+  isObservationEvent(event) &&
+  event.tool_name === SERVER_CHILD_CONVERSATION_TOOL_NAME;
 
 /** Type guard for request-secret tool ActionEvents. */
 export const isRequestSecretActionEvent = (

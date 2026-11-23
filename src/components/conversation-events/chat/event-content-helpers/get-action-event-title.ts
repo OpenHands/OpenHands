@@ -1,5 +1,4 @@
 import { CANVAS_UI_CLIENT_ACTION_KIND } from "#/constants/canvas-ui";
-import { LAUNCH_CHILD_CONVERSATION_ACTION_KIND } from "#/constants/child-conversation";
 import { REQUEST_SECRET_ACTION_KIND } from "#/constants/secret-request";
 import type { ActionEvent } from "#/types/agent-server/core";
 
@@ -133,10 +132,10 @@ export const getActionEventTitleDescriptor = (
     case "CanvasUIAction":
     case CANVAS_UI_CLIENT_ACTION_KIND:
       return { kind: "text", text: "CANVASUI" };
-    case LAUNCH_CHILD_CONVERSATION_ACTION_KIND:
+    case "StartChildConversationAction":
       return {
         kind: "translation",
-        key: "ACTION_MESSAGE$LAUNCH_CHILD_CONVERSATION",
+        key: "ACTION_MESSAGE$START_CHILD_CONVERSATION",
         values: {},
       };
     case REQUEST_SECRET_ACTION_KIND:

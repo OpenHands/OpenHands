@@ -9,6 +9,7 @@ import {
   ExecuteBashAction,
   FileEditorAction,
   GrepAction,
+  StartChildConversationAction,
   TaskAction,
 } from "#/types/agent-server/core/base/action";
 import {
@@ -16,6 +17,7 @@ import {
   FileEditorObservation,
   GrepObservation,
   GlobObservation,
+  StartChildConversationObservation,
   TerminalObservation,
   TaskObservation,
 } from "#/types/agent-server/core/base/observation";
@@ -213,5 +215,38 @@ export const taskObservation = (
     subagent: "code-explorer",
     status: "completed",
     ...observation,
+  },
+});
+
+export const startChildConversationAction = (
+  fields: Partial<StartChildConversationAction> = {},
+): ActionEvent<StartChildConversationAction> => ({
+  ...actionEnvelope("child", "start_child_conversation"),
+  action: {
+    kind: "StartChildConversationAction",
+    task: "Add a regression test for the parser",
+    title: "Parser regression test",
+    isolation: "worktree",
+    ...fields,
+  },
+  summary: "",
+});
+
+export const startChildConversationObservation = (
+  fields: Partial<StartChildConversationObservation> = {},
+): ObservationEvent<StartChildConversationObservation> => ({
+  ...observationEnvelope("child", "start_child_conversation"),
+  observation: {
+    kind: "StartChildConversationObservation",
+    content: [{ type: "text", text: "Started a child conversation." }],
+    is_error: false,
+    conversation_id: "child-1",
+    parent_conversation_id: "parent-1",
+    status: "running",
+    title: "Parser regression test",
+    url: null,
+    workspace: "/workspaces/child-1",
+    isolation: "worktree",
+    ...fields,
   },
 });

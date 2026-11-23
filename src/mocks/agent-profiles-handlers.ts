@@ -137,11 +137,19 @@ const MOCK_TOOL_CATALOG: ToolCatalogEntry[] = [
   ["browser_tool_set", true, "Browse and interact with web pages."],
   ["switch_llm", true, "Switch to another configured LLM mid-conversation."],
   ["task_tool_set", false, "Delegate work to sub-agents."],
+  // The server registers its child launcher without offering it to the user.
+  [
+    "start_child_conversation",
+    false,
+    "Start a same-backend child conversation.",
+  ],
   ["glob", false, "Find files by glob pattern."],
   ["grep", false, "Search file contents with regular expressions."],
 ].map(([name, inDefaultSet, description]) => ({
   name: name as string,
-  user_selectable: true,
+  // Host-only tools are inert until a host attaches them, so no user picks
+  // them from the catalog.
+  user_selectable: name !== "start_child_conversation",
   usable: true,
   in_default_set: inDefaultSet as boolean,
   description: description as string,

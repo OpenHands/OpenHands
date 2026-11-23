@@ -1,7 +1,6 @@
 import type { AskUserAction } from "@openhands/typescript-client";
 import { AUTOMATION_FORM_UPDATE_ACTION_KIND } from "#/constants/automation-form";
 import { CANVAS_UI_CLIENT_ACTION_KIND } from "#/constants/canvas-ui";
-import { LAUNCH_CHILD_CONVERSATION_ACTION_KIND } from "#/constants/child-conversation";
 import { REQUEST_SECRET_ACTION_KIND } from "#/constants/secret-request";
 import { ActionBase } from "./base";
 import { TaskItem } from "./common";
@@ -340,21 +339,14 @@ export interface AutomationFormUpdateAction extends ActionBase<
 }
 
 /**
- * Request to launch a child conversation, emitted over the existing WebSocket
- * and intercepted by handleLaunchChildConversationAction. The agent-server
- * validates the parameter *names* and types against the tool schema but not
- * `enum` values, so the fields stay loosely typed here and the dispatcher
- * narrows them (returning corrective guidance on a mismatch).
+ * The agent-server's `start_child_conversation` call: the server launches the
+ * child on the backend that runs the parent and reports it in the observation.
  */
-export interface LaunchChildConversationAction extends ActionBase<
-  typeof LAUNCH_CHILD_CONVERSATION_ACTION_KIND
-> {
-  target: string;
+export interface StartChildConversationAction extends ActionBase<"StartChildConversationAction"> {
+  /** Self-contained brief the child receives as its first user message. */
   task: string;
   title?: string | null;
-  repository?: string | null;
-  branch?: string | null;
-  isolation?: string | null;
+  isolation?: "worktree" | "shared" | null;
 }
 
 /**
@@ -397,5 +389,5 @@ export type Action =
   | SwitchLLMAction
   | CanvasUIAction
   | AutomationFormUpdateAction
-  | LaunchChildConversationAction
+  | StartChildConversationAction
   | RequestSecretAction;

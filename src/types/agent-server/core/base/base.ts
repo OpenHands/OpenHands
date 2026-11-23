@@ -1,6 +1,5 @@
 import { AUTOMATION_FORM_UPDATE_ACTION_KIND } from "#/constants/automation-form";
 import { CANVAS_UI_CLIENT_ACTION_KIND } from "#/constants/canvas-ui";
-import { LAUNCH_CHILD_CONVERSATION_ACTION_KIND } from "#/constants/child-conversation";
 import { REQUEST_SECRET_ACTION_KIND } from "#/constants/secret-request";
 
 type EventType =
@@ -42,9 +41,10 @@ type ActionEventType =
   | "GrepAction"
   // The `task` tool delegating work to a spawned subagent.
   | "TaskAction"
+  // The agent-server's same-backend child launcher.
+  | "StartChildConversationAction"
   | typeof CANVAS_UI_CLIENT_ACTION_KIND
   | typeof AUTOMATION_FORM_UPDATE_ACTION_KIND
-  | typeof LAUNCH_CHILD_CONVERSATION_ACTION_KIND
   | typeof REQUEST_SECRET_ACTION_KIND;
 type ObservationEventType =
   | `${ObservationOnlyType}Observation`
@@ -54,6 +54,8 @@ type ObservationEventType =
   | "GrepObservation"
   // Result of the `task` tool, which delegates work to a spawned subagent.
   | "TaskObservation"
+  // Result of the agent-server's same-backend child launcher.
+  | "StartChildConversationObservation"
   // Legacy and client-defined acknowledgements for Canvas UI dispatches.
   | "CanvasUIObservation"
   | "ClientToolObservation";

@@ -1,5 +1,4 @@
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
-import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import React, { isValidElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -968,21 +967,18 @@ describe("unknown and incomplete events", () => {
 });
 
 describe("client tool observation dispatch", () => {
-  it.each([
-    [CANVAS_UI_CLIENT_TOOL_NAME, "OBSERVATION_MESSAGE$CANVAS_UI"],
-    [
-      LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
-      "OBSERVATION_MESSAGE$LAUNCH_CHILD_CONVERSATION",
-    ],
-  ])("routes %s through its translated title", (tool_name, key) => {
-    const event = createObservationEvent(
-      observationOf("ClientToolObservation", { content: [] }),
-      { tool_name },
-    );
-    const result = getEventContent(event);
-    expect(getTranslationProps(result.title).i18nKey).toBe(key);
-    expect(result.details).toBe("observation details");
-  });
+  it.each([[CANVAS_UI_CLIENT_TOOL_NAME, "OBSERVATION_MESSAGE$CANVAS_UI"]])(
+    "routes %s through its translated title",
+    (tool_name, key) => {
+      const event = createObservationEvent(
+        observationOf("ClientToolObservation", { content: [] }),
+        { tool_name },
+      );
+      const result = getEventContent(event);
+      expect(getTranslationProps(result.title).i18nKey).toBe(key);
+      expect(result.details).toBe("observation details");
+    },
+  );
 
   it("renders the Canvas command instead of generic or visualizer details", () => {
     const event = createObservationEvent(

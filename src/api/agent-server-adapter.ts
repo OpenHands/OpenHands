@@ -74,10 +74,6 @@ import {
   type ClientToolSpec,
 } from "./canvas-ui-client-tool";
 import {
-  LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
-  LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
-} from "./launch-child-conversation-client-tool";
-import {
   AUTOMATION_SETUP_SYSTEM_SUFFIX,
   buildAutomationFormUpdateClientTool,
 } from "./automation-form-client-tool";
@@ -1226,7 +1222,6 @@ export function buildStartConversationRequest(
       options.agentProfileKind === "openhands"
         ? [
             CANVAS_UI_CLIENT_TOOL,
-            LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
             REQUEST_SECRET_CLIENT_TOOL,
             ...(options.automationSetup
               ? [
@@ -1298,7 +1293,6 @@ export function buildStartConversationRequest(
   };
   delete toolModuleQualnames[LEGACY_CANVAS_UI_TOOL_NAME];
   delete toolModuleQualnames[CANVAS_UI_CLIENT_TOOL_NAME];
-  delete toolModuleQualnames[LAUNCH_CHILD_CONVERSATION_TOOL_NAME];
   if (Object.keys(toolModuleQualnames).length > 0) {
     payload.tool_module_qualnames = toolModuleQualnames;
   }

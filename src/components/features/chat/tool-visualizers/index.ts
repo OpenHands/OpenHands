@@ -1,5 +1,6 @@
 import { RegisteredVisualizer } from "./define";
 import { bashVisualizer } from "./bash/bash";
+import { childConversationVisualizer } from "./child-conversation/child-conversation";
 import { fileEditorVisualizer } from "./file-editor/file-editor";
 import { searchVisualizer } from "./search/search";
 import { taskVisualizer } from "./task/task";
@@ -24,6 +25,7 @@ const ALL: RegisteredVisualizer[] = [
   fileEditorVisualizer,
   searchVisualizer,
   taskVisualizer,
+  childConversationVisualizer,
 ];
 
 const indexByKind = (

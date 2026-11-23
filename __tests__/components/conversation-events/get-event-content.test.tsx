@@ -1,13 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
   CANVAS_UI_CLIENT_ACTION_KIND,
   CANVAS_UI_CLIENT_TOOL_NAME,
 } from "#/constants/canvas-ui";
-import {
-  LAUNCH_CHILD_CONVERSATION_ACTION_KIND,
-  LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
-} from "#/constants/child-conversation";
+import { SERVER_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import { getEventContent } from "#/components/conversation-events/chat/event-content-helpers/get-event-content";
 import {
   ActionEvent,
@@ -430,8 +427,8 @@ describe("getEventContent", () => {
   });
 
   // Without the explicit mapping the default branch would surface the SDK's
-  // generated discriminator ("CLIENTACTION_LAUNCH_CHILD_CONVERSATION") to users.
-  it("titles the launch-child-conversation tool call and its acknowledgement", () => {
+  // generated discriminator ("STARTCHILDCONVERSATION") to users.
+  it("titles the server child-launch tool call and its observation", () => {
     const launchAction: ActionEvent = {
       id: "action-launch",
       timestamp: new Date().toISOString(),
@@ -439,18 +436,19 @@ describe("getEventContent", () => {
       thought: [],
       thinking_blocks: [],
       action: {
-        kind: LAUNCH_CHILD_CONVERSATION_ACTION_KIND,
-        target: "local",
+        kind: "StartChildConversationAction",
         task: "Add a regression test for the parser",
+        title: "Parser regression test",
+        isolation: "worktree",
       },
-      tool_name: LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+      tool_name: SERVER_CHILD_CONVERSATION_TOOL_NAME,
       tool_call_id: "tool-launch",
       tool_call: {
         id: "tool-launch",
         type: "function",
         function: {
-          name: LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
-          arguments: '{"target":"local","task":"Add a regression test"}',
+          name: SERVER_CHILD_CONVERSATION_TOOL_NAME,
+          arguments: '{"task":"Add a regression test for the parser"}',
         },
       },
       llm_response_id: "response-launch",
@@ -461,26 +459,35 @@ describe("getEventContent", () => {
       id: "obs-launch",
       timestamp: new Date().toISOString(),
       source: "environment",
-      tool_name: LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+      tool_name: SERVER_CHILD_CONVERSATION_TOOL_NAME,
       tool_call_id: "tool-launch",
       action_id: "action-launch",
       observation: {
-        kind: "ClientToolObservation",
-        content: [{ type: "text", text: "Tool call dispatched to client." }],
+        kind: "StartChildConversationObservation",
+        content: [{ type: "text", text: "Started child conversation." }],
         is_error: false,
+        conversation_id: "child-1",
+        parent_conversation_id: "parent-1",
+        status: "running",
+        title: "Parser regression test",
+        url: null,
+        workspace: "/tmp/child-1",
+        isolation: "worktree",
       },
     };
 
     render(<span>{getEventContent(launchAction).title}</span>);
     expect(
-      screen.getByText("ACTION_MESSAGE$LAUNCH_CHILD_CONVERSATION"),
+      screen.getByText("ACTION_MESSAGE$START_CHILD_CONVERSATION"),
     ).toBeInTheDocument();
+
+    cleanup();
 
     render(
       <span>{getEventContent(launchObservation, launchAction).title}</span>,
     );
     expect(
-      screen.getByText("OBSERVATION_MESSAGE$LAUNCH_CHILD_CONVERSATION"),
+      screen.getByText("OBSERVATION_MESSAGE$START_CHILD_CONVERSATION"),
     ).toBeInTheDocument();
   });
 });

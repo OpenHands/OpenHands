@@ -23,6 +23,7 @@ import {
   SETUP_QUERY_KEYS,
 } from "#/hooks/query/query-keys";
 import type { DeploymentCapabilities } from "#/manifests/types";
+import { ensureAgentHostTools } from "#/hooks/mutation/ensure-agent-host-tools";
 import { ensureDefaultAgentProfileMigrated } from "#/hooks/use-migrate-default-agent-profile";
 import i18n from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
@@ -141,6 +142,12 @@ export async function resolveConversationLaunch(
         .catch(() => null)
     : null;
   const stored = detail?.profile;
+
+  // The server hosts same-backend child launches but never offers its tool to
+  // the user, so the launch attaches it. ACP agents run their own tools.
+  if (profile?.agent_kind === "openhands") {
+    await ensureAgentHostTools(queryClient, profile.name).catch(() => false);
+  }
 
   return {
     agentProfileId: requestedAgentProfileId,

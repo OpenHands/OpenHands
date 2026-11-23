@@ -1,4 +1,3 @@
-import { CHILD_CONVERSATION_RESULT_PREFIX } from "#/constants/child-conversation";
 import { SECRET_REQUEST_RESULT_PREFIX } from "#/constants/secret-request";
 import { ASK_USER_ANSWER_PREFIX } from "#/utils/decision-closures";
 import { MessageEvent, OpenHandsEvent } from "#/types/agent-server/core";
@@ -69,14 +68,12 @@ const isStopHookFeedback = (event: MessageEvent): boolean =>
   environmentMessageStartsWith(event, STOP_HOOK_FEEDBACK_PREFIX);
 
 // Tool results that reach the agent as `user` messages. The frontend posts the
-// outcome of a `launch_child_conversation` or `request_secret` call this way
-// because client tools have no result channel (see
-// `services/child-conversation-launch.ts` and `services/secret-request.ts`);
-// the agent relays the outcome in its own reply. The server saves an answer
-// picked on a decision card the same way, and the card shows that answer.
-// None of these raw messages belong in the chat.
+// outcome of a `request_secret` call this way because client tools have no
+// result channel (see `services/secret-request.ts`); the agent relays the
+// outcome in its own reply. The server saves an answer picked on a decision
+// card the same way, and the card shows that answer. None of these raw messages
+// belong in the chat.
 const TOOL_RESULT_PREFIXES = [
-  CHILD_CONVERSATION_RESULT_PREFIX,
   SECRET_REQUEST_RESULT_PREFIX,
   ASK_USER_ANSWER_PREFIX,
 ];
