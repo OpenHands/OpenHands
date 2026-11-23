@@ -37493,6 +37493,24 @@
     "ca": "El botó del micròfon de l'entrada del xat utilitza el reconeixement de veu del navegador. Per utilitzar el teu propi servei de transcripció, com ara un servidor Whisper local, introdueix un endpoint compatible amb OpenAI. Aquesta configuració només es desa en aquest navegador.",
     "id": "Tombol mikrofon di input chat menggunakan pengenalan suara peramban Anda. Untuk menggunakan layanan transkripsi Anda sendiri, seperti server Whisper lokal, masukkan endpoint yang kompatibel dengan OpenAI. Pengaturan ini hanya disimpan di peramban ini."
   },
+  "SETTINGS$VOICE_INPUT_AUTOSAVE_NOTICE": {
+    "en": "Auto-saved locally as you type. Save Changes only applies to the other application settings.",
+    "ja": "入力すると自動的にこのブラウザに保存されます。変更を保存は他のアプリケーション設定にのみ適用されます。",
+    "zh-CN": "输入时会自动保存到此浏览器。保存更改仅适用于其他应用程序设置。",
+    "zh-TW": "輸入時會自動儲存在此瀏覽器。儲存變更只適用於其他應用程式設定。",
+    "ko-KR": "입력하는 즉시 이 브라우저에 자동 저장됩니다. 변경 사항 저장은 다른 애플리케이션 설정에만 적용됩니다.",
+    "no": "Lagres automatisk lokalt mens du skriver. Lagre endringer gjelder bare de andre programinnstillingene.",
+    "it": "Salvataggio locale automatico durante la digitazione. Salva modifiche si applica solo alle altre impostazioni dell'applicazione.",
+    "pt": "Salvo automaticamente neste navegador enquanto você digita. Salvar alterações se aplica apenas às outras configurações do aplicativo.",
+    "es": "Se guarda automáticamente en este navegador mientras escribes. Guardar cambios solo se aplica a las otras opciones de la aplicación.",
+    "ar": "يُحفظ تلقائياً محلياً أثناء الكتابة. ينطبق حفظ التغييرات فقط على إعدادات التطبيق الأخرى.",
+    "fr": "Enregistré automatiquement dans ce navigateur pendant la saisie. Enregistrer les modifications s'applique uniquement aux autres paramètres de l'application.",
+    "tr": "Yazarken bu tarayıcıya otomatik olarak kaydedilir. Değişiklikleri Kaydet yalnızca diğer uygulama ayarları için geçerlidir.",
+    "de": "Wird beim Tippen automatisch lokal in diesem Browser gespeichert. Änderungen speichern gilt nur für die anderen Anwendungseinstellungen.",
+    "uk": "Автоматично зберігається локально під час введення. Зберегти зміни застосовується лише до інших налаштувань застосунку.",
+    "ca": "Es desa automàticament en aquest navegador mentre escrius. Desa els canvis només s'aplica a la resta de paràmetres de l'aplicació.",
+    "id": "Disimpan otomatis secara lokal saat Anda mengetik. Simpan Perubahan hanya berlaku untuk pengaturan aplikasi lainnya."
+  },
   "BACKEND$DIGITALOCEAN_ADD_CONNECTION": {
     "en": "Add another",
     "ja": "別の接続を追加",
