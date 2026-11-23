@@ -157,7 +157,7 @@ function MediaPreview({
   );
 }
 
-function Preview({
+export function ProjectFilePreview({
   projectId,
   artifact,
 }: {
@@ -356,7 +356,7 @@ export function ProjectFiles({
         </ul>
       ) : null}
       {openArtifact ? (
-        <Preview projectId={projectId} artifact={openArtifact} />
+        <ProjectFilePreview projectId={projectId} artifact={openArtifact} />
       ) : null}
       {confirmingDelete ? (
         <ConfirmationModal

@@ -1,20 +1,13 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation } from "@tanstack/react-query";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import ProjectsService from "#/api/projects-service/projects-service.api";
 import { useProjectArtifacts } from "#/hooks/query/use-projects";
-import { useChatAttachmentUpload } from "#/hooks/chat/use-chat-attachment-upload";
+import { useAttachProjectFile } from "#/hooks/mutation/use-attach-project-file";
 import { I18nKey } from "#/i18n/declaration";
-import { displayApiErrorToast } from "#/utils/custom-toast-handlers";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 
-/**
- * Picks one of the project's files and adds it to the composer like a file
- * from disk: an image is embedded in the message, any other file is uploaded
- * to the conversation's workspace when the message is sent.
- */
+/** Picks one of the project's files and adds it to the composer. */
 export function ProjectFilePicker({
   projectId,
   onClose,
@@ -28,18 +21,7 @@ export function ProjectFilePicker({
     isLoading,
     isError,
   } = useProjectArtifacts(projectId);
-  const { handleUpload } = useChatAttachmentUpload();
-
-  const attach = useMutation({
-    mutationFn: async (name: string) => {
-      const blob = await ProjectsService.downloadArtifact(projectId, name);
-      await handleUpload([new File([blob], name, { type: blob.type })]);
-    },
-    meta: { disableToast: true },
-    onSuccess: onClose,
-    onError: (error) =>
-      displayApiErrorToast(error, t(I18nKey.PROJECTS$ATTACH_FAILED)),
-  });
+  const attach = useAttachProjectFile(projectId, { onSuccess: onClose });
 
   const sorted = [...(artifacts ?? [])].sort((a, b) =>
     b.updated_at.localeCompare(a.updated_at),
