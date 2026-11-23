@@ -157,6 +157,7 @@ export interface LaunchedAgentProfile {
 
 export interface AppConversation {
   title_generation?: ConversationTitleGeneration | null;
+  broken_reason?: "metadata" | "state";
   id: string;
   created_by_user_id: string | null;
   selected_repository: string | null;

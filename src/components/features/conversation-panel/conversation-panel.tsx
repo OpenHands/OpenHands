@@ -39,6 +39,7 @@ import { ConversationPanelRow } from "./conversation-panel-row";
 import { StartTaskCard } from "./start-task-card/start-task-card";
 import { ConversationCardSkeleton } from "./conversation-card/conversation-card-skeleton";
 import { CompactConversationRow } from "./compact-conversation-row";
+import { BrokenConversationRow } from "./broken-conversation-row";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
 import { cn } from "#/utils/utils";
 import { ConversationLayoutsMenu } from "./conversation-layouts-menu";
@@ -1006,9 +1007,20 @@ export function ConversationPanel({
   const handleConfirmDelete = () => {
     if (selectedConversationId) {
       const conversationId = selectedConversationId;
+      const broken = allLoadedConversations.some(
+        (conversation) =>
+          conversation.id === conversationId && conversation.broken_reason,
+      );
       deleteConversation(
-        { conversationId },
+        broken ? { conversationId, broken } : { conversationId },
         {
+          onError: () => {
+            if (broken) {
+              displayErrorToast(
+                t(I18nKey.CONVERSATION_PANEL$CORRUPTED_DELETE_FAILED),
+              );
+            }
+          },
           onSuccess: () => {
             removeArchivedConversation(activeBackend.id, conversationId);
             if (conversationId === currentConversationId) {
@@ -1093,8 +1105,13 @@ export function ConversationPanel({
     // deduplicated set before deletes start invalidating the paginated cache.
     const idsToDelete = allLoadedConversations.map((c) => c.id);
     const results = await Promise.allSettled(
-      idsToDelete.map((conversationId) =>
-        deleteConversationAsync({ conversationId, deletionScope }),
+      allLoadedConversations.map(
+        ({ id: conversationId, broken_reason: reason }) =>
+          deleteConversationAsync(
+            reason
+              ? { conversationId, deletionScope, broken: true }
+              : { conversationId, deletionScope },
+          ),
       ),
     );
 
@@ -1127,6 +1144,20 @@ export function ConversationPanel({
       conversation: (typeof conversations)[number],
       options?: { inPinnedSection?: boolean },
     ) => {
+      if (conversation.broken_reason) {
+        return (
+          <BrokenConversationRow
+            key={conversation.id}
+            conversation={conversation}
+            onDelete={() =>
+              handleDeleteProject(
+                conversation.id,
+                conversation.title ?? conversation.id,
+              )
+            }
+          />
+        );
+      }
       const { title: displayTitle, pending: titlePending } = getTitle(
         conversation.id,
         conversation.title,

@@ -2574,6 +2574,47 @@ describe("AgentServerConversationService", () => {
       });
     });
 
+    it("keeps healthy and identifiable broken rows when another row is malformed", async () => {
+      mockSearchConversations.mockResolvedValue({
+        items: [
+          null,
+          makeDirectConversation({ id: "healthy" }),
+          { title: "No ID" },
+        ],
+        broken_items: [
+          {
+            id: "damaged",
+            title: "Forked conversation",
+            reason: "state",
+            updated_at: "2099-01-01T00:00:00Z",
+          },
+        ],
+        next_page_id: "next-page",
+      });
+
+      const page = await AgentServerConversationService.searchConversations();
+
+      expect(page.items).toMatchObject([
+        {
+          id: "damaged",
+          title: "Forked conversation",
+          broken_reason: "state",
+          conversation_url: null,
+        },
+        { id: "healthy" },
+      ]);
+      expect(page.next_page_id).toBe("next-page");
+    });
+
+    it("propagates a backend error during conversation search", async () => {
+      const error = new Error("Unauthorized");
+      mockSearchConversations.mockRejectedValue(error);
+
+      await expect(
+        AgentServerConversationService.searchConversations(),
+      ).rejects.toBe(error);
+    });
+
     it.each([
       ["primitive page", "invalid-page"],
       ["missing item list", { items: null, next_page_id: null }],
