@@ -81,6 +81,7 @@ const socketCapture = vi.hoisted(() => ({
   readConversationFile: vi.fn(),
   trackError: vi.fn(),
   launchChild: vi.fn(),
+  requestSecret: vi.fn(),
 }));
 
 const historyCapture = vi.hoisted(() => ({
@@ -150,6 +151,11 @@ vi.mock("#/hooks/mutation/use-read-conversation-file", () => ({
 vi.mock("#/services/child-conversation-launch", () => ({
   handleLaunchChildConversationAction: (...args: unknown[]) =>
     socketCapture.launchChild(...args),
+}));
+
+vi.mock("#/services/secret-request", () => ({
+  handleRequestSecretAction: (...args: unknown[]) =>
+    socketCapture.requestSecret(...args),
 }));
 
 vi.mock("#/utils/error-handler", () => ({
@@ -2433,6 +2439,38 @@ describe("Conversation websocket behavior", () => {
       "conv-main",
       "call-launch",
     );
+  });
+
+  it("does not launch a child conversation during history replay", () => {
+    renderProvider();
+    dispatchMainFrame({ type: "sync", from_seq: -1, through_seq: 100 });
+    const action = {
+      kind: "ClientAction_launch_child_conversation",
+      target: "local",
+      task: "Inspect tests",
+    };
+    dispatchMainFrame({
+      type: "durable",
+      seq: 50,
+      event: makeActionEvent("launch-replay", action, "launch_child_conversation"),
+    });
+    expect(socketCapture.launchChild).not.toHaveBeenCalled();
+  });
+
+  it("does not request a secret during history replay", () => {
+    renderProvider();
+    dispatchMainFrame({ type: "sync", from_seq: -1, through_seq: 100 });
+    const action = {
+      kind: "ClientAction_request_secret",
+      name: "API_KEY",
+      reason: "Authenticate service",
+    };
+    dispatchMainFrame({
+      type: "durable",
+      seq: 50,
+      event: makeActionEvent("secret-replay", action, "request_secret"),
+    });
+    expect(socketCapture.requestSecret).not.toHaveBeenCalled();
   });
 
   it("does not launch a child for unrelated actions or without a parent ID", () => {

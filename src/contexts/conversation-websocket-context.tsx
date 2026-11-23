@@ -1038,7 +1038,12 @@ export function ConversationWebSocketProvider({
           // Same client-tool pattern, but the work is a network call: launch
           // the requested child conversation and post the outcome back so the
           // agent learns the id the server-side acknowledgement can't carry.
-          if (conversationId && isLaunchChildConversationActionEvent(event)) {
+          // Replayed historical frames must be render-only to avoid duplicate side effects.
+          if (
+            conversationId &&
+            isLaunchChildConversationActionEvent(event) &&
+            !isReplay
+          ) {
             void handleLaunchChildConversationAction(
               event.action,
               conversationId,
@@ -1048,7 +1053,11 @@ export function ConversationWebSocketProvider({
 
           // Same pattern again: the user answers in a chat card, and the
           // outcome is posted back once they save or cancel it.
-          if (conversationId && isRequestSecretActionEvent(event)) {
+          if (
+            conversationId &&
+            isRequestSecretActionEvent(event) &&
+            !isReplay
+          ) {
             void handleRequestSecretAction(
               event.action,
               conversationId,
