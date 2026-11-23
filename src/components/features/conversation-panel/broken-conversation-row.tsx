@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { formatTimeDelta } from "#/utils/format-time-delta";
+import { parseDateAsUTC } from "#/utils/format-time-delta";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 interface BrokenConversationRowProps {
@@ -13,7 +13,7 @@ export function BrokenConversationRow({
   conversation,
   onDelete,
 }: BrokenConversationRowProps) {
-  const { t } = useTranslation("openhands");
+  const { t, i18n } = useTranslation("openhands");
   const {
     id,
     title,
@@ -27,7 +27,9 @@ export function BrokenConversationRow({
           className="size-3 shrink-0 group-open:rotate-90"
           aria-hidden
         />
-        <span className="min-w-0 flex-1 truncate text-sm">{title}</span>
+        <span className="min-w-0 flex-1 truncate text-sm group-open:break-words group-open:whitespace-normal">
+          {title}
+        </span>
         <span className="shrink-0 rounded bg-danger/15 px-1.5 py-0.5 text-xs text-danger">
           {t(I18nKey.CONVERSATION_PANEL$CORRUPTED)}
         </span>
@@ -39,7 +41,12 @@ export function BrokenConversationRow({
             : t(I18nKey.CONVERSATION_PANEL$CORRUPTED_STATE)}
         </p>
         <code className="break-all select-text">{id}</code>
-        <time dateTime={updatedAt}>{formatTimeDelta(updatedAt)}</time>
+        <time dateTime={updatedAt}>
+          {parseDateAsUTC(updatedAt).toLocaleString(i18n.language, {
+            dateStyle: "medium",
+            timeStyle: "short",
+          })}
+        </time>
         <button
           type="button"
           onClick={onDelete}
