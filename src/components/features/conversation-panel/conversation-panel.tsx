@@ -66,6 +66,7 @@ import {
   resolvePinnedConversations,
   sortConversationsByField,
   type ConversationGroupLaunch,
+  type NestedConversationRow,
 } from "./conversation-panel-list-helpers";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
@@ -78,10 +79,7 @@ import {
 import { uniqueById } from "#/utils/unique-by-id";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { isEffectivelyArchivedConversation } from "#/utils/conversation-archive-status";
-import type {
-  AppConversation,
-  SandboxStatus,
-} from "#/api/conversation-service/agent-server-conversation-service.types";
+import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 interface ConversationPanelProps {
   onClose?: () => void;
@@ -411,25 +409,37 @@ export function ConversationPanel({
   }, [allLoadedConversations, isRowArchived, showArchivedConversations]);
 
   // Never hide the thread the user is currently reading: when the active
-  // conversation is a child whose parent is loaded, auto-expand that parent.
-  // Only ever adds — a manual collapse of an inactive parent sticks.
+  // conversation is nested, auto-expand every loaded ancestor so the row is
+  // actually reachable (a grandchild needs both its parent and grandparent
+  // open). Only ever adds — a manual collapse of an inactive parent sticks.
   React.useEffect(() => {
     if (!currentConversationId) {
       return;
     }
-    const activeConversation = conversations.find(
-      (conversation) => conversation.id === currentConversationId,
+    const conversationsById = new Map(
+      conversations.map((conversation) => [conversation.id, conversation]),
     );
-    const parentId = activeConversation?.parent_conversation_id;
-    if (!parentId) {
+    const activeConversation = conversationsById.get(currentConversationId);
+    const ancestorIds: string[] = [];
+    const seen = new Set<string>();
+    let parentId = activeConversation?.parent_conversation_id ?? null;
+    while (parentId && conversationsById.has(parentId) && !seen.has(parentId)) {
+      seen.add(parentId);
+      ancestorIds.push(parentId);
+      parentId =
+        conversationsById.get(parentId)?.parent_conversation_id ?? null;
+    }
+    if (ancestorIds.length === 0) {
       return;
     }
-    if (!conversations.some((conversation) => conversation.id === parentId)) {
-      return;
-    }
-    setExpandedSubConversationParentIds((prev) =>
-      prev.has(parentId) ? prev : new Set(prev).add(parentId),
-    );
+    setExpandedSubConversationParentIds((prev) => {
+      if (ancestorIds.every((id) => prev.has(id))) {
+        return prev;
+      }
+      const next = new Set(prev);
+      ancestorIds.forEach((id) => next.add(id));
+      return next;
+    });
   }, [conversations, currentConversationId]);
 
   // Pin/archive ID sets derive from the tags on the loaded conversations
@@ -749,7 +759,7 @@ export function ConversationPanel({
   // worktree/workspace still nests under its parent, and its flat slot is
   // removed from whichever folder it would otherwise appear in.
   const groupedSubConversationsByParentId = React.useMemo(() => {
-    const byParentId = new Map<string, AppConversation[]>();
+    const byParentId = new Map<string, NestedConversationRow[]>();
     if (!groupedSourceConversations) {
       return byParentId;
     }
@@ -764,15 +774,20 @@ export function ConversationPanel({
     return byParentId;
   }, [groupedSourceConversations, conversationSort]);
 
-  const groupedNestedChildIds = React.useMemo(
-    () =>
-      new Set(
-        Array.from(groupedSubConversationsByParentId.values())
-          .flat()
-          .map((conversation) => conversation.id),
+  const groupedNestedChildIds = React.useMemo(() => {
+    const collectDescendantIds = (
+      rows: readonly NestedConversationRow[],
+    ): string[] =>
+      rows.flatMap((row) => [
+        row.conversation.id,
+        ...collectDescendantIds(row.children),
+      ]);
+    return new Set(
+      Array.from(groupedSubConversationsByParentId.values()).flatMap(
+        collectDescendantIds,
       ),
-    [groupedSubConversationsByParentId],
-  );
+    );
+  }, [groupedSubConversationsByParentId]);
 
   const displayConversationGroups = React.useMemo(() => {
     if (!orderedConversationGroups) {
@@ -1672,10 +1687,8 @@ export function ConversationPanel({
                 subConversations={
                   groupedSubConversationsByParentId.get(conversation.id) ?? []
                 }
-                expanded={expandedSubConversationParentIds.has(conversation.id)}
-                onToggle={() =>
-                  toggleSubConversationParentExpanded(conversation.id)
-                }
+                expandedIds={expandedSubConversationParentIds}
+                onToggle={toggleSubConversationParentExpanded}
                 renderParent={(parent) => renderConversationCard(parent)}
                 renderChild={(child) => (
                   <SubConversationRow
@@ -1703,12 +1716,8 @@ export function ConversationPanel({
                 key={row.conversation.id}
                 conversation={row.conversation}
                 subConversations={row.children}
-                expanded={expandedSubConversationParentIds.has(
-                  row.conversation.id,
-                )}
-                onToggle={() =>
-                  toggleSubConversationParentExpanded(row.conversation.id)
-                }
+                expandedIds={expandedSubConversationParentIds}
+                onToggle={toggleSubConversationParentExpanded}
                 renderParent={(parent) => renderConversationCard(parent)}
                 renderChild={(child) => (
                   <SubConversationRow

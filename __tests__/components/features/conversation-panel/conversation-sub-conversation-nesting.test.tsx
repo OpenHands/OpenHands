@@ -30,7 +30,31 @@ describe("nestSubConversations (unit)", () => {
     const rows = nestSubConversations([parent, child], "updated");
     expect(rows).toHaveLength(1);
     expect(rows[0]?.conversation.id).toBe("parent-1");
-    expect(rows[0]?.children.map((c) => c.id)).toEqual(["child-1"]);
+    expect(rows[0]?.children.map((c) => c.conversation.id)).toEqual([
+      "child-1",
+    ]);
+  });
+
+  it("nests grandchildren under their child parent instead of dropping them", () => {
+    const parent = createMockConversation({ id: "parent-1" });
+    const child = createMockConversation({
+      id: "child-1",
+      parent_conversation_id: "parent-1",
+    });
+    const grandchild = createMockConversation({
+      id: "grandchild-1",
+      parent_conversation_id: "child-1",
+    });
+
+    const rows = nestSubConversations([parent, child, grandchild], "updated");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.conversation.id).toBe("parent-1");
+    expect(rows[0]?.children).toHaveLength(1);
+    expect(rows[0]?.children[0]?.conversation.id).toBe("child-1");
+    expect(rows[0]?.children[0]?.children[0]?.conversation.id).toBe(
+      "grandchild-1",
+    );
   });
 
   it("keeps an orphan child (parent not in the list) as a top-level row", () => {
@@ -68,7 +92,7 @@ describe("nestSubConversations (unit)", () => {
     const rows = nestSubConversations([newer, parent, older], "created");
     expect(rows.map((r) => r.conversation.id)).toEqual(["p"]);
     const parentRow = rows.find((r) => r.conversation.id === "p");
-    expect(parentRow?.children.map((c) => c.id)).toEqual([
+    expect(parentRow?.children.map((c) => c.conversation.id)).toEqual([
       "newer-child",
       "older-child",
     ]);
@@ -141,6 +165,64 @@ describe("ConversationPanel sub-conversation nesting (chronological)", () => {
   });
 });
 
+describe("ConversationPanel sub-conversation nesting (grandchildren)", () => {
+  setupConversationPanelTest();
+
+  beforeEach(async () => {
+    const parent = createMockConversation({
+      id: "parent-conv",
+      title: "Parent Conversation",
+    });
+    const child = createMockConversation({
+      id: "child-conv",
+      title: "Child Conversation",
+      parent_conversation_id: "parent-conv",
+    });
+    const grandchild = createMockConversation({
+      id: "grandchild-conv",
+      title: "Grandchild Conversation",
+      parent_conversation_id: "child-conv",
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [parent, child, grandchild],
+      next_page_id: null,
+    });
+    renderConversationPanel();
+    await screen.findByText("Parent Conversation");
+  });
+
+  it("reveals a grandchild only after expanding its parent child", async () => {
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByTestId("conversation-sub-conversations-toggle-parent-conv"),
+    );
+
+    const parentRegion = await screen.findByTestId(
+      "conversation-sub-conversations-parent-conv",
+    );
+    expect(
+      within(parentRegion).getByTestId("sub-conversation-row"),
+    ).toHaveAttribute("data-conversation-id", "child-conv");
+    expect(screen.queryByText("Grandchild Conversation")).toBeNull();
+
+    await user.click(
+      within(parentRegion).getByTestId(
+        "conversation-sub-conversations-toggle-child-conv",
+      ),
+    );
+
+    const childRegion = await screen.findByTestId(
+      "conversation-sub-conversations-child-conv",
+    );
+    expect(
+      within(childRegion).getByTestId("sub-conversation-row"),
+    ).toHaveAttribute("data-conversation-id", "grandchild-conv");
+  });
+});
+
 describe("ConversationPanel sub-conversation nesting (grouped folders)", () => {
   setupConversationPanelTest();
 
@@ -210,6 +292,12 @@ describe("ConversationPanel sub-conversation nesting (cross-folder grouped)", ()
           parent_conversation_id: "parent-conv",
           selected_workspace: "/workspace/beta",
         }),
+        createMockConversation({
+          id: "grandchild-conv",
+          title: "Grandchild Conversation",
+          parent_conversation_id: "child-conv",
+          selected_workspace: "/workspace/gamma",
+        }),
       ],
       next_page_id: null,
     });
@@ -222,6 +310,9 @@ describe("ConversationPanel sub-conversation nesting (cross-folder grouped)", ()
     // The child's folder would otherwise contain only the child, so it must
     // disappear rather than render a folder with no top-level rows.
     expect(screen.queryByTestId("thread-folder-ws--workspace-beta")).toBeNull();
+    expect(
+      screen.queryByTestId("thread-folder-ws--workspace-gamma"),
+    ).toBeNull();
 
     const folder = await screen.findByTestId(
       "thread-folder-ws--workspace-alpha",
@@ -241,5 +332,33 @@ describe("ConversationPanel sub-conversation nesting (cross-folder grouped)", ()
       "data-conversation-id",
       "child-conv",
     );
+  });
+
+  it("nests a grandchild from a third folder under its child parent", async () => {
+    const user = userEvent.setup();
+    const folder = await screen.findByTestId(
+      "thread-folder-ws--workspace-alpha",
+    );
+
+    await user.click(
+      within(folder).getByTestId(
+        "conversation-sub-conversations-toggle-parent-conv",
+      ),
+    );
+    const parentRegion = await screen.findByTestId(
+      "conversation-sub-conversations-parent-conv",
+    );
+
+    await user.click(
+      within(parentRegion).getByTestId(
+        "conversation-sub-conversations-toggle-child-conv",
+      ),
+    );
+    const childRegion = await screen.findByTestId(
+      "conversation-sub-conversations-child-conv",
+    );
+    expect(
+      within(childRegion).getByTestId("sub-conversation-row"),
+    ).toHaveAttribute("data-conversation-id", "grandchild-conv");
   });
 });

@@ -4,12 +4,13 @@ import { useTranslation } from "react-i18next";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import type { NestedConversationRow } from "./conversation-panel-list-helpers";
 
 interface ConversationSubConversationGroupProps {
   conversation: AppConversation;
-  subConversations: AppConversation[];
-  expanded: boolean;
-  onToggle: () => void;
+  subConversations: NestedConversationRow[];
+  expandedIds: ReadonlySet<string>;
+  onToggle: (conversationId: string) => void;
   renderParent: (conversation: AppConversation) => React.ReactNode;
   renderChild: (conversation: AppConversation) => React.ReactNode;
 }
@@ -22,13 +23,14 @@ interface ConversationSubConversationGroupProps {
 export function ConversationSubConversationGroup({
   conversation,
   subConversations,
-  expanded,
+  expandedIds,
   onToggle,
   renderParent,
   renderChild,
 }: ConversationSubConversationGroupProps) {
   const { t } = useTranslation("openhands");
   const count = subConversations.length;
+  const expanded = expandedIds.has(conversation.id);
   const label = t(I18nKey.CONVERSATION_PANEL$SUB_CONVERSATIONS, { count });
   const regionId = `conversation-sub-conversations-region-${conversation.id}`;
 
@@ -43,7 +45,7 @@ export function ConversationSubConversationGroup({
             aria-expanded={expanded}
             aria-controls={regionId}
             aria-label={label}
-            onClick={onToggle}
+            onClick={() => onToggle(conversation.id)}
             className={cn(
               "ml-3 flex items-center gap-1 rounded px-1 py-0.5 text-2xs text-muted",
               "transition-colors hover:bg-surface hover:text-contrast",
@@ -60,7 +62,17 @@ export function ConversationSubConversationGroup({
               data-testid={`conversation-sub-conversations-${conversation.id}`}
               className="ml-4 border-l border-border pl-1"
             >
-              {subConversations.map((child) => renderChild(child))}
+              {subConversations.map((row) => (
+                <ConversationSubConversationGroup
+                  key={row.conversation.id}
+                  conversation={row.conversation}
+                  subConversations={row.children}
+                  expandedIds={expandedIds}
+                  onToggle={onToggle}
+                  renderParent={renderChild}
+                  renderChild={renderChild}
+                />
+              ))}
             </div>
           ) : null}
         </>

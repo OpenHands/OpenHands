@@ -425,10 +425,10 @@ export function sortConversationsByField(
   );
 }
 
-/** A top-level conversation row plus the children nested beneath it. */
+/** A conversation row plus its recursively nested children. */
 export interface NestedConversationRow {
   conversation: AppConversation;
-  children: AppConversation[];
+  children: NestedConversationRow[];
 }
 
 /**
@@ -474,13 +474,28 @@ export function nestSubConversations(
     }));
   }
 
-  return topLevel.map((conversation) => ({
-    conversation,
-    children: sortConversationsByField(
+  const buildRow = (
+    conversation: AppConversation,
+    ancestors: ReadonlySet<string>,
+  ): NestedConversationRow | null => {
+    // A malformed parent cycle must not recurse forever. The repeated node is
+    // omitted from this branch; the cycle's entry point still renders once.
+    if (ancestors.has(conversation.id)) {
+      return null;
+    }
+    const nextAncestors = new Set(ancestors).add(conversation.id);
+    const children = sortConversationsByField(
       childrenByParentId.get(conversation.id) ?? [],
       field,
-    ),
-  }));
+    )
+      .map((child) => buildRow(child, nextAncestors))
+      .filter((row): row is NestedConversationRow => row !== null);
+    return { conversation, children };
+  };
+
+  return topLevel
+    .map((conversation) => buildRow(conversation, new Set()))
+    .filter((row): row is NestedConversationRow => row !== null);
 }
 
 function workspaceGroup(conversation: AppConversation): {
