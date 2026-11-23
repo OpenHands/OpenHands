@@ -5,6 +5,7 @@ import {
 } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import { REQUEST_SECRET_TOOL_NAME } from "#/constants/secret-request";
+import { ASK_USER_TOOL_NAME } from "#/constants/ask-user";
 
 import {
   OpenHandsEvent,
@@ -23,6 +24,7 @@ import {
   CanvasUIAction,
   LaunchChildConversationAction,
   RequestSecretAction,
+  AskUserAction,
 } from "./core";
 import {
   AgentErrorEvent,
@@ -238,6 +240,12 @@ export const isRequestSecretActionEvent = (
   event: OpenHandsEvent,
 ): event is ActionEvent<RequestSecretAction> =>
   isActionEvent(event) && event.tool_name === REQUEST_SECRET_TOOL_NAME;
+
+/** Type guard for ask-user tool ActionEvents. */
+export const isAskUserActionEvent = (
+  event: OpenHandsEvent,
+): event is ActionEvent<AskUserAction> =>
+  isActionEvent(event) && event.tool_name === ASK_USER_TOOL_NAME;
 
 /**
  * Type guard function to check if an event is a system prompt event

@@ -145,6 +145,12 @@ export const getActionEventTitleDescriptor = (
         key: "ACTION_MESSAGE$REQUEST_SECRET",
         values: { name: event.action.name },
       };
+    case "AskUserAction":
+      return {
+        kind: "translation",
+        key: "ACTION_MESSAGE$ASK_USER",
+        values: {},
+      };
     default:
       return {
         kind: "text",
