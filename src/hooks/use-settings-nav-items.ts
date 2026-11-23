@@ -22,6 +22,8 @@ const PROFILE_OWNED_SETTINGS_PATHS = new Set([
   "/settings/condenser",
   "/settings/meta-llm",
 ]);
+// Experimental features live on a local agent server; Cloud has none yet.
+const LOCAL_ONLY_SETTINGS_PATHS = new Set(["/settings/experimental"]);
 
 export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   const { data: config } = useConfig();
@@ -35,7 +37,9 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
     (item) =>
       !isSettingsPageHidden(item.to, featureFlags) &&
       (!isLockedToCloud || item.to === LOCKED_CLOUD_SETTINGS_NAV_PATH) &&
-      (backend.kind === "cloud" || !PROFILE_OWNED_SETTINGS_PATHS.has(item.to)),
+      (backend.kind === "cloud" ||
+        !PROFILE_OWNED_SETTINGS_PATHS.has(item.to)) &&
+      (backend.kind === "local" || !LOCAL_ONLY_SETTINGS_PATHS.has(item.to)),
   ).map((item) => {
     const renamedItem =
       item.to === "/settings"

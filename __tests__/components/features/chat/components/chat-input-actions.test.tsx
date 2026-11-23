@@ -94,6 +94,8 @@ const saasInstanceConfig: CloudIntegrationsConfig = {
   isOrgMcpServersEnabled: false,
   isAgentProfilesEnabled: false,
   isServiceAccountsEnabled: false,
+  isOauthV2LoginEnabled: false,
+  isFactoriesEnabled: false,
 };
 const fetchCloudIntegrationsConfigMock = vi.fn(async () => saasInstanceConfig);
 vi.mock("#/api/cloud/settings-service.api", async () => ({

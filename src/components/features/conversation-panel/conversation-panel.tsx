@@ -21,6 +21,10 @@ import { ConfirmStopModal } from "./confirm-stop-modal";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ExitConversationModal } from "./exit-conversation-modal";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import {
+  SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
+  useBreakpoint,
+} from "#/hooks/use-breakpoint";
 import { Provider } from "#/types/settings";
 import type { LocalWorkspace } from "#/types/workspace";
 import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation";
@@ -73,6 +77,7 @@ import {
   PINNED_CONVERSATION_TAG_KEY,
 } from "#/utils/conversation-tag-flags";
 import { uniqueById } from "#/utils/unique-by-id";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { isEffectivelyArchivedConversation } from "#/utils/conversation-archive-status";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 
@@ -118,6 +123,19 @@ export function ConversationPanel({
   ] = React.useState(false);
   const [confirmDeleteAllVisible, setConfirmDeleteAllVisible] =
     React.useState(false);
+  const [deleteAllPreparation, setDeleteAllPreparation] = React.useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const [isDeletingAll, setIsDeletingAll] = React.useState(false);
+  const deleteAllRequest = React.useRef(0);
+
+  // A confirmation belongs to the backend/org whose pages were enumerated.
+  // External selection changes (including embedded hosts) cancel it rather
+  // than carrying a destructive action into the newly selected scope.
+  React.useEffect(() => {
+    deleteAllRequest.current += 1;
+    setConfirmDeleteAllVisible(false);
+  }, [activeBackend.id, orgId]);
   const showOlderConversations = useConversationPanelPreferencesStore(
     (state) => state.showOlderConversations,
   );
@@ -139,6 +157,11 @@ export function ConversationPanel({
   const showHoverMetadata = useConversationPanelPreferencesStore(
     (state) => state.showHoverMetadata,
   );
+  // Below the rail breakpoint the list only renders in the mobile drawer,
+  // which spans nearly the whole viewport, so a preview beside a card has no
+  // room and would run off screen. Open it below the card instead, where the
+  // overlay positioning keeps it inside the viewport.
+  const isInMobileDrawer = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
   const organizeMode = useConversationPanelPreferencesStore(
     (state) => state.organizeMode,
   );
@@ -305,9 +328,8 @@ export function ConversationPanel({
     return names;
   }, [agentProfilesData]);
 
-  // Deduped, archive-unaware collection of every conversation currently loaded
-  // from the backend. Bulk actions like "Delete all" must use this list so
-  // hiding archived rows from the UI never shrinks what gets deleted.
+  // Archive-unaware collection of the loaded pages. Delete all first loads
+  // every remaining page so neither pagination nor hidden rows shrink its scope.
   const allLoadedConversations = React.useMemo(() => {
     const all = data?.pages.flatMap((page) => page.items) ?? [];
     // The 10s background refetch re-fetches every loaded page with the
@@ -1039,14 +1061,49 @@ export function ConversationPanel({
     }
   };
 
+  const handleCancelDeleteAll = () => {
+    if (isDeletingAll) return;
+    deleteAllRequest.current += 1;
+    setConfirmDeleteAllVisible(false);
+  };
+
+  const handleRequestDeleteAll = async () => {
+    const request = ++deleteAllRequest.current;
+    setDeleteAllPreparation("loading");
+    setConfirmDeleteAllVisible(true);
+    let page = data?.pages.at(-1);
+    const visitedPages = new Set<string>();
+
+    while (page?.next_page_id) {
+      if (visitedPages.has(page.next_page_id)) {
+        setDeleteAllPreparation("error");
+        return;
+      }
+      visitedPages.add(page.next_page_id);
+      const result = await fetchNextPage();
+      if (request !== deleteAllRequest.current) return;
+      if (result.isFetchNextPageError || !result.data) {
+        setDeleteAllPreparation("error");
+        return;
+      }
+      page = result.data.pages.at(-1);
+    }
+    setDeleteAllPreparation("ready");
+  };
+
   const handleConfirmDeleteAll = async () => {
-    // Delete against the unfiltered loaded set so archived (currently hidden)
-    // conversations are still removed from the server — matching the action's
-    // "delete all conversations" label and confirmation count.
+    if (deleteAllPreparation !== "ready" || isDeletingAll) return;
+    // Every item, including its planning children, belongs to this confirmed
+    // backend/org even if the host changes selection while requests await.
+    const deletionScope =
+      AgentServerConversationService.createConversationDeletionScope();
+    setIsDeletingAll(true);
+    // Enumeration completes before confirmation. Capture that complete,
+    // deduplicated set before deletes start invalidating the paginated cache.
     const idsToDelete = allLoadedConversations.map((c) => c.id);
     const results = await Promise.allSettled(
       idsToDelete.map((conversationId) =>
-        deleteConversationAsync({ conversationId }),
+        deleteConversationAsync({ conversationId, deletionScope }),
       ),
     );
 
@@ -1071,6 +1128,7 @@ export function ConversationPanel({
         `${failedCount} conversation${failedCount === 1 ? "" : "s"} could not be deleted.`,
       );
     }
+    setIsDeletingAll(false);
   };
 
   const renderConversationCard = React.useCallback(
@@ -1147,6 +1205,7 @@ export function ConversationPanel({
           isArchived={isArchived}
           explicitlyArchived={explicitlyArchived}
           contextMenuOpen={openContextMenuId === conversation.id}
+          isInMobileDrawer={isInMobileDrawer}
           inPinnedSection={!!options?.inPinnedSection}
           allowEditTags={activeBackend.kind === "local"}
           showHoverMetadata={showHoverMetadata}
@@ -1201,6 +1260,7 @@ export function ConversationPanel({
       showLlmProfiles,
       showTagsMetadata,
       showHoverMetadata,
+      isInMobileDrawer,
     ],
   );
 
@@ -1306,7 +1366,7 @@ export function ConversationPanel({
                 tagFacets={tagFacets}
                 automationNameFacets={automationNameFacets}
                 totalConversationsCount={allLoadedConversations.length}
-                onRequestDeleteAll={() => setConfirmDeleteAllVisible(true)}
+                onRequestDeleteAll={handleRequestDeleteAll}
               />
             </div>
           </div>
@@ -1598,14 +1658,24 @@ export function ConversationPanel({
       {confirmDeleteAllVisible && (
         <ConfirmDeleteModal
           title={t(I18nKey.CONVERSATION$CONFIRM_DELETE_ALL_TITLE)}
-          description={t(I18nKey.CONVERSATION$CONFIRM_DELETE_ALL_DESC, {
-            count: allLoadedConversations.length,
-          })}
+          description={
+            deleteAllPreparation === "ready"
+              ? t(I18nKey.CONVERSATION$CONFIRM_DELETE_ALL_DESC, {
+                  count: allLoadedConversations.length,
+                })
+              : t(
+                  deleteAllPreparation === "error"
+                    ? I18nKey.ERROR$GENERIC
+                    : I18nKey.HOME$LOADING,
+                )
+          }
+          isConfirmDisabled={deleteAllPreparation !== "ready"}
+          isPending={isDeletingAll}
           onConfirm={async () => {
             await handleConfirmDeleteAll();
             setConfirmDeleteAllVisible(false);
           }}
-          onCancel={() => setConfirmDeleteAllVisible(false)}
+          onCancel={handleCancelDeleteAll}
         />
       )}
 

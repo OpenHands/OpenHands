@@ -1006,6 +1006,7 @@ describe("HomeChatLauncher", () => {
       "main",
       undefined,
       100,
+      null,
     );
     await user.click(screen.getByTestId("stub-chat-submit"));
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));

@@ -7,6 +7,7 @@ import {
   HttpError,
 } from "@openhands/typescript-client";
 import type {
+  ACPEffortOption,
   ACPModelInfo,
   ConversationRuntimeInfo,
   HookConfig,
@@ -23,6 +24,7 @@ import {
 } from "#/types/settings";
 import {
   resolveEffectiveAcpModel,
+  toAcpEffortChoices,
   toAcpModelOptions,
 } from "#/constants/acp-providers";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
@@ -144,6 +146,8 @@ export interface DirectConversationInfo {
   current_model_id?: string | null;
   current_model_name?: string | null;
   available_models?: ACPModelInfo[] | null;
+  current_effort?: string | null;
+  available_efforts?: ACPEffortOption[] | null;
   workspace?: {
     working_dir?: string | null;
   } | null;
@@ -452,6 +456,10 @@ export function toAppConversation(
     acp_available_models: isAcp
       ? toAcpModelOptions(info.available_models)
       : null,
+    acp_current_effort: isAcp ? (info.current_effort ?? null) : null,
+    acp_available_efforts: isAcp
+      ? toAcpEffortChoices(info.available_efforts)
+      : null,
     tags: info.tags ?? null,
     launched_agent_profile: info.launched_agent_profile ?? null,
     // Chip path: omit ``providerDefault`` so that when no concrete model
@@ -657,7 +665,47 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   // hovercard names the profile instead of echoing the raw id and revision.
   "agentprofileid",
   "agentprofilerevision",
+  // Projects board state the Agent Server owns: whether the agent ended on
+  // a question (`turn`, `ask`), why it resolved a conversation, and the pull
+  // requests a member opened (`prs`). The board, the resolved banner and the
+  // Project tab show these; a tag PATCH cannot change them.
+  "turn",
+  "ask",
+  "resolvenote",
+  "prs",
 ]);
+
+/**
+ * Projects tags that keep a chip (`project` shows the project's name,
+ * `resolved` who resolved it) but are not editable: membership and
+ * resolution change through the Projects routes, not tags.
+ */
+export const PROJECT_BOARD_TAG_KEYS: ReadonlySet<string> = new Set([
+  "project",
+  "resolved",
+]);
+
+/**
+ * Every Projects tag the Agent Server owns. A tag PATCH keeps them as the
+ * server has them, so clients never send them.
+ */
+export const SERVER_OWNED_PROJECT_TAG_KEYS: ReadonlySet<string> = new Set([
+  "project",
+  "turn",
+  "ask",
+  "resolved",
+  "resolvenote",
+  "prs",
+]);
+
+/** The tags a user can edit: the displayed ones minus Projects state. */
+export function getEditableConversationTags(
+  tags: Record<string, string> | null | undefined,
+): Array<[string, string]> {
+  return getDisplayConversationTags(tags).filter(
+    ([key]) => !PROJECT_BOARD_TAG_KEYS.has(key.trim().toLowerCase()),
+  );
+}
 
 /**
  * High-signal tag keys shown first in the chip row (before A–Z). Automation
@@ -799,6 +847,24 @@ function getConversationSecurityAnalyzer(conversationSettings: SettingsRecord) {
     default:
       return undefined;
   }
+}
+
+/**
+ * The user's approval and iteration settings, as a start request carries them.
+ * A conversation the server starts for Canvas, such as a project's
+ * coordinator, needs the same ones an ordinary chat gets; its workers then
+ * inherit them from the coordinator.
+ */
+export function buildConversationLaunchPolicies(settings: Settings) {
+  const conversationSettings = toRecord(settings.conversation_settings);
+  const securityAnalyzer =
+    getConversationSecurityAnalyzer(conversationSettings);
+  return {
+    confirmation_policy:
+      getConversationConfirmationPolicy(conversationSettings),
+    ...(securityAnalyzer ? { security_analyzer: securityAnalyzer } : {}),
+    max_iterations: resolveMaxIterations(conversationSettings.max_iterations),
+  };
 }
 
 /**

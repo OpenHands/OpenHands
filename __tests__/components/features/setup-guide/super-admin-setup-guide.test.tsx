@@ -20,7 +20,10 @@ import { I18nKey } from "#/i18n/declaration";
 import { server } from "#/mocks/node";
 
 const locked = vi.hoisted(() => ({ cloudHost: null as string | null }));
-const tour = vi.hoisted(() => ({ active: false }));
+const tour = vi.hoisted(() => ({
+  active: false,
+  listeners: new Set<() => void>(),
+}));
 
 // Canvas served from the cloud host opens enterprise pages in its own tab.
 vi.mock("#/api/agent-server-config", async (importOriginal) => ({
@@ -42,8 +45,21 @@ vi.mock(
 vi.mock("#/components/features/setup-guide/tour/tour-engine", () => ({
   startGuidedTour: vi.fn(),
   isGuidedTourActive: () => tour.active,
-  subscribeGuidedTourActive: () => () => {},
+  subscribeGuidedTourActive: (listener: () => void) => {
+    tour.listeners.add(listener);
+    return () => {
+      tour.listeners.delete(listener);
+    };
+  },
 }));
+
+/** A tour opens or closes while the guide is on the page. */
+function setTourActive(active: boolean) {
+  act(() => {
+    tour.active = active;
+    tour.listeners.forEach((listener) => listener());
+  });
+}
 
 const CLOUD_HOST = "https://ohe.example.com";
 const GUIDE_ORG_ID = "org-1";
@@ -613,6 +629,28 @@ describe("SuperAdminSetupGuide", () => {
       screen.getByTestId("super-admin-setup-guide-toggle"),
     ).toHaveAttribute("aria-expanded", "false");
     expect(dismissals).toEqual([]);
+  });
+
+  it("does not ask about closing again after a tour opened over the question", async () => {
+    // Arrange: the admin has closed the panel and not answered yet.
+    const user = userEvent.setup();
+    activateBackend(cloudBackend);
+    serveSetupGuide();
+    renderGuide();
+    await screen.findByTestId("super-admin-setup-guide-panel");
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.BUTTON$CLOSE }),
+    );
+
+    // Act
+    setTourActive(true);
+    setTourActive(false);
+
+    // Assert
+    expect(
+      screen.getByTestId("super-admin-setup-guide-toggle"),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("confirmation-modal")).not.toBeInTheDocument();
   });
 
   it("does not ask for the setup state for a user who is not a Super Admin", async () => {

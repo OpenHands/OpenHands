@@ -34,7 +34,9 @@ import { baselineLines, parseBaseline, withBaseline } from "./lib/baseline.mjs";
 import {
   affectedFamilies,
   familyHead,
+  parseServerLine,
   parseSourceLine,
+  serverMapIds,
   specMatches,
 } from "./lib/map-sources.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
@@ -42,7 +44,12 @@ import {
   networkTiming,
   orderNetworkEntries,
 } from "./lib/network-timing.mjs";
-import { resolveTestids } from "./lib/testids.mjs";
+import {
+  mapWords,
+  resolveTestids,
+  sourceControls,
+  unnamedControls,
+} from "./lib/testids.mjs";
 import { tmuxPathFor } from "./lib/tmux-path.mjs";
 import { browserCallLimit } from "./lib/call-limit.mjs";
 import { HeldKeys, keyDownArguments } from "./lib/held-keys.mjs";
@@ -895,6 +902,7 @@ test("changed paths map to the families whose Source: lines own them", () => {
     "src/mocks/conversation-handlers.ts",
     ".agents/skills/verify-openhands/SKILL.md",
     "src/icons/close.svg",
+    "hero.ts",
     "eslint.config.js",
     "vitest.setup.ts",
     "playwright.live.config.ts",
@@ -914,6 +922,7 @@ test("changed paths map to the families whose Source: lines own them", () => {
     "src/hooks/query/use-get-secrets.ts",
     "src/i18n/translation.json",
     "src/icons/close.svg",
+    "hero.ts",
   ]);
   // A src/ path no family owns is a map gap.
   assert.deepEqual(result.unmapped, [
@@ -953,6 +962,85 @@ test("map affected reads a path list and classifies its paths", () => {
   // line; the baseline test below covers both states.
 });
 
+test("a Server: line names Agent Server IDs, only in the file's head", () => {
+  assert.deepEqual(parseServerLine("Server: F13, F15.changes, F16."), {
+    ids: ["F13", "F15.changes", "F16"],
+    invalid: [],
+  });
+  assert.deepEqual(parseServerLine("Server: F15, `F14`, git"), {
+    ids: ["F15"],
+    invalid: ["`F14`", "git"],
+  });
+  const head = familyHead(
+    "# F08\n\nText.\n\nSource: `src/routes/files-tab.tsx`.\n\nServer: F15.\n\n## Sub-features\n\nServer: F99\n",
+  );
+  assert.deepEqual(head.server.ids, ["F15"]);
+  assert.deepEqual(familyHead("# F01\n\n## Sub-features\n").server, {
+    ids: [],
+    invalid: [],
+  });
+});
+
+test("the server map declares its families and sub-feature IDs", () => {
+  const ids = serverMapIds([
+    {
+      file: "F15-git.md",
+      text: "# Git\n\n## Sub-features\n\n- `F15.changes`: x\n- `F15.diff`: y\n\n## How to get to it (agent POV)\n\n- `F15.not-declared` in prose\n",
+    },
+    { file: "README.md", text: "- `F99.x`: index" },
+  ]);
+  assert.deepEqual([...ids].sort(), ["F15", "F15.changes", "F15.diff"]);
+});
+
+test("map check --server-map checks Server: IDs against the server map", () => {
+  const sdk = mkdtempSync(join(tmpdir(), "servermap-"));
+  const map = join(
+    sdk,
+    ".agents",
+    "skills",
+    "verify-agent-server",
+    "references",
+    "feature-map",
+  );
+  mkdirSync(map, { recursive: true });
+  // Every family a shipped Server: line names, except F16.
+  for (const n of Array.from({ length: 37 }, (_, i) => i + 1)) {
+    if (n === 16) continue;
+    const id = `F${String(n).padStart(2, "0")}`;
+    writeFileSync(
+      join(map, `${id}-x.md`),
+      `# ${id}\n\n## Sub-features\n\n- \`${id}.x\`: x\n`,
+    );
+  }
+  const res = spawnSync(
+    process.execPath,
+    [cli, "map", "check", "--server-map", sdk],
+    { encoding: "utf8" },
+  );
+  const json = JSON.parse(res.stdout);
+  assert.equal(res.status, 1, res.stdout);
+  assert.equal(json.serverMap, map);
+  assert.ok(
+    json.problems.includes(
+      "F08-workspace-files-and-changes.md: Server: F16 is not in the verify-agent-server map",
+    ),
+    res.stdout,
+  );
+  writeFileSync(join(map, "F16-x.md"), "# F16\n\n## Sub-features\n");
+  const ok = spawnSync(
+    process.execPath,
+    [cli, "map", "check", "--server-map", map],
+    { encoding: "utf8" },
+  );
+  assert.equal(ok.status, 0, ok.stdout);
+  const missing = spawnSync(
+    process.execPath,
+    [cli, "map", "check", "--server-map", join(sdk, "nope")],
+    { encoding: "utf8" },
+  );
+  assert.equal(missing.status, 2, missing.stdout + missing.stderr);
+});
+
 test("map check rejects a Source: path that is gone, and the shipped map is clean", () => {
   const dir = mkdtempSync(join(tmpdir(), "mapcheck-"));
   // The checker reads the real map dir; prove the rules on the parser level
@@ -967,6 +1055,89 @@ test("map check rejects a Source: path that is gone, and the shipped map is clea
   );
   assert.equal(head.sources[0].path, "src/does-not-exist.tsx");
   assert.ok(existsSync(dir));
+});
+
+test("map controls lists interactive elements whose test id the map never names", () => {
+  const root = mkdtempSync(join(tmpdir(), "oh-controls-"));
+  const dir = join(root, "src", "components", "features", "demo");
+  mkdirSync(dir, { recursive: true });
+  mkdirSync(join(root, "src", "mocks"), { recursive: true });
+  writeFileSync(
+    join(dir, "panel.tsx"),
+    [
+      "export function Panel({ items }) {",
+      "  return (",
+      '    <section data-testid="demo-panel">',
+      "      <button",
+      '        type="button"',
+      "        onClick={() => items.filter((i) => i > 1)}",
+      '        data-testid="demo-ask-agent"',
+      "      >",
+      "        Ask Agent",
+      "      </button>",
+      '      <BrandButton testId="demo-save">Save</BrandButton>',
+      "      <MenuItem",
+      "        icon={<EditIcon width={16} height={16} />}",
+      "        onClick={() => items.length > 1 && open()}",
+      '        testId="demo-edit"',
+      "      />",
+      '      <div role="menuitem" data-testid={"demo-menu-item"} />',
+      '      <span data-testid="demo-save-hint">Saved</span>',
+      "    </section>",
+      "  );",
+      "}",
+    ].join("\n"),
+  );
+  writeFileSync(
+    join(dir, "panel.test.tsx"),
+    '<button data-testid="only-in-a-test" />',
+  );
+  writeFileSync(
+    join(root, "src", "mocks", "page.tsx"),
+    '<button data-testid="only-in-mocks" />',
+  );
+  const controls = sourceControls(join(root, "src"), root);
+  assert.deepEqual(
+    controls.map((c) => [c.id, c.tag, c.interactive]),
+    [
+      ["demo-ask-agent", "button", true],
+      // The id follows an element passed as a prop: the row is the menu
+      // item, not the icon.
+      ["demo-edit", "MenuItem", true],
+      ["demo-menu-item", "div", true],
+      ["demo-panel", "section", false],
+      ["demo-save", "BrandButton", true],
+      ["demo-save-hint", "span", false],
+    ],
+  );
+  assert.equal(controls[0].file, "src/components/features/demo/panel.tsx");
+  // The map names a control by its whole id: `demo-save-hint` in a recipe
+  // does not account for `demo-save`, and prose about "Ask Agent" does not
+  // account for the button's id.
+  const words = mapWords(
+    "The form has **Ask Agent**. Run `browser text 'testid=demo-save-hint'` and `browser click 'testid=demo-menu-item >> nth=0'`.",
+  );
+  const result = unnamedControls(controls, words);
+  assert.equal(result.considered, 4);
+  assert.deepEqual(
+    result.unnamed.map((c) => c.id),
+    ["demo-ask-agent", "demo-edit", "demo-save"],
+  );
+  assert.deepEqual(
+    unnamedControls(controls, words, { all: true }).unnamed.map((c) => c.id),
+    ["demo-ask-agent", "demo-edit", "demo-panel", "demo-save"],
+  );
+  // On the live tree the command answers with counts and owning families.
+  const live = spawnSync(
+    process.execPath,
+    [cli, "map", "controls", "--family", "F28"],
+    { encoding: "utf8" },
+  );
+  assert.equal(live.status, 0, live.stderr);
+  const report = JSON.parse(live.stdout);
+  assert.ok(report.controls > 0);
+  assert.ok(report.list.every((c) => c.families.includes("F28")));
+  assert.equal(report.unnamed, report.list.length);
 });
 
 test("cited test ids resolve through literals and dynamic prefixes", () => {
@@ -1162,6 +1333,11 @@ test("help names every fixture kind and the new map verbs", () => {
   });
   assert.match(map.stdout, /map affected \[--base REF\]/);
   assert.match(map.stdout, /map testids \[--strict\]/);
+  assert.match(map.stdout, /map controls \[--family Fnn\]/);
+  const browserHelp = spawnSync(process.execPath, [cli, "help", "browser"], {
+    encoding: "utf8",
+  });
+  assert.match(browserHelp.stdout, /timezone <IANA name> \| --reset/);
   const evidence = spawnSync(process.execPath, [cli, "help", "evidence"], {
     encoding: "utf8",
   });
@@ -2555,7 +2731,10 @@ test("a fix is verified only by two reproductions and two passes under the same 
     "verified",
   );
   assert.match(
-    vb([row("xfail"), row("xfail")], [row("xpass"), row("xpass")]).reasons.join(),
+    vb(
+      [row("xfail"), row("xfail")],
+      [row("xpass"), row("xpass")],
+    ).reasons.join(),
     /same backend versions/,
   );
   assert.match(
@@ -2970,30 +3149,52 @@ test("network body projection keeps the start request's runtime choice past the 
   );
 });
 
-test("browser media validates motion before dispatch and preserves playback observation", async () => {
+test("browser media validates options, preserves playback and requests Voice observation explicitly", async () => {
   const runDir = mkdtempSync(join(tmpdir(), "cov-media-motion-"));
   mkdirSync(join(runDir, "private"));
   writeFileSync(join(runDir, "run.json"), "{}\n");
   const calls = [];
+  let legacy = false;
   const server = createHttpServer(async (req, res) => {
     let body = "";
     for await (const chunk of req) body += chunk;
     const call = JSON.parse(body);
     calls.push(call);
     res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify({ ok: true, plays: [] }));
+    res.end(
+      JSON.stringify({
+        ok: true,
+        plays: [],
+        ...(call.args.voice && !legacy ? { voice: { supported: true } } : {}),
+      }),
+    );
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  writeFileSync(join(runDir, "private", "browser.json"), JSON.stringify({
-    pid: process.pid, port: server.address().port, token: "dummy-control-token",
-  }));
-  const invoke = (args) => new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [cli, "browser", "media", ...args, "--run", runDir]);
-    let output = "";
-    child.stdout.on("data", (chunk) => { output += chunk; });
-    child.on("error", reject);
-    child.on("close", (code) => resolve({ code, ...JSON.parse(output) }));
-  });
+  writeFileSync(
+    join(runDir, "private", "browser.json"),
+    JSON.stringify({
+      pid: process.pid,
+      port: server.address().port,
+      token: "dummy-control-token",
+    }),
+  );
+  const invoke = (args) =>
+    new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, [
+        cli,
+        "browser",
+        "media",
+        ...args,
+        "--run",
+        runDir,
+      ]);
+      let output = "";
+      child.stdout.on("data", (chunk) => {
+        output += chunk;
+      });
+      child.on("error", reject);
+      child.on("close", (code) => resolve({ code, ...JSON.parse(output) }));
+    });
   try {
     for (const mode of ["reduce", "no-preference"]) {
       assert.equal((await invoke(["--reduced-motion", mode])).code, 0);
@@ -3003,10 +3204,30 @@ test("browser media validates motion before dispatch and preserves playback obse
     assert.equal((await invoke(["--clear"])).code, 0);
     assert.deepEqual(calls.at(-1).args, { clear: true });
     assert.equal((await invoke([])).code, 0);
+    const voice = await invoke(["--voice"]);
+    assert.equal(voice.code, 0);
+    assert.equal(voice.voice.supported, true);
+    assert.equal(calls.at(-1).args.voice, true);
+    assert.equal((await invoke(["--voice", "--clear"])).code, 0);
+    assert.deepEqual(calls.at(-1).args, { clear: true, voice: true });
     const before = calls.length;
-    for (const args of [["--reduced-motion"], ["--reduced-motion", "sometimes"], ["reduce"], ["extra", "--reduced-motion", "reduce"]])
+    for (const args of [
+      ["--reduced-motion"],
+      ["--reduced-motion", "sometimes"],
+      ["reduce"],
+      ["extra", "--reduced-motion", "reduce"],
+      ["--voice", "false"],
+    ])
       assert.equal((await invoke(args)).code, 2);
-    assert.equal(calls.length, before, "invalid media input must not mutate the browser");
+    assert.equal(
+      calls.length,
+      before,
+      "invalid media input must not mutate the browser",
+    );
+    legacy = true;
+    const unavailable = await invoke(["--voice"]);
+    assert.equal(unavailable.code, 3);
+    assert.match(unavailable.hint, /End the current call/);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     rmSync(runDir, { recursive: true, force: true });
@@ -3053,7 +3274,10 @@ test("browser network times responses and can list them in completion order", ()
       "/sockets/events",
     ],
   );
-  assert.throws(() => orderNetworkEntries(list, "size"), /request or completion/);
+  assert.throws(
+    () => orderNetworkEntries(list, "size"),
+    /request or completion/,
+  );
   // --last windows completed and pending rows separately: 15 open sockets
   // must not push the two completions out of a --last 15 listing.
   const sockets = Array.from({ length: 15 }, (_, i) => ({ path: `/ws/${i}` }));
@@ -3086,4 +3310,48 @@ test("bug run puts back the viewport a block changed", () => {
     encoding: "utf8",
   });
   assert.match(help.stdout, /viewportRestored/);
+});
+
+test("every run names a non-loopback plain-HTTP origin on its ingress port", () => {
+  // A run saved before lanUrl existed still gets one, from its baseUrl.
+  const dir = mkdtempSync(join(tmpdir(), "lan-run-"));
+  mkdirSync(join(dir, "private"));
+  writeFileSync(
+    join(dir, "run.json"),
+    JSON.stringify({
+      baseUrl: "http://127.0.0.1:18800",
+      ports: { ingress: 18800 },
+      launcherPgid: 0,
+    }),
+  );
+  const res = spawnSync(process.execPath, [cli, "env"], {
+    encoding: "utf8",
+    env: { ...process.env, OH_VERIFY_RUN: dir },
+  });
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(
+    res.stdout,
+    /^export OH_VERIFY_LAN_URL=http:\/\/lan\.openhands\.test:18800$/m,
+  );
+  const env = { OH_VERIFY_RUN: dir };
+  assert.equal(
+    run(["status"], env).json.lanUrl,
+    "http://lan.openhands.test:18800",
+  );
+  // No daemon that resolves the name: goto says how to get one.
+  const goto = run(
+    ["browser", "goto", "http://lan.openhands.test:18800/"],
+    env,
+  );
+  assert.equal(goto.status, 3, JSON.stringify(goto.json));
+  assert.match(goto.json.hint, /browser stop/);
+  const launch = spawnSync(process.execPath, [cli, "help", "launch"], {
+    encoding: "utf8",
+  });
+  assert.match(launch.stdout, /lanUrl/);
+  assert.match(launch.stdout, /isSecureContext/);
+  const onboard = spawnSync(process.execPath, [cli, "help", "onboard"], {
+    encoding: "utf8",
+  });
+  assert.match(onboard.stdout, /--stay/);
 });

@@ -27,6 +27,22 @@ describe("automation form session", () => {
     );
   });
 
+  it("keeps the factory a new automation is created in through an edit", () => {
+    initializeAutomationFormSession("conv-1", {
+      prompt: "",
+      kind: "prompt",
+      factoryId: "factory-1",
+    });
+
+    patchAutomationFormSession(
+      "conv-1",
+      { name: "Reviewer" },
+      { source: "user" },
+    );
+
+    expect(getAutomationFormSession("conv-1")?.factoryId).toBe("factory-1");
+  });
+
   it("keeps the existing custom bundle path after a field is edited", () => {
     initializeAutomationFormSession("conv-1", {
       prompt: "",

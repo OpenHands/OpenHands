@@ -245,6 +245,9 @@ export function HomeChatLauncher() {
           name: repositorySelection.repository.full_name,
           gitProvider: repositorySelection.repository.git_provider,
           branch: repositorySelection.branch.name,
+          ...(repositorySelection.repository.git_provider_id != null
+            ? { gitProviderId: repositorySelection.repository.git_provider_id }
+            : {}),
         },
       };
     }

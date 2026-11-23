@@ -29,6 +29,10 @@ describe("SidebarOnboardingChecklistItemIcon", () => {
   it.each([
     ["configure-llm", "sidebar-onboarding-checklist-icon-configure-llm"],
     [
+      "configure-subscription-agent",
+      "sidebar-onboarding-checklist-icon-configure-subscription-agent",
+    ],
+    [
       "start-conversation",
       "sidebar-onboarding-checklist-icon-start-conversation",
     ],
@@ -44,6 +48,21 @@ describe("SidebarOnboardingChecklistItemIcon", () => {
 });
 
 describe("SidebarOnboardingChecklistItemPreview", () => {
+  it("links subscription-agent setup to Agent settings", () => {
+    renderPreview("configure-subscription-agent");
+
+    expect(
+      screen.getByTestId(
+        "sidebar-onboarding-checklist-preview-action-configure-subscription-agent",
+      ),
+    ).toHaveAttribute("href", "/agents");
+    expect(
+      screen.getByText(
+        I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONFIGURE_SUBSCRIPTION_AGENT,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("renders title, icon, action button, and docs link", () => {
     renderPreview("configure-llm");
 
