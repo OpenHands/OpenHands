@@ -549,6 +549,19 @@ describe("AutomationDetail — key-value store", () => {
     );
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.queryByTestId("automation-kv-save")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-kv-warning"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("warns a manager that editing the values may break the automation", async () => {
+    // Act
+    await openKvDialog([kvEntry("cursor", { page: 7 }, 1)]);
+
+    // Assert
+    const warning = screen.getByTestId("automation-kv-warning");
+    expect(warning).toHaveTextContent("AUTOMATIONS$DETAIL$KV_WARNING_TITLE");
+    expect(warning).toHaveTextContent("AUTOMATIONS$DETAIL$KV_WARNING");
   });
 
   it("reports a store that cannot be read", async () => {

@@ -221,7 +221,23 @@ export function KvStoreModal({
             <XMarkIcon className="size-5" />
           </button>
         </div>
-        <div className="flex-1 px-6 pb-6">{renderBody()}</div>
+        <div className="flex-1 px-6 pb-6">
+          {canEdit && entries.length > 0 ? (
+            <div
+              role="note"
+              data-testid="automation-kv-warning"
+              className="mb-4 rounded-lg border-l-4 border-feedback-warning bg-warning/10 p-4"
+            >
+              <p className="mb-1 text-sm font-semibold text-feedback-warning">
+                {t(I18nKey.AUTOMATIONS$DETAIL$KV_WARNING_TITLE)}
+              </p>
+              <p className="text-sm text-contrast">
+                {t(I18nKey.AUTOMATIONS$DETAIL$KV_WARNING)}
+              </p>
+            </div>
+          ) : null}
+          {renderBody()}
+        </div>
         {canEdit && entries.length > 0 ? (
           <div
             data-testid="automation-kv-footer"
