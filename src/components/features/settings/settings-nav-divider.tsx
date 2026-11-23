@@ -1,11 +1,3 @@
-import { cn } from "#/utils/utils";
-
-type SettingsNavDividerProps = {
-  className?: string;
-};
-
-export function SettingsNavDivider({ className }: SettingsNavDividerProps) {
-  return (
-    <div className={cn("border-t border-border-subtle w-full", className)} />
-  );
+export function SettingsNavDivider() {
+  return <div className="border-t border-border-subtle w-full" />;
 }

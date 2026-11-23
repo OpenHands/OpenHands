@@ -45,20 +45,10 @@ export function ConfirmStopModal({
           className="flex justify-end gap-2 w-full"
           onClick={(event) => event.stopPropagation()}
         >
-          <BrandButton
-            type="button"
-            variant="secondary"
-            onClick={onCancel}
-            testId="cancel-button"
-          >
+          <BrandButton type="button" variant="secondary" onClick={onCancel}>
             {t(I18nKey.BUTTON$CANCEL)}
           </BrandButton>
-          <BrandButton
-            type="button"
-            variant="primary"
-            onClick={onConfirm}
-            testId="confirm-button"
-          >
+          <BrandButton type="button" variant="primary" onClick={onConfirm}>
             {t(
               isCloud
                 ? I18nKey.COMMON$STOP_SANDBOX
