@@ -19,4 +19,5 @@ export const CONVERSATION_TAB_LABEL_KEYS: Record<ConversationTab, I18nKey> = {
   terminal: I18nKey.COMMON$TERMINAL,
   browser: I18nKey.COMMON$BROWSER,
   usage: I18nKey.COMMON$USAGE,
+  project: I18nKey.PROJECTS$PROJECT_TAB,
 };

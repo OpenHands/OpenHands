@@ -32,6 +32,7 @@ const member = (
   resolved: null,
   turn: null,
   ask: null,
+  pull_requests: [],
   automation_id: null,
   parent_conversation_id: null,
   created_at: NOW,
