@@ -236,6 +236,14 @@ export async function launchConversation(
   options: CreateConversationOptions,
 ): Promise<AppConversationStartTask> {
   const requestedEnvironment = getActiveBackend();
+  if (
+    options.sandboxSpecId &&
+    (requestedEnvironment.backend.id !== context.backendId ||
+      requestedEnvironment.orgId !== context.orgId)
+  ) {
+    throw new Error(i18n.t(I18nKey.CONVERSATION$START_ENVIRONMENT_CHANGED));
+  }
+
   const launch = await resolveConversationLaunch({
     ...context,
     agentProfileId,

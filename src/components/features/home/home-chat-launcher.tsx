@@ -62,6 +62,8 @@ import { OpenLauncherButton } from "./open-launcher-button";
 import { OpenWorkspaceDialog } from "./open-workspace-dialog";
 import { OpenRepositoryDialog } from "./open-repository-dialog";
 import { HomeGitControlBarPreview } from "./home-git-control-bar-preview";
+import { SandboxSelector } from "./sandbox-selector";
+import { useSandboxTemplates } from "#/hooks/query/use-sandbox-templates";
 
 // How long a create may run before the "Creating conversation…" toast appears.
 const CREATING_TOAST_DELAY_MS = 600;
@@ -109,6 +111,21 @@ export function HomeChatLauncher() {
     useHomeRecommendedAutomationsDismissed();
   const [selectedPlugins, setSelectedPlugins] = useState<PluginSpec[]>([]);
   const [isPluginPickerOpen, setIsPluginPickerOpen] = useState(false);
+  const { data: sandboxOptions } = useSandboxTemplates();
+  const [sandboxSelection, setSandboxSelection] = useState<{
+    backendId: string;
+    orgId: string | null;
+    templateId: string;
+  } | null>(null);
+  useEffect(() => setSandboxSelection(null), [backend.id, orgId]);
+  const selectedSandboxId =
+    !isLocal &&
+    sandboxOptions?.enabled &&
+    sandboxSelection?.backendId === backend.id &&
+    sandboxSelection.orgId === orgId &&
+    sandboxOptions.items.some((item) => item.id === sandboxSelection.templateId)
+      ? sandboxSelection.templateId
+      : "";
   const [launcherMode, setLauncherMode] = useState<HomeLauncherMode>("code");
   const displayedLauncherMode = launcherMode;
   const isAutomateMode = launcherMode === "automate";
@@ -224,6 +241,9 @@ export function HomeChatLauncher() {
       entryPoint: "home_chat_launcher",
       ...(suppressRouterAtStart ? { suppressRouterAtStart: true } : {}),
     };
+    if (selectedSandboxId && !isAutomateMode) {
+      variables.sandboxSpecId = selectedSandboxId;
+    }
     // An isolated backend owns its workspace, so a host selection left over
     // from a non-isolated session must not be forwarded: the server rejects it
     // (`HOME$ISOLATED_WORKSPACE_NOTICE`) and the user sees an error toast for a
@@ -542,7 +562,7 @@ export function HomeChatLauncher() {
           data-testid="home-composer-actions"
           aria-disabled={isAutomateMode}
           className={cn(
-            "flex items-center justify-start gap-2",
+            "flex flex-wrap items-center justify-start gap-2",
             activeLaunch && "hidden",
             isAutomateMode && "pointer-events-none opacity-40",
           )}
@@ -589,6 +609,20 @@ export function HomeChatLauncher() {
             onClick={() => setIsPluginPickerOpen(true)}
             disabled={isCreating || isAutomateMode}
           />
+          {!isLocal && sandboxOptions?.enabled && (
+            <SandboxSelector
+              items={sandboxOptions.items}
+              value={selectedSandboxId}
+              onChange={(templateId) =>
+                setSandboxSelection({
+                  backendId: backend.id,
+                  orgId,
+                  templateId,
+                })
+              }
+              disabled={isCreating || isAutomateMode}
+            />
+          )}
         </div>
 
         <div

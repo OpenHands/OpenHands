@@ -544,6 +544,8 @@ export interface CreateConversationOptions {
   agentLlmProfileOverride?: string;
   /** Cloud only: run this conversation on the named LLM profile (`llm_profile`). */
   llmProfile?: string;
+  /** Cloud only: one-conversation named sandbox template override. */
+  sandboxSpecId?: string;
 }
 
 class AgentServerConversationService {
@@ -618,6 +620,7 @@ class AgentServerConversationService {
       parentConversationId,
       agentType,
       sandboxId,
+      sandboxSpecId,
       agentProfileId,
       agentProfileKind,
       agentLlmProfileRef,
@@ -672,6 +675,7 @@ class AgentServerConversationService {
         agent_type: agentType,
         sandbox_id: sandboxId ?? null,
         agent_profile_id: agentProfileId ?? null,
+        ...(sandboxSpecId ? { sandbox_spec_id: sandboxSpecId } : {}),
         ...(llmProfile ? { llm_profile: llmProfile } : {}),
         ...(routerAtStartSuffix
           ? {
