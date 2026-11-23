@@ -14,7 +14,7 @@ import { SkillsModal } from "#/components/features/conversation-panel/skills-mod
 import { PluginsModal } from "#/components/features/conversation-panel/plugins-modal";
 import { HooksModal } from "#/components/features/conversation-panel/hooks-modal";
 import { ProjectFilePicker } from "#/components/features/projects/project-file-picker";
-import { useProjectsEnabled } from "#/hooks/query/use-projects";
+import { useConversationProjectId } from "#/hooks/query/use-conversation-project";
 
 export interface ChatAddFileButtonProps {
   handleFileIconClick: () => void;
@@ -38,9 +38,8 @@ export function ChatAddFileButton({
   const { data: conversation } = useActiveConversation();
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [pickingProjectFile, setPickingProjectFile] = React.useState(false);
-  const projectsEnabled = useProjectsEnabled();
   // Only a conversation in a project offers that project's files.
-  const projectId = projectsEnabled ? conversation?.tags?.project : undefined;
+  const projectId = useConversationProjectId();
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   useCloseOnEscape(menuOpen, () => setMenuOpen(false), triggerRef);
 

@@ -5,11 +5,12 @@ import { I18nKey } from "#/i18n/declaration";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import ProjectsService, {
-  type ProjectAttention,
   type ProjectConversation,
+  type ProjectPullRequest,
 } from "#/api/projects-service/projects-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { projectsQueryRoot } from "#/hooks/query/use-projects";
+import { usePullRequestStatuses } from "#/hooks/query/use-pull-request-status";
 import {
   autoResolveMessage,
   parseAutoResolveNote,
@@ -21,34 +22,11 @@ import {
   needsUser,
 } from "#/utils/project-conversation-state";
 import { cn } from "#/utils/utils";
-
-/** The board's columns, most urgent first, and the attention each one holds. */
-export const BOARD_GROUPS: Array<{
-  id: "needs_you" | "working" | "idle" | "resolved";
-  label: I18nKey;
-  attention: ProjectAttention[];
-}> = [
-  {
-    id: "needs_you",
-    label: I18nKey.PROJECTS$GROUP_NEEDS_YOU,
-    attention: ["needs_you", "asking"],
-  },
-  {
-    id: "working",
-    label: I18nKey.PROJECTS$GROUP_WORKING,
-    attention: ["working"],
-  },
-  {
-    id: "idle",
-    label: I18nKey.PROJECTS$GROUP_IDLE,
-    attention: ["idle"],
-  },
-  {
-    id: "resolved",
-    label: I18nKey.PROJECTS$GROUP_RESOLVED,
-    attention: ["resolved"],
-  },
-];
+import {
+  BOARD_GROUPS,
+  boardGroupOf,
+  readyPullRequestOf,
+} from "#/utils/project-board-group";
 
 const conversationPath = (id: string) =>
   `/conversations/${encodeURIComponent(id.replace(/-/g, ""))}`;
@@ -64,9 +42,12 @@ export const setResolved = (
 function ProjectCard({
   projectId,
   conversation,
+  readyPullRequest,
 }: {
   projectId: string;
   conversation: ProjectConversation;
+  /** The pull request that moved it to Needs you, if one did. */
+  readyPullRequest?: ProjectPullRequest;
 }) {
   const { t } = useTranslation("openhands");
   const queryClient = useQueryClient();
@@ -133,6 +114,24 @@ function ProjectCard({
           {conversation.ask}
         </p>
       ) : null}
+      {readyPullRequest ? (
+        <p
+          data-testid="project-card-ready-pr"
+          className="text-sm text-foreground"
+        >
+          <a
+            href={`https://github.com/${readyPullRequest.owner}/${readyPullRequest.repo}/pull/${readyPullRequest.number}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium underline-offset-2 hover:underline"
+          >
+            #{readyPullRequest.number}
+          </a>{" "}
+          <span className="text-muted">
+            · {t(I18nKey.PROJECTS$PR_READY_HINT)}
+          </span>
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
         <span
           data-testid="project-card-state"
@@ -189,6 +188,12 @@ export function ProjectBoard({
   conversations: ProjectConversation[];
 }) {
   const { t } = useTranslation("openhands");
+  const statuses = usePullRequestStatuses(
+    React.useMemo(
+      () => conversations.flatMap((c) => c.pull_requests),
+      [conversations],
+    ),
+  );
   if (!conversations.length) {
     return (
       <p data-testid="project-board-empty" className="text-sm text-muted">
@@ -202,8 +207,8 @@ export function ProjectBoard({
       className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
     >
       {BOARD_GROUPS.map((group) => {
-        const items = conversations.filter((c) =>
-          group.attention.includes(c.attention),
+        const items = conversations.filter(
+          (c) => boardGroupOf(c, statuses) === group.id,
         );
         return (
           <section
@@ -228,6 +233,7 @@ export function ProjectBoard({
                   key={conversation.conversation_id}
                   projectId={projectId}
                   conversation={conversation}
+                  readyPullRequest={readyPullRequestOf(conversation, statuses)}
                 />
               ))}
             </ul>

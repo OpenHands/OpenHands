@@ -10,6 +10,7 @@ import ProjectsService, {
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { experimentalFeaturesService } from "#/api/experimental-features-service/experimental-features-service.api";
 import { I18nKey } from "#/i18n/declaration";
+import * as pullRequests from "#/api/git-service/pull-request-status.api";
 
 const PROJECT_ID = "aa000000000040008000000000000001";
 const COORDINATOR_ID = "cc000000000040008000000000000001";
@@ -28,6 +29,7 @@ const member = (
   resolved: attention === "resolved" ? "user" : null,
   turn: null,
   ask: null,
+  pull_requests: [],
   automation_id: null,
   parent_conversation_id: COORDINATOR_ID,
   created_at: "2026-11-09T10:00:00Z",
@@ -253,6 +255,49 @@ describe("ProjectPage", () => {
       I18nKey.PROJECTS$STATE_WAITING_APPROVAL,
     );
     expect(coordinatorState).toHaveAttribute("data-attention", "needs_you");
+  });
+
+  it("moves an idle card with a pull request ready for the user to Needs you", async () => {
+    setProjectsFeature(true);
+    vi.spyOn(pullRequests, "getPullRequestStatus").mockImplementation(
+      async (owner, repo, number) => ({
+        repository: `${owner}/${repo}`,
+        number,
+        title: "Fix",
+        url: `https://github.com/${owner}/${repo}/pull/${number}`,
+        state: "open",
+        checks: number === 7 ? "success" : "pending",
+      }),
+    );
+    const prs = (number: number) => [{ owner: "acme", repo: "app", number }];
+    vi.spyOn(ProjectsService, "listConversations").mockResolvedValue({
+      project_id: PROJECT_ID,
+      coordinator: member(COORDINATOR_ID, "Coordinator", "idle"),
+      conversations: [
+        member("01000000000040008000000000000001", "Ready", "idle", {
+          pull_requests: prs(7),
+        }),
+        member("02000000000040008000000000000001", "Checking", "idle", {
+          pull_requests: prs(8),
+        }),
+        member("03000000000040008000000000000001", "Busy", "working", {
+          pull_requests: prs(7),
+        }),
+      ],
+    });
+    renderPage();
+
+    const needsYou = await screen.findByTestId("project-group-needs_you");
+    await waitFor(() => expect(needsYou).toHaveTextContent("Ready"));
+    expect(
+      within(needsYou).getByTestId("project-card-ready-pr"),
+    ).toHaveTextContent(`#7 · ${I18nKey.PROJECTS$PR_READY_HINT}`);
+    expect(screen.getByTestId("project-group-idle")).toHaveTextContent(
+      "Checking",
+    );
+    expect(screen.getByTestId("project-group-working")).toHaveTextContent(
+      "Busy",
+    );
   });
 
   it("asks before removing a conversation from the project", async () => {

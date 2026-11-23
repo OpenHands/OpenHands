@@ -341,7 +341,7 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   return (
     <div
       data-testid="onboarding-step-setup-llm"
-      className="flex flex-col gap-6 max-h-[calc(90vh-7rem)]"
+      className="flex flex-col gap-6 onboarding-step-height"
     >
       <header className="flex flex-col gap-2">
         <h2 className="text-2xl font-medium text-contrast">
