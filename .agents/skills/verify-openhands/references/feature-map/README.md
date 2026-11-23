@@ -234,8 +234,8 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F02 | [App shell, sidebar and command menu](F02-app-shell.md) | rail and phone drawer, collapse, home pinning, getting-started checklist, command menu, toasts | every page; `Control+k` / `Meta+k` | baseline; LLM for checklist progress | 31 |
 | F03 | [Home and starting work](F03-home.md) | home composer, workspace picker, plugin picker, recommended automations rail, no-LLM banner | `/`, **New Chat**, command menu | runs before and after `llm preset`; fixture repo | 46 |
 | F04 | [Conversation list and folders](F04-conversation-list.md) | sidebar list, View presets, workspace folders, tags, rename/pin/archive/delete, load more | sidebar on every page | several conversations; fixture repos | 43 |
-| F05 | [Composer, slash commands and plan mode](F05-composer.md) | send, drafts, attachments, model pill, slash commands, `/goal`, plan mode, dictation | home and conversation composer | LLM | 27 |
-| F06 | [Agent activity](F06-agent-activity.md) | messages, tool events, thinking, empty state, confirmation mode, stop/resume, errors, branching | `/conversations/<id>` | LLM | 40 |
+| F05 | [Composer, slash commands and plan mode](F05-composer.md) | send, drafts, attachments, model pill, slash commands, `/goal`, plan mode, dictation | home and conversation composer | LLM | 28 |
+| F06 | [Agent activity](F06-agent-activity.md) | messages, tool events, thinking, empty state, confirmation mode, stop/resume, errors, branching | `/conversations/<id>` | LLM | 41 |
 | F07 | [Conversation page, header and menu](F07-conversation-page.md) | title rename, status menu, ⋯ menu (skills, hooks, tools, export, download, cost, stop, delete), git bar, overview | sidebar row, URL, `/panel` | LLM; fixture repo; Cloud items blocked | 27 |
 | F08 | [Workspace drawer: files and changes](F08-workspace-files-and-changes.md) | Files tab, Commits and uncommitted changes, diff viewer, file links in chat | panel toggle, file links | LLM; fixture repo | 35 |
 | F09 | [Settings shell and navigation](F09-settings-shell.md) | settings navigation, phone hub, deep links, update card, backend note | gear, command menu, URLs | baseline; deep links before `llm preset` | 26 |
@@ -254,14 +254,14 @@ How to write and prove new entries: [../mapping.md](../mapping.md).
 | F22 | [Creating automations](F22-automation-creation.md) | templates, setup dialog, custom automations, import | `/automations/templates`, `/automations/new/<id>` | LLM | 33 |
 | F23 | [Automation detail, runs and editing](F23-automation-detail.md) | detail page, runs, logs, edit dialog, triggers, debug | `/automations/<id>` | LLM; runs | 45 |
 | F24 | [Automation Git Sync](F24-git-sync.md) | configure, sync cycles, encryption, status | `/automations/git-sync` | `fixture git-repo` | 26 |
-| F25 | [Backends, Cloud and sharing](F25-backends-and-cloud.md) | add, edit, remove and switch backends, per-backend consent, Cloud login, shared pages | backend selector | a second stack; Cloud account (blocked) | 35 |
+| F25 | [Backends, Cloud and sharing](F25-backends-and-cloud.md) | add, edit, remove and switch backends, per-backend consent, Cloud login, shared pages | backend selector | a second stack; Cloud account (blocked) | 36 |
 | F26 | [Launcher modes, Docker, desktop and library](F26-runtime-variants.md) | launcher flags, partial stacks, LAN bind, Docker, Electron, embeddable library | a terminal | Docker/Electron where available | 40 |
 | F27 | [Workspace tools](F27-workspace-tools.md) | terminal, browser, planner, task list, usage, `canvas_ui_control` | drawer tabs | LLM | 32 |
 | F28 | [Automation setup page](F28-automation-setup-page.md) | blank form, kind toggle, schedule presets, event fields, timeout, draft save and validation, draft Test, Create | **Add Automation → Create Automation**, `/automations/setup`, draft Resume, kebab Edit | automation service; no LLM | 21 |
 | F29 | [ACP agent sessions](F29-acp-sessions.md) | an ACP (Codex) conversation: narration order, tool cards, edits and Changes, follow-up, model switch, Stop, reload and restart, usage | Home composer with an ACP profile active (F13) | approved Codex login (`CODEX_AUTH_JSON`); fixture repo | 12 |
-| F30 | [Experimental features and reactions](F30-experimental-features.md) | Experimental settings page, flag switches, notice; agent and user emoji reactions, picker placement | `/settings/experimental`, settings navigation, command menu; reactions under messages | LLM; local backend (Cloud hides it) | 6 |
+| F30 | [Experimental features and reactions](F30-experimental-features.md) | Experimental settings page, flag switches, notice; agent and user emoji reactions, picker placement | `/settings/experimental`, settings navigation, command menu; reactions under messages | LLM; local backend (Cloud hides it) | 7 |
 
-30 families, 877 sub-features. `control-openhands map ids` lists every ID with its file.
+30 families, 881 sub-features. `control-openhands map ids` lists every ID with its file.
 
 ### Neighbouring families
 
