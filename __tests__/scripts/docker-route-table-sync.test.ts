@@ -137,7 +137,10 @@ describe.skipIf(process.platform === "win32")(
         encoding: "utf-8",
         env: { PATH: process.env.PATH ?? "", ...env },
       });
-      const routes = res.stdout.trim().split("\n").filter(Boolean);
+      const routes = res.stdout
+        .trim()
+        .split("\n")
+        .filter((entry) => Boolean(entry) && entry !== "--route");
       return { status: res.status, stderr: res.stderr, routes };
     }
 
