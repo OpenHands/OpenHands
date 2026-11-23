@@ -75,8 +75,14 @@ export function ConversationName() {
     onContextMenuToggle: setContextMenuOpen,
   });
 
-  const handleDoubleClick = () => {
+  const startEditingTitle = () => {
+    cancelTitleBlurRef.current = false;
+    focusEllipsisAfterCancelRef.current = false;
     setTitleMode("edit");
+  };
+
+  const handleDoubleClick = () => {
+    startEditingTitle();
   };
 
   const handleBlur = () => {
@@ -146,7 +152,7 @@ export function ConversationName() {
   const handleRename = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    setTitleMode("edit");
+    startEditingTitle();
     setContextMenuOpen(false);
   };
 

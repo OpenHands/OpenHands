@@ -156,4 +156,33 @@ describe("ConversationName", () => {
       ),
     );
   });
+
+  it("saves the next rename session after an Escape cancel", async () => {
+    const user = userEvent.setup();
+    const input = await openRenameInput(user);
+
+    await user.clear(input);
+    await user.type(input, "Canceled Title");
+    await user.keyboard("{Escape}");
+    expect(updateConversationMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByLabelText("COMMON$MORE_OPTIONS"));
+    await user.click(screen.getByTestId("rename-button"));
+    const nextInput = screen.getByTestId("conversation-name-input");
+    await waitFor(() => expect(nextInput).toHaveFocus());
+
+    await user.clear(nextInput);
+    await user.type(nextInput, "Saved After Cancel");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() =>
+      expect(updateConversationMock).toHaveBeenCalledWith(
+        { conversationId: "conversation-1", newTitle: "Saved After Cancel" },
+        expect.any(Object),
+      ),
+    );
+    expect(
+      screen.queryByTestId("conversation-name-input"),
+    ).not.toBeInTheDocument();
+  });
 });
