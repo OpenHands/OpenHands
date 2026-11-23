@@ -824,6 +824,16 @@ describe("AutomationService factories", () => {
     );
   });
 
+  it("deletes a factory", async () => {
+    localAxios.delete.mockResolvedValueOnce({ data: undefined });
+
+    await AutomationService.deleteFactory("factory-1");
+
+    expect(localAxios.delete).toHaveBeenCalledWith(
+      "/api/automation/v1/factories/factory-1",
+    );
+  });
+
   it("takes an automation out of its factory with a null factory_id", async () => {
     localAxios.patch.mockResolvedValueOnce({ data: { id: "a-1" } });
 
