@@ -19,7 +19,14 @@ interface SettingsDropdownInputProps {
   isDisabled?: boolean;
   isLoading?: boolean;
   defaultSelectedKey?: string;
-  selectedKey?: string;
+  selectedKey?: string | null;
+  /**
+   * Controls the text in the input. Pass it together with ``selectedKey``
+   * when ``allowsCustomValue`` text is the field's value: with only the
+   * selection controlled, a selected key that matches no item resets the
+   * input to "".
+   */
+  inputValue?: string;
   isClearable?: boolean;
   allowsCustomValue?: boolean;
   required?: boolean;
@@ -103,6 +110,7 @@ export function SettingsDropdownInput({
   isLoading,
   defaultSelectedKey,
   selectedKey,
+  inputValue,
   // HeroUI v2's Autocomplete was clearable by default; the v3 ComboBox port
   // restored that default so callers keep the clear affordance unless they
   // explicitly opt out (#19648).
@@ -135,6 +143,7 @@ export function SettingsDropdownInput({
         defaultItems={items}
         defaultSelectedKey={defaultSelectedKey}
         selectedKey={selectedKey}
+        inputValue={inputValue}
         onSelectionChange={onSelectionChange}
         onInputChange={onInputChange}
         isDisabled={isDisabled || isLoading}
