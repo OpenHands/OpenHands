@@ -69,21 +69,6 @@ function MobileSidebarDrawer({
 }) {
   const { t } = useTranslation("openhands");
   const focus = useModalFocus<HTMLElement>({ elevated: false });
-  const handleKeyDownCapture = React.useCallback(
-    (event: React.KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      const target = event.target instanceof Element ? event.target : null;
-      const expandedCombobox =
-        target?.getAttribute("role") === "combobox" &&
-        target.getAttribute("aria-expanded") === "true";
-      if (expandedCombobox) return;
-      event.preventDefault();
-      event.stopPropagation();
-      onClose();
-    },
-    [onClose],
-  );
-
   const handleKeyDown = React.useCallback(
     (event: React.KeyboardEvent) => {
       focus.onKeyDown(event);
@@ -101,7 +86,6 @@ function MobileSidebarDrawer({
       data-testid="sidebar-mobile-drawer"
       tabIndex={-1}
       onFocus={focus.onFocus}
-      onKeyDownCapture={handleKeyDownCapture}
       onKeyDown={handleKeyDown}
       aria-hidden={!visible}
       className={cn(

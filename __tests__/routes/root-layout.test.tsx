@@ -70,9 +70,22 @@ vi.mock("#/components/features/sidebar/sidebar", () => ({
   Sidebar: () => <div data-testid="sidebar" />,
 }));
 
-vi.mock("#/components/features/sidebar/sidebar-mobile-menu-bar", () => ({
-  SidebarMobileMenuBar: () => <div data-testid="mobile-menu-bar" />,
-}));
+vi.mock("#/components/features/sidebar/sidebar-mobile-menu-bar", async () => {
+  const { useSidebarMobileNav } = await vi.importActual<
+    typeof import("#/components/features/sidebar/sidebar-mobile-nav-context")
+  >("#/components/features/sidebar/sidebar-mobile-nav-context");
+
+  return {
+    SidebarMobileMenuBar: () => {
+      const { open } = useSidebarMobileNav();
+      return (
+        <button type="button" data-testid="mobile-menu-bar" onClick={open}>
+          Open mobile nav
+        </button>
+      );
+    },
+  };
+});
 
 vi.mock("#/components/features/alerts/alert-banner", () => ({
   AlertBanner: ({
@@ -164,6 +177,17 @@ function renderMainApp(path = "/") {
       </ActiveBackendProvider>
     </QueryClientProvider>,
   );
+}
+
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    writable: true,
+    value: width,
+  });
+  act(() => {
+    window.dispatchEvent(new Event("resize"));
+  });
 }
 
 function renderRouteError(thrown: unknown) {

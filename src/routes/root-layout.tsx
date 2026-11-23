@@ -22,6 +22,10 @@ import { useMigrateDefaultAgentProfile } from "#/hooks/use-migrate-default-agent
 import { useMigrateEnabledSkills } from "#/hooks/use-migrate-enabled-skills";
 import { useSyncTelemetryConsent } from "#/hooks/use-sync-telemetry-consent";
 import { useSyncAutomationTelemetryConsent } from "#/hooks/use-sync-automation-telemetry-consent";
+import {
+  SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
+  useBreakpoint,
+} from "#/hooks/use-breakpoint";
 
 import { useTelemetryIdentity } from "#/hooks/use-telemetry-identity";
 import { useSyncDocumentLanguage } from "#/hooks/use-sync-document-language";
@@ -81,12 +85,17 @@ function MobileNavBackgroundContent({
   children: React.ReactNode;
 }) {
   const { isOpen } = useSidebarMobileNav();
+  const isMobileDrawerPresentation = useBreakpoint(
+    SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
+  );
+  const shouldHideForMobileDrawer = isOpen && isMobileDrawerPresentation;
 
   return (
     <div
+      data-testid="mobile-nav-background-content"
       className="flex min-h-0 flex-col w-full min-w-0 h-full gap-3"
-      inert={isOpen ? true : undefined}
-      aria-hidden={isOpen ? true : undefined}
+      inert={shouldHideForMobileDrawer ? true : undefined}
+      aria-hidden={shouldHideForMobileDrawer ? true : undefined}
     >
       {children}
     </div>

@@ -1,3 +1,4 @@
+import React from "react";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { compile } from "@tailwindcss/node";
@@ -14,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
 import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
 import { SidebarMobileMenuBar } from "#/components/features/sidebar/sidebar-mobile-menu-bar";
+import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import {
   NavigationProvider,
@@ -21,6 +23,10 @@ import {
 } from "#/context/navigation-context";
 import { getPinnedHomeRouteKey } from "#/hooks/use-pinned-home-route";
 import translations from "#/i18n/translation.json";
+
+const sidebarConversationListMockState = vi.hoisted(() => ({
+  renderNestedEscapeMenu: false,
+}));
 
 // The global `useTranslation` mock in `vitest.setup.ts` returns the key
 // as-is. Override it here so `t(...)` resolves keys via the source-of-truth
@@ -193,9 +199,37 @@ vi.mock("#/components/features/backends/manage-backends-modal", () => ({
 }));
 
 vi.mock("#/components/features/sidebar/sidebar-conversation-list", () => ({
-  SidebarConversationList: () => (
-    <div data-testid="sidebar-conversation-list" />
-  ),
+  SidebarConversationList: () => {
+    const [menuOpen, setMenuOpen] = React.useState(false);
+    const triggerRef = React.useRef<HTMLButtonElement>(null);
+    useCloseOnEscape(
+      sidebarConversationListMockState.renderNestedEscapeMenu && menuOpen,
+      () => setMenuOpen(false),
+      triggerRef,
+    );
+
+    if (!sidebarConversationListMockState.renderNestedEscapeMenu) {
+      return <div data-testid="sidebar-conversation-list" />;
+    }
+
+    return (
+      <div data-testid="sidebar-conversation-list">
+        <button
+          ref={triggerRef}
+          type="button"
+          data-testid="nested-menu-trigger"
+          onClick={() => setMenuOpen(true)}
+        >
+          Open nested menu
+        </button>
+        {menuOpen ? (
+          <button type="button" data-testid="nested-menu-item">
+            Nested menu item
+          </button>
+        ) : null}
+      </div>
+    );
+  },
 }));
 
 vi.mock("#/hooks/use-settings-nav-items", () => ({
@@ -243,11 +277,13 @@ describe("Sidebar", () => {
     // Zustand store is a module singleton; reset it so collapsed state from
     // a prior test doesn't bleed into this one.
     useSidebarStore.setState({ collapsed: false });
+    sidebarConversationListMockState.renderNestedEscapeMenu = false;
   });
 
   afterEach(() => {
     window.localStorage.clear();
     useSidebarStore.setState({ collapsed: false });
+    sidebarConversationListMockState.renderNestedEscapeMenu = false;
   });
 
   it("opens and closes the mobile navigation drawer from the menu button", async () => {
@@ -397,6 +433,29 @@ describe("Sidebar", () => {
     });
 
     expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("lets a nested Escape layer close before the mobile drawer", () => {
+    sidebarConversationListMockState.renderNestedEscapeMenu = true;
+    renderSidebar("/conversations");
+    const toggle = screen.getByTestId("sidebar-mobile-menu-toggle");
+    fireEvent.click(toggle);
+
+    const drawer = screen.getByTestId("sidebar-mobile-drawer");
+    const nestedTrigger = within(drawer).getByTestId("nested-menu-trigger");
+    fireEvent.click(nestedTrigger);
+    expect(within(drawer).getByTestId("nested-menu-item")).toBeInTheDocument();
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+
+    expect(
+      within(drawer).queryByTestId("nested-menu-item"),
+    ).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(document.activeElement).toBe(nestedTrigger);
 
     fireEvent.keyDown(document.body, { key: "Escape" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
