@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
+import {
+  canAnchorAfterEvent,
+  isMessageEditResult,
+  isReactionResult,
+  shouldRenderEvent,
+} from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 import { CHILD_CONVERSATION_RESULT_PREFIX } from "#/constants/child-conversation";
 import { SECRET_REQUEST_RESULT_PREFIX } from "#/constants/secret-request";
 import {
@@ -312,5 +317,85 @@ describe("shouldRenderEvent - Stop hook feedback", () => {
 
   it("still renders a user message that starts with the same text", () => {
     expect(shouldRenderEvent(makeMessage("user"))).toBe(true);
+  });
+});
+
+describe("shouldRenderEvent - reactions", () => {
+  it("shows a pending react / unreact call; its result keeps only the narration", () => {
+    const react = createOtherActionEvent("react-1");
+    const reactAction = {
+      ...react,
+      action: { kind: "ReactAction", emoji: "eyes", message_id: null },
+    } as unknown as OpenHandsEvent;
+    const unreactAction = {
+      ...react,
+      action: { kind: "UnreactAction", emoji: "eyes", message_id: null },
+    } as unknown as OpenHandsEvent;
+    const observation = {
+      ...createPlanningObservationEvent("react-obs-1"),
+      observation: {
+        kind: "ReactionObservation",
+        content: [{ type: "text", text: "Reacted :eyes:" }],
+        is_error: false,
+        target_event_id: "msg-1",
+        emoji: "eyes",
+        removed: false,
+      },
+    } as unknown as OpenHandsEvent;
+
+    // Pending (for example awaiting confirmation): the user sees the call.
+    expect(shouldRenderEvent(reactAction)).toBe(true);
+    expect(shouldRenderEvent(unreactAction)).toBe(true);
+    // Done: the observation replaces the call. It passes, so groupEvents can
+    // keep the agent's narration, but it renders no card of its own.
+    expect(shouldRenderEvent(observation)).toBe(true);
+    expect(isReactionResult(observation)).toBe(true);
+    expect(canAnchorAfterEvent(observation)).toBe(false);
+    const failed = {
+      ...observation,
+      observation: {
+        ...(observation as unknown as { observation: object }).observation,
+        is_error: true,
+      },
+    } as unknown as OpenHandsEvent;
+    expect(shouldRenderEvent(failed)).toBe(true);
+    expect(isReactionResult(failed)).toBe(false);
+  });
+});
+
+describe("shouldRenderEvent - message edits", () => {
+  const editResult = (isError: boolean) =>
+    ({
+      ...createPlanningObservationEvent("edit-obs-1"),
+      observation: {
+        kind: "EditMessageObservation",
+        content: [{ type: "text", text: "Edited. The message now reads:" }],
+        is_error: isError,
+        target_event_id: "msg-1",
+        edited_text: "~~Port?~~ [Edit: 8080.]",
+      },
+    }) as unknown as OpenHandsEvent;
+
+  it("keeps only the narration of a successful edit; a failed edit shows", () => {
+    const done = editResult(false);
+    expect(shouldRenderEvent(done)).toBe(true);
+    expect(isMessageEditResult(done)).toBe(true);
+    expect(canAnchorAfterEvent(done)).toBe(false);
+
+    const failed = editResult(true);
+    expect(isMessageEditResult(failed)).toBe(false);
+    expect(canAnchorAfterEvent(failed)).toBe(true);
+  });
+
+  it("never renders the MessageEditEvent itself", () => {
+    const edit = {
+      id: "edit-1",
+      kind: "MessageEditEvent",
+      timestamp: "2026-11-16T00:00:00Z",
+      source: "agent",
+      target_event_id: "msg-1",
+      text: "~~Port?~~ [Edit: 8080.]",
+    } as unknown as OpenHandsEvent;
+    expect(shouldRenderEvent(edit)).toBe(false);
   });
 });

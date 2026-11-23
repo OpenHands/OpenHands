@@ -8,6 +8,7 @@ import {
 } from "#/context/navigation-context";
 import { requestAutomationSetupAgent } from "#/components/features/automations/setup/automation-setup-agent-request";
 import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
+import { initializeAutomationFormSession } from "#/api/automation-form-session";
 
 // Mutable mock state for controlling breakpoint
 let mockIsMobile = false;
@@ -147,9 +148,11 @@ vi.mock(
     return {
       AutomationSetupPanel: ({
         conversationId,
+        draft,
         toolbarPortal,
       }: {
         conversationId?: string | null;
+        draft?: { form?: { name?: string } };
         toolbarPortal?: HTMLElement | null;
       }) => {
         automationSetupPanelRender(conversationId);
@@ -168,7 +171,10 @@ vi.mock(
               data-testid="automation-setup-panel"
               data-conversation-id={conversationId ?? ""}
             >
-              <input aria-label={automationDraftLabel} defaultValue="" />
+              <input
+                aria-label={automationDraftLabel}
+                defaultValue={draft?.form?.name ?? ""}
+              />
             </div>
           </>
         );
@@ -452,7 +458,7 @@ describe("ConversationMain - Layout Transition Stability", () => {
     );
   });
 
-  it("retains unsaved phone form edits across view switches and discards them on exit", async () => {
+  it("retains unsaved phone form edits across view switches and after returning", async () => {
     const user = userEvent.setup();
     mockIsMobile = true;
     mockActiveConversationTags = { automation_setup: "true" };
@@ -469,12 +475,18 @@ describe("ConversationMain - Layout Transition Stability", () => {
     expect(
       screen.getByRole("textbox", { name: "Unsaved automation name" }),
     ).toHaveValue("Keep my draft");
+    // The real panel keeps its edits in the conversation's form session.
+    initializeAutomationFormSession("conv-1", {
+      prompt: "",
+      kind: "prompt",
+      form: { name: "Keep my draft" },
+    });
     rendered.unmount();
     markAutomationSetupHandoff("conv-1");
     renderConversationMain();
     expect(
       await screen.findByRole("textbox", { name: "Unsaved automation name" }),
-    ).toHaveValue("");
+    ).toHaveValue("Keep my draft");
   });
 
   it("expands the automation form to full width when hiding the agent", async () => {

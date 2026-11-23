@@ -164,6 +164,18 @@ describe("setupDraftFromServerDraft", () => {
     expect(draft.form?.runAsUserId).toBe("sa-1");
   });
 
+  it("keeps the factory a saved draft was started in", () => {
+    const saved = {
+      ...baseSavedDraft,
+      draft: { prompt: "Triage issues", factory_id: "factory-1" },
+    } satisfies AutomationDraftApiResponse;
+
+    expect(setupDraftFromServerDraft(saved).factoryId).toBe("factory-1");
+    expect(setupDraftFromServerDraft(baseSavedDraft)).not.toHaveProperty(
+      "factoryId",
+    );
+  });
+
   it("updates an existing form with repositories, event keys, and run-as", () => {
     const saved = {
       ...baseSavedDraft,
@@ -186,6 +198,38 @@ describe("setupDraftFromServerDraft", () => {
     expect(form.repository).toBe("acme/one, acme/two");
     expect(form.eventKey).toBe("push,release.published");
     expect(form.runAsUserId).toBe("sa-2");
+  });
+
+  it("reopens a private draft as private", () => {
+    // Arrange
+    const saved = {
+      ...baseSavedDraft,
+      draft: { prompt: "Triage issues", visibility: "private" },
+    } satisfies AutomationDraftApiResponse;
+
+    // Act
+    const draft = setupDraftFromServerDraft(saved);
+
+    // Assert
+    expect(draft.form?.visibility).toBe("private");
+  });
+
+  it("keeps a private automation private when its saved draft does not say", () => {
+    // Arrange: a draft saved without a visibility, restored over the form of
+    // a private automation that is being edited.
+    const saved = {
+      ...baseSavedDraft,
+      draft: { prompt: "Triage issues" },
+    } satisfies AutomationDraftApiResponse;
+
+    // Act
+    const form = formFromServerDraft(saved, {
+      ...baseForm,
+      visibility: "private",
+    });
+
+    // Assert
+    expect(form.visibility).toBe("private");
   });
 
   it.each([

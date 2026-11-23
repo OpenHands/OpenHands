@@ -14,6 +14,7 @@ import {
   useDeleteAutomation,
   useDispatchAutomation,
   useUpdateAutomationKeepAlive,
+  useChangeAutomationFactory,
   useChangeRunAs,
 } from "#/hooks/query/use-automations";
 import {
@@ -24,7 +25,14 @@ import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useCloudOrgMember } from "#/hooks/query/use-cloud-org-member";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
+import { factoryPath, withFactoryContext } from "#/constants/factories";
 import {
+  useFactories,
+  useFactoriesSupported,
+} from "#/hooks/query/use-factories";
+import { useFactoryContext } from "#/hooks/use-factory-context";
+import {
+  automationDetailPath,
   automationListPath,
   hasAutomationInterface,
 } from "#/manifests/automation-interface";
@@ -35,6 +43,7 @@ import { DescriptionSection } from "#/components/features/automations/detail/des
 import { TriggerSection } from "#/components/features/automations/detail/trigger-section";
 import { ActionSection } from "#/components/features/automations/detail/action-section";
 import { SettingsSection } from "#/components/features/automations/detail/settings-section";
+import { KvStoreModal } from "#/components/features/automations/detail/kv-store-modal";
 import { SectionConnector } from "#/components/features/automations/detail/section-connector";
 import { ActivityLogSection } from "#/components/features/automations/detail/activity-log-section";
 import { DetailSkeleton } from "#/components/features/automations/detail/detail-skeleton";
@@ -42,6 +51,7 @@ import { NotFoundState } from "#/components/features/automations/detail/not-foun
 import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
+import { ChangeFactoryModal } from "#/components/features/automations/change-factory-modal";
 import { ChangeRunAsModal } from "#/components/features/automations/change-run-as-modal";
 import { useOpenAutomationEditor } from "#/hooks/use-open-automation-editor";
 import { useTracking } from "#/hooks/use-tracking";
@@ -65,6 +75,8 @@ import {
   serializeScriptAutomation,
 } from "#/utils/automation-export";
 import { downloadBlob } from "#/utils/utils";
+import { AUTOMATION_KV_FEATURE } from "#/constants/automation-kv";
+import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 
 /**
  * Placeholder automation used to keep `useIsAutomationOwner` hooked before
@@ -101,7 +113,15 @@ export default function AutomationDetail() {
   const { navigate } = useNavigation();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showChangeRunAsModal, setShowChangeRunAsModal] = useState(false);
+  const [showChangeFactoryModal, setShowChangeFactoryModal] = useState(false);
+  const [showKvModal, setShowKvModal] = useState(false);
+  const { data: capabilities } = useDeploymentCapabilities();
+  const hasKvStore = capabilities?.features.includes(AUTOMATION_KV_FEATURE);
   const { openEditor } = useOpenAutomationEditor();
+  const factoryContext = useFactoryContext();
+  const backPath = factoryContext
+    ? factoryPath(factoryContext)
+    : automationListPath();
 
   const {
     data: healthData,
@@ -139,6 +159,9 @@ export default function AutomationDetail() {
   const dispatchMutation = useDispatchAutomation();
   const keepAliveMutation = useUpdateAutomationKeepAlive();
   const changeRunAsMutation = useChangeRunAs();
+  const changeFactoryMutation = useChangeAutomationFactory();
+  const { isSupported: isFactoriesSupported } = useFactoriesSupported();
+  const factoriesQuery = useFactories({ enabled: showChangeFactoryModal });
   // Change Runs As and the service-account name need the service account list,
   // which only managers on a cloud team workspace with the capability can read.
   const serviceAccountRunAsEnabled = useServiceAccountRunAsEnabled();
@@ -228,7 +251,7 @@ export default function AutomationDetail() {
   const handleDelete = () => {
     deleteMutation.mutate(automation.id, {
       onSuccess: () => {
-        navigate?.(automationListPath());
+        navigate?.(backPath);
       },
     });
   };
@@ -257,6 +280,46 @@ export default function AutomationDetail() {
               keepAlive
                 ? I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE_ON_SUCCESS
                 : I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE_OFF_SUCCESS,
+            ),
+          );
+        },
+      },
+    );
+  };
+
+  const handleChangeFactory = (nextFactoryId: string | null) => {
+    changeFactoryMutation.mutate(
+      { id: automation.id, factoryId: nextFactoryId },
+      {
+        onSuccess: () => {
+          setShowChangeFactoryModal(false);
+          const nextFactory = factoriesQuery.data?.find(
+            (factory) => factory.id === nextFactoryId,
+          );
+          displaySuccessToast(
+            nextFactory
+              ? t(I18nKey.AUTOMATIONS$CHANGE_FACTORY_SUCCESS, {
+                  name: automation.name,
+                  factory: nextFactory.name,
+                })
+              : t(I18nKey.AUTOMATIONS$CHANGE_FACTORY_REMOVED, {
+                  name: automation.name,
+                }),
+          );
+          // The page's factory context follows the automation.
+          navigate?.(
+            withFactoryContext(
+              automationDetailPath(automation.id),
+              nextFactoryId,
+            ),
+            { replace: true },
+          );
+        },
+        onError: (error) => {
+          displayErrorToast(
+            getApiErrorMessage(
+              error,
+              t(I18nKey.AUTOMATIONS$CHANGE_FACTORY_ERROR),
             ),
           );
         },
@@ -344,6 +407,9 @@ export default function AutomationDetail() {
   const runsAs = runsAsService ? serviceAccountName : person;
   const createdBy = runsAsService ? person : null;
   const canChangeRunAs = serviceAccountRunAsEnabled && !isDraft;
+  // A factory change needs manage_automations, even for the owner.
+  const canChangeFactory =
+    isFactoriesSupported && hasManagePermission && !isDraft;
   const canEditTags = canEdit && !isDraft;
 
   return (
@@ -355,11 +421,16 @@ export default function AutomationDetail() {
           canToggleKeepAlive ? handleToggleKeepAlive : undefined
         }
         isKeepAlivePending={keepAliveMutation.isPending}
+        backTo={backPath}
         onEdit={() => openEditor(automation)}
         onDelete={() => setShowDeleteModal(true)}
+        onChangeFactory={
+          canChangeFactory ? () => setShowChangeFactoryModal(true) : undefined
+        }
         onChangeRunAs={
           canChangeRunAs ? () => setShowChangeRunAsModal(true) : undefined
         }
+        onViewKvStore={hasKvStore ? () => setShowKvModal(true) : undefined}
         onExport={handleExport}
         onDownloadTarball={() =>
           AutomationService.downloadTarball(automation.id, automation.name)
@@ -414,6 +485,16 @@ export default function AutomationDetail() {
             automation={automation}
             highlightedRunId={highlightedRunId}
           />
+          <ChangeFactoryModal
+            automationName={automation.name}
+            isOpen={showChangeFactoryModal}
+            factories={factoriesQuery.data ?? []}
+            currentFactoryId={automation.factory_id}
+            isLoading={factoriesQuery.isLoading}
+            isPending={changeFactoryMutation.isPending}
+            onConfirm={handleChangeFactory}
+            onCancel={() => setShowChangeFactoryModal(false)}
+          />
           <ChangeRunAsModal
             automationName={automation.name}
             isOpen={showChangeRunAsModal}
@@ -426,6 +507,13 @@ export default function AutomationDetail() {
             onConfirm={handleChangeRunAs}
             onCancel={() => setShowChangeRunAsModal(false)}
           />
+          {showKvModal ? (
+            <KvStoreModal
+              automationId={automation.id}
+              canEdit={canManage}
+              onClose={() => setShowKvModal(false)}
+            />
+          ) : null}
           <DeleteConfirmationModal
             automationName={automation.name}
             isOpen={showDeleteModal}
