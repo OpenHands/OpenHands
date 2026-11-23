@@ -52,6 +52,12 @@ export type ChangeRunAsRequest =
 /** What kind of identity an automation runs as. */
 export type AutomationRunAsKind = "user" | "service";
 
+/**
+ * Who in the organization can see an automation: every member, or only the
+ * person it runs as plus Owners and Admins.
+ */
+export type AutomationVisibility = "organization" | "private";
+
 export interface AutomationPluginSpec {
   plugin: { source: string; ref?: string; repo_path?: string };
   config: Record<string, unknown>;
@@ -65,6 +71,8 @@ export interface Automation {
   plugin_spec?: AutomationPluginSpec | null;
   id: string;
   name: string;
+  /** The factory this automation belongs to, or null/absent when it has none. */
+  factory_id?: string | null;
   trigger: AutomationTrigger;
   enabled: boolean;
   /** Backend automation lifecycle state. Prefer this over deprecated `enabled` when present. */
@@ -112,6 +120,12 @@ export interface Automation {
    * service older than run-as.
    */
   created_by_user_id?: string;
+  /**
+   * Who can see the automation. Only one that runs as a person can be
+   * `private`. Absent on an automation service older than visibility; treat
+   * it as `organization`.
+   */
+  visibility?: AutomationVisibility;
   /**
    * Single repository in the import/export file's shape. The automation
    * service does not return it; read `repositories` for what an automation
@@ -355,4 +369,43 @@ export interface AutomationRunExportRow {
    * The run's `current_phase` as stored. Null only when the run has no phase.
    */
   phase: string | null;
+}
+
+/** A named group of automations (`GET /v1/factories`). */
+export interface Factory {
+  id: string;
+  name: string;
+  /** Live (not soft-deleted) automations in the factory. */
+  automation_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FactoryListResponse {
+  factories: Factory[];
+  total: number;
+}
+
+/** One page of an automation's key-value store keys. */
+export interface AutomationKvKeysResponse {
+  keys: string[];
+  count: number;
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** A key of an automation's key-value store with its decoded JSON value. */
+export interface AutomationKvEntry {
+  key: string;
+  value: unknown;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** The result of an atomic batch write to an automation's key-value store. */
+export interface AutomationKvBatchResponse {
+  version: number;
+  results: Array<Record<string, unknown>>;
 }

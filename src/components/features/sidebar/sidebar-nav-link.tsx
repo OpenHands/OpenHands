@@ -57,6 +57,8 @@ interface SidebarNavLinkProps {
    * (e.g. the Extensions link being active on /mcp and /plugins too).
    */
   forceActive?: boolean;
+  /** When true, never shows the active style, even on a matching path. */
+  forceInactive?: boolean;
   /** Pin-as-home toggle; rendered only when the sidebar is expanded. */
   pinAction?: SidebarNavLinkPinAction;
   /** Always-visible "+" action; rendered only when the sidebar is expanded. */
@@ -74,11 +76,17 @@ export function SidebarNavLink({
   collapsed = false,
   hoverContent,
   forceActive = false,
+  forceInactive = false,
   pinAction,
   addAction,
 }: SidebarNavLinkProps) {
   const { currentPath } = useNavigation();
-  const active = forceActive || isPathActive(currentPath, to, end);
+  const active =
+    !forceInactive && (forceActive || isPathActive(currentPath, to, end));
+  // NavigationLink derives its own aria-current from the path unless told otherwise.
+  let ariaCurrent: "page" | "false" | undefined;
+  if (active) ariaCurrent = "page";
+  else if (forceInactive) ariaCurrent = "false";
   const showPinAction = !collapsed && (pinAction != null || addAction != null);
 
   const link = (
@@ -88,7 +96,7 @@ export function SidebarNavLink({
       data-testid={testId}
       tabIndex={disabled ? -1 : 0}
       aria-label={collapsed ? label : undefined}
-      aria-current={active ? "page" : undefined}
+      aria-current={ariaCurrent}
       // Announce the disabled state to assistive tech. The visual disabled
       // styling plus tabIndex=-1 + preventDefault gives sighted/keyboard users
       // the right behaviour already; this closes the screen-reader gap so the

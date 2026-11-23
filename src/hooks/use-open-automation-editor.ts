@@ -4,6 +4,8 @@ import {
   initializeAutomationFormSession,
 } from "#/api/automation-form-session";
 import { useNavigation } from "#/context/navigation-context";
+import { withFactoryContext } from "#/constants/factories";
+import { useFactoryContext } from "#/hooks/use-factory-context";
 import type { Automation } from "#/types/automation";
 import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
 
@@ -15,6 +17,7 @@ import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
  */
 export function useOpenAutomationEditor() {
   const { navigate } = useNavigation();
+  const factoryContext = useFactoryContext();
 
   const openEditor = useCallback(
     (automation: Automation) => {
@@ -23,10 +26,13 @@ export function useOpenAutomationEditor() {
         setupDraftFromAutomation(automation),
       );
       navigate?.(
-        `/automations/setup?automationId=${encodeURIComponent(automation.id)}`,
+        withFactoryContext(
+          `/automations/setup?automationId=${encodeURIComponent(automation.id)}`,
+          factoryContext,
+        ),
       );
     },
-    [navigate],
+    [factoryContext, navigate],
   );
 
   return { openEditor };
