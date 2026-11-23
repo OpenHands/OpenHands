@@ -1995,6 +1995,7 @@ describe("AgentSettingsScreen — system prompt", () => {
     vi.restoreAllMocks();
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
     vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
+    acpModelDiscoveryMock.mockReturnValue(NO_DISCOVERY);
     profileSupportsInstructionsMock.mockReturnValue(true);
   });
 
@@ -2036,8 +2037,15 @@ describe("AgentSettingsScreen — system prompt", () => {
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: OPENHANDS_PROFILE,
     });
-    await screen.findByTestId("agent-settings-system-prompt-mode");
+    const modeInput = await screen.findByTestId(
+      "agent-settings-system-prompt-mode",
+    );
 
+    expect(
+      screen.getByRole("combobox", {
+        name: "SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT",
+      }),
+    ).toBe(modeInput);
     expect(
       screen.queryByTestId("agent-settings-system-prompt"),
     ).not.toBeInTheDocument();

@@ -13,6 +13,7 @@ interface SettingsDropdownInputProps {
   name: string;
   items: { key: React.Key; label: string }[];
   label?: ReactNode;
+  ariaLabel?: string;
   wrapperClassName?: string;
   placeholder?: string;
   showOptionalTag?: boolean;
@@ -94,6 +95,7 @@ function OpenOnClickInput({
 export function SettingsDropdownInput({
   testId,
   label,
+  ariaLabel,
   wrapperClassName,
   name,
   items,
@@ -114,6 +116,8 @@ export function SettingsDropdownInput({
   inputClassName,
 }: SettingsDropdownInputProps) {
   const { t } = useTranslation("openhands");
+  const labelText = typeof label === "string" ? label.trim() : "";
+  const accessibleLabel = ariaLabel?.trim() || labelText || name;
 
   return (
     <label
@@ -128,7 +132,7 @@ export function SettingsDropdownInput({
       <ComboBox
         menuTrigger="focus"
         allowsEmptyCollection
-        aria-label={typeof label === "string" ? label : name}
+        aria-label={accessibleLabel}
         defaultItems={items}
         defaultSelectedKey={defaultSelectedKey}
         selectedKey={selectedKey}
