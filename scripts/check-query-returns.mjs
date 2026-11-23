@@ -3,7 +3,10 @@ import { pathToFileURL } from "node:url";
 import {
   isIdentifier,
   isImportDeclaration,
+  isMethodDeclaration,
+  isObjectLiteralExpression,
   isPropertyAssignment,
+  isShorthandPropertyAssignment,
   isStringLiteral,
 } from "typescript/unstable/ast";
 import { API, SignatureKind, TypeFlags } from "typescript/unstable/sync";
@@ -38,7 +41,7 @@ export function findMissingQueryReturns(config, sourceDirectory) {
     const failures = [];
     for (const file of project.rootFiles) {
       if (
-        !file.startsWith(`${sourceDirectory}${path.sep}`) ||
+        !path.normalize(file).startsWith(`${sourceDirectory}${path.sep}`) ||
         !/\.[cm]?tsx?$/.test(file)
       )
         continue;
@@ -54,11 +57,17 @@ export function findMissingQueryReturns(config, sourceDirectory) {
         continue;
       function visit(node) {
         if (
-          isPropertyAssignment(node) &&
+          (isPropertyAssignment(node) ||
+            isShorthandPropertyAssignment(node) ||
+            (isMethodDeclaration(node) &&
+              isObjectLiteralExpression(node.parent))) &&
           isIdentifier(node.name) &&
           node.name.text === "queryFn"
         ) {
-          const type = checker.getTypeAtLocation(node.initializer);
+          const value = isPropertyAssignment(node)
+            ? node.initializer
+            : node.name;
+          const type = checker.getTypeAtLocation(value);
           const signature =
             type && checker.getSignaturesOfType(type, SignatureKind.Call)[0];
           if (
@@ -68,7 +77,9 @@ export function findMissingQueryReturns(config, sourceDirectory) {
               checker.getReturnTypeOfSignature(signature),
             )
           ) {
-            const line = source.text.slice(0, node.name.pos).split("\n").length;
+            const line = source.text
+              .slice(0, node.name.getStart(source))
+              .split("\n").length;
             failures.push(
               `${path.relative(process.cwd(), file)}:${line}: queryFn must return a non-undefined value`,
             );

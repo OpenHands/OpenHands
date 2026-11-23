@@ -25,13 +25,16 @@ const plain = { queryFn: missing };
 const promised = { queryFn: async () => undefined };
 const union = { queryFn: (): Promise<number | undefined> => Promise.resolve(1) };
 const valid = { queryFn: async () => null };
+const queryFn = () => {};
+const shorthand = { queryFn };
+const method = { queryFn() {} };
 `,
     );
     expect(
       findMissingQueryReturns(config, dir).map(
         (message) => message.match(/queries\.ts:(\d+):/)?.[1],
       ),
-    ).toEqual(["4", "5", "6"]);
+    ).toEqual(["4", "5", "6", "9", "10"]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
