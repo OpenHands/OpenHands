@@ -10,7 +10,11 @@ import {
   TAG_CHIP_VALUE_MAX_LENGTH,
   truncateTagChipValue,
 } from "#/components/features/conversation-panel/conversation-card/conversation-tag-display";
-import { getDisplayConversationTags } from "#/api/agent-server-adapter";
+import {
+  getDisplayConversationTags,
+  getEditableConversationTags,
+} from "#/api/agent-server-adapter";
+import { mergeConversationTagEdits } from "#/components/features/conversation-panel/edit-conversation-tags-modal";
 import { I18nKey } from "#/i18n/declaration";
 
 describe("truncateTagChipValue", () => {
@@ -133,6 +137,23 @@ describe("getDisplayConversationTags", () => {
     ]);
   });
 
+  it("hides the Projects board state and keeps project and resolved as chips, not editable", () => {
+    const tags = {
+      project: "p1",
+      resolved: "auto",
+      resolvenote: "0.93 nothing",
+      turn: "asking",
+      ask: "Ship it?",
+      team: "web",
+    };
+    expect(getDisplayConversationTags(tags).map(([key]) => key)).toEqual([
+      "project",
+      "resolved",
+      "team",
+    ]);
+    expect(getEditableConversationTags(tags)).toEqual([["team", "web"]]);
+  });
+
   it("returns an empty list for nullish tags", () => {
     expect(getDisplayConversationTags(null)).toEqual([]);
     expect(getDisplayConversationTags(undefined)).toEqual([]);
@@ -238,5 +259,36 @@ describe("getConversationTagLabel", () => {
     );
     // The git host stamp keeps the Git label.
     expect(getConversationTagLabel("git_provider", t)).toBe("Git");
+  });
+});
+
+describe("getDisplayConversationTags — launched agent profile tags", () => {
+  it("keeps the app server's agent profile id and revision out of the display tags", () => {
+    expect(
+      getDisplayConversationTags({
+        agentprofileid: "3f2a1b9c-d4e5-4f60-8a7b-9c0d1e2f3a4b",
+        agentprofilerevision: "3",
+        owner: "alice",
+      }),
+    ).toEqual([["owner", "alice"]]);
+  });
+});
+
+describe("mergeConversationTagEdits", () => {
+  it("keeps internal tags but never sends the Projects tags the server owns", () => {
+    expect(
+      mergeConversationTagEdits(
+        {
+          project: "p1",
+          turn: "asking",
+          ask: "Ship it?",
+          resolved: "auto",
+          resolvenote: "0.93 nothing",
+          clientsource: "agentcanvas",
+          team: "web",
+        },
+        [["team", "api"]],
+      ),
+    ).toEqual({ clientsource: "agentcanvas", team: "api" });
   });
 });

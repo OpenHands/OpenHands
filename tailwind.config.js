@@ -10,7 +10,6 @@ export default {
           input: "#27272A",
           primary: "#F3CE49",
           secondary: "#737373",
-          muted: "#A3A3A3",
         },
         surface: {
           DEFAULT: "#050505",

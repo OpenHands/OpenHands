@@ -59,12 +59,35 @@ const solarized: ITheme = {
   brightWhite: "#002b36",
 };
 
+// Every ANSI slot is an ink that stays legible on aged newsprint; "white" is
+// the faded ink, and bright variants print one shade heavier.
+const paper: ITheme = {
+  black: "#241c17",
+  red: "#9a2616",
+  green: "#45572f",
+  yellow: "#724d16",
+  blue: "#335069",
+  magenta: "#6a3b56",
+  cyan: "#315855",
+  white: "#615448",
+  brightBlack: "#615448",
+  brightRed: "#891809",
+  brightGreen: "#364622",
+  brightYellow: "#5f3d06",
+  brightBlue: "#234058",
+  brightMagenta: "#572d45",
+  brightCyan: "#204745",
+  brightWhite: "#241c17",
+  selectionBackground: "rgba(154, 38, 22, 0.18)",
+};
+
 const palettes: Record<ColorThemeKey, ITheme> = {
   "openhands-deepsea": dark,
   "openhands-neutral": dark,
   "openhands-neo": dark,
   "light-plus": light,
   "solarized-light": solarized,
+  paper,
 };
 
 export function getTerminalTheme(
@@ -77,8 +100,9 @@ export function getTerminalTheme(
     foreground,
     cursor: foreground,
     selectionBackground:
-      COLOR_THEMES[key].appearance === "light"
+      palettes[key].selectionBackground ??
+      (COLOR_THEMES[key].appearance === "light"
         ? "rgba(0, 80, 160, 0.2)"
-        : "rgba(255, 255, 255, 0.25)",
+        : "rgba(255, 255, 255, 0.25)"),
   };
 }

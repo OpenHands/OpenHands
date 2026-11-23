@@ -16,6 +16,7 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
+import { copyToClipboard } from "#/utils/copy-to-clipboard";
 
 const DEFAULT_DEVICE_POLL_INTERVAL_SECONDS = 5;
 const MIN_DEVICE_POLL_INTERVAL_SECONDS = 1;
@@ -50,9 +51,12 @@ export function OpenAISubscriptionAuthCard({
     }
   }, []);
 
-  const handleCopyCode = () => {
+  const handleCopyCode = async () => {
     if (!challenge) return;
-    navigator.clipboard.writeText(challenge.userCode);
+    if (!(await copyToClipboard(challenge.userCode))) {
+      displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
+      return;
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -204,7 +208,7 @@ export function OpenAISubscriptionAuthCard({
           <div className="flex items-center gap-2 rounded-lg bg-surface-deep px-3 py-2 font-mono text-base font-semibold text-contrast">
             <span
               data-testid="subscription-user-code"
-              className="flex-1 select-all tracking-[0.08em]"
+              className="flex-1 select-all tracking-auth-code"
             >
               {challenge.userCode}
             </span>

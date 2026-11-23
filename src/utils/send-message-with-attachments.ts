@@ -1,3 +1,5 @@
+import { getActiveBackend } from "#/api/backend-registry/active-store";
+import { assertActiveEnvironment } from "#/utils/assert-active-environment";
 import type { TFunction } from "i18next";
 import {
   resolveConversationRuntime,
@@ -26,7 +28,9 @@ export async function sendMessageWithAttachments(options: {
   files: File[];
   imagesMarkedUploadAsFile: string[];
   t: TFunction;
+  requireAllAttachments?: boolean;
 }): Promise<SendMessageWithAttachmentsResult> {
+  const environment = getActiveBackend();
   const {
     conversationId,
     content,
@@ -51,13 +55,18 @@ export async function sendMessageWithAttachments(options: {
     imagesToEmbed.map((image) => convertImageToBase64(image)),
   );
 
+  assertActiveEnvironment(environment);
   const runtime = await resolveConversationRuntime(conversationId);
+  assertActiveEnvironment(environment);
 
   const { skipped_files: skippedFiles, uploaded_files: uploadedFiles } =
     filesToUpload.length > 0
       ? await uploadFilesToConversation(conversationId, filesToUpload)
       : { skipped_files: [], uploaded_files: [] };
 
+  if (options.requireAllAttachments && skippedFiles.length > 0) {
+    throw new Error(skippedFiles.map((file) => file.reason).join("\n"));
+  }
   skippedFiles.forEach((file) => displayErrorToast(file.reason));
 
   const filePrompt = `${t(I18nKey.CHAT_INTERFACE$AUGMENTED_PROMPT_FILES_TITLE)}: ${uploadedFiles.join("\n\n")}`;
@@ -78,6 +87,7 @@ export async function sendMessageWithAttachments(options: {
     });
   }
 
+  assertActiveEnvironment(environment);
   await AgentServerConversationService.sendMessage(
     conversationId,
     messageContent,

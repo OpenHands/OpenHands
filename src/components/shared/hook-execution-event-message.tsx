@@ -3,34 +3,12 @@ import { useTranslation } from "react-i18next";
 import { isHookExecutionEvent } from "#/types/agent-server/type-guards";
 import { OpenHandsEvent } from "#/types/agent-server/core";
 import { GenericEventMessage } from "#/components/features/chat/generic-event-message";
+import { useStandaloneEventRowClass } from "#/components/features/chat/is-in-event-group-context";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 
 interface HookExecutionEventMessageProps {
   event: OpenHandsEvent;
-}
-
-function getHookIcon(hookType: string, blocked: boolean): string {
-  if (blocked) {
-    return "🚫";
-  }
-
-  switch (hookType) {
-    case "PreToolUse":
-      return "⏳";
-    case "PostToolUse":
-      return "✅";
-    case "UserPromptSubmit":
-      return "📝";
-    case "SessionStart":
-      return "🚀";
-    case "SessionEnd":
-      return "🏁";
-    case "Stop":
-      return "⏹️";
-    default:
-      return "🔗";
-  }
 }
 
 function formatHookCommand(command: string): string {
@@ -41,15 +19,15 @@ function formatHookCommand(command: string): string {
   return command;
 }
 
-function getStatusText(blocked: boolean, success: boolean): string {
+// Successful hooks are the common case and get no badge.
+function getStatusText(blocked: boolean, success: boolean): string | null {
   if (blocked) return "blocked";
-  if (success) return "ok";
+  if (success) return null;
   return "failed";
 }
 
-function getStatusClassName(blocked: boolean, success: boolean): string {
+function getStatusClassName(blocked: boolean): string {
   if (blocked) return "bg-feedback-warning/10 text-feedback-warning";
-  if (success) return "bg-feedback-success/10 text-feedback-success";
   return "bg-feedback-error/10 text-feedback-error";
 }
 
@@ -57,14 +35,14 @@ export function HookExecutionEventMessage({
   event,
 }: HookExecutionEventMessageProps) {
   const { t } = useTranslation("openhands");
+  const standaloneRowClass = useStandaloneEventRowClass();
 
   if (!isHookExecutionEvent(event)) {
     return null;
   }
 
-  const icon = getHookIcon(event.hook_event_type, event.blocked);
   const statusText = getStatusText(event.blocked, event.success);
-  const statusClassName = getStatusClassName(event.blocked, event.success);
+  const statusClassName = getStatusClassName(event.blocked);
 
   // Determine the overall success indicator for GenericEventMessage.
   // When blocked, suppress the success indicator entirely — the amber "blocked"
@@ -77,13 +55,17 @@ export function HookExecutionEventMessage({
 
   const title = (
     <span>
-      {icon} {t(I18nKey.HOOK$HOOK_LABEL)}: {event.hook_event_type}
+      {t(I18nKey.HOOK$HOOK_LABEL)}: {event.hook_event_type}
       {event.tool_name && (
         <span className="text-muted ml-2">({event.tool_name})</span>
       )}
-      <span className={cn("ml-2 px-1 py-0.5 rounded text-xs", statusClassName)}>
-        {statusText}
-      </span>
+      {statusText && (
+        <span
+          className={cn("ml-2 px-1 py-0.5 rounded text-xs", statusClassName)}
+        >
+          {statusText}
+        </span>
+      )}
     </span>
   );
 
@@ -151,6 +133,7 @@ export function HookExecutionEventMessage({
       title={title}
       details={details}
       success={successStatus}
+      className={standaloneRowClass}
     />
   );
 }

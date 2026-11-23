@@ -1,6 +1,9 @@
 import { getMarsBridge } from "#/api/mars/mars-tunnel-backend";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { ProjectSidebar } from "#/components/features/projects/project-sidebar/project-sidebar";
+import { useProjectView } from "#/hooks/query/use-conversation-project";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { MarsSessionPanel } from "./mars-session-panel";
 
 interface SidebarConversationListProps {
@@ -17,6 +20,9 @@ interface SidebarConversationListProps {
  * Conversation list section rendered inside the sidebar nav. The list itself
  * scrolls independently from the rest of the nav.
  *
+ * In a project view (a project's page, or a conversation in a project) the
+ * project's own conversations replace the list.
+ *
  * In the collapsed sidebar variant the list reduces each row to a status
  * indicator + hover-preview.
  *
@@ -27,6 +33,8 @@ export function SidebarConversationList({
   collapsed,
 }: SidebarConversationListProps) {
   const { backend } = useActiveBackend();
+  const projectView = useProjectView();
+  const { conversationId } = useOptionalConversationId();
 
   if (collapsed) {
     return null;
@@ -36,6 +44,18 @@ export function SidebarConversationList({
   // sessions replace the list, with this session's conversations nested.
   const showMarsSessions =
     Boolean(backend.marsSessionId) && getMarsBridge() !== null;
+
+  if (projectView) {
+    return (
+      <ProjectSidebar
+        projectId={projectView.projectId}
+        conversationId={
+          projectView.onProjectPage ? undefined : (conversationId ?? undefined)
+        }
+        onProjectPage={projectView.onProjectPage}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col flex-1 min-h-0">

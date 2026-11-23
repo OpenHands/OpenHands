@@ -11,10 +11,17 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: toastMocks.displayErrorToast,
 }));
 
+const originalExecCommand = document.execCommand;
+
 describe("ErrorMessageBanner", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     toastMocks.displayErrorToast.mockClear();
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      writable: true,
+      value: originalExecCommand,
+    });
   });
 
   it("calls onDismiss when the close button is clicked", async () => {
@@ -141,10 +148,30 @@ describe("ErrorMessageBanner", () => {
     );
   });
 
-  it("shows an error toast when the copy button cannot write to the clipboard", async () => {
+  it("copies through the fallback when the async API rejects", async () => {
     const user = userEvent.setup();
     const writeText = vi.fn().mockRejectedValue(new Error("denied"));
     vi.spyOn(navigator.clipboard, "writeText").mockImplementation(writeText);
+    document.execCommand = vi.fn().mockReturnValue(true);
+
+    render(<ErrorMessageBanner message="fallback copy" />);
+
+    await user.click(screen.getByTestId("error-message-banner-copy"));
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("error-message-banner-copy"),
+      ).toHaveAccessibleName("BUTTON$COPIED"),
+    );
+    expect(document.execCommand).toHaveBeenCalledWith("copy");
+    expect(toastMocks.displayErrorToast).not.toHaveBeenCalled();
+  });
+
+  it("shows an error toast when every copy mechanism fails", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockRejectedValue(new Error("denied"));
+    vi.spyOn(navigator.clipboard, "writeText").mockImplementation(writeText);
+    document.execCommand = vi.fn().mockReturnValue(false);
 
     render(<ErrorMessageBanner message="copy failed" />);
 
@@ -205,5 +232,51 @@ describe("ErrorMessageBanner", () => {
     expect(
       screen.queryByTestId("error-message-banner-reauth"),
     ).not.toBeInTheDocument();
+  });
+
+  it("links to where the user can act on the error", () => {
+    // Arrange
+    const link = {
+      href: "https://ohe.example.com/settings/your-budget?org=org-1",
+      label: "View your budget",
+      openInNewTab: false,
+    };
+
+    // Act
+    render(<ErrorMessageBanner message="Budget reached" link={link} />);
+
+    // Assert
+    expect(
+      screen.getByRole("link", { name: "View your budget" }),
+    ).toHaveAttribute("href", link.href);
+  });
+
+  it.each([
+    [true, "_blank"],
+    [false, null],
+  ])(
+    "opens the link in a new tab only when asked to (%s)",
+    (openInNewTab, target) => {
+      // Arrange
+      const link = {
+        href: "https://ohe.example.com/settings/your-budget",
+        label: "View your budget",
+        openInNewTab,
+      };
+
+      // Act
+      render(<ErrorMessageBanner message="Budget reached" link={link} />);
+
+      // Assert
+      expect(screen.getByRole("link").getAttribute("target")).toBe(target);
+    },
+  );
+
+  it("omits the link when none is provided", () => {
+    // Act
+    render(<ErrorMessageBanner message="boom" />);
+
+    // Assert
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 });

@@ -9,6 +9,22 @@ import {
 export type { SkillReadyItem };
 
 /**
+ * True when a user message carries the skills and extended content a Skill
+ * Ready card needs. `event-message.tsx` renders that card only in this case, so
+ * the message list reads the same predicate to tell a plain user row (which
+ * paints an `<article>`) from the Skill Ready card that replaces it.
+ */
+export const shouldShowSkillReadyEvent = (
+  messageEvent: MessageEvent,
+): boolean => {
+  const hasActivatedSkills = (messageEvent.activated_skills?.length ?? 0) > 0;
+  const hasExtendedContent = (messageEvent.extended_content ?? []).some(
+    (content) => content.type === "text" && content.text.trim().length > 0,
+  );
+  return hasActivatedSkills && hasExtendedContent;
+};
+
+/**
  * Synthetic event type for Skill Ready events.
  * This extends BaseEvent and includes a marker to identify it as a skill ready event.
  */

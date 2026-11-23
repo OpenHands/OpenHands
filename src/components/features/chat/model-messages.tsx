@@ -8,13 +8,24 @@ import type { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 import { useFreeModels } from "#/hooks/query/use-free-models";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
 import { GenericEventMessage } from "./generic-event-message";
+import { useRowExpansionKey } from "#/components/features/chat/row-expansion-context";
+import { usePersistentExpansion } from "#/stores/message-expansion-store";
 
 interface ProfileRowProps {
   profile: ProfileInfo;
+  /** The /model entry this row belongs to; two entries can anchor to one event. */
+  entryId: string;
 }
 
-function ProfileRow({ profile }: ProfileRowProps) {
-  const [expanded, setExpanded] = React.useState(false);
+function ProfileRow({ profile, entryId }: ProfileRowProps) {
+  // Persisted by row + entry + profile name so a remounted row restores which
+  // profile cards the user had opened, and two /model listings anchored to the
+  // same event keep their expansion state to themselves.
+  const expansionKey = useRowExpansionKey(`profile-${entryId}-${profile.name}`);
+  const [expanded, toggleExpanded] = usePersistentExpansion(
+    expansionKey,
+    false,
+  );
   const freeModels = useFreeModels();
   const displayModel = formatModelNameForDisplay(profile.model, freeModels);
 
@@ -22,7 +33,7 @@ function ProfileRow({ profile }: ProfileRowProps) {
     <div className="border border-border rounded-md overflow-hidden">
       <button
         type="button"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={() => toggleExpanded()}
         aria-expanded={expanded}
         aria-label={`Toggle details for ${profile.name}`}
         className="w-full py-1.5 px-2 text-left flex items-center gap-2 hover:bg-interactive-hover-low transition-colors cursor-pointer"
@@ -72,30 +83,54 @@ export function ModelMessages({
     <div data-testid="model-messages" className="flex flex-col w-full">
       {entries.map((entry) => {
         if (entry.switchedTo) {
+          const switchKey =
+            entry.initiator === "agent"
+              ? I18nKey.MODEL$AGENT_SWITCHED
+              : entry.initiator === "router"
+                ? I18nKey.MODEL$ROUTER_SWITCHED
+                : entry.initiator === "user"
+                  ? I18nKey.MODEL$USER_SWITCHED
+                  : I18nKey.MODEL$SWITCHED_TO_PROFILE;
           return (
-            <GenericEventMessage
-              key={entry.id}
-              title={
-                <span className="inline-flex items-center gap-1.5 text-contrast">
-                  <InfoCircleIcon
-                    width={14}
-                    height={14}
-                    className="shrink-0 text-text-tertiary"
-                    aria-hidden
-                  />
-                  <Trans
-                    i18nKey={I18nKey.MODEL$SWITCHED_TO_PROFILE}
-                    values={{ name: entry.switchedTo }}
-                    components={{
-                      cmd: (
-                        <span className="font-mono text-contrast bg-surface-raised px-1 rounded" />
-                      ),
-                    }}
-                  />
-                </span>
-              }
-              details=""
-            />
+            <div key={entry.id}>
+              <GenericEventMessage
+                title={
+                  <span className="inline-flex items-center gap-1.5 text-contrast">
+                    <InfoCircleIcon
+                      width={14}
+                      height={14}
+                      className="shrink-0 text-text-tertiary"
+                      aria-hidden
+                    />
+                    <Trans
+                      i18nKey={switchKey}
+                      values={{ name: entry.switchedTo }}
+                      components={{
+                        cmd: (
+                          <span className="font-mono text-contrast bg-surface-raised px-1 rounded" />
+                        ),
+                      }}
+                    />
+                  </span>
+                }
+                details=""
+              />
+              {(entry.initiator === "agent" || entry.initiator === "router") &&
+                entry.reason?.trim() && (
+                  <p className="text-sm text-muted whitespace-pre-wrap break-words pl-5">
+                    <span className="font-medium">
+                      <Trans
+                        i18nKey={
+                          entry.initiator === "router"
+                            ? I18nKey.MODEL$ROUTER_SWITCH_REASON
+                            : I18nKey.MODEL$AGENT_SWITCH_REASON
+                        }
+                      />
+                    </span>{" "}
+                    {entry.reason}
+                  </p>
+                )}
+            </div>
           );
         }
 
@@ -103,6 +138,7 @@ export function ModelMessages({
         return (
           <GenericEventMessage
             key={entry.id}
+            disclosureId={`model-${entry.id}`}
             title={
               <span className="text-contrast">
                 {isEmpty ? (
@@ -123,7 +159,7 @@ export function ModelMessages({
               ) : (
                 <div className="flex flex-col gap-1 mt-1">
                   {entry.profiles.map((p) => (
-                    <ProfileRow key={p.name} profile={p} />
+                    <ProfileRow key={p.name} profile={p} entryId={entry.id} />
                   ))}
                 </div>
               )

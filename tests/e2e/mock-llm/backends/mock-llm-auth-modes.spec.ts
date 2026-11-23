@@ -283,7 +283,17 @@ test.describe("auth mode: public gate", () => {
     // Should show an error status (not navigate away).
     const statusEl = page.getByTestId("api-key-entry-status");
     await expect(statusEl).toBeVisible({ timeout: 10_000 });
-    await expect(statusEl).toHaveClass(/text-red/);
+    await expect(statusEl).toContainText("Invalid API key");
+    await expect(page.getByTestId("api-key-entry-screen")).toBeVisible();
+    await statusEl.evaluate((element) => {
+      const scope = element.closest("[data-agent-server-ui]");
+      if (!scope) throw new Error("Agent Server UI theme scope not found");
+      (scope as HTMLElement).style.setProperty(
+        "--oh-feedback-error",
+        "#8b1029",
+      );
+    });
+    await expect(statusEl).toHaveCSS("color", "rgb(139, 16, 41)");
   });
 
   test("allows access after pasting the correct key", async ({ page }) => {

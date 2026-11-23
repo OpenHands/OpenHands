@@ -6,8 +6,7 @@ import {
 } from "#/types/automation";
 
 export type AutomationRunBadgeStatus =
-  | AutomationRunStatus
-  | AutomationTaskOutcomeStatus;
+  AutomationRunStatus | AutomationTaskOutcomeStatus;
 
 export interface AutomationRunTaskOutcome {
   status: AutomationTaskOutcomeStatus;

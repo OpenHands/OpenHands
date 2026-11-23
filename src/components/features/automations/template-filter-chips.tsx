@@ -5,7 +5,11 @@ import { INTEGRATION_CATALOG as MCP_MARKETPLACE } from "@openhands/extensions/in
 import { HorizontalScrollFade } from "#/components/shared/horizontal-scroll-fade";
 import { McpLogoBadge } from "#/components/features/mcp-logo-badge";
 import { I18nKey } from "#/i18n/declaration";
-import type { TemplateTriggerKind } from "#/utils/automation-catalog";
+import {
+  BUILT_IN_INTEGRATION_NAMES,
+  getIntegrationLogoId,
+  type TemplateTriggerKind,
+} from "#/utils/automation-catalog";
 import { getMarketplaceEntryById } from "#/utils/mcp-marketplace-utils";
 import { pillToggleClassName } from "#/utils/pill-toggle-classes";
 import { cn } from "#/utils/utils";
@@ -105,6 +109,13 @@ export function TemplateFilterChips({
         </FilterChip>
         {integrationIds.map((id) => {
           const entry = getMarketplaceEntryById(id, MCP_MARKETPLACE);
+          // A built-in provider with no catalog entry of its own (such as
+          // Bitbucket Data Center) keeps its product name and borrows the
+          // logo of the integration it stands for.
+          const logoEntry =
+            entry ??
+            getMarketplaceEntryById(getIntegrationLogoId(id), MCP_MARKETPLACE);
+          const label = entry?.name ?? BUILT_IN_INTEGRATION_NAMES[id] ?? id;
           const active = filters.integrationId === id;
           return (
             <FilterChip
@@ -115,8 +126,8 @@ export function TemplateFilterChips({
                 onChange({ ...filters, integrationId: active ? null : id })
               }
             >
-              <McpLogoBadge entry={entry} size="xs" />
-              {entry?.name ?? id}
+              <McpLogoBadge entry={logoEntry} size="xs" />
+              {label}
             </FilterChip>
           );
         })}

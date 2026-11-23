@@ -1,3 +1,4 @@
+import { ArrowRightLeft, Database, Factory, Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
@@ -8,38 +9,66 @@ import DownloadIcon from "#/icons/download.svg?react";
 import TrashIcon from "#/icons/trash.svg?react";
 import EditIcon from "#/icons/u-edit.svg?react";
 import PlayIcon from "#/icons/play.svg?react";
+import { automationListPath } from "#/manifests/automation-interface";
+import { AutomationPageHeader } from "../automation-page-header";
 import { ActiveStatusBadge } from "./active-status-badge";
 
 interface DetailHeaderProps {
   automation: Automation;
   onToggle: () => void;
-  /** When provided (and the user can manage), the kebab menu shows an Edit entry. */
+  /**
+   * When provided, the kebab menu offers flipping `keep_alive`. Omit it when
+   * the setting does not apply or cannot be changed (local backend, no
+   * permission, draft, or forced on).
+   */
+  onToggleKeepAlive?: () => void;
+  isKeepAlivePending?: boolean;
+  /** When provided (and the user can edit), the header shows an Edit button. */
   onEdit?: () => void;
+  /** Where the back link goes. Defaults to the automations list. */
+  backTo?: string;
   onDelete: () => void;
+  /** When provided, the kebab menu shows a Change factory entry. */
+  onChangeFactory?: () => void;
+  /** When provided, the kebab menu shows a Change Runs As entry. */
+  onChangeRunAs?: () => void;
+  /** When provided, the kebab menu shows a View key-value store entry. */
+  onViewKvStore?: () => void;
   onExport: () => void;
   onDownloadTarball: () => void;
   onRunNow?: () => void;
   isRunningNow?: boolean;
   /** Whether the caller may mutate this automation (manage perm or owner). */
   canManage?: boolean;
+  /** Whether the caller may edit this automation. Defaults to `canManage`. */
+  canEdit?: boolean;
   /**
    * Whether the caller may flip the enabled switch. Defaults to `canManage`;
-   * pass `false` for a disabled automation the caller did not create, since
-   * non-creators may only turn automations off.
+   * pass `false` when the caller may only turn the automation off or not at all.
    */
   canToggle?: boolean;
 }
 
+const headerButtonClassName =
+  "inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-content transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-60";
+
 export function DetailHeader({
   automation,
   onToggle,
+  onToggleKeepAlive,
+  isKeepAlivePending = false,
   onEdit,
+  backTo,
   onDelete,
+  onChangeFactory,
+  onChangeRunAs,
+  onViewKvStore,
   onExport,
   onDownloadTarball,
   onRunNow,
   isRunningNow = false,
   canManage = true,
+  canEdit = canManage,
   canToggle = canManage,
 }: DetailHeaderProps) {
   const { t } = useTranslation("openhands");
@@ -57,15 +86,6 @@ export function DetailHeader({
       onClick: onDownloadTarball,
     },
     // Write items — only when the user may mutate this automation.
-    ...(canManage && onEdit
-      ? [
-          {
-            label: t(I18nKey.AUTOMATIONS$EDIT),
-            icon: <EditIcon className="size-4" />,
-            onClick: onEdit,
-          },
-        ]
-      : []),
     ...(canToggle
       ? [
           {
@@ -74,6 +94,46 @@ export function DetailHeader({
               : t(I18nKey.AUTOMATIONS$TURN_ON),
             icon: <PowerIcon className="size-4" />,
             onClick: onToggle,
+          },
+        ]
+      : []),
+    ...(onToggleKeepAlive
+      ? [
+          {
+            label:
+              automation.keep_alive === true
+                ? t(I18nKey.AUTOMATIONS$STOP_KEEPING_SANDBOX_ALIVE)
+                : t(I18nKey.AUTOMATIONS$KEEP_SANDBOX_ALIVE),
+            icon: <Server className="size-4" aria-hidden />,
+            onClick: onToggleKeepAlive,
+            disabled: isKeepAlivePending,
+          },
+        ]
+      : []),
+    ...(onChangeFactory
+      ? [
+          {
+            label: t(I18nKey.AUTOMATIONS$CHANGE_FACTORY),
+            icon: <Factory className="size-4" aria-hidden />,
+            onClick: onChangeFactory,
+          },
+        ]
+      : []),
+    ...(onChangeRunAs
+      ? [
+          {
+            label: t(I18nKey.AUTOMATIONS$CHANGE_RUN_AS),
+            icon: <ArrowRightLeft className="size-4" aria-hidden />,
+            onClick: onChangeRunAs,
+          },
+        ]
+      : []),
+    ...(onViewKvStore
+      ? [
+          {
+            label: t(I18nKey.AUTOMATIONS$DETAIL$KV_VIEW_STORE),
+            icon: <Database className="size-4" aria-hidden />,
+            onClick: onViewKvStore,
           },
         ]
       : []),
@@ -89,42 +149,48 @@ export function DetailHeader({
   ];
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <h1 className="min-w-0 break-words text-xl font-medium text-content">
-            {automation.name}
-          </h1>
-          <ActiveStatusBadge automation={automation} />
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {canManage && onRunNow && (
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-content transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isRunningNow || !automation.enabled}
-              onClick={onRunNow}
-            >
-              <PlayIcon className="size-3.5 shrink-0" aria-hidden />
-              {isRunningNow
-                ? t(I18nKey.AUTOMATIONS$STARTING)
-                : t(I18nKey.AUTOMATIONS$RUN_NOW)}
-            </button>
-          )}
-          {canToggle && (
-            <ToggleSwitch
-              enabled={automation.enabled}
-              label={
-                automation.enabled
-                  ? t(I18nKey.AUTOMATIONS$TURN_OFF)
-                  : t(I18nKey.AUTOMATIONS$TURN_ON)
-              }
-              onToggle={onToggle}
-            />
-          )}
-          <KebabMenu items={kebabItems} />
-        </div>
-      </div>
-    </div>
+    <AutomationPageHeader
+      testId="automation-detail-header"
+      title={automation.name}
+      backTo={backTo ?? automationListPath()}
+      badge={<ActiveStatusBadge automation={automation} />}
+    >
+      {canManage && onRunNow && (
+        <button
+          type="button"
+          className={headerButtonClassName}
+          disabled={isRunningNow || !automation.enabled}
+          onClick={onRunNow}
+        >
+          <PlayIcon className="size-3.5 shrink-0" aria-hidden />
+          {isRunningNow
+            ? t(I18nKey.AUTOMATIONS$STARTING)
+            : t(I18nKey.AUTOMATIONS$RUN_NOW)}
+        </button>
+      )}
+      {canEdit && onEdit && (
+        <button
+          type="button"
+          data-testid="automation-detail-edit"
+          className={headerButtonClassName}
+          onClick={onEdit}
+        >
+          <EditIcon className="size-3.5 shrink-0" aria-hidden />
+          {t(I18nKey.AUTOMATIONS$EDIT)}
+        </button>
+      )}
+      {canToggle && (
+        <ToggleSwitch
+          enabled={automation.enabled}
+          label={
+            automation.enabled
+              ? t(I18nKey.AUTOMATIONS$TURN_OFF)
+              : t(I18nKey.AUTOMATIONS$TURN_ON)
+          }
+          onToggle={onToggle}
+        />
+      )}
+      <KebabMenu items={kebabItems} />
+    </AutomationPageHeader>
   );
 }

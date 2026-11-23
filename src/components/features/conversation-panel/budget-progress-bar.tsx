@@ -17,7 +17,7 @@ export function BudgetProgressBar({
       <div
         className={cn(
           "absolute inset-y-0 left-0 rounded-full transition-all duration-300",
-          isNearLimit ? "bg-red-500" : "bg-blue-500",
+          isNearLimit ? "bg-status-error" : "bg-foreground",
         )}
         // runtime usage-percentage width
         style={{

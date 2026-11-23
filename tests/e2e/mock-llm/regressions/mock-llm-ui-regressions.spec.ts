@@ -51,22 +51,40 @@ interface PaginationEvent {
 
 type CriticEvent = MessageEvent | ActionEvent<FinishAction>;
 
-function createPaginationEvent(index: number, prefix: string): PaginationEvent {
+function createPaginationEvent(
+  index: number,
+  prefix: string,
+  varyHeight = false,
+): PaginationEvent {
   return {
     id: `${prefix.toLowerCase().replaceAll(" ", "-")}-${index}`,
-    timestamp: timestampForEvent(index),
+    timestamp: timestampForEvent(index === 51 ? 50 : index),
     source: "agent",
     kind: "MessageEvent",
     llm_message: {
       role: "assistant",
-      content: [{ type: "text", text: `${prefix} ${index}` }],
+      // When `varyHeight` is set the bubble is padded with a variable number of
+      // lines, so each row measures away from the flat estimate and the
+      // virtualizer has real size corrections to apply.
+      content: [
+        {
+          type: "text",
+          text: varyHeight
+            ? `${prefix} ${index}\n\n${"filler line\n\n".repeat(index % 12)}`
+            : `${prefix} ${index}`,
+        },
+      ],
     },
   };
 }
 
-function createAllPaginationEvents(prefix: string): PaginationEvent[] {
-  return Array.from({ length: PAGINATION_EVENT_COUNT }, (_, i) =>
-    createPaginationEvent(i + 1, prefix),
+function createAllPaginationEvents(
+  prefix: string,
+  count = PAGINATION_EVENT_COUNT,
+  varyHeight = false,
+): PaginationEvent[] {
+  return Array.from({ length: count }, (_, i) =>
+    createPaginationEvent(i + 1, prefix, varyHeight),
   );
 }
 
@@ -81,28 +99,38 @@ function searchPaginationEvents(
     ? events.filter((e) => e.timestamp < timestampLt)
     : events;
   const sorted = [...filtered].sort((a, b) =>
-    sortOrder === "TIMESTAMP_DESC"
-      ? b.timestamp.localeCompare(a.timestamp)
-      : a.timestamp.localeCompare(b.timestamp),
+    a.timestamp.localeCompare(b.timestamp),
   );
+  if (sortOrder === "TIMESTAMP_DESC") sorted.reverse();
+  const pageId = searchParams.get("page_id");
+  const start = pageId
+    ? Math.max(
+        0,
+        sorted.findIndex((event) => event.id === pageId),
+      )
+    : 0;
   return {
-    items: sorted.slice(0, limit),
-    next_page_id: sorted.length > limit ? "next-page" : null,
+    items: sorted.slice(start, start + limit),
+    next_page_id: sorted[start + limit]?.id ?? null,
   };
 }
 
 /** Build the mock conversation with the same fields the real agent-server
  *  returns so `requireDirectConversationInfo` can parse it and the
  *  conversation route doesn't redirect to `/conversations`. */
-function buildMockConversation() {
+function buildMockConversation(
+  id = PAGINATION_CONVERSATION_ID,
+  eventCount = PAGINATION_EVENT_COUNT,
+  title = "Pagination test",
+) {
   return {
-    id: PAGINATION_CONVERSATION_ID,
-    conversation_id: PAGINATION_CONVERSATION_ID,
+    id,
+    conversation_id: id,
     status: "STOPPED",
     execution_status: "stopped",
     created_at: timestampForEvent(1),
-    updated_at: timestampForEvent(PAGINATION_EVENT_COUNT),
-    title: "Pagination test",
+    updated_at: timestampForEvent(eventCount),
+    title,
   };
 }
 
@@ -227,9 +255,32 @@ function searchCriticEvents(
   };
 }
 
-/** Intercept conversation lookup + event search for pagination tests. */
-async function routePaginationConversation(page: Page) {
-  const allEvents = createAllPaginationEvents("Pagination message");
+/**
+ * Intercept conversation lookup + event search for pagination tests.
+ *
+ * `count` controls how many synthetic events back the conversation: the
+ * default 100 spans two 50-event pages, while a count above the virtualization
+ * threshold (150 rendered rows) drives the virtualized list.
+ */
+async function routePaginationConversation(
+  page: Page,
+  {
+    id = PAGINATION_CONVERSATION_ID,
+    count = PAGINATION_EVENT_COUNT,
+    title = "Pagination test",
+    varyHeight = false,
+  }: {
+    id?: string;
+    count?: number;
+    title?: string;
+    varyHeight?: boolean;
+  } = {},
+) {
+  const allEvents = createAllPaginationEvents(
+    "Pagination message",
+    count,
+    varyHeight,
+  );
 
   // The app fetches conversations via the batch endpoint:
   //   GET /api/conversations?ids=<id>
@@ -247,11 +298,11 @@ async function routePaginationConversation(page: Page) {
       ...url.searchParams.getAll("ids"),
       ...url.searchParams.getAll("ids[]"),
     ];
-    if (ids.includes(PAGINATION_CONVERSATION_ID)) {
+    if (ids.includes(id)) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify([buildMockConversation()]),
+        body: JSON.stringify([buildMockConversation(id, count, title)]),
       });
     } else {
       await route.fallback();
@@ -259,20 +310,22 @@ async function routePaginationConversation(page: Page) {
   });
 
   // Stub the event search endpoint with the synthetic paginated events.
-  // Older-events requests (those with timestamp__lt) are delayed slightly so
+  // Older-events requests (those with page_id or timestamp__lt) are delayed slightly so
   // the loading indicator has time to render before the response arrives.
   // Without this, React can batch the isLoading true→false transition into a
   // single commit and the DOM element never materialises — making the
   // "loading-older-events" assertion flaky.
   await page.route(
-    `**/api/conversations/${PAGINATION_CONVERSATION_ID}/events/search**`,
+    `**/api/conversations/${id}/events/search**`,
     async (route, req) => {
       if (req.method() !== "GET") {
         await route.fallback();
         return;
       }
       const url = new URL(req.url());
-      const isOlderPage = url.searchParams.has("timestamp__lt");
+      const isOlderPage =
+        url.searchParams.has("page_id") ||
+        url.searchParams.has("timestamp__lt");
       const result = searchPaginationEvents(allEvents, url.searchParams);
       if (isOlderPage) {
         await new Promise((r) => setTimeout(r, 300));
@@ -351,7 +404,7 @@ async function waitForScrollableConversation(page: Page) {
 async function triggerOlderEventLoad(page: Page) {
   const scroller = await waitForScrollableConversation(page);
   await scroller.evaluate((el) => {
-    el.scrollTop = 0;
+    el.scrollTo({ top: 0 });
     el.dispatchEvent(new Event("scroll", { bubbles: true }));
   });
 }
@@ -530,7 +583,7 @@ test.describe("UI regressions", () => {
           )
       )
         return false;
-      return !new URL(req.url()).searchParams.has("timestamp__lt");
+      return !new URL(req.url()).searchParams.has("page_id");
     });
 
     await page.goto(`/conversations/${PAGINATION_CONVERSATION_ID}`, {
@@ -562,7 +615,7 @@ test.describe("UI regressions", () => {
           )
       )
         return false;
-      return new URL(req.url()).searchParams.has("timestamp__lt");
+      return new URL(req.url()).searchParams.has("page_id");
     });
 
     await triggerOlderEventLoad(page);
@@ -575,14 +628,193 @@ test.describe("UI regressions", () => {
     const olderUrl = new URL(olderRequest.url());
     expect(olderUrl.searchParams.get("limit")).toBe(String(PAGE_SIZE));
     expect(olderUrl.searchParams.get("sort_order")).toBe("TIMESTAMP_DESC");
-    expect(olderUrl.searchParams.get("timestamp__lt")).toBe(
-      timestampForEvent(51),
-    );
+    expect(olderUrl.searchParams.get("page_id")).toBe("pagination-message-50");
+    expect(olderUrl.searchParams.has("timestamp__lt")).toBe(false);
 
     await expect(
       page.getByText("Pagination message 50", { exact: true }),
     ).toBeAttached({ timeout: 15_000 });
+    await expect(page.getByText(/^Pagination message (49|50|51)$/)).toHaveText([
+      "Pagination message 49",
+      "Pagination message 50",
+      "Pagination message 51",
+    ]);
     await expect(page.getByTestId("loading-older-events")).toHaveCount(0);
+  });
+
+  // ── virtualized rows render real message components ──────────────
+
+  test("virtualizes long conversations into real message rows", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const VIRTUALIZED_CONVERSATION_ID = "virtualized-e2e";
+    const EVENT_COUNT = 400;
+    await routeSessionApiKey(page);
+    await routePaginationConversation(page, {
+      id: VIRTUALIZED_CONVERSATION_ID,
+      count: EVENT_COUNT,
+      title: "Virtualized test",
+    });
+
+    const shell = page.getByTestId("virtualized-message-list");
+    const mountedRows = page.getByTestId("virtualized-message-row");
+    const agentBubble = (index: number) =>
+      page
+        .getByTestId("agent-message")
+        .filter({ hasText: `Pagination message ${index}` });
+    const olderPageRequest = () =>
+      page.waitForRequest(
+        (req) =>
+          req.method() === "GET" &&
+          req
+            .url()
+            .includes(
+              `/api/conversations/${VIRTUALIZED_CONVERSATION_ID}/events/search`,
+            ) &&
+          new URL(req.url()).searchParams.has("page_id"),
+      );
+
+    await page.goto(`/conversations/${VIRTUALIZED_CONVERSATION_ID}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    // The tail fetch returns the newest 50 events, rendered through the real
+    // `EventMessage` tree as an actual agent chat bubble — not the mocked stub
+    // the unit test substitutes, so row-layout regressions surface here.
+    await expect(agentBubble(EVENT_COUNT)).toBeVisible({ timeout: 15_000 });
+
+    // Below the virtualization threshold the list is the plain one, so the
+    // shell is absent until enough pages accumulate.
+    await expect(shell).toHaveCount(0);
+
+    // Scroll up to backfill older pages through the real load-older path until
+    // the rendered-row count crosses the threshold and the list virtualizes.
+    for (let page_ = 0; page_ < 3; page_ += 1) {
+      const request = olderPageRequest();
+      await triggerOlderEventLoad(page);
+      await request;
+      await expect(page.getByTestId("loading-older-events")).toHaveCount(0);
+    }
+
+    // 200 events are loaded now — past the 150-row threshold — so the list is
+    // virtualized and only a bounded window of the history is mounted.
+    await expect(shell).toBeVisible({ timeout: 15_000 });
+    expect(await mountedRows.count()).toBeLessThan(100);
+    await expect(
+      page.getByText("Pagination message 1", { exact: true }),
+    ).toHaveCount(0);
+
+    // A backfilled page merged into the virtualized list: the shell represents
+    // the extra rows (offsets, not mounted nodes), so its scroll height grows
+    // while the mounted window stays bounded.
+    const scroller = await getChatScroller(page);
+    const heightBefore = await scroller.evaluate((el) => el.scrollHeight);
+    const backfillRequest = olderPageRequest();
+    await triggerOlderEventLoad(page);
+    await expect(page.getByTestId("loading-older-events")).toContainText(
+      "Fetching older messages",
+    );
+    await backfillRequest;
+    await expect(page.getByTestId("loading-older-events")).toHaveCount(0);
+    await expect
+      .poll(() => scroller.evaluate((el) => el.scrollHeight), {
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(heightBefore);
+    expect(await mountedRows.count()).toBeLessThan(100);
+
+    // Scrolling near the top mounts the oldest backfilled row (event 151, from
+    // the fourth page) as a real agent bubble. scrollTop stays above the
+    // load-older threshold so this does not trigger yet another fetch.
+    await scroller.evaluate((el) => {
+      el.scrollTo({ top: 100 });
+      el.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    await expect(agentBubble(151)).toBeAttached({ timeout: 15_000 });
+  });
+
+  // ── scroll-to-bottom lands at the bottom in a virtualized list ───
+
+  /**
+   * The PR's goal for the "jump to latest" control: with hundreds of rows the
+   * list is virtualized and its tail rows mount as the jump lands on them, so
+   * the reader must end at the true bottom with the newest message visible. The
+   * row-size clamp itself is pinned down in
+   * `messages-virtualization.test.tsx` ("re-pins the bottom once the shell
+   * grows"); this is the end-to-end guard that the button still reaches the
+   * bottom over the real browser layout.
+   */
+  test("scroll-to-bottom reaches the newest message in a virtualized list", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const VIRTUALIZED_CONVERSATION_ID = "scroll-bottom-e2e";
+    const EVENT_COUNT = 400;
+    await routeSessionApiKey(page);
+    await routePaginationConversation(page, {
+      id: VIRTUALIZED_CONVERSATION_ID,
+      count: EVENT_COUNT,
+      title: "Scroll bottom test",
+      varyHeight: true,
+    });
+
+    const shell = page.getByTestId("virtualized-message-list");
+    const olderPageRequest = () =>
+      page.waitForRequest(
+        (req) =>
+          req.method() === "GET" &&
+          req
+            .url()
+            .includes(
+              `/api/conversations/${VIRTUALIZED_CONVERSATION_ID}/events/search`,
+            ) &&
+          new URL(req.url()).searchParams.has("page_id"),
+      );
+
+    await page.goto(`/conversations/${VIRTUALIZED_CONVERSATION_ID}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page
+        .getByTestId("agent-message")
+        .filter({ hasText: `Pagination message ${EVENT_COUNT}` }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // Backfill past the virtualization threshold, then leave the reader up in
+    // the history so the newest rows are unmounted and still at the estimate.
+    for (let page_ = 0; page_ < 3; page_ += 1) {
+      const request = olderPageRequest();
+      await triggerOlderEventLoad(page);
+      await request;
+      await expect(page.getByTestId("loading-older-events")).toHaveCount(0);
+    }
+    await expect(shell).toBeVisible({ timeout: 15_000 });
+
+    const scroller = await getChatScroller(page);
+    const bottomDistance = () =>
+      scroller.evaluate(
+        (el) => el.scrollHeight - el.clientHeight - el.scrollTop,
+      );
+
+    // Start well away from the bottom so the jump has real work to do.
+    await scroller.evaluate((el) => {
+      el.scrollTo({ top: 0 });
+      el.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    await page.waitForTimeout(300);
+    expect(await bottomDistance()).toBeGreaterThan(1_000);
+
+    await page.getByTestId("scroll-to-bottom").click();
+
+    // The button's own jump must land at the bottom and stay there as the
+    // newly mounted tail rows report their real sizes.
+    await expect.poll(bottomDistance, { timeout: 15_000 }).toBeLessThan(50);
+    await expect(
+      page
+        .getByTestId("agent-message")
+        .filter({ hasText: `Pagination message ${EVENT_COUNT}` }),
+    ).toBeVisible();
   });
 
   // ── Drag-selection stays inside the message feed ─────────────────
@@ -936,6 +1168,31 @@ test.describe("UI regressions", () => {
   // @spec WN-001 — Home warning icon follows the embedding host warning role
   test("home warning icon follows the host warning color", async ({ page }) => {
     await routeSessionApiKey(page);
+    // Earlier scenarios persist usable LLM and ACP profiles on the shared server.
+    await page.route("**/api/profiles", async (route, request) => {
+      if (request.method() !== "GET") return route.fallback();
+      return route.fulfill({
+        json: { profiles: [], active_profile: null },
+      });
+    });
+    await page.route("**/api/agent-profiles", async (route, request) => {
+      if (request.method() !== "GET") return route.fallback();
+      return route.fulfill({
+        json: {
+          active_agent_profile_id: "warning-test-agent",
+          profiles: [
+            {
+              id: "warning-test-agent",
+              name: "default",
+              agent_kind: "openhands",
+              revision: 1,
+              llm_profile_ref: null,
+              mcp_server_refs: [],
+            },
+          ],
+        },
+      });
+    });
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(
       page.getByTestId("home-llm-not-configured-banner"),

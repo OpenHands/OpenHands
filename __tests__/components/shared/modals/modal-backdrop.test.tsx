@@ -454,6 +454,61 @@ describe("ModalBackdrop Escape layering", () => {
     },
   );
 
+  it("lets an open combobox listbox take Escape and closes the dialog on the next press", async () => {
+    // React Aria's ComboBox closes its listbox on Escape and lets the event
+    // keep propagating; the dialog must wait for a second Escape (#19646).
+    const user = userEvent.setup();
+    const onCloseDialog = vi.fn();
+    function DialogWithCombobox({ listboxOpen }: { listboxOpen: boolean }) {
+      const [open, setOpen] = React.useState(true);
+      if (!open) return null;
+      return (
+        <ModalBackdrop
+          onClose={() => {
+            onCloseDialog();
+            setOpen(false);
+          }}
+          aria-label="test dialog"
+        >
+          {/* The React Aria combobox shape: focus stays on the input while
+              its portaled listbox is open, and aria-expanded tracks the
+              popup. */}
+          <input
+            role="combobox"
+            aria-label="provider"
+            aria-expanded={listboxOpen}
+            aria-controls="providers"
+          />
+          {listboxOpen
+            ? createPortal(
+                <ul role="listbox" aria-label="providers" id="providers">
+                  <li role="option">OpenAI</li>
+                </ul>,
+                document.body,
+              )
+            : null}
+        </ModalBackdrop>
+      );
+    }
+    const { rerender } = render(<DialogWithCombobox listboxOpen />);
+    screen.getByRole("combobox", { name: "provider" }).focus();
+
+    // Act: first Escape with the listbox open.
+    await user.keyboard("{Escape}");
+
+    // Assert: only the listbox closes; the dialog stays open.
+    expect(onCloseDialog).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "test dialog" })).toBeInTheDocument();
+
+    // Act: second Escape, listbox closed.
+    rerender(<DialogWithCombobox listboxOpen={false} />);
+    await user.keyboard("{Escape}");
+
+    // Assert: the dialog closes.
+    expect(onCloseDialog).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("lets a menu that is open inside the dialog take Escape", async () => {
     const user = userEvent.setup();
     const onCloseMenu = vi.fn();

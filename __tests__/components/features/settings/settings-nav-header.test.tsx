@@ -5,10 +5,10 @@ import { I18nKey } from "#/i18n/declaration";
 
 describe("SettingsNavHeader", () => {
   it("should render the translated header text", () => {
-    render(<SettingsNavHeader text={I18nKey.SETTINGS$PERSONAL_SETTINGS_HEADER} />);
+    render(<SettingsNavHeader text={I18nKey.SETTINGS$TITLE} />);
 
     expect(
-      screen.getByText("SETTINGS$PERSONAL_SETTINGS_HEADER"),
+      screen.getByText("SETTINGS$TITLE"),
     ).toBeInTheDocument();
   });
 
@@ -17,7 +17,7 @@ describe("SettingsNavHeader", () => {
   it("should accept custom className", () => {
     const { container } = render(
       <SettingsNavHeader
-        text={I18nKey.SETTINGS$PERSONAL_SETTINGS_HEADER}
+        text={I18nKey.SETTINGS$TITLE}
         className="custom-class"
       />,
     );

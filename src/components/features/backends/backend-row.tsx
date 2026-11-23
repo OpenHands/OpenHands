@@ -119,7 +119,7 @@ export function BackendRow({
             </span>
           ) : null}
         </div>
-        <span className="px-2 py-1 rounded-full text-[11px] uppercase tracking-wide text-text-tertiary bg-surface border border-border">
+        <span className="px-2 py-1 rounded-full text-2xs uppercase tracking-wide text-text-tertiary bg-surface border border-border">
           {isMarsSession
             ? t(I18nKey.DO_AGENTS$BADGE)
             : backend.kind === "cloud"

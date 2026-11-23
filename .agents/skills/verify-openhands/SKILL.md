@@ -106,6 +106,12 @@ control-openhands stop                         # stops only this run; evidence s
   only `scripts/static-server.mjs` takes `--lock-to-cloud`; `browser goto
   <lockedCloud.url>/` opens it as a run page, and `stop` ends it with the run.
   Never hand-start these processes on fixed ports: `stop` cannot see them.
+- **A non-loopback origin** comes with every run: `lanUrl`
+  (`$OH_VERIFY_LAN_URL` from `control-openhands env`) is the run's ingress
+  under a name its browser resolves to loopback, so the page is plain HTTP
+  outside a secure context, as it is for a user on a LAN or VPN address
+  (`F26.lan-http-origin`). It has its own browser storage: `onboard --skip
+  --stay` and `conversation start --stay` act on the page that is open.
 - **Doctor** checks the launcher's process group, ports, served build revision,
   unauthenticated rejection, authenticated settings, Agent Server pin and the
   UI's minimum Agent Server version, automation health and a throwaway-tab UI
@@ -120,6 +126,13 @@ control-openhands stop                         # stops only this run; evidence s
   from *before* any client-side navigation: use `click ... --expect-url '<regex>'`
   (or `browser wait-url`) after every navigating click, because many routes
   redirect (`/settings` → `/settings/agents`, `/customize` → `/mcp`).
+- **Paper theme by default.** The run's browser starts in the Paper theme
+  (`openhands-color-theme=paper`, seeded once per browser profile), so
+  screenshots and reports share one look. A check that names a theme still
+  chooses it (F16) or sets that key, and the choice holds across reloads. A
+  check whose expected colours assume the app's own default theme starts the
+  browser with `CONTROL_OPENHANDS_THEME=default` (or another theme id) on the
+  first `browser` command of the run, or after `browser reset`.
 - **Arrange, don't fake.** `llm`, `fixture` and `api ... --write` exist to set up
   preconditions (a configured profile, a git repo, a dummy secret). They never
   count as proof that the UI path works; the map says which steps are UI proof.
@@ -138,6 +151,19 @@ control-openhands stop                         # stops only this run; evidence s
   automation|agent-server` (backend-down UI), `restart` (same state after a
   backend restart: persistence and reconnection) and `restart --rotate-key`
   (stale session key). `restart` keeps the browser on its page.
+  For a frontend fix, `restart --rebuild --run <owned-run>` stops that run,
+  runs `npm run build:app`, checks that inputs stayed unchanged, stamps the new
+  build and restarts with the same state and keys. Ordinary `restart` reuses
+  the build; SDK-only changes do not need this flag. End active Voice first,
+  then reload and doctor after rebuilding: a loaded tab still contains the old
+  bundle until reload. Old/new identities and failed attempts remain in
+  `run.json`'s `buildHistory` and `evidence/build-history.jsonl`; existing ledger
+  rows are untouched and new rows include `buildId`. Failed/interrupted builds
+  leave the run stopped and require another successful `restart --rebuild`.
+  The preflight refuses other live runs from this checkout found in
+  `$OH_VERIFY_HOME` or the selected run's parent; it cannot discover unrelated
+  servers or other verification homes. Use a separate checkout when sharing
+  would risk replacing another agent's served build.
   `browser network-state offline|online|status` disconnects or reconnects the
   browser context without changing backend state or intercepting requests;
   restore `online` before doctor or teardown.
@@ -145,6 +171,21 @@ control-openhands stop                         # stops only this run; evidence s
   emulation on the active page and returns its real `matchMedia` preference,
   alongside the existing playback observations. Use `no-preference` for normal
   streaming-motion checks; restore the prior preference afterwards.
+  `browser media --voice` adds read-only microphone permission and capture
+  outcomes, audio-track `enabled`/`readyState`, peer connection states and
+  available inbound audio RTP counters (`bytesReceived`, `packetsReceived`,
+  `totalAudioEnergy`, `totalSamplesReceived`), plus output element state even for
+  detached `Audio` objects. Instrumentation starts before page scripts; restart
+  an older owned browser daemon only after ending its active call. Normal native
+  media APIs still run: this grants no permission and supplies no audio or mock
+  responses. IDs identify observations within this document, never devices or
+  provider calls. No SDP, ICE addresses, labels, credentials or transcripts enter
+  the Voice projection. Each kind keeps at most 128 observations and reports
+  dropped counts; `collected: true` carries its last observed state, not proof
+  that a live resource was released. `--clear` still clears only play-call
+  history. Compare samples while audio is active, then require ended microphone
+  tracks, closed peers and cleared output streams after End call. Received RTP
+  counters establish media delivery; they do not establish physical audibility.
   `browser events --kinds websocket-created,websocket-open,websocket-close,websocket-error --last 100`
   observes real subscriptions: redacted socket/page URLs preserve numeric
   `after_seq`, with event timestamps and frame counts. No frame bodies or
@@ -231,6 +272,13 @@ prerequisite; never substitute a mock and call it a pass.
   `src/` paths no family owns (a map gap) and non-user-facing paths. Drive every entry point those features list at
   desktop and phone viewports, and report with
   [the report contract](references/report.md).
+- **Verify an Agent Server change** (a software-agent-sdk PR or an Agent
+  Server bump): the families whose `Server:` line names the changed server
+  features are where a user could see it ([mapping.md](references/mapping.md)).
+  For a PR, launch the baseline with `--sdk-ref main` and the change with
+  `--sdk-ref <PR branch>` (`launch --new` for each) and drive those families
+  on both. A difference is user-facing; no difference means the change does
+  not reach Canvas users on those paths.
 - **Verify a fix for a known bug** (an open PR or a merged commit that claims
   to fix a bug the map records): launch the baseline and the fix as two runs
   (`launch --new` with each worktree's own `control-openhands`: the CLI
@@ -260,7 +308,11 @@ prerequisite; never substitute a mock and call it a pass.
   yesterday's is at hand.
 - **Create or extend the map**: follow [references/mapping.md](references/mapping.md).
   It teaches how to discover features, write entries against the CLI and prove
-  each one live. `control-openhands map coverage` measures what is still unmapped.
+  each one live. `control-openhands map coverage` measures what is still unmapped,
+  `map controls` lists the controls on mapped pages that no bullet operates, and
+  [references/scenarios.md](references/scenarios.md) lists the situations (the
+  item edited later, two actions at once, real data, another environment) to
+  ask of every sub-feature beyond its happy path.
 - **Maintain the map (periodic or weekly)**: follow
   [references/maintenance.md](references/maintenance.md): index hygiene, a source
   wave, one live pass over every feature, PR-intent reconciliation for the week's
