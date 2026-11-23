@@ -290,7 +290,7 @@ describe("PlanPreview", () => {
     expect(container.textContent).toContain("Heading 2");
   });
 
-  it("should use planHeadings components for h1 headings", () => {
+  it("should use planComponents for h1 headings", () => {
     // Arrange
     const planContent = "# Main Title";
 
@@ -305,7 +305,7 @@ describe("PlanPreview", () => {
     expect(h1).toHaveTextContent("Main Title");
   });
 
-  it("should use planHeadings components for h2 headings", () => {
+  it("should use planComponents for h2 headings", () => {
     // Arrange
     const planContent = "## Section Title";
 
@@ -320,7 +320,7 @@ describe("PlanPreview", () => {
     expect(h2).toHaveTextContent("Section Title");
   });
 
-  it("should use planHeadings components for h3 headings", () => {
+  it("should use planComponents for h3 headings", () => {
     // Arrange
     const planContent = "### Subsection Title";
 
@@ -335,7 +335,7 @@ describe("PlanPreview", () => {
     expect(h3).toHaveTextContent("Subsection Title");
   });
 
-  it("should use planHeadings components for all heading levels", () => {
+  it("should use planComponents for all heading levels", () => {
     // Arrange
     const planContent = `# H1 Title
 ## H2 Title

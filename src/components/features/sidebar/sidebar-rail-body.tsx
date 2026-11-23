@@ -3,9 +3,11 @@ import { useTranslation } from "react-i18next";
 import {
   ChevronLeft,
   ChevronRight,
+  Factory,
   Plus,
   Server,
   Settings,
+  FolderKanban,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -42,8 +44,15 @@ import {
   sidebarNavRowClassName,
 } from "./sidebar-layout";
 import { useCanvasExtensionsRuntime } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
+import { useFactoriesSupported } from "#/hooks/query/use-factories";
+import { FACTORIES_PATH } from "#/constants/factories";
+import { useFactoryContext } from "#/hooks/use-factory-context";
 import { CanvasExtensionIcon } from "#/components/features/canvas-extensions/canvas-extension-icon";
 import type { Backend } from "#/api/backend-registry/types";
+import { useProjectsEnabled } from "#/hooks/query/use-projects";
+import { useProjectView } from "#/hooks/query/use-conversation-project";
+import { NEW_PROJECT_PATH, PROJECTS_PATH } from "#/utils/project-paths";
+import { useNavigation } from "#/context/navigation-context";
 
 const ICON_SIZE = 18;
 const SIDEBAR_LOGO_WIDTH = 34;
@@ -95,9 +104,16 @@ export function SidebarRailBody({
   onOpenManageBackends,
 }: SidebarRailBodyProps) {
   const { t } = useTranslation("openhands");
+  const projectsEnabled = useProjectsEnabled();
+  const inProject = useProjectView() !== undefined;
+  const { navigate } = useNavigation();
   const { pages: canvasExtensionPages } = useCanvasExtensionsRuntime();
   const backendCloseTimerRef = collapsedBackendCloseTimer;
   const { isPinnedRoute, togglePinnedRoute } = usePinnedHomeRoute();
+  const [backendMenuOpen, setBackendMenuOpen] = React.useState(false);
+  const { isSupported: isFactoriesSupported } = useFactoriesSupported();
+  // Setup and detail pages opened from a factory keep Factories selected.
+  const inFactoryFlow = useFactoryContext() !== null && isFactoriesSupported;
 
   const buildPinAction = (path: string, testId: string) => {
     const pinned = isPinnedRoute(path);
@@ -202,83 +218,123 @@ export function SidebarRailBody({
       </div>
 
       <nav className={sidebarNavListClassName(collapsed)}>
-        <CommandMenuTrigger collapsed={collapsed} />
-        <SidebarNavLink
-          to="/conversations"
-          end
-          label={t(I18nKey.SIDEBAR$NEW_CHAT)}
-          testId="sidebar-conversations-link"
-          collapsed={collapsed}
-          icon={<Plus width={ICON_SIZE} height={ICON_SIZE} />}
-        />
-        <SidebarNavLink
-          to={CUSTOMIZE_PATH}
-          label={t(I18nKey.NAV$CUSTOMIZE)}
-          testId="sidebar-skills-link"
-          collapsed={collapsed}
-          forceActive={isExtensionsActive}
-          pinAction={buildPinAction(
-            CUSTOMIZE_PATH,
-            "sidebar-pin-home-toggle-customize",
-          )}
-          icon={
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width={ICON_SIZE}
-              height={ICON_SIZE}
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z" />
-              <path d="m7 16.5-4.74-2.85" />
-              <path d="m7 16.5 5-3" />
-              <path d="M7 16.5v5.17" />
-              <path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z" />
-              <path d="m17 16.5-5-3" />
-              <path d="m17 16.5 4.74-2.85" />
-              <path d="m17 16.5v5.17" />
-              <path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z" />
-              <path d="M12 8 7.26 5.15" />
-              <path d="m12 8 4.74-2.85" />
-              <path d="M12 13.5V8" />
-            </svg>
-          }
-        />
-        {/* The interface manifest owns this entry's label, so an absent
-            manifest leaves the rail without it rather than with host copy. */}
-        {hasAutomationInterface() && (
+        {inProject ? (
+          // A project has the sidebar to itself: the app's navigation gives
+          // way to one row that leads back out to all projects.
           <SidebarNavLink
-            to={automationListPath()}
-            label={getInterfaceCopy().sidebarLabel}
-            testId="sidebar-automations-link"
+            to={PROJECTS_PATH}
+            end
+            label={t(I18nKey.PROJECTS$ALL_PROJECTS)}
+            testId="sidebar-projects-link"
             collapsed={collapsed}
-            icon={<AutomationsIcon width={ICON_SIZE} height={ICON_SIZE} />}
-            pinAction={buildPinAction(
-              automationListPath(),
-              "sidebar-pin-home-toggle-automations",
-            )}
+            icon={<ChevronLeft width={ICON_SIZE} height={ICON_SIZE} />}
           />
-        )}
-        {canvasExtensionPages.map((page) => (
-          <SidebarNavLink
-            key={`${page.extension.name}:${page.contribution.id}`}
-            to={page.href}
-            label={page.contribution.nav_label || page.contribution.title}
-            testId={`sidebar-canvas-extension-${page.extension.name}-${page.contribution.id}`}
-            collapsed={collapsed}
-            icon={
-              <CanvasExtensionIcon
-                extension={page.extension}
-                size={ICON_SIZE}
+        ) : (
+          <>
+            <CommandMenuTrigger collapsed={collapsed} />
+            <SidebarNavLink
+              to="/conversations"
+              end
+              label={t(I18nKey.SIDEBAR$NEW_CHAT)}
+              testId="sidebar-conversations-link"
+              collapsed={collapsed}
+              icon={<Plus width={ICON_SIZE} height={ICON_SIZE} />}
+            />
+            <SidebarNavLink
+              to={CUSTOMIZE_PATH}
+              label={t(I18nKey.NAV$CUSTOMIZE)}
+              testId="sidebar-skills-link"
+              collapsed={collapsed}
+              forceActive={isExtensionsActive}
+              pinAction={buildPinAction(
+                CUSTOMIZE_PATH,
+                "sidebar-pin-home-toggle-customize",
+              )}
+              icon={
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width={ICON_SIZE}
+                  height={ICON_SIZE}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z" />
+                  <path d="m7 16.5-4.74-2.85" />
+                  <path d="m7 16.5 5-3" />
+                  <path d="M7 16.5v5.17" />
+                  <path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z" />
+                  <path d="m17 16.5-5-3" />
+                  <path d="m17 16.5 4.74-2.85" />
+                  <path d="m17 16.5v5.17" />
+                  <path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z" />
+                  <path d="M12 8 7.26 5.15" />
+                  <path d="m12 8 4.74-2.85" />
+                  <path d="M12 13.5V8" />
+                </svg>
+              }
+            />
+            {/* The interface manifest owns this entry's label, so an absent
+              manifest leaves the rail without it rather than with host copy. */}
+            {hasAutomationInterface() && (
+              <SidebarNavLink
+                to={automationListPath()}
+                label={getInterfaceCopy().sidebarLabel}
+                testId="sidebar-automations-link"
+                collapsed={collapsed}
+                forceInactive={inFactoryFlow}
+                icon={<AutomationsIcon width={ICON_SIZE} height={ICON_SIZE} />}
+                pinAction={buildPinAction(
+                  automationListPath(),
+                  "sidebar-pin-home-toggle-automations",
+                )}
               />
-            }
-          />
-        ))}
+            )}
+            {projectsEnabled && (
+              <SidebarNavLink
+                to={PROJECTS_PATH}
+                label={t(I18nKey.PROJECTS$TITLE)}
+                testId="sidebar-projects-link"
+                collapsed={collapsed}
+                icon={<FolderKanban width={ICON_SIZE} height={ICON_SIZE} />}
+                addAction={{
+                  label: t(I18nKey.PROJECTS$NEW),
+                  testId: "sidebar-new-project",
+                  onClick: () => navigate(NEW_PROJECT_PATH),
+                }}
+              />
+            )}
+            {hasAutomationInterface() && isFactoriesSupported && (
+              <SidebarNavLink
+                to={FACTORIES_PATH}
+                label={t(I18nKey.FACTORIES$NAV_LABEL)}
+                testId="sidebar-factories-link"
+                collapsed={collapsed}
+                forceActive={inFactoryFlow}
+                icon={<Factory width={ICON_SIZE} height={ICON_SIZE} />}
+              />
+            )}
+            {canvasExtensionPages.map((page) => (
+              <SidebarNavLink
+                key={`${page.extension.name}:${page.contribution.id}`}
+                to={page.href}
+                label={page.contribution.nav_label || page.contribution.title}
+                testId={`sidebar-canvas-extension-${page.extension.name}-${page.contribution.id}`}
+                collapsed={collapsed}
+                icon={
+                  <CanvasExtensionIcon
+                    extension={page.extension}
+                    size={ICON_SIZE}
+                  />
+                }
+              />
+            ))}
+          </>
+        )}
       </nav>
 
       <SidebarConversationList collapsed={collapsed} />
@@ -364,7 +420,7 @@ export function SidebarRailBody({
                 <span className="relative inline-flex size-4.5 shrink-0 items-center justify-center">
                   <BackendStatusDot
                     isConnected={activeBackendHealth?.isConnected ?? null}
-                    className="absolute -left-0.5 -top-0.5 z-[1] pointer-events-none"
+                    className="absolute -left-0.5 -top-0.5 z-1 pointer-events-none"
                   />
                   <Server width={ICON_SIZE} height={ICON_SIZE} />
                 </span>
@@ -395,7 +451,14 @@ export function SidebarRailBody({
 
       {!collapsed ? (
         <>
-          <div className="mb-2 shrink-0 pr-2.5">
+          {/* Keep the card's space while the backend menu covers it, so the
+              list above doesn't jump when the menu opens on hover. */}
+          <div
+            className={cn(
+              "mb-2 shrink-0 pr-2.5",
+              backendMenuOpen && "invisible",
+            )}
+          >
             <SidebarOnboardingChecklist collapsed={collapsed} />
           </div>
           <div
@@ -405,7 +468,11 @@ export function SidebarRailBody({
             )}
           >
             <AgentCanvasVersionTile hideWhenUpToDate />
-            <BackendSelector sidebarCollapsed={collapsed} openUpward />
+            <BackendSelector
+              sidebarCollapsed={collapsed}
+              openUpward
+              onMenuOpenChange={setBackendMenuOpen}
+            />
           </div>
         </>
       ) : null}

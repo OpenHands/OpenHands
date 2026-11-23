@@ -1,4 +1,4 @@
-import { Tooltip } from "@heroui/react";
+import { Tooltip } from "#/components/shared/tooltip";
 import { Plus, Zap } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -28,7 +28,6 @@ import {
   deriveRunHealth,
   formatTriggerSourceLabel,
   getTriggerEventLabel,
-  getTriggerScheduleLabel,
   getTriggerSource,
 } from "./automation-run-health";
 import {
@@ -44,6 +43,7 @@ import {
   getRunStatusLabelKey,
   HomeAutomationRunTooltip,
 } from "./home-automation-run-tooltip";
+import { describeSchedule } from "#/utils/automation-trigger-description";
 
 interface RunningAutomationRowProps {
   item: HomeAutomationActivityItem;
@@ -56,14 +56,18 @@ function RunningAutomationRow({
   automation,
   runState,
 }: RunningAutomationRowProps) {
-  const { t } = useTranslation("openhands");
+  const { t, i18n } = useTranslation("openhands");
   const { isPinned, togglePin } = useHomePinnedAutomations();
   const actions = useHomeAutomationActions(automation, runState.latestRun);
   const pinned = isPinned(item.id);
   const isEventTrigger = automation.trigger.type === "event";
   const TriggerIcon = isEventTrigger ? Zap : ClockIcon;
   const triggerEventLabel = getTriggerEventLabel(automation);
-  const triggerScheduleLabel = getTriggerScheduleLabel(automation);
+  const triggerScheduleLabel = describeSchedule(
+    automation.trigger,
+    t,
+    i18n.language,
+  );
   const triggerSource = getTriggerSource(automation);
   const hasTriggerMeta = Boolean(
     triggerEventLabel || triggerScheduleLabel || triggerSource,
@@ -78,6 +82,7 @@ function RunningAutomationRow({
     automation,
     t,
     canManage: actions.canManage,
+    canEdit: actions.canEdit,
     isRunPending: actions.isRunPending,
     isCancelPending: actions.isCancelPending,
     canCancel: actions.canCancel,
@@ -114,7 +119,7 @@ function RunningAutomationRow({
           aria-label={`${item.name} ${t(statusLabelKey)}`}
           className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
         >
-          <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-2">
+          <div className="grid min-w-0 flex-1 automation-summary-columns gap-x-2">
             <span className="inline-flex h-5 w-2.5 shrink-0 items-center justify-center">
               <AutomationHealthIndicator health={health} />
             </span>

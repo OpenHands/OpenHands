@@ -2,9 +2,21 @@
 import { createServer } from "node:http";
 import net from "node:net";
 import { WebSocketServer } from "ws";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { server as mswServer } from "#/mocks/node";
 
 import { startPortForwardTunnel } from "../../scripts/tunnel-client.mjs";
+
+beforeAll(() => mswServer.close());
+afterAll(() => mswServer.listen({ onUnhandledFrame: "bypass" }));
 
 const sessionId = "sess_abc123";
 const remotePort = 8000;

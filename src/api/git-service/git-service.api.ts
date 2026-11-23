@@ -1,15 +1,12 @@
 import { GitClient } from "@openhands/typescript-client/clients";
-import { RemoteWorkspace } from "@openhands/typescript-client/workspace/remote-workspace";
 import { RepositoryPage, BranchPage, InstallationPage } from "#/types/git";
 import { Provider } from "#/types/settings";
-import { GitChange, GitChangeDiff } from "../open-hands.types";
-import AgentServerConversationService from "../conversation-service/agent-server-conversation-service.api";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
-import { mapAnyGitStatusToClientStatus } from "#/utils/git-status-mapper";
 import { getActiveBackend } from "../backend-registry/active-store";
 import {
   getCloudInstallations,
   getCloudRepositoryBranches,
+  getCloudRepositoryDetails,
   searchCloudRepositories,
 } from "../cloud/git-service.api";
 
@@ -64,6 +61,7 @@ class GitService {
     limit = 100,
     pageId?: string,
     installationId?: string,
+    gitProviderId?: number | null,
   ): Promise<RepositoryPage> {
     if (isInvalidProvider(provider)) {
       return EMPTY_REPOSITORY_PAGE;
@@ -82,6 +80,7 @@ class GitService {
       limit,
       pageId,
       installationId,
+      gitProviderId,
     });
   }
 
@@ -90,6 +89,7 @@ class GitService {
     pageId?: string,
     limit = 30,
     installationId?: string,
+    gitProviderId?: number | null,
   ): Promise<RepositoryPage> {
     if (isInvalidProvider(provider)) {
       return EMPTY_REPOSITORY_PAGE;
@@ -106,6 +106,7 @@ class GitService {
       limit,
       pageId,
       installationId,
+      gitProviderId,
     });
   }
 
@@ -115,6 +116,7 @@ class GitService {
     installations: string[],
     pageId?: string,
     limit = 30,
+    gitProviderId?: number | null,
   ): Promise<RepositoryPage> {
     if (isInvalidProvider(provider) || !isCloudActive()) {
       return EMPTY_REPOSITORY_PAGE;
@@ -126,7 +128,28 @@ class GitService {
       installationId,
       limit,
       pageId,
+      gitProviderId,
     });
+  }
+
+  /**
+   * The repository's default branch, for repositories whose list entry has
+   * no `main_branch`. Null when it is unknown.
+   */
+  static async getRepositoryDefaultBranch(
+    repository: string,
+    provider: string,
+    gitProviderId?: number | null,
+  ): Promise<string | null> {
+    if (isInvalidProvider(provider) || !isCloudActive()) {
+      return null;
+    }
+    const details = await getCloudRepositoryDetails({
+      provider: safeProvider(provider),
+      repository,
+      gitProviderId,
+    });
+    return details?.main_branch ?? null;
   }
 
   static async getRepositoryBranches(
@@ -135,6 +158,7 @@ class GitService {
     query: string = "",
     pageId?: string,
     limit = 30,
+    gitProviderId?: number | null,
   ): Promise<BranchPage> {
     if (isInvalidProvider(provider) || !isCloudActive()) {
       return EMPTY_BRANCH_PAGE;
@@ -145,6 +169,7 @@ class GitService {
       query: query || undefined,
       pageId,
       limit,
+      gitProviderId,
     });
   }
 
@@ -154,6 +179,7 @@ class GitService {
     query: string,
     pageId?: string,
     limit = 30,
+    gitProviderId?: number | null,
   ): Promise<BranchPage> {
     if (isInvalidProvider(provider) || !isCloudActive()) {
       return EMPTY_BRANCH_PAGE;
@@ -164,6 +190,7 @@ class GitService {
       query,
       pageId,
       limit,
+      gitProviderId,
     });
   }
 
@@ -171,6 +198,7 @@ class GitService {
     provider: string,
     pageId?: string,
     limit = 100,
+    gitProviderId?: number | null,
   ): Promise<InstallationPage> {
     if (isInvalidProvider(provider) || !isCloudActive()) {
       return EMPTY_INSTALLATION_PAGE;
@@ -179,40 +207,8 @@ class GitService {
       provider: safeProvider(provider),
       pageId,
       limit,
+      gitProviderId,
     });
-  }
-
-  static async getGitChanges(conversationId: string): Promise<GitChange[]> {
-    const workingDir =
-      await AgentServerConversationService.resolveConversationWorkingDir(
-        conversationId,
-      );
-    const changes = await new RemoteWorkspace(
-      getAgentServerClientOptions({ workingDir, conversationId }),
-    ).gitChanges(workingDir);
-
-    return changes.map((change) => ({
-      path: change.path,
-      status: mapAnyGitStatusToClientStatus(
-        String(change.status) as Parameters<
-          typeof mapAnyGitStatusToClientStatus
-        >[0],
-      ),
-    }));
-  }
-
-  static async getGitChangeDiff(
-    conversationId: string,
-    path: string,
-  ): Promise<GitChangeDiff> {
-    const diff = await new RemoteWorkspace(
-      getAgentServerClientOptions({ conversationId }),
-    ).gitDiff(path);
-
-    return {
-      modified: diff.modified ?? "",
-      original: diff.original ?? "",
-    };
   }
 }
 

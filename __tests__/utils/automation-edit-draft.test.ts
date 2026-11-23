@@ -13,7 +13,13 @@ function automation(overrides: Partial<Automation> = {}): Automation {
       timezone: "America/New_York",
     },
     enabled: true,
-    repository: "acme/repo",
+    // What the client reads: repositories lifted from the service's preset
+    // metadata, which has no top-level `repository`.
+    repositories: [{ url: "acme/repo", provider: "github" }],
+    preset_metadata: {
+      preset_type: "prompt",
+      repos: [{ url: "acme/repo", provider: "github" }],
+    },
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
     ...overrides,
@@ -78,5 +84,68 @@ describe("setupDraftFromAutomation", () => {
     expect(setupDraftFromAutomation(savedAutomation).form).toMatchObject(
       expected,
     );
+  });
+
+  it("keeps the saved repositories so an edit can tell what changed", () => {
+    const draft = setupDraftFromAutomation(
+      automation({
+        repositories: [
+          { url: "acme/repo", ref: "main", provider: "github" },
+          { url: "https://github.com/acme/docs" },
+        ],
+      }),
+    );
+
+    expect(draft.form?.repository).toBe(
+      "acme/repo, https://github.com/acme/docs",
+    );
+    expect(draft.existingRepositories).toEqual([
+      { url: "acme/repo", ref: "main", provider: "github" },
+      { url: "https://github.com/acme/docs" },
+    ]);
+    expect(draft.canUpdateRepositories).toBe(true);
+  });
+
+  it("falls back to the single repository of an imported file", () => {
+    const draft = setupDraftFromAutomation(
+      automation({ repositories: undefined, repository: "acme/legacy" }),
+    );
+
+    expect(draft.form?.repository).toBe("acme/legacy");
+  });
+
+  it("keeps the visibility of an automation that runs as a person", () => {
+    // Arrange
+    const personal = automation({ run_as_kind: "user", visibility: "private" });
+
+    // Act
+    const draft = setupDraftFromAutomation(personal);
+
+    // Assert
+    expect(draft.existingVisibility).toBe("private");
+  });
+
+  it("offers no visibility for an automation that runs as a service account", () => {
+    // Arrange
+    const serviceRun = automation({
+      run_as_kind: "service",
+      visibility: "organization",
+    });
+
+    // Act
+    const draft = setupDraftFromAutomation(serviceRun);
+
+    // Assert
+    expect(draft.existingVisibility).toBeUndefined();
+  });
+
+  it.each([
+    { name: "a plugin spec", preset_metadata: { preset_type: "plugin_spec" } },
+    { name: "a custom bundle", preset_metadata: null },
+  ])("does not offer repository changes for $name", ({ preset_metadata }) => {
+    expect(
+      setupDraftFromAutomation(automation({ preset_metadata }))
+        .canUpdateRepositories,
+    ).toBe(false);
   });
 });

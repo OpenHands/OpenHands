@@ -154,6 +154,53 @@ describe("useWebSocket connection lifecycle", () => {
     expect("lastMessage" in result.current).toBe(false);
   });
 
+  it("replaces a same-URL connection when its identity changes and replays with current options", () => {
+    vi.stubGlobal("WebSocket", BrowserWebSocketDouble);
+    let afterSeq = "4";
+    const queryParams = () => ({ after_seq: afterSeq });
+    const originalOnMessage = vi.fn();
+    const latestOnMessage = vi.fn();
+    const initialProps = {
+      connectionKey: "runtime-a",
+      sessionApiKey: "session-a",
+      onMessage: originalOnMessage,
+    };
+    const { result, rerender } = renderHook(
+      (props: typeof initialProps) =>
+        useWebSocket("ws://acme.test/events", { ...props, queryParams }),
+      { initialProps },
+    );
+    const firstSocket = getSocket();
+    act(() => firstSocket.open());
+
+    rerender({ ...initialProps, onMessage: latestOnMessage });
+    act(() => firstSocket.receive("live frame"));
+    expect(BrowserWebSocketDouble.instances).toHaveLength(1);
+    expect(latestOnMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ data: "live frame" }),
+    );
+
+    // Cached history can keep the URL unchanged across an identity switch.
+    // A replacement still needs fresh auth and a freshly resolved cursor.
+    afterSeq = "-1";
+    rerender({
+      connectionKey: "runtime-b",
+      sessionApiKey: "session-b",
+      onMessage: latestOnMessage,
+    });
+
+    expect(firstSocket.close).toHaveBeenCalledOnce();
+    expect(BrowserWebSocketDouble.instances).toHaveLength(2);
+    const replacementSocket = getSocket();
+    expect(replacementSocket.url).toBe("ws://acme.test/events?after_seq=-1");
+    act(() => replacementSocket.open());
+    expect(replacementSocket.send).toHaveBeenCalledExactlyOnceWith(
+      JSON.stringify({ type: "auth", session_api_key: "session-b" }),
+    );
+    expect(result.current.socket).toBe(replacementSocket);
+    expect(result.current.isConnected).toBe(true);
+  });
+
   it("delivers the final asynchronous close after clearing the URL", () => {
     vi.stubGlobal("WebSocket", BrowserWebSocketDouble);
     const onClose = vi.fn();
@@ -449,6 +496,44 @@ describe("useWebSocket reconnection", () => {
     expect(result.current.isReconnecting).toBe(false);
     expect(result.current.error).toBe(null);
     expect(result.current.attemptCount).toBe(0);
+  });
+
+  it("ignores a late close from a socket replaced by reconnect", () => {
+    const onClose = vi.fn();
+    const onError = vi.fn();
+    const { result } = renderWebSocket("ws://acme.test/events", {
+      onClose,
+      onError,
+    });
+    const firstSocket = getSocket();
+
+    act(() => firstSocket.open());
+    expect(result.current.isConnected).toBe(true);
+    expect(result.current.error).toBe(null);
+
+    // Defer the old socket's close event, as a browser does: reconnect()
+    // returns before the TCP teardown delivers "close".
+    vi.mocked(firstSocket.close).mockImplementation(() => {});
+
+    act(() => result.current.reconnect());
+    const newSocket = getSocket();
+    expect(newSocket).not.toBe(firstSocket);
+    act(() => newSocket.open());
+    expect(result.current.isConnected).toBe(true);
+    expect(result.current.error).toBe(null);
+
+    // The stale socket's late close must not clobber the live state.
+    act(() => firstSocket.emitClose(1006, "Abnormal closure"));
+    expect(result.current.isConnected).toBe(true);
+    expect(result.current.error).toBe(null);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+
+    // Closing the live socket still updates state and notifies.
+    act(() => newSocket.emitClose(1000, "Normal closure"));
+    expect(result.current.isConnected).toBe(false);
+    expect(result.current.error).toBe(null);
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("manual reconnect supersedes a pending retry without creating a duplicate", () => {

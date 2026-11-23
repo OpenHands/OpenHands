@@ -1,4 +1,11 @@
-import { AppWindow, Brain, Route as RouteIcon, Shield } from "lucide-react";
+import {
+  AppWindow,
+  Brain,
+  Container,
+  FlaskConical,
+  Route as RouteIcon,
+  Shield,
+} from "lucide-react";
 import KeyIcon from "#/icons/key.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
@@ -58,6 +65,12 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     subtitle: "SETTINGS$PAGE_VERIFICATION_SUBLINE",
   },
   {
+    icon: <Container className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/runtime",
+    text: "SETTINGS$NAV_RUNTIME",
+    subtitle: "SETTINGS$PAGE_RUNTIME_SUBLINE",
+  },
+  {
     icon: <AppWindow className="size-4" strokeWidth={2} aria-hidden />,
     to: "/settings/app",
     text: "SETTINGS$NAV_APPLICATION",
@@ -68,6 +81,13 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/secrets",
     text: "SETTINGS$NAV_SECRETS",
     subtitle: "SETTINGS$PAGE_SECRETS_SUBLINE",
+  },
+  {
+    // Experimental features the user turns on or off, listed by the agent server.
+    icon: <FlaskConical className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/experimental",
+    text: "SETTINGS$NAV_EXPERIMENTAL",
+    subtitle: "SETTINGS$PAGE_EXPERIMENTAL_SUBLINE",
   },
 ];
 

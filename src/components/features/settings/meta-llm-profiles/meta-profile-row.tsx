@@ -53,7 +53,7 @@ export function MetaProfileRow({
           {info.name}
         </span>
         <span
-          className="min-w-0 max-w-full truncate text-sm text-[var(--oh-muted)]"
+          className="min-w-0 max-w-full truncate text-sm text-muted"
           title={summary}
         >
           {summary}

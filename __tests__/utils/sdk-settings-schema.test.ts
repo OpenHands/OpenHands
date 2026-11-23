@@ -1058,6 +1058,19 @@ describe("sdk settings schema helpers", () => {
       );
     });
 
+    it("refuses a container CPU limit docker run would reject", () => {
+      const cpusField = getMockField({
+        key: "container_cpus",
+        label: "Container CPU limit",
+        value_type: "number",
+      });
+
+      expect(() => coerceFieldValue(cpusField, "0.001")).toThrow(
+        "Container CPU limit must be at least 0.01",
+      );
+      expect(coerceFieldValue(cpusField, "0.5")).toBe(0.5);
+    });
+
     it("coerces JSON arrays and reports invalid array input", () => {
       const field = getMockField({
         label: "Tags",
@@ -1183,6 +1196,19 @@ describe("sdk settings schema helpers", () => {
         false,
       );
       expect(isSettingsFieldVisible(dependent, { one: true })).toBe(false);
+    });
+
+    it("shows a field that depends on a choice only for that value", () => {
+      const dockerOnly = getMockField({
+        depends_on: ["default_runtime=docker"],
+      });
+
+      expect(
+        isSettingsFieldVisible(dockerOnly, { default_runtime: "docker" }),
+      ).toBe(true);
+      expect(
+        isSettingsFieldVisible(dockerOnly, { default_runtime: "worktree" }),
+      ).toBe(false);
     });
 
     it("keeps only fields allowed by exclusions, view, and dependencies", () => {

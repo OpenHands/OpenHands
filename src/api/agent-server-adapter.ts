@@ -1,8 +1,13 @@
 import i18n, { OPENHANDS_I18N_NAMESPACE } from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 import { hasPluginParameters } from "#/utils/plugin-parameters";
-import { HOOK_EVENT_FIELDS, HookType } from "@openhands/typescript-client";
+import {
+  HOOK_EVENT_FIELDS,
+  HookType,
+  HttpError,
+} from "@openhands/typescript-client";
 import type {
+  ACPEffortOption,
   ACPModelInfo,
   ConversationRuntimeInfo,
   HookConfig,
@@ -11,9 +16,15 @@ import { ServerClient } from "@openhands/typescript-client/clients";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { ExecutionStatus } from "#/types/agent-server/core";
-import { AgentKind, Settings, SettingsValue } from "#/types/settings";
+import {
+  AgentKind,
+  Settings,
+  SettingsValue,
+  isProvider,
+} from "#/types/settings";
 import {
   resolveEffectiveAcpModel,
+  toAcpEffortChoices,
   toAcpModelOptions,
 } from "#/constants/acp-providers";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
@@ -44,6 +55,7 @@ import {
   buildSkillEnablementFilter,
   findInvokedCatalogSkill,
   profileSkillEnablement,
+  toSkillEnablement,
   type SkillEnablement,
 } from "#/utils/skill-enablement";
 import type { StoredOpenHandsProfile } from "./agent-profiles-service/profile-behavior";
@@ -65,7 +77,11 @@ import {
   LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
   LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
 } from "./launch-child-conversation-client-tool";
-import { AUTOMATION_FORM_UPDATE_CLIENT_TOOL } from "./automation-form-client-tool";
+import {
+  AUTOMATION_SETUP_SYSTEM_SUFFIX,
+  buildAutomationFormUpdateClientTool,
+} from "./automation-form-client-tool";
+import type { DeploymentCapabilities } from "#/manifests/types";
 import { REQUEST_SECRET_CLIENT_TOOL } from "./request-secret-client-tool";
 import {
   buildPlanPath,
@@ -82,6 +98,7 @@ export interface DirectConversationInfo {
   created_at: string;
   updated_at: string;
   execution_status?: string | null;
+  max_budget_per_run?: number | null;
   /** Cloud-only sandbox lifecycle state. Omitted / null for local agent-server conversations. */
   sandbox_status?: string | null;
   /** Availability of the runtime that backs a local conversation. */
@@ -129,6 +146,8 @@ export interface DirectConversationInfo {
   current_model_id?: string | null;
   current_model_name?: string | null;
   available_models?: ACPModelInfo[] | null;
+  current_effort?: string | null;
+  available_efforts?: ACPEffortOption[] | null;
   workspace?: {
     working_dir?: string | null;
   } | null;
@@ -243,16 +262,6 @@ export async function fetchBackendExecutionRuntime(): Promise<
 > {
   const serverInfo = await fetchBackendServerInfo();
   return serverInfo?.execution_runtime;
-}
-
-/**
- * Return the deployment mode from the runtime services info, e.g. "docker",
- * "dev:automation", etc. Returns `null` when no runtime info is supplied.
- */
-export function getDeploymentMode(
-  runtimeServicesInfo?: RuntimeServicesInfo | null,
-): string | null {
-  return runtimeServicesInfo?.mode ?? null;
 }
 
 /**
@@ -422,9 +431,15 @@ export function toAppConversation(
   return {
     id: info.id,
     created_by_user_id: null,
-    selected_repository: metadata?.selected_repository ?? null,
-    selected_branch: metadata?.selected_branch ?? null,
-    git_provider: metadata?.git_provider ?? null,
+    selected_repository:
+      metadata?.selected_repository ?? info.tags?.[REPOSITORY_TAG_KEY] ?? null,
+    selected_branch:
+      metadata?.selected_branch ?? info.tags?.[SELECTED_BRANCH_TAG_KEY] ?? null,
+    git_provider:
+      metadata?.git_provider ??
+      (isProvider(info.tags?.[GIT_PROVIDER_TAG_KEY])
+        ? info.tags[GIT_PROVIDER_TAG_KEY]
+        : null),
     // Prefer the creating client's localStorage metadata; fall back to the
     // server-side workspace tag so local sidebar grouping survives on another
     // browser, device, or after cleared site data (#17386).
@@ -440,6 +455,10 @@ export function toAppConversation(
     acp_server: acpServer,
     acp_available_models: isAcp
       ? toAcpModelOptions(info.available_models)
+      : null,
+    acp_current_effort: isAcp ? (info.current_effort ?? null) : null,
+    acp_available_efforts: isAcp
+      ? toAcpEffortChoices(info.available_efforts)
       : null,
     tags: info.tags ?? null,
     launched_agent_profile: info.launched_agent_profile ?? null,
@@ -567,6 +586,12 @@ export function buildWorkspaceTags(
   return workspace ? { [WORKSPACE_TAG_KEY]: workspace } : {};
 }
 
+// Repository tags, read back like the workspace tag (#15598). Keys must match
+// the agent-server's `^[a-z0-9]+$`.
+export const REPOSITORY_TAG_KEY = "repository";
+export const SELECTED_BRANCH_TAG_KEY = "selectedbranch";
+export const GIT_PROVIDER_TAG_KEY = "gitprovider";
+
 export const AUTOMATION_TRIGGER_TAG_KEY = "automationtrigger";
 export const AUTOMATION_ID_TAG_KEY = "automationid";
 export const AUTOMATION_NAME_TAG_KEY = "automationname";
@@ -619,17 +644,68 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   AUTOMATION_MATERIALIZED_DRAFT_ID_TAG_KEY,
   AUTOMATION_EDIT_ID_TAG_KEY,
   "title",
+  GIT_PROVIDER_TAG_KEY,
   "git_provider",
   "repo_name",
   "repo",
   "repository",
+  SELECTED_BRANCH_TAG_KEY,
   "selected_branch",
   "branch",
   "archiveworkspacepath",
   "workspace",
   "working_dir",
+  // `pinned` / `archived` are the sidebar's pin/archive flags (see
+  // `conversation-tag-flags.ts`), surfaced by the pin icon and the archived
+  // presentation rather than as generic tag chips.
+  "pinned",
+  "archived",
   LOCAL_PLANNER_PARENT_TAG_KEY,
+  // The launched agent profile, which the app server stamps as tags; the
+  // hovercard names the profile instead of echoing the raw id and revision.
+  "agentprofileid",
+  "agentprofilerevision",
+  // Projects board state the Agent Server owns: whether the agent ended on
+  // a question (`turn`, `ask`), why it resolved a conversation, and the pull
+  // requests a member opened (`prs`). The board, the resolved banner and the
+  // Project tab show these; a tag PATCH cannot change them.
+  "turn",
+  "ask",
+  "resolvenote",
+  "prs",
 ]);
+
+/**
+ * Projects tags that keep a chip (`project` shows the project's name,
+ * `resolved` who resolved it) but are not editable: membership and
+ * resolution change through the Projects routes, not tags.
+ */
+export const PROJECT_BOARD_TAG_KEYS: ReadonlySet<string> = new Set([
+  "project",
+  "resolved",
+]);
+
+/**
+ * Every Projects tag the Agent Server owns. A tag PATCH keeps them as the
+ * server has them, so clients never send them.
+ */
+export const SERVER_OWNED_PROJECT_TAG_KEYS: ReadonlySet<string> = new Set([
+  "project",
+  "turn",
+  "ask",
+  "resolved",
+  "resolvenote",
+  "prs",
+]);
+
+/** The tags a user can edit: the displayed ones minus Projects state. */
+export function getEditableConversationTags(
+  tags: Record<string, string> | null | undefined,
+): Array<[string, string]> {
+  return getDisplayConversationTags(tags).filter(
+    ([key]) => !PROJECT_BOARD_TAG_KEYS.has(key.trim().toLowerCase()),
+  );
+}
 
 /**
  * High-signal tag keys shown first in the chip row (before A–Z). Automation
@@ -771,6 +847,57 @@ function getConversationSecurityAnalyzer(conversationSettings: SettingsRecord) {
     default:
       return undefined;
   }
+}
+
+/**
+ * The user's approval and iteration settings, as a start request carries them.
+ * A conversation the server starts for Canvas, such as a project's
+ * coordinator, needs the same ones an ordinary chat gets; its workers then
+ * inherit them from the coordinator.
+ */
+export function buildConversationLaunchPolicies(settings: Settings) {
+  const conversationSettings = toRecord(settings.conversation_settings);
+  const securityAnalyzer =
+    getConversationSecurityAnalyzer(conversationSettings);
+  return {
+    confirmation_policy:
+      getConversationConfirmationPolicy(conversationSettings),
+    ...(securityAnalyzer ? { security_analyzer: securityAnalyzer } : {}),
+    max_iterations: resolveMaxIterations(conversationSettings.max_iterations),
+  };
+}
+
+/**
+ * The Settings → Runtime options a start request carries. Only non-defaults
+ * are sent, so servers without the fields see the request they always did.
+ */
+function getConversationRuntimeOptions(conversationSettings: SettingsRecord) {
+  const {
+    worktree_base: base,
+    worktree_base_ref: ref,
+    worktree_branch_prefix: branchPrefix,
+    container_memory: memory,
+    container_cpus: cpus,
+    container_browser: browser,
+  } = conversationSettings;
+  const worktreeOptions = {
+    ...(typeof base === "string" && base !== "default_branch" ? { base } : {}),
+    ...(base === "ref" && typeof ref === "string" ? { ref } : {}),
+    ...(typeof branchPrefix === "string" && branchPrefix !== "openhands/"
+      ? { branch_prefix: branchPrefix }
+      : {}),
+  };
+  const container = {
+    ...(typeof memory === "string" && memory ? { memory } : {}),
+    ...(typeof cpus === "number" ? { cpus } : {}),
+    ...(browser === false ? { browser } : {}),
+  };
+  return {
+    ...(Object.keys(worktreeOptions).length > 0
+      ? { worktree_options: worktreeOptions }
+      : {}),
+    ...(Object.keys(container).length > 0 ? { container } : {}),
+  };
 }
 
 function buildInitialMessage(
@@ -1008,6 +1135,13 @@ export interface StartConversationOptions {
   query?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
+  /**
+   * What the automation service reports it supports, so the setup assistant's
+   * form tool can name this deployment's event sources. Null when it could
+   * not be read; the tool then carries its generic description.
+   */
+  automationSetupCapabilities?: DeploymentCapabilities | null;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
@@ -1027,12 +1161,20 @@ export interface StartConversationOptions {
   llmProfileOverride?: string;
   /** The profile carries a Model Router, so router-at-start can apply. */
   profileHasRouter?: boolean;
+  /**
+   * A home-page model pick was made before the first message, so the
+   * route-at-start suffix is suppressed for this single launch. Threaded in
+   * by the home launch (`useCreateConversation`) so this builder stays free of
+   * UI state; callers that don't pass it (child, `/new`) route as usual.
+   */
+  suppressRouterAtStart?: boolean;
   /** The ACP profile's server, stamped as the `acpserver` tag. */
   acpServer?: string;
   titleLlmProfile?: string;
   runtimeServicesInfo?: RuntimeServicesInfo | null;
   executionRuntime?: AgentServerInfo["execution_runtime"];
   workspaceHookConfig?: HookConfig | null;
+  skillEnablement?: SkillEnablement | null;
 }
 
 /**
@@ -1072,28 +1214,39 @@ export function buildStartConversationRequest(
 ): ProfileStartConversationPayload {
   const launchSuffix = [
     buildRuntimeServicesSystemSuffix(options.runtimeServicesInfo),
+    // A home-page model pick made before the first message is an explicit
+    // choice the router shouldn't override on turn 1 — suppress the suffix for
+    // this single launch. The flag is threaded in by the home launch so this
+    // builder is stateless; callers that don't pass it route as usual.
     buildRouterAtStartSystemSuffix(
-      options.settings.run_router_at_conversation_start ?? false,
+      options.settings.run_router_at_conversation_start &&
+        !options.suppressRouterAtStart,
       options.profileHasRouter ?? false,
     ),
+    // Sent with the form tool below, which only OpenHands profiles get.
+    options.automationSetup && options.agentProfileKind === "openhands"
+      ? [AUTOMATION_SETUP_SYSTEM_SUFFIX, options.automationSetupContext]
+          .filter(Boolean)
+          .join("\n\n")
+      : null,
   ]
     .filter((suffix): suffix is string => Boolean(suffix))
     .join("\n\n");
-  // A catalog skill the opening message invokes loads for this conversation
-  // even when the profile does not select it.
-  const invokedSkillName =
-    options.agentProfileKind === "openhands"
-      ? findInvokedCatalogSkill(options.query)
-      : undefined;
-  const invokedSkill = invokedSkillName
-    ? buildBundledSkills().find((skill) => skill.name === invokedSkillName)
-    : undefined;
+  const invokedSkillName = findInvokedCatalogSkill(options.query);
+  const isEnabled = buildSkillEnablementFilter(
+    options.skillEnablement ?? toSkillEnablement(options.settings),
+  );
+  const launchSkills = buildBundledSkills().filter(
+    (skill) =>
+      skill.name === invokedSkillName ||
+      (options.agentProfileKind === "acp" && isEnabled(skill.name)),
+  );
   const launchAdditions = {
     ...(launchSuffix ? { system_message_suffix_append: launchSuffix } : {}),
     ...(options.llmProfileOverride
       ? { llm_profile_ref: options.llmProfileOverride }
       : {}),
-    ...(invokedSkill ? { skills: [invokedSkill] } : {}),
+    ...(launchSkills.length > 0 ? { skills: launchSkills } : {}),
   };
 
   const sourceConversationOptions = options.encryptedConversationSettings
@@ -1108,6 +1261,11 @@ export function buildStartConversationRequest(
 
   const conversationSettings = buildConfiguredConversationSettings({
     ...sourceConversationOptions,
+    ...(options.automationSetup &&
+    options.agentProfileKind === "acp" &&
+    options.automationSetupContext
+      ? { query: `${options.query ?? ""}\n\n${options.automationSetupContext}` }
+      : {}),
     executionRuntime: options.executionRuntime,
   });
 
@@ -1129,7 +1287,11 @@ export function buildStartConversationRequest(
             LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
             REQUEST_SECRET_CLIENT_TOOL,
             ...(options.automationSetup
-              ? [AUTOMATION_FORM_UPDATE_CLIENT_TOOL]
+              ? [
+                  buildAutomationFormUpdateClientTool(
+                    options.automationSetupCapabilities,
+                  ),
+                ]
               : []),
           ]
         : [],
@@ -1145,6 +1307,7 @@ export function buildStartConversationRequest(
       options.executionRuntime === "docker"
         ? false
         : (options.worktree ?? true),
+    ...getConversationRuntimeOptions(conversationSettings),
   };
 
   // Stamp the client source tag so the agent-server can attribute the
@@ -1189,8 +1352,7 @@ export function buildStartConversationRequest(
 
   const toolModuleQualnames = {
     ...((conversationSettings.tool_module_qualnames as
-      | Record<string, string>
-      | undefined) ?? {}),
+      Record<string, string> | undefined) ?? {}),
   };
   delete toolModuleQualnames[LEGACY_CANVAS_UI_TOOL_NAME];
   delete toolModuleQualnames[CANVAS_UI_CLIENT_TOOL_NAME];
@@ -1390,6 +1552,24 @@ async function resolveAgentProfileLlmSettings(
   }
 }
 
+async function resolveDefaultProfileSkillEnablement(): Promise<SkillEnablement | null> {
+  try {
+    const {
+      default: AgentProfilesService,
+      WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
+    } = await import("./agent-profiles-service/agent-profiles-service.api");
+    const { profile } = await AgentProfilesService.getProfile(
+      WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
+    );
+    return profile.agent_kind === "openhands"
+      ? profileSkillEnablement(profile as StoredOpenHandsProfile)
+      : null;
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 404) return null;
+    throw error;
+  }
+}
+
 /**
  * The skill selection of the parent's agent profile, or of the active one when
  * the parent recorded none. `null` — caller falls back to the global lists —
@@ -1506,6 +1686,8 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   query?: string;
   automationSetup?: boolean;
   automationSetupTags?: Record<string, string>;
+  automationSetupContext?: string;
+  automationSetupCapabilities?: DeploymentCapabilities | null;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
@@ -1518,6 +1700,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   agentProfileKind?: AgentKind;
   llmProfileOverride?: string;
   profileHasRouter?: boolean;
+  suppressRouterAtStart?: boolean;
   acpServer?: string;
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {
@@ -1526,18 +1709,27 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     import("./hooks-service"),
   ]);
 
-  const [settingsResult, customSecrets, serverInfo, workspaceHookConfig] =
-    await Promise.all([
-      SettingsService.getSettingsForConversation(),
-      SecretsService.getSecrets(),
-      fetchBackendServerInfo(),
-      options.hooksProjectDir === null
-        ? Promise.resolve(null)
-        : HooksService.loadWorkspaceHooks(options.hooksProjectDir),
-    ]);
+  const [
+    settingsResult,
+    customSecrets,
+    serverInfo,
+    workspaceHookConfig,
+    skillEnablement,
+  ] = await Promise.all([
+    SettingsService.getSettingsForConversation(),
+    SecretsService.getSecrets(),
+    fetchBackendServerInfo(),
+    options.hooksProjectDir === null
+      ? Promise.resolve(null)
+      : HooksService.loadWorkspaceHooks(options.hooksProjectDir),
+    options.agentProfileKind === "acp"
+      ? resolveDefaultProfileSkillEnablement()
+      : Promise.resolve(null),
+  ]);
 
   return buildStartConversationRequest({
     ...options,
+    skillEnablement,
     encryptedConversationSettings: settingsResult.conversationSettings,
     customSecrets,
     runtimeServicesInfo: parseRuntimeServicesInfo(

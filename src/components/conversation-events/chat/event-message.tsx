@@ -37,7 +37,10 @@ import { ThoughtEventMessage } from "./event-message-components/thought-event-me
 import { CollapsibleThinking } from "./event-message-components/collapsible-thinking";
 import { HookExecutionEventMessage } from "./event-message-components/hook-execution-event-message";
 import { CorrectiveNudgeMessage } from "./event-message-components/corrective-nudge-message";
-import { createSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
+import {
+  createSkillReadyEvent,
+  shouldShowSkillReadyEvent,
+} from "./event-content-helpers/create-skill-ready-event";
 import { parseMessageFromEvent } from "./event-content-helpers/parse-message-from-event";
 import { isCorrectiveNudge } from "./event-content-helpers/should-render-event";
 import { shouldShowPlanPreview } from "./hooks/use-plan-preview-events";
@@ -46,11 +49,9 @@ import { useStreamedText } from "#/hooks/use-streamed-text";
 
 interface EventMessageProps {
   event: OpenHandsEvent & { isFromPlanningAgent?: boolean };
-  /** @deprecated Prefer the stable correspondingAction prop. */
-  messages?: OpenHandsEvent[];
   /**
    * The action paired with an observation. null means the caller performed
-   * the lookup and found no action; undefined keeps legacy messages lookup.
+   * the lookup and found no action.
    */
   correspondingAction?: ActionEvent | null;
   isLastMessage: boolean;
@@ -67,38 +68,8 @@ interface EventMessageProps {
    * Has no effect on `ThinkAction`, whose thought IS its action body.
    */
   suppressThought?: boolean;
+  suppressReasoning?: boolean;
 }
-
-const getActivatedSkills = (event: MessageEvent): string[] =>
-  event.activated_skills || [];
-
-/**
- * Checks if extended content contains valid text content.
- */
-const hasValidExtendedContent = (
-  extendedContent: MessageEvent["extended_content"],
-): boolean => {
-  if (!extendedContent || extendedContent.length === 0) {
-    return false;
-  }
-
-  return extendedContent.some(
-    (content) => content.type === "text" && content.text.trim().length > 0,
-  );
-};
-
-/**
- * Determines if a Skill Ready event should be displayed for the given message event.
- */
-const shouldShowSkillReadyEvent = (messageEvent: MessageEvent): boolean => {
-  const activatedSkills = getActivatedSkills(messageEvent);
-  const hasActivatedSkills = activatedSkills.length > 0;
-  const hasExtendedContent = hasValidExtendedContent(
-    messageEvent.extended_content,
-  );
-
-  return hasActivatedSkills && hasExtendedContent;
-};
 
 interface CommonProps {
   isLastMessage: boolean;
@@ -179,13 +150,13 @@ function PlanningObservationPreview({
 
 function EventMessageComponent({
   event,
-  messages,
   correspondingAction: suppliedCorrespondingAction,
   isLastMessage,
   isInLast10Actions,
   planPreviewEventIds,
   showPlanPreview,
   suppressThought = false,
+  suppressReasoning = false,
 }: EventMessageProps) {
   const { data: config } = useConfig();
   const planContent = useConversationStore((state) => state.planContent);
@@ -200,18 +171,14 @@ function EventMessageComponent({
   // Read isFromPlanningAgent directly from the event object
   const isFromPlanningAgent = event.isFromPlanningAgent || false;
 
-  // Streaming slots render on a clock rather than at the granularity the
-  // network delivered (#15493). Unconditional: hooks cannot be nested in the
-  // per-kind branches below. A finished agent message is fed through it too:
-  // it replaces its slot in place, so the reveal carries on from where the
-  // slot left off instead of the unrevealed rest appearing at once. Any other
-  // message mounts complete and is shown as is.
+  // Smooth live deltas, then show the complete durable reply immediately.
   const finishedReply =
     isMessageEvent(event) && event.source === "agent"
       ? parseMessageFromEvent(event)
       : "";
   const streamedContent = useStreamedText(
     isStreamingDeltaEvent(event) ? (event.content ?? "") : finishedReply,
+    isStreamingDeltaEvent(event),
   );
 
   // Common props for components that need them
@@ -262,7 +229,12 @@ function EventMessageComponent({
       .join("\n\n");
     return (
       <>
-        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
+        {!suppressReasoning && reasoningContent && (
+          <CollapsibleThinking
+            content={reasoningContent}
+            expansionId={`reasoning-${event.id}`}
+          />
+        )}
         {message && (
           <ChatMessage
             type="agent"
@@ -280,11 +252,6 @@ function EventMessageComponent({
     return renderStreamingReply(event.reasoning_content ?? "");
   }
 
-  // The finished reply is still being revealed: keep the streaming bubble.
-  if (isMessageEvent(event) && streamedContent.length < finishedReply.length) {
-    return renderStreamingReply(getReasoningContent(event.llm_message));
-  }
-
   // Finish actions
   if (isActionEvent(event) && event.action.kind === "FinishAction") {
     return (
@@ -300,7 +267,12 @@ function EventMessageComponent({
   // (usually English) differs from the conversation language.
   if (isActionEvent(event) && event.action.kind === "ThinkAction") {
     const thinkAction = event as ActionEvent<ThinkAction>;
-    return <CollapsibleThinking content={thinkAction.action.thought} />;
+    return (
+      <CollapsibleThinking
+        content={thinkAction.action.thought}
+        expansionId={`reasoning-${thinkAction.id}`}
+      />
+    );
   }
 
   // Action events - render thought + action (will be replaced by thought + observation)
@@ -308,7 +280,6 @@ function EventMessageComponent({
     const reasoningContent = getReasoningContent(event);
     return (
       <>
-        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
         {!suppressThought && (
           <ThoughtEventMessage
             event={event}
@@ -318,6 +289,7 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          reasoning={suppressReasoning ? "" : reasoningContent}
         />
       </>
     );
@@ -348,13 +320,8 @@ function EventMessageComponent({
       return null;
     }
 
-    // Find the action that this observation is responding to
-    const correspondingAction =
-      suppliedCorrespondingAction === undefined
-        ? messages?.find(
-            (msg) => isActionEvent(msg) && msg.id === event.action_id,
-          )
-        : (suppliedCorrespondingAction ?? undefined);
+    // The action that this observation is responding to
+    const correspondingAction = suppliedCorrespondingAction ?? undefined;
 
     // Skip ThoughtEventMessage for ThinkAction (thought IS the action)
     const shouldShowThought =
@@ -370,7 +337,6 @@ function EventMessageComponent({
 
     return (
       <>
-        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
         {shouldShowThought && (
           <ThoughtEventMessage
             event={correspondingAction}
@@ -380,6 +346,7 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          reasoning={suppressReasoning ? "" : reasoningContent}
           correspondingAction={
             correspondingAction && isActionEvent(correspondingAction)
               ? correspondingAction
@@ -399,7 +366,6 @@ function EventMessageComponent({
 
     return (
       <>
-        {reasoningContent && <CollapsibleThinking content={reasoningContent} />}
         {!suppressThought && correspondingAction && (
           <ThoughtEventMessage
             event={correspondingAction}
@@ -409,6 +375,7 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          reasoning={suppressReasoning ? "" : reasoningContent}
           correspondingAction={correspondingAction}
         />
       </>
@@ -436,6 +403,7 @@ function EventMessageComponent({
     return (
       <UserAssistantEventMessage
         event={messageEvent}
+        suppressReasoning={suppressReasoning}
         {...commonProps}
         isLastMessage={isLastMessage}
       />

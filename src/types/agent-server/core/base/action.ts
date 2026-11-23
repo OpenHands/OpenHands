@@ -1,9 +1,21 @@
+import type { AskUserAction as ClientAskUserAction } from "@openhands/typescript-client";
 import { AUTOMATION_FORM_UPDATE_ACTION_KIND } from "#/constants/automation-form";
 import { CANVAS_UI_CLIENT_ACTION_KIND } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_ACTION_KIND } from "#/constants/child-conversation";
 import { REQUEST_SECRET_ACTION_KIND } from "#/constants/secret-request";
 import { ActionBase } from "./base";
 import { TaskItem } from "./common";
+
+/**
+ * The client's `ask_user` question, plus the Projects coordinator's
+ * `ask_user_for_conversation` question it relays for a worker
+ * (`for_conversation`). The Agent Server's client types add that kind with
+ * software-agent-sdk#6602; until a release carries it, Canvas widens it here.
+ */
+export type AskUserAction = Omit<ClientAskUserAction, "kind"> & {
+  kind: ClientAskUserAction["kind"] | "AskUserForConversationAction";
+  for_conversation?: string | null;
+};
 
 export interface MCPToolAction extends ActionBase<"MCPToolAction"> {
   /**
@@ -367,6 +379,7 @@ export interface RequestSecretAction extends ActionBase<
 }
 
 export type Action =
+  | AskUserAction
   | MCPToolAction
   | FinishAction
   | ThinkAction

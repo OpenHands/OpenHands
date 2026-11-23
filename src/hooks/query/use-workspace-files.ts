@@ -13,7 +13,10 @@ import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import { getGitPath } from "#/utils/get-git-path";
 import { useWorkspaceFileDiscovery } from "./use-workspace-file-discovery";
 import {
+  buildWindowsWorkspaceFileListCommand,
   buildWorkspaceFileListCommand,
+  isWindowsWorkingDir,
+  parseWindowsWorkspaceFileList,
   parseWorkspaceFileList,
 } from "#/utils/workspace-file-discovery";
 
@@ -63,10 +66,16 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
       options,
     ],
     queryFn: async () => {
+      // Pick the command from the agent-server's own working directory, not
+      // the browser's user agent: the two can run on different operating
+      // systems (Docker Desktop on Windows runs a Linux agent-server).
+      const onWindowsHost = isWindowsWorkingDir(workingDir);
       const result = await AgentServerRuntimeService.executeCommand(
         conversationUrl,
         sessionApiKey,
-        buildWorkspaceFileListCommand(options),
+        onWindowsHost && workingDir
+          ? buildWindowsWorkspaceFileListCommand(options, workingDir)
+          : buildWorkspaceFileListCommand(options),
         workingDir,
         30,
         conversationId,
@@ -78,7 +87,9 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
         );
       }
 
-      return parseWorkspaceFileList(result.stdout, options.maxFiles);
+      return onWindowsHost && workingDir
+        ? parseWindowsWorkspaceFileList(result.stdout, workingDir, options)
+        : parseWorkspaceFileList(result.stdout, options.maxFiles);
     },
     enabled:
       enabled &&
@@ -131,7 +142,10 @@ function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
   const absolutePath = gitPath.startsWith("/") ? gitPath : `/${gitPath}`;
 
   const query = useQuery<string[]>({
-    queryKey: ["workspace-files-cloud", conversationId, absolutePath],
+    // Shares the `workspace-files` prefix with the local listing so the Files
+    // tab Refresh and the file-edit auto-refresh (which invalidate
+    // `["workspace-files"]`) refetch this query too.
+    queryKey: ["workspace-files", "cloud", conversationId, absolutePath],
     queryFn: async () => {
       const files = await listCloudConversationFiles(
         conversationId!,

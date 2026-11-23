@@ -422,8 +422,46 @@ describe("mock conversation handlers", () => {
       "local-pagination-message-100",
       "local-pagination-message-99",
     ]);
-    expect(descending.body.next_page_id).toBe("next-page");
+    expect(descending.body.next_page_id).toBe("local-pagination-message-98");
   });
+
+  it.each(["local", "cloud"] as const)(
+    "continues the %s history cursor through an equal-timestamp page boundary",
+    async (kind) => {
+      const path =
+        kind === "local"
+          ? "/api/conversations/pagination-local/events/search"
+          : "/api/v1/conversation/pagination-cloud/events/search";
+      type Page = {
+        items: { id: string; timestamp: string }[];
+        next_page_id: string | null;
+      };
+      const request = (query: string) =>
+        kind === "local"
+          ? requestJson<Page>(`${path}?${query}`)
+          : cloudProxy<Page>(`${path}?${query}`);
+      const first = await request("limit=50&sort_order=TIMESTAMP_DESC");
+      const second = await request(
+        `limit=50&sort_order=TIMESTAMP_DESC&page_id=${first.body.next_page_id}`,
+      );
+      const combined = [...first.body.items, ...second.body.items];
+      expect(new Set(combined.map((event) => event.id)).size).toBe(100);
+      expect(first.body.items.at(-1)?.timestamp).toBe(
+        second.body.items[0].timestamp,
+      );
+      expect(second.body.next_page_id).toBeNull();
+      expect(
+        combined
+          .reverse()
+          .filter((event) => /-(49|50|51)$/.test(event.id))
+          .map((event) => event.id),
+      ).toEqual([
+        `${kind}-pagination-message-49`,
+        `${kind}-pagination-message-50`,
+        `${kind}-pagination-message-51`,
+      ]);
+    },
+  );
 
   it("returns only pagination events older than the requested timestamp", async () => {
     const timer = vi.spyOn(globalThis, "setTimeout");
@@ -468,7 +506,7 @@ describe("mock conversation handlers", () => {
     }>("/api/conversations/unknown/events/search");
 
     expect(staticPage.body.items).toHaveLength(1);
-    expect(staticPage.body.next_page_id).toBe("next-page");
+    expect(staticPage.body.next_page_id).toBe("table-demo-agent-1");
     expect(unknownPage.body).toEqual({ items: [], next_page_id: null });
   });
 
@@ -544,7 +582,7 @@ describe("mock conversation handlers", () => {
       "cloud-pagination-message-100",
       "cloud-pagination-message-99",
     ]);
-    expect(events.body.next_page_id).toBe("next-page");
+    expect(events.body.next_page_id).toBe("cloud-pagination-message-98");
   });
 
   it("serves cloud account bootstrap data through the proxy", async () => {

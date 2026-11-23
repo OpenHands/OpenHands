@@ -1,5 +1,5 @@
 import React from "react";
-import Markdown, { Components } from "react-markdown";
+import Markdown, { Components, defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import rehypeRaw from "rehype-raw";
@@ -10,6 +10,10 @@ import { code } from "./code";
 import { ul, ol, li } from "./list";
 import { paragraph } from "./paragraph";
 import { anchor } from "./anchor";
+import {
+  markdownUrlTransform,
+  withConversationMentions,
+} from "./conversation-mention";
 import { h1, h2, h3, h4, h5, h6 } from "./headings";
 import { table, th, td } from "./table";
 import { blockquote } from "./blockquote";
@@ -52,13 +56,18 @@ export const MARKDOWN_SANITIZE_SCHEMA: Schema = {
   attributes: {
     ...defaultSchema.attributes,
     "*": [...(defaultSchema.attributes?.["*"] ?? []), "className", "id"],
-    // `["rel", "noopener", "noreferrer", "nofollow"]` (rehype-sanitize's
-    // "[attrName, ...allowed-values]" form) requires `rel` to be EXACTLY
-    // one of those tokens — it would strip the standard, space-separated
-    // `rel="noopener noreferrer"` and reintroduce a reverse-tabnabbing
-    // vector on `target="_blank"` links. None of the `rel` keywords
-    // execute code or navigate, so allowing any rel value is safe.
-    a: ["href", "title", "target", "rel"],
+    // Call sites without `includeStandard` skip the `anchor` component, so
+    // this schema alone guards `rel`/`target` on untrusted markdown.
+    // `rel`: drop the `opener` token (it hands the opened page
+    // `window.opener`). A regexp, not a value list, because sanitize tests it
+    // per token on an array `rel` but against the whole value on a string.
+    // `target`: only `_blank`/`_self`, so links can't retarget the app frame.
+    a: [
+      "href",
+      "title",
+      ["target", "_blank", "_self"],
+      ["rel", /^(?!.*(?:^|\s)opener(?:\s|$))/i],
+    ],
     img: [
       ...(defaultSchema.attributes?.img ?? []),
       "src",
@@ -84,7 +93,9 @@ export const MARKDOWN_SANITIZE_SCHEMA: Schema = {
   protocols: {
     ...defaultSchema.protocols,
     src: ["http", "https"],
-    href: ["http", "https", "mailto", "tel"],
+    // `conversation` is a conversation mention, opened in place by
+    // `withConversationMentions`; browsers do not navigate to it.
+    href: ["http", "https", "mailto", "tel", "conversation"],
   },
 };
 
@@ -143,6 +154,13 @@ const htmlRehypePlugins: PluggableList = [
   [rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
 ];
 
+const urlTransform = (url: string) =>
+  markdownUrlTransform(url, defaultUrlTransform);
+
+// Conversation mentions open in place whichever link renderer is in use.
+const standardLink = withConversationMentions(anchor);
+const plainLink = withConversationMentions();
+
 function MarkdownBlockComponent({
   source,
   components,
@@ -161,6 +179,7 @@ function MarkdownBlockComponent({
     <Markdown
       components={components}
       remarkPlugins={remarkPlugins}
+      urlTransform={urlTransform}
       rehypePlugins={
         clock
           ? [
@@ -249,8 +268,8 @@ function MarkdownRendererComponent({
       th,
       td,
       blockquote,
+      a: includeStandard ? standardLink : plainLink,
       ...(includeStandard && {
-        a: anchor,
         p: paragraph,
       }),
       ...(includeHeadings && {
@@ -262,6 +281,10 @@ function MarkdownRendererComponent({
         h6,
       }),
       ...customComponents, // Custom components override defaults
+      // A custom link renderer still opens conversation mentions in place.
+      ...(customComponents?.a && {
+        a: withConversationMentions(customComponents.a),
+      }),
     }),
     [customComponents, includeStandard, includeHeadings],
   );

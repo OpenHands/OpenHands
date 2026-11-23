@@ -300,8 +300,17 @@ const same = (values) => new Set(values).size <= 1;
  * verified: every baseline attempt (at least two) reproduced the bug and
  * every fix attempt (at least two) passed, under matching inputs.
  * not-fixed: the fix still reproduces it. inconclusive: anything else.
+ * `vary` names what the fix changed: "revision" (default, a Canvas fix: same
+ * backend, different revisions) or "backend" (an Agent Server or automation
+ * fix: same revision, a different backend version on each side).
  */
-export function proofVerdict({ baseline, fix, sha, min = 2 }) {
+export function proofVerdict({
+  baseline,
+  fix,
+  sha,
+  min = 2,
+  vary = "revision",
+}) {
   const reasons = [];
   const pick = (rows) => rows.filter((r) => r.sha === sha);
   const b = pick(baseline);
@@ -330,12 +339,24 @@ export function proofVerdict({ baseline, fix, sha, min = 2 }) {
   const inputs = [];
   if (!same(all.map((r) => r.viewport ?? "")))
     inputs.push("attempts ran at different viewports");
-  if (!same(all.map((r) => r.backend ?? "")))
-    inputs.push("attempts ran against different backend versions");
-  if (b.length && f.length && same(all.map((r) => r.revision)))
-    inputs.push("baseline and fix ran the same revision");
-  if (!same(b.map((r) => r.revision)) || !same(f.map((r) => r.revision)))
-    inputs.push("attempts on one side ran different revisions");
+  if (vary === "backend") {
+    if (!same(all.map((r) => r.revision)))
+      inputs.push("attempts ran different revisions");
+    if (
+      !same(b.map((r) => r.backend ?? "")) ||
+      !same(f.map((r) => r.backend ?? ""))
+    )
+      inputs.push("attempts on one side ran different backend versions");
+    if (b.length && f.length && same(all.map((r) => r.backend ?? "")))
+      inputs.push("baseline and fix ran the same backend versions");
+  } else {
+    if (!same(all.map((r) => r.backend ?? "")))
+      inputs.push("attempts ran against different backend versions");
+    if (b.length && f.length && same(all.map((r) => r.revision)))
+      inputs.push("baseline and fix ran the same revision");
+    if (!same(b.map((r) => r.revision)) || !same(f.map((r) => r.revision)))
+      inputs.push("attempts on one side ran different revisions");
+  }
   reasons.push(...inputs);
   // Mismatched inputs or an unreliable baseline make any fix reading moot.
   const baselineReproduced = b.length >= min && bx === b.length;
@@ -351,4 +372,17 @@ export function proofVerdict({ baseline, fix, sha, min = 2 }) {
     fix: tally(f),
     ignored,
   };
+}
+
+/**
+ * The viewport to put back after an attempt, as `browser viewport` takes it
+ * (`WxH`), or null when the block left it as it found it. A block may switch
+ * to phone (F07.overview-toggle phone-overview); without the restore the next
+ * attempt, and the caller's next check, would silently run at phone width.
+ */
+export function viewportToRestore(before, after) {
+  if (!before?.width || !before?.height) return null;
+  if (after?.width === before.width && after?.height === before.height)
+    return null;
+  return `${before.width}x${before.height}`;
 }

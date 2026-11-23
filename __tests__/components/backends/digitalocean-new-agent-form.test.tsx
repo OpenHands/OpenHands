@@ -23,6 +23,7 @@ vi.mock("react-i18next", async (importOriginal) => {
 });
 
 const SIZES: MarsSandboxSize[] = [
+  { slug: "mars-1vcpu-1gb", vcpus: 1, memory_mb: 1024 },
   {
     slug: "mars-2vcpu-4gb",
     vcpus: 2,
@@ -107,43 +108,122 @@ describe("DigitalOceanNewAgentForm – sandbox size", () => {
     expect(await screen.findByText("4 vCPU · 8 GB")).toBeInTheDocument();
   });
 
-  it("submits no size when the default is kept", async () => {
-    // Arrange
-    const bridge = installBridge(async () => SIZES);
+  it("selects and submits the smallest size without user intervention", async () => {
+    // Arrange: the catalog need not arrive smallest first.
+    installBridge(async () => [...SIZES].reverse());
     const user = userEvent.setup();
     const { onSubmit } = renderForm();
     await typeName(user);
-    await waitFor(() => expect(bridge.listSandboxSizes).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByRole("combobox")).toHaveValue("1 vCPU · 1 GB"),
+    );
 
     // Act
     await user.click(screen.getByTestId("digitalocean-new-agent-submit"));
 
     // Assert
+    expect(onSubmit).toHaveBeenCalledWith({
+      name: "team-agent",
+      size: "mars-1vcpu-1gb",
+    });
+  });
+
+  it("keeps DigitalOcean default as an explicit choice", async () => {
+    installBridge(async () => SIZES);
+    const user = userEvent.setup();
+    const { onSubmit } = renderForm();
+    await typeName(user);
+    await waitFor(() =>
+      expect(screen.getByRole("combobox")).toHaveValue("1 vCPU · 1 GB"),
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(await screen.findByText("Default (DigitalOcean picks)"));
+    await user.click(screen.getByTestId("digitalocean-new-agent-submit"));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      name: "team-agent",
+      size: undefined,
+    });
+  });
+
+  it("preserves an explicit provider default when a delayed catalog arrives", async () => {
+    let resolveSizes!: (sizes: MarsSandboxSize[]) => void;
+    installBridge(
+      () =>
+        new Promise((resolve) => {
+          resolveSizes = resolve;
+        }),
+    );
+    const user = userEvent.setup();
+    const { onSubmit } = renderForm();
+    await typeName(user);
+    await user.click(screen.getByRole("combobox"));
+    await user.click(await screen.findByText("Default (DigitalOcean picks)"));
+
+    resolveSizes(SIZES);
+    await user.click(screen.getByRole("combobox"));
+    expect(
+      await screen.findByText("16 vCPU · 32 GB · $192.50/month"),
+    ).toBeInTheDocument();
+    await user.keyboard("{Escape}");
     expect(screen.getByRole("combobox")).toHaveValue(
       "Default (DigitalOcean picks)",
     );
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "team-agent", size: undefined }),
-    );
+    await user.click(screen.getByTestId("digitalocean-new-agent-submit"));
+    expect(onSubmit).toHaveBeenCalledWith({
+      name: "team-agent",
+      size: undefined,
+    });
   });
 
-  it("still creates with the default size when the catalog fails to load", async () => {
-    // Arrange
-    const bridge = installBridge(async () => {
-      throw new Error("403 forbidden");
-    });
+  it("waits for a delayed catalog instead of submitting the provider default", async () => {
+    let resolveSizes!: (sizes: MarsSandboxSize[]) => void;
+    installBridge(
+      () =>
+        new Promise((resolve) => {
+          resolveSizes = resolve;
+        }),
+    );
     const user = userEvent.setup();
     const { onSubmit } = renderForm();
     await typeName(user);
-    await waitFor(() => expect(bridge.listSandboxSizes).toHaveBeenCalled());
 
-    // Act
-    await user.click(screen.getByTestId("digitalocean-new-agent-submit"));
-
-    // Assert
-    expect(screen.getByTestId("digitalocean-new-agent-submit")).toBeEnabled();
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "team-agent", size: undefined }),
+    expect(screen.getByTestId("digitalocean-new-agent-submit")).toBeDisabled();
+    expect(onSubmit).not.toHaveBeenCalled();
+    resolveSizes(SIZES);
+    await waitFor(() =>
+      expect(screen.getByRole("combobox")).toHaveValue("1 vCPU · 1 GB"),
     );
+    await user.click(screen.getByTestId("digitalocean-new-agent-submit"));
+    expect(onSubmit).toHaveBeenCalledWith({
+      name: "team-agent",
+      size: "mars-1vcpu-1gb",
+    });
   });
+
+  it.each(["failed", "empty"])(
+    "requires an explicit default choice for a %s catalog",
+    async (catalog) => {
+      installBridge(async () => {
+        if (catalog === "failed") throw new Error("403 forbidden");
+        return [];
+      });
+      const user = userEvent.setup();
+      const { onSubmit } = renderForm();
+      await typeName(user);
+
+      expect(
+        screen.getByTestId("digitalocean-new-agent-submit"),
+      ).toBeDisabled();
+      await user.click(screen.getByRole("combobox"));
+      await user.click(await screen.findByText("Default (DigitalOcean picks)"));
+      await user.click(screen.getByTestId("digitalocean-new-agent-submit"));
+
+      expect(onSubmit).toHaveBeenCalledWith({
+        name: "team-agent",
+        size: undefined,
+      });
+    },
+  );
 });

@@ -3,12 +3,14 @@ import type { PluginSpec } from "#/api/conversation-service/agent-server-convers
 
 const STORAGE_KEY = "openhands-agent-server-conversation-metadata";
 
-export type WorkspaceMode = "local_repo" | "new_worktree";
+export type WorkspaceMode = "local_repo" | "new_worktree" | "docker_container";
 
 export interface ConversationMetadata {
   selected_repository: string | null;
   selected_branch: string | null;
   git_provider: Provider | null;
+  /** The connected git provider (`auth_providers.id`) the repository came from. */
+  git_provider_id?: number | null;
   /**
    * The local workspace path the user explicitly attached at conversation
    * creation time. Distinct from `selected_repository` (which is set by
@@ -24,7 +26,9 @@ export interface ConversationMetadata {
    * `local_repo` means the runtime should operate directly in the selected
    * folder, even when it is not a git checkout. `new_worktree` preserves the
    * historical agent-server behavior for conversations that should start in a
-   * generated per-conversation worktree.
+   * generated per-conversation worktree. `docker_container` runs the
+   * conversation in its own container with the selected folder mounted at
+   * `/workspace` (agent-server `conversation_runtime: "docker"`).
    */
   workspace_mode?: WorkspaceMode | null;
   /**

@@ -1,13 +1,14 @@
 import React, { useLayoutEffect, useReducer, useRef } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
-import { isExecutionActive, isExecutionPaused } from "#/utils/status";
+import { canStopRuntime, isExecutionPaused } from "#/utils/status";
+import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { ConversationCardContextMenu } from "./conversation-card-context-menu";
 import { EllipsisButton } from "../ellipsis-button";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 interface ConversationCardActionsProps {
   contextMenuOpen: boolean;
@@ -16,11 +17,15 @@ interface ConversationCardActionsProps {
   onArchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onUnarchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onNewConversationInSandbox?: (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => void;
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onEditTags?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   executionStatus?: ExecutionStatus | null;
+  sandboxStatus?: SandboxStatus | null;
   conversationId?: string;
   showOptions?: boolean;
 }
@@ -32,17 +37,19 @@ export function ConversationCardActions({
   onArchive,
   onUnarchive,
   onStop,
+  onNewConversationInSandbox,
   onEdit,
   onEditTags,
   onDownloadViaVSCode,
   onDownloadConversation,
   executionStatus,
+  sandboxStatus,
   conversationId,
   showOptions,
 }: ConversationCardActionsProps) {
   const { t } = useTranslation("openhands");
   const isPaused = isExecutionPaused(executionStatus);
-  const isActive = isExecutionActive(executionStatus);
+  const canStop = canStopRuntime(executionStatus, sandboxStatus);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const [, bumpPosition] = useReducer((i: number) => i + 1, 0);
   useCloseOnEscape(
@@ -115,29 +122,29 @@ export function ConversationCardActions({
         ariaLabel={t(I18nKey.COMMON$MORE_OPTIONS)}
         className={cn(isPaused && "opacity-60")}
       />
-      {contextMenuOpen && floatingStyle && portalTarget
-        ? createPortal(
-            <ConversationCardContextMenu
-              ignoreOutsideClickRef={anchorRef}
-              floatingStyle={floatingStyle}
-              onClose={() => onContextMenuToggle(false)}
-              onDelete={onDelete}
-              onArchive={onArchive}
-              onUnarchive={onUnarchive}
-              onStop={isActive ? onStop : undefined}
-              onEdit={onEdit}
-              onEditTags={onEditTags}
-              onDownloadViaVSCode={
-                conversationId && showOptions ? onDownloadViaVSCode : undefined
-              }
-              onDownloadConversation={
-                conversationId ? onDownloadConversation : undefined
-              }
-              position="bottom"
-            />,
-            portalTarget,
-          )
-        : null}
+      {contextMenuOpen && floatingStyle && portalTarget ? (
+        <AppearancePortal container={portalTarget}>
+          <ConversationCardContextMenu
+            ignoreOutsideClickRef={anchorRef}
+            floatingStyle={floatingStyle}
+            onClose={() => onContextMenuToggle(false)}
+            onDelete={onDelete}
+            onArchive={onArchive}
+            onUnarchive={onUnarchive}
+            onStop={canStop ? onStop : undefined}
+            onNewConversationInSandbox={onNewConversationInSandbox}
+            onEdit={onEdit}
+            onEditTags={onEditTags}
+            onDownloadViaVSCode={
+              conversationId && showOptions ? onDownloadViaVSCode : undefined
+            }
+            onDownloadConversation={
+              conversationId ? onDownloadConversation : undefined
+            }
+            position="bottom"
+          />
+        </AppearancePortal>
+      ) : null}
     </>
   );
 }

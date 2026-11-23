@@ -1,12 +1,32 @@
 import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
+  isACPToolCallEvent,
+  isAgentErrorEvent,
+  isMessageEvent,
+  isStreamingDeltaEvent,
+  isHookExecutionEvent,
   isObservationEvent,
   isPlanningFileEditorObservationEvent,
+  isUserMessageEvent,
   isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
+import { getStepKey } from "./step-disclosure-context";
 import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
-import { getThoughtSourceAction } from "./event-thought-helpers";
+import { shouldShowSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
+import type { SessionActivity } from "#/stores/session-activity-store";
+import { parseDateAsUTC } from "#/utils/format-time-delta";
+import { parseMessageFromEvent } from "./event-content-helpers/parse-message-from-event";
+import {
+  isMessageEditResult,
+  isReactionResult,
+} from "./event-content-helpers/should-render-event";
+import {
+  getReasoningContent,
+  splitInlineThink,
+  buildActionById,
+  getThoughtSourceAction,
+} from "./event-thought-helpers";
 
 /** Minimum run-length before consecutive actions get folded into a single
  *  collapsible group. Even pairs are folded so the chat scroll stays compact
@@ -17,9 +37,10 @@ export const EVENT_GROUP_MIN_SIZE = 2;
  * Returns true if the given event is one of the action / observation cards
  * that we want to fold into an `EventGroup` when several appear in a row.
  *
- * Events that have their own dedicated rendering (FinishAction, ThinkAction,
- * HookExecution, AgentError, MessageEvent, PlanPreview, markdown file
- * artifacts, TaskTracker) are treated as group breakers.
+ * Successful and blocked hooks fold into the surrounding run; failed hooks
+ * stay visible on their own. Events that have their own dedicated rendering
+ * (FinishAction, AgentError, MessageEvent, PlanPreview, markdown
+ * file artifacts, TaskTracker) are treated as group breakers.
  */
 export const isGroupableEvent = (
   event: OpenHandsEvent,
@@ -27,7 +48,7 @@ export const isGroupableEvent = (
 ): boolean => {
   if (isActionEvent(event)) {
     const { kind } = event.action;
-    if (kind === "FinishAction" || kind === "ThinkAction") {
+    if (kind === "FinishAction") {
       return false;
     }
     // Keep markdown *create* artifact cards outside collapsed groups so their
@@ -45,10 +66,19 @@ export const isGroupableEvent = (
     if (isMarkdownFileEditorEvent(event, correspondingAction)) {
       return false;
     }
-    if (event.observation.kind === "TaskTrackerObservation") {
+    if (
+      event.observation.kind === "TaskTrackerObservation" ||
+      event.observation.kind === "AskUserObservation"
+    ) {
       return false;
     }
     return true;
+  }
+
+  if (isACPToolCallEvent(event)) return event.status !== "failed";
+
+  if (isHookExecutionEvent(event)) {
+    return event.success || event.blocked;
   }
 
   // A rejected action stays wherever the action itself was: in its run, or
@@ -63,7 +93,107 @@ export const isGroupableEvent = (
 export type RenderedItem =
   | { kind: "single"; event: OpenHandsEvent; index: number }
   | { kind: "thought"; action: ActionEvent; index: number }
-  | { kind: "group"; events: OpenHandsEvent[]; startIndex: number };
+  | {
+      kind: "group";
+      events: OpenHandsEvent[];
+      startIndex: number;
+      session?: SessionActivity;
+      reasoning?: { id: string; text: string; index: number }[];
+    };
+
+/**
+ * Stable key for a group item, shared by React keys and the expansion store.
+ *
+ * An action and the observation that replaces it in place must resolve to the
+ * same key: `handleEventForUI` swaps a finished action for its observation, so
+ * keying on `events[0].id` would rename (and remount) the live group the moment
+ * its first observation lands, dropping the state the user had opened. The
+ * paired action's id is used instead. An ACP tool call is swapped the same way
+ * but keeps a new `id` per event, so it is keyed by its stable `tool_call_id`
+ * (matching `getStepKey`). A reasoning-only group is keyed by its reasoning id,
+ * which does not shift when older events are prepended, rather than by its
+ * position.
+ */
+export const getGroupKey = (
+  item: Extract<RenderedItem, { kind: "group" }>,
+): string => {
+  if (item.session) return item.session.id;
+  const reasoning = item.reasoning?.[0];
+  if (reasoning && reasoning.index <= item.startIndex) return reasoning.id;
+  const first = item.events[0];
+  const eventKey =
+    first &&
+    (isObservationEvent(first) || isUserRejectObservation(first)
+      ? (first.action_id ?? first.id)
+      : isACPToolCallEvent(first)
+        ? `call:${first.tool_call_id}`
+        : first.id);
+  return eventKey ?? `group-${item.startIndex}`;
+};
+
+/**
+ * Stable identity for a rendered item. Shared by the plain and virtualized
+ * lists so React keys and virtualizer item keys agree.
+ *
+ * A `single` row is keyed by `getStepKey`, which resolves an action and the
+ * observation or rejection that replaces it to the same tool call — otherwise
+ * the swap renames the row, remounting it and dropping its expansion state.
+ */
+export const renderedItemKey = (item: RenderedItem): string => {
+  if (item.kind === "single") return `single-${getStepKey(item.event)}`;
+  if (item.kind === "thought") return `thought-${item.action.id}`;
+  return `group-${getGroupKey(item)}`;
+};
+
+/**
+ * True for a rendered row whose visible content is a tool step: a collapsed
+ * `EventGroup`, or a standalone row that paints `GenericEventMessage` /
+ * `HookExecutionEventMessage`. Those rows carry their own
+ * `mt-2 mb-0 [&+article]:mt-2` class, and agent text that follows one trims its
+ * top margin so the tool row and the reply sit evenly.
+ *
+ * The message list applies that trim to the following row's own wrapper (see
+ * `Messages`), because each row now has its own wrapper element and the
+ * `<article>` is no longer a DOM sibling of the tool row for the
+ * `[&+article]` selector to match.
+ *
+ * The branches mirror `EventMessage`'s own order so the list's decision stays
+ * in step with what the row paints: a plain user/assistant message, an agent
+ * error, a `FinishAction` reply bubble, a `ThinkAction` thinking section, a
+ * streaming row, and a plan preview paint an `<article>` or their own box and
+ * carry no trim. Every other action or observation (including a markdown
+ * artifact card), a hook run, an ACP tool call, a rejection, and a Skill Ready
+ * card do carry it.
+ */
+export const isToolRowItem = (item: RenderedItem): boolean => {
+  if (item.kind === "group") return true;
+  if (item.kind !== "single") return false;
+
+  const { event } = item;
+
+  // An agent error paints `ErrorMessage`'s own box, not a tool row.
+  if (isAgentErrorEvent(event)) return false;
+  if (isHookExecutionEvent(event)) return true;
+  if (isACPToolCallEvent(event)) return true;
+  if (isUserRejectObservation(event)) return true;
+  // A planning observation renders the plan preview, not a tool row.
+  if (isObservationEvent(event)) {
+    return !isPlanningFileEditorObservationEvent(event);
+  }
+  if (isActionEvent(event)) {
+    // `FinishAction` renders a reply bubble and `ThinkAction` a thinking
+    // section; every other action renders the trim-carrying wrapper.
+    return (
+      event.action.kind !== "FinishAction" &&
+      event.action.kind !== "ThinkAction"
+    );
+  }
+  // A user message with skills and extended content paints a Skill Ready card
+  // after its bubble.
+  if (isUserMessageEvent(event) && shouldShowSkillReadyEvent(event))
+    return true;
+  return false;
+};
 
 /**
  * Walk a list of UI events and bucket consecutive groupable events into
@@ -80,27 +210,76 @@ export type RenderedItem =
  *
  * `allEvents` should be the full event history so observations can find
  * their matching action; if omitted, it defaults to `events`.
+ *
+ * `trailingMinSize` applies to the run at the very end of `events`. While the
+ * agent is working, pass 1 so the stage it is on is a group from its first
+ * step and does not jump from a lone row into a group when a second arrives.
+ *
+ * Pass `actionById` (from {@link buildActionById}) when the caller already
+ * indexed the same history — `Messages` keeps one such map per render — so the
+ * grouping does not scan the whole history for every observation.
  */
 export const groupEvents = (
   events: OpenHandsEvent[],
   minSize: number = EVENT_GROUP_MIN_SIZE,
   allEvents: OpenHandsEvent[] = events,
+  trailingMinSize: number = minSize,
+  sessions: readonly SessionActivity[] = [],
+  actionById: ReadonlyMap<string, ActionEvent> = buildActionById(allEvents),
 ): RenderedItem[] => {
-  if (minSize < 1) {
+  if (minSize < 1 || trailingMinSize < 1) {
     throw new Error("minSize must be at least 1");
   }
 
   const items: RenderedItem[] = [];
   const emittedThoughtActionIds = new Set<string>();
-  let run: { events: OpenHandsEvent[]; startIndex: number } | null = null;
+  // An action and its observation share reasoning. Keep this lookup per run
+  // instead of scanning/copying its growing reasoning array for every step.
+  const runReasoningIds = new Set<string>();
+  let run: Omit<Extract<RenderedItem, { kind: "group" }>, "kind"> | null = null;
+  const startRun = (index: number) => {
+    if (!run) run = { events: [], startIndex: index };
+    return run;
+  };
+  const insertions = new Map<number, SessionActivity[]>();
+  for (const session of sessions) {
+    let index: number;
+    if (session.kind === "initialize") {
+      const userIndex = events.findIndex((event) => event.source === "user");
+      index = userIndex < 0 ? 0 : userIndex + 1;
+    } else {
+      const anchor = session.afterEventId
+        ? events.findIndex((event) => event.id === session.afterEventId)
+        : -1;
+      index =
+        anchor >= 0
+          ? anchor + 1
+          : events.findIndex(
+              (event) =>
+                parseDateAsUTC(event.timestamp ?? "").getTime() >=
+                session.startedAt,
+            );
+      if (index < 0) index = events.length;
+      if (events[index]?.source === "user") index += 1;
+    }
+    insertions.set(index, [...(insertions.get(index) ?? []), session]);
+  }
 
-  const flushRun = () => {
+  const flushRun = (size = minSize) => {
     if (!run) return;
-    if (run.events.length >= minSize) {
+    const loneBlockedHook =
+      !run.session &&
+      !run.reasoning?.length &&
+      run.events.length === 1 &&
+      isHookExecutionEvent(run.events[0]) &&
+      run.events[0].blocked;
+    if (
+      !loneBlockedHook &&
+      (run.session || run.reasoning?.length || run.events.length >= size)
+    ) {
       items.push({
         kind: "group",
-        events: run.events,
-        startIndex: run.startIndex,
+        ...run,
       });
     } else {
       run.events.forEach((event, offset) => {
@@ -108,31 +287,117 @@ export const groupEvents = (
       });
     }
     run = null;
+    runReasoningIds.clear();
+  };
+
+  const insertSessions = (index: number) => {
+    for (const session of insertions.get(index) ?? []) {
+      flushRun();
+      startRun(index).session = session;
+    }
   };
 
   events.forEach((event, index) => {
+    insertSessions(index);
+    if (
+      (isMessageEvent(event) && event.source === "agent") ||
+      isStreamingDeltaEvent(event)
+    ) {
+      const streaming = isStreamingDeltaEvent(event);
+      const { reasoning: inline, message } = splitInlineThink(
+        streaming ? (event.content ?? "") : parseMessageFromEvent(event),
+        { streaming },
+      );
+      const reasoning = [
+        streaming
+          ? event.reasoning_content
+          : getReasoningContent(event.llm_message),
+        inline,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      if (reasoning) {
+        const current = startRun(index);
+        (current.reasoning ??= []).push({
+          id: event.id,
+          text: reasoning,
+          index,
+        });
+        runReasoningIds.add(event.id);
+      }
+      const hasVisiblePayload =
+        isMessageEvent(event) &&
+        (event.critic_result != null ||
+          (Array.isArray(event.llm_message.content) &&
+            event.llm_message.content.some(
+              (content) =>
+                content.type === "image" && content.image_urls.length > 0,
+            )));
+      if (!message.trim() && !hasVisiblePayload && (streaming || reasoning))
+        return;
+    }
     const correspondingAction =
       isObservationEvent(event) || isUserRejectObservation(event)
-        ? allEvents.find(
-            (candidate): candidate is ActionEvent =>
-              isActionEvent(candidate) && candidate.id === event.action_id,
-          )
+        ? actionById.get(event.action_id ?? "")
         : undefined;
-    if (isGroupableEvent(event, correspondingAction)) {
-      const thoughtAction = getThoughtSourceAction(event, allEvents);
+    // Narration: the agent's thought on a tool call is hoisted into the main
+    // stream, and its reasoning goes to the step's group.
+    const keepNarration = () => {
+      // Hoist the thought before attaching the action's reasoning, so the
+      // reasoning lands in the step's own group rather than a "Thinking"-only
+      // group that shares the step's key and open state.
+      const thoughtAction = getThoughtSourceAction(
+        event,
+        allEvents,
+        actionById,
+      );
       if (thoughtAction && !emittedThoughtActionIds.has(thoughtAction.id)) {
         flushRun();
         emittedThoughtActionIds.add(thoughtAction.id);
         items.push({ kind: "thought", action: thoughtAction, index });
       }
+      const reasoningAction = isActionEvent(event)
+        ? event
+        : correspondingAction;
+      const reasoning = reasoningAction
+        ? getReasoningContent(reasoningAction)
+        : "";
+      if (reasoning && reasoningAction) {
+        const current = startRun(index);
+        if (!runReasoningIds.has(reasoningAction.id)) {
+          (current.reasoning ??= []).push({
+            id: reasoningAction.id,
+            text: reasoning,
+            index,
+          });
+          runReasoningIds.add(reasoningAction.id);
+        }
+      }
+    };
+    if (isReactionResult(event) || isMessageEditResult(event)) {
+      // The reaction shows as a chip on its message, and an edit in place
+      // on its message, so their tool cards are dropped; what the agent said
+      // while reacting or editing stays.
+      keepNarration();
+      return;
+    }
+    if (isGroupableEvent(event, correspondingAction)) {
+      keepNarration();
       if (!run) run = { events: [], startIndex: index };
       run.events.push(event);
     } else {
+      if (
+        isObservationEvent(event) &&
+        event.observation.kind === "AskUserObservation"
+      ) {
+        keepNarration();
+      }
       flushRun();
       items.push({ kind: "single", event, index });
     }
   });
 
-  flushRun();
+  insertSessions(events.length);
+  flushRun(trailingMinSize);
   return items;
 };

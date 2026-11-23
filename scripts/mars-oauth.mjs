@@ -38,6 +38,8 @@ const SIGN_IN_TIMEOUT_MS = 5 * 60 * 1000;
 /** The relayed fragment is a token plus a few params; anything larger is not one. */
 const RELAY_BODY_LIMIT_BYTES = 16 * 1024;
 
+class InvalidOAuthRelayError extends Error {}
+
 /**
  * Served at the redirect URI.
  *
@@ -109,21 +111,21 @@ export function buildAuthorizeUrl({ clientId, state, redirectUri, scope }) {
  */
 export function parseImplicitGrant(fragment, expectedState) {
   const params = new URLSearchParams(fragment ?? "");
-
   const error = params.get("error");
+  const accessToken = params.get("access_token");
+
+  if (!accessToken && !error) {
+    throw new InvalidOAuthRelayError(
+      "DigitalOcean did not return an access token.",
+    );
+  }
+
+  if (params.get("state") !== expectedState) {
+    throw new InvalidOAuthRelayError("Sign-in state did not match.");
+  }
+
   if (error) {
     throw new Error(params.get("error_description") || error);
-  }
-
-  const accessToken = params.get("access_token");
-  if (!accessToken) {
-    throw new Error("DigitalOcean did not return an access token.");
-  }
-
-  // Guards against a forged callback: a third party that can reach the
-  // loopback port cannot know the state we generated for this attempt.
-  if (params.get("state") !== expectedState) {
-    throw new Error("Sign-in state did not match; aborting for safety.");
   }
 
   const expiresIn = Number.parseInt(params.get("expires_in") ?? "", 10);
@@ -188,7 +190,7 @@ export async function signInWithDigitalOcean({
           resolve(parsed);
         } catch (error) {
           res.writeHead(400).end();
-          reject(error);
+          if (!(error instanceof InvalidOAuthRelayError)) reject(error);
         }
         return;
       }

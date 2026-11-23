@@ -112,10 +112,20 @@ export function redactBody(text, { limit = BODY_LIMIT, all = false } = {}) {
   return shown.length > limit ? `${shown.slice(0, limit)}…` : shown;
 }
 
-// Only this explicit top-level field is projected before the display body's
-// truncation. Never retain the full parsed request (system prompts, LLM
-// configuration and unrelated fields are deliberately outside this allowlist).
+// Only these explicit top-level fields are projected before the display
+// body's truncation: plugins, and the conversation start request's runtime
+// choice (conversation_runtime, worktree, worktree_options, container), which
+// sit after the long agent_launch_additions. Never retain the full parsed
+// request (system prompts, LLM configuration and unrelated fields are
+// deliberately outside this allowlist).
 export const BODY_FIELDS_LIMIT_BYTES = 16 * 1024;
+export const BODY_FIELDS = [
+  "plugins",
+  "conversation_runtime",
+  "worktree",
+  "worktree_options",
+  "container",
+];
 
 export function redactBodyFields(
   text,
@@ -131,20 +141,26 @@ export function redactBodyFields(
   if (
     !parsed ||
     typeof parsed !== "object" ||
-    Array.isArray(parsed) ||
-    !Object.hasOwn(parsed, "plugins")
+    Array.isArray(parsed)
   )
     return {};
+  const present = BODY_FIELDS.filter((key) => Object.hasOwn(parsed, key));
+  if (present.length === 0) return {};
 
-  const bodyFields = { plugins: redactNode(parsed.plugins, all) };
+  const bodyFields = Object.fromEntries(
+    present.map((key) => [key, redactNode(parsed[key], all)]),
+  );
   // Measure UTF-8 bytes, not characters: a Unicode parameter must not bypass
   // the bound. Oversized projections are omitted as a whole, never clipped
   // into invalid JSON or replaced with an unredacted excerpt.
   if (Buffer.byteLength(JSON.stringify(bodyFields), "utf8") > limitBytes) {
     return {
-      bodyFieldsOmitted: {
-        plugins: `redacted projection exceeds ${limitBytes} UTF-8 bytes`,
-      },
+      bodyFieldsOmitted: Object.fromEntries(
+        present.map((key) => [
+          key,
+          `redacted projection exceeds ${limitBytes} UTF-8 bytes`,
+        ]),
+      ),
     };
   }
   return { bodyFields };

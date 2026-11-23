@@ -12,6 +12,7 @@ interface UseGitRepositoriesOptions {
   pageSize?: number;
   enabled?: boolean;
   allowMissingProvider?: boolean;
+  gitProviderId?: number | null;
 }
 
 type InstallationCursor = { installationIndex: number; pageId: string | null };
@@ -24,14 +25,30 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
     pageSize = 30,
     enabled = true,
     allowMissingProvider = false,
+    gitProviderId,
   } = options;
   const { providers } = useUserProviders();
-  const { data: page } = useAppInstallations(provider, { enabled });
+  const { data: page } = useAppInstallations(provider, {
+    enabled,
+    gitProviderId,
+  });
   const installations = page?.items;
   const active = useActiveBackend();
 
+  // A GitHub token from a plain OAuth app (OpenHands Enterprise on Docker
+  // Compose, which has no GitHub App) cannot list installations, so the
+  // backend answers with an empty page. That token can still list the user's
+  // repositories directly, so fall back to that flow instead of waiting for
+  // installations that never come. GitHub App tokens keep the installation
+  // flow whenever at least one installation exists.
+  const hasNoGithubInstallations =
+    provider === "github" &&
+    Array.isArray(installations) &&
+    installations.length === 0;
+
   const useInstallationRepos = provider
-    ? shouldUseInstallationRepos(provider, active.backend.kind)
+    ? shouldUseInstallationRepos(provider, active.backend.kind) &&
+      !hasNoGithubInstallations
     : false;
 
   const repos = useInfiniteQuery<
@@ -54,6 +71,7 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
       pageSize,
       active.backend.id,
       active.orgId,
+      gitProviderId ?? null,
       ...(useInstallationRepos ? [installations || []] : []),
     ],
     queryFn: async ({ pageParam }) => {
@@ -73,6 +91,7 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
           installations,
           cursor.pageId ?? undefined,
           pageSize,
+          gitProviderId,
         );
         return result;
       }
@@ -82,6 +101,8 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
         provider,
         cursor ?? undefined,
         pageSize,
+        undefined,
+        gitProviderId,
       );
       return result;
     },
@@ -110,7 +131,9 @@ export function useGitRepositories(options: UseGitRepositoriesOptions) {
       : null,
     enabled:
       enabled &&
-      (allowMissingProvider || (providers || []).length > 0) &&
+      (allowMissingProvider ||
+        gitProviderId != null ||
+        (providers || []).length > 0) &&
       !!provider &&
       (!useInstallationRepos ||
         (Array.isArray(installations) && installations.length > 0)),

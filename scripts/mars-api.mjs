@@ -21,6 +21,7 @@ export const AGENT_SERVER_GUEST_PORT = 8000;
 
 export const SESSIONS_PATH = "/v2/agents/sessions";
 const CONFIGS_PATH = "/v2/agents/configs";
+const ACCOUNT_PATH = "/v2/account";
 const CONFIG_SESSIONS_SUBPATH = "/sessions";
 const DEVICE_ID_HEADER = "X-Device-UUID";
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -329,6 +330,22 @@ export function createMarsApiClient({
      */
     async verifyAccess() {
       await request("GET", SESSIONS_PATH, { query: { page_size: 1 } });
+    },
+
+    /**
+     * The token's team and account email, to name the connection. Needs the
+     * `account:read` scope, which a narrowly scoped personal token may lack:
+     * callers treat a refusal as "unknown", not as a failed sign-in.
+     */
+    async getAccount() {
+      const body = await request("GET", ACCOUNT_PATH);
+      const account = body?.account;
+      if (!account) return null;
+      return {
+        uuid: account.team?.uuid ?? null,
+        name: account.team?.name ?? null,
+        email: account.email ?? null,
+      };
     },
   };
 }

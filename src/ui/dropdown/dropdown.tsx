@@ -9,20 +9,6 @@ import { ToggleButton } from "./toggle-button";
 import { DropdownMenu } from "./dropdown-menu";
 import { DropdownInput } from "./dropdown-input";
 
-// Equivalent to Tailwind's `sr-only`, inlined so we don't depend on the
-// utility class being preserved by the host project's CSS pipeline.
-const visuallyHiddenStyle: React.CSSProperties = {
-  position: "absolute",
-  width: 1,
-  height: 1,
-  padding: 0,
-  margin: -1,
-  overflow: "hidden",
-  clip: "rect(0, 0, 0, 0)",
-  whiteSpace: "nowrap",
-  border: 0,
-};
-
 interface DropdownProps {
   options: DropdownOption[];
   emptyMessage?: string;
@@ -44,6 +30,17 @@ interface DropdownProps {
   italicPlaceholder?: boolean;
   /** Size the trigger to its label instead of stretching to the container width. */
   fitContent?: boolean;
+  /** Keep the menu exactly as wide as the trigger; long labels truncate. */
+  matchTriggerWidth?: boolean;
+  /**
+   * Position the menu against the nearest positioned ancestor instead of the
+   * trigger, so it can span a wider row that contains the trigger.
+   */
+  anchorMenuToParent?: boolean;
+  /** Allow a taller menu before it scrolls, for menus with a footer and headings. */
+  tallMenu?: boolean;
+  /** Called whenever the menu opens or closes. */
+  onOpenChange?: (isOpen: boolean) => void;
 }
 
 export function Dropdown({
@@ -64,6 +61,10 @@ export function Dropdown({
   openOnHover = false,
   italicPlaceholder = true,
   fitContent = false,
+  matchTriggerWidth = false,
+  anchorMenuToParent = false,
+  tallMenu = false,
+  onOpenChange,
 }: DropdownProps) {
   const closeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -117,6 +118,7 @@ export function Dropdown({
       isOpen: newIsOpen,
       selectedItem: currentSelectedItem,
     }) => {
+      onOpenChange?.(Boolean(newIsOpen));
       if (newIsOpen) {
         // Clear the input on open so the user sees an empty search box
         // (with the placeholder reminding them of the current value)
@@ -157,7 +159,10 @@ export function Dropdown({
 
   return (
     <div
-      className={cn("relative", fitContent ? "inline-block w-auto" : "w-full")}
+      className={cn(
+        !anchorMenuToParent && "relative",
+        fitContent ? "inline-block w-auto" : "w-full",
+      )}
       data-testid={testId}
       onMouseEnter={
         openOnHover
@@ -218,7 +223,8 @@ export function Dropdown({
         // toggle button) to be wired up. When the trigger is hidden (e.g.
         // collapsed-sidebar popover) we still need to mount a real input
         // so it stops warning every render. Keep it visually hidden but
-        // present in the DOM for accessibility.
+        // present in the DOM for accessibility. The hiding utility ships in
+        // both the standalone and library stylesheets.
         <>
           <input
             {...getInputPropsWithCursorFix({
@@ -226,12 +232,12 @@ export function Dropdown({
               "aria-label": placeholder ?? "Filter options",
               tabIndex: -1,
             })}
-            style={visuallyHiddenStyle}
+            className="sr-only"
           />
           <button
             type="button"
             {...getToggleButtonProps({ tabIndex: -1 })}
-            style={visuallyHiddenStyle}
+            className="sr-only"
             aria-hidden
           />
         </>
@@ -246,6 +252,8 @@ export function Dropdown({
         footer={footer}
         openUpward={openUpward}
         fitContent={fitContent}
+        matchTriggerWidth={matchTriggerWidth}
+        tallMenu={tallMenu}
       />
     </div>
   );
