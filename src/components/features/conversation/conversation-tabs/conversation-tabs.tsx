@@ -7,7 +7,13 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup } from "framer-motion";
-import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import {
+  Boxes,
+  Gauge,
+  Globe,
+  ListTodo,
+  SquareChevronRight,
+} from "lucide-react";
 import { LuFileDiff } from "react-icons/lu";
 import DocumentIcon from "#/icons/document.svg?react";
 import DoubleCheckIcon from "#/icons/double-check.svg?react";
@@ -145,6 +151,15 @@ export function ConversationTabs({
       tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.usage),
       tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.usage),
       label: t(CONVERSATION_TAB_LABEL_KEYS.usage),
+    },
+    {
+      tabValue: "resources",
+      isActive: isTabActive("resources"),
+      icon: Boxes,
+      onClick: () => selectTab("resources"),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.resources),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.resources),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.resources),
     },
   ];
 
