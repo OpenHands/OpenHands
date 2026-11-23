@@ -1,9 +1,13 @@
 """Tests for check_pr_description.py — PR description validation logic."""
 
+import json
+import subprocess
 import sys
 import urllib.error
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -232,6 +236,61 @@ After: no remaining child process, exit status 0.
 ## Type
 - [x] Bug fix
 """
+
+
+@pytest.mark.parametrize(
+    ("draft", "action", "human_note", "expected_code"),
+    [
+        (True, "opened", "", 0),
+        (True, "synchronize", "", 0),
+        (False, "ready_for_review", "", 1),
+        (False, "edited", "", 1),
+        (None, "edited", "", 1),
+        (False, "ready_for_review", "I tested the shutdown behavior by hand.", 0),
+    ],
+)
+def test_human_note_required_only_when_ready(
+    tmp_path, draft, action, human_note, expected_code
+):
+    body = NONVISUAL_BUG_BODY.replace(
+        "I reproduced the shutdown failure and verified the corrected exit status.",
+        human_note,
+    ).replace("[x] Bug fix", "[x] Docs / chore")
+    body += "\n## Issue Number\nFixes #123\n"
+    pull_request = {"body": body}
+    if draft is not None:
+        pull_request["draft"] = draft
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps({"action": action, "pull_request": pull_request}))
+    files_path = tmp_path / "files.txt"
+    files_path.write_text("scripts/launcher.cjs\n")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).resolve().parent.parent / "check_pr_description.py"),
+            "--event-path",
+            str(event_path),
+            "--files-file",
+            str(files_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == expected_code, result.stdout + result.stderr
+    if expected_code:
+        assert "Add a short human-written note" in result.stdout
+
+
+def test_draft_still_requires_other_template_fields():
+    body = NONVISUAL_BUG_BODY.replace("## Summary", "## Overview").replace(
+        "I reproduced the shutdown failure and verified the corrected exit status.", ""
+    )
+    errors = validate_pr_body(body, draft=True)
+    assert "Keep the `## Summary` section from the PR template." in errors
+    assert "Add a short human-written note between `HUMAN:` and `AGENT:`." not in errors
 
 
 def test_functional_launcher_bug_requires_running_canvas_media():

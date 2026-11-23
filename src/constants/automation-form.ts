@@ -21,3 +21,10 @@ export const AUTOMATION_DRAFTS_FEATURE = "automationDrafts";
  * `run_as_user_id` on create, `POST /v1/{id}/run-as`).
  */
 export const SERVICE_ACCOUNT_RUN_AS_FEATURE = "serviceAccountRunAs";
+
+/**
+ * The capabilities feature flag the automation service advertises when it
+ * serves factories (`/v1/factories`, `factory_id` on automations;
+ * `OpenHands/automation` PR #751).
+ */
+export const FACTORIES_FEATURE = "factories";
