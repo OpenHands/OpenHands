@@ -71,6 +71,8 @@ export interface Automation {
   plugin_spec?: AutomationPluginSpec | null;
   id: string;
   name: string;
+  /** The factory this automation belongs to, or null/absent when it has none. */
+  factory_id?: string | null;
   trigger: AutomationTrigger;
   enabled: boolean;
   /** Backend automation lifecycle state. Prefer this over deprecated `enabled` when present. */
@@ -367,6 +369,21 @@ export interface AutomationRunExportRow {
    * The run's `current_phase` as stored. Null only when the run has no phase.
    */
   phase: string | null;
+}
+
+/** A named group of automations (`GET /v1/factories`). */
+export interface Factory {
+  id: string;
+  name: string;
+  /** Live (not soft-deleted) automations in the factory. */
+  automation_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FactoryListResponse {
+  factories: Factory[];
+  total: number;
 }
 
 /** One page of an automation's key-value store keys. */

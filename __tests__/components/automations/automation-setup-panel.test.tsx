@@ -309,9 +309,11 @@ function renderPanel(
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   }),
   onAskAgent?: (prompt: string) => void,
+  currentSearch = "",
 ) {
   const value: NavigationContextValue = {
     currentPath: `/conversations/${conversationId}`,
+    currentSearch,
     conversationId,
     isNavigating: false,
     navigate: mockNavigate,
@@ -1922,6 +1924,96 @@ describe("AutomationSetupPanel", () => {
     expect(
       vi.mocked(AutomationService.createAutomationDraft).mock.calls[0][0],
     ).not.toHaveProperty("run_as_user_id");
+    expect(
+      vi.mocked(AutomationService.createAutomationDraft).mock.calls[0][0],
+    ).not.toHaveProperty("factory_id");
+  });
+
+  it("creates the automation in the factory the form was opened from, and refreshes the lists and factory counts", async () => {
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-1",
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+    const user = userEvent.setup();
+    renderPanel(
+      { prompt: "Review every pull request", kind: "prompt", factoryId: "f-1" },
+      "conv-1",
+      null,
+      queryClient,
+    );
+    await user.click(screen.getByTestId("automation-setup-create"));
+
+    await waitFor(() =>
+      expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+        expect.objectContaining({ factory_id: "f-1" }),
+        expect.anything(),
+      ),
+    );
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["automations"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["factories"] });
+  });
+
+  it("opens the new automation with the factory context, so the sidebar stays on Factories", async () => {
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-1",
+    });
+
+    const user = userEvent.setup();
+    renderPanel(
+      { prompt: "Review every pull request", kind: "prompt", factoryId: "f-1" },
+      "conv-1",
+      null,
+      undefined,
+      undefined,
+      "?factory=f-1",
+    );
+    await user.click(screen.getByTestId("automation-setup-create"));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        "/automations/automation-1?factory=f-1",
+      ),
+    );
+  });
+
+  it("opens the new automation without a factory context when created from Automate", async () => {
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-1",
+    });
+
+    const user = userEvent.setup();
+    renderPanel({ prompt: "Review every pull request", kind: "prompt" });
+    await user.click(screen.getByTestId("automation-setup-create"));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith("/automations/automation-1"),
+    );
+  });
+
+  it("creates in a factory through the plugin endpoint too", async () => {
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-1",
+    });
+
+    const user = userEvent.setup();
+    renderPanel({
+      prompt: "Summarize Slack blockers",
+      kind: "plugin",
+      plugins: ["github:org/blockers-plugin"],
+      factoryId: "f-1",
+    });
+    await user.click(screen.getByTestId("automation-setup-create"));
+
+    await waitFor(() =>
+      expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+        expect.objectContaining({ factory_id: "f-1" }),
+        "plugin",
+      ),
+    );
   });
 
   it("does not offer the run-as picker when editing an existing automation", () => {

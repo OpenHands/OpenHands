@@ -67,6 +67,8 @@ export interface AutomationSetupDraft {
   /** Request last saved to `serverDraftId`, to tell unsaved edits apart. */
   savedDraftRequestKey?: string;
   materializedAutomationId?: string | null;
+  /** The factory a new automation is created in, when the form was opened from one. */
+  factoryId?: string;
   existingCustomTarballPath?: string;
   existingPluginSpec?: AutomationPluginSpec;
   /** Repositories the edited automation clones, as the service stores them. */

@@ -164,6 +164,18 @@ describe("setupDraftFromServerDraft", () => {
     expect(draft.form?.runAsUserId).toBe("sa-1");
   });
 
+  it("keeps the factory a saved draft was started in", () => {
+    const saved = {
+      ...baseSavedDraft,
+      draft: { prompt: "Triage issues", factory_id: "factory-1" },
+    } satisfies AutomationDraftApiResponse;
+
+    expect(setupDraftFromServerDraft(saved).factoryId).toBe("factory-1");
+    expect(setupDraftFromServerDraft(baseSavedDraft)).not.toHaveProperty(
+      "factoryId",
+    );
+  });
+
   it("updates an existing form with repositories, event keys, and run-as", () => {
     const saved = {
       ...baseSavedDraft,
