@@ -13,6 +13,7 @@ import {
 } from "#/api/conversation-metadata-store";
 
 const mockGetHome = vi.fn();
+const mockBatchGetAppConversations = vi.fn();
 
 vi.mock("@openhands/typescript-client/clients", () => ({
   FileClient: vi.fn(function FileClientMock() {
@@ -32,9 +33,8 @@ vi.mock(
   "#/api/conversation-service/agent-server-conversation-service.api",
   () => ({
     default: {
-      resolveConversationWorkingDir: vi.fn(
-        async (id: string) => `/workspace/project/${id.replace(/-/g, "")}`,
-      ),
+      batchGetAppConversations: (ids: string[]) =>
+        mockBatchGetAppConversations(ids),
     },
   }),
 );
@@ -43,6 +43,13 @@ beforeEach(() => {
   clearAgentServerHomeDirCache();
   mockGetHome.mockReset();
   mockGetHome.mockResolvedValue({ home: "/Users/test" });
+  mockBatchGetAppConversations.mockReset();
+  mockBatchGetAppConversations.mockImplementation(async (ids: string[]) =>
+    ids.map((id) => ({
+      id,
+      workspace: { working_dir: `/workspace/project/${id.replace(/-/g, "")}` },
+    })),
+  );
 });
 
 describe("workspace-upload-path", () => {
@@ -235,12 +242,51 @@ describe("workspace-upload-path", () => {
     try {
       const dir = await resolveConversationUploadWorkingDir(conversationId);
 
-      expect(dir).toBe(
-        "/workspace/project/550e8400e29b41d4a716446655440000",
-      );
+      expect(dir).toBe("/workspace/project/550e8400e29b41d4a716446655440000");
     } finally {
       removeStoredConversationMetadata(conversationId);
     }
+  });
+
+  it.each([
+    [
+      "has no match",
+      () => mockBatchGetAppConversations.mockResolvedValue([null]),
+    ],
+    [
+      "lookup fails",
+      () => mockBatchGetAppConversations.mockRejectedValue(new Error("down")),
+    ],
+  ])(
+    "falls back to the workspace recorded at creation when the server %s",
+    async (_case, arrange) => {
+      const conversationId = "550e8400-e29b-41d4-a716-446655440000";
+      setStoredConversationMetadata(conversationId, {
+        selected_repository: null,
+        selected_branch: null,
+        git_provider: null,
+        selected_workspace: "/home/user/repos/qa-repo",
+      });
+      arrange();
+
+      try {
+        expect(await resolveConversationUploadWorkingDir(conversationId)).toBe(
+          "/home/user/repos/qa-repo",
+        );
+      } finally {
+        removeStoredConversationMetadata(conversationId);
+      }
+    },
+  );
+
+  it("surfaces a failed lookup when no workspace was recorded", async () => {
+    mockBatchGetAppConversations.mockRejectedValue(new Error("down"));
+
+    await expect(
+      resolveConversationUploadWorkingDir(
+        "550e8400-e29b-41d4-a716-446655440000",
+      ),
+    ).rejects.toThrow("down");
   });
 
   it("resolves the workspace for compact UUIDs returned by cloud", async () => {

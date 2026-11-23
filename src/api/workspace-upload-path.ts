@@ -85,22 +85,28 @@ export async function resolveConversationUploadWorkingDir(
   // "New worktree" is created from the selected repo path, and the server
   // reports its own `/tmp/conversation-worktrees/<id>/<repo>` instead. Uploading
   // against the recorded path then lands outside the conversation workspace
-  // and the server rejects it with 422.
+  // and the server rejects it with 422. The recorded workspace stays the
+  // fallback when the server has no match or the lookup fails.
+  const stored =
+    getStoredConversationMetadata(conversationId)?.selected_workspace?.trim();
   if (
     UUID_PATTERN.test(conversationId) ||
     /^[0-9a-f]{32}$/i.test(conversationId)
   ) {
-    return AgentServerConversationService.resolveConversationWorkingDir(
-      conversationId,
-    );
+    let reported: string | undefined;
+    try {
+      const [conversation] =
+        await AgentServerConversationService.batchGetAppConversations([
+          conversationId,
+        ]);
+      reported = conversation?.workspace?.working_dir?.trim();
+    } catch (error) {
+      if (!stored) throw error;
+    }
+    if (reported) return reported;
   }
 
-  const stored = getStoredConversationMetadata(conversationId);
-  if (stored?.selected_workspace?.trim()) {
-    return stored.selected_workspace.trim();
-  }
-
-  return getAgentServerWorkingDir();
+  return stored || getAgentServerWorkingDir();
 }
 
 // Re-export so callers can construct overrides matching what
