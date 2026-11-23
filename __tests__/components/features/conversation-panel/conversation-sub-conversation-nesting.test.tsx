@@ -14,6 +14,17 @@ const mockStopConversationMutate = vi.fn();
 vi.mock("#/hooks/mutation/use-unified-stop-conversation", () => ({
   useUnifiedPauseConversation: () => ({ mutate: mockStopConversationMutate }),
 }));
+vi.mock("#/hooks/query/use-resolved-workspaces", () => ({
+  useResolvedWorkspaces: () => ({
+    workspaces: [
+      { id: "ws-empty", name: "Empty Workspace", path: "/workspace/empty" },
+    ],
+    parents: [],
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+}));
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: vi.fn(),
   displayErrorToast: vi.fn(),
@@ -163,6 +174,20 @@ describe("ConversationPanel sub-conversation nesting (chronological)", () => {
     );
     expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
+
+  it("keeps the full conversation card and actions on nested rows", async () => {
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByTestId("conversation-sub-conversations-toggle-parent-conv"),
+    );
+
+    const nested = await screen.findByTestId(
+      "conversation-sub-conversations-parent-conv",
+    );
+    const row = within(nested).getByTestId("sub-conversation-row");
+    expect(within(row).getByTestId("conversation-card")).toBeInTheDocument();
+    expect(within(row).getByTestId("ellipsis-button")).toBeInTheDocument();
+  });
 });
 
 describe("ConversationPanel sub-conversation nesting (grandchildren)", () => {
@@ -266,6 +291,12 @@ describe("ConversationPanel sub-conversation nesting (grouped folders)", () => {
     );
     expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
+
+  it("keeps a registered workspace folder that was empty before nesting", async () => {
+    expect(
+      await screen.findByTestId("thread-folder-ws--workspace-empty"),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("ConversationPanel sub-conversation nesting (cross-folder grouped)", () => {
@@ -360,5 +391,57 @@ describe("ConversationPanel sub-conversation nesting (cross-folder grouped)", ()
     expect(
       within(childRegion).getByTestId("sub-conversation-row"),
     ).toHaveAttribute("data-conversation-id", "grandchild-conv");
+  });
+});
+
+describe("ConversationPanel sub-conversation nesting (active child preview)", () => {
+  setupConversationPanelTest();
+
+  beforeEach(async () => {
+    useConversationPanelPreferencesStore.setState({
+      organizeMode: "grouped",
+      groupFolderOrder: [],
+    });
+    // Root is older than the six unrelated rows, so the five-row preview
+    // would drop it if only the active child id were force-included.
+    const unrelated = Array.from({ length: 6 }, (_, index) =>
+      createMockConversation({
+        id: `other-${index}`,
+        title: `Other Conversation ${index}`,
+        selected_workspace: "/workspace/shared",
+      }),
+    );
+    const root = createMockConversation({
+      id: "root-conv",
+      title: "Root Parent",
+      selected_workspace: "/workspace/shared",
+    });
+    const activeChild = createMockConversation({
+      id: "active-child",
+      title: "Active Child",
+      parent_conversation_id: "root-conv",
+      selected_workspace: "/workspace/shared",
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [...unrelated, root, activeChild],
+      next_page_id: null,
+    });
+    renderConversationPanel({
+      navigation: { conversationId: "active-child" },
+    });
+    await screen.findByText("Other Conversation 0");
+  });
+
+  it("keeps the root ancestor of the active child in the folder preview", async () => {
+    const folder = await screen.findByTestId(
+      "thread-folder-ws--workspace-shared",
+    );
+    expect(within(folder).getByText("Root Parent")).toBeInTheDocument();
+
+    const row = await within(folder).findByTestId("sub-conversation-row");
+    expect(row).toHaveAttribute("data-conversation-id", "active-child");
   });
 });

@@ -47,7 +47,6 @@ import { ConversationPanelNewThreadPicker } from "./conversation-panel-new-threa
 import { ConversationGroupFolderList } from "./conversation-group-folder-list";
 import { ConversationPanelPinnedSection } from "./conversation-panel-pinned-section";
 import { ConversationSubConversationGroup } from "./conversation-sub-conversation-group";
-import { SubConversationRow } from "./sub-conversation-row";
 import {
   applyAutomationConversationFilter,
   applyGroupFolderOrder,
@@ -408,6 +407,30 @@ export function ConversationPanel({
     );
   }, [allLoadedConversations, isRowArchived, showArchivedConversations]);
 
+  // Grouped mode renders a folder's top-level rows through a preview limit.
+  // If the active conversation is nested, the row the preview must keep
+  // visible is its root ancestor, not the child id (the child has been removed
+  // from the folder's top-level rows).
+  const activeRootConversationId = React.useMemo(() => {
+    if (!currentConversationId) {
+      return null;
+    }
+    const conversationsById = new Map(
+      conversations.map((conversation) => [conversation.id, conversation]),
+    );
+    let rootId = currentConversationId;
+    const seen = new Set([rootId]);
+    let parentId =
+      conversationsById.get(rootId)?.parent_conversation_id ?? null;
+    while (parentId && conversationsById.has(parentId) && !seen.has(parentId)) {
+      seen.add(parentId);
+      rootId = parentId;
+      parentId =
+        conversationsById.get(parentId)?.parent_conversation_id ?? null;
+    }
+    return rootId;
+  }, [conversations, currentConversationId]);
+
   // Never hide the thread the user is currently reading: when the active
   // conversation is nested, auto-expand every loaded ancestor so the row is
   // actually reachable (a grandchild needs both its parent and grandparent
@@ -739,12 +762,12 @@ export function ConversationPanel({
       groupedSourceConversations,
       conversationPageById,
       activeBackend.kind,
-      { forceIncludeConversationId: currentConversationId },
+      { forceIncludeConversationId: activeRootConversationId },
     );
   }, [
     activeBackend.kind,
+    activeRootConversationId,
     conversationPageById,
-    currentConversationId,
     groupedSourceConversations,
   ]);
 
@@ -789,6 +812,16 @@ export function ConversationPanel({
     );
   }, [groupedSubConversationsByParentId]);
 
+  const groupsWithTopLevelRowsBeforeNesting = React.useMemo(
+    () =>
+      new Set(
+        (orderedConversationGroups ?? [])
+          .filter((group) => group.conversations.length > 0)
+          .map((group) => group.id),
+      ),
+    [orderedConversationGroups],
+  );
+
   const displayConversationGroups = React.useMemo(() => {
     if (!orderedConversationGroups) {
       return null;
@@ -803,8 +836,16 @@ export function ConversationPanel({
           (conversation) => !groupedNestedChildIds.has(conversation.id),
         ),
       }))
-      .filter((group) => group.conversations.length > 0);
-  }, [orderedConversationGroups, groupedNestedChildIds]);
+      .filter(
+        (group) =>
+          group.conversations.length > 0 ||
+          !groupsWithTopLevelRowsBeforeNesting.has(group.id),
+      );
+  }, [
+    groupedNestedChildIds,
+    groupsWithTopLevelRowsBeforeNesting,
+    orderedConversationGroups,
+  ]);
 
   const conversationGroupIds = React.useMemo(
     () => displayConversationGroups?.map((group) => group.id) ?? [],
@@ -1678,7 +1719,7 @@ export function ConversationPanel({
             onToggleGroupCollapsed={toggleGroupCollapsed}
             onToggleGroupPreviewExpanded={toggleGroupPreviewExpanded}
             isCreatingConversationFlow={isCreatingConversationFlow}
-            activeConversationId={currentConversationId}
+            activeConversationId={activeRootConversationId}
             onLaunchFromGroup={launchFromGroup}
             renderConversationCard={(conversation) => (
               <ConversationSubConversationGroup
@@ -1691,16 +1732,13 @@ export function ConversationPanel({
                 onToggle={toggleSubConversationParentExpanded}
                 renderParent={(parent) => renderConversationCard(parent)}
                 renderChild={(child) => (
-                  <SubConversationRow
+                  <div
                     key={child.id}
-                    conversationId={child.id}
-                    title={getTitle(child.id, child.title).title}
-                    executionStatus={child.execution_status}
-                    sandboxStatus={child.sandbox_status}
-                    lastUpdatedAt={child.updated_at}
-                    isActive={child.id === currentConversationId}
-                    onClose={onClose}
-                  />
+                    data-testid="sub-conversation-row"
+                    data-conversation-id={child.id}
+                  >
+                    {renderConversationCard(child)}
+                  </div>
                 )}
               />
             )}
@@ -1720,16 +1758,13 @@ export function ConversationPanel({
                 onToggle={toggleSubConversationParentExpanded}
                 renderParent={(parent) => renderConversationCard(parent)}
                 renderChild={(child) => (
-                  <SubConversationRow
+                  <div
                     key={child.id}
-                    conversationId={child.id}
-                    title={getTitle(child.id, child.title).title}
-                    executionStatus={child.execution_status}
-                    sandboxStatus={child.sandbox_status}
-                    lastUpdatedAt={child.updated_at}
-                    isActive={child.id === currentConversationId}
-                    onClose={onClose}
-                  />
+                    data-testid="sub-conversation-row"
+                    data-conversation-id={child.id}
+                  >
+                    {renderConversationCard(child)}
+                  </div>
                 )}
               />
             ))}
