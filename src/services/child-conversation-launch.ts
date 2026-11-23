@@ -399,7 +399,9 @@ async function launchCloudChild(
   // attached — failing closed if the endpoint is unreachable.
   // Best-effort: if the settings fetch fails the router toggle reads as
   // unset, matching the pre-strict fallback behavior for this feature flag.
-  const cloudSettings = await SettingsService.getSettingsWithDefaults();
+  const cloudSettings = await (SettingsService.getSettingsWithDefaults
+    ? SettingsService.getSettingsWithDefaults()
+    : SettingsService.getSettings());
   const cloudMetaProfiles = cloudSettings.run_router_at_conversation_start
     ? await MetaProfilesService.listMetaProfiles().catch(() => null)
     : null;

@@ -108,7 +108,9 @@ async function migrateDefaultAgentProfile(): Promise<true> {
   // `default` since this one cached its settings.
   SettingsService.invalidateCache();
   // Best-effort: the one-time migration can retry on a later session.
-  const settings = await SettingsService.getSettingsWithDefaults();
+  const settings = await (SettingsService.getSettingsWithDefaults
+    ? SettingsService.getSettingsWithDefaults()
+    : SettingsService.getSettings());
   if (settings.default_profile_migrated) return true;
 
   const { profiles } = await AgentProfilesService.listProfiles();

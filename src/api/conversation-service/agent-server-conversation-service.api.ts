@@ -711,7 +711,9 @@ class AgentServerConversationService {
     const [settings, profiles] = await Promise.all([
       // Best-effort: a settings hiccup must not block creating the
       // conversation; the title-profile preference falls back gracefully.
-      SettingsService.getSettingsWithDefaults(),
+      SettingsService.getSettingsWithDefaults
+        ? SettingsService.getSettingsWithDefaults()
+        : SettingsService.getSettings(),
       ProfilesService.listProfiles().catch(() => undefined),
     ]);
     const titleLlmProfile = resolveTitleLlmProfile(

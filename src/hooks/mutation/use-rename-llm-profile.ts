@@ -21,7 +21,9 @@ export function useRenameLlmProfile() {
     onSuccess: async (_response, { name, newName }) => {
       if (getActiveBackend().backend.kind === "local") {
         // Best-effort: the mutation acts on profiles, not saved settings.
-        const settings = await SettingsService.getSettingsWithDefaults();
+        const settings = await Promise.resolve(
+          SettingsService.getSettings?.(),
+        ).catch(() => undefined);
         if (settings?.title_llm_profile === name) {
           await SettingsService.saveSettings({
             title_llm_profile: newName,
