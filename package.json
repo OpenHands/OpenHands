@@ -176,7 +176,7 @@
     "husky": "9.1.7",
     "jsdom": "31.0.1",
     "lint-staged": "17.6.0",
-    "msw": "3.0.5",
+    "msw": "3.0.6",
     "png2icons": "2.0.1",
     "postcss-prefix-selector": "2.2.1",
     "prettier": "3.10.1",
