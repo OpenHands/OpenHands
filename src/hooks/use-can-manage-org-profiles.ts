@@ -32,7 +32,7 @@ export function useCanManageOrgProfiles(): boolean {
 
   // Keep the key byte-identical to useCloudCurrentUserId so React Query shares
   // the cached /me result, including its connection-credential revision.
-  // eslint-disable-next-line @tanstack/query/exhaustive-deps
+  // eslint-disable-next-line query/exhaustive-deps
   const { data } = useQuery({
     queryKey: [
       "cloud-current-user",

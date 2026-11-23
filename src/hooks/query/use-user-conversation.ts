@@ -1,6 +1,6 @@
 import { conversationHistoryQueryOptions } from "./conversation-history-query-options";
 import { persistedHistoryQueryOptions } from "./persisted-history-query-options";
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable typescript/no-explicit-any */
 import { useCallback, useRef } from "react";
 import { CONVERSATION_LAUNCH_PREFIX } from "#/stores/conversation-launch-store";
 import {

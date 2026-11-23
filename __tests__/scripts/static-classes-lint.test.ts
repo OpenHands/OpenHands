@@ -3,15 +3,7 @@ import { ESLint } from "eslint";
 import { describe, expect, it } from "vitest";
 
 // Exercise the shipped config, not a separate copy of the rule settings.
-// Virtual TSX probes need syntax parsing but do not belong to tsconfig's project.
-const eslint = new ESLint({
-  overrideConfig: [
-    {
-      languageOptions: { parserOptions: { project: null } },
-      rules: { "@typescript-eslint/prefer-optional-chain": "off" },
-    },
-  ],
-});
+const eslint = new ESLint();
 
 const probe = `
 import { Typography as Type } from "#/ui/typography";

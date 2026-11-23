@@ -3,14 +3,7 @@ import { ESLint } from "eslint";
 import { describe, expect, it } from "vitest";
 
 // Use the shipped policy; virtual probes only opt out of type-aware parsing.
-const eslint = new ESLint({
-  overrideConfig: [
-    {
-      languageOptions: { parserOptions: { project: null } },
-      rules: { "@typescript-eslint/prefer-optional-chain": "off" },
-    },
-  ],
-});
+const eslint = new ESLint();
 
 const probe = `
 import { Divider as Separator } from "#/ui/divider";

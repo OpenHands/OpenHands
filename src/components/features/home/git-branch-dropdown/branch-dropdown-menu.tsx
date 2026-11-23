@@ -15,10 +15,10 @@ export interface BranchDropdownMenuProps {
   selectedItem: Branch | null;
   getMenuProps: <Options>(
     options?: UseComboboxGetMenuPropsOptions & Options,
-  ) => any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  ) => any; // oxlint-disable-line typescript/no-explicit-any
   getItemProps: <Options>(
     options: UseComboboxGetItemPropsOptions<Branch> & Options,
-  ) => any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  ) => any; // oxlint-disable-line typescript/no-explicit-any
   onScroll: (event: React.UIEvent<HTMLUListElement>) => void;
   menuRef: React.RefObject<HTMLUListElement | null>;
 }
@@ -41,7 +41,7 @@ export function BranchDropdownMenu({
     currentSelectedItem: Branch | null,
     currentGetItemProps: <Options>(
       options: UseComboboxGetItemPropsOptions<Branch> & Options,
-    ) => any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    ) => any, // oxlint-disable-line typescript/no-explicit-any
   ) => (
     <DropdownItem
       key={branch.name}

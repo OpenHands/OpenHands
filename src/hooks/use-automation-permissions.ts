@@ -43,7 +43,7 @@ export function useAutomationPermissions(): AutomationPermissionsResult {
   const { backend, orgId } = useActiveBackend();
   const isCloud = backend.kind === "cloud";
 
-  // eslint-disable-next-line @tanstack/query/exhaustive-deps
+  // eslint-disable-next-line query/exhaustive-deps
   const { data, isLoading } = useQuery({
     queryKey: [
       "cloud-current-user",

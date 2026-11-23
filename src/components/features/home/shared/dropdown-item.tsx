@@ -10,7 +10,7 @@ interface DropdownItemProps<T> {
   item: T;
   index: number;
   isSelected: boolean;
-  getItemProps: <Options>(options: any & Options) => any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  getItemProps: <Options>(options: any & Options) => any; // oxlint-disable-line typescript/no-explicit-any
   getDisplayText: (item: T) => string;
   getItemKey: (item: T) => string;
   isProviderDropdown?: boolean;

@@ -119,7 +119,7 @@ export function GitProviderDropdown({
     index: number,
     currentHighlightedIndex: number,
     currentSelectedItem: GitProviderOption | null,
-    currentGetItemProps: any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    currentGetItemProps: any, // oxlint-disable-line typescript/no-explicit-any
   ) => (
     <DropdownItem
       key={gitProviderOptionKey(item)}

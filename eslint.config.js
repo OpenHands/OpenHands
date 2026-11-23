@@ -28,16 +28,14 @@ import path from "node:path";
 
 import { FlatCompat } from "@eslint/eslintrc";
 import js from "@eslint/js";
-import tsParser from "@typescript-eslint/parser";
-import tsPlugin from "@typescript-eslint/eslint-plugin";
+import * as tsParser from "eslint-parser-oxc";
 import reactPlugin from "eslint-plugin-react";
 import reactHooksPlugin from "eslint-plugin-react-hooks";
 import jsxA11yPlugin from "eslint-plugin-jsx-a11y";
 import importXPlugin from "eslint-plugin-import-x";
 import prettierPlugin from "eslint-plugin-prettier";
 import prettierConfig from "eslint-config-prettier";
-import unusedImportsPlugin from "eslint-plugin-unused-imports";
-import tanstackQueryPlugin from "@tanstack/eslint-plugin-query";
+import queryPlugin from "oxlint-plugin-query";
 import { plugin as shadcnPlugin } from "@shadcn/lint";
 import globals from "globals";
 
@@ -138,7 +136,7 @@ export default [
   // registered under both `import-x/*` and `import/*` aliases so existing
   // `// eslint-disable-next-line import/*` comments still match.
   importXPlugin.flatConfigs.recommended,
-  importXPlugin.flatConfigs.typescript,
+  { rules: importXPlugin.flatConfigs.typescript.rules },
 
   // `eslint-plugin-i18next` is still eslintrc-only — pull it in via compat.
   ...compat.extends("plugin:i18next/recommended"),
@@ -158,10 +156,6 @@ export default [
       ecmaVersion: "latest",
       sourceType: "module",
       parser: tsParser,
-      parserOptions: {
-        project: "./tsconfig.json",
-        ecmaFeatures: { jsx: true },
-      },
       globals: {
         ...globals.browser,
         ...globals.node,
@@ -169,12 +163,10 @@ export default [
       },
     },
     plugins: {
-      "@typescript-eslint": tsPlugin,
       react: reactPlugin,
       "react-hooks": reactHooksPlugin,
       "jsx-a11y": jsxA11yPlugin,
-      "@tanstack/query": tanstackQueryPlugin,
-      "unused-imports": unusedImportsPlugin,
+      query: queryPlugin,
       // Alias `import-x` rules under `import/*` so existing
       // `// eslint-disable-next-line import/foo` comments keep working.
       import: importXPlugin,
@@ -192,19 +184,34 @@ export default [
       // `eslint-import-resolver-typescript` resolves both TS path aliases
       // (via tsconfig) and regular node-style imports, so we don't also
       // configure the legacy `node` resolver shortcut here.
+      "import-x/extensions": [
+        ".ts",
+        ".tsx",
+        ".cts",
+        ".mts",
+        ".js",
+        ".jsx",
+        ".cjs",
+        ".mjs",
+      ],
+      "import-x/external-module-folders": [
+        "node_modules",
+        "node_modules/@types",
+      ],
+      "import-x/parsers": {
+        "eslint-parser-oxc": [".ts", ".tsx", ".cts", ".mts"],
+      },
       "import-x/resolver": {
         typescript: true,
       },
     },
     rules: {
       // Recommended rule packs we want everywhere.
-      ...tsPlugin.configs["eslint-recommended"].overrides[0].rules,
-      ...tsPlugin.configs.recommended.rules,
       ...reactPlugin.configs.recommended.rules,
       ...reactPlugin.configs["jsx-runtime"].rules,
       ...reactHooksPlugin.configs.recommended.rules,
       ...jsxA11yPlugin.configs.recommended.rules,
-      ...tanstackQueryPlugin.configs.recommended.rules,
+      ...queryPlugin.configs.recommended.rules,
 
       // Prettier integration. `eslint-config-prettier` turns off conflicting
       // stylistic rules; `eslint-plugin-prettier` re-reports prettier diffs
@@ -265,8 +272,6 @@ export default [
           },
         },
       ],
-      "unused-imports/no-unused-imports": "error",
-      "@typescript-eslint/prefer-optional-chain": "error",
       "no-restricted-imports": [
         "error",
         {
@@ -303,32 +308,31 @@ export default [
       // registry version check — do not target `/api/...` and are unaffected.
       "local/no-direct-agent-server-fetch": "error",
 
-      // Allow `interface Foo extends Bar<"foo"> {}` — the codebase uses this
-      // discriminated-union pattern in `src/types/agent-server/**` and the
-      // empty body is intentional. We still disallow `interface Foo {}` and
-      // `type Foo = {}` (the default behaviour for the other two options).
-      "@typescript-eslint/no-empty-object-type": [
-        "error",
-        { allowInterfaces: "with-single-extends" },
-      ],
-
-      // tsPlugin's `recommended` enables no-unused-vars; we already report
-      // unused imports above, so make sure the TS rule still catches unused
-      // locals/args (with the standard airbnb-style `_`-prefix escape hatch).
-      // `caughtErrors: 'none'` keeps the v7 behaviour of allowing
-      // `catch (error)` clauses where the error is intentionally unused.
+      // Oxlint owns TypeScript-specific rules, including unused variables.
       "no-unused-vars": "off",
-      "@typescript-eslint/no-unused-vars": [
-        "error",
-        {
-          args: "after-used",
-          argsIgnorePattern: "^_",
-          varsIgnorePattern: "^_",
-          ignoreRestSiblings: true,
-          caughtErrors: "none",
-        },
-      ],
-
+      "no-undef": "off",
+      "no-redeclare": "off",
+      "no-dupe-class-members": "off",
+      "no-unreachable": "off",
+      "no-const-assign": "off",
+      "no-dupe-args": "off",
+      "no-func-assign": "off",
+      "no-import-assign": "off",
+      "no-new-native-nonconstructor": "off",
+      "no-obj-calls": "off",
+      "no-setter-return": "off",
+      "no-this-before-super": "off",
+      "constructor-super": "off",
+      "getter-return": "off",
+      "no-class-assign": "off",
+      "no-dupe-keys": "off",
+      "no-new-symbol": "off",
+      "no-unsafe-negation": "off",
+      "no-with": "off",
+      "no-var": "error",
+      "prefer-const": "error",
+      "prefer-rest-params": "error",
+      "prefer-spread": "error",
       // React Compiler rules (added in eslint-plugin-react-hooks v5+) are
       // opt-in for projects that have actually adopted the compiler. Keep
       // them off so existing code isn't retroactively flagged.

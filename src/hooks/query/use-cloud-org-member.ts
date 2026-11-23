@@ -12,7 +12,7 @@ export function useCloudOrgMember(userId: string | undefined) {
   const { backend, orgId } = useActiveBackend();
   const enabled = backend.kind === "cloud" && !!orgId && !!userId;
 
-  // eslint-disable-next-line @tanstack/query/exhaustive-deps
+  // eslint-disable-next-line query/exhaustive-deps
   return useQuery({
     queryKey: [
       "cloud-org-member",

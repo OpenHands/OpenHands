@@ -42,7 +42,7 @@ export function useServiceAccounts() {
   const { backend, orgId } = useActiveBackend();
   const enabled = useServiceAccountRunAsEnabled();
 
-  // eslint-disable-next-line @tanstack/query/exhaustive-deps
+  // eslint-disable-next-line query/exhaustive-deps
   return useQuery({
     queryKey: [
       "cloud-service-accounts",

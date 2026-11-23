@@ -14,10 +14,10 @@ export interface GenericDropdownMenuProps<T> {
   selectedItem: T | null;
   getMenuProps: <Options>(
     options?: UseComboboxGetMenuPropsOptions & Options,
-  ) => any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  ) => any; // oxlint-disable-line typescript/no-explicit-any
   getItemProps: <Options>(
     options: UseComboboxGetItemPropsOptions<T> & Options,
-  ) => any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  ) => any; // oxlint-disable-line typescript/no-explicit-any
   onScroll?: (event: React.UIEvent<HTMLUListElement>) => void;
   menuRef?: React.RefObject<HTMLUListElement | null>;
   renderItem: (
@@ -27,7 +27,7 @@ export interface GenericDropdownMenuProps<T> {
     selectedItem: T | null,
     getItemProps: <Options>(
       options: UseComboboxGetItemPropsOptions<T> & Options,
-    ) => any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    ) => any, // oxlint-disable-line typescript/no-explicit-any
   ) => React.ReactNode;
   /**
    * Optional presentational node rendered immediately BEFORE an item (e.g. a
