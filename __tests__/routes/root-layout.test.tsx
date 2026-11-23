@@ -353,6 +353,27 @@ describe("root layout", () => {
     expect(screen.queryByTestId("mobile-menu-bar")).not.toBeInTheDocument();
   });
 
+  it("clears background inert state when an open mobile nav crosses the desktop breakpoint", () => {
+    const originalWidth = window.innerWidth;
+    try {
+      setViewportWidth(767);
+      renderMainApp();
+      const background = screen.getByTestId("mobile-nav-background-content");
+      expect(background).not.toHaveAttribute("inert");
+      expect(background).not.toHaveAttribute("aria-hidden");
+
+      fireEvent.click(screen.getByTestId("mobile-menu-bar"));
+      expect(background).toHaveAttribute("inert");
+      expect(background).toHaveAttribute("aria-hidden", "true");
+
+      setViewportWidth(768);
+      expect(background).not.toHaveAttribute("inert");
+      expect(background).not.toHaveAttribute("aria-hidden");
+    } finally {
+      setViewportWidth(originalWidth);
+    }
+  });
+
   it("bounds conversation routes inside the dynamic safe-area viewport", () => {
     renderMainApp("/conversations/abc-123");
 
