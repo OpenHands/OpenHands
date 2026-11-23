@@ -6,6 +6,7 @@ import UserIcon from "#/icons/user.svg?react";
 import BellIcon from "#/icons/bell.svg?react";
 import ClockIcon from "#/icons/clock.svg?react";
 import CalendarIcon from "#/icons/calendar.svg?react";
+import LockIcon from "#/icons/lock.svg?react";
 import { formatCompactDuration } from "#/manifests/automation-insights";
 import { formatDate } from "#/utils/format-relative-time";
 import { SectionCard } from "./section-card";
@@ -73,6 +74,15 @@ export function SettingsSection({
             label={t(I18nKey.AUTOMATIONS$DETAIL$CREATED_BY)}
           >
             <span className="break-all">{createdBy}</span>
+          </ConfigField>
+        ) : null}
+
+        {automation.visibility === "private" ? (
+          <ConfigField
+            icon={<LockIcon className="size-3.5" />}
+            label={t(I18nKey.AUTOMATION_SETUP$VISIBILITY)}
+          >
+            {t(I18nKey.AUTOMATION_SETUP$VISIBILITY_PRIVATE)}
           </ConfigField>
         ) : null}
 

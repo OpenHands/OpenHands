@@ -43,6 +43,7 @@ import { DescriptionSection } from "#/components/features/automations/detail/des
 import { TriggerSection } from "#/components/features/automations/detail/trigger-section";
 import { ActionSection } from "#/components/features/automations/detail/action-section";
 import { SettingsSection } from "#/components/features/automations/detail/settings-section";
+import { KvStoreModal } from "#/components/features/automations/detail/kv-store-modal";
 import { SectionConnector } from "#/components/features/automations/detail/section-connector";
 import { ActivityLogSection } from "#/components/features/automations/detail/activity-log-section";
 import { DetailSkeleton } from "#/components/features/automations/detail/detail-skeleton";
@@ -74,6 +75,8 @@ import {
   serializeScriptAutomation,
 } from "#/utils/automation-export";
 import { downloadBlob } from "#/utils/utils";
+import { AUTOMATION_KV_FEATURE } from "#/constants/automation-kv";
+import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 
 /**
  * Placeholder automation used to keep `useIsAutomationOwner` hooked before
@@ -111,6 +114,9 @@ export default function AutomationDetail() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showChangeRunAsModal, setShowChangeRunAsModal] = useState(false);
   const [showChangeFactoryModal, setShowChangeFactoryModal] = useState(false);
+  const [showKvModal, setShowKvModal] = useState(false);
+  const { data: capabilities } = useDeploymentCapabilities();
+  const hasKvStore = capabilities?.features.includes(AUTOMATION_KV_FEATURE);
   const { openEditor } = useOpenAutomationEditor();
   const factoryContext = useFactoryContext();
   const backPath = factoryContext
@@ -424,6 +430,7 @@ export default function AutomationDetail() {
         onChangeRunAs={
           canChangeRunAs ? () => setShowChangeRunAsModal(true) : undefined
         }
+        onViewKvStore={hasKvStore ? () => setShowKvModal(true) : undefined}
         onExport={handleExport}
         onDownloadTarball={() =>
           AutomationService.downloadTarball(automation.id, automation.name)
@@ -500,6 +507,13 @@ export default function AutomationDetail() {
             onConfirm={handleChangeRunAs}
             onCancel={() => setShowChangeRunAsModal(false)}
           />
+          {showKvModal ? (
+            <KvStoreModal
+              automationId={automation.id}
+              canEdit={canManage}
+              onClose={() => setShowKvModal(false)}
+            />
+          ) : null}
           <DeleteConfirmationModal
             automationName={automation.name}
             isOpen={showDeleteModal}

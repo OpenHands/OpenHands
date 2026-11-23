@@ -6,6 +6,9 @@ import type {
   AutomationScriptBundle,
   AutomationSpec,
   AutomationTagCount,
+  AutomationKvBatchResponse,
+  AutomationKvEntry,
+  AutomationKvKeysResponse,
   AutomationTrigger,
   Factory,
   FactoryListResponse,
@@ -69,6 +72,7 @@ import {
 import { randomUUID } from "#/utils/random-uuid";
 
 const AUTOMATION_BASE_PATH = "/api/automation";
+const AUTOMATION_KV_PATH = `${AUTOMATION_BASE_PATH}/v1/kv`;
 
 type AutomationDraftCreateTarget = SetupEntry | "prompt" | "plugin" | "custom";
 
@@ -1012,6 +1016,88 @@ class AutomationService {
       responseType: "arraybuffer",
     });
     return new Uint8Array(data);
+  }
+
+  private static async getKv<T>(
+    path: string,
+    params: Record<string, string | number | boolean>,
+  ): Promise<T> {
+    const active = getActiveBackend().backend;
+
+    if (active.kind === "cloud") {
+      const query = new URLSearchParams(
+        Object.entries(params).map(([name, value]) => [name, String(value)]),
+      );
+      return callCloudProxy<T>({
+        backend: active,
+        method: "GET",
+        path: `${path}?${query}`,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.get<T>(path, { params });
+    return data;
+  }
+
+  static async listKvKeys(
+    automationId: string,
+    { limit, offset = 0 }: { limit: number; offset?: number },
+  ): Promise<AutomationKvKeysResponse> {
+    return AutomationService.getKv<AutomationKvKeysResponse>(
+      AUTOMATION_KV_PATH,
+      { automation_id: automationId, limit, offset },
+    );
+  }
+
+  static async getKvEntry(
+    automationId: string,
+    key: string,
+  ): Promise<AutomationKvEntry> {
+    return AutomationService.getKv<AutomationKvEntry>(
+      `${AUTOMATION_KV_PATH}/${encodeURIComponent(key)}`,
+      { automation_id: automationId, meta: true },
+    );
+  }
+
+  /**
+   * Overwrite existing keys in one transaction: every key is written or none
+   * is. The write is rejected with 409 when the store's version is no longer
+   * `ifVersion`, so a value a run stored meanwhile is not overwritten blindly.
+   */
+  static async setKvEntries(
+    automationId: string,
+    entries: Array<{ key: string; value: unknown }>,
+    ifVersion: number,
+  ): Promise<AutomationKvBatchResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_KV_PATH}/batch`;
+    const body = {
+      if_version: ifVersion,
+      operations: entries.map(({ key, value }) => ({
+        op: "set",
+        key,
+        value,
+        xx: true,
+      })),
+    };
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<AutomationKvBatchResponse>({
+        backend: active,
+        method: "POST",
+        path: `${path}?${new URLSearchParams({ automation_id: automationId })}`,
+        body,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<AutomationKvBatchResponse>(
+      path,
+      body,
+      { params: { automation_id: automationId } },
+    );
+    return data;
   }
 
   static async downloadTarball(id: string, name: string): Promise<void> {
