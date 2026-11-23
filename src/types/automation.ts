@@ -52,6 +52,12 @@ export type ChangeRunAsRequest =
 /** What kind of identity an automation runs as. */
 export type AutomationRunAsKind = "user" | "service";
 
+/**
+ * Who in the organization can see an automation: every member, or only the
+ * person it runs as plus Owners and Admins.
+ */
+export type AutomationVisibility = "organization" | "private";
+
 export interface AutomationPluginSpec {
   plugin: { source: string; ref?: string; repo_path?: string };
   config: Record<string, unknown>;
@@ -112,6 +118,12 @@ export interface Automation {
    * service older than run-as.
    */
   created_by_user_id?: string;
+  /**
+   * Who can see the automation. Only one that runs as a person can be
+   * `private`. Absent on an automation service older than visibility; treat
+   * it as `organization`.
+   */
+  visibility?: AutomationVisibility;
   /**
    * Single repository in the import/export file's shape. The automation
    * service does not return it; read `repositories` for what an automation

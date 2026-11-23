@@ -49,6 +49,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { server } from "#/mocks/node";
 import { http, HttpResponse } from "msw";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
@@ -1930,6 +1931,142 @@ describe("AutomationSetupPanel", () => {
     expect(
       screen.queryByTestId("automation-setup-run-as"),
     ).not.toBeInTheDocument();
+  });
+
+  describe("visibility", () => {
+    const teamBackend: Backend = {
+      id: "cloud-1",
+      name: "Enterprise",
+      host: "https://app.example.test",
+      apiKey: "bearer-token",
+      kind: "cloud",
+    };
+
+    /**
+     * Renders the panel for member `user-1` of the team org `org-1`, on an
+     * automation service that stores a visibility.
+     */
+    function renderInTeamWorkspace(
+      draft: AutomationSetupDraft = {
+        prompt: "Review every pull request",
+        kind: "prompt",
+      },
+    ) {
+      setRegisteredBackends([teamBackend]);
+      setActiveSelection({ backendId: teamBackend.id, orgId: "org-1" });
+      server.use(
+        http.get(`${teamBackend.host}/api/organizations/org-1/me`, () =>
+          HttpResponse.json({
+            org_id: "org-1",
+            user_id: "user-1",
+            role: "member",
+            permissions: ["view_automations"],
+          }),
+        ),
+      );
+      vi.mocked(useDeploymentCapabilities).mockReturnValue({
+        data: { features: ["automationVisibility"] },
+        isLoading: false,
+      } as never);
+      const navigation: NavigationContextValue = {
+        currentPath: "/conversations/conv-1",
+        conversationId: "conv-1",
+        isNavigating: false,
+        navigate: mockNavigate,
+      };
+
+      return render(
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
+          <ActiveBackendProvider>
+            <NavigationProvider value={navigation}>
+              <AutomationSetupPanel
+                draft={draft}
+                conversationId="conv-1"
+                conversationTags={null}
+              />
+            </NavigationProvider>
+          </ActiveBackendProvider>
+        </QueryClientProvider>,
+      );
+    }
+
+    afterEach(() => {
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+    });
+
+    it("creates a private automation when Private is chosen", async () => {
+      // Arrange
+      vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+        id: "automation-1",
+      });
+      const user = userEvent.setup();
+      renderInTeamWorkspace();
+
+      // Act
+      await user.selectOptions(
+        await screen.findByTestId("automation-setup-visibility"),
+        "private",
+      );
+      await user.click(screen.getByTestId("automation-setup-create"));
+
+      // Assert
+      await waitFor(() =>
+        expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+          expect.objectContaining({ visibility: "private" }),
+          expect.anything(),
+        ),
+      );
+    });
+
+    it("offers no visibility for an automation that runs as a service account", async () => {
+      // Arrange
+      serviceAccountMocks.enabled = true;
+      const user = userEvent.setup();
+      renderInTeamWorkspace();
+      await screen.findByTestId("automation-setup-visibility");
+
+      // Act
+      await user.selectOptions(
+        screen.getByTestId("automation-setup-run-as"),
+        "sa-1",
+      );
+
+      // Assert
+      expect(
+        screen.queryByTestId("automation-setup-visibility"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("keeps a private automation private when it is saved", async () => {
+      // Arrange
+      const privateReviewer = savedReviewer({
+        user_id: "user-1",
+        run_as_kind: "user",
+        visibility: "private",
+      });
+      vi.mocked(AutomationService.updateAutomation).mockResolvedValue(
+        privateReviewer,
+      );
+      const user = userEvent.setup();
+      renderInTeamWorkspace(setupDraftFromAutomation(privateReviewer));
+      await screen.findByTestId("automation-setup-visibility");
+
+      // Act
+      await user.click(screen.getByTestId("automation-setup-save"));
+
+      // Assert
+      await waitFor(() =>
+        expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+          "auto-1",
+          expect.objectContaining({ visibility: "private" }),
+        ),
+      );
+    });
   });
 
   it("hides the event filter until Add Event Filter is clicked", async () => {
