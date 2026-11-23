@@ -1,0 +1,7 @@
+context: after mobile fixed build
+run: /tmp/openhands-verify/2026-11-23T0052-53c5c3
+sha: c5e47c4b4dab1d14724e74675c06254957ccbf47 (dirty fix branch before commit)
+date: 2026-11-23T00:52:35+00:00
+route: / after onboarding skipped
+viewport: phone 390x844
+commands: click Open Workspace, focus workspace dropdown, ArrowDown, Tab to + Add Workspace, Enter
