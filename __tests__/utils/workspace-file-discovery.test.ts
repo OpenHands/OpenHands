@@ -153,6 +153,15 @@ describe("Windows workspace discovery", () => {
           encoding: "utf8",
           shell: "cmd.exe",
         });
+
+        // Assert directly on raw cmd.exe stdout to verify findstr pipeline stage
+        // before parseWindowsWorkspaceFileList post-filtering
+        expect(stdout).toContain("root.txt");
+        expect(stdout).toContain("src\\file.txt");
+        expect(stdout).not.toContain("node_modules");
+        expect(stdout).not.toContain(".git");
+        expect(stdout).not.toContain("src\\generated");
+
         const result = parseWindowsWorkspaceFileList(stdout, workspacePath, {
           ...options,
           maxFiles: 0,
