@@ -16,7 +16,8 @@ describe("getSkillScope", () => {
     expect(
       getSkillScope(
         buildSkill({
-          source: "/Users/test/.openhands/cache/skills/public-skills/skills/deno/SKILL.md",
+          source:
+            "/Users/test/.openhands/cache/skills/public-skills/skills/deno/SKILL.md",
         }),
       ),
     ).toBe("public");
@@ -46,21 +47,30 @@ describe("getSkillScope", () => {
     ).toBe("project");
     expect(getSkillScope(buildSkill({ source: "project" }))).toBe("project");
   });
+
+  it("classifies custom skills", () => {
+    expect(getSkillScope(buildSkill({ source: "custom" }))).toBe("custom");
+  });
 });
 
 describe("groupSkillsByScope", () => {
   it("groups and sorts skills by scope", () => {
-    const grouped = groupSkillsByScope([
-      buildSkill({ name: "beta", source: "public" }),
-      buildSkill({ name: "alpha", source: "user" }),
-      buildSkill({
-        name: "gamma",
-        source: "/workspace/project/.agents/skills/gamma/SKILL.md",
-      }),
-    ], "/workspace/project");
+    const grouped = groupSkillsByScope(
+      [
+        buildSkill({ name: "beta", source: "public" }),
+        buildSkill({ name: "alpha", source: "user" }),
+        buildSkill({
+          name: "gamma",
+          source: "/workspace/project/.agents/skills/gamma/SKILL.md",
+        }),
+        buildSkill({ name: "delta", source: "custom" }),
+      ],
+      "/workspace/project",
+    );
 
     expect(grouped.public.map((skill) => skill.name)).toEqual(["beta"]);
     expect(grouped.personal.map((skill) => skill.name)).toEqual(["alpha"]);
     expect(grouped.project.map((skill) => skill.name)).toEqual(["gamma"]);
+    expect(grouped.custom.map((skill) => skill.name)).toEqual(["delta"]);
   });
 });

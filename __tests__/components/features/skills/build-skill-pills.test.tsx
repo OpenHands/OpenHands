@@ -54,4 +54,15 @@ describe("buildSkillPills category pill", () => {
     expect(pills[0]!.id).toBe("type-knowledge");
     expect(pills[1]!.id).toBe("category-environment");
   });
+
+  it("renders custom scope pill when skill source is custom", () => {
+    const skill = buildSkill({ name: "my-custom", source: "custom" });
+    const pills = buildSkillPills(skill, translate);
+
+    expect(pills.some((p) => p.id === "scope-custom")).toBe(true);
+    renderPills(pills);
+    expect(screen.getByTestId("skill-custom-my-custom")).toHaveTextContent(
+      "SETTINGS$SKILLS_SOURCE_CUSTOM",
+    );
+  });
 });

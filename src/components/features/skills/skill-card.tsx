@@ -5,6 +5,9 @@ import type { SkillInfo } from "#/types/settings";
 import { cn } from "#/utils/utils";
 import CopyIcon from "#/icons/copy.svg?react";
 import CheckmarkIcon from "#/icons/checkmark.svg?react";
+import EditIcon from "#/icons/u-edit.svg?react";
+import TrashIcon from "#/icons/trash.svg?react";
+import { getSkillScope } from "#/utils/skill-scope";
 import { CirclePlusCheckToggle } from "#/components/shared/buttons/circle-plus-check-toggle";
 import { SkillIconBadge } from "./skill-icon-badge";
 import { SkillCardPillRow } from "./skill-card-pill-row";
@@ -24,6 +27,8 @@ interface SkillCardProps {
   onOpen: () => void;
   onToggle: (enabled: boolean) => void;
   isToggleDisabled?: boolean;
+  onEdit?: (skill: SkillInfo) => void;
+  onDelete?: (skill: SkillInfo) => void;
 }
 
 export function SkillCard({
@@ -32,9 +37,23 @@ export function SkillCard({
   onOpen,
   onToggle,
   isToggleDisabled = false,
+  onEdit,
+  onDelete,
 }: SkillCardProps) {
   const { t } = useTranslation("openhands");
   const [sourceCopied, setSourceCopied] = React.useState(false);
+
+  const isCustom = getSkillScope(skill) === "custom";
+
+  const handleEdit = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    onEdit?.(skill);
+  };
+
+  const handleDelete = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    onDelete?.(skill);
+  };
 
   const description = getSkillCardDescription(skill);
   const pills = React.useMemo(() => buildSkillPills(skill, t), [skill, t]);
@@ -125,13 +144,37 @@ export function SkillCard({
                 </div>
               ) : null}
             </div>
-            <CirclePlusCheckToggle
-              testId={`skill-toggle-${skill.name}`}
-              isSelected={enabled}
-              onToggle={onToggle}
-              isDisabled={isToggleDisabled}
-              disableTooltipKey={I18nKey.COMMON$DISABLE}
-            />
+            <div className="flex items-center gap-1">
+              {isCustom && onEdit ? (
+                <button
+                  type="button"
+                  data-testid={`skill-card-edit-${skill.name}`}
+                  aria-label={t(I18nKey.BUTTON$EDIT)}
+                  onClick={handleEdit}
+                  className="shrink-0 cursor-pointer border-0 bg-transparent p-1 text-tertiary-alt hover:text-contrast [&_path]:fill-current"
+                >
+                  <EditIcon width={14} height={14} />
+                </button>
+              ) : null}
+              {isCustom && onDelete ? (
+                <button
+                  type="button"
+                  data-testid={`skill-card-delete-${skill.name}`}
+                  aria-label={t(I18nKey.BUTTON$DELETE)}
+                  onClick={handleDelete}
+                  className="shrink-0 cursor-pointer border-0 bg-transparent p-1 text-tertiary-alt hover:text-danger [&_path]:fill-current"
+                >
+                  <TrashIcon width={14} height={14} />
+                </button>
+              ) : null}
+              <CirclePlusCheckToggle
+                testId={`skill-toggle-${skill.name}`}
+                isSelected={enabled}
+                onToggle={onToggle}
+                isDisabled={isToggleDisabled}
+                disableTooltipKey={I18nKey.COMMON$DISABLE}
+              />
+            </div>
           </header>
 
           {description ? (

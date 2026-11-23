@@ -14,6 +14,7 @@ import type {
 } from "@openhands/typescript-client";
 import { ServerClient } from "@openhands/typescript-client/clients";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
+import { loadCustomSkills } from "#/utils/custom-skills-storage";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import {
@@ -967,6 +968,24 @@ function buildBundledSkills(): BundledSkill[] {
   });
 }
 
+function buildCustomSkills(): BundledSkill[] {
+  return loadCustomSkills().map((entry) => {
+    const trigger: BundledSkill["trigger"] =
+      entry.triggers && entry.triggers.length > 0
+        ? { type: "keyword", keywords: entry.triggers }
+        : null;
+
+    return {
+      name: entry.name,
+      content: entry.content ?? "",
+      trigger,
+      source: entry.source ?? "custom",
+      description: entry.description ?? null,
+      is_agentskills_format: true as const,
+    };
+  });
+}
+
 function buildAgentContext(
   agentSettings: SettingsRecord,
   enablement: SkillEnablement = {},
@@ -982,6 +1001,8 @@ function buildAgentContext(
   const disabledSkillNames = new Set(disabledSkills);
   const isSkillEnabled = buildSkillEnablementFilter(enablement);
 
+  const customSkills = buildCustomSkills();
+
   // The bundled catalog is allow-listed, not deny-listed: it is a build-time
   // snapshot of ~60 skills, so a deny-list puts every future addition into
   // every system prompt (OpenHands#16302). Skills the agent context already
@@ -991,6 +1012,7 @@ function buildAgentContext(
       (skill) =>
         typeof skill.name !== "string" || !disabledSkillNames.has(skill.name),
     ),
+    ...customSkills.filter((skill) => !disabledSkillNames.has(skill.name)),
     ...buildBundledSkills().filter((skill) => isSkillEnabled(skill.name)),
   ];
 
@@ -1233,7 +1255,8 @@ export function buildStartConversationRequest(
   const isEnabled = buildSkillEnablementFilter(
     options.skillEnablement ?? toSkillEnablement(options.settings),
   );
-  const launchSkills = buildBundledSkills().filter(
+  const allBundledSkills = [...buildBundledSkills(), ...buildCustomSkills()];
+  const launchSkills = allBundledSkills.filter(
     (skill) =>
       skill.name === invokedSkillName ||
       (options.agentProfileKind === "acp" && isEnabled(skill.name)),

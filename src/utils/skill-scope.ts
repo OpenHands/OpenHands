@@ -1,11 +1,12 @@
 import type { SkillInfo } from "#/types/settings";
 
-export type SkillScope = "project" | "personal" | "public";
+export type SkillScope = "project" | "personal" | "public" | "custom";
 
 export const SKILL_SCOPE_ORDER: SkillScope[] = [
   "project",
   "personal",
   "public",
+  "custom",
 ];
 
 // `.openhands/microagents/` is the pre-rename skills directory. The SDK still
@@ -86,6 +87,9 @@ export function getSkillScope(
   }
 
   const lower = source.toLowerCase();
+  if (lower === "custom") {
+    return "custom";
+  }
   if (isPublicSource(source)) {
     return "public";
   }
@@ -113,6 +117,7 @@ export function groupSkillsByScope(
     project: [],
     personal: [],
     public: [],
+    custom: [],
   };
 
   for (const skill of skills) {
