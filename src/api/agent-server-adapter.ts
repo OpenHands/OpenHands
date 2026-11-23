@@ -665,7 +665,47 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   // hovercard names the profile instead of echoing the raw id and revision.
   "agentprofileid",
   "agentprofilerevision",
+  // Projects board state the Agent Server owns: whether the agent ended on
+  // a question (`turn`, `ask`), why it resolved a conversation, and the pull
+  // requests a member opened (`prs`). The board, the resolved banner and the
+  // Project tab show these; a tag PATCH cannot change them.
+  "turn",
+  "ask",
+  "resolvenote",
+  "prs",
 ]);
+
+/**
+ * Projects tags that keep a chip (`project` shows the project's name,
+ * `resolved` who resolved it) but are not editable: membership and
+ * resolution change through the Projects routes, not tags.
+ */
+export const PROJECT_BOARD_TAG_KEYS: ReadonlySet<string> = new Set([
+  "project",
+  "resolved",
+]);
+
+/**
+ * Every Projects tag the Agent Server owns. A tag PATCH keeps them as the
+ * server has them, so clients never send them.
+ */
+export const SERVER_OWNED_PROJECT_TAG_KEYS: ReadonlySet<string> = new Set([
+  "project",
+  "turn",
+  "ask",
+  "resolved",
+  "resolvenote",
+  "prs",
+]);
+
+/** The tags a user can edit: the displayed ones minus Projects state. */
+export function getEditableConversationTags(
+  tags: Record<string, string> | null | undefined,
+): Array<[string, string]> {
+  return getDisplayConversationTags(tags).filter(
+    ([key]) => !PROJECT_BOARD_TAG_KEYS.has(key.trim().toLowerCase()),
+  );
+}
 
 /**
  * High-signal tag keys shown first in the chip row (before A–Z). Automation
@@ -807,6 +847,24 @@ function getConversationSecurityAnalyzer(conversationSettings: SettingsRecord) {
     default:
       return undefined;
   }
+}
+
+/**
+ * The user's approval and iteration settings, as a start request carries them.
+ * A conversation the server starts for Canvas, such as a project's
+ * coordinator, needs the same ones an ordinary chat gets; its workers then
+ * inherit them from the coordinator.
+ */
+export function buildConversationLaunchPolicies(settings: Settings) {
+  const conversationSettings = toRecord(settings.conversation_settings);
+  const securityAnalyzer =
+    getConversationSecurityAnalyzer(conversationSettings);
+  return {
+    confirmation_policy:
+      getConversationConfirmationPolicy(conversationSettings),
+    ...(securityAnalyzer ? { security_analyzer: securityAnalyzer } : {}),
+    max_iterations: resolveMaxIterations(conversationSettings.max_iterations),
+  };
 }
 
 /**

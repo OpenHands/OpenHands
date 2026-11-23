@@ -493,4 +493,19 @@ describe("fetchCloudIntegrationsConfig", () => {
       expect(config.isOauthV2LoginEnabled).toBe(isOauthV2LoginEnabled);
     },
   );
+
+  it.each([
+    ["on", { enable_factories: true }, true],
+    ["off", { enable_factories: false }, false],
+    ["not reported", {}, false],
+  ])(
+    "reads whether the instance has Factories %s",
+    async (_state, flags, isFactoriesEnabled) => {
+      stubGet("/api/v1/web-client/config", { feature_flags: flags });
+
+      const config = await fetchCloudIntegrationsConfig();
+
+      expect(config.isFactoriesEnabled).toBe(isFactoriesEnabled);
+    },
+  );
 });
