@@ -343,6 +343,13 @@ export function ConversationPanel({
   const isConversationUnread = useConversationReadStateStore(
     (state) => state.isConversationUnread,
   );
+  const lastReadAt = useConversationReadStateStore((state) => state.lastReadAt);
+  const manualUnread = useConversationReadStateStore(
+    (state) => state.manualUnread,
+  );
+  const pruneMissingReadStateConversations = useConversationReadStateStore(
+    (state) => state.pruneMissingConversations,
+  );
 
   const hasUnreadConversations = React.useMemo(
     () =>
@@ -354,12 +361,35 @@ export function ConversationPanel({
           isCurrent: conversation.id === currentConversationId,
         }),
       ),
-    [allLoadedConversations, isConversationUnread, currentConversationId],
+    [
+      allLoadedConversations,
+      isConversationUnread,
+      currentConversationId,
+      lastReadAt,
+      manualUnread,
+    ],
   );
 
-  const handleMarkAllAsRead = React.useCallback(() => {
-    markAllAsRead(allLoadedConversations.map((c) => c.id));
-  }, [allLoadedConversations, markAllAsRead]);
+  const handleMarkAllAsRead = React.useCallback(async () => {
+    let currentPage = data?.pages.at(-1);
+    const visitedPages = new Set<string>();
+    const allIds = new Set<string>(allLoadedConversations.map((c) => c.id));
+
+    while (currentPage?.next_page_id) {
+      if (visitedPages.has(currentPage.next_page_id)) break;
+      visitedPages.add(currentPage.next_page_id);
+      const result = await fetchNextPage();
+      if (result.isFetchNextPageError || !result.data) break;
+      currentPage = result.data.pages.at(-1);
+      if (currentPage) {
+        for (const item of currentPage.items) {
+          allIds.add(item.id);
+        }
+      }
+    }
+
+    markAllAsRead(Array.from(allIds));
+  }, [allLoadedConversations, data, fetchNextPage, markAllAsRead]);
 
   // Fetch in-progress start tasks
   const {
@@ -578,14 +608,25 @@ export function ConversationPanel({
         allLoadedConversations.map((conversation) => conversation.id),
       );
     }
+    if (
+      !data?.pages.at(-1)?.next_page_id &&
+      isFetched &&
+      allLoadedConversations.length > 0
+    ) {
+      pruneMissingReadStateConversations(
+        allLoadedConversations.map((conversation) => conversation.id),
+      );
+    }
   }, [
     activeBackend.id,
     allLoadedConversations,
+    data?.pages,
     isFetched,
     legacyArchivedIds,
     legacyPinnedIds,
     migrateConversationTagFlags,
     pruneMissingPinnedConversations,
+    pruneMissingReadStateConversations,
     removeArchivedConversation,
     unpinConversation,
   ]);
@@ -1037,6 +1078,11 @@ export function ConversationPanel({
         {
           onSuccess: () => {
             removeArchivedConversation(activeBackend.id, conversationId);
+            pruneMissingReadStateConversations(
+              allLoadedConversations
+                .filter((c) => c.id !== conversationId)
+                .map((c) => c.id),
+            );
             if (conversationId === currentConversationId) {
               navigate("/conversations");
             }
@@ -1132,6 +1178,11 @@ export function ConversationPanel({
     for (const conversationId of deletedIds) {
       removeArchivedConversation(activeBackend.id, conversationId);
     }
+
+    const remainingIds = allLoadedConversations
+      .map((c) => c.id)
+      .filter((id) => !deletedIds.includes(id));
+    pruneMissingReadStateConversations(remainingIds);
 
     if (
       currentConversationId !== null &&

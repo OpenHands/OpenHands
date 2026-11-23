@@ -61,6 +61,29 @@ describe("conversation-read-state store", () => {
     expect(state.manualUnread["conv-2"]).toBeUndefined();
   });
 
+  it("prunes entries for conversations that are no longer in the backend", () => {
+    useConversationReadStateStore.setState({
+      lastReadAt: {
+        "conv-existing": new Date().toISOString(),
+        "conv-deleted": new Date().toISOString(),
+      },
+      manualUnread: {
+        "conv-existing": true,
+        "conv-deleted": true,
+      },
+    });
+
+    useConversationReadStateStore
+      .getState()
+      .pruneMissingConversations(["conv-existing"]);
+
+    const state = useConversationReadStateStore.getState();
+    expect(state.lastReadAt["conv-existing"]).toBeDefined();
+    expect(state.manualUnread["conv-existing"]).toBe(true);
+    expect(state.lastReadAt["conv-deleted"]).toBeUndefined();
+    expect(state.manualUnread["conv-deleted"]).toBeUndefined();
+  });
+
   describe("isConversationUnread", () => {
     it("returns false if the conversation is currently active / open", () => {
       const isUnread = useConversationReadStateStore

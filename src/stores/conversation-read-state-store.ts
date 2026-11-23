@@ -21,6 +21,11 @@ export interface ConversationReadStateActions {
   markAsUnread: (conversationId: string) => void;
   markAllAsRead: (conversationIds: string[]) => void;
   isConversationUnread: (options: IsConversationUnreadOptions) => boolean;
+  /**
+   * Prunes entries for conversations that no longer exist in the backend.
+   * Mirrors the pattern in pinned-conversations-store.ts to keep localStorage bounded.
+   */
+  pruneMissingConversations: (existingIds: readonly string[]) => void;
 }
 
 export type ConversationReadStateStore = ConversationReadState &
@@ -69,6 +74,36 @@ export const useConversationReadStateStore =
             for (const id of conversationIds) {
               nextLastReadAt[id] = now;
               delete nextManualUnread[id];
+            }
+            return {
+              lastReadAt: nextLastReadAt,
+              manualUnread: nextManualUnread,
+            };
+          });
+        },
+
+        pruneMissingConversations: (existingIds: readonly string[]) => {
+          const existing = new Set(existingIds);
+          set((state) => {
+            let hasChanges = false;
+            const nextLastReadAt: Record<string, string> = {};
+            for (const [id, val] of Object.entries(state.lastReadAt)) {
+              if (existing.has(id)) {
+                nextLastReadAt[id] = val;
+              } else {
+                hasChanges = true;
+              }
+            }
+            const nextManualUnread: Record<string, boolean> = {};
+            for (const [id, val] of Object.entries(state.manualUnread)) {
+              if (existing.has(id)) {
+                nextManualUnread[id] = val;
+              } else {
+                hasChanges = true;
+              }
+            }
+            if (!hasChanges) {
+              return state;
             }
             return {
               lastReadAt: nextLastReadAt,
