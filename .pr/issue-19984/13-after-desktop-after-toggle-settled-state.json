@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "value": {
+    "asideWidth": 60,
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "url": "http://127.0.0.1:18810/"
+  }
+}

@@ -413,9 +413,7 @@ describe("vite library build", () => {
     const repositoryMenu = declarations(
       recipe("automation-setup-repository-menu"),
     );
-    expect(repositoryMenu.width.replace(/\s/g, "")).toBe(
-      "min(28rem,100vw-3rem)",
-    );
+    expect(repositoryMenu.width.replace(/\s/g, "")).toBe("min(28rem,100cqw)");
 
     // Fields consume row-owned rem widths after merging shared form classes.
     const scheduleRow = recipe("automation-setup-schedule-row");
@@ -722,6 +720,9 @@ describe("vite library build", () => {
       },
       "onboarding-viewport-height": {
         "max-height": "90vh",
+      },
+      "onboarding-step-height": {
+        "max-height": "calc(90vh - 7rem)",
       },
       "dialog-content-height": {
         "max-height": "80vh",

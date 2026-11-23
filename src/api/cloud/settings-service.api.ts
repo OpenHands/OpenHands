@@ -269,6 +269,8 @@ export interface CloudIntegrationsConfig {
    * so a user can have several of one type, such as two GitLab hosts.
    */
   isOauthV2LoginEnabled: boolean;
+  /** Whether the instance turns Factories on (`feature_flags.enable_factories`). */
+  isFactoriesEnabled: boolean;
 }
 
 export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsConfig> {
@@ -285,6 +287,7 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
       enable_agent_profiles_page?: boolean;
       enable_service_accounts?: boolean;
       enable_oauth_v2_login?: boolean;
+      enable_factories?: boolean;
     };
   }>({
     backend,
@@ -305,6 +308,7 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
     isServiceAccountsEnabled:
       config.feature_flags?.enable_service_accounts === true,
     isOauthV2LoginEnabled: config.feature_flags?.enable_oauth_v2_login === true,
+    isFactoriesEnabled: config.feature_flags?.enable_factories === true,
   };
 }
 

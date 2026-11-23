@@ -21,6 +21,10 @@ import { ConfirmStopModal } from "./confirm-stop-modal";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ExitConversationModal } from "./exit-conversation-modal";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import {
+  SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
+  useBreakpoint,
+} from "#/hooks/use-breakpoint";
 import { Provider } from "#/types/settings";
 import type { LocalWorkspace } from "#/types/workspace";
 import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation";
@@ -153,6 +157,11 @@ export function ConversationPanel({
   const showHoverMetadata = useConversationPanelPreferencesStore(
     (state) => state.showHoverMetadata,
   );
+  // Below the rail breakpoint the list only renders in the mobile drawer,
+  // which spans nearly the whole viewport, so a preview beside a card has no
+  // room and would run off screen. Open it below the card instead, where the
+  // overlay positioning keeps it inside the viewport.
+  const isInMobileDrawer = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
   const organizeMode = useConversationPanelPreferencesStore(
     (state) => state.organizeMode,
   );
@@ -1196,6 +1205,7 @@ export function ConversationPanel({
           isArchived={isArchived}
           explicitlyArchived={explicitlyArchived}
           contextMenuOpen={openContextMenuId === conversation.id}
+          isInMobileDrawer={isInMobileDrawer}
           inPinnedSection={!!options?.inPinnedSection}
           allowEditTags={activeBackend.kind === "local"}
           showHoverMetadata={showHoverMetadata}
@@ -1250,6 +1260,7 @@ export function ConversationPanel({
       showLlmProfiles,
       showTagsMetadata,
       showHoverMetadata,
+      isInMobileDrawer,
     ],
   );
 

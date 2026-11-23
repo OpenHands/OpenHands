@@ -485,7 +485,8 @@ const buildTranscriptEntries = (
         if (
           event.observation.kind === "AskUserObservation" &&
           !event.observation.is_error &&
-          correspondingAction?.action.kind === "AskUserAction"
+          (correspondingAction?.action.kind === "AskUserAction" ||
+            correspondingAction?.action.kind === "AskUserForConversationAction")
         ) {
           const { question, options, recommended } = correspondingAction.action;
           entries.push({

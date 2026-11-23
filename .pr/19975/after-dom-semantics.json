@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "value": {
+    "found": true,
+    "tag": "DIV",
+    "contenteditable": "true",
+    "role": "textbox",
+    "ariaLabel": "What do you want to build?",
+    "ariaMultiline": "true",
+    "ariaDisabled": null,
+    "tabIndexAttribute": "0",
+    "tabIndexProperty": 0,
+    "dataPlaceholder": "What do you want to build?",
+    "activeBefore": true
+  }
+}

@@ -1,6 +1,7 @@
 import type {
   AutomationPluginSpec,
   AutomationRepository,
+  AutomationVisibility,
 } from "#/types/automation";
 
 export type AutomationSetupKind = "prompt" | "plugin" | "custom";
@@ -14,6 +15,8 @@ export interface AutomationSetupFormValues {
   name: string;
   /** Service account id selected for a new automation; empty means the caller. */
   runAsUserId: string;
+  /** Who can see the automation; absent means the whole organization. */
+  visibility?: AutomationVisibility;
   prompt: string;
   repository: string;
   pluginSource: string;
@@ -64,6 +67,8 @@ export interface AutomationSetupDraft {
   /** Request last saved to `serverDraftId`, to tell unsaved edits apart. */
   savedDraftRequestKey?: string;
   materializedAutomationId?: string | null;
+  /** The factory a new automation is created in, when the form was opened from one. */
+  factoryId?: string;
   existingCustomTarballPath?: string;
   existingPluginSpec?: AutomationPluginSpec;
   /** Repositories the edited automation clones, as the service stores them. */
@@ -75,6 +80,11 @@ export interface AutomationSetupDraft {
    * `destination`), sent back unchanged so a save does not reset them.
    */
   existingEventTrigger?: Record<string, unknown>;
+  /**
+   * The edited automation's visibility. Set only when it can be changed: the
+   * automation runs as a person and the service reports its visibility.
+   */
+  existingVisibility?: AutomationVisibility;
   form?: AutomationSetupFormPatch;
   fieldMetadata?: Partial<
     Record<AutomationSetupField, AutomationSetupFieldMetadata>
